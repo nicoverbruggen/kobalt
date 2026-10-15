@@ -317,10 +317,16 @@ QVector<ReadingFont> ReaderModel::fontCatalog() {
             present |= font.family == family;
         if (present)
             continue;
-        const auto filename = family == "Noto Serif" ? "NotoSerif-Regular.ttf" : "NotoSerifCJK-Regular.ttc";
-        for (const auto &file : fonts_.fallbackFiles)
-            if (QFileInfo(file).fileName() == filename)
-                result.append({family, {file}, FontOrigin::Interface, false, {}, {}});
+        QStringList files;
+        for (const auto &file : fonts_.fallbackFiles) {
+            const auto name = QFileInfo(file).fileName();
+            if (family == "Noto Serif" ? name.startsWith("NotoSerif-") : name == "NotoSerifCJK-Regular.ttc") {
+                files.append(file);
+            }
+        }
+        if (!files.isEmpty()) {
+            result.append({family, files, FontOrigin::Interface, false, {}, {}});
+        }
     }
     readingFontCatalog = result;
     fontCatalogReady = true;

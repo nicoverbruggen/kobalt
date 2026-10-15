@@ -42,6 +42,56 @@
       "file": "NotoSerifThai-Regular.ttf",
       "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifThai/hinted/ttf/NotoSerifThai-Regular.ttf",
       "sha256": "747b5bb1fdd329850ddd3218d872a3d2a96ab0dd544f51e5300c6d1b12071b62"
+    },
+    {
+      "file": "NotoNaskhArabic-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoNaskhArabic/hinted/ttf/NotoNaskhArabic-Bold.ttf",
+      "sha256": "04017b0ccdd1156dcde3bc386734c1b03165261762f16a025c8afc9088ae76e9"
+    },
+    {
+      "file": "NotoSerifHebrew-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifHebrew/hinted/ttf/NotoSerifHebrew-Bold.ttf",
+      "sha256": "9dc92fcff313103397ec593cfda58e68f88ee71ff2d4a32aa9cff5a8b2725ea1"
+    },
+    {
+      "file": "NotoSerifArmenian-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifArmenian/hinted/ttf/NotoSerifArmenian-Bold.ttf",
+      "sha256": "79b6e9d36f8409444d16bb88e8c1f091aaf9548fb9ba7e5dba572aec325f905e"
+    },
+    {
+      "file": "NotoSerifGeorgian-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifGeorgian/hinted/ttf/NotoSerifGeorgian-Bold.ttf",
+      "sha256": "6d30bd1fd83882002cab9da8e3fadb6bbe86fc710913a07305b3aea861de007a"
+    },
+    {
+      "file": "NotoSerifDevanagari-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifDevanagari/hinted/ttf/NotoSerifDevanagari-Bold.ttf",
+      "sha256": "0544878a7b09ea1dc16d9de1f7a1f8cf82beb255d66a287712bb05a24336bcc0"
+    },
+    {
+      "file": "NotoSerifBengali-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifBengali/hinted/ttf/NotoSerifBengali-Bold.ttf",
+      "sha256": "7a5a625899a77187518b46a9c9c174671a8b740cdbd88cd2d01766598e8cf6f2"
+    },
+    {
+      "file": "NotoSerifTamil-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifTamil/hinted/ttf/NotoSerifTamil-Bold.ttf",
+      "sha256": "0b3f994281fa5777e5a6fdefa51f0a98cf9b7ea3c25ccf7d448af5f1958fe0eb"
+    },
+    {
+      "file": "NotoSerifTamil-Italic.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifTamil/hinted/ttf/NotoSerifTamil-Italic.ttf",
+      "sha256": "c2601356d6fe1f7f22cbbb53bc20384a4707598a519ccba16b6d747c758837ca"
+    },
+    {
+      "file": "NotoSerifTamil-BoldItalic.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifTamil/hinted/ttf/NotoSerifTamil-BoldItalic.ttf",
+      "sha256": "85cda857a9fc90b8b779b94ce619598018b871e9c79f54f75064008c70a82eff"
+    },
+    {
+      "file": "NotoSerifThai-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/3ec599d8ea849413786a184f20e473c3fcbc4082/fonts/NotoSerifThai/hinted/ttf/NotoSerifThai-Bold.ttf",
+      "sha256": "af3f64944248fe0dd9a37c0d2e8eed69930623d962eb5b2130fa81bb9e879dd1"
     }
   ]
 }

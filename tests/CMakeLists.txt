@@ -320,6 +320,7 @@ kobalt_engine_check(vertical-writing)
 kobalt_engine_check(mathml)
 kobalt_engine_check(line-breaking)
 kobalt_engine_check(whitespace)
+kobalt_engine_check(fallback-styles)
 kobalt_engine_check(svg-limits)
 target_compile_definitions(whitespace-check PRIVATE KOBALT_FONT_DIRECTORY="${KOBALT_ROOT}/resources/fonts")
 kobalt_engine_check(multilingual ARGUMENTS "${KOBALT_TEST_FIXTURES}/multilingual-ar.epub"

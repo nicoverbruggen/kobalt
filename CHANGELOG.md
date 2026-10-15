@@ -4,6 +4,8 @@
 
 ## v1.0-beta.4
 
+- Use real bold and available italic fonts for non-CJK fallback text in books and the reading interface.
+
 - Refresh the page and bookmark ribbon together when jumping to a bookmark or returning to the previous passage.
 
 - Update bundled FreeType, FriBidi and Android libpng to include upstream security fixes.

@@ -4,10 +4,15 @@
 #include "font_catalog.h"
 
 namespace kobalt {
-inline constexpr std::array<const char *, 8> scriptFallbackFontFiles{
-    "NotoNaskhArabic-Regular.ttf",   "NotoSerifHebrew-Regular.ttf",     "NotoSerifArmenian-Regular.ttf",
-    "NotoSerifGeorgian-Regular.ttf", "NotoSerifDevanagari-Regular.ttf", "NotoSerifBengali-Regular.ttf",
-    "NotoSerifTamil-Regular.ttf",    "NotoSerifThai-Regular.ttf"};
+inline constexpr std::array<const char *, 4> serifFallbackFontFiles{"NotoSerif-Regular.ttf", "NotoSerif-Bold.ttf",
+                                                                    "NotoSerif-Italic.ttf", "NotoSerif-BoldItalic.ttf"};
+inline constexpr std::array<const char *, 18> scriptFallbackFontFiles{
+    "NotoNaskhArabic-Regular.ttf",   "NotoNaskhArabic-Bold.ttf",      "NotoSerifHebrew-Regular.ttf",
+    "NotoSerifHebrew-Bold.ttf",      "NotoSerifArmenian-Regular.ttf", "NotoSerifArmenian-Bold.ttf",
+    "NotoSerifGeorgian-Regular.ttf", "NotoSerifGeorgian-Bold.ttf",    "NotoSerifDevanagari-Regular.ttf",
+    "NotoSerifDevanagari-Bold.ttf",  "NotoSerifBengali-Regular.ttf",  "NotoSerifBengali-Bold.ttf",
+    "NotoSerifTamil-Regular.ttf",    "NotoSerifTamil-Bold.ttf",       "NotoSerifTamil-Italic.ttf",
+    "NotoSerifTamil-BoldItalic.ttf", "NotoSerifThai-Regular.ttf",     "NotoSerifThai-Bold.ttf"};
 inline QString supplementalFontFamily(QString language) {
     language = language.toLower().replace('_', '-');
     const auto base = language.section('-', 0, 0);

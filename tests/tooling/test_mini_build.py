@@ -70,7 +70,7 @@ class MiniBuildTests(unittest.TestCase):
             with package.open('ab') as stream:
                 stream.write(b'x')
             assets.check_package_size(package)
-            with self.assertRaisesRegex(ValueError, 'exceeds 25,000,000'):
+            with self.assertRaisesRegex(ValueError, 'exceeds 28,000,000'):
                 assets.check_package_size(package, mini=True)
             self.assertFalse(package.exists())
 

@@ -12,6 +12,21 @@
       "file": "NotoSansMath-Regular.ttf",
       "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/e0ad9f160a2942bcdd249bb1958e8336742edef3/fonts/NotoSansMath/hinted/ttf/NotoSansMath-Regular.ttf",
       "sha256": "d51afd5739c7ba6c44fcab35a88160e25dfb69a2d4ad0bd99533f8d894af1f96"
+    },
+    {
+      "file": "NotoSerif-Bold.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/e0ad9f160a2942bcdd249bb1958e8336742edef3/fonts/NotoSerif/hinted/ttf/NotoSerif-Bold.ttf",
+      "sha256": "96656aa5cec8f1d6fd0e804c1fad397e1a1cfa082e6642124e0bda68cd8363ce"
+    },
+    {
+      "file": "NotoSerif-Italic.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/e0ad9f160a2942bcdd249bb1958e8336742edef3/fonts/NotoSerif/hinted/ttf/NotoSerif-Italic.ttf",
+      "sha256": "749e80e313ef711f9373c6cce17c72297ef05490b3dcda7967d1d5d90bf1183f"
+    },
+    {
+      "file": "NotoSerif-BoldItalic.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/notofonts.github.io/e0ad9f160a2942bcdd249bb1958e8336742edef3/fonts/NotoSerif/hinted/ttf/NotoSerif-BoldItalic.ttf",
+      "sha256": "c710c5b9cf354ae46e7a10472a08019b28220fafeb5887a482a76856f8f6fc0b"
     }
   ]
 }

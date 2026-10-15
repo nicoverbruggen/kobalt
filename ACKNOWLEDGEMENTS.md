@@ -43,7 +43,7 @@ Dependency revisions and checksums are recorded in [dependencies/manifest.json](
 | Project | Authors and contributors | Use in Kobalt | Notices |
 | --- | --- | --- | --- |
 | [IBM Plex](https://github.com/IBM/plex) | IBM and the Plex contributors. | Plex Sans and Plex Mono for the interface and reading bar. | [IBM Plex](resources/notices/IBM-Plex-OFL) |
-| [Noto](https://github.com/notofonts) | The Noto Project Authors. | Noto Serif, Noto Sans Math, Noto Naskh Arabic and Noto Serif fallback fonts for Hebrew, Armenian, Georgian, Devanagari, Bengali, Tamil and Thai. | [Noto](resources/notices/Noto-OFL) |
+| [Noto](https://github.com/notofonts) | The Noto Project Authors. | Noto Serif, Noto Sans Math, Noto Naskh Arabic and Noto Serif fallback fonts for Hebrew, Armenian, Georgian, Devanagari, Bengali, Tamil and Thai, including their available bold and italic faces. | [Noto](resources/notices/Noto-OFL) |
 | [Noto Serif CJK](https://github.com/notofonts/noto-cjk) | Adobe and the Noto Project Authors. | Chinese, Japanese and Korean fallback glyphs. | [Noto Serif CJK](resources/notices/Noto-Serif-CJK-OFL) |
 | [Instrument Serif](https://github.com/Instrument/instrument-serif) | The Instrument Serif Project Authors. | Loading-screen wordmark and caption. | [Instrument Serif](resources/notices/Instrument-Serif-OFL) |
 | [eBook Fonts](https://github.com/nicoverbruggen/ebook-fonts) | Nico Verbruggen, collection and font adaptations; original font authors listed below. | Reading fonts listed below. | [Font credits](resources/notices/eBook-Fonts), [Atkinson Hyperlegible Next](resources/notices/Atkinson-Hyperlegible-Next-OFL), [Domitian](resources/notices/Domitian) |

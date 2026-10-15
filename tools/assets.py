@@ -17,9 +17,18 @@ UI_FONTS = (
     'InstrumentSerif-Regular.ttf', 'InstrumentSerif-Italic.ttf',
 )
 # Fallback faces for characters that a reading font lacks.
-FALLBACK_FONTS = ('NotoSerif-Regular.ttf', 'NotoSansMath-Regular.ttf', 'NotoSerifCJK-Regular.ttc',
-                  'NotoNaskhArabic-Regular.ttf', 'NotoSerifHebrew-Regular.ttf',
-                  'NotoSerifArmenian-Regular.ttf', 'NotoSerifGeorgian-Regular.ttf', 'NotoSerifDevanagari-Regular.ttf', 'NotoSerifBengali-Regular.ttf', 'NotoSerifTamil-Regular.ttf', 'NotoSerifThai-Regular.ttf')
+FALLBACK_FONTS = (
+    'NotoSerif-Regular.ttf', 'NotoSerif-Bold.ttf', 'NotoSerif-Italic.ttf', 'NotoSerif-BoldItalic.ttf',
+    'NotoSansMath-Regular.ttf', 'NotoSerifCJK-Regular.ttc',
+    'NotoNaskhArabic-Regular.ttf', 'NotoNaskhArabic-Bold.ttf',
+    'NotoSerifHebrew-Regular.ttf', 'NotoSerifHebrew-Bold.ttf',
+    'NotoSerifArmenian-Regular.ttf', 'NotoSerifArmenian-Bold.ttf',
+    'NotoSerifGeorgian-Regular.ttf', 'NotoSerifGeorgian-Bold.ttf',
+    'NotoSerifDevanagari-Regular.ttf', 'NotoSerifDevanagari-Bold.ttf',
+    'NotoSerifBengali-Regular.ttf', 'NotoSerifBengali-Bold.ttf',
+    'NotoSerifTamil-Regular.ttf', 'NotoSerifTamil-Bold.ttf', 'NotoSerifTamil-Italic.ttf', 'NotoSerifTamil-BoldItalic.ttf',
+    'NotoSerifThai-Regular.ttf', 'NotoSerifThai-Bold.ttf',
+)
 # Hyphenation dictionaries from the pinned engine. Other languages keep the
 # engine's algorithmic hyphenation.
 HYPHENATION = (
@@ -30,7 +39,7 @@ HYPHENATION = (
 )
 # Installed asset folders that the reader accepts.
 FOLDERS = ('fonts/', 'hyph/')
-MINI_ZIP_LIMIT = 25_000_000
+MINI_ZIP_LIMIT = 28_000_000
 
 
 def source_path(name, root=ROOT, mini=False):
@@ -69,7 +78,7 @@ def mini_collection(core):
 def check_package_size(package, mini=False):
     if mini and package.stat().st_size > MINI_ZIP_LIMIT:
         package.unlink()
-        raise ValueError('Mini ZIP exceeds 25,000,000 bytes; no package was retained')
+        raise ValueError('Mini ZIP exceeds 28,000,000 bytes; no package was retained')
 
 
 def manifest(root=ROOT, version=None, mini=False):

@@ -99,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--cpus', type=int, help='limit the build container to this many CPUs')
     parser.add_argument('--sdk-image', help='pull a prebuilt SDK instead of building one locally')
     parser.add_argument('--allow-dirty', action='store_true', help='local validation only')
-    parser.add_argument('--mini', action='store_true', help='build a test ZIP capped at 25 MB in build/mini')
+    parser.add_argument('--mini', action='store_true', help='build a test ZIP capped at 28 MB in build/mini')
     args = parser.parse_args()
     if args.jobs < 1: parser.error('--jobs must be positive')
     if args.cpus is not None and args.cpus < 1: parser.error('--cpus must be positive')

@@ -521,7 +521,7 @@ int main(int argc, char **argv) {
         auto changed = initial;
         changed.hyphenationDirectory += "/.";
         for (const auto &file : initial.fallbackFiles)
-            if (QFileInfo(file).fileName() == "NotoSerif-Regular.ttf")
+            if (QFileInfo(file).fileName().startsWith("NotoSerif-"))
                 changed.fallbackFiles.removeOne(file);
         {
             kobalt::ReaderModel first(initial);
@@ -586,18 +586,24 @@ int main(int argc, char **argv) {
                     require(font.files.size() == 3, "Bundled control family lost a style");
                 } else if (font.family == "Noto Naskh Arabic") {
                     ++arabicFallback;
-                    require(font.files.size() == 1 && font.files.first().endsWith("/NotoNaskhArabic-Regular.ttf"),
-                            "Arabic fallback lost its interface classification or regular face");
+                    require(font.files.size() == 2 && font.files.first().endsWith("/NotoNaskhArabic-Regular.ttf") &&
+                                font.files.last().endsWith("/NotoNaskhArabic-Bold.ttf"),
+                            "Arabic fallback lost its interface classification or regular and bold faces");
                 } else if (font.family == "Noto Serif Hebrew") {
                     ++hebrewFallback;
-                    require(font.files.size() == 1 && font.files.first().endsWith("/NotoSerifHebrew-Regular.ttf"),
-                            "Hebrew fallback lost its interface classification or regular face");
+                    require(font.files.size() == 2 && font.files.first().endsWith("/NotoSerifHebrew-Regular.ttf") &&
+                                font.files.last().endsWith("/NotoSerifHebrew-Bold.ttf"),
+                            "Hebrew fallback lost its interface classification or regular and bold faces");
                 } else {
                     QStringList scriptFiles;
                     for (const auto *name : kobalt::scriptFallbackFontFiles)
                         scriptFiles.append(QString::fromLatin1(name));
-                    require(font.files.size() == 1 && scriptFiles.contains(QFileInfo(font.files.first()).fileName()),
-                            "Unexpected bundled interface font family");
+                    require(font.files.size() == (font.family == "Noto Serif Tamil" ? 4 : 2),
+                            "Script fallback lost a style");
+                    for (const auto &file : font.files) {
+                        require(scriptFiles.contains(QFileInfo(file).fileName()),
+                                "Unexpected bundled interface font family");
+                    }
                 }
             } else {
                 ++sideloaded;
@@ -609,9 +615,8 @@ int main(int argc, char **argv) {
         require(collection.open(QIODevice::ReadOnly), "Cannot read core font collection");
         const auto coreFiles = QJsonDocument::fromJson(collection.readAll()).object().value("files").toArray();
         require(!coreFiles.isEmpty() && coreFiles.size() % 4 == 0, "Core collection lost a style");
-        require(core == coreFiles.size() / 4 + variableCore && sideloaded == 1 &&
-                    interface == 1 + int(kobalt::scriptFallbackFontFiles.size()) && arabicFallback == 1 &&
-                    hebrewFallback == 1,
+        require(core == coreFiles.size() / 4 + variableCore && sideloaded == 1 && interface == 9 &&
+                    arabicFallback == 1 && hebrewFallback == 1,
                 "Core collection or font catalog incomplete");
         require(kobalt::fontFamilyKey("KF Libron") == kobalt::fontFamilyKey("Libron"), "Legacy font alias changed");
     }

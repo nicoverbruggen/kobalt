@@ -195,7 +195,7 @@ def main():
     parser.add_argument('--page-animations', action=argparse.BooleanOptionalAction, default=True, help='include optional page animations')
     parser.add_argument('--hardware', action='store_true', default=True, help='persistent device package')
     parser.add_argument('--temporary', action='store_true', help='remove on the next Nickel restart, requires --hardware')
-    parser.add_argument('--mini', action='store_true', help='keep compatibility assets, Libron and NV Bitter; cap the ZIP at 25 MB')
+    parser.add_argument('--mini', action='store_true', help='keep compatibility assets, Libron and NV Bitter; cap the ZIP at 28 MB')
     parser.add_argument('--in-toolchain', action='store_true', help='run directly inside the SDK at /work, without nested containers')
     parser.add_argument('--version', help='release version override; defaults to the tag or development fallback')
     parser.add_argument('--commit', help='commit to show in About (default: the checkout HEAD, if Git can read it)')

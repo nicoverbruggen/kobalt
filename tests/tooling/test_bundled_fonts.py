@@ -11,6 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools'))
 import fetch_fonts
+import assets
 
 
 class BundledFonts(unittest.TestCase):
@@ -99,6 +100,17 @@ class BundledFonts(unittest.TestCase):
             self.assertEqual(item['release'], 'Libron')
             self.assertFalse(item.get('bundled'))
             self.assertFalse((ROOT / 'resources/fonts' / item['file']).exists())
+
+    def test_fallback_assets_match_pinned_files(self):
+        files = []
+        for manifest in ('noto.json', 'noto-scripts.json', 'noto-cjk.json'):
+            spec = json.loads((ROOT / 'resources/fonts' / manifest).read_text())
+            for item in spec['files']:
+                data = (ROOT / 'resources/fonts' / item['file']).read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), item['sha256'], item['file'])
+                self.assertIn('/' + spec['revision'] + '/', item['url'])
+                files.append(item['file'])
+        self.assertCountEqual(files, assets.FALLBACK_FONTS)
 
 
 if __name__ == '__main__':

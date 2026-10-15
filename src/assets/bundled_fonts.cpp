@@ -37,8 +37,11 @@ kobalt::EngineFontInputs kobalt::engineFontInputs(const AssetBundle &assets, QSt
         return inputs;
     inputs.sources = {bundledFontFiles(assets), std::move(systemDirectory), std::move(sideloadDirectory),
                       std::move(removableRoot)};
-    for (const auto *name : {"IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf", "NotoSerif-Regular.ttf",
-                             "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc"})
+    for (const auto *name : serifFallbackFontFiles) {
+        inputs.fallbackFiles.append(assets.file(QString("fonts/") + name));
+    }
+    for (const auto *name :
+         {"IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf", "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc"})
         inputs.fallbackFiles.append(assets.file(QString("fonts/") + name));
     inputs.hyphenationDirectory = assets.file("hyph");
     return inputs;

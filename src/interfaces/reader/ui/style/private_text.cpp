@@ -125,7 +125,31 @@ FT_Face primaryFace(const QFont &font) {
     }
     return nullptr;
 }
-FT_Face faceFor(uint character, QChar::Script script, FT_Face primary) {
+FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0) {
+    if (regular.endsWith("-Regular.ttf")) {
+        const auto stem = regular.left(regular.size() - QStringLiteral("Regular.ttf").size());
+        QStringList styles;
+        if (font.weight() >= QFont::Bold && font.italic()) {
+            styles.append("BoldItalic");
+        }
+        if (font.weight() >= QFont::Bold) {
+            styles.append("Bold");
+        }
+        if (font.italic()) {
+            styles.append("Italic");
+        }
+        for (const auto &style : styles) {
+            const auto file = stem + style + ".ttf";
+            if (fonts().pending.contains(file) || fonts().sources.contains(file)) {
+                if (const auto face = fonts().face(file, index)) {
+                    return face;
+                }
+            }
+        }
+    }
+    return fonts().face(regular, index);
+}
+FT_Face faceFor(uint character, QChar::Script script, FT_Face primary, const QFont &font) {
     if (primary && FT_Get_Char_Index(primary, character)) {
         return primary;
     }
@@ -172,13 +196,13 @@ FT_Face faceFor(uint character, QChar::Script script, FT_Face primary) {
         break;
     }
     if (!preferred.isEmpty()) {
-        const auto face = fonts().face(preferred, index);
+        const auto face = fallbackFace(preferred, font, index);
         if (face && FT_Get_Char_Index(face, character)) {
             return face;
         }
     }
     for (const auto &file : {QStringLiteral("NotoSerif-Regular.ttf"), QStringLiteral("NotoSansMath-Regular.ttf")}) {
-        const auto face = fonts().face(file);
+        const auto face = fallbackFace(file, font);
         if (face && FT_Get_Char_Index(face, character)) {
             return face;
         }
@@ -199,10 +223,12 @@ struct Glyph {
 }
 bool initializePrivateInterfaceText(const AssetBundle &assets) {
     QMap<QString, std::function<QByteArray()>> pending;
-    QStringList files{"IBMPlexSans-Regular.ttf",    "IBMPlexSans-Bold.ttf",  "IBMPlexSans-Italic.ttf",
-                      "IBMPlexMono-Regular.ttf",    "IBMPlexMono-Bold.ttf",  "InstrumentSerif-Regular.ttf",
-                      "InstrumentSerif-Italic.ttf", "NotoSerif-Regular.ttf", "NotoSansMath-Regular.ttf",
-                      "NotoSerifCJK-Regular.ttc"};
+    QStringList files{"IBMPlexSans-Regular.ttf",    "IBMPlexSans-Bold.ttf",     "IBMPlexSans-Italic.ttf",
+                      "IBMPlexMono-Regular.ttf",    "IBMPlexMono-Bold.ttf",     "InstrumentSerif-Regular.ttf",
+                      "InstrumentSerif-Italic.ttf", "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc"};
+    for (const auto *file : serifFallbackFontFiles) {
+        files.append(QLatin1String(file));
+    }
     for (const auto *file : scriptFallbackFontFiles) {
         files.append(QLatin1String(file));
     }
@@ -423,22 +449,33 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
             return true;
         };
         FT_Face requested = primary;
+        const QFont *requestedFont = &font;
         for (const auto &range : boldRanges) {
             if (start >= range.first && start < range.first + range.second) {
                 requested = boldPrimary;
+                if (emphasis == PrivateTextEmphasis::FontFace) {
+                    requestedFont = &boldFont;
+                }
                 break;
             }
         }
         FT_Face face = requested;
         if (!covers(face)) {
-            face = faceFor(cluster.first(), QChar::script(cluster.first()), requested);
+            face = faceFor(cluster.first(), QChar::script(cluster.first()), requested, *requestedFont);
             if (!covers(face)) {
                 QStringList files = fonts().pending.keys();
                 for (const auto &file : fonts().sources.keys())
                     if (!files.contains(file))
                         files.append(file);
                 for (const auto &file : files) {
-                    const auto candidate = fonts().face(file);
+                    if (file.endsWith("-Bold.ttf") || file.endsWith("-Italic.ttf") ||
+                        file.endsWith("-BoldItalic.ttf")) {
+                        const auto regular = file.left(file.lastIndexOf('-') + 1) + "Regular.ttf";
+                        if (fonts().pending.contains(regular) || fonts().sources.contains(regular)) {
+                            continue;
+                        }
+                    }
+                    const auto candidate = fallbackFace(file, *requestedFont);
                     if (covers(candidate)) {
                         face = candidate;
                         break;

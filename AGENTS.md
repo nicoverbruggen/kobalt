@@ -10,7 +10,9 @@ Only the user edits this repository's root `README.md`. Agents may edit README f
 
 `develop` is this repository's integration branch. Start new implementation work in a separate worktree and task branch based on `develop`. Continue existing work in its existing worktree and branch unless the user requests otherwise. Target completed implementation changes at `develop`. Use `main` only for explicitly requested release work.
 
-When the user explicitly asks you to implement a change and merge it into `develop`, you may create the task branch and worktree, stage and commit the task's changes, and merge them into local `develop` after the required checks pass. This authorization covers only repositories named in the request. Follow the signing requirements and preserve unrelated work. Do not ask again for operations already covered by that authorization.
+When the user explicitly asks you to implement a change and merge it into `develop`, you may create the task branch and worktree, stage and commit the task's changes, and integrate them into local `develop` after the required checks pass. This authorization covers only repositories named in the request. Follow the signing requirements and preserve unrelated work. Do not ask again for operations already covered by that authorization.
+
+A request to merge a task means to integrate its commits. Fast-forward `develop` when possible. Otherwise, cherry-pick the task's commits in order onto current `develop`. Create a merge commit only when the user explicitly requests one. Preserve independent changes when resolving conflicts. If the resulting source differs from the tested source, run the affected checks again before finishing.
 
 A request to fix or implement something without an explicit merge instruction authorizes local edits and verification only. A request naming only a specific Git operation authorizes only that operation. Rebasing and destructive cleanup require separate explicit authorization. Completed task branches and worktrees follow the cleanup rule below.
 
@@ -20,9 +22,9 @@ Never push branches, tags or any other refs unless the user explicitly requests 
 
 When committing is authorized, finish implementation and required verification before the signing handoff. Present the proposed atomic commits and their validation results, then warn the user before triggering signing prompts. Use imperative one-line commit messages and no agent coauthor attribution.
 
-Always sign project commits, including merge commits. Run commits that use 1Password signing outside the agent sandbox. If signing fails, retry once automatically. Before retrying, confirm that the intended commit was not already created. If the second signing attempt fails, stop and ask permission for one further attempt so the user can intervene. Do not make further attempts without permission, and never fall back to unsigned commits.
+Always sign project commits, including cherry-picked commits and explicitly requested merge commits. Run commits that use 1Password signing outside the agent sandbox. If signing fails, retry once automatically. Before retrying, confirm that the intended commit was not already created. If the second signing attempt fails, stop and ask permission for one further attempt so the user can intervene. Do not make further attempts without permission, and never fall back to unsigned commits.
 
-After signing succeeds, continue any local merge already authorized without asking again.
+After signing succeeds, continue any local integration already authorized without asking again.
 
 ## Key constraints
 
@@ -64,7 +66,7 @@ Record the source commits, hashes of relevant uncommitted inputs, build configur
 
 Arrange cleanup before starting temporary test devices. Copy required evidence out, then stop and delete each device immediately after its last use, including after failed tests. Verify that the device's temporary storage was removed. Remove only devices and scratch files created by the current task. Preserve explicitly persistent devices and shared caches.
 
-After successfully merging a task into `develop`, remove the completed task's feature worktree and delete its feature branch. This cleanup is included in the merge authorization. Before removal, verify that all intended changes are merged, the worktree has no uncommitted changes, and no other active task is using it. Preserve required verification evidence outside the worktree first.
+After successfully integrating a task into `develop`, remove the completed task's feature worktree and delete its feature branch. This cleanup is included in the merge authorization. Before removal, verify that all intended changes are present in `develop`, the worktree has no uncommitted changes, and no other active task is using it. Preserve required verification evidence outside the worktree first.
 
 Do not discard uncommitted work or delete unrelated branches or worktrees. If safe cleanup cannot be established, leave them intact and report why. This does not authorize deleting remote branches or performing any push.
 

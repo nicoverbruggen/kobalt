@@ -91,7 +91,7 @@ On Kobo models with a physical Home button, pressing it closes Kobalt and return
 
 ## Opening books
 
-The default build opens unencrypted local EPUBs selected through Nickel, regardless of their folder. This includes onboard and SD storage, hidden folders, Kobo's built-in Dropbox and Google Drive downloads, and folders used by third-party sync services. Local files can have any filename or use a symlink; Nickel's EPUB MIME type and Kobalt's archive inspection determine whether they are supported. DRM-free Kobo purchases also open, including extensionless books stored by Nickel. Embedded TrueType and OpenType fonts using standard IDPF font obfuscation are supported. This font embedding method is not DRM. Other resource encryption and unsupported font obfuscation still use Nickel. Book previews, PDFs and protected books use Nickel's reader.
+The default build opens unencrypted local EPUBs selected through Nickel, regardless of their folder. This includes onboard and SD storage, hidden folders, Kobo's built-in Dropbox and Google Drive downloads, and folders used by third-party sync services. Local files can have any filename or use a symlink; Nickel's EPUB MIME type and Kobalt's archive inspection determine whether they are supported. DRM-free Kobo purchases also open, including extensionless books stored by Nickel. Embedded TrueType and OpenType fonts using IDPF or Adobe font obfuscation are supported. Adobe font obfuscation requires a UUID in the book's metadata. These font embedding methods are not DRM. Other resource encryption and unsupported font obfuscation still use Nickel. Book previews, PDFs and protected books use Nickel's reader.
 
 On firmware 4, sideloaded filenames and saved chapter prefixes preserve literal `#`, `?` and percent sequences such as `%20`.
 
@@ -280,7 +280,7 @@ Power-off and reboot wait for Kobalt to save reading time and progress before Ni
 
 Kobalt tolerates repeated manifest items when every attribute matches. Conflicting declarations with the same ID remain unsupported.
 
-- ZIP64 archives are not supported. Resource encryption is unsupported except for standard IDPF font obfuscation.
+- ZIP64 archives are not supported. Resource encryption is unsupported except for IDPF and Adobe font obfuscation.
 - SVG input elements can nest up to 64 levels. Rendering skips references that would extend an active SVG reference chain beyond 16 levels.
 - Resources are limited to 32 MiB each, and the source cache to 32 MiB in total. Images above the limits show a placeholder. An optional image that cannot load shows a warning and does not stop later images from loading. Renewing the source allows another attempt. Cancellation, revoked access and changed resource bytes still stop the session. Interlaced PNG images whose decoded storage exceeds 64 MiB are not rendered, including images embedded inside other resources. The parsed document, fonts and page images are outside the source-cache budget.
 - Typography changes lay out the whole book again. There is no partial reflow.

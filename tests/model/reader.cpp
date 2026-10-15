@@ -367,52 +367,80 @@ static void checkCssDensity() {
     require(sizesAt212[4] == sizesAt300[4] && qAbs(sizesAt300[4].width() - 200) <= 1,
             "Percentage image width changed with CSS density");
 }
-static void checkIdpfFonts() {
+static void checkObfuscatedFonts() {
     QFile font(kobalt::test::readerAssets().file("fonts/InstrumentSerif-Regular.ttf"));
     require(font.open(QIODevice::ReadOnly), "open synthetic embedded font fixture");
     const auto original = font.readAll();
-    auto obfuscated = original;
-    const auto key = QCryptographicHash::hash("test-identifier", QCryptographicHash::Sha1);
-    for (int i = 0; i < qMin(1040, int(obfuscated.size())); ++i)
-        obfuscated[i] = char(uchar(obfuscated[i]) ^ uchar(key[i % key.size()]));
-    auto book = [&](const QByteArray &fontBytes, bool encoded, const QByteArray &identifier) {
+    const QByteArray idpfAlgorithm = "http://www.idpf.org/2008/embedding";
+    const QByteArray adobeAlgorithm = "http://ns.adobe.com/pdf/enc#RC";
+    auto book = [&](const QByteArray &fontBytes, const QByteArray &algorithm, const QByteArray &identifier,
+                    const QByteArray &extraIdentifiers = QByteArray()) {
         QList<QPair<QByteArray, QByteArray>> members = {
             {"mimetype", "application/epub+zip"},
             {"META-INF/container.xml",
              "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>"},
             {"book.opf",
              "<package xmlns='http://www.idpf.org/2007/opf' version='3.0' unique-identifier='book-id'><metadata xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:identifier id='book-id'>" +
-                 identifier +
-                 "</dc:identifier></metadata><manifest><item id='font' href='font.ttf' media-type='font/ttf'/><item id='chapter' href='chapter.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='chapter'/></spine></package>"},
+                 identifier + "</dc:identifier>" + extraIdentifiers +
+                 "</metadata><manifest><item id='font' href='font.ttf' media-type='font/ttf'/><item id='chapter' href='chapter.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='chapter'/></spine></package>"},
             {"chapter.xhtml",
              "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>@font-face {font-family: Embedded; src: url(font.ttf);} body {font-family: Embedded;}</style></head><body><p>Embedded font glyphs should match the unobfuscated original.</p></body></html>"},
             {"font.ttf", fontBytes}};
-        if (encoded)
+        if (!algorithm.isEmpty()) {
             members.append(QPair<QByteArray, QByteArray>{
                 "META-INF/encryption.xml",
-                "<encryption xmlns='urn:oasis:names:tc:opendocument:xmlns:container' xmlns:enc='http://www.w3.org/2001/04/xmlenc#'><enc:EncryptedData><enc:EncryptionMethod Algorithm='http://www.idpf.org/2008/embedding'/><enc:CipherData><enc:CipherReference URI='font.ttf'/></enc:CipherData></enc:EncryptedData></encryption>"});
+                "<encryption xmlns='urn:oasis:names:tc:opendocument:xmlns:container' xmlns:enc='http://www.w3.org/2001/04/xmlenc#'><enc:EncryptedData><enc:EncryptionMethod Algorithm='" +
+                    algorithm +
+                    "'/><enc:CipherData><enc:CipherReference URI='font.ttf'/></enc:CipherData></enc:EncryptedData></encryption>"});
+        }
         return storedEpub(members);
     };
     QString error;
     QByteArray expected, expectedPreview;
     {
         kobalt::ReaderModel plain(kobalt::test::readerFonts());
-        require(plain.open(book(original, false, "test-identifier"), QSize(800, 1000), {}, &error), qPrintable(error));
+        require(plain.open(book(original, {}, "test-identifier"), QSize(800, 1000), {}, &error), qPrintable(error));
         require(plain.embeddedFontCount() == 1 && plain.style(32, 120, "", 36), "load original publisher font");
         expected = hash(plain.image(0));
         kobalt::ReaderModel preview(kobalt::test::readerFonts());
         require(preview.openPreview(plain, QSize(800, 1000), &error), qPrintable(error));
         expectedPreview = hash(preview.image(0));
     }
-    for (const auto &identifier : {QByteArray("test-identifier"), QByteArray(" test-\tiden\n tifier\r ")}) {
-        kobalt::ReaderModel decoded(kobalt::test::readerFonts());
-        require(decoded.open(book(obfuscated, true, identifier), QSize(800, 1000), {}, &error), qPrintable(error));
-        require(decoded.embeddedFontCount() == 1 && decoded.style(32, 120, "", 36), "load IDPF publisher font");
-        require(hash(decoded.image(0)) == expected, "IDPF font glyphs differ from the original font");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
-        require(preview.openPreview(decoded, QSize(800, 1000), &error), qPrintable(error));
-        require(preview.embeddedFontCount() == 1 && hash(preview.image(0)) == expectedPreview,
-                "IDPF font preview changed publisher glyphs");
+    struct FontCase {
+        QByteArray algorithm, identifier, extraIdentifiers, key;
+        int prefixBytes;
+    };
+    const auto idpfKey = QCryptographicHash::hash("test-identifier", QCryptographicHash::Sha1);
+    const auto adobeKey = QByteArray::fromHex("0123456789abcdef0123456789abcdef");
+    for (const auto &fixture :
+         {FontCase{idpfAlgorithm, "test-identifier", {}, idpfKey, 1040},
+          FontCase{idpfAlgorithm, " test-\tiden\n tifier\r ", {}, idpfKey, 1040},
+          FontCase{adobeAlgorithm, "urn:uuid:01234567-89ab-cdef-0123-456789abcdef", {}, adobeKey, 1024},
+          FontCase{adobeAlgorithm, "test-identifier",
+                   "<dc:identifier id='font-id'>urn:uuid:01234567-89ab-cdef-0123-456789abcdef</dc:identifier>",
+                   adobeKey, 1024}}) {
+        auto obfuscated = original;
+        for (int i = 0; i < qMin(fixture.prefixBytes, int(obfuscated.size())); ++i) {
+            obfuscated[i] = char(uchar(obfuscated[i]) ^ uchar(fixture.key[i % fixture.key.size()]));
+        }
+        const auto bytes = book(obfuscated, fixture.algorithm, fixture.identifier, fixture.extraIdentifiers);
+        QTemporaryDir cache;
+        require(cache.isValid(), "create obfuscated font cache");
+        const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+        for (bool cached : {false, true}) {
+            kobalt::ReaderModel decoded(kobalt::test::readerFonts());
+            decoded.setDocumentCache(cache.path(), fingerprint, "obfuscated-font-test", bytes.size());
+            require(decoded.open(bytes, QSize(800, 1000), {}, &error), qPrintable(error));
+            require(decoded.openedFromCache() == cached, "obfuscated font cache was not reused");
+            require(decoded.embeddedFontCount() == 1 && decoded.style(32, 120, "", 36),
+                    "load obfuscated publisher font");
+            require(hash(decoded.image(0)) == expected, "obfuscated font glyphs differ from the original font");
+            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            require(preview.openPreview(decoded, QSize(800, 1000), &error), qPrintable(error));
+            require(preview.embeddedFontCount() == 1 && hash(preview.image(0)) == expectedPreview,
+                    "obfuscated font preview changed publisher glyphs");
+            require(decoded.saveDocumentCache(), "save obfuscated font cache");
+        }
     }
 }
 static void checkDeferredPublisherStyles() {
@@ -452,7 +480,7 @@ static void checkDeferredPublisherStyles() {
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     checkDeferredPublisherStyles();
-    checkIdpfFonts();
+    checkObfuscatedFonts();
     const auto positions = kobalt::nickel::positionCodec();
     const QVector<kobalt::ReadingFont> axisFixture{
         {"Variable fixture", {}, kobalt::FontOrigin::Sideloaded, false, {300, 650, 450}, {6.25, 72.75, 14}}};

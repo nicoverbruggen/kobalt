@@ -44,7 +44,7 @@ bool safeName(const QString &name) {
     return !name.startsWith("TENG/") && !name.startsWith("FONT_ROUTE/") && !name.startsWith("EPUBPATH");
 }
 // Font obfuscation is an EPUB embedding convention, not content encryption.
-// CREngine decodes IDPF fonts. Admit only metadata that describes that path.
+// CREngine decodes IDPF and Adobe fonts. Admit only metadata for those paths.
 bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes) {
     constexpr qint64 limit = 2 * 1024 * 1024;
     auto read = [&](const QString &name) -> QByteArray {
@@ -89,6 +89,9 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
         return false;
     QXmlStreamReader package(read(packagePath));
     QString identifierId, identifier;
+    bool hasAdobeIdentifier = false;
+    const QRegularExpression adobeIdentifier(
+        "^(?:urn:uuid:)?(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$");
     int matchingIdentifiers = 0, depth = 0, metadataDepth = -1, manifestDepth = -1;
     QSet<QString> fonts, ids, paths;
     const QSet<QString> fontTypes = {"application/vnd.ms-opentype",
@@ -124,10 +127,16 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
                  package.name() == QStringLiteral("manifest"))
             manifestDepth = depth;
         else if (depth == metadataDepth + 1 && metadataDepth == 2 && package.name() == QStringLiteral("identifier") &&
-                 package.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/") &&
-                 package.attributes().value("id") == identifierId && !identifierId.isEmpty()) {
-            ++matchingIdentifiers;
-            identifier = package.readElementText();
+                 package.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
+            const bool unique = package.attributes().value("id") == identifierId && !identifierId.isEmpty();
+            const auto text = package.readElementText();
+            if (unique) {
+                ++matchingIdentifiers;
+                identifier = text;
+            }
+            // Adobe uses a UUID identifier, which can differ from the IDPF
+            // unique identifier. CREngine checks every metadata identifier.
+            hasAdobeIdentifier |= adobeIdentifier.match(text.trimmed()).hasMatch();
             --depth;
         } else if (depth == manifestDepth + 1 && manifestDepth == 2 &&
                    package.namespaceUri() == QStringLiteral("http://www.idpf.org/2007/opf") &&
@@ -195,8 +204,9 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
             } else
                 return false;
         }
-        if (methods != 1 || cipherData != 1 || references != 1 ||
-            algorithm != QStringLiteral("http://www.idpf.org/2008/embedding") || !safeName(target) ||
+        const bool supported = algorithm == QStringLiteral("http://www.idpf.org/2008/embedding") ||
+                               (algorithm == QStringLiteral("http://ns.adobe.com/pdf/enc#RC") && hasAdobeIdentifier);
+        if (methods != 1 || cipherData != 1 || references != 1 || !supported || !safeName(target) ||
             target.contains('%') || !fonts.contains(target) || targets.contains(target))
             return false;
         targets.insert(target);

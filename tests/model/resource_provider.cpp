@@ -302,6 +302,28 @@ int main(int argc, char **argv) {
     QString reason;
     require(inspection.inspect(zip(obfuscatedFiles), &reason), "accept standard IDPF font metadata");
     const auto validMetadata = obfuscatedFiles.value("META-INF/encryption.xml");
+    const auto validPackage = obfuscatedFiles.value("book.opf");
+    auto adobeMetadata = validMetadata;
+    adobeMetadata.replace("http://www.idpf.org/2008/embedding", "http://ns.adobe.com/pdf/enc#RC");
+    auto adobePackage = validPackage;
+    adobePackage.replace(
+        "</metadata>",
+        "<dc:identifier id='font-id'>urn:uuid:01234567-89ab-cdef-0123-456789abcdef</dc:identifier></metadata>");
+    obfuscatedFiles["META-INF/encryption.xml"] = adobeMetadata;
+    obfuscatedFiles["book.opf"] = adobePackage;
+    require(inspection.inspect(zip(obfuscatedFiles), &reason), "accept Adobe font metadata with a separate UUID");
+    obfuscatedFiles["book.opf"] = validPackage;
+    require(!inspection.inspect(zip(obfuscatedFiles), &reason), "reject Adobe font metadata without a UUID");
+    for (const auto &replacement :
+         {QPair<QByteArray, QByteArray>{"font.otf", "book.opf"},
+          {"font.otf", "missing.otf"},
+          {"http://ns.adobe.com/pdf/enc#RC", "http://www.w3.org/2001/04/xmlenc#aes128-cbc"}}) {
+        obfuscatedFiles["book.opf"] = adobePackage;
+        obfuscatedFiles["META-INF/encryption.xml"] = adobeMetadata;
+        obfuscatedFiles["META-INF/encryption.xml"].replace(replacement.first, replacement.second);
+        require(!inspection.inspect(zip(obfuscatedFiles), &reason), "reject unsupported Adobe resource handling");
+    }
+    obfuscatedFiles["book.opf"] = validPackage;
     for (const auto &replacement : {QPair<QByteArray, QByteArray>{"http://www.idpf.org/2008/embedding", "urn:unknown"},
                                     {"font.otf", "book.opf"},
                                     {"font.otf", "missing.otf"},
@@ -325,7 +347,6 @@ int main(int argc, char **argv) {
     obfuscatedFiles["META-INF/encryption.xml"] = repeated;
     require(!inspection.inspect(zip(obfuscatedFiles), &reason), "reject repeated obfuscated font target");
     obfuscatedFiles["META-INF/encryption.xml"] = validMetadata;
-    const auto validPackage = obfuscatedFiles.value("book.opf");
     for (const auto &replacement : {QPair<QByteArray, QByteArray>{"http://www.idpf.org/2007/opf", "urn:wrong"},
                                     {"<manifest>", "<manifest xmlns='urn:wrong'>"},
                                     {"<metadata ", "<outside><metadata "},

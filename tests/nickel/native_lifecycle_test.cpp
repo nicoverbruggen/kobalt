@@ -15,6 +15,7 @@ public:
     bool asleep = false, sleepVisible = false, pinVisible = false;
 signals:
     void aboutToSleep();
+    void resumingFromSleep();
     void resumedFromSleep();
 };
 
@@ -234,11 +235,15 @@ private slots:
 
     void delayedUnlockResumesWithoutAnotherPowerSignal_data() {
         QTest::addColumn<bool>("usbConnected");
-        QTest::newRow("sleep-overlay") << false;
-        QTest::newRow("usb-remount-after-sleep") << true;
+        QTest::addColumn<bool>("earlyResume");
+        QTest::newRow("sleep-overlay") << false << false;
+        QTest::newRow("sleep-overlay-before-frontlight") << false << true;
+        QTest::newRow("usb-remount-after-sleep") << true << false;
+        QTest::newRow("usb-remount-before-frontlight") << true << true;
     }
     void delayedUnlockResumesWithoutAnotherPowerSignal() {
         QFETCH(bool, usbConnected);
+        QFETCH(bool, earlyResume);
         kobalt::NativeLifecycle lifecycle(nullptr);
         QVERIFY(lifecycle.connected());
         auto *power = N3PowerWorkflowManager::sharedInstance();
@@ -257,7 +262,11 @@ private slots:
         power->asleep = power->sleepVisible = true;
         emit power->aboutToSleep();
         power->asleep = false;
-        emit power->resumedFromSleep();
+        if (earlyResume) {
+            emit power->resumingFromSleep();
+        } else {
+            emit power->resumedFromSleep();
+        }
         QTest::qWait(20);
         QCOMPARE(wakes, 0);
         QVERIFY(lifecycle.blocked());
@@ -271,6 +280,9 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(wakes, 1, 300);
         QVERIFY(!lifecycle.blocked());
         QVERIFY(!kobalt::NativeLifecycle::suspended());
+        emit power->resumedFromSleep();
+        QTest::qWait(50);
+        QCOMPARE(wakes, 1);
     }
 
     void wakeWaitsForUsbViewToCloseAfterRemount() {
@@ -290,7 +302,7 @@ private slots:
         power->asleep = true;
         emit power->aboutToSleep();
         power->asleep = false;
-        emit power->resumedFromSleep();
+        emit power->resumingFromSleep();
         QTest::qWait(20);
         emit usb->aboutToUnplug();
         emit usb->doneProcessing();
@@ -321,16 +333,82 @@ private slots:
         QVERIFY(lifecycle.blocked());
         power->asleep = false;
         power->pinVisible = true;
-        emit power->resumedFromSleep();
+        emit power->resumingFromSleep();
         QCoreApplication::processEvents();
         QCOMPARE(wakes, 0);
         QVERIFY(lifecycle.blocked());
         QVERIFY(kobalt::NativeLifecycle::suspended());
         power->pinVisible = false;
-        emit power->resumedFromSleep();
         QTRY_COMPARE(wakes, 1);
         QVERIFY(!lifecycle.blocked());
         QVERIFY(!kobalt::NativeLifecycle::suspended());
+        emit power->resumedFromSleep();
+        QTest::qWait(50);
+        QCOMPARE(wakes, 1);
+    }
+
+    void anotherSleepCancelsPendingWake() {
+        kobalt::NativeLifecycle lifecycle(nullptr);
+        QVERIFY(lifecycle.connected());
+        auto *power = N3PowerWorkflowManager::sharedInstance();
+        int wakes = 0;
+        lifecycle.wake = [&] {
+            ++wakes;
+        };
+        power->asleep = power->sleepVisible = true;
+        emit power->aboutToSleep();
+        power->asleep = false;
+        emit power->resumingFromSleep();
+        QTest::qWait(20);
+        power->asleep = true;
+        emit power->aboutToSleep();
+        power->sleepVisible = false;
+        // The earlier frontlight animation can finish during the next sleep.
+        emit power->resumedFromSleep();
+        QTest::qWait(80);
+        QCOMPARE(wakes, 0);
+        QVERIFY(lifecycle.blocked());
+        power->asleep = false;
+        emit power->resumingFromSleep();
+        QTRY_COMPARE(wakes, 1);
+        emit power->resumingFromSleep();
+        emit power->resumedFromSleep();
+        QTest::qWait(50);
+        QCOMPARE(wakes, 1);
+    }
+
+    void usbCompletionRestoresAwakeReader_data() {
+        QTest::addColumn<bool>("cancelled");
+        QTest::newRow("cancelled") << true;
+        QTest::newRow("remounted") << false;
+    }
+
+    void usbCompletionRestoresAwakeReader() {
+        QFETCH(bool, cancelled);
+        kobalt::NativeLifecycle lifecycle(nullptr);
+        QVERIFY(lifecycle.connected());
+        auto *usb = PlugWorkflowManager::sharedInstance();
+        int wakes = 0;
+        lifecycle.wake = [&] {
+            ++wakes;
+        };
+        lifecycle.prepareUsb = [](std::function<void()> ready) {
+            ready();
+        };
+        if (cancelled) {
+            kobalt_usb_workflow(usb);
+            QVERIFY(lifecycle.storageBlocked());
+            kobalt::NativeLifecycle::disconnected();
+        } else {
+            QVERIFY(kobalt::NativeLifecycle::interceptUsb(usb));
+            emit usb->aboutToUnplug();
+            emit usb->doneProcessing();
+        }
+        QTRY_COMPARE(wakes, 1);
+        QVERIFY(!lifecycle.blocked());
+        emit N3PowerWorkflowManager::sharedInstance() -> resumedFromSleep();
+        QTest::qWait(50);
+        QCOMPARE(wakes, 1);
     }
 
     void refusedSleepViewRemovalCancelsPreparedWake() {

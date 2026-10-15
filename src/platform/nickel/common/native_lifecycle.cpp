@@ -142,6 +142,9 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent) {
         !nativeShowSleepView || !nativeHideSleepView || !nativePowerOff || !nativeReboot)
         return;
     const auto a = connect(power(), SIGNAL(aboutToSleep()), this, SLOT(aboutToSleep()), Qt::DirectConnection);
+    // Nickel can defer resumedFromSleep until the frontlight fade finishes.
+    // Start earlier; finishWake still waits for the sleep, PIN and USB views.
+    const auto resuming = connect(power(), SIGNAL(resumingFromSleep()), this, SLOT(resumed()), Qt::DirectConnection);
     const auto b = connect(power(), SIGNAL(resumedFromSleep()), this, SLOT(resumed()), Qt::DirectConnection);
     const auto c = connect(usb(), SIGNAL(doneProcessing()), this, SLOT(processingDone()), Qt::DirectConnection);
     const auto d = connect(usb(), SIGNAL(aboutToUnplug()), this, SLOT(unplugging()), Qt::DirectConnection);
@@ -149,7 +152,7 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent) {
     if (plugManager) {
         connect(plugManager(), SIGNAL(plugged()), this, SLOT(usbPlugged()), Qt::DirectConnection);
     }
-    connected_ = a && b && c && d;
+    connected_ = a && resuming && b && c && d;
     if (connected_) {
         active = this;
         asleep = nativeSleeping();
@@ -186,6 +189,10 @@ void NativeLifecycle::aboutToSleep() {
     savingBeforeSleep = false;
 }
 void NativeLifecycle::resumed() {
+    // The completed signal can arrive after the reader is already awake.
+    if (!asleep) {
+        return;
+    }
     // Leave Nickel's resume stack before restoring the reader.
     wakeRetry.start(0);
 }
@@ -343,7 +350,7 @@ void NativeLifecycle::disconnected() {
     active->pendingGadget.clear();
     active->storageReady = false;
     active->pendingWorkflow.clear();
-    active->resumed();
+    active->wakeRetry.start(0);
 }
 void NativeLifecycle::processingDone() {
     // Ordinary library scans also emit this signal. Only a remount ends USB.
@@ -360,7 +367,7 @@ void NativeLifecycle::processingDone() {
     if (nativeSleeping()) {
         engineActivity().pause(true);
     }
-    resumed();
+    wakeRetry.start(0);
 }
 bool NativeLifecycle::restartAfterRemoval() {
     // A read error must not look like an uninstall request. Nickel has already

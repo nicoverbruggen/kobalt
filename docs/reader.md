@@ -253,7 +253,7 @@ Ordinary page turns reuse chapter pages and the available font list in memory. C
 
 ## Sleep, USB and power
 
-Before sleep, Kobalt saves its position and pauses its work. The page stays on screen until Nickel's sleep screen is ready. Kobalt then shows the sleep screen with one full refresh, which also clears the page, so the screen flashes once, as in Nickel's own reader. After wake, Kobalt waits for Nickel's sleep or PIN view to close and for USB storage to finish remounting. It then checks authorization and restores page-turn input before it shows the book again. If wake or USB cancellation arrives while the previous operation is still releasing resources, Kobalt completes that release before checking authorization again.
+Before sleep, Kobalt saves its position and pauses its work. The page stays on screen until Nickel's sleep screen is ready. Kobalt then shows the sleep screen with one full refresh, which also clears the page, so the screen flashes once, as in Nickel's own reader. After wake, Kobalt waits for Nickel's sleep or PIN view to close and for USB storage to finish remounting. It then checks authorization and restores page-turn input before it shows the book again. The frontlight can finish fading in while the page is already visible. If wake or USB cancellation arrives while the previous operation is still releasing resources, Kobalt completes that release before checking authorization again.
 
 Nickel's USB confirmation appears above the open Kobalt page. Cancel keeps the book open.
 

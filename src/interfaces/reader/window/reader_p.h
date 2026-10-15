@@ -207,6 +207,7 @@ private:
         QString chapter;
     };
     QVector<LinkVisit> linkHistory;
+    LinkVisit pendingPassage{};
     quint64 linkEpoch = 0;
     bool linkPending = false, returningFromLink = false;
     bool linksActive() const;
@@ -226,7 +227,7 @@ private:
     void dismissLinks();
     void updateLinkReturn();
     bool openLink(QPoint point);
-    void confirmLink(const QString &target);
+    void goToPassage(const QString &target);
     kobalt::DictionaryPanel *dictionaryPanel = nullptr;
     std::unique_ptr<kobalt::DictionaryService> dictionary;
     QString lookupText;

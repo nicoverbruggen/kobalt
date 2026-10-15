@@ -145,6 +145,13 @@ void Reader::syncFrameState() {
     // It must not drop a tap or swipe in progress either.
     if (!appearanceEdit.panelOpen() && (model->busy() || model->image().cacheKey() != page->image.cacheKey()))
         dismissLookup(true);
+    if (!model->busy() && !pendingPassage.position.isEmpty()) {
+        // Accept the visit only after the engine confirms a different passage.
+        const auto origin = std::exchange(pendingPassage, {});
+        if (model->error().isEmpty() && model->state().value("position").toString() != origin.position) {
+            linkHistory.append(origin);
+        }
+    }
     if (returningFromLink && !model->busy()) {
         returningFromLink = false;
         if (!linkHistory.isEmpty() && model->state().value("position").toString() == linkHistory.last().position)

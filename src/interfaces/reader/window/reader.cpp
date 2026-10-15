@@ -692,7 +692,7 @@ bool Reader::openLink(QPoint point) {
                            return;
                        reader->dismissLinkConfirmation();
                        if (details.kind == kobalt::LinkKind::Passage)
-                           reader->confirmLink(details.target);
+                           reader->goToPassage(details.target);
                        else if (details.kind == kobalt::LinkKind::Website) {
                            auto *dialog = new kobalt::WebsiteDialog(reader);
                            reader->linkDialog = dialog;
@@ -744,14 +744,17 @@ bool Reader::openLink(QPoint point) {
     return false;
 }
 
-void Reader::confirmLink(const QString &target) {
-    if (target.isEmpty() || model->busy() || closing || lifecycleHidden || services.suspended())
+void Reader::goToPassage(const QString &target) {
+    if (target.isEmpty() || model->busy() || closing || lifecycleHidden || services.suspended()) {
         return;
+    }
     const LinkVisit origin{model->state().value("position").toString(), model->page(), page->chapterTitle};
+    if (!model->goTo(target)) {
+        return;
+    }
+    pendingPassage = origin;
     dismissLookup();
     dismissControls();
-    linkHistory.append(origin);
-    model->goTo(target);
     refresh();
 }
 

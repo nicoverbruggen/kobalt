@@ -4011,6 +4011,199 @@ private slots:
         }
         QVERIFY(storage::writeJson(settingsPath, original));
     }
+    void bookmarkJumpAndReturn_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<int>("ppi");
+        for (bool dark : {false, true}) {
+            for (int ppi : {300, 212}) {
+                const auto name = QString("%1-%2").arg(dark ? "dark" : "light").arg(ppi);
+                QTest::newRow(qPrintable(name)) << dark << ppi;
+            }
+        }
+    }
+    void bookmarkJumpAndReturn() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        struct RestoreDensity {
+            int density = ui::density(), ppi = readingPpi.load();
+            ~RestoreDensity() {
+                ui::setDensity(density);
+                readingPpi.store(ppi);
+            }
+        } restore;
+        ui::setDensity(ppi);
+        readingPpi.store(ppi);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        QVERIFY(storage::writeJson(paths.preferences(), {{"dark_mode", dark}}));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        test::ReaderCanvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->go(2));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *page = host.window()->findChild<ReadingPage *>("rrPage");
+        QVERIFY(page);
+        const auto destination = host.session()->state().value("position").toString();
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->bookmarkCorner().center())));
+        QTRY_VERIFY(page->bookmarked);
+        QVERIFY(host.session()->go(8));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto origin = host.session()->state().value("position").toString();
+        const int originPage = host.session()->page();
+        const auto originChapter = page->chapterTitle;
+        const QPoint center(nativeSize.width() / 2, nativeSize.height() / 2);
+        QVERIFY(clickAt(canvas, center));
+        auto *bookmarks = host.window()->findChild<QPushButton *>("rrBookmarks");
+        QVERIFY(bookmarks && bookmarks->isVisible());
+        QVERIFY(click(canvas, bookmarks));
+        auto *entry = host.window()->findChild<QPushButton *>("rrBookmark0");
+        QVERIFY(entry && entry->isVisible());
+        QVERIFY(click(canvas, entry));
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), destination);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrBookmarkList")->isVisible());
+        auto *back = host.window()->findChild<ui::CaptionButton *>("rrNavLinkReturn");
+        QVERIFY(back);
+        QVERIFY(!back->isVisible());
+        QVERIFY(clickAt(canvas, center));
+        QTRY_VERIFY(back->isVisible());
+        QCOMPARE(back->text(), strings::get("reader.return_page").arg(originPage + 1));
+        QCOMPARE(back->caption(), strings::get("reader.jumped_from_chapter").arg(originChapter));
+        QVERIFY(host.window()->grab().save(
+            QString("native-reader-bookmark-return-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
+        // Closing the menu and reading on keep the original return passage.
+        QVERIFY(clickAt(canvas, center));
+        QTRY_VERIFY(!back->isVisible());
+        host.window()->pageButton(1);
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->page(), 3);
+        QVERIFY(clickAt(canvas, center));
+        QTRY_VERIFY(back->isVisible());
+        QVERIFY(click(canvas, back));
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), origin);
+        QVERIFY(clickAt(canvas, center));
+        QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+        QVERIFY(!back->isVisible());
+        // Discarding a return entry leaves the bookmarked passage open.
+        QVERIFY(click(canvas, bookmarks));
+        entry = host.window()->findChild<QPushButton *>("rrBookmark0");
+        QVERIFY(entry && entry->isVisible());
+        QVERIFY(click(canvas, entry));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(clickAt(canvas, center));
+        QTRY_VERIFY(back->isVisible());
+        auto *stay = host.window()->findChild<QPushButton *>("rrNavLinkStay");
+        QVERIFY(stay && stay->isVisible());
+        QVERIFY(click(canvas, stay));
+        QVERIFY(!back->isVisible());
+        QCOMPARE(host.session()->state().value("position").toString(), destination);
+        // Selecting the current bookmark must not create another return entry.
+        QVERIFY(click(canvas, bookmarks));
+        entry = host.window()->findChild<QPushButton *>("rrBookmark0");
+        QVERIFY(entry && entry->isVisible());
+        QVERIFY(click(canvas, entry));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(clickAt(canvas, center));
+        QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+        QVERIFY(!back->isVisible());
+    }
+    void bookmarkReturnSharesLinkHistory() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        bool suspended = false;
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.suspended = [&] {
+                return suspended;
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->go(2));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto first = host.session()->state().value("position").toString();
+        QVERIFY(host.session()->go(5));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto second = host.session()->state().value("position").toString();
+        QVERIFY(host.session()->go(8));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto origin = host.session()->state().value("position").toString();
+        auto *list = host.window()->findChild<BookmarkList *>("rrBookmarkList");
+        auto *links = host.window()->findChild<LinkPanel *>("rrLinkPanel");
+        auto *back = host.window()->findChild<QPushButton *>("rrLinkReturn");
+        QVERIFY(list && links && back);
+        // Exercise the same callbacks as a bookmark row and Show in book.
+        list->selected(first);
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), first);
+        links->navigate(second);
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), second);
+        list->selected(second);
+        QTRY_VERIFY(!host.session()->busy());
+        list->selected({});
+        QVERIFY(!host.session()->busy());
+        list->selected("not-a-valid-position");
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(!host.session()->error().isEmpty());
+        QCOMPARE(host.session()->state().value("position").toString(), second);
+        // A busy reader must keep its current command and return history.
+        QVERIFY(host.session()->go(6));
+        QVERIFY(host.session()->busy());
+        list->selected(origin);
+        back->click();
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->page(), 6);
+        const auto beforeSleep = host.session()->state().value("position").toString();
+        suspended = true;
+        list->selected(origin);
+        back->click();
+        QVERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), beforeSleep);
+        suspended = false;
+        host.window()->sleepReader();
+        list->selected(origin);
+        back->click();
+        QVERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), beforeSleep);
+        host.window()->wakeReader();
+        QTRY_VERIFY(!host.session()->busy());
+        // Reflow changes page numbers; return still uses the saved passage.
+        const auto state = host.session()->state();
+        QVERIFY(host.session()->style(state.value("font_pixels").toInt() + 4, state.value("line_spacing").toInt()));
+        QTRY_VERIFY(!host.session()->busy());
+        back->click();
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), first);
+        back->click();
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), origin);
+        // Consuming both entries must not create a trip back to a destination.
+        back->click();
+        QVERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), origin);
+        bool prepared = false;
+        host.window()->prepareShutdown([&] {
+            prepared = true;
+        });
+        QTRY_VERIFY(prepared);
+        list->selected(first);
+        QVERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), origin);
+    }
     void searchAndBookmark() {
         test::ReaderHost host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};

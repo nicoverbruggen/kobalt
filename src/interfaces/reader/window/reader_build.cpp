@@ -207,7 +207,7 @@ void Reader::buildReadingPage() {
         updateLinkReturn();
     };
     linkPanel->navigate = [this](const QString &target) {
-        confirmLink(target);
+        goToPassage(target);
     };
     linkReturn = new kobalt::ui::BackButton(strings::get("reader.return_to_passage"), this);
     linkReturn->setObjectName("rrLinkReturn");
@@ -215,8 +215,9 @@ void Reader::buildReadingPage() {
     linkReturn->setFixedSize(m::links::returnWidth, m::links::returnHeight);
     linkReturn->hide();
     connect(linkReturn, &QPushButton::clicked, this, [this] {
-        if (this->model->busy() || linkHistory.isEmpty() || lifecycleHidden || closing)
+        if (this->model->busy() || linkHistory.isEmpty() || lifecycleHidden || closing || services.suspended()) {
             return;
+        }
         dismissLookup();
         dismissControls();
         returningFromLink = true;
@@ -520,10 +521,7 @@ void Reader::buildOverlays() {
     choices->hide();
     bookmarkList = new kobalt::BookmarkList(this);
     bookmarkList->selected = [this](const QString &position) {
-        if (model->goTo(position)) {
-            bookmarkList->hide();
-            dismissControls();
-        }
+        goToPassage(position);
     };
     bookmarkList->back = [this] {
         bookmarkList->hide();

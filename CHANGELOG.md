@@ -1,5 +1,7 @@
 ## v1.0-beta.4
 
+- Bookmark jumps now offer Return to page in the reading menu, using the same return history as internal links.
+
 - Size Text, Layout and About panels from their visible content. Android's Layout panel no longer leaves space for the omitted rotation controls. Text and Layout scroll when their controls do not fit on screen.
 
 - Added an experimental Android debug APK for ARM64 devices running Android 9 or later. It opens DRM-free EPUBs and keeps books, settings and reading progress locally. Obtain testing APKs directly from this repository; they use a shared public signing key.

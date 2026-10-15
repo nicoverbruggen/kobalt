@@ -7,6 +7,7 @@
 #include <QDir>
 #include "engine/crengine/reader_model.h"
 #include "engine/crengine/document_cache.h"
+#include "engine/crengine/kobo_styles.h"
 #include "engine/crengine/page_pixels.h"
 #include "publication/publication.h"
 #include "support/strings.h"
@@ -89,6 +90,82 @@ static QByteArray storedEpub(const QList<QPair<QByteArray, QByteArray>> &members
     u32(bytes, start);
     u16(bytes, 0);
     return bytes;
+}
+static void checkKoboStyleHacks() {
+    const QByteArray css = "div#book-inner p, div#book-inner div { font-size: 1.0em; }"
+                           "a { color: black; } a:link, a:visited, a:hover, a:active { color: blue; }"
+                           "div#book-inner * { margin-top: 0 !important; margin-bottom: 0 !important;}";
+    const QByteArray head = "<html xmlns='http://www.w3.org/1999/xhtml'><head>"
+                            "<style>h2{margin:1em 0 2em}p{margin:1em 0}</style>";
+    const QByteArray body = "</head><body><div id='book-inner'><h2>Chapter title</h2>"
+                            "<p>First paragraph, caf\xc3\xa9.</p><p>Second paragraph.</p></div></body></html>";
+    const auto style = [](const QByteArray &attributes, const QByteArray &contents) {
+        return "<style " + attributes + ">" + contents + "</style>";
+    };
+    const auto empty = style("id='kobostylehacks'", {});
+    const auto injected = style("id='kobostylehacks'", css);
+    const auto cleaned = head + empty + body;
+    require(kobalt::withoutKoboStyleHacks(head + injected + body) == cleaned,
+            "Known Kobo injection did not leave publisher styles and text intact");
+    require(kobalt::withoutKoboStyleHacks(head + style("class='extra kobostylehacks'", css) + body) ==
+                head + style("class='extra kobostylehacks'", {}) + body,
+            "Class-marked Kobo injection was retained");
+    require(kobalt::withoutKoboStyleHacks(head + style("id='kobostylehacks'", "<![CDATA[" + css + "]]>") + body) ==
+                cleaned,
+            "CDATA Kobo injection was retained");
+    auto spaced = css;
+    spaced.replace(";", ";\n\t");
+    require(kobalt::withoutKoboStyleHacks(head + style("id='kobostylehacks'", spaced) + body) == cleaned,
+            "Whitespace prevented recognition of Kobo CSS");
+    const QList<QByteArray> preserved{
+        style("id='kobostylehacks'", "div#book-inner { margin-top: 0; margin-bottom: 0; }"),
+        style("id='kobostylehacks'", css + "p{hyphens:none}"),
+        style("id='publisher'", css),
+        "<!--" + injected + "-->",
+        "<script><![CDATA[" + injected + "]]></script>",
+    };
+    for (const auto &markup : preserved) {
+        const auto original = head + markup + body;
+        require(kobalt::withoutKoboStyleHacks(original) == original, "Custom or non-style markup was modified");
+    }
+    const auto malformed = head + injected + "</head><body><p>Unclosed";
+    require(kobalt::withoutKoboStyleHacks(malformed) == malformed, "Malformed markup was rewritten");
+    const QList<QPair<QByteArray, QByteArray>> files{
+        {"mimetype", "application/epub+zip"},
+        {"META-INF/container.xml",
+         "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>"},
+        {"book.opf",
+         "<package xmlns='http://www.idpf.org/2007/opf' version='2.0'><metadata><title>Spacing</title></metadata><manifest>"
+         "<item id='c' href='chapter.xhtml' media-type='application/xhtml+xml'/></manifest>"
+         "<spine><itemref idref='c'/></spine></package>"},
+        {"chapter.xhtml", head + injected + body},
+    };
+    auto publisher = files;
+    publisher.last().second = head + body;
+    const auto settings = kobalt::qt::object({{"font_pixels", 36}});
+    QString error;
+    kobalt::ReaderModel expected(kobalt::test::readerFonts()), actual(kobalt::test::readerFonts());
+    require(expected.open(storedEpub(publisher), QSize(800, 1000), settings, &error), qPrintable(error));
+    require(actual.open(storedEpub(files), QSize(800, 1000), settings, &error), qPrintable(error));
+    require(actual.image(0) == expected.image(0), "ZIP opening did not restore publisher spacing");
+    QMap<QString, QByteArray> data;
+    QMap<QString, qint64> sizes;
+    for (const auto &file : files) {
+        data[QString::fromUtf8(file.first)] = file.second;
+        sizes[QString::fromUtf8(file.first)] = file.second.size();
+    }
+    auto resources = std::make_shared<kobalt::ResourceCache>(
+        data.keys(),
+        [data](const QString &name, const kobalt::ResourceCache::Sink &sink, QString *) {
+            const auto bytes = data.value(name);
+            return sink(bytes.constData(), bytes.size());
+        },
+        std::make_shared<std::atomic_bool>(false));
+    kobalt::ReaderModel streamed(kobalt::test::readerFonts()), preview(kobalt::test::readerFonts());
+    require(streamed.openResources(resources, sizes, QSize(800, 1000), settings, &error), qPrintable(error));
+    require(streamed.image(0) == expected.image(0), "Resource opening retained Kobo style hacks");
+    require(preview.openPreview(streamed, QSize(800, 1000), &error), qPrintable(error));
+    require(preview.image(0) == expected.image(0), "Preview retained Kobo style hacks");
 }
 static void checkPagePixelConversion() {
     for (const auto size : {QSize(1, 1), QSize(31, 33), QSize(65, 63), QSize(1264, 1680), QSize(2049, 2049)}) {
@@ -513,6 +590,7 @@ int main(int argc, char **argv) {
     checkJpeg(false);
     checkJpeg(true);
     checkSvg();
+    checkKoboStyleHacks();
     checkPagePixelConversion();
     require(argc == 3, "Pass the text and color test EPUB paths");
     QFile file(QString::fromLocal8Bit(argv[1]));

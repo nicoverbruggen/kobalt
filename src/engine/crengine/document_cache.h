@@ -53,7 +53,7 @@ inline lUInt32 documentCacheChecksum(const QByteArray &policy, int domVersion,
                                      const QByteArray &kobaltVersion = QByteArray(KOBALT_VERSION)) {
     // Bump when the cached book's contents change for a reason the policy
     // does not cover.
-    constexpr int version = 3;
+    constexpr int version = 4;
     const auto digest = QCryptographicHash::hash(policy + '|' + kobaltVersion + '|' + QByteArray::number(version) +
                                                      '|' + QByteArray::number(domVersion),
                                                  QCryptographicHash::Sha256);

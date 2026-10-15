@@ -2,6 +2,7 @@
 #include "support/strings.h"
 #include "reader_model.h"
 #include "reader_source.h"
+#include "kobo_styles.h"
 #include "reader_render_callback.h"
 #include "reader_alignment.h"
 #include "reader_page_layout.h"
@@ -183,12 +184,9 @@ public:
 private:
     std::shared_ptr<ResourceCache> resources;
 };
-class SectionContainer : public LVContainer {
+class ContentContainer : public LVContainer {
 public:
-    SectionContainer(LVContainerRef source, lString32 packagePath, QByteArray package)
-        : source(source), packagePath(packagePath), package(std::move(package)) {
-        packageInfo.SetItemInfo(packagePath, this->package.size(), 0);
-    }
+    explicit ContentContainer(LVContainerRef source) : source(source) {}
     bool IsContainer() override {
         return true;
     }
@@ -205,6 +203,45 @@ public:
         return source->GetObjectCount();
     }
     const LVContainerItemInfo *GetObjectInfo(int index) override {
+        return source->GetObjectInfo(index);
+    }
+    const LVContainerItemInfo *GetObjectInfo(lString32 name) override {
+        return source->GetObjectInfo(name);
+    }
+    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override {
+        auto stream = source->OpenStream(name, mode);
+        const auto suffix = QFileInfo(qstring(lString32(name))).suffix().toLower();
+        // Bound the temporary chapter copy; leave large or non-text resources streamed.
+        constexpr lvsize_t limit = 2 * 1024 * 1024;
+        if (stream.isNull() || mode != LVOM_READ ||
+            !(suffix.isEmpty() || suffix == "html" || suffix == "xhtml" || suffix == "htm" || suffix == "xml") ||
+            stream->GetSize() > limit) {
+            return stream;
+        }
+        QByteArray bytes(int(stream->GetSize()), '\0');
+        lvsize_t read = 0;
+        if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK || read != lvsize_t(bytes.size())) {
+            stream->SetPos(0);
+            return stream;
+        }
+        auto cleaned = withoutKoboStyleHacks(bytes);
+        if (cleaned == bytes) {
+            stream->SetPos(0);
+            return stream;
+        }
+        return LVCreateMemoryStream(cleaned.data(), cleaned.size(), true, LVOM_READ);
+    }
+
+protected:
+    LVContainerRef source;
+};
+class SectionContainer : public ContentContainer {
+public:
+    SectionContainer(LVContainerRef source, lString32 packagePath, QByteArray package)
+        : ContentContainer(source), packagePath(packagePath), package(std::move(package)) {
+        packageInfo.SetItemInfo(packagePath, this->package.size(), 0);
+    }
+    const LVContainerItemInfo *GetObjectInfo(int index) override {
         const auto *item = source->GetObjectInfo(index);
         return item && lString32(item->GetName()) == packagePath ? &packageInfo : item;
     }
@@ -212,15 +249,16 @@ public:
         return name == packagePath ? &packageInfo : source->GetObjectInfo(name);
     }
     LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override {
-        if (mode != LVOM_READ)
+        if (mode != LVOM_READ) {
             return {};
-        if (lString32(name) == packagePath)
+        }
+        if (lString32(name) == packagePath) {
             return LVCreateMemoryStream(package.data(), package.size(), true, LVOM_READ);
+        }
         return source->OpenStream(name, mode);
     }
 
 private:
-    LVContainerRef source;
     lString32 packagePath;
     QByteArray package;
     LVCommonContainerItemInfo packageInfo;
@@ -368,6 +406,9 @@ bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, c
                                                                                               : cacheBytes_)));
     } else
         properties->setString(DOC_PROP_FILE_NAME, lString32(U"publication.epub"));
+    if (!source->parent) {
+        source->container = LVContainerRef(new ContentContainer(source->container));
+    }
     OpeningCallback callback(engine_, std::move(progress));
     source_ = std::move(source);
     openingTimes_["model_prepare_ms"] = double(phase.restart());

@@ -1,3 +1,7 @@
+## v1.0-beta.4
+
+- Restore publisher spacing in Kobo books containing the original injected style hacks. Keep kepubify wrapper rules and custom styles.
+
 ## v1.0-beta.3
 
 ### What's changed

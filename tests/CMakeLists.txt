@@ -31,6 +31,7 @@ add_test(NAME bundled-fonts COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/
 add_test(NAME mini-build COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_mini_build.py")
 add_test(NAME dependency-extraction COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_build.py")
 add_test(NAME host-dependency-cache COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_run_tests.py")
+add_test(NAME dependency-artifacts COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_dependency_cache.py")
 add_test(NAME install-receipt COMMAND "${Python3_EXECUTABLE}" -B -m unittest discover -s "${KOBALT_TESTS}/tooling" -p test_install_receipt.py)
 add_test(NAME kobo-build-script COMMAND "${Python3_EXECUTABLE}" -B -m unittest discover -s "${KOBALT_TESTS}/tooling" -p test_kobo_build.py)
 add_test(NAME coverage-report COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_test_coverage.py")

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INPUTS = ('VERSION', 'CMakeLists.txt', 'cmake', 'targets', 'src', 'resources', 'dependencies',
           'toolchains/nickelhook-qt6', 'toolchains/qt5', 'toolchains/qt6',
           'vendor/ebook-fonts', 'tools/fetch_fonts.py', 'tools/build.py', 'tools/build_engine.py', 'tools/assets.py', 'tools/ui_strings.py', 'tools/ui_icon_vectors.py', 'tools/version.py',
-          'tools/mini_fonts.py', 'tests/Checks.cmake', 'tests/model', 'tests/unit')
+          'tools/mini_fonts.py', 'tools/dependency_cache.py', 'tests/Checks.cmake', 'tests/model', 'tests/unit')
 STAMP = 'source-state'
 
 

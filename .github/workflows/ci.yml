@@ -16,6 +16,7 @@ concurrency:
 env:
   CONTAINER_ENGINE: docker
   PYTHONUNBUFFERED: '1'
+  KOBALT_DEPENDENCY_CACHE: ${{ github.workspace }}/.cache/shared-dependencies
   KOBALT_RELEASE_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
 
 jobs:
@@ -107,8 +108,16 @@ jobs:
             .cache/android-dependencies/*.tar.gz
             .cache/android-gradle/caches
             .cache/android-gradle/wrapper
+            .cache/shared-dependencies/gradle/caches
+            .cache/shared-dependencies/gradle/wrapper
             vendor/ebook-fonts
           key: android-${{ runner.os }}-${{ hashFiles('tools/ci_android.py', 'android/dependencies.json', 'dependencies/manifest.json', 'resources/fonts/ebook-core.json') }}
+          restore-keys: android-${{ runner.os }}-
+      - uses: actions/cache@v6
+        with:
+          path: .cache/shared-dependencies/artifacts/android-arm64-v8a-linux-x86_64
+          key: android-artifacts-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          restore-keys: android-artifacts-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Build and verify debug APK
         env:
           VERSION_CODE: ${{ github.run_number }}

@@ -22,6 +22,7 @@ from build import fetch
 import assets
 import source_state
 import build
+from dependency_cache import fetch_source
 
 
 class DependencyExtractionTest(unittest.TestCase):
@@ -200,6 +201,30 @@ class DeviceDependencyCacheTest(unittest.TestCase):
 
 
 class DependencyDownloadTest(unittest.TestCase):
+    def test_shared_archive_is_reused_offline_in_another_checkout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first, second = root / 'first', root / 'second'
+            first.mkdir(); second.mkdir()
+            archive, payload = DependencyExtractionTest().make_archive(first)
+            spec = {'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(), 'directory': 'sample-1'}
+            fetch_source('sample', spec, first, root / 'shared', offline=True)
+            with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected download')):
+                fetch_source('sample', spec, second, root / 'shared', offline=True)
+            self.assertEqual((second / 'sample-1/configure').read_bytes(), payload)
+
+    def test_corrupt_shared_archive_is_rejected_before_extraction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache = root / 'checkout'; cache.mkdir()
+            spec = {'sha256': '0' * 64, 'directory': 'sample-1'}
+            shared = root / 'shared' / spec['sha256']
+            shared.mkdir(parents=True)
+            (shared / 'sample.tar.gz').write_bytes(b'corrupt')
+            with self.assertRaisesRegex(ValueError, 'Shared dependency archive hash mismatch'):
+                fetch_source('sample', spec, cache, root / 'shared', offline=True)
+            self.assertFalse((cache / 'sample.tar.gz').exists())
+
     def test_interrupted_write_leaves_no_cache_entry_or_partial(self):
         with tempfile.TemporaryDirectory() as temporary:
             cache = Path(temporary)

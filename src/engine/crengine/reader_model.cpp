@@ -15,6 +15,7 @@
 #include "font_weight.h"
 #include "model/page_refresh_regions.h"
 #include "page_pixels.h"
+#include <QCryptographicHash>
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <QJsonArray>
@@ -335,6 +336,14 @@ void ReaderModel::setDocumentCache(QString directory, QByteArray fingerprint, QB
     cachePolicy_ =
         std::move(policy) + ":css-density-leading-v1:line-height-v2:" + QByteArray::number(readingPpi.load());
     cacheBytes_ = bytes;
+}
+QByteArray ReaderModel::documentCachePolicy() const {
+    // Detect CSS edits for cache reuse only. User CSS is never an installation asset.
+    if (userStyleSheet_.isEmpty()) {
+        return cachePolicy_;
+    }
+    return cachePolicy_ +
+           ":user-css-v1:" + QCryptographicHash::hash(userStyleSheet_, QCryptographicHash::Sha256).toHex();
 }
 bool ReaderModel::saveDocumentCache() {
     if (!engine_ || cacheDirectory_.isEmpty() || cacheFingerprint_.isEmpty() || !resourceError().isEmpty() || !pages())
@@ -663,7 +672,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
         if (!cacheFingerprint_.isEmpty())
             engine_->getDocProps()->setHex(
                 DOC_PROP_FILE_CRC32,
-                documentCacheChecksum(cachePolicy_ + ":bionic-v3:" + bionic_.toUtf8(), domVersion_));
+                documentCacheChecksum(documentCachePolicy() + ":bionic-v3:" + bionic_.toUtf8(), domVersion_));
         engine_->getDocument()->getProps()->setInt("kobalt.bionic.mode", bionic_ == "bold" ? 1 : 0);
         engine_->requestRender();
     }
@@ -750,7 +759,8 @@ void ReaderModel::applyStyleSheet() {
                 "[data-kobalt-prose=\"1\"], [data-kobalt-prose=\"1\"] span { text-align:%1 !important; text-align-last:auto !important; }")
                 .arg(alignment_);
     engine_->setStyleSheet(lString8(readerHtmlCss) + lString8(readerOverridesCss) +
-                           lString8(overrides.toUtf8().constData()));
+                           lString8(overrides.toUtf8().constData()) + lString8("\n") +
+                           lString8(userStyleSheet_.constData()));
 }
 void ReaderModel::resize(QSize size) {
     applyAppearance({}, size);

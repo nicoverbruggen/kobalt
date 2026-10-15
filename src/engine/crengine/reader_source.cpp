@@ -399,8 +399,9 @@ bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, c
     if (keyed) {
         properties->setString(DOC_PROP_FILE_NAME,
                               Utf8ToUnicode(lString8(documentCacheName(cacheFingerprint_).toUtf8().constData())));
-        properties->setHex(DOC_PROP_FILE_CRC32,
-                           documentCacheChecksum(cachePolicy_ + ":bionic-v3:" + bionic_.toUtf8(), domVersion_));
+        properties->setHex(
+            DOC_PROP_FILE_CRC32,
+            documentCacheChecksum(documentCachePolicy() + ":bionic-v3:" + bionic_.toUtf8(), domVersion_));
         properties->setString(DOC_PROP_FILE_SIZE, lString32::itoa(int(cacheBytes_ < 0         ? 0
                                                                       : cacheBytes_ > INT_MAX ? INT_MAX
                                                                                               : cacheBytes_)));
@@ -573,6 +574,7 @@ bool ReaderModel::openPreview(ReaderModel &source, QSize size, QString *error) {
     QString anchor = source.position();
     anchor.replace(QRegularExpression("/DocFragment(?:\\[\\d+\\])?"), "/DocFragment[1]");
     settings["position"] = anchor;
+    userStyleSheet_ = source.userStyleSheet_;
     return openSource(std::move(preview), size, settings, error);
 }
 }

@@ -10,6 +10,7 @@
 #include "publication/layout_compatibility.h"
 #include "storage/layout_cache.h"
 #include <QFile>
+#include <QFileInfo>
 #include <QFontInfo>
 #include <QCryptographicHash>
 #include <QCoreApplication>
@@ -45,6 +46,23 @@ const std::shared_ptr<EngineWorker> &engineWorkerState() {
         return state;
     }();
     return state;
+}
+QByteArray readUserStyleSheet(const QString &path) {
+    if (path.isEmpty() || !QFileInfo(path).isFile()) {
+        return {};
+    }
+    // Bound memory on small devices. A missing or unusable stylesheet never
+    // prevents reading, and an empty file intentionally disables custom CSS.
+    constexpr qint64 maximumBytes = 256 * 1024;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() > maximumBytes) {
+        return {};
+    }
+    const auto bytes = file.read(maximumBytes + 1);
+    if (file.error() != QFile::NoError || bytes.size() > maximumBytes || bytes.contains('\0')) {
+        return {};
+    }
+    return bytes;
 }
 QObject *engineWorker() {
     return engineWorkerState()->object;
@@ -254,6 +272,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     const auto nativeLocation = std::move(request.platformLocation),
                layoutCachePath = std::move(request.layoutCachePath);
     const auto documentCachePath = std::move(request.documentCachePath);
+    const auto userStyleSheetPath = std::move(request.userStyleSheetPath);
     const auto factory = std::move(request.resources);
     running = true;
     retiring = false;
@@ -294,7 +313,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
         engineWorker(),
         [guard, engine, path, identity, size, saved, nativeLocation, lease, factory, finished, report, systemFont,
          layoutCachePath, documentCachePath, retainedHash, retainedSettings, latest, job, positions, pinnedAppearance,
-         retainedWarning, retainedDetails]() mutable {
+         retainedWarning, retainedDetails, userStyleSheetPath]() mutable {
             EngineJob activity;
             QElapsedTimer timer;
             timer.start();
@@ -390,10 +409,12 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 if (!resources)
                     outcome = OpeningResult::failed(OpeningFailureKind::HostUnavailable,
                                                     strings::key("error.cannot_read_the_publication"));
-                // A deferred image can fail while the closing facade is being
-                // retired. Retry that book with fresh resources, not its failed cache.
-                retainedHit =
-                    resources && !retainedHash.isEmpty() && retainedHash == digest && engine->resourceError().isEmpty();
+                const auto userStyleSheet = readUserStyleSheet(userStyleSheetPath);
+                // A deferred image failure or changed user CSS requires a fresh
+                // layout, even when the publication and appearance are unchanged.
+                retainedHit = resources && !retainedHash.isEmpty() && retainedHash == digest &&
+                              engine->resourceError().isEmpty() && engine->userStyleSheet() == userStyleSheet;
+                engine->setUserStyleSheet(userStyleSheet);
                 // Cold opening normalizes missing, old or invalid appearance fields.
                 // Reuse only the settings that produced this retained layout.
                 if (!appearance::same(saved, retainedSettings))

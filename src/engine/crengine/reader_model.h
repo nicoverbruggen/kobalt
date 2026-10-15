@@ -19,6 +19,7 @@
 #include <QVector>
 #include <memory>
 #include <functional>
+#include <utility>
 
 class LVDocView;
 namespace kobalt {
@@ -77,6 +78,13 @@ public:
     // changes with the code that builds the parsed book. An empty directory
     // or fingerprint opens without the cache.
     void setDocumentCache(QString directory, QByteArray fingerprint, QByteArray policy, qint64 bytes);
+    // Set before opening. Previews inherit these bytes from their source model.
+    void setUserStyleSheet(QByteArray css) {
+        userStyleSheet_ = std::move(css);
+    }
+    const QByteArray &userStyleSheet() const {
+        return userStyleSheet_;
+    }
     // The last opening restored the parsed book from the cache without
     // reading its text from the publication.
     bool openedFromCache() const {
@@ -215,6 +223,8 @@ private:
     QString nativeLocation_;
     QString cacheDirectory_;
     QByteArray cacheFingerprint_, cachePolicy_;
+    QByteArray userStyleSheet_;
+    QByteArray documentCachePolicy() const;
     qint64 cacheBytes_ = 0;
     bool openedFromCache_ = false;
     QVector<ChapterLink> contents_, graph_;

@@ -685,7 +685,8 @@ void ReaderCoordinator::load() {
         {run.identity, run.filePath, size, saved,
          useNative ? run.diskBaseline.location : run.nativePublication->location(), environment_.paths.layoutCache(),
          run.sourceLease, run.nativePublication->resources(run.sourceLease), positionCodec(),
-         environment_.paths.documentCache(), temporaryAppearance, originalAppearance},
+         environment_.paths.documentCache(), temporaryAppearance, originalAppearance,
+         environment_.paths.directory + "/userstyle.css"},
         [this](const kobalt::OpeningResult &outcome) {
             run.openingTimings["load_and_layout_ms"] = run.openingTimer.elapsed() - run.layoutStarted;
             if (!outcome.ready()) {

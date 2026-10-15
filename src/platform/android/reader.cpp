@@ -87,8 +87,10 @@ void ReaderController::begin(const QString &path, QSize pixels) {
     const auto viewport = readerInterface().readingViewport(pixels, settings);
     opening = std::make_unique<ReaderSession>(fonts, placeholder);
     QPointer<ReaderController> guard(this);
+    OpenRequest request{identity, path, viewport, saved, {}, paths.layoutCache(), lease, source->resources(lease)};
+    request.userStyleSheetPath = paths.directory + "/userstyle.css";
     opening->open(
-        {identity, path, viewport, saved, {}, paths.layoutCache(), lease, source->resources(lease)},
+        std::move(request),
         [guard, identity, statePath, pixels](const OpeningResult &result) {
             if (!guard || guard->phase != Phase::Opening)
                 return;

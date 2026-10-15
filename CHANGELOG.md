@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add optional `userstyle.css` for book styling. Edits apply when reopening a book and do not affect installation checks.
+
 ## v1.0-beta.4
 
 - Pause Android reading time while the device sleeps or the app is inactive, so Stats does not count that time as reading.

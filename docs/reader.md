@@ -74,6 +74,7 @@ All files are in `.adds/kobalt/`.
 | `assets/` | Bundled fonts, hyphenation dictionaries and `manifest.json` |
 | `config.json` | `enabled`, the Open books in Kobalt choice |
 | `reader-settings.json` | Settings that apply to every book: display options, Bold Reading, default reading font and interface preferences |
+| `userstyle.css` | Optional user CSS for every book; create and edit this file yourself |
 | `<hash>.json` | One file per book: saved position, typography, header, footer, clock, orientation, dictionary choice and the Nickel progress baseline |
 | `annotations/<key>/` | One folder per book with `bookmarks.json` and `book.json`, see Bookmarks |
 | `reopen-layout.json` | Up to 20 layout-check results, keyed by archive digest, at most 8 KiB |
@@ -241,6 +242,18 @@ Chapters uses the EPUB's table of contents on every platform. Counting and chapt
 
 NickelBench can select a temporary appearance profile for its dedicated benchmark EPUB. That opening uses the embedded publisher font, Kobalt’s default text size and 60-pixel margins at 300 ppi, 144% line spacing, publisher alignment and light mode. Text and margin sizes follow screen density. Hyphenation, extra weight and Bold Reading are off. Kobalt keeps the original book appearance values, including absent values, when it saves reading progress. The profile stays in memory and does not change global settings or other books. Settings writes are disabled for that opening.
 
+## Custom book styles
+
+Create `.adds/kobalt/userstyle.css` to add CSS to every book. Kobalt does not create this file or ship a default. Updates preserve it. The file is not part of the asset manifest, and editing or deleting it does not affect installation checks.
+
+Kobalt reads the file each time a book opens. Close and reopen the book after an edit. A changed stylesheet discards the retained layout and prevents reuse of cached layouts made with other CSS. Appearance previews use the same CSS as the open book. Removing the file or leaving it empty restores normal styling.
+
+Rules use CREngine's supported CSS. They follow Kobalt's built-in styles and Text settings in the same base stylesheet. Ordinary rules remain below publisher styling. Use `!important` and a selector with sufficient specificity to override publisher styling or a Text setting. For example, `p { text-indent: 0 !important; }` removes paragraph indentation. Font selection still overrides every element except code unless your CSS overrides it. Custom CSS changes book content, not the reader interface.
+
+The file must be at most 256 KiB and contain no NUL bytes. Missing, unreadable or oversized files are ignored so the book can still open. CSS syntax errors are left to CREngine; they do not trigger an installation error. Font fallback defaults remain built into the app.
+
+On the macOS development app, put `userstyle.css` in `~/Library/Application Support/Kobalt/Kobalt/config/`, beside `reader-settings.json`. Android uses its app-private `config/` directory; there is no in-app CSS file picker or editor.
+
 ## Display refresh
 
 Kobalt paints one completed frame per page turn. Ordinary turns use Kobo's reading policy for the detected display backend. On firmware 4's i.MX backend, Kobalt queries Nickel's hardware capabilities and the native DisableRegal setting. It uses partial REAGL when Regal is supported and enabled, or partial GLKW16 in dark mode when Eclipse is supported. Other i.MX revisions use driver-selected automatic updates. Ordinary MediaTek page turns use partial GLR16/GLRC16 or dark GLKW16 in one submission. Unknown backends keep Kobo's automatic policy. Ordinary turns on i.MX and unknown backends use one whole-screen update with their existing mode and waveform. On MediaTek, a page turn that needs image cleanup uses one whole-screen quality refresh. Kobo selects GC16 for greyscale cleanup, GCK16 for dark greyscale cleanup and GCC16 for colour cleanup. Entering dark mode requests one whole-screen cleanup. In light mode, opening the plain reading bars over a text-only page uses one screen-spanning partial text update without cleanup, so the top and bottom appear together. Bottom panels keep localized updates. Opening the menu in dark mode requests one whole-screen cleanup. Closing the menu with a tap on the page or the title requests one full cleanup to clear ghosting. In dark mode, returning from the menu also requests cleanup when it closes another way. In light mode, closing a panel another way, or jumping from Chapters or Search, does not flash. Refresh the screen, on the Display tab, decides which page turns also flash. Smart, the default, flashes on a forward turn onto the first page of a chapter, but only after at least 10 turns since the last flash, so a run of short chapters does not flash on every turn. Every chapter flashes at every chapter start. Every 6, 10 or 20 pages flashes on that many turns since the last flash, in either direction. Manually flashes only when the menu closes. Any flash restarts the count. Each flash logs a `full-flash` event with its reason, and replaces that turn's page animation.
@@ -271,7 +284,7 @@ Kobalt tolerates repeated manifest items when every attribute matches. Conflicti
 - Resources are limited to 32 MiB each, and the source cache to 32 MiB in total. Images above the limits show a placeholder. An optional image that cannot load shows a warning and does not stop later images from loading. Renewing the source allows another attempt. Cancellation, revoked access and changed resource bytes still stop the session. Interlaced PNG images whose decoded storage exceeds 64 MiB are not rendered, including images embedded inside other resources. The parsed document, fonts and page images are outside the source-cache budget.
 - Typography changes lay out the whole book again. There is no partial reflow.
 - Hyphenation dictionaries cover only the languages listed above.
-- There are no highlights or notes, and no custom tap zones or custom CSS.
+- There are no highlights or notes, and no custom tap zones.
 - Reading-time estimates use only the current session, and page counts, not words. A font change during a session changes the page count but not the measured pace.
 
 ## Hardware validation

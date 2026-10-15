@@ -1395,6 +1395,42 @@ int main(int argc, char **argv) {
                 "Preview cannot restore the original settings");
     }
     {
+        const int previousPpi = kobalt::readingPpi.load();
+        const auto captureDirectory = QString::fromLocal8Bit(qgetenv("KOBALT_USERSTYLE_CAPTURE"));
+        if (!captureDirectory.isEmpty()) {
+            require(QDir().mkpath(captureDirectory), "Cannot create user CSS capture directory");
+        }
+        for (const int ppi : {300, 212}) {
+            kobalt::readingPpi.store(ppi);
+            for (const bool dark : {false, true}) {
+                kobalt::ReaderModel baseline(model.fontInputs()), styled(model.fontInputs()),
+                    preview(model.fontInputs());
+                auto settings = model.state();
+                settings["dark_mode"] = dark;
+                const QByteArray userCss("* { color: #777777 !important; } p { text-indent: 0 !important; }");
+                require(baseline.open(bytes, model.viewport(), settings, &error), qPrintable(error));
+                styled.setUserStyleSheet(userCss);
+                require(styled.open(bytes, model.viewport(), settings, &error), qPrintable(error));
+                require(hash(styled.image(styled.page())) != hash(baseline.image(baseline.page())),
+                        "User CSS did not change book rendering");
+                require(preview.openPreview(styled, styled.viewport(), &error), qPrintable(error));
+                require(preview.userStyleSheet() == userCss &&
+                            hash(preview.image(preview.page())) == hash(styled.image(styled.page())),
+                        "Section preview did not inherit user CSS");
+                require(preview.style(48, 150) && preview.style(32, 120), "Cannot change styled preview typography");
+                require(hash(preview.image(preview.page())) == hash(styled.image(styled.page())),
+                        "Changing typography lost user CSS");
+                if (!captureDirectory.isEmpty()) {
+                    const auto prefix = captureDirectory + '/' + QString::number(ppi) + (dark ? "-dark" : "-light");
+                    require(baseline.image(baseline.page()).save(prefix + "-before.png") &&
+                                styled.image(styled.page()).save(prefix + "-after.png"),
+                            "Cannot save user CSS captures");
+                }
+            }
+        }
+        kobalt::readingPpi.store(previousPpi);
+    }
+    {
         require(model.goTo(model.chapters()[1].position) && model.go(model.page() + 1), "Cannot open second section");
         kobalt::ReaderModel preview(kobalt::test::readerFonts());
         const auto expected = hash(model.image(model.page()));

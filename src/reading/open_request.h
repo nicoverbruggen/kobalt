@@ -21,5 +21,7 @@ struct OpenRequest {
     // A host may pin one opening without saving its appearance. Keep the raw
     // stored appearance separately so checkpoints retain absent keys too.
     QJsonObject temporaryAppearance{}, originalAppearance{};
+    // Optional user CSS. Read on the engine worker for every opening.
+    QString userStyleSheetPath{};
 };
 }

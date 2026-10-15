@@ -14,7 +14,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from build import ENGINE_PATCHES, build_autotools, source_commit, verify_public_library
+from build import ENGINE_PATCHES, LUNASVG_PATCHES, build_autotools, source_commit, verify_public_library
 import assets
 from sign import sign_interactively
 from session_lock import acquire
@@ -205,8 +205,9 @@ def main():
                                           'host': host_triple, 'recipe': inspect.getsource(build_autotools)
                                           + inspect.getsource(compile_autotools)}, output, compile_autotools)
     extensions = source['koreader-base'] / 'thirdparty/lunasvg'
-    svg = patched(source['lunasvg'], [extensions / p for p in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch')], output)
-    svg_patches = [extensions / p for p in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch')]
+    svg_patches = [extensions / name for name in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch')]
+    svg_patches += [ROOT / 'dependencies/patches' / name for name in LUNASVG_PATCHES]
+    svg = patched(source['lunasvg'], svg_patches, output)
     build('lunasvg', svg, f'-DXTENDED_DIR={extensions}/xtended', '-DLUNASVG_BUILD_EXAMPLES=OFF',
           patches=svg_patches + sorted((extensions / 'xtended').rglob('*.cpp')) + sorted((extensions / 'xtended').rglob('*.h')))
     engine = patched(source['crengine'], [ROOT / 'dependencies/patches' / p for p in ENGINE_PATCHES], output)

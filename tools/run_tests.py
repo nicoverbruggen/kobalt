@@ -19,7 +19,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from build import ENGINE_PATCHES, build_autotools, fetch
+from build import ENGINE_PATCHES, LUNASVG_PATCHES, build_autotools, fetch
 import fetch_fonts
 from session_lock import acquire
 
@@ -67,6 +67,7 @@ def dependency_identity(qt, specs, text_only):
     files = [Path(__file__).resolve(), ROOT / 'tools/build.py', ROOT / 'dependencies/crengine-patches.txt']
     if not text_only:
         files += [ROOT / 'dependencies/patches' / name for name in ENGINE_PATCHES]
+        files += [ROOT / 'dependencies/patches' / name for name in LUNASVG_PATCHES]
         png, header, _ = bundled_png(qt)
         files += [png, header / 'png.h']
         files += [qt / 'lib/cmake/Qt6/Qt6Config.cmake']
@@ -235,7 +236,9 @@ def build_engine(qt, output, jobs, cache=DEFAULT_CACHE, offline=False, text_only
     dependency('xxhash', sources['xxhash'] / 'cmake_unofficial', '-DXXHASH_BUILD_XXHSUM=OFF')
     autotools('libunibreak-autotools', sources['libunibreak'])
     extensions = sources['koreader-base'] / 'thirdparty/lunasvg'
-    svg = patched(sources['lunasvg'], [extensions / name for name in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch')], output)
+    svg_patches = [extensions / name for name in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch')]
+    svg_patches += [ROOT / 'dependencies/patches' / name for name in LUNASVG_PATCHES]
+    svg = patched(sources['lunasvg'], svg_patches, output)
     dependency('lunasvg-build-' + svg.name.rsplit('-', 1)[-1], svg, f'-DXTENDED_DIR={extensions / "xtended"}',
                '-DLUNASVG_BUILD_EXAMPLES=OFF')
     # The device build renames CREngine's FreeType glyph calls with objcopy,

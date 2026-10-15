@@ -281,6 +281,7 @@ Power-off and reboot wait for Kobalt to save reading time and progress before Ni
 Kobalt tolerates repeated manifest items when every attribute matches. Conflicting declarations with the same ID remain unsupported.
 
 - ZIP64 archives are not supported. Resource encryption is unsupported except for standard IDPF font obfuscation.
+- SVG input elements can nest up to 64 levels. Rendering skips references that would extend an active SVG reference chain beyond 16 levels.
 - Resources are limited to 32 MiB each, and the source cache to 32 MiB in total. Images above the limits show a placeholder. An optional image that cannot load shows a warning and does not stop later images from loading. Renewing the source allows another attempt. Cancellation, revoked access and changed resource bytes still stop the session. Interlaced PNG images whose decoded storage exceeds 64 MiB are not rendered, including images embedded inside other resources. The parsed document, fonts and page images are outside the source-cache budget.
 - Typography changes lay out the whole book again. There is no partial reflow.
 - Hyphenation dictionaries cover only the languages listed above.

@@ -8,6 +8,7 @@ function(kobalt_layout_policy output root archive_source)
         src/engine/crengine/reader_source.cpp src/engine/crengine/reader_alignment.cpp
         src/engine/crengine/reader_page_layout.cpp src/engine/crengine/reader_links.cpp
         ${archive_source})
+    list(APPEND LAYOUT_POLICY_INPUTS dependencies/patches/lunasvg-resource-limits.patch)
     file(STRINGS "${root}/dependencies/crengine-patches.txt" patches)
     list(APPEND LAYOUT_POLICY_INPUTS dependencies/crengine-patches.txt)
     foreach(patch IN LISTS patches)

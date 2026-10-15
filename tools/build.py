@@ -25,6 +25,7 @@ import source_state
 
 
 ENGINE_PATCHES = tuple((ROOT / 'dependencies/crengine-patches.txt').read_text().splitlines())
+LUNASVG_PATCHES = ('lunasvg-resource-limits.patch',)
 
 
 def fetch(name, spec, cache, offline=False):
@@ -154,6 +155,7 @@ def device_dependency_inputs(root, selected, specs, image):
     files = [root / 'tools/build.py', root / 'tools/build_engine.py', root / 'targets' / (selected.name + '.json'),
              root / 'dependencies/crengine-patches.txt']
     files += [root / 'dependencies/patches' / name for name in ENGINE_PATCHES]
+    files += [root / 'dependencies/patches' / name for name in LUNASVG_PATCHES]
     return {'target': selected.name, 'image': image, 'root': str(root.resolve()),
             'sources': {name: item['sha256'] for name, item in specs.items() if name != 'fonttools'},
             'recipes': {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}}
@@ -270,17 +272,21 @@ def main():
                         shutil.rmtree(directory)
             # CREngine uses KOReader's text and image callbacks, not stock LunaSVG.
             # Patch a build copy; keep the verified upstream source unchanged.
-            svg_revision = hashlib.sha256((specs['lunasvg']['sha256'] + specs['koreader-base']['sha256']).encode()).hexdigest()[:16]
+            extensions = cache / specs['koreader-base']['directory'] / 'thirdparty/lunasvg'
+            svg_patches = [extensions / name for name in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch')]
+            svg_patches += [ROOT / 'dependencies/patches' / name for name in LUNASVG_PATCHES]
+            svg_revision = hashlib.sha256((specs['lunasvg']['sha256'] + specs['koreader-base']['sha256']).encode()
+                                         + b''.join(patch.read_bytes() for patch in svg_patches)).hexdigest()[:16]
             svg_source = ROOT / build_root / ('lunasvg-source-' + svg_revision)
             svg_extensions = '/work/.cache/kobalt/' + specs['koreader-base']['directory'] + '/thirdparty/lunasvg'
             if not svg_source.exists():
                 with tempfile.TemporaryDirectory(prefix='lunasvg-', dir=svg_source.parent) as temporary:
                     patched = Path(temporary) / 'source'
                     shutil.copytree(cache / specs['lunasvg']['directory'], patched)
-                    for patch in ('cmake_tweaks.patch', 'extended.patch', 'pkgconfig.patch'):
+                    for patch in svg_patches:
                         run(engine, command + ['patch', '--batch', '--forward', '-p1',
                                                '-d', '/work/' + str(patched.relative_to(ROOT)),
-                                               '-i', svg_extensions + '/' + patch])
+                                               '-i', '/work/' + str(patch.relative_to(ROOT))])
                     patched.rename(svg_source)
             svg_build = str(build_root / 'lunasvg')
             run(engine, command + ['cmake', '-S', str(svg_source.relative_to(ROOT)), '-B', svg_build, *common,

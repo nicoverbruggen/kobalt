@@ -38,6 +38,8 @@ Kobo, desktop, Android and host-test builds enable FriBidi, libunibreak and Math
 
 FriBidi builds and installs only its library, headers and pkg-config metadata. Its command-line tools and manuals are not needed by Kobalt. Building those manuals would require `help2man` and executing the target binary, which does not work during cross-compilation.
 
+LunaSVG retains KOReader's 2.3.9 integration. `lunasvg-resource-limits.patch` bounds SVG element nesting to 64 levels and active resource-reference chains to 16 levels. These limits bound recursive tree traversal, cloning and layout work without changing the renderer API. The `svg-limits` host check verifies both limits and ordinary sibling elements. All builders apply the patch after KOReader's SVG extensions and include it in dependency-cache identities.
+
 The macOS app and host engine tests fully link their FreeType archive so font initialization and glyph operations use one FreeType build. Linux host tests also hide the archive symbols from Qt. Qt keeps its own bundled FreeType. Both Kobo targets also link the pinned private FreeType archive and hide its symbols from Nickel.
 
 Host builds disable FreeType's optional Apple HVF driver. This keeps the portable reader and font checks independent of the macOS HVF library and does not add a new supported font format.

@@ -131,6 +131,7 @@ class BuildInputTest(unittest.TestCase):
             names = set(re.findall(r'(?:src|dependencies)/[\w/]+\.(?:cpp|h|json)', helper.read_text()))
             names.add('src/publication/plain_archive.cpp')
             names.update('dependencies/patches/' + name for name in build.ENGINE_PATCHES)
+            names.update('dependencies/patches/' + name for name in build.LUNASVG_PATCHES)
             for name in names:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -154,8 +155,12 @@ class BuildInputTest(unittest.TestCase):
             patch_path.write_text('changed SVG handling')
             patched = configure()
             self.assertNotEqual(initial, patched)
+            svg_patch = root / 'dependencies/patches/lunasvg-resource-limits.patch'
+            svg_patch.write_text('changed SVG nesting limits')
+            limited = configure()
+            self.assertNotEqual(patched, limited)
             (root / 'src/publication/native_resources.cpp').write_text('changed resource handling')
-            self.assertNotEqual(patched, configure())
+            self.assertNotEqual(limited, configure())
             dependencies = (root / 'build/inputs').read_text().split(';')
             self.assertIn(str(patch_path), dependencies)
             self.assertIn(str(inventory), dependencies)

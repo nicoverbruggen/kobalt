@@ -1,0 +1,57 @@
+--- a/source/parser.cpp
++++ b/source/parser.cpp
+@@ -1780,6 +1780,7 @@
+     std::string name;
+     std::string value;
+     int ignoring = 0;
++    unsigned depth = 0;
+     auto handleText = [&](const char* start, const char* end, bool in_cdata) {
+         if(ignoring > 0 || current == nullptr)
+             return;
+@@ -1842,8 +1843,10 @@
+ 
+             if(ignoring > 0)
+                 --ignoring;
+-            else
++            else {
+                 current = current->parent;
++                --depth;
++            }
+ 
+             ++ptr;
+             continue;
+@@ -1919,6 +1922,10 @@
+ 
+         Element* element = nullptr;
+         if(ignoring == 0) {
++            // Layout, cloning and destruction recurse through the element tree.
++            // Reject excessive nesting before adding another owned element.
++            if(depth >= 64)
++                return false;
+             if(m_rootElement && current == nullptr)
+                 return false;
+ 
+@@ -1975,8 +1982,10 @@
+         }
+ 
+         if(ptr < end && *ptr == '>') {
+-            if(element != nullptr)
++            if(element != nullptr) {
+                 current = element;
++                ++depth;
++            }
+ 
+             ++ptr;
+             continue;
+--- a/source/layoutcontext.cpp
++++ b/source/layoutcontext.cpp
+@@ -731,7 +731,8 @@
+ 
+ bool LayoutContext::hasReference(const Element* element) const
+ {
+-    return m_references.count(element);
++    // Acyclic reference chains also need a bound on recursive layout work.
++    return m_references.size() >= 16 || m_references.count(element);
+ }
+ 
+ LayoutBreaker::LayoutBreaker(LayoutContext* context, const Element* element)

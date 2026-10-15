@@ -111,6 +111,7 @@ private:
     void showPageImage(const QImage &nextImage);
     void paintTurn();
     void syncAppearanceControls(bool pickingFont);
+    void fitAppearance();
     void syncReadingControls();
     void publishResize();
     void openPendingDestination();
@@ -133,7 +134,8 @@ private:
     kobalt::ui::BluetoothIndicator *menuBluetooth;
     kobalt::ReadingPage *page;
     ChapterHeader *header;
-    QFrame *menu, *bottomControls;
+    AppearanceSheet *menu;
+    QFrame *bottomControls;
     kobalt::ui::Panel *topControls;
     kobalt::ToolbarComposition toolbarComposition;
     std::unique_ptr<kobalt::reader::Navigation> navigation;

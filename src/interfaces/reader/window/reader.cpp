@@ -490,7 +490,7 @@ void Reader::resizeEvent(QResizeEvent *) {
     header->setVisible(page->topHeight() > 0);
     topControls->setGeometry(0, 0, width(), navigation ? navigation->toolbarHeight() : m::panel::toolbarHeight);
     bottomControls->setGeometry(m::panel::footer(size()));
-    menu->resize(m::panel::appearance(size(), panels->currentIndex() == 1).size());
+    fitAppearance();
     chapterGraph->resize(width(), chapterGraph->height());
     choices->setGeometry(rect());
     fitSettings();

@@ -298,9 +298,7 @@ void Reader::syncAppearanceControls(bool pickingFont) {
     variableWeightSlider->parentWidget()->setVisible(weightAxis.available());
     // Navigation places this panel above the bottom bar. Moving it below
     // the toolbar here would invalidate it before navigation moves it back.
-    menu->resize(
-        ui::metrics::panel::appearance(size(), panels->currentIndex() == 1, optical.available(), weightAxis.available())
-            .size());
+    fitAppearance();
     if (!weightSlider->interacting()) {
         weightSlider->setValue(normalWeight ? settings->thickness() : 0);
         findChild<QLabel *>("rrFontWeightValue")

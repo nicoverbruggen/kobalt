@@ -33,7 +33,7 @@ public:
     void dismissRestore();
     void hideDeviceOptions(bool hidden);
     void showDictionaries(bool visible);
-    int fitContent(QSize readerSize, QSize availableSize);
+    int fitContent(QSize availableSize);
     ui::DescribedOption *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;

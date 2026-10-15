@@ -1,6 +1,9 @@
 #pragma once
 #include "interfaces/reader/ui/controls/buttons.h"
+#include "interfaces/reader/ui/controls/panels.h"
 #include "interfaces/reader/ui/controls/sliders.h"
+#include <QScrollArea>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace kobalt::reader {
@@ -13,6 +16,18 @@ struct AppearancePanelInputs {
     bool sideButtons = false, reverseLandscapeButtons = false;
     bool automaticRotationAvailable = false, showClock = true;
     bool systemRotation = false;
+};
+// Measure only the selected page. Overflow scrolls inside the available reader area.
+class AppearanceSheet final : public ui::Panel {
+public:
+    explicit AppearanceSheet(QWidget *parent);
+    AppearanceLayout controls() const;
+    int fitHeight(int width, int availableHeight);
+    QStackedWidget *pages;
+    QLabel *message;
+
+private:
+    QScrollArea *scroll;
 };
 // The existing pages own the controls. Reader keeps preview and apply policy.
 class AppearancePanel {

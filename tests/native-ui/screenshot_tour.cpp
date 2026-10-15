@@ -155,6 +155,7 @@ public:
             host.configureServices = [this, state = lookup, desktop = group == "native-ui",
                                       catalogue = discoverReadingFonts(fonts.sources)](ReaderHostServices &services) {
                 services.desktopUi = desktop;
+                services.systemRotation = this->group == "layout-system-rotation";
                 if (this->group == "bluetooth")
                     services.observeBluetooth = [this](QObject *, std::function<void(bool)> changed) {
                         bluetoothChanged = std::move(changed);
@@ -1000,7 +1001,7 @@ public:
             capture("spacing-preview", "rrFont");
             return;
         }
-        if (group == "layout") {
+        if (group == "layout" || group == "layout-system-rotation") {
             tap("rrNavLayout");
             capture("layout", "rrMargins");
             for (const auto &part : {"Header", "Footer"}) {

@@ -28,6 +28,7 @@ GROUPS = {
     'typography': ('alice', 'Text panel, font picker and appearance previews'),
     'embedded-fonts': ('embedded-fonts', 'Publisher font count and selection with a real embedded family'),
     'layout': ('alice', 'Page layout, header/footer size pickers and margin preview'),
+    'layout-system-rotation': ('alice', 'Layout controls without manual rotation, as on Android'),
     'chapters': ('alice', 'Every page of the chapter picker'),
     'links': ('alice', 'Book contents, link actions, destination and return row'),
     'footnotes': ('maths', 'Footnote reference, preview, full passage and return row'),

@@ -11,6 +11,7 @@
 #include "interfaces/reader/ui/style/styles.h"
 
 #include <QEvent>
+#include <QScrollBar>
 
 namespace kobalt::reader {
 namespace m = ui::metrics;
@@ -51,6 +52,87 @@ private:
     QWidget *frame;
     QVector<QPushButton *> buttons;
 };
+}
+
+AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::BottomEdge) {
+    setObjectName("rrMenu");
+    setFrameStyle(QFrame::Box);
+    auto *rows = new QVBoxLayout(this);
+    rows->setContentsMargins(m::panel::margins);
+    rows->setSpacing(m::panel::gap);
+    rows->setSizeConstraint(QLayout::SetNoConstraint);
+    scroll = new QScrollArea(this);
+    scroll->setObjectName("rrAppearanceScroll");
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidgetResizable(false);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rows->addWidget(scroll, 1);
+    pages = new QStackedWidget(this);
+    pages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    // QStackedLayout otherwise keeps the largest hidden page's minimum size.
+    pages->layout()->setSizeConstraint(QLayout::SetNoConstraint);
+    scroll->hide();
+    rows->addWidget(pages, 1);
+    for (int index = 0; index < 2; ++index) {
+        auto *page = new QWidget;
+        auto *controls = new QVBoxLayout(page);
+        controls->setContentsMargins(m::panel::rowsMargins);
+        pages->addWidget(page);
+    }
+    message = new QLabel(this);
+    message->setObjectName("rrPreviewLabel");
+    message->setAlignment(Qt::AlignCenter);
+    message->setWordWrap(true);
+    rows->addWidget(message);
+    message->hide();
+}
+
+AppearanceLayout AppearanceSheet::controls() const {
+    return {pages->widget(0), pages->widget(1), static_cast<QVBoxLayout *>(pages->widget(0)->layout()),
+            static_cast<QVBoxLayout *>(pages->widget(1)->layout())};
+}
+
+int AppearanceSheet::fitHeight(int width, int availableHeight) {
+    ensurePolished();
+    const auto margins = layout()->contentsMargins();
+    const int innerWidth = qMax(1, width - margins.left() - margins.right());
+    auto *rows = pages->currentWidget()->layout();
+    auto measure = [rows](int width) {
+        return qMax(rows->minimumSize().height(),
+                    rows->hasHeightForWidth() ? rows->totalHeightForWidth(width) : rows->sizeHint().height());
+    };
+    const int messageHeight = message->isHidden() ? 0 : qMax(0, message->heightForWidth(innerWidth));
+    const int extra =
+        margins.top() + margins.bottom() + (message->isHidden() ? 0 : messageHeight + layout()->spacing());
+    int contentHeight = measure(innerWidth);
+    int contentWidth = innerWidth;
+    if (contentHeight + extra > availableHeight) {
+        contentWidth = qMax(1, innerWidth - scroll->verticalScrollBar()->sizeHint().width());
+        contentHeight = measure(contentWidth);
+    }
+    const bool overflow = contentHeight + extra > availableHeight;
+    // Keep the ordinary preview hierarchy unchanged. A scroll viewport can
+    // repaint unrelated rows when a child updates its layout hint.
+    if (overflow != (scroll->widget() != nullptr)) {
+        if (overflow) {
+            layout()->removeWidget(pages);
+            scroll->setWidget(pages);
+            scroll->show();
+        } else {
+            scroll->takeWidget();
+            pages->setParent(this);
+            static_cast<QVBoxLayout *>(layout())->insertWidget(0, pages, 1);
+            scroll->hide();
+        }
+        pages->show();
+    }
+    if (overflow) {
+        pages->resize(contentWidth, contentHeight);
+    }
+    const int height = qMin(contentHeight + extra, qMax(1, availableHeight));
+    resize(width, height);
+    layout()->activate();
+    return height;
 }
 
 AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const AppearancePanelInputs &inputs) {

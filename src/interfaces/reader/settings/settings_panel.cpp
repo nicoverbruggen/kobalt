@@ -375,19 +375,19 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     ui::readerStyle(openAcknowledgments, ui::styles::textAction() + ui::styles::font(c::labelText));
     hide();
 }
-int SettingsPanel::fitContent(QSize readerSize, QSize availableSize) {
+int SettingsPanel::fitContent(QSize availableSize) {
     const int contentWidth = qMax(1, availableSize.width() - tabRail->width());
     auto *description = aboutDescription;
     description->setFixedWidth(qMin<int>(m::about::textWidth, contentWidth - ui::px(32)));
+    description->setMinimumHeight(0);
+    description->setMaximumHeight(QWIDGETSIZE_MAX);
     description->setFixedHeight(description->heightForWidth(description->width()));
     auto *content = settingsPages->currentWidget();
     content->ensurePolished();
     auto *rows = content->layout();
     const int contentHeight =
-        settingsPages->currentIndex() == AboutSettings
-            ? m::panel::settings(readerSize).height()
-            : qMax(rows->minimumSize().height(),
-                   rows->hasHeightForWidth() ? rows->totalHeightForWidth(contentWidth) : rows->sizeHint().height());
+        qMax(rows->minimumSize().height(),
+             rows->hasHeightForWidth() ? rows->totalHeightForWidth(contentWidth) : rows->sizeHint().height());
     // A short page still leaves room for every tab in the rail beside it.
     const int panelHeight = settingsPages->currentIndex() == DictionariesSettings
                                 ? qMax(1, availableSize.height())

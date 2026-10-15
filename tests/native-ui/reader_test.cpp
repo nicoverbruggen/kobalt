@@ -56,6 +56,7 @@
 #include <QLineEdit>
 #include <QWindow>
 #include <QScreen>
+#include <QScrollBar>
 #include <QEventLoop>
 #include <QJsonArray>
 #include <QLabel>
@@ -971,6 +972,67 @@ private slots:
         delete typography;
         QVERIFY(retainedFont.isNull());
     }
+    void appearanceContentMeasurement_data() {
+        QTest::addColumn<int>("ppi");
+        for (const int ppi : {212, 300}) {
+            QTest::newRow(qPrintable(QString::number(ppi))) << ppi;
+        }
+    }
+    void appearanceContentMeasurement() {
+        QFETCH(int, ppi);
+        struct RestoreDensity {
+            int value = ui::density();
+            ~RestoreDensity() {
+                ui::setDensity(value);
+            }
+        } restore;
+        ui::setDensity(ppi);
+        QWidget owner;
+        owner.resize(nativeSize);
+        owner.setFont(ui::interfaceFont());
+        reader::AppearanceSheet sheet(&owner), androidSheet(&owner);
+        reader::AppearancePanel panel(sheet.controls(), {});
+        reader::AppearancePanelInputs inputs;
+        inputs.systemRotation = true;
+        reader::AppearancePanel androidPanel(androidSheet.controls(), inputs);
+        sheet.pages->setCurrentIndex(1);
+        androidSheet.pages->setCurrentIndex(1);
+        const int layoutHeight = sheet.fitHeight(nativeSize.width(), 1400);
+        const int androidHeight = androidSheet.fitHeight(nativeSize.width(), 1400);
+        QVERIFY(androidHeight < layoutHeight);
+        // The inactive Text page must not reserve space in Layout.
+        sheet.controls().typeRows->addSpacing(2000);
+        QCOMPARE(sheet.fitHeight(nativeSize.width(), 1400), layoutHeight);
+        androidSheet.pages->setCurrentIndex(0);
+        const int textHeight = androidSheet.fitHeight(nativeSize.width(), 1400);
+        androidPanel.opticalSizeSlider->parentWidget()->show();
+        const int opticalHeight = androidSheet.fitHeight(nativeSize.width(), 1400);
+        QVERIFY(opticalHeight > textHeight);
+        androidPanel.variableWeightSlider->parentWidget()->show();
+        QVERIFY(androidSheet.fitHeight(nativeSize.width(), 1400) > opticalHeight);
+        androidPanel.opticalSizeSlider->parentWidget()->hide();
+        androidPanel.variableWeightSlider->parentWidget()->hide();
+        QCOMPARE(androidSheet.fitHeight(nativeSize.width(), 1400), textHeight);
+        androidSheet.message->setText(QStringLiteral("Could not apply settings. ").repeated(8));
+        androidSheet.message->show();
+        QVERIFY(androidSheet.fitHeight(nativeSize.width(), 1400) > textHeight);
+        androidSheet.message->hide();
+        QCOMPARE(androidSheet.fitHeight(nativeSize.width(), 1400), textHeight);
+        androidSheet.pages->setCurrentIndex(1);
+        owner.show();
+        androidSheet.show();
+        const int limitedHeight = qMax(1, androidHeight / 2);
+        QCOMPARE(androidSheet.fitHeight(nativeSize.width(), limitedHeight), limitedHeight);
+        QCoreApplication::processEvents();
+        auto *scroll = androidSheet.findChild<QScrollArea *>("rrAppearanceScroll");
+        QVERIFY(scroll);
+        QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+        scroll->ensureWidgetVisible(androidPanel.clockOption);
+        QCoreApplication::processEvents();
+        QVERIFY(scroll->viewport()->rect().contains(
+            androidPanel.clockOption->mapTo(scroll->viewport(), androidPanel.clockOption->rect().center())));
+        QCOMPARE(androidSheet.fitHeight(nativeSize.width(), 1400), androidHeight);
+    }
     void marginNotchesMatchStepPositions() {
         const int originalDensity = ui::density();
         struct RestoreDensity {
@@ -1226,22 +1288,28 @@ private slots:
         inputs.desktopUi = true;
         reader::SettingsPanel panel(&owner, inputs);
         const QSize available(nativeSize.width(), 1200);
-        const int displayHeight = panel.fitContent(nativeSize, available);
+        const int displayHeight = panel.fitContent(available);
         QCOMPARE(panel.settingsPages->height(), displayHeight);
         QVERIFY(displayHeight >= panel.findChild<QWidget *>("rrSettingsRail")->sizeHint().height());
         panel.settingsPages->setCurrentIndex(reader::DictionariesSettings);
-        QCOMPARE(panel.fitContent(nativeSize, available), available.height());
+        QCOMPARE(panel.fitContent(available), available.height());
         panel.settingsPages->setCurrentIndex(reader::AboutSettings);
-        QCOMPARE(panel.fitContent(nativeSize, available), ui::metrics::panel::settings(nativeSize).height());
+        const int aboutHeight = panel.fitContent(available);
+        QVERIFY(aboutHeight >= panel.findChild<QWidget *>("rrAboutContent")->sizeHint().height());
         auto *description = panel.findChild<QLabel *>("rrAboutDescription");
         QVERIFY(description);
         const int wideHeight = description->height();
-        description->setText(description->text().repeated(4));
+        const auto originalDescription = description->text();
+        description->setText(originalDescription.repeated(4));
         const QSize narrow(600, 1000);
-        panel.fitContent(narrow, narrow);
+        panel.fitContent(narrow);
         QCOMPARE(description->width(), narrow.width() - int(ui::metrics::chrome::railWidth) - ui::px(32));
         QCOMPARE(description->height(), description->heightForWidth(description->width()));
         QVERIFY(description->height() > wideHeight);
+        QVERIFY(panel.settingsPages->height() > aboutHeight);
+        description->setText(originalDescription);
+        QCOMPARE(panel.fitContent(available), aboutHeight);
+        QCOMPARE(description->height(), wideHeight);
         auto *nativeTab = panel.findChild<QPushButton *>("rrSettingsUI");
         QVERIFY(nativeTab);
         nativeTab->click();

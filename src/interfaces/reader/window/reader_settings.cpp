@@ -101,8 +101,15 @@ void Reader::openSettings() {
 void Reader::fitSettings() {
     const int top = navigation ? navigation->toolbarHeight() : int(m::panel::toolbarHeight);
     const int bottom = navigation ? navigation->contentBottom(size()) : height() - int(m::panel::footerHeight);
-    const int panelHeight = static_cast<SettingsPanel *>(general)->fitContent(size(), QSize(width(), bottom - top));
+    const int panelHeight = static_cast<SettingsPanel *>(general)->fitContent(QSize(width(), bottom - top));
     general->setGeometry(0, top, width(), panelHeight);
+}
+
+void Reader::fitAppearance() {
+    const int top = navigation ? navigation->toolbarHeight() : int(m::panel::toolbarHeight);
+    const int bottom = navigation ? navigation->contentBottom(size()) : height();
+    const int height = menu->fitHeight(width(), bottom - top);
+    menu->setGeometry(panelBounds(height));
 }
 
 bool Reader::writePreferences(const QJsonObject &next) {

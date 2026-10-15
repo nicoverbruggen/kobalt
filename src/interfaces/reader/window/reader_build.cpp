@@ -473,26 +473,10 @@ void Reader::buildBottomControls() {
 }
 
 kobalt::reader::AppearanceLayout Reader::buildMenu() {
-    menu = new kobalt::ui::Panel(this, Qt::BottomEdge);
-    menu->setObjectName("rrMenu");
-    menu->setFrameStyle(QFrame::Box);
-    auto *controls = new QVBoxLayout(menu);
-    controls->setContentsMargins(m::panel::margins);
-    controls->setSpacing(m::panel::gap);
-    panels = new QStackedWidget(menu);
-    controls->addWidget(panels, 1);
-    previewLabel = new QLabel(menu);
-    previewLabel->setObjectName("rrPreviewLabel");
-    previewLabel->setAlignment(Qt::AlignCenter);
-    controls->addWidget(previewLabel);
-    previewLabel->hide();
-    auto *typography = new QWidget(panels), *pageLayout = new QWidget(panels);
-    panels->addWidget(typography);
-    panels->addWidget(pageLayout);
-    auto *typeRows = new QVBoxLayout(typography), *pageRows = new QVBoxLayout(pageLayout);
-    typeRows->setContentsMargins(m::panel::rowsMargins);
-    pageRows->setContentsMargins(m::panel::rowsMargins);
-    return {typography, pageLayout, typeRows, pageRows};
+    menu = new AppearanceSheet(this);
+    panels = menu->pages;
+    previewLabel = menu->message;
+    return menu->controls();
 }
 
 void Reader::buildOverlays() {

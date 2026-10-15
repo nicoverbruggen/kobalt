@@ -48,7 +48,6 @@ inline constexpr PxMargins margins{32, 32, 32, 32}, rowsMargins{16, 0, 16, 0};
 inline constexpr PxMargins contentMargins{margins.left() + rowsMargins.left(), spacing::section,
                                           margins.right() + rowsMargins.right(), spacing::section};
 inline constexpr Px gap{8}, toolbarGap{18}, footerGap{18}, toolbarHeight{152}, footerHeight{280};
-inline constexpr Px typographyHeight{616}, layoutHeight{598}, settingsHeight{760};
 inline constexpr Px exitLabelExtraRight{6};
 inline constexpr PxMargins statusMargins{12, 0, 15, 0};
 inline constexpr Px statusHeight{40}, statusGap{8}, statusText{30}, sessionText{32};
@@ -61,15 +60,6 @@ inline QRect toolbar(const QSize &size) {
 }
 inline QRect footer(const QSize &size) {
     return {0, size.height() - footerHeight, size.width(), footerHeight};
-}
-inline QRect appearance(const QSize &size, bool pageLayout, bool opticalSize = false, bool variableWeight = false) {
-    return {0, toolbarHeight, size.width(),
-            pageLayout ? int(layoutHeight)
-                       : int(typographyHeight) +
-                             (int(opticalSize) + int(variableWeight)) * (int(control::stepSize) + int(gap))};
-}
-inline QRect settings(const QSize &size) {
-    return {0, toolbarHeight, size.width(), qMin<int>(settingsHeight, size.height() - toolbarHeight)};
 }
 }
 namespace light {

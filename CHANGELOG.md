@@ -1,5 +1,7 @@
 ## v1.0-beta.4
 
+- Keep missing zero-width spaces invisible and preserve thin and hair spacing when a font lacks those characters.
+
 - Bookmark jumps now offer Return to page in the reading menu, using the same return history as internal links.
 
 - Size Text, Layout and About panels from their visible content. Android's Layout panel no longer leaves space for the omitted rotation controls. Text and Layout scroll when their controls do not fit on screen.

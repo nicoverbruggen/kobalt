@@ -10,3 +10,4 @@ crengine-bionic-reading.patch
 crengine-optical-size.patch
 crengine-idpf-font-key.patch
 crengine-cache-obsolete.patch
+crengine-whitespace-fallback.patch

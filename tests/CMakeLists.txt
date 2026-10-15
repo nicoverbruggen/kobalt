@@ -318,6 +318,8 @@ kobalt_engine_check(alignment)
 kobalt_engine_check(vertical-writing)
 kobalt_engine_check(mathml)
 kobalt_engine_check(line-breaking)
+kobalt_engine_check(whitespace)
+target_compile_definitions(whitespace-check PRIVATE KOBALT_FONT_DIRECTORY="${KOBALT_ROOT}/resources/fonts")
 kobalt_engine_check(multilingual ARGUMENTS "${KOBALT_TEST_FIXTURES}/multilingual-ar.epub"
     "${KOBALT_TEST_FIXTURES}/multilingual-he.epub")
 kobalt_engine_check(links ARGUMENTS "${KOBALT_TEST_FIXTURES}/links.epub")

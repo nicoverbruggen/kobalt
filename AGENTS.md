@@ -4,7 +4,7 @@ Read [README.md](README.md) before changing code. Follow [Building Kobalt](docs/
 
 ## README edits
 
-Only the user edits README files. Agents must not modify them. As soon as you identify a necessary README edit, tell the user why it is needed and propose the exact wording. Notify the user immediately, even when other work remains. Continue other pending work that can proceed independently. Wait for the user's README edits only when no other pending work can proceed.
+Only the user edits this repository's root `README.md`. Agents may edit README files in subdirectories as ordinary project documentation. As soon as you identify a necessary edit to the root `README.md`, tell the user why it is needed and propose the exact wording. Notify the user immediately, even when other work remains. Continue other pending work that can proceed independently. Wait for the user's root README edits only when no other pending work can proceed.
 
 ## Worktrees and branches
 

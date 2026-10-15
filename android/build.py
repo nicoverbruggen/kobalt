@@ -196,8 +196,9 @@ def main():
             directory = output / (name + '-' + key[:16])
             directory.mkdir(exist_ok=True)
             environment = dict(autotools_environment, DESTDIR=str(files / 'stage'))
+            make_options = ('SUBDIRS=lib',) if name == 'fribidi' else ()
             build_autotools(source[name], directory, prefix, args.jobs,
-                            host=host_triple, environment=environment)
+                            host=host_triple, environment=environment, make_options=make_options)
             shutil.move(str(files / 'stage' / str(prefix).lstrip('/')), files / 'deps')
             shutil.rmtree(files / 'stage')
         keys[name] = artifacts.build(name, {'toolchain': toolchain, 'source': specs[name]['sha256'],

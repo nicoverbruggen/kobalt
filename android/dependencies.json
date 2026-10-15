@@ -1,8 +1,8 @@
 {
   "libpng": {
-    "url": "https://codeload.github.com/pnggroup/libpng/tar.gz/refs/tags/v1.6.55",
-    "sha256": "71a2c5b1218f60c4c6d2f1954c7eb20132156cae90bdb90b566c24db002782a6",
-    "directory": "libpng-1.6.55"
+    "url": "https://codeload.github.com/pnggroup/libpng/tar.gz/refs/tags/v1.6.59",
+    "sha256": "2540302a1844ad2b2b501977abecfa850f265f97b78f065a712ab4074a89f5b5",
+    "directory": "libpng-1.6.59"
   },
   "openssl": {
     "url": "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/openssl-3.5.9",

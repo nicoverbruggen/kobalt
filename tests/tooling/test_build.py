@@ -68,6 +68,39 @@ class DependencyExtractionTest(unittest.TestCase):
             self.assertEqual((source / '.kobalt-source').read_text(), digest + ':metadata-v1')
 
 
+class AutotoolsBuildTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('make'), 'Make is required for the library-only build check')
+    def test_library_only_selection_applies_to_build_and_staged_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = root / 'source'
+            source.mkdir()
+            # The default build needs an unavailable target program to make
+            # its manual. Library-only builds must skip it during install too.
+            (source / 'configure').write_text(
+                '#!/bin/sh\nset -eu\n'
+                'for argument in "$@"; do\n'
+                '  case "$argument" in --prefix=*) prefix=${argument#--prefix=};; esac\n'
+                'done\n'
+                'printf "PREFIX := %s\\n" "$prefix" > Makefile\n'
+                "cat >> Makefile <<'MAKEFILE'\n"
+                'SUBDIRS = lib bin\n'
+                '.PHONY: all install\n'
+                'all install:\n'
+                '\t@test "$(SUBDIRS)" = lib || { echo "Cannot run target program for its manual" >&2; exit 1; }\n'
+                '\t@mkdir -p "$(DESTDIR)$(PREFIX)/lib"\n'
+                '\t@printf "library\\n" > "$(DESTDIR)$(PREFIX)/lib/libsample.a"\n'
+                'MAKEFILE\n')
+            prefix = root / 'prefix'
+            with self.assertRaises(subprocess.CalledProcessError):
+                build.build_autotools(source, root / 'default-build', prefix)
+            stage = root / 'stage'
+            build.build_autotools(source, root / 'library-build', prefix,
+                                  environment={'DESTDIR': str(stage)}, make_options=('SUBDIRS=lib',))
+            self.assertEqual((stage / str(prefix).lstrip('/') / 'lib/libsample.a').read_text(), 'library\n')
+            self.assertFalse(prefix.exists())
+
+
 class BuildInputTest(unittest.TestCase):
     def test_android_uses_the_same_engine_patches(self):
         expected = tuple((ROOT / 'dependencies/crengine-patches.txt').read_text().splitlines())

@@ -62,7 +62,7 @@
   {
     "group": "engine",
     "name": "FreeType",
-    "version": "2.14.3",
+    "version": "2.15.0",
     "description": "Font rasterization and outline emboldening. Portions of this software are copyright © 2026 The FreeType Project (https://freetype.org). All rights reserved.",
     "license": "FreeType License",
     "url": "https://freetype.org",
@@ -97,7 +97,7 @@
   {
     "group": "engine",
     "name": "libpng",
-    "version": "Device-supplied library",
+    "version": "Android 1.6.59; device or SDK library on other targets",
     "description": "PNG decoding, by the PNG Reference Library authors.",
     "license": "PNG Reference Library License",
     "url": "http://www.libpng.org/pub/png/libpng.html",
@@ -119,7 +119,7 @@
   {
     "group": "engine",
     "name": "FriBidi",
-    "version": "1.0.16",
+    "version": "1.0.17",
     "description": "Unicode bidirectional text support, by the FriBidi contributors.",
     "license": "GNU LGPL v2.1 or later",
     "url": "https://github.com/fribidi/fribidi",

@@ -212,19 +212,20 @@ def build_engine(qt, output, jobs, cache=DEFAULT_CACHE, offline=False, text_only
                 subprocess.run([str(part) for part in command], env=environment, check=True)
         return directory
 
-    def autotools(name, source):
+    def autotools(name, source, make_options=()):
         directory = output / name
         # Make does not rebuild objects just because compiler flags changed.
         if directory.exists():
             shutil.rmtree(directory)
-        build_autotools(source, directory, prefix, jobs, environment=environment)
+        build_autotools(source, directory, prefix, jobs, environment=environment, make_options=make_options)
 
     png_options = ['-DFT_DISABLE_PNG=ON'] if text_only else ['-DFT_DISABLE_PNG=OFF', f'-DPNG_LIBRARY={png}', f'-DPNG_PNG_INCLUDE_DIR={png_include}']
+    # Keep the portable font set independent of Apple's optional HVF library.
     dependency('freetype-' + sources['freetype'].name, sources['freetype'], '-DFT_DISABLE_HARFBUZZ=ON', '-DFT_DISABLE_BZIP2=ON',
-               '-DFT_DISABLE_BROTLI=ON', *png_options)
+               '-DFT_DISABLE_BROTLI=ON', '-DFT_DISABLE_HVF=ON', *png_options)
     dependency('harfbuzz-' + sources['harfbuzz'].name, sources['harfbuzz'], '-DHB_BUILD_UTILS=OFF', '-DHB_BUILD_SUBSET=OFF', '-DHB_BUILD_RASTER=OFF',
         '-DHB_BUILD_VECTOR=OFF', '-DHB_BUILD_GPU=OFF', '-DHB_HAVE_FREETYPE=ON')
-    autotools('fribidi-autotools', sources['fribidi'])
+    autotools('fribidi-autotools', sources['fribidi'], make_options=('SUBDIRS=lib',))
     if text_only:
         return record_dependencies(output, identity,
                                    ['-DKOBALT_TEST_ENGINE=OFF', f'-DKOBALT_TEST_DEPENDENCIES={prefix}', '-DKOBALT_TEST_PNG='])

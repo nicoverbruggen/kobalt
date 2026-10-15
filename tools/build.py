@@ -115,7 +115,7 @@ def verify_public_library(path):
 
 
 def build_autotools(source, build, prefix, jobs=2, host=None, environment=None,
-                    engine=None, container_command=None):
+                    engine=None, container_command=None, make_options=()):
     """Build a pinned Autotools library out of tree as a static dependency."""
     source, build, prefix = (Path(path).resolve() for path in (source, build, prefix))
     build.mkdir(parents=True, exist_ok=True)
@@ -126,7 +126,8 @@ def build_autotools(source, build, prefix, jobs=2, host=None, environment=None,
     if engine is None:
         process_env = os.environ.copy()
         process_env.update(env)
-        commands = ((configure, build), (['make', '-j', str(jobs)], build), (['make', 'install'], build))
+        commands = ((configure, build), (['make', '-j', str(jobs), *make_options], build),
+                    (['make', 'install', *make_options], build))
         for command, cwd in commands:
             subprocess.run(command, cwd=cwd, env=process_env, check=True)
         return
@@ -145,7 +146,7 @@ def build_autotools(source, build, prefix, jobs=2, host=None, environment=None,
     workdir = command.index('-w') + 1
     command[workdir] = build_arg
     env_command = ['env', *(f'{name}={value}' for name, value in env.items())]
-    for args in (configure, ['make', '-j', str(jobs)], ['make', 'install']):
+    for args in (configure, ['make', '-j', str(jobs), *make_options], ['make', 'install', *make_options]):
         run(engine, command + env_command + args)
 
 
@@ -318,9 +319,11 @@ def main():
                              {'CC': '/tc/qt5/bin/gcc', 'AR': '/usr/bin/arm-linux-gnueabihf-ar',
                               'RANLIB': '/usr/bin/arm-linux-gnueabihf-ranlib'})
             for name in ('fribidi', 'libunibreak'):
+                # FriBidi's CLI manual requires running the target binary.
+                make_options = ('SUBDIRS=lib',) if name == 'fribidi' else ()
                 build_autotools(cache / specs[name]['directory'], ROOT / build_root / (name + '-autotools'),
                                 ROOT / build_root / 'deps', args.jobs, autotools_host, autotools_env,
-                                engine=engine, container_command=command)
+                                engine=engine, container_command=command, make_options=make_options)
             # Keep the verified dependency intact. Apply reader-specific resource
             # and image-memory changes only to a build copy.
             if not patched_source.exists():

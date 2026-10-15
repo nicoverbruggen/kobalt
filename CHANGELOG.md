@@ -4,6 +4,8 @@
 
 ## v1.0-beta.4
 
+- Update bundled FreeType, FriBidi and Android libpng to include upstream security fixes.
+
 - Pause Android reading time while the device sleeps or the app is inactive, so Stats does not count that time as reading.
 
 - Keep missing zero-width spaces invisible and preserve thin and hair spacing when a font lacks those characters.

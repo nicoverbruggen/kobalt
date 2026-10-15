@@ -36,7 +36,11 @@ open build/macos/Kobalt.app
 
 Kobo, desktop, Android and host-test builds enable FriBidi, libunibreak and MathML in CREngine. FriBidi and libunibreak are pinned in `dependencies/manifest.json` and built as static libraries from their release archives. The builds need `make` and a POSIX shell for those two dependencies; their archives contain the generated Autotools scripts, so Autoconf and Automake are not required.
 
+FriBidi builds and installs only its library, headers and pkg-config metadata. Its command-line tools and manuals are not needed by Kobalt. Building those manuals would require `help2man` and executing the target binary, which does not work during cross-compilation.
+
 The macOS app and host engine tests fully link their FreeType archive so font initialization and glyph operations use one FreeType build. Linux host tests also hide the archive symbols from Qt. Qt keeps its own bundled FreeType. Both Kobo targets also link the pinned private FreeType archive and hide its symbols from Nickel.
+
+Host builds disable FreeType's optional Apple HVF driver. This keeps the portable reader and font checks independent of the macOS HVF library and does not add a new supported font format.
 
 The first build compiles the pinned host Qt SDK and engine dependencies. Later builds reuse `build/tests/<host>/`, the same dependency directory as the portable tests. `--offline` uses cached dependencies and fonts only. `--cache DIR` selects a source archive cache. `--qt PATH` selects an existing host SDK with its bundled libpng.
 

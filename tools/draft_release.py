@@ -12,12 +12,16 @@ from release_sources import checkout, digest
 from version import validate as validate_version
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACTS = {'qt5': 'Kobalt-qt5.zip', 'qt6': 'Kobalt-qt6.zip', 'source': 'Kobalt-source.tar.gz'}
+ARTIFACTS = {'qt5': 'Kobalt-qt5.zip', 'qt6': 'Kobalt-qt6.zip',
+             'android': 'Kobalt-android-arm64-debug.apk', 'source': 'Kobalt-source.tar.gz'}
 
 
 def release_artifacts(tag, artifacts=ARTIFACTS):
-    # The first public beta ships Qt5; Qt6 remains a CI build target.
-    return {key: name for key, name in artifacts.items() if tag != 'v1.0-beta.1' or key != 'qt6'}
+    # Preserve the attachment sets of published betas. Android starts at Beta 4.
+    excluded = {'qt6'} if tag == 'v1.0-beta.1' else set()
+    if tag in ('v1.0-beta.1', 'v1.0-beta.2', 'v1.0-beta.3'):
+        excluded.add('android')
+    return {key: name for key, name in artifacts.items() if key not in excluded}
 
 
 def release_notes(root, tag, repository):
@@ -37,6 +41,17 @@ def release_notes(root, tag, repository):
             fields[key + '_url'] = download_url + '/' + name
             packages.append(f'- [{name}]({fields[key + "_url"]}) for {firmware[key]}.')
     fields['package_links'] = '\n'.join(packages)
+    fields['android_installation'] = ''
+    if 'android' in artifacts:
+        fields['android_url'] = download_url + '/' + artifacts['android']
+        fields['android_installation'] = (
+            '### Android debug build\n\n'
+            f'Download [{artifacts["android"]}]({fields["android_url"]}) for ARM64 devices running Android 9 or later. '
+            'Allow installation from your browser or file manager when Android asks.\n\n'
+            'This is an experimental, debuggable build signed with Kobalt\'s shared public test key. '
+            'Obtain it directly from this GitHub repository. Anyone with the public key can sign a modified update; '
+            'the signature does not prove that an APK came from the maintainer. '
+            'It installs separately from release builds and keeps its own books, settings and reading progress.')
     installation = (root / 'docs/release-installation.md').read_text(encoding='utf-8').strip()
     if not installation:
         raise ValueError('Empty release installation template')

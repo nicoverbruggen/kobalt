@@ -2,7 +2,7 @@ name: Build and release
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     tags: ['v*']
   workflow_dispatch:
 
@@ -89,16 +89,56 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  build-android:
+    name: Build Android debug APK
+    needs: [validation, tests]
+    if: >-
+      ${{ !cancelled() && needs.validation.result == 'success' &&
+          (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .cache/android-dependencies/*.tar.gz
+            .cache/android-gradle/caches
+            .cache/android-gradle/wrapper
+            vendor/ebook-fonts
+          key: android-${{ runner.os }}-${{ hashFiles('tools/ci_android.py', 'android/dependencies.json', 'dependencies/manifest.json', 'resources/fonts/ebook-core.json') }}
+      - name: Build and verify debug APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: python3 tools/ci_android.py --jobs 2 --version-code "$VERSION_CODE"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kobalt-android
+          path: |
+            build/release/Kobalt-android-arm64-debug.apk
+            build/release/android.json
+          if-no-files-found: error
+          compression-level: 0
+
   archive-source:
     name: Archive Sources
     needs: validation
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: actions/cache@v6
+        with:
+          path: |
+            .cache/kobalt/*.tar.gz
+            .cache/android-dependencies/*.tar.gz
+            .cache/release-sources
+            vendor/ebook-fonts
+          key: release-sources-${{ hashFiles('dependencies/manifest.json', 'dependencies/release-sources.json', 'android/dependencies.json', 'toolchains/qt6/source/source.json', 'resources/fonts/ebook-core.json') }}
       - name: Collect source and asset bundle
         run: python3 tools/release_sources.py
       - uses: actions/upload-artifact@v7
@@ -114,8 +154,9 @@ jobs:
       ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') &&
           needs.validation.result == 'success' &&
           (needs.tests.result == 'success' || needs.tests.result == 'skipped') &&
-          needs.build-kobo.result == 'success' && needs.archive-source.result == 'success' }}
-    needs: [validation, tests, build-kobo, archive-source]
+          needs.build-kobo.result == 'success' && needs.build-android.result == 'success' &&
+          needs.archive-source.result == 'success' }}
+    needs: [validation, tests, build-kobo, build-android, archive-source]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

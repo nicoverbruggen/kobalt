@@ -69,6 +69,8 @@ def main():
     parser.add_argument('--native-only', action='store_true', help='compile the reader without packaging an APK')
     parser.add_argument('--release', action='store_true', help='build a release APK; unsigned unless --keystore is supplied')
     parser.add_argument('--version-code', type=version_code, default=1, help='Android update number; increase it for each distributed release')
+    parser.add_argument('--commit', help='source commit recorded by the container build helper')
+    parser.add_argument('--modified', action='store_true', help='mark a copied source snapshot as modified')
     parser.add_argument('--keystore', type=Path, help='sign the release APK with this external PKCS#12 file')
     parser.add_argument('--key-alias', default='kobalt-release', help='key alias inside the keystore')
     args = parser.parse_args()
@@ -179,7 +181,7 @@ def main():
         app_version += '-debug'
     manifest.write_bytes(assets.manifest(version=app_version))
     openssl = build_openssl(source['openssl'], output, ndk, args.abi, args.jobs)
-    commit, modified = source_commit()
+    commit, modified = (args.commit, args.modified) if args.commit is not None else source_commit()
     run(qt / 'bin/qt-cmake', '-S', ROOT / 'android', '-B', output / 'app', '-G', 'Ninja',
         '-DCMAKE_BUILD_TYPE=' + ('Release' if args.release else 'Debug'), f'-DQT_HOST_PATH={os.environ["QT_HOST_PATH"]}',
         f'-DANDROID_SDK_ROOT={os.environ["ANDROID_HOME"]}', f'-DANDROID_NDK_ROOT={ndk}',

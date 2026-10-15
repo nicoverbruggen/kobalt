@@ -17,6 +17,18 @@
     "file": "nickeltc.tar.gz",
     "description": "NickelTC build recipes and patches"
   },
+  "android-qtbase": {
+    "url": "https://download.qt.io/online/qtsdkrepository/all_os/qt/qt6_6113_unix_line_endings_src/qt.qt6.6113.src/6.11.3-0-202609240252qtbase-everywhere-src-6.11.3.tar.xz",
+    "sha256": "389ca4a93ffd13f6353bb91a255544e3b54abfcf8182039d303ab288b8c41e93",
+    "file": "qtbase-everywhere-src-6.11.3.tar.xz",
+    "description": "Qt Base source matching the Android SDK, including its bundled third-party sources and licenses"
+  },
+  "android-qtsensors": {
+    "url": "https://download.qt.io/online/qtsdkrepository/all_os/qt/qt6_6113_unix_line_endings_src/qt.qt6.6113.src/6.11.3-0-202609240252qtsensors-everywhere-src-6.11.3.tar.xz",
+    "sha256": "488d4637db6c85979cea967607d93aef9966d8ac676dc6e46025b5c78a863be7",
+    "file": "qtsensors-everywhere-src-6.11.3.tar.xz",
+    "description": "Qt Sensors source matching the Android SDK"
+  },
   "ebook-fonts": {
     "url": "https://codeload.github.com/nicoverbruggen/ebook-fonts/tar.gz/13834303660d071657b1aa885da02c2d075b5368",
     "sha256": "57b448edd090cdef0dd33d03cc9fe3e04fc55653572ce81db255b29860e26fb0",

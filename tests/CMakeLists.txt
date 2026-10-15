@@ -38,6 +38,7 @@ add_test(NAME variable-font-fixture COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT
 add_test(NAME cpp-formatter-tool COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_format_cpp.py")
 add_test(NAME release-version COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_version.py")
 add_test(NAME release-artifacts COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_release_artifacts.py")
+add_test(NAME android-ci-artifacts COMMAND "${Python3_EXECUTABLE}" -B "${KOBALT_TESTS}/tooling/test_ci_android.py")
 
 execute_process(COMMAND "${Python3_EXECUTABLE}" -B -c
     "import sys; sys.path.insert(0, sys.argv[1]); from version import release_version; print(release_version())"

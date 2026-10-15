@@ -86,6 +86,31 @@ class ReleaseArtifactTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Artifact does not match'):
             github.validate(self.root, self.output, BETA)
 
+    def test_beta_four_requires_android_and_includes_testing_policy(self):
+        tag = 'v1.0-beta.4'
+        self.prepare(tag)
+        (self.root / 'CHANGELOG.md').write_text('## ' + tag + '\n\nAndroid testing build.\n')
+        creation = self.github_draft(tag)[-1]
+        self.assertIn(str(self.output / github.ARTIFACTS['android']), creation)
+        self.assert_inventory(('qt5', 'qt6', 'android', 'source'))
+        notes = (self.output / 'release-notes.md').read_text()
+        self.assertIn('/' + tag + '/Kobalt-android-arm64-debug.apk)', notes)
+        self.assertIn('shared public test key', notes)
+        self.assertIn('signature does not prove', notes)
+        (self.output / 'android.json').unlink()
+        with self.assertRaises(FileNotFoundError):
+            github.validate(self.root, self.output, tag)
+
+    def test_previous_betas_do_not_require_or_advertise_android(self):
+        for tag in ('v1.0-beta.1', 'v1.0-beta.2', 'v1.0-beta.3'):
+            with self.subTest(tag=tag):
+                self.prepare(tag)
+                (self.root / 'CHANGELOG.md').write_text('## ' + tag + '\n\nExisting beta.\n')
+                (self.output / 'android.json').unlink()
+                (self.output / github.ARTIFACTS['android']).unlink()
+                self.assertNotIn('android', github.validate(self.root, self.output, tag))
+                self.assertNotIn('Android debug build', github.release_notes(self.root, tag, 'owner/kobalt'))
+
     def test_github_beta_creation_uploads_qt5_source_and_matching_metadata(self):
         self.remove_qt6()
         commands = self.github_draft()
@@ -167,7 +192,7 @@ class ReleaseArtifactTests(unittest.TestCase):
 
 
     def test_other_tags_keep_both_packages(self):
-        for tag in ('v0.9-beta.1', 'v1.0-beta.2', 'v1.0'):
+        for tag in ('v1.0-beta.2', 'v1.0'):
             with self.subTest(tag=tag):
                 self.prepare(tag)
                 (self.root / 'CHANGELOG.md').write_text('## ' + tag + '\n\nRelease notes.\n')
@@ -175,7 +200,7 @@ class ReleaseArtifactTests(unittest.TestCase):
                 self.assertIn(str(self.output / 'Kobalt-qt6.zip'), creation)
                 self.assertIn('](https://github.com/owner/kobalt/releases/download/' + tag + '/Kobalt-qt6.zip)',
                               (self.output / 'release-notes.md').read_text(encoding='utf-8'))
-                self.assert_inventory(('qt5', 'qt6', 'source'))
+                self.assert_inventory(('qt5', 'qt6', *(['android'] if tag == 'v1.0' else []), 'source'))
 
 
 if __name__ == '__main__':

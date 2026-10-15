@@ -85,6 +85,11 @@ def inputs(root, offline=False, allow_dirty=False):
         relative = '.cache/kobalt/' + name + '.tar.gz'
         download(spec, root / relative, offline)
         files[relative] = root / relative
+    # Android overrides some Kobo dependency versions. Keep both source sets.
+    for name, spec in json.loads((root / 'android/dependencies.json').read_text()).items():
+        relative = '.cache/android-dependencies/' + name + '.tar.gz'
+        download(spec, root / relative, offline)
+        files[relative] = root / relative
     extra = json.loads((root / 'dependencies/release-sources.json').read_text())
     qt = json.loads((root / 'toolchains/qt6/source/source.json').read_text())
     extra['qt6-base'] = {**qt, 'file': 'qtbase-' + qt['version'] + '.tar.xz'}
@@ -109,7 +114,7 @@ def inputs(root, offline=False, allow_dirty=False):
 def bundle(root, output, *, offline=False, allow_dirty=False):
     provenance = checkout(root, allow_dirty)
     files = inputs(root, offline, allow_dirty)
-    record = {**provenance, 'version': release_version(root), 'format': 1, 'targets': ['qt5', 'qt6'],
+    record = {**provenance, 'version': release_version(root), 'format': 1, 'targets': ['qt5', 'qt6', 'android'],
               'files': {name: {'sha256': digest(path), 'size': path.stat().st_size} for name, path in sorted(files.items())}}
     if checkout(root, allow_dirty) != provenance:
         raise ValueError('Checkout changed while collecting release inputs')

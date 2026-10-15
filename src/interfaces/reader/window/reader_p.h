@@ -83,6 +83,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private:
+    void observeReading();
     void prepareTransition(std::function<void()> finished, int timeoutMs);
     // Construction, in this order. Each step builds one group of widgets and
     // connects its signals.

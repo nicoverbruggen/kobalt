@@ -170,6 +170,10 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
     });
     resize(QGuiApplication::primaryScreen()->size());
     connectPageInput();
+    // Android can suspend the app without hiding the embedded reader widget.
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] {
+        observeReading();
+    });
 }
 
 void Reader::buildReadingPage() {

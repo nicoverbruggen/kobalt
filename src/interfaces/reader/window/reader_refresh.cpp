@@ -51,8 +51,8 @@ void Reader::refresh() {
     // the new page is painted.
     const bool turnFrame =
         !model->busy() && model->turnDirection() != 0 && model->image().cacheKey() != page->image.cacheKey();
-    if (isVisible() && !turnFrame)
-        book->observeReading();
+    if (!turnFrame)
+        observeReading();
     const bool afterTurn = !turnFrame && std::exchange(turnPainted, false);
     if (!publishPendingDarkMode())
         return;

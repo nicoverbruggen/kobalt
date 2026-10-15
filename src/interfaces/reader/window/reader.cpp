@@ -59,6 +59,14 @@ void Reader::checkpoint() {
     save(true);
 }
 
+void Reader::observeReading() {
+    if (closing || lifecycleHidden || !isVisible() || services.suspended()) {
+        book->stopReading();
+        return;
+    }
+    book->observeReading();
+}
+
 void Reader::prepareShutdown(std::function<void()> finished) {
     prepareTransition(std::move(finished), 0);
 }
@@ -435,7 +443,7 @@ void Reader::showEvent(QShowEvent *event) {
         orientation->start(kobalt::shownOrientation(QGuiApplication::primaryScreen()));
     QWidget::showEvent(event);
     resizeText();
-    book->observeReading();
+    observeReading();
     // The first refresh runs before the window is visible. Record the
     // opening once it is; a busy model retries from its next refresh.
     if (!recordedOpening)

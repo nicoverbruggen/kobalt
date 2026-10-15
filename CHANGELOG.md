@@ -1,5 +1,7 @@
 ## v1.0-beta.4
 
+- Pause Android reading time while the device sleeps or the app is inactive, so Stats does not count that time as reading.
+
 - Keep missing zero-width spaces invisible and preserve thin and hair spacing when a font lacks those characters.
 
 - Bookmark jumps now offer Return to page in the reading menu, using the same return history as internal links.

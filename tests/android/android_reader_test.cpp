@@ -30,6 +30,7 @@ class AndroidReaderTest : public QObject {
     EngineFontInputs fonts;
     QString placeholder;
     storage::Paths paths;
+    bool suspended = false;
     QString fixture(const char *name = "text.epub") const {
         return QString::fromUtf8(qgetenv("KOBALT_FIXTURES")) + '/' + QString::fromLatin1(name);
     }
@@ -48,8 +49,18 @@ private slots:
         temporary = std::make_unique<QTemporaryDir>();
         QVERIFY(temporary->isValid());
         paths = storage::Paths{temporary->path() + "/config"};
-        reader = std::make_unique<android::ReaderController>(paths, fonts, placeholder, test::hostReaderServices,
-                                                             [](Qt::ScreenOrientation) {});
+        paths.stateReport = temporary->path() + "/state.json";
+        suspended = false;
+        reader = std::make_unique<android::ReaderController>(
+            paths, fonts, placeholder,
+            [this] {
+                auto services = test::hostReaderServices();
+                services.suspended = [this] {
+                    return suspended;
+                };
+                return services;
+            },
+            [](Qt::ScreenOrientation) {});
     }
     void cleanup() {
         reader->close();
@@ -106,6 +117,65 @@ private slots:
             reader->close();
             QTRY_VERIFY_WITH_TIMEOUT(reader->idle(), 15000);
         }
+    }
+    void readingTimePausesWhileInactive_data() {
+        QTest::addColumn<int>("applicationState");
+        QTest::newRow("inactive") << int(Qt::ApplicationInactive);
+        QTest::newRow("hidden") << int(Qt::ApplicationHidden);
+        QTest::newRow("suspended") << int(Qt::ApplicationSuspended);
+    }
+    void readingTimePausesWhileInactive() {
+        QFETCH(int, applicationState);
+        QSignalSpy opened(reader.get(), &android::ReaderController::opened);
+        reader->open(fixture(), {674, 896});
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 15000);
+        auto *window = reader->window();
+        window->show();
+        QTRY_VERIFY(window->readyForPresentation());
+        const auto readingTime = [&] {
+            window->checkpoint();
+            return storage::readJson(paths.stateReport).value("session_reading_ms").toDouble(-1);
+        };
+        QTRY_VERIFY(readingTime() > 0);
+        suspended = true;
+        qApp->applicationStateChanged(Qt::ApplicationState(applicationState));
+        const auto paused = readingTime();
+        // Android can stop event delivery while the reader widget remains visible.
+        QTest::qSleep(80);
+        QCOMPARE(readingTime(), paused);
+        // A late layout or show event must not restart the background timer.
+        window->hide();
+        window->show();
+        QTRY_VERIFY(window->readyForPresentation());
+        QTest::qWait(80);
+        QCOMPARE(readingTime(), paused);
+        suspended = false;
+        qApp->applicationStateChanged(Qt::ApplicationActive);
+        const auto resumed = readingTime();
+        QTest::qSleep(80);
+        QVERIFY(readingTime() > resumed);
+        window->hide();
+        const auto hidden = readingTime();
+        qApp->applicationStateChanged(Qt::ApplicationActive);
+        QTest::qSleep(80);
+        QCOMPARE(readingTime(), hidden);
+    }
+    void openingWhileInactiveDoesNotStartReadingTime() {
+        suspended = true;
+        QSignalSpy opened(reader.get(), &android::ReaderController::opened);
+        reader->open(fixture(), {674, 896});
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 15000);
+        auto *window = reader->window();
+        window->show();
+        QTRY_VERIFY(window->readyForPresentation());
+        QTest::qWait(80);
+        window->checkpoint();
+        QCOMPARE(storage::readJson(paths.stateReport).value("session_reading_ms").toDouble(-1), 0.0);
+        suspended = false;
+        qApp->applicationStateChanged(Qt::ApplicationActive);
+        QTest::qSleep(80);
+        window->checkpoint();
+        QVERIFY(storage::readJson(paths.stateReport).value("session_reading_ms").toDouble() > 0);
     }
     void logicalPageButtonsKeepRtlOrderAndInputGuards() {
         QSignalSpy opened(reader.get(), &android::ReaderController::opened);

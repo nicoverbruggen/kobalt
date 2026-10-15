@@ -56,6 +56,9 @@ void Reader::refresh() {
     const bool afterTurn = !turnFrame && std::exchange(turnPainted, false);
     if (!publishPendingDarkMode())
         return;
+    // syncFrameState consumes the completed jump and its return history.
+    // Refresh the destination's text, strips and bookmark ribbon together.
+    const bool passageFrame = !model->busy() && (!pendingPassage.position.isEmpty() || returningFromLink);
     syncFrameState();
     finishAppearanceApply();
     const bool pickingFont = syncFontPicker();
@@ -94,7 +97,7 @@ void Reader::refresh() {
     if (!readingTurn)
         page->refreshContent(isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() &&
                              !general->isVisible() && !choices->isVisible() && !syncDialog && !finishDialog &&
-                             !services.suspended() && !applyingText && model->turnDirection() != 0 &&
+                             !services.suspended() && !applyingText && (model->turnDirection() != 0 || passageFrame) &&
                              nextImage.cacheKey() != previousPageImage);
     if (!recordedOpening)
         recordOpening();

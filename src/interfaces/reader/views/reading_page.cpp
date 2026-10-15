@@ -222,8 +222,8 @@ void ReadingPage::refreshContent(bool reading, bool now) {
     renderedTop = topHeight();
     renderedBottom = bottomHeight();
     renderedPalette = colors.cacheKey();
-    // Keep separate UI strips separate. Page turns still use one rectangle
-    // for the existing turn waveform and animation path.
+    // Keep separate UI strips separate. Reading frames use one rectangle
+    // for page turns and completed passage jumps.
     if (reading)
         dirty = dirty.boundingRect();
     const int turn = std::exchange(animationDirection, 0);

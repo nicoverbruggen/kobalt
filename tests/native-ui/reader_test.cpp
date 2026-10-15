@@ -4043,7 +4043,8 @@ private slots:
         host.open(fixture(), nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         test::ReaderCanvas canvas(host.window(), nativeSize);
-        canvas.resize(900, 900);
+        // Keep the header visible while clicking the return control at the bottom.
+        canvas.resize(nativeSize + QSize(40, 40));
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QTRY_VERIFY(!host.session()->busy());
@@ -4066,9 +4067,37 @@ private slots:
         QVERIFY(click(canvas, bookmarks));
         auto *entry = host.window()->findChild<QPushButton *>("rrBookmark0");
         QVERIFY(entry && entry->isVisible());
+        class PassagePaints final : public QObject {
+        public:
+            test::ReaderHost &host;
+            ReadingPage &page;
+            QString position;
+            QVector<QRegion> frames;
+            QVector<int> animations;
+            PassagePaints(test::ReaderHost &host, ReadingPage &page) : host(host), page(page) {}
+
+        protected:
+            bool eventFilter(QObject *, QEvent *event) override {
+                if (event->type() == QEvent::Paint && !host.session()->busy() &&
+                    host.session()->state().value("position").toString() == position) {
+                    frames.append(static_cast<QPaintEvent *>(event)->region());
+                    animations.append(page.window()->property("reader_animation_direction").toInt());
+                }
+                return false;
+            }
+        } paints(host, *page);
+        page->installEventFilter(&paints);
+        paints.position = destination;
         QVERIFY(click(canvas, entry));
         QTRY_VERIFY(!host.session()->busy());
         QCOMPARE(host.session()->state().value("position").toString(), destination);
+        QTRY_VERIFY(!paints.frames.isEmpty());
+        QCOMPARE(paints.frames.first().rectCount(), 1);
+        QVERIFY(paints.frames.first().contains(page->ribbonRect()));
+        QCOMPARE(paints.animations.first(), 0);
+        QVERIFY(page->bookmarked);
+        QVERIFY(host.window()->grab().save(
+            QString("native-reader-bookmark-jump-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
         QVERIFY(!host.window()->findChild<QWidget *>("rrBookmarkList")->isVisible());
         auto *back = host.window()->findChild<ui::CaptionButton *>("rrNavLinkReturn");
         QVERIFY(back);
@@ -4085,11 +4114,24 @@ private slots:
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy());
         QCOMPARE(host.session()->page(), 3);
+        // Return from another bookmarked page after reading on.
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->bookmarkCorner().center())));
+        QTRY_VERIFY(page->bookmarked);
         QVERIFY(clickAt(canvas, center));
         QTRY_VERIFY(back->isVisible());
+        paints.frames.clear();
+        paints.animations.clear();
+        paints.position = origin;
         QVERIFY(click(canvas, back));
         QTRY_VERIFY(!host.session()->busy());
         QCOMPARE(host.session()->state().value("position").toString(), origin);
+        QTRY_VERIFY(!paints.frames.isEmpty());
+        QCOMPARE(paints.frames.first().rectCount(), 1);
+        QVERIFY(paints.frames.first().contains(page->ribbonRect()));
+        QCOMPARE(paints.animations.first(), 0);
+        QVERIFY(!page->bookmarked);
+        QVERIFY(host.window()->grab().save(
+            QString("native-reader-passage-return-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
         QVERIFY(clickAt(canvas, center));
         QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
         QVERIFY(!back->isVisible());

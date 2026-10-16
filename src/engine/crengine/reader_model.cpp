@@ -481,7 +481,7 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     // css_font_family_t: serif, sans-serif, cursive, fantasy, monospace, math,
     // emoji and fangsong. Empty entries keep the engine's choice.
     properties->setString(PROP_FONT_FAMILY_FACES,
-                          lString8(QString("|||||%1|||").arg(monospaceFontFace).toUtf8().constData()));
+                          lString8(QString("|||||%1|%2||").arg(monospaceFontFace, mathFontFace).toUtf8().constData()));
     engine_->propsApply(properties);
     engine_->setViewMode(DVM_PAGES, 1);
     engine_->setDefaultFontFace(lString8((face_.isEmpty() ? QString(defaultFontFace) : face_).toUtf8().constData()));
@@ -725,8 +725,9 @@ bool ReaderModel::setHyphenation(const QString &mode) {
 void ReaderModel::applyPublisherFontFallbacks() {
     const bool useFallbacks = face_.isEmpty() && embeddedFontCount() == 0;
     const auto sansFace = fontFaces().contains(publisherSansFontFace) ? publisherSansFontFace : "IBM Plex Sans";
-    const auto families = useFallbacks ? QString("|%1|%2|||%3|||").arg(defaultFontFace, sansFace, monospaceFontFace)
-                                       : QString("|||||%1|||").arg(monospaceFontFace);
+    const auto families =
+        useFallbacks ? QString("|%1|%2|||%3|%4||").arg(defaultFontFace, sansFace, monospaceFontFace, mathFontFace)
+                     : QString("|||||%1|%2||").arg(monospaceFontFace, mathFontFace);
     auto properties = LVCreatePropsContainer();
     properties->setString(PROP_FONT_FAMILY_FACES, lString8(families.toUtf8().constData()));
     engine_->propsApply(properties);
@@ -750,8 +751,9 @@ void ReaderModel::applyStyleSheet() {
         overrides +=
             "* { font-family: \"" + escaped +
             "\" !important; }\n"
-            // Code keeps its fixed width under the chosen reading font.
-            "pre, code, kbd, samp, tt, pre *, code *, kbd *, samp *, tt * { font-family: monospace !important; }\n";
+            // Code keeps its fixed width; MathML keeps the math font and its layout metrics.
+            "pre, code, kbd, samp, tt, pre *, code *, kbd *, samp *, tt * { font-family: monospace !important; }\n"
+            "math, math * { font-family: math !important; }\n";
     }
     // Like Nickel's line-height override, leave inline spans and media alone.
     // Relative font sizes, indentation and paragraph margins remain publisher CSS.

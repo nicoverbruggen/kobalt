@@ -49,7 +49,8 @@ int main(int argc, char **argv) {
           Sample{"Noto Serif Bengali", "NotoSerifBengali", U'ব', false},
           Sample{"Noto Serif Tamil", "NotoSerifTamil", U'த', true},
           Sample{"Noto Serif Thai", "NotoSerifThai", U'ภ', false}}) {
-        require(fontMan->SetFallbackFontFaces(lString8(sample.family)), "Cannot select style fallback");
+        require(fontMan->SetFallbackFontFaces(lString8(kobalt::fallbackFontFaces)),
+                "Cannot select production fallback chain");
         for (const bool italic : {false, true}) {
             if (italic && !sample.italics) {
                 continue;
@@ -101,5 +102,12 @@ int main(int argc, char **argv) {
         require(shapedPixels(primary, word) == joined,
                 "Production fallback order lost Arabic joining or the requested weight");
     }
-    puts("PASS: real fallback styles, Arabic joining and complete font-picker families");
+    const auto primary = fontMan->GetFont(64, 400, false, css_ff_serif, lString8("Instrument Serif"));
+    const auto math = fontMan->GetFont(64, 400, false, css_ff_serif, lString8("Noto Sans Math"));
+    const auto cjk = fontMan->GetFont(64, 400, false, css_ff_serif, lString8("Noto Serif CJK JP"));
+    require(shapedPixels(primary, lString32(U"∀∂∇")) == shapedPixels(math, lString32(U"∀∂∇")),
+            "Mathematical symbols fell through to a text or CJK font");
+    require(shapedPixels(primary, lString32(U"漢")) == shapedPixels(cjk, lString32(U"漢")),
+            "CJK text lost its covering fallback font");
+    puts("PASS: production fallback styles, Arabic joining, mathematical symbols and CJK text");
 }

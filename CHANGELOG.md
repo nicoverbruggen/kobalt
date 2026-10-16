@@ -12,6 +12,8 @@
 
 ## v1.0-beta.4
 
+- Prefer script text fonts before the math fallback, and keep MathML equations on Noto Sans Math when changing the reading font.
+
 - Use the Arabic text font before the math fallback so Arabic letters join correctly.
 
 - Use real bold and available italic fonts for non-CJK fallback text in books and the reading interface.

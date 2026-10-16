@@ -154,7 +154,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                               restoreDialog->raise();
                                               restoreDialog->setFocus();
                                           });
-    readerStyle(resetDefaults, styles::textAction());
+    // A list action paints its own label; a text link's underline does not belong here.
+    readerStyle(resetDefaults, styles::font(m::text::secondary));
     resetDefaults->setFixedHeight(m::about::actionHeight);
     resetRow->addStretch(1);
     advancedRows->addStretch(1);

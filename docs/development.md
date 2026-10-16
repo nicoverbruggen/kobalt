@@ -204,7 +204,7 @@ Run `python3 tools/ui_review.py serve --port 0` to serve the gallery, comparison
 
 Keep release notes in `CHANGELOG.md`, newest first. Each release heading must be exactly `## <tag>`, such as `## v1.0-beta.1`. Its notes continue until the next `## ` heading. Use `## Unreleased` for work that is not ready for a tag. It never supplies notes for a release. Missing, empty or duplicate tag sections fail validation.
 
-Use one short paragraph for a simple release. For longer notes, group them under `### What's new`, `### What's changed` and `### Technical changes`, omitting empty sections. Keep new features and changed behavior user-facing. Put internal refactors, build changes and test changes under technical changes. Group minor fixes under bug fixes and improvements. The `v1.0-beta.1` entry contains only: "First public Kobo beta, using Qt5 on firmware 4.38 and later."
+From `v1.0-beta.2` onward, group beta release notes under `### What's new` for new features and `### What's fixed` for bug fixes, performance improvements and compatibility improvements. Keep the notes user-facing. Omit internal refactors, build changes and test changes. Leave the `v1.0-beta.1` entry unchanged.
 
 On a GitHub tag push, the first CI job renders the changelog entry and installation template with `tools/draft_release.py --notes-only`. Every build and packaging job depends on this check, so invalid notes stop the workflow before a build starts. Branch pushes on GitHub and manual runs skip the notes check. Rerunning a draft replaces its notes, including hand edits. Published releases remain protected.
 

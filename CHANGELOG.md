@@ -1,18 +1,18 @@
 ## v1.0-beta.4
 
-### New
+### What's new
 
 - Header and footer customization has been added with a few presets and the option to fully customize both. The _Custom_ preset is saved globally, but needs to be applied on a per-book basis. Books without a saved header and footer start with the last preset used.
 
 - An optional Kobalt sleep screen on Kobo: turn on Use Kobalt's sleep screen in Settings > System. It shows the dimmed reading page with a card for Sleeping, the percentage read and, when known, the time left. It is off by default, and Kobo's PIN prompt is unchanged.
 
-- Style every book with your own CSS in an optional `.adds/kobalt/userstyle.css`. Any of this CSS is loaded automatically by Kobalt. Use responsibly.
+- Style every book with your own CSS in an optional `.adds/kobalt/userstyle.css`. Any of this CSS is loaded automatically by Kobalt. Use responsibly!
 
 - After jumping to a bookmark, "Return to page" is now offered to take you back to where you came from when you navigated to the bookmark.
 
-- An experimental Android debug build is now available, too.
+### What's fixed
 
-### Improved
+- On Kobo, your e-reader will now wake faster from sleep: it won't wait for the frontlight to be ready to refresh the screen.
 
 - New icons throughout the reader. The bottom tabs have larger icons and labels on one line, Settings opens from a gear in the toolbar, and each Settings tab shows an icon above its label.
 
@@ -20,11 +20,7 @@
 
 - Interface text on Kobo is sharper at small sizes due to not using font hinting.
 
-- Text, Layout and About panels are only as tall as their content, and paginate when their controls do not fit on screen.
-
 - Minor UI adjustments.
-
-### Fixed
 
 - The header and footer sheet fits six-inch screens, keeps its height when presets or sizes change, and joins the toolbar when the gap is small.
 
@@ -42,25 +38,11 @@
 
 ## v1.0-beta.3
 
-### What's changed
-
-- More EPUBs open correctly, including books with imperfect markup, unsupported layout features or Adobe page templates.
+### What's new
 
 - New option: Hide non-linear fragments, in Settings > Advanced. Normal page turns skip the optional sections of an EPUB, while links, Chapters and page numbers can still open them. It is off by default.
 
 - Text size now goes up to 48 pt, from 20 pt, and Thickness up to +12, from +8.
-
-- The screen flashes less often.
-
-- The font and layout panels open much faster.
-
-- Bionic Reading is now called Bold Reading, and applies as soon as you tick it. Your Beta 2 setting carries over.
-
-- Reading progress is saved to Kobo every 30 seconds and before the device sleeps or connects over USB, so the sleep screen shows where you are.
-
-- Fixed bugs syncing reading progress to Kobo for some KEPUB books, and opening books from compatible sync servers.
-
-- Stats shows word counts for every book, plain EPUBs included, on Kobo and Android. Very long chapters no longer draw a line through their bar in the chart.
 
 - Automatic brightness, on Kobo devices with an ambient light sensor. Adjusting the brightness yourself turns it off.
 
@@ -72,9 +54,21 @@
 
 - Fonts you add in subfolders of `fonts/`, such as `fonts/Family/static/`, appear in the font picker.
 
-- With Publisher Fonts and a book without embedded fonts, serif text uses Libron, sans-serif uses Legible Next and monospace uses IBM Plex Mono.
-
 - Hyphenation for Estonian, Finnish, Georgian, Hungarian, Latvian, Lithuanian, Polish, Slovak, Slovenian and Ukrainian.
+
+### What's fixed
+
+- More EPUBs open correctly, including books with imperfect markup, unsupported layout features or Adobe page templates.
+
+- The screen flashes less often, and the font and layout panels open much faster.
+
+- Reading progress is saved to Kobo every 30 seconds and before the device sleeps or connects over USB, so the sleep screen shows where you are.
+
+- Fixed bugs syncing reading progress to Kobo for some KEPUB books, and opening books from compatible sync servers.
+
+- Stats shows word counts for every book, plain EPUBs included, on Kobo and Android. Very long chapters no longer draw a line through their bar in the chart.
+
+- With Publisher Fonts and a book without embedded fonts, serif text uses Libron, sans-serif uses Legible Next and monospace uses IBM Plex Mono.
 
 - Formatting warnings appear only for layout features that are really unsupported, and no longer appear for large books just because of their size.
 
@@ -82,15 +76,17 @@
 
 ## v1.0-beta.2
 
-### What's changed
+### What's new
+
+- Added evenly spaced line-spacing slider marks with snapping at 100%, 110%, 120%, 130%, 140%, 150%, 175%, 200%, 250% and 300%. Plus and minus still adjust spacing by one percentage point.
+
+### What's fixed
 
 - Fixed opening and appearance previews for EPUBs whose structural CSS selectors require styles to be recalculated after parsing. Publisher image spacing and centered text are preserved.
 
 - Fixed opening EPUBs with repeated identical manifest items. Conflicting duplicate IDs remain unsupported.
 
 - Fixed opening EPUBs with standard IDPF-obfuscated embedded TrueType or OpenType fonts.
-
-- Added evenly spaced line-spacing slider marks with snapping at 100%, 110%, 120%, 130%, 140%, 150%, 175%, 200%, 250% and 300%. Plus and minus still adjust spacing by one percentage point.
 
 - Fixed line spacing being applied twice. 150% now means 1.5 times the font size. Existing book settings are converted to preserve their approximate spacing, with 122% becoming 150% and a maximum of 300%.
 

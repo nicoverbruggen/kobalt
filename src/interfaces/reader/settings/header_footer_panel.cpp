@@ -429,7 +429,10 @@ void HeaderFooterView::resizeEvent(QResizeEvent *) {
     // The cell stops above the divider, which runs the full width.
     close->setGeometry(width() - cell, m::chrome::heavyRule, cell,
                        header - m::chrome::heavyRule - int(m::control::border));
-    content->setGeometry(0, header, width(), qMax(0, height() - header));
+    // The rows keep their own height; a sheet stretched to meet the toolbar
+    // leaves the extra room below the last row.
+    const int rows = preferredHeight(width()) - header;
+    content->setGeometry(0, header, width(), qMax(0, qMin(rows, height() - header)));
 }
 
 FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent) {

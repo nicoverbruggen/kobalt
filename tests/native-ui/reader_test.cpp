@@ -3813,6 +3813,70 @@ private slots:
         QTest::qWait(30);
         QCOMPARE(host.session()->page(), 1);
     }
+    void headerFooterSheetMeetsToolbar() {
+        // The sheet's top, its height and its preferred height, and the toolbar's
+        // bottom, on a screen of this height.
+        struct Placement {
+            int top = 0, height = 0, preferred = 0, toolbar = 0, tabs = 0;
+        };
+        const auto place = [&](int screenHeight) {
+            Placement placement;
+            QTemporaryDir directory;
+            if (!directory.isValid()) {
+                return placement;
+            }
+            storage::Paths paths{directory.path()};
+            paths.stateReport = paths.directory + "/state.json";
+            const QSize screen(nativeSize.width(), screenHeight);
+            test::ReaderHost host(paths, testFonts, testPlaceholder);
+            CloseHost cleanup{host};
+            QSignalSpy opened(&host, &test::ReaderHost::opened);
+            host.open(fixture(), screen);
+            if (!QTest::qWaitFor(
+                    [&] {
+                        return opened.count() == 1;
+                    },
+                    30000)) {
+                return placement;
+            }
+            test::ReaderCanvas canvas(host.window(), screen);
+            canvas.resize(900, 900);
+            canvas.show();
+            if (!QTest::qWaitForWindowExposed(&canvas) || !QTest::qWaitFor([&] {
+                    return !host.session()->busy();
+                })) {
+                return placement;
+            }
+            clickAt(canvas, QPoint(screen.width() / 2, screen.height() / 2));
+            click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout"));
+            click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooter"));
+            auto *view = host.window()->findChild<kobalt::reader::HeaderFooterView *>("rrHeaderFooterView");
+            auto *edge = host.window()->findChild<QWidget *>("rrNavigationUpperEdge");
+            auto *tabs = host.window()->findChild<QWidget *>("rrBottomNavigation");
+            if (!view || !edge || !tabs || !QTest::qWaitFor([&] {
+                    return view->isVisible();
+                })) {
+                return placement;
+            }
+            placement = {view->y(), view->height(), view->preferredHeight(view->width()), edge->geometry().bottom() + 1,
+                         tabs->y()};
+            return placement;
+        };
+        const int rule = ui::metrics::chrome::heavyRule;
+        // With room to spare, the sheet keeps its own height and the page shows above it.
+        const auto roomy = place(nativeSize.height());
+        QVERIFY(roomy.height > 0);
+        QCOMPARE(roomy.height, roomy.preferred);
+        const int gap = roomy.top - (roomy.toolbar - rule);
+        QVERIFY(gap >= int(ui::metrics::headerFooter::toolbarSnap));
+        // A screen that leaves only a sliver of page puts the sheet's rule on
+        // the toolbar's, and the sheet still ends on the tabs.
+        const auto tight = place(nativeSize.height() - gap + int(ui::metrics::headerFooter::toolbarSnap) / 2);
+        QVERIFY(tight.height > 0);
+        QCOMPARE(tight.top, tight.toolbar - rule);
+        QCOMPARE(tight.top + tight.height, tight.tabs);
+        QVERIFY(tight.height > tight.preferred);
+    }
     void headerFooterPresetLabelsFitSixInchScreen() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

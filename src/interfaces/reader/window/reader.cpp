@@ -1213,8 +1213,12 @@ void Reader::syncNavigation() {
     }
     if (chromeSheet) {
         const int bottom = navigation->contentBottom(size());
-        const int sheetHeight =
-            qMin(headerFooterView->preferredHeight(width()), qMax(1, bottom - navigation->toolbarHeight()));
+        // At most up to the toolbar, with the sheet's rule on the toolbar's.
+        const int room = qMax(1, bottom - navigation->toolbarHeight() + int(m::chrome::heavyRule));
+        int sheetHeight = qMin(headerFooterView->preferredHeight(width()), room);
+        if (room - sheetHeight < m::headerFooter::toolbarSnap) {
+            sheetHeight = room;
+        }
         headerFooterView->setGeometry(0, bottom - sheetHeight, width(), sheetHeight);
         headerFooterView->raise();
     }

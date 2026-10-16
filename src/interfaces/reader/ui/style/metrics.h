@@ -195,6 +195,9 @@ inline constexpr Px namePadding{control::segmentHorizontalPadding};
 inline constexpr Px fieldRowHeight{list::oneLine};
 // Dashes stand for slot text inside a miniature; they are drawing sizes.
 inline constexpr Px dashHeight{6}, shortDash{22}, longDash{46};
+// A sheet that would stop this close below the toolbar meets it instead, so
+// the two heavy rules do not read as one thick line.
+inline constexpr Px toolbarSnap{spacing::section};
 
 }
 namespace opening {

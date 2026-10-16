@@ -26,7 +26,7 @@
 
 ### Fixed
 
-- The header and footer sheet fits six-inch screens and keeps its height when presets or sizes change.
+- The header and footer sheet fits six-inch screens, keeps its height when presets or sizes change, and joins the toolbar when the gap is small.
 
 - Showing and hiding link highlights refreshes the whole page once instead of refreshing each link separately.
 

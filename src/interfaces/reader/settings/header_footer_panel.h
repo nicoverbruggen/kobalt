@@ -8,9 +8,9 @@
 
 namespace kobalt::ui {
 class ListHeader;
+class PagerBar;
 }
 class QLabel;
-class QScrollArea;
 class QVBoxLayout;
 
 namespace kobalt::reader {
@@ -91,9 +91,10 @@ private:
 };
 
 // One slot's choices, from Nothing to Time left in book, each with what it
-// would show now. It fills the reading area like Chapters, with a check cell
-// that returns to Header and footer. A choice applies at once and the list stays open.
-// Uppercase for this slot sits where Chapters has its pager.
+// would show now. It fills the reading area like Chapters. A choice applies
+// and returns to Header and footer; the back cell returns without one.
+// Fields that do not fit go to further pages, with the Chapters pager at the
+// bottom. Uppercase for this slot sits above it and keeps the list open.
 class FieldChooser final : public ui::Panel {
 public:
     explicit FieldChooser(QWidget *parent);
@@ -114,11 +115,13 @@ private:
     class Row;
     QLabel *title, *position;
     ui::ListHeader *heading;
-    QScrollArea *scroll;
+    ui::PagerBar *pager;
     QVector<Row *> rows;
     QPushButton *finish;
     ui::Panel *options;
     QPushButton *uppercaseButtons[2] = {};
-    int currentSlot = -1;
+    int currentSlot = -1, page = 0;
+    int perPage() const;
+    void arrange();
 };
 }

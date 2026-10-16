@@ -3503,8 +3503,8 @@ private slots:
             }
         }
         QCOMPARE(storage::readJson(paths.bookState(identity)).value("header_footer").toString(), QString("custom"));
-        // A slot opens its field list in the view's place. A choice applies
-        // at once and the list stays; the check cell returns.
+        // A slot opens its field list in the view's place. Case changes keep
+        // the list open; a choice applies and returns, as choosing a chapter does.
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderTextSize_small")));
         auto *slot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot2");
         QVERIFY(slot && slot->isVisible());
@@ -3513,22 +3513,29 @@ private slots:
         QTRY_VERIFY(chooser && chooser->isVisible());
         QCOMPARE(chooser->geometry(), view->geometry());
         QCOMPARE(currentPage(), int(Fields));
-        auto *author = host.window()->findChild<QPushButton *>("rrHeaderFooterField_author");
-        QVERIFY(author);
-        QVERIFY(click(canvas, author));
-        QVERIFY(author->isChecked());
-        QCOMPARE(page->chrome.slotFields[2], headerfooter::Field::Author);
-        // Case belongs to this slot only.
+        // Every field fits on one portrait page, so no pager shows.
+        QVERIFY(!visible("rrHeaderFooterFieldsNext"));
         const bool otherCase = page->chrome.uppercase[1];
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterUppercase_on")));
         QVERIFY(page->chrome.uppercase[2]);
         QCOMPARE(page->chrome.uppercase[1], otherCase);
+        QCOMPARE(currentPage(), int(Fields));
+        auto *author = host.window()->findChild<QPushButton *>("rrHeaderFooterField_author");
+        QVERIFY(author);
+        QVERIFY(click(canvas, author));
+        QTRY_COMPARE(currentPage(), int(View));
+        QCOMPARE(page->chrome.slotFields[2], headerfooter::Field::Author);
+        QVERIFY(page->chrome.uppercase[2]);
         QCOMPARE(page->slotContents[2].text, page->slotContents[2].text.toUpper());
+        // Back leaves without a new choice; the case change still applies.
+        QVERIFY(click(canvas, slot));
+        QTRY_COMPARE(currentPage(), int(Fields));
+        QVERIFY(author->isChecked());
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterUppercase_off")));
         QVERIFY(!page->chrome.uppercase[2]);
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterDone")));
-        QTRY_VERIFY(!chooser->isVisible());
-        QCOMPARE(currentPage(), int(View));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterBack")));
+        QTRY_COMPARE(currentPage(), int(View));
+        QCOMPARE(page->chrome.slotFields[2], headerfooter::Field::Author);
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterProgressBar_off")));
         QVERIFY(!page->showProgress());
         // Choosing a preset keeps the Custom layout for later.
@@ -3553,6 +3560,41 @@ private slots:
         QVERIFY(host.window()->findChild<QPushButton *>("rrHeaderFooterPreset_custom")->isChecked());
         QVERIFY(host.window()->findChild<QPushButton *>("rrHeaderTextSize_small")->isChecked());
         QVERIFY(host.window()->findChild<QPushButton *>("rrFooterTextSize_off")->isChecked());
+    }
+    void fieldChooserPagesInsteadOfScrolling() {
+        // Kobalt has no scroll bars: fields that do not fit go to pages.
+        QWidget owner;
+        owner.resize(1680, 1100);
+        reader::FieldChooser chooser(&owner);
+        chooser.setGeometry(0, 0, 1680, 1100);
+        headerfooter::Values values;
+        chooser.open(5, headerfooter::Field::BookTimeLeft, values, false);
+        owner.show();
+        chooser.show();
+        QCoreApplication::processEvents();
+        QVERIFY(chooser.findChildren<QScrollArea *>().isEmpty());
+        auto *next = chooser.findChild<QPushButton *>("rrHeaderFooterFieldsNext");
+        auto *previous = chooser.findChild<QPushButton *>("rrHeaderFooterFieldsPrevious");
+        QVERIFY(next && previous && next->isVisible());
+        // The list opens on the page with the slot's field.
+        auto *last = chooser.findChild<QPushButton *>("rrHeaderFooterField_book_time_left");
+        auto *first = chooser.findChild<QPushButton *>("rrHeaderFooterField_nothing");
+        QVERIFY(last->isVisible() && last->isChecked());
+        QVERIFY(!first->isVisible());
+        QVERIFY(!next->isEnabled());
+        previous->click();
+        QVERIFY(first->isVisible() && !last->isVisible());
+        // Every visible row ends above the pager.
+        auto *pager = chooser.findChild<QLabel *>("rrHeaderFooterFieldsPage")->parentWidget();
+        for (auto *row : chooser.findChildren<QPushButton *>()) {
+            if (row->objectName().startsWith("rrHeaderFooterField_") && row->isVisible())
+                QVERIFY(row->geometry().bottom() < pager->y());
+        }
+        // A tall screen shows every field on one page.
+        chooser.setGeometry(0, 0, 1264, 1508);
+        QCoreApplication::processEvents();
+        QVERIFY(!next->isVisible());
+        QVERIFY(first->isVisible() && last->isVisible());
     }
     void chromeSizeLabelsFollowAvailableWidth_data() {
         QTest::addColumn<int>("ppi");

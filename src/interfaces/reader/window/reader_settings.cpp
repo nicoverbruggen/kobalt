@@ -167,7 +167,7 @@ void Reader::openFieldChooser(int slot) {
     refresh();
 }
 
-// The check cell returns to Header and footer.
+// A choice or the back cell returns to Header and footer.
 void Reader::closeFieldChooser() {
     if (!fieldChooser->isVisible())
         return;

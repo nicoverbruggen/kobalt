@@ -1310,6 +1310,7 @@ bool Reader::pageList(int direction) {
                     : bookmarkList->isVisible()                 ? static_cast<QWidget *>(bookmarkList)
                     : searchPanel->isVisible()                  ? static_cast<QWidget *>(searchPanel)
                     : acknowledgments->isVisible()              ? acknowledgments
+                    : fieldChooser->isVisible()                 ? static_cast<QWidget *>(fieldChooser)
                                                                 : nullptr;
     if (!list)
         return false;

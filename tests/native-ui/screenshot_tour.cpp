@@ -1013,7 +1013,7 @@ public:
             capture("header-footer", "rrHeaderFooterView");
             tap("rrHeaderFooterSlot2");
             capture("header-footer-fields", "rrHeaderFooterChooser");
-            tap("rrHeaderFooterDone");
+            tap("rrHeaderFooterBack");
             // The Layout tab closes the view and the panel. Then show each
             // preset on the page, with the menus closed.
             tap("rrNavLayout");

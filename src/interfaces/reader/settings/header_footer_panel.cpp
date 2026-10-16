@@ -1,5 +1,6 @@
 #include "header_footer_panel.h"
 #include "interfaces/reader/ui/controls/icons.h"
+#include "interfaces/reader/ui/controls/paging.h"
 #include "interfaces/reader/ui/controls/rows.h"
 #include "interfaces/reader/ui/controls/text.h"
 #include "interfaces/reader/ui/style/fonts.h"
@@ -11,8 +12,6 @@
 
 #include <QPainter>
 #include <QResizeEvent>
-#include <QScrollArea>
-#include <QScrollBar>
 #include <QtMath>
 #include <QVBoxLayout>
 
@@ -289,28 +288,6 @@ void PresetCard::paintEvent(QPaintEvent *) {
 }
 
 namespace {
-// The cell that leaves the field list, drawn like the bar's other cells with
-// the hand-drawn check the list rows use.
-class CheckCell final : public ui::CellButton {
-public:
-    explicit CheckCell(QWidget *parent) : ui::CellButton(ui::ControlIcon::Close, parent) {}
-
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter painter(this);
-        const auto paper = palette().color(QPalette::Window), ink = palette().color(QPalette::WindowText);
-        painter.fillRect(rect(), isDown() ? ink : paper);
-        ui::paintEdges(painter, rect(), Qt::RightEdge, palette().color(QPalette::Mid));
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(QPen(isDown() ? paper : ink, px(3), Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
-        const int side = m::chrome::cellIcon;
-        const QPointF origin((width() - side) / 2.0, (height() - side) / 2.0);
-        QPolygonF check;
-        check << origin + QPointF(side * .18, side * .5) << origin + QPointF(side * .42, side * .75)
-              << origin + QPointF(side * .82, side * .22);
-        painter.drawPolyline(check);
-    }
-};
 // The bar that takes the place of the header's action row, as in Chapters:
 // a cell on the left, a serif title and an optional count on the right.
 void arrangeBar(QWidget *owner, QWidget *cell, QLabel *title, QLabel *count) {
@@ -438,9 +415,12 @@ private:
 
 FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent) {
     setObjectName("rrHeaderFooterChooser");
-    finish = new CheckCell(this);
-    finish->setObjectName("rrHeaderFooterDone");
-    finish->setAccessibleName(strings::get("header_footer.done"));
+    // The same back cell as Acknowledgments: it leaves without a new choice.
+    auto *back = new ui::CellButton(ui::ControlIcon::Back, this, m::chrome::backIcon);
+    back->setRule(Qt::RightEdge);
+    back->setObjectName("rrHeaderFooterBack");
+    back->setAccessibleName(strings::get("common.back"));
+    finish = back;
     connect(finish, &QPushButton::clicked, this, [this] {
         if (done)
             done();
@@ -454,27 +434,27 @@ FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent) {
     heading = new ui::ListHeader(this);
     heading->setObjectName("rrHeaderFooterChooserHeading");
     heading->setCaptions(strings::get("header_footer.fields"), strings::get("header_footer.shows"));
-    scroll = new QScrollArea(this);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidgetResizable(true);
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    auto *list = new QWidget(scroll);
-    auto *listRows = new QVBoxLayout(list);
-    listRows->setContentsMargins(0, 0, 0, 0);
-    listRows->setSpacing(0);
     for (const auto field : headerfooter::fields) {
-        auto *row = new Row(list, field);
-        listRows->addWidget(row);
+        auto *row = new Row(this, field);
         rows.append(row);
         connect(row, &QPushButton::clicked, this, [this, field] {
             if (selected)
                 selected(field);
         });
     }
-    listRows->addStretch();
-    scroll->setWidget(list);
-    // The slot's own case, in the same segmented row as the other settings,
-    // where Chapters has its pager.
+    // Rows that do not fit go to further pages, with the same pager as Chapters.
+    pager = new ui::PagerBar(this, "rrHeaderFooterFields");
+    pager->previous->setAccessibleName(strings::get("header_footer.previous_fields"));
+    pager->next->setAccessibleName(strings::get("header_footer.next_fields"));
+    connect(pager->previous, &QPushButton::clicked, this, [this] {
+        page = pager->turnTarget(-1);
+        arrange();
+    });
+    connect(pager->next, &QPushButton::clicked, this, [this] {
+        page = pager->turnTarget(1);
+        arrange();
+    });
+    // The slot's own case, in the same segmented row as the other settings.
     options = new ui::Panel(this, Qt::TopEdge);
     options->setSoftEdges(true);
     auto *optionRows = new QVBoxLayout(options);
@@ -501,7 +481,34 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
         row->setChecked(row->field == current);
     }
     uppercaseButtons[uppercase]->setChecked(true);
-    scroll->verticalScrollBar()->setValue(0);
+    // Open on the page that holds the slot's field.
+    page = 0;
+    for (int index = 0; index < rows.size(); ++index)
+        if (rows[index]->field == current)
+            page = index / qMax(1, perPage());
+    arrange();
+}
+
+int FieldChooser::perPage() const {
+    const int listTop = m::chrome::actionHeight + m::list::headerHeight;
+    const int available = height() - listTop - options->sizeHint().height();
+    int count = qMax(1, available / int(hf::chooserRowHeight));
+    // Leave room for the pager only when the list needs more than one page.
+    if (rows.size() > count)
+        count = qMax(1, (available - m::chrome::actionHeight) / int(hf::chooserRowHeight));
+    return count;
+}
+
+void FieldChooser::arrange() {
+    const int count = perPage(), pages = (int(rows.size()) + count - 1) / count;
+    page = qBound(0, page, pages - 1);
+    pager->setPage(page, pages);
+    const int listTop = m::chrome::actionHeight + m::list::headerHeight;
+    for (int index = 0; index < rows.size(); ++index) {
+        const int row = index - page * count;
+        rows[index]->setVisible(row >= 0 && row < count);
+        rows[index]->setGeometry(0, listTop + row * int(hf::chooserRowHeight), width(), hf::chooserRowHeight);
+    }
 }
 
 void FieldChooser::paintEvent(QPaintEvent *event) {
@@ -512,9 +519,11 @@ void FieldChooser::paintEvent(QPaintEvent *event) {
 void FieldChooser::resizeEvent(QResizeEvent *) {
     arrangeBar(this, finish, title, position);
     heading->setGeometry(0, m::chrome::actionHeight, width(), m::list::headerHeight);
+    // The pager keeps the bottom, as in Chapters; the slot's case sits above it.
     const int optionsHeight = options->sizeHint().height();
-    const int listTop = m::chrome::actionHeight + m::list::headerHeight;
-    options->setGeometry(0, height() - optionsHeight, width(), optionsHeight);
-    scroll->setGeometry(0, listTop, width(), qMax(0, height() - optionsHeight - listTop));
+    pager->setGeometry(0, height() - m::chrome::actionHeight, width(), m::chrome::actionHeight);
+    arrange();
+    const int bottom = pager->isVisible() ? pager->y() : height();
+    options->setGeometry(0, bottom - optionsHeight, width(), optionsHeight);
 }
 }

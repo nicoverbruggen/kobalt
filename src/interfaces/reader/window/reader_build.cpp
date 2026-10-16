@@ -766,6 +766,8 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
         editCustom([slot, field](kobalt::headerfooter::Layout &custom) {
             custom.slotFields[slot] = field;
         });
+        // A choice ends the list, as choosing a chapter does.
+        closeFieldChooser();
     };
     fieldChooser->uppercaseChanged = [this, editCustom](bool on) {
         const int slot = fieldChooser->slot();

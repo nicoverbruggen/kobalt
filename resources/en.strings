@@ -240,9 +240,10 @@
 "header_footer.slot_position" = "Slot %1 of %2";
 /* Arguments: %1, %2 */
 "header_footer.slot_value" = "%1: %2";
-"header_footer.done" = "Done";
 "header_footer.close" = "Close header and footer";
 "header_footer.fields" = "Fields";
+"header_footer.previous_fields" = "Previous fields";
+"header_footer.next_fields" = "Next fields";
 "header_footer.shows" = "Shows";
 "header_footer.empty" = "Empty";
 "header_footer.unavailable" = "—";

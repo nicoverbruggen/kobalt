@@ -105,6 +105,7 @@ endfunction()
 kobalt_check(touch-rotation SOURCES tests/model/touch_rotation.cpp src/platform/nickel/qt5/touch_rotation.cpp LIBRARIES Qt6::Gui)
 kobalt_check(usb-removal SOURCES tests/model/usb_removal.cpp LIBRARIES Qt6::Core)
 kobalt_check(nickel-session-calls SOURCES tests/model/nickel_session_calls.cpp LIBRARIES Qt6::Core)
+kobalt_check(nickel-dictionary-selection SOURCES tests/model/nickel_dictionary_selection.cpp LIBRARIES Qt6::Core)
 
 kobalt_check(progress SOURCES tests/model/reading_progress.cpp src/reading/reading_progress.cpp LIBRARIES Qt6::Core)
 kobalt_check(storage-assets SOURCES tests/model/storage_assets.cpp src/assets/assets.cpp src/storage/reader_storage.cpp

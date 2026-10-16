@@ -5454,19 +5454,25 @@ private slots:
         QTRY_VERIFY(!back->isVisible());
         QCOMPARE(host.session()->state().value("position").toString(), destination);
     }
+    void dictionarySuccessChoicePersists_data() {
+        QTest::addColumn<QString>("secondId");
+        QTest::newRow("opaque") << QString("second");
+        QTest::newRow("custom-path") << QString("custom:/mnt/onboard/.kobo/custom-dict/dicthtml-es-en.zip");
+    }
     void dictionarySuccessChoicePersists() {
+        QFETCH(QString, secondId);
         struct LookupState {
-            QString selected, word, book;
+            QString selected, word, book, secondId;
             int selections = 0, lookups = 0;
         };
         class SuccessfulDictionary final : public DictionaryService {
         public:
             explicit SuccessfulDictionary(std::shared_ptr<LookupState> state) : state(std::move(state)) {}
             QVector<DictionaryChoice> choices() const override {
-                return {{"first", "First dictionary", "en"}, {"second", "Second dictionary", "en"}};
+                return {{"first", "First dictionary", "en"}, {state->secondId, "Second dictionary", "en"}};
             }
             bool select(const QString &book, const QString &id, QString *) override {
-                if (id != "first" && id != "second")
+                if (id != "first" && id != state->secondId)
                     return false;
                 selected = id;
                 state->selected = id;
@@ -5506,6 +5512,7 @@ private slots:
         paths.stateReport = root.path() + "/state.json";
         paths.sessionReport = root.path() + "/session.json";
         auto lookup = std::make_shared<LookupState>();
+        lookup->secondId = secondId;
         test::ReaderHost host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{host};
         host.configureServices = [lookup](ReaderHostServices &services) {
@@ -5559,14 +5566,13 @@ private slots:
             QVERIFY(!second->isChecked());
             QVERIFY(click(canvas, second));
             QVERIFY(!choices->isVisible());
-            QCOMPARE(lookup->selected, QString("second"));
+            QCOMPARE(lookup->selected, secondId);
             QCOMPARE(lookup->selections, 1);
             QCOMPARE(lookup->lookups, 2);
             QCOMPARE(selector->text(), QString("Second dictionary"));
             QCOMPARE(definition->pages(), 1);
             QCOMPARE(definition->page(), 0);
-            QCOMPARE(storage::readJson(paths.bookState(lookup->book)).value("dictionary_id").toString(),
-                     QString("second"));
+            QCOMPARE(storage::readJson(paths.bookState(lookup->book)).value("dictionary_id").toString(), secondId);
             QVERIFY(click(canvas, panel->findChild<QPushButton *>("rrDictionaryClose")));
             QVERIFY(!panel->isVisible());
             QCOMPARE(host.session()->page(), before);
@@ -5576,7 +5582,7 @@ private slots:
         lookup->selected.clear();
         host.open(fixture(), nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
-        QCOMPARE(lookup->selected, QString("second"));
+        QCOMPARE(lookup->selected, secondId);
         QCOMPARE(lookup->selections, 2);
     }
     void dictionaryLookupDismisses() {

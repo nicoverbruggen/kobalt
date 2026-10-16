@@ -24,6 +24,8 @@
 
 - Use the Arabic text font before the math fallback so Arabic letters join correctly.
 
+- Load Kobo custom dictionaries when the standard dictionary is not installed. Keep standard and custom dictionaries separately selectable when they share a language suffix, and save the selected custom dictionary with the book.
+
 - Use real bold and available italic fonts for non-CJK fallback text in books and the reading interface.
 
 - Refresh the page and bookmark ribbon together when jumping to a bookmark or returning to the previous passage.

@@ -1,6 +1,7 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "platform/nickel/common/native_dictionary.h"
+#include "platform/nickel/common/dictionary_selection.h"
 #include "support/diagnostics.h"
 #include <QCoreApplication>
 #include <QApplication>
@@ -68,6 +69,8 @@ struct Api {
         symbol<decltype(settings)>("_ZN21ContentSettingManager8retrieveERK7QStringRK11ContentTypeS2_");
     QList<Dictionary> (*all)(const void *) = symbol<decltype(all)>("_ZN21DictionaryFileManager6getAllERK6Device");
     const QString &(*suffix)(const Dictionary *) = symbol<decltype(suffix)>("_ZNK10Dictionary6suffixEv");
+    const QString &(*path)(const Dictionary *) = symbol<decltype(path)>("_ZNK10Dictionary4pathEv");
+    bool (*custom)(const Dictionary *) = symbol<decltype(custom)>("_ZNK10Dictionary8isCustomEv");
     // The setter accepts QVariant, but stores a QString and returns it by reference.
     void (*select)(ContentSettings *, const QVariant &) =
         symbol<decltype(select)>("_ZN15ContentSettings21setSelectedDictionaryERK8QVariant");
@@ -95,9 +98,9 @@ struct Api {
         return type("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI10DictionaryE8metaTypeE") == sizeof(Dictionary) &&
                type("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI18DictionaryProviderE8metaTypeE") == 28 &&
                type("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE") == sizeof(Volume) && all && suffix &&
-               select && volume && values && device && dbName && settings && choose && parser && active && initialize &&
-               equal && valid && installed && language && name && source && construct && find && definition &&
-               symbol<void *>("_ZN6VolumeD1Ev") && symbol<void *>("_ZN10DictionaryD1Ev") &&
+               path && custom && select && volume && values && device && dbName && settings && choose && parser &&
+               active && initialize && equal && valid && installed && language && name && source && construct && find &&
+               definition && symbol<void *>("_ZN6VolumeD1Ev") && symbol<void *>("_ZN10DictionaryD1Ev") &&
                symbol<void *>("_ZN15ContentSettingsD1Ev");
     }
 };
@@ -117,23 +120,10 @@ bool NativeDictionary::available() {
     return api().ready();
 }
 QVector<DictionaryChoice> NativeDictionary::choices() const {
-    QVector<DictionaryChoice> result;
-    if (!available() || QThread::currentThread() != qApp->thread())
-        return result;
-    const auto list = api().all(api().device());
-    for (const auto &dictionary : list) {
-        if (!api().valid(&dictionary) || !api().installed(&dictionary))
-            continue;
-        const auto id = api().suffix(&dictionary);
-        bool duplicate = false;
-        for (const auto &choice : result)
-            duplicate |= choice.id == id;
-        // Nickel saves only the suffix. Entries sharing it cannot be selected
-        // independently, so show the first match used by its parser.
-        if (!duplicate)
-            result.append({id, api().name(&dictionary), api().language(&dictionary), true});
+    if (!available() || QThread::currentThread() != qApp->thread()) {
+        return {};
     }
-    return result;
+    return nickel::dictionaryChoices(api().all(api().device()), api());
 }
 bool NativeDictionary::select(const QString &book, const QString &id, QString *error) {
     if (!available() || QThread::currentThread() != qApp->thread() || pending) {
@@ -199,16 +189,24 @@ DictionaryResult NativeDictionary::lookup(const QString &book, const QString &wo
     const int contentType = values.value("ContentType").toInt();
     auto settings = a.settings(book, contentType, a.dbName(a.device()));
     // Override only this lookup value; Nickel's saved content settings stay unchanged.
-    if (data->selected.contains(book))
+    if (data->selected.contains(book) && !data->selected.value(book).startsWith("custom:")) {
         a.select(&settings, QVariant(data->selected.value(book)));
-    const auto dictionary = a.choose(volume, settings);
+    }
+    const auto automatic = a.choose(volume, settings);
+    auto id = data->selected.value(book);
+    if (id.isEmpty() && a.valid(&automatic)) {
+        id = a.suffix(&automatic);
+    }
+    const auto dictionaries = a.all(a.device());
+    const auto *installed = nickel::installedDictionary(dictionaries, id, a);
+    const auto &dictionary = installed ? *installed : automatic;
     if (!a.valid(&dictionary)) {
         result.error = strings::get("error.no_dictionary_is_available_for_this_book");
         return result;
     }
     result.language = a.language(&dictionary);
     result.dictionary = a.name(&dictionary);
-    result.dictionaryId = a.suffix(&dictionary);
+    result.dictionaryId = nickel::dictionaryId(dictionary, a);
     if (!a.installed(&dictionary)) {
         result.error = strings::get("error.the_selected_dictionary_is_not_installed");
         return result;

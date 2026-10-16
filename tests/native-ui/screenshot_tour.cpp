@@ -488,9 +488,11 @@ public:
         auto *panel = dynamic_cast<DictionaryPanel *>(widget("rrDictionary"));
         require(panel, "Dictionary lookup panel missing");
         panel->setLanguage("en");
-        panel->setChoices({{"en-en", "English monolingual", "en", true},
-                           {"downloaded:en-fr", "English to French", "en", false},
-                           {"downloaded:ar-ar", "Arabic monolingual", "ar", false}});
+        panel->setChoices(
+            {{"en-en", "English monolingual", "en", true},
+             {"custom:/mnt/onboard/.kobo/custom-dict/dicthtml-en.zip", "English monolingual (Custom)", "en", true},
+             {"downloaded:en-fr", "English to French", "en", false},
+             {"downloaded:ar-ar", "Arabic monolingual", "ar", false}});
         tap("rrDictionarySelect");
         capture("lookup-choices", "rrDictionaryChoices");
         const int selections = lookup->selections, lookups = lookup->lookups;

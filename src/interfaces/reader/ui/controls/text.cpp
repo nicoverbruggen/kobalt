@@ -251,9 +251,9 @@ void drawOpticalText(QPainter &painter, const QRectF &area, const QString &text,
                      SampleAppearance appearance) {
     if (needsPrivateText(text, painter.font())) {
         const auto ranges = appearance.bionic == "bold" ? samplePrefixes(text) : QVector<QPair<int, int>>();
-        drawInterfaceText(painter, area.toRect(),
-                          elidePrivateText(text, painter.font(), qMax(0, int(area.width())), ranges),
-                          (centered ? Qt::AlignHCenter : Qt::AlignLeft) | Qt::AlignVCenter, appearance.weight, ranges);
+        drawOpticalPrivateText(painter, area.toRect(),
+                               elidePrivateText(text, painter.font(), qMax(0, int(area.width())), ranges),
+                               centered ? Qt::AlignHCenter : Qt::AlignLeft, appearance.weight, ranges);
         return;
     }
     const bool bold = appearance.bionic == "bold";

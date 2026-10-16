@@ -732,12 +732,9 @@ QString elideInterfaceText(const QString &text, const QFont &font, int width) {
     }
     return elidePrivateText(text, font, width);
 }
-void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment, int weight,
-                       const QVector<QPair<int, int>> &boldRanges) {
-    if (!needsPrivateText(text, painter.font())) {
-        painter.drawText(area, alignment, text);
-        return;
-    }
+namespace {
+void drawPrivateText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment, int weight,
+                     const QVector<QPair<int, int>> &boldRanges, bool optical) {
     auto rendered = renderPrivateText(text, painter.font(), weight, boldRanges);
     if (rendered.image.isNull()) {
         return;
@@ -749,13 +746,43 @@ void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text
     const int x = alignment.testFlag(Qt::AlignRight)     ? area.right() + 1 - rendered.advance
                   : alignment.testFlag(Qt::AlignHCenter) ? area.left() + (area.width() - rendered.advance) / 2
                                                          : area.left();
-    const int y = alignment.testFlag(Qt::AlignBottom)    ? area.bottom() + 1 - rendered.image.height()
-                  : alignment.testFlag(Qt::AlignVCenter) ? area.top() + (area.height() - rendered.image.height()) / 2
-                                                         : area.top();
+    int y = alignment.testFlag(Qt::AlignBottom)    ? area.bottom() + 1 - rendered.image.height()
+            : alignment.testFlag(Qt::AlignVCenter) ? area.top() + (area.height() - rendered.image.height()) / 2
+                                                   : area.top();
+    if (optical) {
+        // Center the rows that hold ink, as Qt's tight bounds do for native
+        // text, so a line without descenders does not sit high.
+        int first = -1, last = -1;
+        for (int row = 0; row < rendered.image.height(); ++row) {
+            const auto *pixels = reinterpret_cast<const QRgb *>(rendered.image.constScanLine(row));
+            for (int column = 0; column < rendered.image.width(); ++column)
+                if (qAlpha(pixels[column])) {
+                    if (first < 0)
+                        first = row;
+                    last = row;
+                    break;
+                }
+        }
+        if (first >= 0)
+            y = qRound(area.top() + area.height() / 2.0 - (first + last + 1) / 2.0);
+    }
     painter.save();
     painter.setClipRect(area, Qt::IntersectClip);
     painter.drawImage(QPoint(x, y), rendered.image);
     painter.restore();
+}
+}
+void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment, int weight,
+                       const QVector<QPair<int, int>> &boldRanges) {
+    if (!needsPrivateText(text, painter.font())) {
+        painter.drawText(area, alignment, text);
+        return;
+    }
+    drawPrivateText(painter, area, text, alignment, weight, boldRanges, false);
+}
+void drawOpticalPrivateText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment,
+                            int weight, const QVector<QPair<int, int>> &boldRanges) {
+    drawPrivateText(painter, area, text, alignment, weight, boldRanges, true);
 }
 int PrivateTextLabel::textWidth(const QString &value) const {
     return interfaceTextWidth(value, font());

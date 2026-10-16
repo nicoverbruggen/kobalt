@@ -170,6 +170,30 @@ inline void checkPrivateInterfaceText(const kobalt::AssetBundle &assets) {
     require(registerPrivateInterfaceFont(assets.file("fonts/ebook-core/Libron-Bold.ttf"), "Private Excerpt Serif",
                                          true) == PrivateFontRegistration::Private,
             "Cannot register private excerpt bold");
+    {
+        // A private label without descenders centers its letters, as the
+        // font button's name does with Qt's tight bounds.
+        QImage canvas(400, 72, QImage::Format_RGB32);
+        canvas.fill(Qt::white);
+        QPainter painter(&canvas);
+        QFont face("Private Excerpt Serif");
+        face.setPixelSize(32);
+        painter.setFont(face);
+        painter.setPen(Qt::black);
+        drawOpticalText(painter, QRectF(canvas.rect()), QStringLiteral("Libron"));
+        painter.end();
+        int first = -1, last = -1;
+        for (int y = 0; y < canvas.height(); ++y)
+            for (int x = 0; x < canvas.width(); ++x)
+                if (qGray(canvas.pixel(x, y)) < 128) {
+                    if (first < 0)
+                        first = y;
+                    last = y;
+                    break;
+                }
+        require(first >= 0 && qAbs((first + last + 1) - canvas.height()) <= 2,
+                "Private optical text did not center its letters");
+    }
     WholeLineLabel excerpt;
     excerpt.setAlignment(Qt::AlignLeft | Qt::AlignTop);
     excerpt.setStyleSheet("background:white;color:black;border:none;");

@@ -6,6 +6,8 @@
 
 - Use Phosphor icons throughout the reader. The bottom tabs have larger icons and labels, aligned on one line.
 
+- Center font names in the font button and use the chosen font for the Set default font sample on Kobo.
+
 - Draw interface text without font hinting on Kobo, matching the reading text and keeping small labels true to their shapes.
 
 ## v1.0-beta.4

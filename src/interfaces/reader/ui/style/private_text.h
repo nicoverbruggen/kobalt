@@ -56,6 +56,10 @@ QString elideInterfaceText(const QString &text, const QFont &font, int width);
 void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text,
                        Qt::Alignment alignment = Qt::AlignLeft | Qt::AlignVCenter, int weight = -1,
                        const QVector<QPair<int, int>> &boldRanges = {});
+// Centers the ink of the letters vertically instead of the line box.
+void drawOpticalPrivateText(QPainter &painter, const QRect &area, const QString &text,
+                            Qt::Alignment alignment = Qt::AlignLeft, int weight = -1,
+                            const QVector<QPair<int, int>> &boldRanges = {});
 class PrivateTextLabel : public QLabel {
 public:
     using QLabel::QLabel;

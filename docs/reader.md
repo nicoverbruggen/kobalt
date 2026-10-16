@@ -255,15 +255,50 @@ NickelBench can select a temporary appearance profile for its dedicated benchmar
 
 ## Custom book styles
 
-Create `.adds/kobalt/userstyle.css` to add CSS to every book. Kobalt does not create this file or ship a default. Updates preserve it. The file is not part of the asset manifest, and editing or deleting it does not affect installation checks.
+`userstyle.css` adds your own CSS to every book. Use it for changes that the Text and Layout panels do not offer, such as paragraph indentation or heading alignment. It changes book content only, not the reader interface.
 
-Kobalt reads the file each time a book opens. Close and reopen the book after an edit. A changed stylesheet discards the retained layout and prevents reuse of cached layouts made with other CSS. Appearance previews use the same CSS as the open book. Removing the file or leaving it empty restores normal styling.
+### Where the file goes
 
-Rules use CREngine's supported CSS. They follow Kobalt's built-in styles and Text settings in the same base stylesheet. Ordinary rules remain below publisher styling. Use `!important` and a selector with sufficient specificity to override publisher styling or a Text setting. For example, `p { text-indent: 0 !important; }` removes paragraph indentation. Font selection still overrides every element except code unless your CSS overrides it. Custom CSS changes book content, not the reader interface.
+Kobalt does not create the file or ship a default. Create it as a plain text file:
 
-The file must be at most 256 KiB and contain no NUL bytes. Missing, unreadable or oversized files are ignored so the book can still open. CSS syntax errors are left to CREngine; they do not trigger an installation error. Font fallback defaults remain built into the app.
+| Platform | Location |
+|---|---|
+| Kobo | `.adds/kobalt/userstyle.css` on the Kobo drive |
+| macOS development app | `~/Library/Application Support/Kobalt/Kobalt/config/userstyle.css`, beside `reader-settings.json` |
+| Android | The app-private `config/` directory. There is no in-app file picker or editor. |
 
-On the macOS development app, put `userstyle.css` in `~/Library/Application Support/Kobalt/Kobalt/config/`, beside `reader-settings.json`. Android uses its app-private `config/` directory; there is no in-app CSS file picker or editor.
+Updates keep the file. It is not part of the asset manifest, so editing or deleting it does not affect installation checks.
+
+### When changes apply
+
+Kobalt reads the file each time a book opens. After an edit, close the book and open it again. A changed file also discards cached layouts that were made with other CSS. Appearance previews use the same CSS as the open book. To stop using custom CSS, delete the file or leave it empty.
+
+### How your rules combine with the book's
+
+Your rules go into Kobalt's base stylesheet, after Kobalt's built-in styles and Text settings. CREngine applies them in this order:
+
+1. Ordinary rules in your file rank below the book's own styles. They apply only where the publisher sets nothing.
+2. Rules marked `!important` rank above ordinary publisher styles. Use a selector that is at least as specific as the book's.
+3. Some Text and Layout settings are already `!important`: line spacing, page margins, alignment when it is not Publisher, hyphenation when it is On or Off, and the font family when a reading font other than Publisher Fonts is chosen. To change those, your rule needs `!important` and enough specificity too. Alignment is set on marked text blocks with an attribute selector, so `p { text-align: left !important; }` is not specific enough; set Alignment to Publisher instead, or use a selector such as `p[data-kobalt-prose]`.
+
+When a reading font is chosen, it replaces every font except code and MathML unless your CSS sets the font itself.
+
+### Examples
+
+```css
+/* Remove paragraph indentation. */
+p { text-indent: 0 !important; }
+
+/* Add space between paragraphs. */
+p { margin-top: 0.5em !important; margin-bottom: 0.5em !important; }
+
+/* Centre chapter headings. */
+h1, h2 { text-align: center !important; }
+```
+
+### Limits
+
+The file must be at most 256 KiB and must not contain NUL bytes. Kobalt ignores a missing, unreadable or oversized file, and the book still opens. Rules use the CSS that CREngine supports. CREngine handles CSS syntax errors itself; they never cause an installation error. Font fallbacks stay built into the app and cannot be changed here.
 
 ## Display refresh
 

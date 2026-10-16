@@ -298,6 +298,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     customRows->addWidget(slotMap);
     slotHint = new QLabel(strings::get("header_footer.custom_hint"), custom);
     slotHint->setObjectName("rrHeaderFooterHint");
+    slotHint->setWordWrap(true);
     // The same secondary text as the sliders' current values, so it follows the theme.
     readerStyle(slotHint, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
     customRows->addWidget(slotHint);

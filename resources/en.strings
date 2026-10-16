@@ -238,7 +238,7 @@
 "header_footer.customize_title" = "Customize header and footer";
 /* Arguments: %1 */
 "header_footer.customize_slot" = "Customize slot: %1";
-"header_footer.custom_hint" = "Tap a slot to customize it.";
+"header_footer.custom_hint" = "You may customize six slots: tap one to customize it. Keep in mind that these changes are saved in the Custom preset, and are applied to all books that use it!";
 /* Arguments: %1, %2 */
 "header_footer.slot_value" = "%1: %2";
 "header_footer.close" = "Close header and footer";

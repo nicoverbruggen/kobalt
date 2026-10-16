@@ -55,5 +55,10 @@ private:
 void drawOpticalText(QPainter &painter, const QRectF &area, const QString &text, bool centered = false,
                      SampleAppearance appearance = {});
 QFont fontSample(const QString &face);
+// Page counts such as 5 / 33 keep half-width spaces around the slash. A
+// Unicode thin space still takes a full cell in mono fonts, so the painter
+// draws each word and advances half a space between them.
+qreal halfSpacedWidth(const QFontMetrics &metrics, const QString &text);
+void drawHalfSpaced(QPainter &painter, qreal x, const QRect &bounds, const QString &text);
 void captionLabel(QLabel *label, int pixels = metrics::chrome::captionText);
 }

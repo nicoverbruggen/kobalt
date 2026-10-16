@@ -42,6 +42,7 @@ public:
     void setPanelBelowHeader(bool visible);
     int topHeight() const;
     int bottomHeight() const;
+    QRect headerTextRect() const;
     // The footer's text line, in page coordinates. Empty without a footer.
     QRect footerTextRect() const;
     // The ribbon that marks a bookmarked page, and the corner that toggles it.

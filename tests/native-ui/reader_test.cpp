@@ -21,6 +21,7 @@
 #include "platform/api/light_controls.h"
 #include "interfaces/reader/panels/search_panel.h"
 #include "interfaces/reader/settings/appearance_panel.h"
+#include "interfaces/reader/settings/header_footer_panel.h"
 #include "interfaces/reader/views/navigation.h"
 #include "interfaces/reader/panels/link_panel.h"
 #include "interfaces/reader/views/reading_page.h"
@@ -3437,8 +3438,8 @@ private slots:
         };
         auto *page = host.window()->findChild<ReadingPage *>("rrPage");
         QVERIFY(page);
-        // Where the header and footer editing is: its full-screen view, the
-        // full-screen field list, the Layout panel, or closed.
+        // Where the header and footer editing is: its sheet, the full-screen
+        // field list, the Layout panel, or closed.
         enum Place { Closed = -1, View, Fields, Layout };
         const auto visible = [&](const char *name) {
             auto *widget = host.window()->findChild<QWidget *>(name);
@@ -3462,11 +3463,26 @@ private slots:
         QCOMPARE(door->height(), rotation->height());
         QVERIFY(click(canvas, door));
         QTRY_COMPARE(currentPage(), int(View));
-        // The view fills the reading area like Chapters, with the Layout tab selected.
-        auto *view = host.window()->findChild<QWidget *>("rrHeaderFooterView");
+        // The view is a sheet on the tabs sized to its rows, like Font, so
+        // the page shows above it. The Layout tab stays selected.
+        auto *view = host.window()->findChild<kobalt::reader::HeaderFooterView *>("rrHeaderFooterView");
         auto *tabs = host.window()->findChild<QWidget *>("rrBottomNavigation");
         QCOMPARE(view->geometry().bottom() + 1, tabs->y());
+        QCOMPARE(view->height(), view->preferredHeight(view->width()));
+        QVERIFY(view->y() > int(ui::metrics::chrome::headerHeight) + int(ui::metrics::list::oneLine));
         QVERIFY(host.window()->findChild<QPushButton *>("rrNavLayout")->isChecked());
+        // The size and bar rows keep the bottom, below the page preview.
+        auto *map = host.window()->findChild<QWidget *>("rrHeaderFooterCustomMap");
+        auto *progressRow = host.window()->findChild<QPushButton *>("rrHeaderFooterProgressBar_on");
+        QVERIFY(map && progressRow);
+        QVERIFY(map->mapTo(view, QPoint()).y() < progressRow->mapTo(view, QPoint()).y());
+        QVERIFY(view->height() - progressRow->mapTo(view, QPoint(0, progressRow->height())).y() <
+                int(ui::metrics::list::oneLine));
+        // A tap on the page above the sheet returns to the Layout panel.
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, view->y() / 2 + 40)));
+        QTRY_COMPARE(currentPage(), int(Layout));
+        QVERIFY(click(canvas, door));
+        QTRY_COMPARE(currentPage(), int(View));
         // Close returns to the Layout panel.
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterClose")));
         QTRY_COMPARE(currentPage(), int(Layout));
@@ -3491,6 +3507,24 @@ private slots:
         auto adjusted = headerfooter::presetLayout(headerfooter::Preset::AlternativeB);
         adjusted.headerSize = QStringLiteral("medium");
         QCOMPARE(page->chrome, adjusted);
+        // The preview draws each strip's text at its size, as the page does:
+        // count the rows of a slot that hold dark ink.
+        const auto inkRows = [&](const char *name) {
+            const auto image = host.window()->findChild<QWidget *>(name)->grab().toImage();
+            int rows = 0;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x)
+                    if (qGray(image.pixel(x, y)) < 96) {
+                        ++rows;
+                        break;
+                    }
+            return rows;
+        };
+        QHash<QString, int> previewInk;
+        // Strip text is centred at the same distance from the page edge at every size.
+        QSet<int> headerTops, footerGaps;
+        // The preview is a page: larger strips make it, and the sheet, taller.
+        QHash<QString, int> sheetHeights;
         for (const auto &part : {QString("Header"), QString("Footer")}) {
             const bool footer = part == "Footer";
             for (const auto &value : {QString("small"), QString("medium"), QString("large"), QString("off")}) {
@@ -3501,6 +3535,17 @@ private slots:
                 QTRY_VERIFY(previewReady());
                 QCOMPARE(footer ? page->chrome.footerSize : page->chrome.headerSize, value);
                 QCOMPARE(footer ? page->showFooter() : page->showHeader(), value != "off");
+                if (value != "off")
+                    (footer ? footerGaps : headerTops)
+                        .insert(footer ? page->height() - page->footerTextRect().center().y()
+                                       : page->headerTextRect().center().y());
+                if (!footer) {
+                    QTRY_COMPARE(view->height(), view->preferredHeight(view->width()));
+                    sheetHeights[value] = view->height();
+                }
+                // Ember's time is in the header's centre slot.
+                if (!footer)
+                    previewInk[value] = inkRows("rrHeaderFooterSlot1");
                 const auto custom = storage::readJson(paths.preferences()).value("header_footer_custom").toObject();
                 QCOMPARE(custom.value(footer ? "footer_size" : "header_size").toString(), value);
                 for (auto *sibling : button->parentWidget()->findChildren<QPushButton *>()) {
@@ -3509,6 +3554,12 @@ private slots:
             }
         }
         QCOMPARE(storage::readJson(paths.bookState(identity)).value("header_footer").toString(), QString("custom"));
+        QVERIFY(sheetHeights["small"] < sheetHeights["medium"] && sheetHeights["medium"] < sheetHeights["large"]);
+        QCOMPARE(headerTops.size(), 1);
+        QCOMPARE(footerGaps.size(), 1);
+        QVERIFY2(previewInk["small"] < previewInk["medium"] && previewInk["medium"] < previewInk["large"],
+                 qPrintable(
+                     QString("%1 %2 %3").arg(previewInk["small"]).arg(previewInk["medium"]).arg(previewInk["large"])));
         // A slot opens its field list in the view's place. Case changes keep
         // the list open; a choice applies and returns, as choosing a chapter does.
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderTextSize_small")));
@@ -3517,29 +3568,52 @@ private slots:
         QVERIFY(click(canvas, slot));
         auto *chooser = host.window()->findChild<QWidget *>("rrHeaderFooterChooser");
         QTRY_VERIFY(chooser && chooser->isVisible());
-        QCOMPARE(chooser->geometry(), view->geometry());
+        // The field list fills the reading area, from above the sheet to the tabs.
+        QVERIFY(chooser->y() < view->y());
+        QCOMPARE(chooser->geometry().bottom(), view->geometry().bottom());
         QCOMPARE(currentPage(), int(Fields));
         // Every field fits on one portrait page, so no pager shows.
         QVERIFY(!visible("rrHeaderFooterFieldsNext"));
+        QVERIFY(visible("rrHeaderFooterField_book_time_left"));
+        // The title names the slot; Uppercase is a checkbox in the bar.
+        QCOMPARE(host.window()->findChild<QLabel *>("rrHeaderFooterChooserTitle")->text(),
+                 strings::get("header_footer.customize_slot").arg(headerfooter::slotLabel(2)));
+        auto *uppercase = host.window()->findChild<QCheckBox *>("rrHeaderFooterUppercase");
+        QVERIFY(uppercase && uppercase->isVisible());
+        QVERIFY(uppercase->geometry().bottom() < int(ui::metrics::chrome::actionHeight));
         const bool otherCase = page->chrome.uppercase[1];
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterUppercase_on")));
+        if (uppercase->isChecked())
+            QVERIFY(click(canvas, uppercase));
+        QVERIFY(!page->chrome.uppercase[2]);
+        QVERIFY(click(canvas, uppercase));
+        QVERIFY(uppercase->isChecked());
         QVERIFY(page->chrome.uppercase[2]);
         QCOMPARE(page->chrome.uppercase[1], otherCase);
         QCOMPARE(currentPage(), int(Fields));
-        auto *author = host.window()->findChild<QPushButton *>("rrHeaderFooterField_author");
+        auto *author = host.window()->findChild<QAbstractButton *>("rrHeaderFooterField_author");
         QVERIFY(author);
+        {
+            // Holding a field shows that it is pressed.
+            const QPoint corner(author->width() - 4, 4);
+            const auto idle = author->grab().toImage().pixelColor(corner);
+            QTest::mousePress(author, Qt::LeftButton, Qt::NoModifier, author->rect().center());
+            const auto held = author->grab().toImage().pixelColor(corner);
+            QTest::mouseRelease(author, Qt::LeftButton, Qt::NoModifier, QPoint(-10, -10));
+            QVERIFY2(held != idle, qPrintable(held.name() + " " + idle.name()));
+        }
         QVERIFY(click(canvas, author));
         QTRY_COMPARE(currentPage(), int(View));
         QCOMPARE(page->chrome.slotFields[2], headerfooter::Field::Author);
         QVERIFY(page->chrome.uppercase[2]);
         QCOMPARE(page->slotContents[2].text, page->slotContents[2].text.toUpper());
-        // Back leaves without a new choice; the case change still applies.
+        // Close leaves without a new choice; the case change still applies.
         QVERIFY(click(canvas, slot));
         QTRY_COMPARE(currentPage(), int(Fields));
         QVERIFY(author->isChecked());
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterUppercase_off")));
+        QVERIFY(uppercase->isChecked());
+        QVERIFY(click(canvas, uppercase));
         QVERIFY(!page->chrome.uppercase[2]);
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterBack")));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterFieldsClose")));
         QTRY_COMPARE(currentPage(), int(View));
         QCOMPARE(page->chrome.slotFields[2], headerfooter::Field::Author);
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterProgressBar_off")));
@@ -3552,7 +3626,61 @@ private slots:
         QVERIFY(click(canvas, custom));
         QTRY_VERIFY(previewReady());
         QCOMPARE(page->chrome, customLayout);
+        // Custom differs from Kobalt, so its card and the Layout row show a star.
+        const auto starred =
+            strings::get("header_footer.preset.modified").arg(headerfooter::presetLabel(headerfooter::Preset::Custom));
+        QCOMPARE(door->text(), starred);
+        QCOMPARE(custom->accessibleName(), strings::get("header_footer.preset.modified_name")
+                                               .arg(headerfooter::presetLabel(headerfooter::Preset::Custom)));
+        // An edit from a preset would replace that layout, so it asks first.
+        const auto savedCustom = [&] {
+            return storage::readJson(paths.preferences()).value("header_footer_custom").toObject();
+        };
+        const auto kept = savedCustom();
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterPreset_default")));
+        QTRY_VERIFY(previewReady());
+        auto *large = host.window()->findChild<QPushButton *>("rrHeaderTextSize_large");
+        QVERIFY(click(canvas, large));
+        QTRY_VERIFY(visible("rrReplaceCustom"));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrKeepCustomLayout")));
+        QTRY_VERIFY(!visible("rrReplaceCustom"));
+        QCOMPARE(page->chrome, headerfooter::presetLayout(headerfooter::Preset::Default));
+        QVERIFY(!large->isChecked());
+        QVERIFY(host.window()->findChild<QPushButton *>("rrHeaderTextSize_small")->isChecked());
+        QCOMPARE(savedCustom(), kept);
+        // Replace applies the edit to the preset and saves it as Custom.
+        QVERIFY(click(canvas, large));
+        QTRY_VERIFY(visible("rrReplaceCustom"));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrReplaceCustomLayout")));
+        QTRY_VERIFY(!visible("rrReplaceCustom") && previewReady());
+        auto replaced = headerfooter::presetLayout(headerfooter::Preset::Default);
+        replaced.headerSize = QStringLiteral("large");
+        QCOMPARE(page->chrome, replaced);
+        QVERIFY(custom->isChecked());
+        QCOMPARE(savedCustom(), headerfooter::toJson(replaced));
+        // A slot starts an edit too: from a preset it asks before the field list opens.
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterPreset_alternative_b")));
+        QTRY_VERIFY(previewReady());
+        QVERIFY(click(canvas, slot));
+        QTRY_VERIFY(visible("rrReplaceCustom"));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrKeepCustomLayout")));
+        QTRY_VERIFY(!visible("rrReplaceCustom"));
+        QCOMPARE(currentPage(), int(View));
+        QCOMPARE(page->chrome, headerfooter::presetLayout(headerfooter::Preset::AlternativeB));
+        QVERIFY(click(canvas, custom));
+        QTRY_VERIFY(previewReady());
+        QCOMPARE(page->chrome, replaced);
+        // Back at Kobalt's layout, Custom is unmodified: no star, and no question.
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderTextSize_small")));
+        QTRY_VERIFY(previewReady());
         QCOMPARE(door->text(), headerfooter::presetLabel(headerfooter::Preset::Custom));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterPreset_alternative_a")));
+        QTRY_VERIFY(previewReady());
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrFooterTextSize_off")));
+        QTRY_VERIFY(previewReady());
+        QVERIFY(!visible("rrReplaceCustom"));
+        QVERIFY(custom->isChecked());
+        QCOMPARE(page->chrome.footerSize, QString("off"));
         // The Layout tab closes everything.
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout")));
         QTRY_VERIFY(!host.session()->busy() && currentPage() == Closed);
@@ -3583,8 +3711,8 @@ private slots:
         auto *previous = chooser.findChild<QPushButton *>("rrHeaderFooterFieldsPrevious");
         QVERIFY(next && previous && next->isVisible());
         // The list opens on the page with the slot's field.
-        auto *last = chooser.findChild<QPushButton *>("rrHeaderFooterField_book_time_left");
-        auto *first = chooser.findChild<QPushButton *>("rrHeaderFooterField_nothing");
+        auto *last = chooser.findChild<QAbstractButton *>("rrHeaderFooterField_book_time_left");
+        auto *first = chooser.findChild<QAbstractButton *>("rrHeaderFooterField_nothing");
         QVERIFY(last->isVisible() && last->isChecked());
         QVERIFY(!first->isVisible());
         QVERIFY(!next->isEnabled());
@@ -3592,12 +3720,22 @@ private slots:
         QVERIFY(first->isVisible() && !last->isVisible());
         // Every visible row ends above the pager.
         auto *pager = chooser.findChild<QLabel *>("rrHeaderFooterFieldsPage")->parentWidget();
-        for (auto *row : chooser.findChildren<QPushButton *>()) {
+        for (auto *row : chooser.findChildren<QAbstractButton *>()) {
             if (row->objectName().startsWith("rrHeaderFooterField_") && row->isVisible())
-                QVERIFY(row->geometry().bottom() < pager->y());
+                QVERIFY(row->mapTo(&chooser, QPoint(0, row->height() - 1)).y() < pager->y());
         }
-        // A tall screen shows every field on one page.
-        chooser.setGeometry(0, 0, 1264, 1508);
+        // Holding a row shows that it is pressed, as list rows do.
+        const QPoint corner(first->width() - 4, 4);
+        const auto idle = first->grab().toImage().pixelColor(corner);
+        QTest::mousePress(first, Qt::LeftButton, Qt::NoModifier, first->rect().center());
+        QVERIFY(first->isDown());
+        const auto held = first->grab().toImage().pixelColor(corner);
+        QVERIFY2(held != idle, qPrintable(held.name() + " " + idle.name()));
+        QTest::mouseRelease(first, Qt::LeftButton, Qt::NoModifier, first->rect().center());
+        // With room for every row, one page and no pager.
+        chooser.setGeometry(0, 0, 1264,
+                            int(ui::metrics::chrome::actionHeight) + int(ui::metrics::list::headerHeight) +
+                                14 * int(ui::metrics::headerFooter::fieldRowHeight));
         QCoreApplication::processEvents();
         QVERIFY(!next->isVisible());
         QVERIFY(first->isVisible() && last->isVisible());

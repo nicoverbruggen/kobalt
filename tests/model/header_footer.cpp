@@ -92,9 +92,14 @@ int main() {
     values.battery = 80;
     const auto chapterPage = strings::get("common.page_fraction").arg(6).arg(20);
     require(content(Field::ChapterPage, values, false).text == chapterPage, "Page in chapter is wrong");
+    // Beside a name the page reads "6 of 20"; alone it keeps the slash.
     require(content(Field::ChapterAndPage, values, false).text ==
-                strings::get("reader.chapter_position").arg(values.chapter, chapterPage),
+                strings::get("reader.chapter_position").arg(values.chapter, QStringLiteral("6 of 20")),
             "Chapter and page is wrong");
+    require(content(Field::TitleAndPage, values, false).text.endsWith(QStringLiteral(" 6 of 193")),
+            "Title and page is wrong");
+    require(pageCount(Field::ChapterPage) && pageCount(Field::BookPage) && !pageCount(Field::ChapterAndPage),
+            "Only lone page counts keep half spaces");
     require(content(Field::Chapter, values, true).text == QStringLiteral("DOWN THE RABBIT-HOLE"),
             "Uppercase did not apply");
     require(content(Field::ChapterPagesLeft, values, false).text.startsWith(QStringLiteral("14 ")),

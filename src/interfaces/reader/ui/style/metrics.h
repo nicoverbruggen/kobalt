@@ -172,18 +172,23 @@ inline constexpr Px headerSide{28}, headerTextGap{24}, batteryGap{8};
 inline constexpr Px progressBottom{14}, progressFillHeight{4};
 }
 namespace headerFooter {
-// The slot map uses the list rhythm: one-line strips around a two-line page.
-inline constexpr Px mapRowHeight{list::oneLine}, mapBodyHeight{list::twoLines}, mapLineHeight{4};
-inline constexpr Px mapLineGap{spacing::section}, mapLineInset{list::inset};
+// The slot map is a short page: one-line slot rows, their text at the top
+// and bottom edges as on the page, and a few lines between them.
+inline constexpr Px mapRowHeight{list::oneLine}, mapLineHeight{4};
+inline constexpr Px mapLineGap{spacing::section}, mapLineInset{list::inset}, mapEdgeInset{10};
+// Each slot is a dashed box around its text, so it reads as something to tap.
+inline constexpr Px slotGap{8}, slotPadding{8}, slotDash{4}, mapSideInset{7};
 inline constexpr Px valueText{control::captionValueText}, emptyText{chrome::captionText};
 // Preset miniatures: a page, then its name in a block as tall as a segment.
 inline constexpr Px miniatureWidth{184}, selectedBorder{5};
 inline constexpr Px miniatureTop{spacing::section}, nameGap{spacing::row}, nameHeight{control::segmentHeight};
 inline constexpr Px namePadding{control::segmentHorizontalPadding};
+// Field rows are list rows at the reader's step height, so every field fits a
+// portrait page on six-inch screens.
+inline constexpr Px fieldRowHeight{control::stepSize};
 // Dashes stand for slot text inside a miniature; they are drawing sizes.
 inline constexpr Px dashHeight{6}, shortDash{22}, longDash{46};
-// The field chooser: a list header, rows at the reader's step height, then Done.
-inline constexpr Px chooserRowHeight{control::stepSize}, radioSize{chrome::cellIcon}, radioGap{spacing::section};
+
 }
 namespace opening {
 inline constexpr int hintDelayMilliseconds = 4000;

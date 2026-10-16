@@ -115,6 +115,8 @@ struct Content {
     }
 };
 Content content(Field field, const Values &values, bool uppercase);
+// A page count alone, such as 5 / 33, which is drawn with half-width spaces.
+bool pageCount(Field field);
 
 QString fieldLabel(Field field);
 QString slotLabel(int slot);

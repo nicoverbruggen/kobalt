@@ -189,6 +189,10 @@ private:
     void closeChromeViews();
     kobalt::headerfooter::Values chromeValues();
     kobalt::headerfooter::Layout customChrome() const;
+    // Custom has a saved layout that differs from Kobalt's.
+    bool customModified() const;
+    // Before an edit replaces a modified Custom layout with a preset's, ask.
+    void confirmCustomReplace(const std::function<void()> &proceed, const std::function<void()> &cancel);
     // Reads the preset and layout from the preferences and shows them.
     void loadChrome();
     // Saves the preset, and the Custom layout when given, then shows them.
@@ -331,6 +335,7 @@ private:
     void syncBookmarks();
     kobalt::BookmarkList *bookmarkList = nullptr;
     QPointer<kobalt::ui::ModalOverlay> removeDialog;
+    QPointer<kobalt::ui::ModalOverlay> customReplaceDialog;
     QPointer<kobalt::ui::ModalOverlay> bookmarkErrorDialog, settingsWriteErrorDialog;
     QPointer<kobalt::ui::ModalOverlay> formattingWarningDialog;
     QVector<kobalt::BookmarkRow> bookmarkRows() const;

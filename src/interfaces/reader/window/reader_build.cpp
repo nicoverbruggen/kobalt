@@ -733,16 +733,33 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
             }
         });
     }
+    // A slot starts an edit, so a preset in force may replace Custom first.
     slotMap->chosen = [this](int slot) {
-        openFieldChooser(slot);
+        confirmCustomReplace(
+            [this, slot] {
+                if (chromePreset != kobalt::headerfooter::Preset::Custom) {
+                    const auto start = page->chrome;
+                    if (model->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &start))
+                        return;
+                }
+                openFieldChooser(slot);
+            },
+            [] {});
     };
     // An edit starts from the layout in force, so a preset can be adjusted.
     // The result is the shared Custom layout, and the book switches to Custom.
     const auto editCustom = [this](const std::function<void(kobalt::headerfooter::Layout &)> &edit) {
-        auto custom = page->chrome;
-        edit(custom);
-        if (model->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &custom))
-            syncChromeControls();
+        // The pressed segment already looks chosen; Cancel puts it back.
+        confirmCustomReplace(
+            [this, edit] {
+                auto custom = page->chrome;
+                edit(custom);
+                if (model->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &custom))
+                    syncChromeControls();
+            },
+            [this] {
+                syncChromeControls();
+            });
     };
     for (auto *button : headerSizeButtons + footerSizeButtons) {
         const bool footer = footerSizeButtons.contains(button);

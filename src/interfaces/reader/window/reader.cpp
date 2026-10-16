@@ -242,6 +242,7 @@ QVector<QWidget *> Reader::popups() const {
             finishDialog.data(),
             refreshPopup.data(),
             removeDialog.data(),
+            customReplaceDialog.data(),
             bookmarkErrorDialog.data(),
             formattingWarningDialog.data(),
             settingsWriteErrorDialog.data()};
@@ -421,6 +422,25 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
                 dismissing = true;
                 choices->hide();
                 refresh();
+            }
+        }
+        // A tap on the page above the Header and footer sheet closes it, as
+        // with Font; the toolbar and the tabs keep working.
+        if (isVisible() && headerFooterView->isVisible() && !fieldChooser->isVisible()) {
+            QPointF point;
+            if (touch) {
+                const auto points = kobalt::ui::touchPositions(static_cast<QTouchEvent *>(event), true);
+                if (points.isEmpty())
+                    return QWidget::eventFilter(watched, event);
+                point = points.first();
+            } else
+                point = kobalt::ui::mousePosition(static_cast<QMouseEvent *>(event), true);
+            const QRect sheetRect(headerFooterView->mapToGlobal(QPoint()), headerFooterView->size());
+            const QRect toolbarRect(topControls->mapToGlobal(QPoint()), topControls->size());
+            if (!sheetRect.contains(point.toPoint()) && !toolbarRect.contains(point.toPoint()) &&
+                !(navigation && navigation->contains(point.toPoint()))) {
+                dismissing = true;
+                closeChromeViews();
             }
         }
     }
@@ -1091,12 +1111,14 @@ void Reader::syncNavigation() {
         }
     }
     const bool chapters = choices->isVisible() && !choosingTypography;
-    // Header and footer and the field list take the place Chapters takes, under the Layout tab.
-    auto *cover = chromeView();
+    // The field list takes the place Chapters takes, under the Layout tab.
+    // Header and footer is a sheet over the page, placed like Font below.
+    QWidget *cover = fieldChooser && fieldChooser->isVisible() ? fieldChooser : nullptr;
+    const bool chromeSheet = !cover && headerFooterView && headerFooterView->isVisible();
     const bool pinned = statsPinned();
     using Nav = kobalt::NavigationDestination;
     const auto update = [&] {
-        const int active = cover                                                                   ? int(Nav::Layout)
+        const int active = cover || chromeSheet                                                    ? int(Nav::Layout)
                            : chapters                                                              ? int(Nav::Chapters)
                            : choosingTypography && choices->isVisible() && choices->isFontPicker() ? int(Nav::Text)
                            : menu->isVisible()       ? (panels->currentIndex() == 0 ? int(Nav::Text) : int(Nav::Layout))
@@ -1156,6 +1178,13 @@ void Reader::syncNavigation() {
         }
         // Dropdowns cover the reading-panel rules raised by navigation.
         choices->raise();
+    }
+    if (chromeSheet) {
+        const int bottom = navigation->contentBottom(size());
+        const int sheetHeight =
+            qMin(headerFooterView->preferredHeight(width()), qMax(1, bottom - navigation->toolbarHeight()));
+        headerFooterView->setGeometry(0, bottom - sheetHeight, width(), sheetHeight);
+        headerFooterView->raise();
     }
 }
 

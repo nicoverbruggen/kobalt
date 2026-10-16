@@ -1,4 +1,5 @@
 #include "text.h"
+#include "support/qt_font.h"
 #include "../style/fonts.h"
 #include "../style/font_data.h"
 #include "../style/styles.h"
@@ -424,6 +425,18 @@ void SampleLabel::paintEvent(QPaintEvent *event) {
 }
 // Some fonts report an x-height that does not match their glyphs. Measure
 // capitals as well as lowercase so small x-heights do not inflate font names.
+qreal halfSpacedWidth(const QFontMetrics &metrics, const QString &text) {
+    return qt::textWidth(metrics, text) - text.count(' ') * qt::textWidth(metrics, QStringLiteral(" ")) / 2.0;
+}
+void drawHalfSpaced(QPainter &painter, qreal x, const QRect &bounds, const QString &text) {
+    const auto metrics = painter.fontMetrics();
+    const qreal baseline = bounds.y() + (bounds.height() - metrics.height()) / 2.0 + metrics.ascent();
+    const qreal space = qt::textWidth(metrics, QStringLiteral(" ")) / 2.0;
+    for (const auto &word : text.split(' ')) {
+        painter.drawText(QPointF(x, baseline), word);
+        x += qt::textWidth(metrics, word) + space;
+    }
+}
 QFont fontSample(const QString &face) {
     QFont font(face.isEmpty() ? kobalt::ui::interfaceFontFamily() : face);
     font.setWeight(QFont::Normal);

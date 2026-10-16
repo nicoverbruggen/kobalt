@@ -235,12 +235,14 @@
 
 /* header_footer */
 "header_footer.title" = "Header and footer";
+"header_footer.customize_title" = "Customize header and footer";
+/* Arguments: %1 */
+"header_footer.customize_slot" = "Customize slot: %1";
 "header_footer.custom_hint" = "Tap a slot to customize it.";
-/* Arguments: %1, %2 */
-"header_footer.slot_position" = "Slot %1 of %2";
 /* Arguments: %1, %2 */
 "header_footer.slot_value" = "%1: %2";
 "header_footer.close" = "Close header and footer";
+"header_footer.close_fields" = "Close fields";
 "header_footer.fields" = "Fields";
 "header_footer.previous_fields" = "Previous fields";
 "header_footer.next_fields" = "Next fields";
@@ -258,6 +260,16 @@
 "header_footer.preset.alternative_a" = "Bookish";
 "header_footer.preset.alternative_b" = "Ember";
 "header_footer.preset.custom" = "Custom";
+/* Arguments: %1, %2 */
+"header_footer.page_of" = "%1 of %2";
+/* Arguments: %1 */
+"header_footer.preset.modified" = "%1 *";
+/* Arguments: %1 */
+"header_footer.preset.modified_name" = "%1, modified";
+"header_footer.replace_custom_prompt" = "Replace your custom layout?";
+/* Arguments: %1 */
+"header_footer.replace_custom_detail" = "Customizing %1 replaces the layout saved as Custom.";
+"header_footer.replace_custom" = "Replace";
 "header_footer.slot.top_left" = "Top left";
 "header_footer.slot.top_center" = "Top center";
 "header_footer.slot.top_right" = "Top right";

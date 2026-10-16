@@ -52,6 +52,13 @@ kobalt::headerfooter::Layout Reader::customChrome() const {
     return kobalt::headerfooter::customLayout(preferences, page->chrome);
 }
 
+bool Reader::customModified() const {
+    using namespace kobalt::headerfooter;
+    const auto saved = preferences.value(customKey);
+    return saved.isObject() &&
+           fromJson(saved.toObject(), presetLayout(Preset::Default)) != presetLayout(Preset::Default);
+}
+
 bool Reader::chromeTicks() const {
     using kobalt::headerfooter::Field;
     for (const auto field : page->chrome.slotFields)
@@ -112,8 +119,10 @@ void Reader::syncChromeControls() {
     const auto &current = page->chrome;
     slotMap->setSlots(current, contents(current));
     const auto custom = customChrome();
+    const bool modified = customModified();
     for (auto *card : presetCards) {
         card->setLayout(card->preset() == Preset::Custom ? custom : presetLayout(card->preset()));
+        card->setModified(card->preset() == Preset::Custom && modified);
         card->setChecked(card->preset() == chromePreset);
     }
     for (auto *button : headerSizeButtons)
@@ -122,9 +131,15 @@ void Reader::syncChromeControls() {
         button->setChecked(button->property("text_size").toString() == current.footerSize);
     for (auto *button : progressBarButtons)
         button->setChecked(button->property("switch_on").toBool() == current.progressBar);
-    headerFooterRow->setText(presetLabel(chromePreset));
+    // A modified Custom layout carries a star, as on its card.
+    const bool starred = chromePreset == Preset::Custom && modified;
+    headerFooterRow->setText(starred ? strings::get("header_footer.preset.modified").arg(presetLabel(chromePreset))
+                                     : presetLabel(chromePreset));
     headerFooterRow->setAccessibleName(
-        strings::get("header_footer.slot_value").arg(strings::get("header_footer.title"), presetLabel(chromePreset)));
+        strings::get("header_footer.slot_value")
+            .arg(strings::get("header_footer.title"),
+                 starred ? strings::get("header_footer.preset.modified_name").arg(presetLabel(chromePreset))
+                         : presetLabel(chromePreset)));
     if (fieldChooser->isVisible())
         fieldChooser->open(fieldChooser->slot(), current.slotFields[fieldChooser->slot()], values,
                            current.uppercase[fieldChooser->slot()]);
@@ -167,7 +182,7 @@ void Reader::openFieldChooser(int slot) {
     refresh();
 }
 
-// A choice or the back cell returns to Header and footer.
+// A choice or the close cell returns to Header and footer.
 void Reader::closeFieldChooser() {
     if (!fieldChooser->isVisible())
         return;

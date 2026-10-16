@@ -26,6 +26,11 @@ QString timeLeft(qint64 milliseconds, bool learningPace) {
                                    : strings::get("stats.duration_hours").arg(minutes / 60).arg(minutes % 60);
     return strings::get("header_footer.time_left").arg(time);
 }
+// Beside a name the page reads 5 of 33, so the slash does not compete with
+// the dot between the two parts.
+QString pageOf(int page, int pages) {
+    return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(pages) : QString();
+}
 QString joined(const QString &name, const QString &position) {
     if (name.isEmpty() || position.isEmpty())
         return name.isEmpty() ? position : name;
@@ -238,10 +243,10 @@ Content content(Field field, const Values &values, bool uppercase) {
         }
         break;
     case Field::ChapterAndPage:
-        result.text = joined(values.chapter, pageFraction(values.chapterPage, values.chapterPages));
+        result.text = joined(values.chapter, pageOf(values.chapterPage, values.chapterPages));
         break;
     case Field::TitleAndPage:
-        result.text = joined(values.title, pageFraction(values.page, values.pages));
+        result.text = joined(values.title, pageOf(values.page, values.pages));
         break;
     case Field::BatteryPercent:
     case Field::Battery:
@@ -267,6 +272,10 @@ Content content(Field field, const Values &values, bool uppercase) {
     if (uppercase)
         result.text = result.text.toUpper();
     return result;
+}
+
+bool pageCount(Field field) {
+    return field == Field::ChapterPage || field == Field::BookPage;
 }
 
 QString fieldLabel(Field field) {

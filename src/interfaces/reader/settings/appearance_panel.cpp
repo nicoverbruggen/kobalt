@@ -276,8 +276,8 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
                                      styles::font(m::text::secondary));
     chromeRow->addWidget(headerFooterRow, 1);
 
-    // The rest lives in the full-screen Header and footer view, which
-    // supplies these rows: the presets, the slots, then sizes and the bar.
+    // The rest lives in the Header and footer sheet, which supplies these
+    // rows: the presets, the slots, then sizes and the bar at the bottom.
     if (!layout.headerFooter)
         return;
     auto *custom = layout.headerFooter;
@@ -292,6 +292,8 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
         presetCards.append(card);
     }
     customRows->addLayout(cards);
+    // The presets are a choice of their own; keep them apart from the slots.
+    customRows->addSpacing(m::spacing::section);
     slotMap = new SlotMap(custom, true);
     customRows->addWidget(slotMap);
     slotHint = new QLabel(strings::get("header_footer.custom_hint"), custom);
@@ -299,6 +301,8 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     // The same secondary text as the sliders' current values, so it follows the theme.
     readerStyle(slotHint, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
     customRows->addWidget(slotHint);
+    // The size and bar rows are settings of their own; keep them apart from the page.
+    customRows->addSpacing(m::spacing::section);
     auto sizeRow = [this, custom, customRows](bool footer) {
         const QString name = footer ? "rrFooterTextSize" : "rrHeaderTextSize";
         ui::SegmentedRow row(custom, customRows, name.toLatin1().constData(),

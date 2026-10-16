@@ -1,5 +1,6 @@
 #include "interfaces/reader/ui/style/theme.h"
 #include "support/qt_font.h"
+#include "interfaces/reader/ui/controls/text.h"
 #include "reading_page.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/private_text.h"
@@ -23,23 +24,6 @@ using platform::textRefresh;
 namespace {
 using headerfooter::Content;
 using headerfooter::Field;
-qreal progressWidth(const QFontMetrics &metrics, const QString &text) {
-    return qt::textWidth(metrics, text) - text.count(' ') * qt::textWidth(metrics, QStringLiteral(" ")) / 2.0;
-}
-// Page counts keep half-width spaces. A Unicode thin space still occupies a
-// full cell in some mono fonts.
-void paintProgress(QPainter &painter, qreal x, const QRect &bounds, const QString &text) {
-    const auto metrics = painter.fontMetrics();
-    const qreal baseline = bounds.y() + (bounds.height() - metrics.height()) / 2.0 + metrics.ascent();
-    const qreal space = qt::textWidth(metrics, QStringLiteral(" ")) / 2.0;
-    for (const auto &word : text.split(' ')) {
-        painter.drawText(QPointF(x, baseline), word);
-        x += qt::textWidth(metrics, word) + space;
-    }
-}
-bool pageCount(Field field) {
-    return field == Field::ChapterPage || field == Field::BookPage;
-}
 // The battery sits beside the text at a little below the text height.
 qreal batteryBody(const QFont &font) {
     return qRound(font.pixelSize() * .75);
@@ -47,7 +31,8 @@ qreal batteryBody(const QFont &font) {
 int textWidth(const QFont &font, Field field, const QString &text) {
     if (text.isEmpty())
         return 0;
-    return pageCount(field) ? qCeil(progressWidth(QFontMetrics(font), text)) : ui::interfaceTextWidth(text, font);
+    return headerfooter::pageCount(field) ? qCeil(ui::halfSpacedWidth(QFontMetrics(font), text))
+                                          : ui::interfaceTextWidth(text, font);
 }
 int iconWidth(const QFont &font, const Content &content) {
     if (!content.batteryIcon)
@@ -77,8 +62,8 @@ void paintContent(QPainter &painter, const QRect &bounds, Field field, const Con
                   : align & Qt::AlignHCenter ? bounds.x() + (bounds.width() - total) / 2
                                              : bounds.x();
     if (!text.isEmpty()) {
-        if (pageCount(field))
-            paintProgress(painter, x, bounds, text);
+        if (headerfooter::pageCount(field))
+            ui::drawHalfSpaced(painter, x, bounds, text);
         else
             ui::drawInterfaceText(painter, QRect(x, bounds.y(), width, bounds.height()), text,
                                   Qt::AlignLeft | Qt::AlignVCenter);
@@ -143,6 +128,14 @@ int ReadingPage::bottomHeight() const {
     return (showFooter() ? m::reading::stripHeight(chrome.footerSize) : 0) +
            (showProgress() ? ui::metrics::reading::progressHeight : 0);
 }
+// Strip text keeps the Small strip's distance from the page edge at every
+// size: it is centred in a band as tall as that strip, at the edge. A larger
+// strip only adds space between its text and the book.
+QRect ReadingPage::headerTextRect() const {
+    if (!showHeader())
+        return {};
+    return {0, 0, width(), m::reading::stripHeight(QStringLiteral("small"))};
+}
 QRect ReadingPage::footerTextRect() const {
     if (!showFooter())
         return {};
@@ -151,7 +144,9 @@ QRect ReadingPage::footerTextRect() const {
     const int offset = showProgress() ? int(m::reading::progressHeight) - int(m::reading::progressBottom) -
                                             int(m::reading::progressFillHeight)
                                       : 0;
-    return {0, height() - bottomHeight() + offset, width(), m::reading::stripHeight(chrome.footerSize)};
+    const int band = m::reading::stripHeight(QStringLiteral("small"));
+    const int bottom = height() - bottomHeight() + offset + m::reading::stripHeight(chrome.footerSize);
+    return {0, bottom - band, width(), band};
 }
 
 void ReadingPage::cancelHold() {
@@ -489,7 +484,7 @@ void ReadingPage::paintHeader(QPainter &painter) const {
     font.setPixelSize(headerTextPixels());
     painter.setFont(font);
     if (showHeader())
-        paintSlots(painter, QRect(0, 0, width(), topHeight()), false);
+        paintSlots(painter, headerTextRect(), false);
     if (panelBelowHeader)
         painter.fillRect(0, topHeight() - m::control::border, width(), m::control::border, ui::dividerColor(this));
 }

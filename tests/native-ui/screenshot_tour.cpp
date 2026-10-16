@@ -1013,7 +1013,13 @@ public:
             capture("header-footer", "rrHeaderFooterView");
             tap("rrHeaderFooterSlot2");
             capture("header-footer-fields", "rrHeaderFooterChooser");
-            tap("rrHeaderFooterBack");
+            tap("rrHeaderFooterFieldsClose");
+            // Large strips make the preview page, and the sheet, taller.
+            tap("rrHeaderTextSize_large");
+            tap("rrFooterTextSize_large");
+            capture("header-footer-large", "rrHeaderFooterView");
+            tap("rrHeaderTextSize_small");
+            tap("rrFooterTextSize_small");
             // The Layout tab closes the view and the panel. Then show each
             // preset on the page, with the menus closed.
             tap("rrNavLayout");

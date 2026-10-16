@@ -7,7 +7,9 @@
 #include <functional>
 
 namespace kobalt::ui {
+class DescribedOption;
 class ListHeader;
+class RadioList;
 class PagerBar;
 }
 class QLabel;
@@ -16,8 +18,9 @@ class QVBoxLayout;
 namespace kobalt::reader {
 using SlotContents = std::array<headerfooter::Content, headerfooter::slotCount>;
 
-// The six slots as the header and footer draw them, around a few lines that
-// stand for the page. The preset page shows it read-only; Custom taps a slot
+// The six slots as the header and footer draw them on a short page: header
+// text at the top edge, footer text at the bottom edge above the progress bar,
+// and a few lines between them. The preset page shows it read-only; Custom taps a slot
 // to choose what goes in it. Each slot is a button for input and accessibility.
 class SlotMap final : public QWidget {
 public:
@@ -52,6 +55,8 @@ public:
     }
     void setLayout(const headerfooter::Layout &layout);
     void setDivider(bool shown);
+    // A modified Custom layout shows a star after its name.
+    void setModified(bool value);
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -61,13 +66,13 @@ protected:
 private:
     headerfooter::Preset value;
     headerfooter::Layout miniature;
-    bool divider = false;
+    bool divider = false, modified = false;
 };
 
-// Header and footer fills the reading area like Chapters: a bar with a close
-// cell and the title takes the place of the header's action row, and the
-// tabs stay. Its rows hold the presets and the slot controls. Close returns
-// to the Layout panel.
+// Header and footer is a sheet over the bottom of the page, like Font: a
+// heavy rule, a bold title and a close cell, then rows sized to their
+// content, so the page shows above. Its rows hold the presets, the slots and
+// the size and progress bar rows. Close returns to the Layout panel.
 class HeaderFooterView final : public ui::Panel {
 public:
     explicit HeaderFooterView(QWidget *parent);
@@ -77,6 +82,8 @@ public:
     QVBoxLayout *rows() const {
         return contentRows;
     }
+    // The title row and the rows' height at this width.
+    int preferredHeight(int width) const;
     std::function<void()> closed;
 
 protected:
@@ -92,9 +99,9 @@ private:
 
 // One slot's choices, from Nothing to Time left in book, each with what it
 // would show now. It fills the reading area like Chapters. A choice applies
-// and returns to Header and footer; the back cell returns without one.
+// and returns to Header and footer; the close cell returns without one.
 // Fields that do not fit go to further pages, with the Chapters pager at the
-// bottom. Uppercase for this slot sits above it and keeps the list open.
+// bottom. The Uppercase checkbox on the right of the bar keeps the list open.
 class FieldChooser final : public ui::Panel {
 public:
     explicit FieldChooser(QWidget *parent);
@@ -112,14 +119,12 @@ protected:
     void resizeEvent(QResizeEvent *) override;
 
 private:
-    class Row;
-    QLabel *title, *position;
+    QLabel *title;
     ui::ListHeader *heading;
     ui::PagerBar *pager;
-    QVector<Row *> rows;
+    ui::RadioList *list;
     QPushButton *finish;
-    ui::Panel *options;
-    QPushButton *uppercaseButtons[2] = {};
+    ui::DescribedOption *uppercase;
     int currentSlot = -1, page = 0;
     int perPage() const;
     void arrange();

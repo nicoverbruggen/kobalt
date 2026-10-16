@@ -21,7 +21,59 @@ namespace m = kobalt::ui::metrics;
 using kobalt::ui::readerStyle;
 using kobalt::ui::makeButton;
 using kobalt::platform::textRefresh;
-using ReaderOption = kobalt::ui::DescribedOption;
+
+void Reader::confirmCustomReplace(const std::function<void()> &proceed, const std::function<void()> &cancel) {
+    using kobalt::headerfooter::Preset;
+    // Custom itself, or a Custom that still matches Kobalt, has nothing to lose.
+    if (chromePreset == Preset::Custom || !customModified()) {
+        proceed();
+        return;
+    }
+    if (customReplaceDialog)
+        return;
+    auto *choice = new ui::ChoiceModal(
+        this,
+        {strings::get("header_footer.replace_custom_detail").arg(kobalt::headerfooter::presetLabel(chromePreset)),
+         strings::get("header_footer.replace_custom_prompt"),
+         {}},
+        {strings::get("common.cancel"), "rrKeepCustomLayout"},
+        {strings::get("header_footer.replace_custom"), "rrReplaceCustomLayout"});
+    customReplaceDialog = choice;
+    customReplaceDialog->setObjectName("rrReplaceCustom");
+    auto *text = choice->descriptionLabel();
+    text->setObjectName("rrReplaceCustomDetail");
+    readerStyle(text, styles::font(m::chrome::descriptionText) + "color:palette(placeholder-text);");
+    auto finish = [this, proceed, cancel](bool replace) {
+        if (!customReplaceDialog)
+            return;
+        customReplaceDialog->hide();
+        customReplaceDialog->deleteLater();
+        customReplaceDialog.clear();
+        if (replace)
+            proceed();
+        else
+            cancel();
+        refresh();
+    };
+    connect(choice->secondaryButton(), &QPushButton::clicked, this, [finish] {
+        finish(false);
+    });
+    connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] {
+        finish(true);
+    });
+    // A tap outside the card keeps the layout, as Cancel does.
+    choice->dismissed = [finish] {
+        finish(false);
+    };
+    choice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    customReplaceDialog->centerCard();
+    for (auto *widget : customReplaceDialog->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(customReplaceDialog);
+    customReplaceDialog->show();
+    customReplaceDialog->raise();
+    customReplaceDialog->setFocus();
+}
 
 void Reader::showFontDefaultDialog(const QString &face) {
     if (model->temporaryTypography())
@@ -628,34 +680,26 @@ void Reader::openScreenRefresh() {
     auto *title = card->title(strings::get("reader.refresh_the_screen"), "rrScreenRefreshTitle");
     title->setContentsMargins(c::inset, 0, c::inset, 0);
     card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    QVector<ReaderOption *> options;
     const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
-    int rowHeight = c::listActionHeight;
+    // The shared pick-one list: rows share the tallest height a choice needs.
+    auto *choices = new kobalt::ui::RadioList(card);
+    choices->setObjectName("rrScreenRefreshChoices");
+    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setTopDivider(true);
     for (const auto mode : kobalt::screenRefreshModes) {
-        auto *option = new ReaderOption(refreshLabel(mode), refreshExplanation(mode), card);
-        option->setObjectName(qPrintable("rrRefresh_" + kobalt::screenRefreshValue(mode)));
-        auto presentation = option->presentation();
-        presentation.indicator = ReaderOption::Indicator::Radio;
-        presentation.horizontalInset = c::inset;
-        presentation.dividers = ui::Edges(Qt::BottomEdge) | (options.isEmpty() ? ui::Edges(Qt::TopEdge) : ui::Edges{});
-        presentation.labelPixels = c::labelText;
-        presentation.descriptionPixels = c::descriptionText;
-        presentation.indicatorSize = {c::checkSize, c::checkSize};
-        presentation.minimumRowHeight =
-            refreshExplanation(mode).isEmpty() ? c::listActionHeight * 2 / 3 : c::listActionHeight;
-        option->setPresentation(presentation);
-        option->setChecked(mode == screenRefreshMode);
-        connect(option, &QCheckBox::clicked, this, [this, mode] {
-            screenRefreshMode = mode;
-            showScreenRefresh();
-            closeScreenRefresh();
-        });
-        card->rows()->addWidget(option);
-        options.append(option);
-        rowHeight = qMax(rowHeight, option->heightForWidth(cardWidth - 4));
+        choices->add(QString("rrRefresh_" + kobalt::screenRefreshValue(mode)), refreshLabel(mode),
+                     refreshExplanation(mode));
+        if (mode == screenRefreshMode)
+            choices->setCurrent(choices->options().size() - 1);
     }
-    for (auto *option : options)
-        option->setFixedHeight(rowHeight);
+    choices->chosen = [this](int index) {
+        screenRefreshMode = kobalt::screenRefreshModes[index];
+        showScreenRefresh();
+        closeScreenRefresh();
+    };
+    card->rows()->addWidget(choices);
+    // The card sizes from its layout; give the list its height at the card's width.
+    choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
     card->fitToWidth(cardWidth);
     refreshPopup->centerCard();
     for (auto *widget : refreshPopup->findChildren<QWidget *>())

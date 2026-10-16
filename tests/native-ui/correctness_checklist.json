@@ -561,6 +561,7 @@
       "scenes": [
         "header-footer",
         "header-footer-fields",
+        "header-footer-large",
         "layout",
         "margin-preview",
         "reading-alternative-a",

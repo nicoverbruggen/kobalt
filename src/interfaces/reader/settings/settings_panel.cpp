@@ -8,6 +8,7 @@
 #include "settings_panel.h"
 #include "support/strings.h"
 #include "interfaces/reader/ui/style/metrics.h"
+#include "interfaces/reader/ui/style/private_text.h"
 #include "interfaces/reader/ui/style/styles.h"
 #include <QButtonGroup>
 #include <QGridLayout>
@@ -57,6 +58,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *tabGroup = new QButtonGroup(this);
     const char *tabNames[] = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries",
                               "rrSettingsStats",   "rrSettingsSystem",   "rrSettingsAbout"};
+    const ui::ControlIcon tabIcons[] = {ui::ControlIcon::Display,      ui::ControlIcon::Advanced,
+                                        ui::ControlIcon::Dictionaries, ui::ControlIcon::Graph,
+                                        ui::ControlIcon::System,       ui::ControlIcon::About};
     const QStringList tabs = {strings::get("settings.display"),      strings::get("settings.advanced"),
                               strings::get("settings.dictionaries"), strings::get("settings.stats"),
                               strings::get("settings.system"),       strings::get("settings.about")};
@@ -65,6 +69,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             settingsPages->setCurrentIndex(index);
         });
         button->setProperty("reader_tab_label", tabs[index]);
+        button->setProperty("reader_tab_icon", int(tabIcons[index]));
         button->setCheckable(true);
         tabGroup->addButton(button, index);
         settingsTabButtons.append(button);
@@ -312,6 +317,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             settingsPages->setCurrentIndex(NativeUiSettings);
         });
         button->setProperty("reader_tab_label", strings::get("settings.ui"));
+        button->setProperty("reader_tab_icon", int(ui::ControlIcon::Desktop));
         button->setCheckable(true);
         tabGroup->addButton(button);
         settingsTabButtons.append(button);
@@ -371,21 +377,27 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                 .arg(c::inset));
         button->setFixedHeight(c::listActionHeight);
     }
-    tabRail->setFixedWidth(c::railWidth);
     settingsTabs->setAlignment(Qt::AlignTop);
     for (auto *button : settingsTabButtons) {
         button->setText(button->property("reader_tab_label").toString().toUpper());
         button->setFixedHeight(c::railRowHeight);
+        if (auto *tab = dynamic_cast<ui::Button *>(button); tab && button->property("reader_tab_icon").isValid()) {
+            ui::buttonIcon(button, ui::ControlIcon(button->property("reader_tab_icon").toInt()));
+            button->setIconSize(QSize(c::tabIcon, c::tabIcon));
+            tab->setIconLabelGap(c::tabGap);
+            tab->setIconAboveLabel(true);
+        }
         ui::readerStyle(
             button,
             QString(
                 "QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;border:0;border-bottom:%5px solid %3;border-right:%5px solid palette(window-text);border-radius:0;text-align:left;padding:0 %4px;background:palette(window);color:palette(window-text);} QPushButton:checked{background:palette(window-text);color:palette(window);}")
-                .arg(c::railText)
+                .arg(c::tabText)
                 .arg(c::railRowHeight)
                 .arg(c::dividerLight)
                 .arg(c::railInset)
                 .arg(m::control::border));
     }
+    fitRail();
     ui::readerStyle(
         settingsPages,
         QString("QStackedWidget{border:0;border-left:%1px solid palette(window-text);}").arg(m::control::border));
@@ -434,6 +446,19 @@ void SettingsPanel::showDictionaries(bool visible) {
     button->setEnabled(visible);
     if (!visible && settingsPages->currentIndex() == DictionariesSettings)
         settingsPages->setCurrentIndex(DisplaySettings);
+    fitRail();
+}
+
+void SettingsPanel::fitRail() {
+    // As wide as the widest visible label, or the icon above it, with the
+    // rail's margin on each side. Without Dictionaries the rail narrows.
+    int widest = c::tabIcon;
+    for (auto *button : settingsTabButtons)
+        if (!button->isHidden()) {
+            button->ensurePolished();
+            widest = qMax(widest, ui::interfaceTextWidth(button->text(), button->font()));
+        }
+    tabRail->setFixedWidth(widest + 2 * c::railInset);
 }
 
 void SettingsPanel::hideDeviceOptions(bool hidden) {

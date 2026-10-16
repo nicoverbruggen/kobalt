@@ -4,6 +4,8 @@
 
 - Choose what the header and footer show. Layout > Header and footer offers three presets, Kobalt, Bookish and Ember, and a Custom layout with six slots for the title, author, chapter, page counts, percent read, time left, battery, a low battery warning and time. Each book keeps its own preset. The book progress bar moved from Settings > Display into the presets.
 
+- Open Settings from a gear in the toolbar. Settings tabs show icons above their labels.
+
 - Use Phosphor icons throughout the reader. The bottom tabs have larger icons and labels, aligned on one line.
 
 - Center font names in the font button and use the chosen font for the Set default font sample on Kobo.

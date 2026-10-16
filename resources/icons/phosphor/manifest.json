@@ -51,6 +51,10 @@
       "sha256": "d161e503af4f5386a370ffd742d19d85e98625fd6d6eadbabbdb36d58dcca22c"
     },
     {
+      "file": "desktop.svg",
+      "sha256": "875a31fd2dc493c6ba9aa5187a91e0364de6704876704e1bf81ef4b7e785ad79"
+    },
+    {
       "file": "dots-three.svg",
       "sha256": "ca4e748007101155641ec3041cd129bb03a8030d0eed16e313b9dd75e6beac77"
     },
@@ -59,8 +63,24 @@
       "sha256": "c48678aa09b44ba4974954690ee6cc846379c448a7214f8c802604c2a1562014"
     },
     {
+      "file": "eye.svg",
+      "sha256": "91d39f20bf95e0f36c07bd79b83a85fe6ff4ca20e2759c4afee7419ef80403fe"
+    },
+    {
       "file": "file-x.svg",
       "sha256": "f27c09b92f424e1fdda308284ec89d528eb05e590bedab9a3ca021cd4594611f"
+    },
+    {
+      "file": "flask.svg",
+      "sha256": "6fe1929c860962cadddc917a3d119145444537ccaee6a9d618e7d856c16f8501"
+    },
+    {
+      "file": "gear-fine.svg",
+      "sha256": "ca000a36662d0049d39ea5cbe44a0133960d791dd95dd1929692211355fac4e0"
+    },
+    {
+      "file": "info.svg",
+      "sha256": "438a1f319d53d86e840af73fb7b1d224c9224a437b9fa449a4e2cb45a82a3552"
     },
     {
       "file": "layout.svg",
@@ -91,10 +111,6 @@
       "sha256": "d688feb9dd2e41c1721d6906a05a2a42e18cd774762fe706d72b2bdfd91cddc4"
     },
     {
-      "file": "sliders-horizontal.svg",
-      "sha256": "1d937baa3bc51ec4052364edf30cf8991d550920534f5d413eb9f60535cc1916"
-    },
-    {
       "file": "sun.svg",
       "sha256": "8df1c7b747774f8b2c1fe353b1b785c74aac35bfa50f2ed7d8d9a85a4191b2ac"
     },
@@ -109,6 +125,14 @@
     {
       "file": "text-align-left.svg",
       "sha256": "4d166977720d3beb386288a8607fbb36134fef06fdd99496ab09cf2d2da211b5"
+    },
+    {
+      "file": "translate.svg",
+      "sha256": "1e49dc31f3a172c9c7c67361511ee5314598b3f5b32788219325f589487f76c5"
+    },
+    {
+      "file": "wrench.svg",
+      "sha256": "690d657aa4a9c99d620583cf6247cfefa5372c10e2bc60e9255a3ce19e3e9c47"
     },
     {
       "file": "x.svg",

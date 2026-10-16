@@ -32,6 +32,15 @@ public:
         iconLabelGap = pixels;
         update();
     }
+    // With a gap set, draw the icon centred above the label, as the bottom
+    // tabs do, instead of beside it.
+    void setIconAboveLabel(bool above) {
+        if (iconAboveLabel == above) {
+            return;
+        }
+        iconAboveLabel = above;
+        update();
+    }
 
 protected:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -47,6 +56,7 @@ private:
     ButtonPaintMode mode = ButtonPaintMode::Native;
     ButtonIcon configuredIcon;
     int iconLabelGap = 0;
+    bool iconAboveLabel = false;
     bool hasConfiguredIcon = false, hasIconTheme = false, iconDark = false;
 };
 

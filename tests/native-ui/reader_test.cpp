@@ -1339,7 +1339,21 @@ private slots:
         auto *rail = panel->findChild<QWidget *>("rrSettingsRail");
         QVERIFY(rail);
         QCOMPARE(static_cast<QBoxLayout *>(rail->layout())->direction(), QBoxLayout::TopToBottom);
-        QCOMPARE(rail->width(), int(ui::metrics::chrome::railWidth));
+        // The rail fits its widest label with its margin, and narrows without Dictionaries.
+        const auto railFor = [&] {
+            int widest = int(ui::metrics::chrome::tabIcon);
+            for (auto *button : panel->settingsTabButtons)
+                if (!button->isHidden())
+                    widest = qMax(widest, ui::interfaceTextWidth(button->text(), button->font()));
+            return widest + 2 * int(ui::metrics::chrome::railInset);
+        };
+        QCOMPARE(rail->width(), railFor());
+        const int withDictionaries = rail->width();
+        panel->showDictionaries(false);
+        QCOMPARE(rail->width(), railFor());
+        QVERIFY(rail->width() < withDictionaries);
+        panel->showDictionaries(true);
+        QCOMPARE(rail->width(), withDictionaries);
         const QStringList tabNames = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries",
                                       "rrSettingsStats",   "rrSettingsSystem",   "rrSettingsAbout"};
         for (int index = 0; index < tabNames.size(); ++index)
@@ -1438,10 +1452,12 @@ private slots:
         QVERIFY(description);
         const int wideHeight = description->height();
         const auto originalDescription = description->text();
-        description->setText(originalDescription.repeated(4));
+        // Long enough to outgrow the rail beside it.
+        description->setText(originalDescription.repeated(10));
         const QSize narrow(600, 1000);
         panel.fitContent(narrow);
-        QCOMPARE(description->width(), narrow.width() - int(ui::metrics::chrome::railWidth) - ui::px(32));
+        QCOMPARE(description->width(),
+                 narrow.width() - panel.findChild<QWidget *>("rrSettingsRail")->width() - ui::px(32));
         QCOMPARE(description->height(), description->heightForWidth(description->width()));
         QVERIFY(description->height() > wideHeight);
         QVERIFY(panel.settingsPages->height() > aboutHeight);

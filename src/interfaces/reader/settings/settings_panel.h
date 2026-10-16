@@ -57,6 +57,7 @@ protected:
 
 private:
     QWidget *tabRail = nullptr;
+    void fitRail();
     QLabel *aboutDescription = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog;
     QVector<QWidget *> deviceOptions;

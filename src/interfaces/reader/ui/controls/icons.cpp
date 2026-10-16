@@ -86,7 +86,7 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
     } else {
         static const char *const names[] = {"magnifying-glass",
                                             "sun",
-                                            "sliders-horizontal",
+                                            "gear-fine",
                                             "layout",
                                             "x",
                                             "list",
@@ -114,10 +114,16 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
                                             "book-open",
                                             "arrow-u-up-left",
                                             "download-simple",
-                                            "bluetooth"};
-        static_assert(sizeof(names) / sizeof(*names) == size_t(ControlIcon::Bluetooth) + 1);
+                                            "bluetooth",
+                                            "eye",
+                                            "wrench",
+                                            "desktop",
+                                            "translate",
+                                            "info",
+                                            "flask"};
+        static_assert(sizeof(names) / sizeof(*names) == size_t(ControlIcon::System) + 1);
         const int index = int(icon);
-        if (index >= 0 && index <= int(ControlIcon::Bluetooth) && names[index]) {
+        if (index >= 0 && index <= int(ControlIcon::System) && names[index]) {
             result.canvas = 256;
             result.filled = true;
             phosphorGeometry(QString::fromLatin1(names[index]), path);
@@ -255,7 +261,7 @@ void paintOpeningIcon(QPainter &painter, ControlIcon icon, const QRectF &bounds,
     paintGeometry(painter, geometry(icon, false), icon, bounds, color, IconRendition::OriginalAsset);
 }
 QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
-    if (int(icon) < 0 || int(icon) > int(ControlIcon::Bluetooth))
+    if (int(icon) < 0 || int(icon) > int(ControlIcon::System))
         return {};
     return QIcon(new VectorIconEngine(icon, color, sideButtons));
 }

@@ -387,17 +387,17 @@ void Reader::buildToolbar() {
                    });
     toolbarComposition.formattingWarning->setVisible(model->formattingWarning());
 
-    toolbarComposition.settings =
-        iconButton(topControls, top, "rrSettings", strings::get("reader.reader_settings"), ControlIcon::More, [this] {
-            // The button stays enabled while a panel's changes apply, so the
-            // visible top bar does not repaint twice. Ignore taps then.
-            if (appearanceEdit.applying())
-                return;
-            if (general->isVisible())
-                applySettings();
-            else
-                openSettings();
-        });
+    toolbarComposition.settings = iconButton(topControls, top, "rrSettings", strings::get("reader.reader_settings"),
+                                             ControlIcon::Settings, [this] {
+                                                 // The button stays enabled while a panel's changes apply, so the
+                                                 // visible top bar does not repaint twice. Ignore taps then.
+                                                 if (appearanceEdit.applying())
+                                                     return;
+                                                 if (general->isVisible())
+                                                     applySettings();
+                                                 else
+                                                     openSettings();
+                                             });
     toolbarComposition.settings->setCheckable(true);
     toolbarComposition.clock = menuClock;
     toolbarComposition.session = menuSession;

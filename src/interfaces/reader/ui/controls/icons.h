@@ -40,6 +40,13 @@ enum class ControlIcon {
     Undo,
     Download,
     Bluetooth,
+    // The Settings tabs. System belongs to the sleep screen settings.
+    Display,
+    Advanced,
+    Desktop,
+    Dictionaries,
+    About,
+    System,
     RotationBoth,
     Swipe
 };

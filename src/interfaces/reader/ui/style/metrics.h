@@ -125,7 +125,9 @@ inline constexpr Px labelText{30}, descriptionText{25}, countText{28}, tabText{2
 inline constexpr Px tabIcon{48}, tabGap{10};
 inline constexpr Px captionText{22}, captionSpacing{2}, numberText{22};
 inline constexpr Px listActionHeight{list::twoLines}, optionHeight{186}, checkSize{48};
-inline constexpr Px railWidth{268}, railRowHeight{120}, railText{28}, railInset{28};
+// Settings tabs stack an icon over a label, as the bottom tabs do. The rail
+// is as wide as its widest label with this margin on each side.
+inline constexpr Px railRowHeight{120}, railInset{28};
 inline constexpr Px chevronRight{42}, actionRight{112}, statsTopPadding{heavyRule};
 inline constexpr Px queryText{36}, selectorGap{16}, selectorIcon{36};
 // A label and its description, or a caption and the text below it.

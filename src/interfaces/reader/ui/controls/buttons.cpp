@@ -1,4 +1,5 @@
 #include "buttons.h"
+#include "text.h"
 #include "../style/private_text.h"
 #include "support/strings.h"
 #include "assets/font_catalog.h"
@@ -10,6 +11,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
+#include <QtMath>
 #include <QStyle>
 #include <QStyleOptionButton>
 #include <QVariant>
@@ -72,6 +74,17 @@ void Button::paintEvent(QPaintEvent *) {
             painter.setFont(font());
             const int labelWidth = interfaceTextWidth(text(), font());
             const int gap = text().isEmpty() ? 0 : iconLabelGap;
+            if (iconAboveLabel) {
+                // Capitals' height is the label's ink, so the icon and that
+                // ink centre as one group, as in the bottom tabs.
+                const int capital = qCeil(QFontMetricsF(font()).tightBoundingRect(QStringLiteral("H")).height());
+                const int top = (height() - iconSize().height() - gap - capital) / 2;
+                const QRect area((width() - iconSize().width()) / 2, top, iconSize().width(), iconSize().height());
+                icon().paint(&painter, area, Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                             active ? QIcon::On : QIcon::Off);
+                drawOpticalText(painter, QRect(0, area.bottom() + 1 + gap, width(), capital), text(), true);
+                return;
+            }
             const int left = (width() - iconSize().width() - gap - labelWidth) / 2;
             icon().paint(
                 &painter, QRect(left, (height() - iconSize().height()) / 2, iconSize().width(), iconSize().height()),

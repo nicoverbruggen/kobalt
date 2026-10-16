@@ -165,9 +165,23 @@ inline QString textSize(const QString &size) {
 inline int stripHeight(const QString &size) {
     return px(size == "large" ? 80 : size == "medium" ? 64 : 48);
 }
-inline constexpr Px clockHeight{36}, progressHeight{24};
-inline constexpr Px headerSide{28}, headerTextGap{24};
+inline constexpr Px progressHeight{24};
+inline constexpr Px headerSide{28}, headerTextGap{24}, batteryGap{8};
 inline constexpr Px progressBottom{14}, progressFillHeight{4};
+}
+namespace headerFooter {
+// The slot map uses the list rhythm: one-line strips around a two-line page.
+inline constexpr Px mapRowHeight{list::oneLine}, mapBodyHeight{list::twoLines}, mapLineHeight{4};
+inline constexpr Px mapLineGap{spacing::section}, mapLineInset{list::inset};
+inline constexpr Px valueText{control::captionValueText}, emptyText{chrome::captionText};
+// Preset miniatures: a page, then its name in a block as tall as a segment.
+inline constexpr Px miniatureWidth{184}, selectedBorder{5};
+inline constexpr Px miniatureTop{spacing::section}, nameGap{spacing::row}, nameHeight{control::segmentHeight};
+inline constexpr Px namePadding{control::segmentHorizontalPadding};
+// Dashes stand for slot text inside a miniature; they are drawing sizes.
+inline constexpr Px dashHeight{6}, shortDash{22}, longDash{46};
+// The field chooser: a list header, rows at the reader's step height, then Done.
+inline constexpr Px chooserRowHeight{control::stepSize}, radioSize{chrome::cellIcon}, radioGap{spacing::section};
 }
 namespace opening {
 inline constexpr int hintDelayMilliseconds = 4000;

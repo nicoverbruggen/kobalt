@@ -256,16 +256,9 @@ void Reader::buildReadingPage() {
         lookupWord(point);
     };
     header = new ChapterHeader(page);
-    page->showHeader = preferences.value("show_header").toBool(true);
-    page->showFooter = preferences.value("show_footer").toBool(true);
-    page->headerSize = m::reading::textSize(preferences.value("header_text_size").toString());
-    page->footerSize = m::reading::textSize(preferences.value("footer_text_size").toString());
-    page->headerTextPixels = m::reading::textPixels(page->headerSize, false);
-    page->footerTextPixels = m::reading::textPixels(page->footerSize, true);
-    page->showClock = preferences.value("show_clock").toBool(true);
-    page->hideDeviceStatus = hideNativeStatus();
-    page->showProgress = preferences.value("show_progress_bar").toBool(true);
-    page->clockText = services.clock();
+    const auto chrome = kobalt::headerfooter::select(preferences);
+    chromePreset = chrome.preset;
+    page->chrome = chrome.layout;
 }
 
 void Reader::startClockTimer() {
@@ -281,14 +274,13 @@ void Reader::startClockTimer() {
             updateMenuStatus();
             return;
         }
-        if (!page->showClock || general->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible() ||
+        if (!chromeTicks() || general->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible() ||
             linksActive())
             return;
-        const auto time = services.clock();
-        if (time == page->clockText)
+        const auto before = page->slotContents;
+        showChapterText();
+        if (page->slotContents == before)
             return;
-        page->clockText = time;
-        page->cleanRefresh(false);
         page->refreshContent(true);
     });
     startClock();
@@ -481,7 +473,11 @@ kobalt::reader::AppearanceLayout Reader::buildMenu() {
     menu = new AppearanceSheet(this);
     panels = menu->pages;
     previewLabel = menu->message;
-    return menu->controls();
+    headerFooterView = new kobalt::reader::HeaderFooterView(this);
+    auto layout = menu->controls();
+    layout.headerFooter = headerFooterView->body();
+    layout.headerFooterRows = headerFooterView->rows();
+    return layout;
 }
 
 void Reader::buildOverlays() {
@@ -558,23 +554,13 @@ void Reader::buildOverlays() {
 }
 
 void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
-    auto *typography = layout.typography, *pageLayout = layout.pageLayout;
     auto *typeRows = layout.typeRows, *pageRows = layout.pageRows;
     kobalt::reader::AppearancePanelInputs appearanceInputs;
-    const auto chromeSize = [this](bool footer) {
-        const QString key = footer ? "footer_text_size" : "header_text_size";
-        const QString visibility = footer ? "show_footer" : "show_header";
-        return preferences.value(visibility).toBool(true) ? m::reading::textSize(preferences.value(key).toString())
-                                                          : QString("off");
-    };
-    appearanceInputs.headerSize = chromeSize(false);
-    appearanceInputs.footerSize = chromeSize(true);
     appearanceInputs.sideButtons = services.pageButtons();
     appearanceInputs.reverseLandscapeButtons = services.reverseLandscapeButtons();
     appearanceInputs.automaticRotationAvailable = orientation->automaticAvailable();
-    appearanceInputs.showClock = page->showClock;
     appearanceInputs.systemRotation = services.systemRotation;
-    kobalt::reader::AppearancePanel appearance({typography, pageLayout, typeRows, pageRows}, appearanceInputs);
+    kobalt::reader::AppearancePanel appearance(layout, appearanceInputs);
     fontButton = appearance.fontButton;
     sizeSlider = appearance.sizeSlider;
     opticalSizeSlider = appearance.opticalSizeSlider;
@@ -587,8 +573,6 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     hyphenButtons = appearance.hyphenButtons;
     rotationButtons = appearance.rotationButtons;
     autoRotateOption = appearance.autoRotateOption;
-    clockOption = appearance.clockOption;
-    clockHideOption = appearance.clockHideOption;
     connect(fontButton, &QPushButton::clicked, this, [this] {
         if (choices->isVisible() && choosingTypography) {
             choices->hide();
@@ -721,60 +705,90 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
                                         : strings::get("reader.the_orientation_sensor_is_unavailable"));
             refresh();
         });
+    headerFooterRow = appearance.headerFooterRow;
+    slotMap = appearance.slotMap;
+    presetCards = appearance.presetCards;
     headerSizeButtons = appearance.headerSizeButtons;
     footerSizeButtons = appearance.footerSizeButtons;
-    auto connectChromeSize = [this](bool footer) {
-        const QString key = footer ? "footer_text_size" : "header_text_size";
-        const QString visibility = footer ? "show_footer" : "show_header";
-        for (auto *button : footer ? footerSizeButtons : headerSizeButtons) {
-            connect(button, &QPushButton::clicked, this, [this, button, key, footer, visibility] {
-                if (model->temporaryTypography()) {
-                    syncChromeSizeButtons();
-                    return;
-                }
-                const QString value = button->property("text_size").toString();
-                auto next = preferences;
-                next[visibility] = value != "off";
-                if (value != "off") {
-                    next[key] = value;
-                }
-                const bool changed = next != preferences;
-                if (!writePreferences(next)) {
-                    syncChromeSizeButtons();
-                    appearanceEdit.setError(strings::get("reader.could_not_save_reader_settings"));
-                    refresh();
-                    return;
-                }
-                preferences = next;
-                if (footer) {
-                    page->showFooter = value != "off";
-                    page->footerSize = m::reading::textSize(next.value(key).toString());
-                    page->footerTextPixels = m::reading::textPixels(page->footerSize, true);
-                } else {
-                    page->showHeader = value != "off";
-                    page->headerSize = m::reading::textSize(next.value(key).toString());
-                    page->headerTextPixels = m::reading::textPixels(page->headerSize, false);
-                }
-                const QSize viewport(width(), height() - page->topHeight() - page->bottomHeight());
-                if (changed) {
-                    mutateAppearance([viewport](ReaderSession &preview) {
-                        preview.resize(viewport);
-                    });
-                }
-                header->setGeometry(0, 0, width(), page->topHeight());
-                header->setVisible(page->topHeight() > 0);
-                syncChromeSizeButtons();
-                appearanceEdit.clearError();
-                refresh();
-            });
-        }
+    progressBarButtons = appearance.progressBarButtons;
+    connect(headerFooterRow, &QPushButton::clicked, this, [this] {
+        openHeaderFooterView();
+    });
+    // Close returns to the Layout panel, which stayed open beneath the view.
+    headerFooterView->closed = [this] {
+        closeChromeViews();
     };
-    connectChromeSize(false);
-    connectChromeSize(true);
-    typeRows->setSpacing(m::control::rowGap);
-    pageRows->setSpacing(m::control::rowGap);
-    typeRows->addStretch();
-    pageRows->addStretch();
+    for (auto *card : presetCards) {
+        const auto preset = card->preset();
+        connect(card, &QPushButton::clicked, this, [this, preset] {
+            if (model->temporaryTypography()) {
+                syncChromeControls();
+                return;
+            }
+            if (preset != chromePreset) {
+                // Custom starts from the preset in force until it has a layout of its own.
+                const auto custom = customChrome();
+                saveChrome(preset, preset == kobalt::headerfooter::Preset::Custom ? &custom : nullptr);
+            }
+        });
+    }
+    slotMap->chosen = [this](int slot) {
+        openFieldChooser(slot);
+    };
+    // An edit starts from the layout in force, so a preset can be adjusted.
+    // The result is the shared Custom layout, and the book switches to Custom.
+    const auto editCustom = [this](const std::function<void(kobalt::headerfooter::Layout &)> &edit) {
+        auto custom = page->chrome;
+        edit(custom);
+        if (model->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &custom))
+            syncChromeControls();
+    };
+    for (auto *button : headerSizeButtons + footerSizeButtons) {
+        const bool footer = footerSizeButtons.contains(button);
+        const auto value = button->property("text_size").toString();
+        connect(button, &QPushButton::clicked, this, [editCustom, footer, value] {
+            editCustom([footer, value](kobalt::headerfooter::Layout &custom) {
+                (footer ? custom.footerSize : custom.headerSize) = value;
+            });
+        });
+    }
+    for (auto *button : progressBarButtons) {
+        const bool on = button->property("switch_on").toBool();
+        connect(button, &QPushButton::clicked, this, [editCustom, on] {
+            editCustom([on](kobalt::headerfooter::Layout &custom) {
+                custom.progressBar = on;
+            });
+        });
+    }
+    fieldChooser = new kobalt::reader::FieldChooser(this);
+    fieldChooser->selected = [this, editCustom](kobalt::headerfooter::Field field) {
+        const int slot = fieldChooser->slot();
+        editCustom([slot, field](kobalt::headerfooter::Layout &custom) {
+            custom.slotFields[slot] = field;
+        });
+    };
+    fieldChooser->uppercaseChanged = [this, editCustom](bool on) {
+        const int slot = fieldChooser->slot();
+        editCustom([slot, on](kobalt::headerfooter::Layout &custom) {
+            custom.uppercase[slot] = on;
+        });
+    };
+    fieldChooser->done = [this] {
+        closeFieldChooser();
+    };
+    // The views belong to the Layout panel and leave with it. The Text tab
+    // replaces it with the Text page, which also closes them.
+    menu->installEventFilter(this);
+    connect(panels, &QStackedWidget::currentChanged, this, [this](int index) {
+        if (index == kobalt::reader::TypographyPage)
+            closeChromeViews();
+    });
+    syncChromeControls();
+    // Every appearance page uses the same row gap.
+    for (auto *rows : {typeRows, pageRows, layout.headerFooterRows}) {
+        rows->setSpacing(m::control::rowGap);
+        rows->addStretch();
+    }
 }
 
 void Reader::buildSettings() {
@@ -851,7 +865,6 @@ void Reader::buildSettings() {
     settingsPages = settings->settingsPages;
     darkOption = settings->darkOption;
     smoothOption = settings->smoothOption;
-    progressOption = settings->progressOption;
     animationOption = settings->animationOption;
     edgeLightOption = settings->edgeLightOption;
     denseGraphOption = settings->denseGraphOption;
@@ -882,10 +895,8 @@ void Reader::buildSettings() {
     });
     connect(settings->confirmDefaults, &QPushButton::clicked, this, [this] {
         restoringDefaults = true;
-        clockOption->setChecked(true);
         darkOption->setChecked(false);
         smoothOption->setChecked(true);
-        progressOption->setChecked(true);
         animationOption->setChecked(false);
         bionicOption->setChecked(false);
         screenRefreshMode = kobalt::ScreenRefresh::Smart;
@@ -1032,7 +1043,9 @@ void Reader::connectPageInput() {
         const qreal y = qreal(point.y()) / qMax(1, page->height());
         const bool menuTap = x > .33 && x < .67 && (!devicePreview || (y > .33 && y < .67));
         if (topControls->isVisible() || choices->isVisible()) {
-            if (!devicePreview || menuTap) {
+            // An open Text or Layout panel can cover the middle of a device
+            // preview, so any tap on the page that stays visible closes it.
+            if (!devicePreview || menuTap || appearanceEdit.panelOpen()) {
                 flashAfterMenu = true;
                 dismissControls();
             }

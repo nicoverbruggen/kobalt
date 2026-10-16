@@ -233,6 +233,51 @@
 
 /* graph */
 
+/* header_footer */
+"header_footer.title" = "Header and footer";
+"header_footer.custom_hint" = "Tap a slot to customize it.";
+/* Arguments: %1, %2 */
+"header_footer.slot_position" = "Slot %1 of %2";
+/* Arguments: %1, %2 */
+"header_footer.slot_value" = "%1: %2";
+"header_footer.done" = "Done";
+"header_footer.close" = "Close header and footer";
+"header_footer.fields" = "Fields";
+"header_footer.shows" = "Shows";
+"header_footer.empty" = "Empty";
+"header_footer.unavailable" = "—";
+"header_footer.uppercase" = "Uppercase";
+"header_footer.progress_bar" = "Progress bar";
+/* Arguments: %1 */
+"header_footer.time_left" = "%1 left";
+"header_footer.learning_pace" = "Learning reading speed";
+/* Arguments: %1, %2 */
+"header_footer.pages_left" = "%1 %2";
+"header_footer.preset.default" = "Kobalt";
+"header_footer.preset.alternative_a" = "Bookish";
+"header_footer.preset.alternative_b" = "Ember";
+"header_footer.preset.custom" = "Custom";
+"header_footer.slot.top_left" = "Top left";
+"header_footer.slot.top_center" = "Top center";
+"header_footer.slot.top_right" = "Top right";
+"header_footer.slot.bottom_left" = "Bottom left";
+"header_footer.slot.bottom_center" = "Bottom center";
+"header_footer.slot.bottom_right" = "Bottom right";
+"header_footer.field.nothing" = "Nothing";
+"header_footer.field.title" = "Title of the book";
+"header_footer.field.author" = "Author";
+"header_footer.field.chapter" = "Chapter";
+"header_footer.field.chapter_page" = "Page in chapter";
+"header_footer.field.book_page" = "Page in book";
+"header_footer.field.chapter_pages_left" = "Pages left in chapter";
+"header_footer.field.chapter_and_page" = "Chapter and page in chapter";
+"header_footer.field.title_and_page" = "Title and page in book";
+"header_footer.field.battery_percent" = "Battery, with percentage";
+"header_footer.field.battery" = "Battery";
+"header_footer.field.time" = "Time";
+"header_footer.field.chapter_time_left" = "Time left in chapter";
+"header_footer.field.book_time_left" = "Time left in book";
+
 /* image */
 "image.unavailable" = "Image could not be loaded";
 
@@ -274,7 +319,6 @@
 "reader.automatic_rotation" = "Automatic rotation";
 "reader.book_marked_finished" = "Book marked finished";
 "reader.book_position" = "Book position";
-"reader.book_progress_bar" = "Book progress bar";
 /* Arguments: %1 */
 "reader.brightness" = "Brightness %1%";
 "reader.brightness_and_warmth" = "Brightness and warmth";
@@ -282,7 +326,6 @@
 "reader.chapter_lengths" = "Chapter lengths";
 /* Arguments: %1, %2 */
 "reader.chapter_position" = "%1 · %2";
-"reader.clock" = "Clock";
 "reader.contents" = "Contents";
 /* Arguments: %1 */
 "reader.contents_detail" = "Contents: %1";
@@ -412,7 +455,6 @@
 "settings.hide_status_bar_description" = "Hide the clock, battery and menu status row on this Mac.";
 "settings.hide_device_options" = "Hide device-only options";
 "settings.hide_device_options_description" = "Hide e-ink refresh, page animations and frontlight gestures. Turn this off to inspect the reader controls.";
-"settings.progress_description" = "Reading progress along the bottom edge.";
 "settings.smoothing_description" = "Softer edges on scaled images.";
 "settings.edge_light_description" = "Swipe up or down along the left edge for brightness, and along the right edge for warmth.";
 "settings.edge_brightness_description" = "Swipe up or down along the left edge for brightness.";

@@ -195,18 +195,17 @@ bool Reader::syncFontPicker() {
     return pickingFont;
 }
 
+// Fills the header and footer slots. An error or image warning takes the
+// footer's place until it clears.
 void Reader::showChapterText() {
     page->cleanRefresh(false);
-    page->clockText = services.clock();
-    page->chapterTitle =
-        (model->chapterTitle().isEmpty() ? strings::get("reader.reading") : model->chapterTitle()).toUpper();
-    page->chapterProgress =
-        model->chapterPages() > 0
-            ? strings::get("common.page_fraction").arg(model->chapterPage()).arg(model->chapterPages())
-            : QString();
-    header->setText(page->chapterProgress.isEmpty()
-                        ? page->chapterTitle
-                        : strings::get("reader.chapter_position").arg(page->chapterTitle, page->chapterProgress));
+    page->notice = !model->error().isEmpty() ? model->error() : model->imageWarning();
+    const auto values = chromeValues();
+    for (int slot = 0; slot < kobalt::headerfooter::slotCount; ++slot)
+        page->slotContents[slot] =
+            kobalt::headerfooter::content(page->chrome.slotFields[slot], values, page->chrome.uppercase[slot]);
+    const auto text = page->headerText();
+    header->setText(text.isEmpty() ? values.chapter : text);
     header->setAccessibleName(header->text());
 }
 
@@ -234,10 +233,6 @@ void Reader::showPageImage(const QImage &nextImage) {
 }
 
 void Reader::paintTurn() {
-    page->progress = !model->error().isEmpty() ? model->error()
-                     : !model->imageWarning().isEmpty()
-                         ? model->imageWarning()
-                         : strings::get("common.page_fraction").arg(model->page() + 1).arg(model->pages());
     page->progressFraction =
         model->pages() > 0 ? qBound(qreal(0), qreal(model->page() + 1) / model->pages(), qreal(1)) : 0;
     page->preparedDamage = model->damage();
@@ -351,10 +346,6 @@ void Reader::syncAppearanceControls(bool pickingFont) {
 }
 
 void Reader::syncReadingControls() {
-    page->progress = !model->error().isEmpty() ? model->error()
-                     : !model->imageWarning().isEmpty()
-                         ? model->imageWarning()
-                         : strings::get("common.page_fraction").arg(model->page() + 1).arg(model->pages());
     if (!bookSlider->interacting()) {
         bookSlider->setRange(0, qMax(0, model->pages() - 1));
         QVector<int> chapterStarts;
@@ -390,7 +381,8 @@ void Reader::syncReadingControls() {
     findChild<QPushButton *>("rrTypography")
         ->setChecked(!general->isVisible() && appearanceEdit.panelOpen() && panels->currentIndex() == 0);
     findChild<QPushButton *>("rrLayout")
-        ->setChecked(!general->isVisible() && appearanceEdit.panelOpen() && panels->currentIndex() == 1);
+        ->setChecked(!general->isVisible() && appearanceEdit.panelOpen() &&
+                     panels->currentIndex() != kobalt::reader::TypographyPage);
     findChild<QPushButton *>("rrSettings")->setChecked(general->isVisible());
     findChild<QPushButton *>("rrGraph")->setEnabled(!model->busy() && !appearanceEdit.applying());
     findChild<QPushButton *>("rrGraph")->setChecked(chapterGraph->isVisible() ||

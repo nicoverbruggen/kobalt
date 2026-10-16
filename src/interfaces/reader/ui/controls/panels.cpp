@@ -166,29 +166,44 @@ void BatteryIndicator::setStatus(int value, bool pluggedIn) {
                                         .arg(charging ? strings::get("components.charging") : ""));
     update();
 }
-void BatteryIndicator::paintEvent(QPaintEvent *event) {
-    QLabel::paintEvent(event);
-    QPainter painter(this);
-    const QColor ink = palette().color(QPalette::WindowText);
+void paintBattery(QPainter &painter, const QRectF &body, int percent, bool charging, const QColor &ink,
+                  const QColor &paper) {
+    // The menu's battery is the reference size; smaller ones scale its parts.
+    const qreal scale = body.height() / int(m::panel::batteryBodyHeight);
+    const auto part = [scale](int pixels) {
+        return px(pixels) * scale;
+    };
+    painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF body(width() - m::panel::batteryIconSize + 1, (height() - m::panel::batteryBodyHeight) / 2.0,
-                      m::panel::batteryBodyWidth, m::panel::batteryBodyHeight);
     painter.setPen(QPen(ink, m::panel::batteryStroke));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(body);
-    painter.fillRect(QRectF(body.right() + px(2), body.center().y() - px(4), px(3), px(8)), ink);
-    auto fill = body.adjusted(px(4), px(4), -px(4), -px(4));
+    painter.fillRect(QRectF(body.right() + part(2), body.center().y() - part(4), part(3), part(8)), ink);
+    auto fill = body.adjusted(part(4), part(4), -part(4), -part(4));
     fill.setWidth(qRound(fill.width() * qMax(0, percent) / 100.0));
     painter.fillRect(fill, ink);
     if (charging) {
         const auto center = body.center();
-        const QPolygonF bolt(QVector<QPointF>{center + QPointF(2, -9), center + QPointF(-5, 1), center + QPointF(0, 1),
-                                              center + QPointF(-2, 9), center + QPointF(5, -1),
-                                              center + QPointF(0, -1)});
-        painter.setPen(QPen(palette().color(QPalette::Window), 2));
+        const QPolygonF bolt(QVector<QPointF>{center + QPointF(2, -9) * scale, center + QPointF(-5, 1) * scale,
+                                              center + QPointF(0, 1) * scale, center + QPointF(-2, 9) * scale,
+                                              center + QPointF(5, -1) * scale, center + QPointF(0, -1) * scale});
+        painter.setPen(QPen(paper, 2 * scale));
         painter.setBrush(ink);
         painter.drawPolygon(bolt);
     }
+    painter.restore();
+}
+qreal batteryWidth(qreal bodyHeight) {
+    const qreal scale = bodyHeight / int(m::panel::batteryBodyHeight);
+    return (int(m::panel::batteryBodyWidth) + px(5)) * scale;
+}
+void BatteryIndicator::paintEvent(QPaintEvent *event) {
+    QLabel::paintEvent(event);
+    QPainter painter(this);
+    const QRectF body(width() - m::panel::batteryIconSize + 1, (height() - m::panel::batteryBodyHeight) / 2.0,
+                      m::panel::batteryBodyWidth, m::panel::batteryBodyHeight);
+    paintBattery(painter, body, percent, charging, palette().color(QPalette::WindowText),
+                 palette().color(QPalette::Window));
 }
 Panel::Panel(QWidget *parent, Edges separators) : QFrame(parent), separators(separators) {
     setAttribute(Qt::WA_OpaquePaintEvent);

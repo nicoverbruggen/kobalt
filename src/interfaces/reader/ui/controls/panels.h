@@ -58,6 +58,12 @@ private:
     bool warm = false;
 };
 
+// Draws a battery whose body fills `body`; the terminal sits outside it. A
+// negative percent draws an empty battery. Insets scale with the body height.
+void paintBattery(QPainter &painter, const QRectF &body, int percent, bool charging, const QColor &ink,
+                  const QColor &paper);
+// The width of the battery drawn for a body of this height, terminal included.
+qreal batteryWidth(qreal bodyHeight);
 class BatteryIndicator : public QLabel {
 public:
     explicit BatteryIndicator(QWidget *parent);

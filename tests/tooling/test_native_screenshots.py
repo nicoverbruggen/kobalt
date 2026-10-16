@@ -99,8 +99,14 @@ class ScreenshotRunnerTest(unittest.TestCase):
         android.validate_reader_geometry((2400, 1080), (137, 0, 0, 0), geometry)
         no_strips = android.reader_geometry(event, 212, dict(show_header=False, show_footer=False, show_progress_bar=False, show_clock=False))
         self.assertEqual(no_strips['height'], 911)
+        # The old clock without a header now keeps a small header strip.
         clock = android.reader_geometry(event, 212, dict(show_header=False, show_footer=False, show_progress_bar=False))
-        self.assertEqual(clock['height'], 936)
+        self.assertEqual(clock['height'], 945)
+        quiet = android.reader_geometry(event, 212, dict(header_footer='alternative_b'))
+        self.assertEqual(quiet['height'], 911 + 2 * 34)
+        custom = android.reader_geometry(event, 212, dict(header_footer='custom', header_footer_custom=dict(
+            header_size='large', footer_size='off', progress_bar=False)))
+        self.assertEqual(custom['height'], 911 + 57)
         with self.assertRaisesRegex(ValueError, 'not a main reader resize'):
             android.reader_geometry({**event, 'target': 'preview'}, 420, {})
 

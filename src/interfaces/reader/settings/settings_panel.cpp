@@ -98,8 +98,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     };
     darkOption =
         check(displayPage, "rrDarkMode", strings::get("reader.dark_mode"), strings::get("settings.dark_description"));
-    progressOption = check(displayPage, "rrShowProgress", strings::get("reader.book_progress_bar"),
-                           strings::get("settings.progress_description"));
     const bool animationsSupported = inputs.animationsSupported;
     animationOption = check(displayPage, "rrPageAnimations", strings::get("reader.enable_page_animations"),
                             animationsSupported ? strings::get("settings.animations_description")
@@ -108,7 +106,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     bionicOption = check(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
                          strings::get("reader.bionic_description"));
     int optionIndex = 0;
-    for (auto *option : {darkOption, progressOption, bionicOption, animationOption}) {
+    for (auto *option : {darkOption, bionicOption, animationOption}) {
         option->setMinimumHeight(m::settings::displayOptionHeight);
         generalOptions->addWidget(option, optionIndex++, 0);
     }
@@ -315,9 +313,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         settingsTabButtons[index == NativeUiSettings ? 5 : index]->setChecked(true);
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = {hideNonlinearOption, linkIndicatorOption, darkOption,    progressOption,
-                                              bionicOption,        animationOption,     smoothOption,  edgeLightOption,
-                                              heavierTextOption,   denseGraphOption,    pinStatsOption};
+    QVector<ui::DescribedOption *> options = {
+        hideNonlinearOption, linkIndicatorOption, darkOption,        bionicOption,     animationOption,
+        smoothOption,        edgeLightOption,     heavierTextOption, denseGraphOption, pinStatsOption};
     if (inputs.desktopUi)
         options << hideStatusOption << hideDeviceOptionsOption;
     for (auto *option : options) {

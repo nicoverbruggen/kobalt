@@ -24,19 +24,160 @@ using kobalt::ui::ControlIcon;
 using kobalt::ui::buttonIcon;
 using kobalt::platform::textRefresh;
 
-void Reader::syncChromeSizeButtons() {
-    for (const auto &key : {QString("header"), QString("footer")}) {
-        const auto value = preferences.value("show_" + key).toBool(true)
-                               ? m::reading::textSize(preferences.value(key + "_text_size").toString())
-                               : QString("off");
-        for (auto *button : key == "header" ? headerSizeButtons : footerSizeButtons) {
-            button->setChecked(button->property("text_size").toString() == value);
-        }
+kobalt::headerfooter::Values Reader::chromeValues() {
+    kobalt::headerfooter::Values values;
+    values.title = model->title();
+    values.author = model->author();
+    values.chapter = model->chapterTitle().isEmpty() ? strings::get("reader.reading") : model->chapterTitle();
+    values.time = services.clock();
+    values.chapterPage = model->chapterPage();
+    values.chapterPages = model->chapterPages();
+    values.page = model->page() + 1;
+    values.pages = model->pages();
+    const auto battery = services.battery();
+    values.battery = battery.percent;
+    values.charging = battery.charging;
+    values.deviceStatus = !hideNativeStatus();
+    // The same estimates as Stats, at this session's pace.
+    const auto reading = book->readingMilliseconds();
+    const int chapterLeft = model->chapterPages() > 0 ? model->chapterPages() - model->chapterPage() + 1 : -1;
+    values.chapterMilliseconds = book->pace().estimate(chapterLeft, reading);
+    values.bookMilliseconds = book->pace().estimate(model->pages() - model->page(), reading);
+    values.learningPace = book->pace().estimate(0, reading) < 0;
+    return values;
+}
+
+kobalt::headerfooter::Layout Reader::customChrome() const {
+    // Until Custom has a layout of its own, it starts from the layout in force.
+    return kobalt::headerfooter::customLayout(preferences, page->chrome);
+}
+
+bool Reader::chromeTicks() const {
+    using kobalt::headerfooter::Field;
+    for (const auto field : page->chrome.slotFields)
+        if (field == Field::Time || field == Field::Battery || field == Field::BatteryPercent ||
+            field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
+            return true;
+    return false;
+}
+
+void Reader::loadChrome() {
+    const auto chrome = kobalt::headerfooter::select(preferences);
+    chromePreset = chrome.preset;
+    const int top = page->topHeight(), bottom = page->bottomHeight();
+    page->chrome = chrome.layout;
+    showChapterText();
+    syncChromeControls();
+    if (top == page->topHeight() && bottom == page->bottomHeight())
+        return;
+    // The strips changed height, so the book gets a new viewport. With a
+    // panel open the preview takes it, and closing the panel applies it.
+    const QSize viewport(width(), height() - page->topHeight() - page->bottomHeight());
+    if (appearanceEdit.panelOpen())
+        mutateAppearance([viewport](ReaderSession &preview) {
+            preview.resize(viewport);
+        });
+    header->setGeometry(0, 0, width(), page->topHeight());
+    header->setVisible(page->topHeight() > 0);
+}
+
+bool Reader::saveChrome(kobalt::headerfooter::Preset preset, const kobalt::headerfooter::Layout *custom) {
+    auto next = preferences;
+    next[kobalt::headerfooter::presetKey] = kobalt::headerfooter::presetValue(preset);
+    if (custom)
+        next[kobalt::headerfooter::customKey] = kobalt::headerfooter::toJson(*custom);
+    if (next != preferences && !writePreferences(next)) {
+        syncChromeControls();
+        appearanceEdit.setError(strings::get("reader.could_not_save_reader_settings"));
+        refresh();
+        return false;
     }
+    preferences = next;
+    appearanceEdit.clearError();
+    loadChrome();
+    refresh();
+    return true;
+}
+
+void Reader::syncChromeControls() {
+    using namespace kobalt::headerfooter;
+    const auto values = chromeValues();
+    const auto contents = [&values](const Layout &layout) {
+        kobalt::reader::SlotContents result;
+        for (int slot = 0; slot < slotCount; ++slot)
+            result[slot] = content(layout.slotFields[slot], values, layout.uppercase[slot]);
+        return result;
+    };
+    // The view shows and edits the layout in force.
+    const auto &current = page->chrome;
+    slotMap->setSlots(current, contents(current));
+    const auto custom = customChrome();
+    for (auto *card : presetCards) {
+        card->setLayout(card->preset() == Preset::Custom ? custom : presetLayout(card->preset()));
+        card->setChecked(card->preset() == chromePreset);
+    }
+    for (auto *button : headerSizeButtons)
+        button->setChecked(button->property("text_size").toString() == current.headerSize);
+    for (auto *button : footerSizeButtons)
+        button->setChecked(button->property("text_size").toString() == current.footerSize);
+    for (auto *button : progressBarButtons)
+        button->setChecked(button->property("switch_on").toBool() == current.progressBar);
+    headerFooterRow->setText(presetLabel(chromePreset));
+    headerFooterRow->setAccessibleName(
+        strings::get("header_footer.slot_value").arg(strings::get("header_footer.title"), presetLabel(chromePreset)));
+    if (fieldChooser->isVisible())
+        fieldChooser->open(fieldChooser->slot(), current.slotFields[fieldChooser->slot()], values,
+                           current.uppercase[fieldChooser->slot()]);
+}
+
+QWidget *Reader::chromeView() const {
+    if (fieldChooser && fieldChooser->isVisible())
+        return fieldChooser;
+    if (headerFooterView && headerFooterView->isVisible())
+        return headerFooterView;
+    return nullptr;
+}
+
+void Reader::openHeaderFooterView() {
+    if (model->temporaryTypography() || !menu->isVisible())
+        return;
+    fieldChooser->hide();
+    syncChromeControls();
+    headerFooterView->show();
+    headerFooterView->raise();
+    refresh();
+}
+
+void Reader::closeChromeViews() {
+    if (!chromeView())
+        return;
+    fieldChooser->hide();
+    headerFooterView->hide();
+    refresh();
+}
+
+void Reader::openFieldChooser(int slot) {
+    if (model->temporaryTypography() || !menu->isVisible())
+        return;
+    const auto &current = page->chrome;
+    fieldChooser->open(slot, current.slotFields[slot], chromeValues(), current.uppercase[slot]);
+    headerFooterView->hide();
+    fieldChooser->show();
+    fieldChooser->raise();
+    refresh();
+}
+
+// The check cell returns to Header and footer.
+void Reader::closeFieldChooser() {
+    if (!fieldChooser->isVisible())
+        return;
+    fieldChooser->hide();
+    headerFooterView->show();
+    headerFooterView->raise();
+    refresh();
 }
 
 void Reader::refreshHostPresentation() {
-    page->hideDeviceStatus = hideNativeStatus();
     static_cast<reader::SettingsPanel *>(general)->showDictionaries(
         services.downloadableDictionaries && !(services.devicePreview && services.devicePreview()));
     updateMenuStatus();
@@ -82,7 +223,6 @@ void Reader::openSettings() {
     darkOption->setChecked(model->state().value("dark_mode").toBool(false));
     smoothOption->setChecked(model->state().value("smooth_images").toBool(true));
     hideNonlinearOption->setChecked(model->state().value("hide_nonlinear_fragments").toBool(false));
-    progressOption->setChecked(page->showProgress);
     animationOption->setChecked(preferences.value("page_animations").toBool(false));
     bionicOption->setChecked(model->state().value("bold_reading").toString("off") == "bold");
     linkIndicatorOption->setChecked(preferences.value("show_link_indicator").toBool(false));
@@ -138,12 +278,10 @@ void Reader::applySettings() {
         return;
     }
     auto next = preferences;
-    next["show_clock"] = clockOption->isChecked();
     next["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     next["dark_mode"] = darkOption->isChecked();
     next["smooth_images"] = smoothOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
-    next["show_progress_bar"] = progressOption->isChecked();
     next["page_animations"] = animationOption->isChecked();
     next["show_link_indicator"] = linkIndicatorOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
@@ -155,12 +293,9 @@ void Reader::applySettings() {
         next["native_hide_status_bar"] = hideStatusOption->isChecked();
         next["native_hide_device_options"] = hideDeviceOptionsOption->isChecked();
     }
-    if (restoringDefaults) {
-        next["show_header"] = true;
-        next["show_footer"] = true;
-        next["header_text_size"] = QStringLiteral("small");
-        next["footer_text_size"] = QStringLiteral("small");
-    }
+    if (restoringDefaults)
+        next[kobalt::headerfooter::presetKey] =
+            kobalt::headerfooter::presetValue(kobalt::headerfooter::Preset::Default);
     const auto rotation = orientation->settings();
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
@@ -173,21 +308,14 @@ void Reader::applySettings() {
         return;
     }
     preferences = next;
-    page->hideDeviceStatus = hideNativeStatus();
     navigation->setStatusVisible(!hideNativeStatus());
-    page->showHeader = preferences.value("show_header").toBool(true);
-    page->showFooter = preferences.value("show_footer").toBool(true);
-    page->headerSize = m::reading::textSize(preferences.value("header_text_size").toString());
-    page->footerSize = m::reading::textSize(preferences.value("footer_text_size").toString());
-    page->headerTextPixels = m::reading::textPixels(page->headerSize, false);
-    page->footerTextPixels = m::reading::textPixels(page->footerSize, true);
-    syncChromeSizeButtons();
-    page->showClock = clockOption->isChecked();
-    page->showProgress = progressOption->isChecked();
+    const auto chrome = kobalt::headerfooter::select(preferences);
+    chromePreset = chrome.preset;
+    page->chrome = chrome.layout;
+    syncChromeControls();
     applyEdgeLight();
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
     pinStats = preferences.value("pin_stats").toBool(false);
-    page->clockText = services.clock();
     auto settings =
         appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()->requestedState() : model->state();
     settings["dark_mode"] = darkOption->isChecked();
@@ -412,7 +540,10 @@ void Reader::selectPanel(int index) {
     if (general->isVisible()) {
         appearanceEdit.request(index == 0 ? AppearanceDestination::Text : AppearanceDestination::Layout);
         applySettings();
-    } else if (menu->isVisible() && panels->currentIndex() == index) {
+    } else if (menu->isVisible() &&
+               (panels->currentIndex() == index ||
+                (index == kobalt::reader::LayoutPage && panels->currentIndex() != kobalt::reader::TypographyPage))) {
+        // The Layout tab closes the header and footer pages too.
         finishPreview();
     } else
         openPanel(index);
@@ -518,7 +649,6 @@ void Reader::finishPreview() {
         // A failed preview has no settings to apply. Dismiss it without
         // trapping the reader now that panels have no Cancel action.
         orientation->configure(preferences);
-        (page->showClock ? clockOption : clockHideOption)->setChecked(true);
         appearanceEdit.resetPreview();
         appearanceEdit.setPanelOpen(false);
         appearanceEdit.cancelDeferredApply();
@@ -542,7 +672,6 @@ void Reader::finishPreview() {
     }
     appearanceEdit.cancelDeferredApply();
     auto next = preferences;
-    next["show_clock"] = clockOption->isChecked();
     const auto rotation = orientation->settings();
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
@@ -554,7 +683,6 @@ void Reader::finishPreview() {
     }
     preferences = next;
     appearanceEdit.clearError();
-    page->showClock = clockOption->isChecked();
     const QSize viewport(width(), height() - page->topHeight() - page->bottomHeight());
     if (appearanceEdit.ready())
         model->apply(appearanceEdit.preview()->requestedState(), viewport);

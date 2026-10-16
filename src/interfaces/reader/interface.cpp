@@ -3,19 +3,16 @@
 #include "interfaces/reader/views/opening.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/metrics.h"
+#include "reading/header_footer.h"
 
 namespace kobalt {
 namespace {
 QSize readingViewport(QSize screen, const QJsonObject &preferences) {
     namespace m = ui::metrics::reading;
-    screen.rheight() -= (preferences.value("show_header").toBool(true)
-                             ? m::stripHeight(preferences.value("header_text_size").toString())
-                         : preferences.value("show_clock").toBool(true) ? m::clockHeight
-                                                                        : 0) +
-                        (preferences.value("show_footer").toBool(true)
-                             ? m::stripHeight(preferences.value("footer_text_size").toString())
-                             : 0) +
-                        (preferences.value("show_progress_bar").toBool(true) ? m::progressHeight : 0);
+    const auto chrome = headerfooter::select(preferences).layout;
+    screen.rheight() -= (chrome.header() ? m::stripHeight(chrome.headerSize) : 0) +
+                        (chrome.footer() ? m::stripHeight(chrome.footerSize) : 0) +
+                        (chrome.progressBar ? m::progressHeight : 0);
     return screen;
 }
 }

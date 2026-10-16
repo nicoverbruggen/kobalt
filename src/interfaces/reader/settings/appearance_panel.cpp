@@ -73,7 +73,7 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
     pages->layout()->setSizeConstraint(QLayout::SetNoConstraint);
     scroll->hide();
     rows->addWidget(pages, 1);
-    for (int index = 0; index < 2; ++index) {
+    for (int index = TypographyPage; index <= LayoutPage; ++index) {
         auto *page = new QWidget;
         auto *controls = new QVBoxLayout(page);
         controls->setContentsMargins(m::panel::rowsMargins);
@@ -88,8 +88,11 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
 }
 
 AppearanceLayout AppearanceSheet::controls() const {
-    return {pages->widget(0), pages->widget(1), static_cast<QVBoxLayout *>(pages->widget(0)->layout()),
-            static_cast<QVBoxLayout *>(pages->widget(1)->layout())};
+    const auto rows = [this](int page) {
+        return static_cast<QVBoxLayout *>(pages->widget(page)->layout());
+    };
+    return {pages->widget(TypographyPage), pages->widget(LayoutPage), nullptr,
+            rows(TypographyPage),          rows(LayoutPage),          nullptr};
 }
 
 int AppearanceSheet::fitHeight(int width, int availableHeight) {
@@ -258,9 +261,47 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
         autoRotateOption->setAccessibleName(strings::get("reader.automatic_rotation"));
         autoRotateOption->setVisible(inputs.automaticRotationAvailable);
     }
-    auto chromeSizeRow = [this, pageLayout, pageRows, &inputs](bool footer) {
+    // Header and footer moved to their own pages. Layout keeps one labeled
+    // row whose button names the preset in force and opens the presets.
+    auto *chromeRow = ui::labeledRow(pageLayout, pageRows, strings::get("header_footer.title"));
+    headerFooterRow = new ui::DropdownButton(pageLayout);
+    headerFooterRow->setObjectName("rrHeaderFooter");
+    headerFooterRow->setFocusPolicy(Qt::NoFocus);
+    headerFooterRow->setForward(true);
+    // As tall as the segmented rows above it, with their label size. QSS
+    // heights exclude the reader style's padding, as for the font button.
+    const int rowHeight =
+        m::control::segmentHeight + 2 * int(m::control::segmentVerticalPadding) + 2 * int(m::control::border);
+    readerStyle(headerFooterRow, QString("min-height:%1px;max-height:%1px;").arg(rowHeight - 2 * m::control::padding) +
+                                     styles::font(m::text::secondary));
+    chromeRow->addWidget(headerFooterRow, 1);
+
+    // The rest lives in the full-screen Header and footer view, which
+    // supplies these rows: the presets, the slots, then sizes and the bar.
+    if (!layout.headerFooter)
+        return;
+    auto *custom = layout.headerFooter;
+    auto *customRows = layout.headerFooterRows;
+    auto *cards = new QHBoxLayout;
+    cards->setContentsMargins(0, 0, 0, 0);
+    cards->setSpacing(0);
+    for (const auto preset : headerfooter::presets) {
+        auto *card = new PresetCard(preset, custom);
+        card->setDivider(preset != headerfooter::Preset::Custom);
+        cards->addWidget(card, 1);
+        presetCards.append(card);
+    }
+    customRows->addLayout(cards);
+    slotMap = new SlotMap(custom, true);
+    customRows->addWidget(slotMap);
+    slotHint = new QLabel(strings::get("header_footer.custom_hint"), custom);
+    slotHint->setObjectName("rrHeaderFooterHint");
+    // The same secondary text as the sliders' current values, so it follows the theme.
+    readerStyle(slotHint, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
+    customRows->addWidget(slotHint);
+    auto sizeRow = [this, custom, customRows](bool footer) {
         const QString name = footer ? "rrFooterTextSize" : "rrHeaderTextSize";
-        ui::SegmentedRow row(pageLayout, pageRows, name.toLatin1().constData(),
+        ui::SegmentedRow row(custom, customRows, name.toLatin1().constData(),
                              strings::get(footer ? "reader.footer" : "reader.header"));
         auto &buttons = footer ? footerSizeButtons : headerSizeButtons;
         struct SizeChoice {
@@ -280,16 +321,21 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
             button->setProperty("compact_label", strings::get(choice.compactLabel));
             button->setAccessibleName(label);
             button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-            button->setChecked(value == (footer ? inputs.footerSize : inputs.headerSize));
             buttons.append(button);
         }
         new ChoiceLabels(buttons.first()->parentWidget(), buttons);
     };
-    chromeSizeRow(false);
-    chromeSizeRow(true);
-    kobalt::ui::SegmentedRow clock(pageLayout, pageRows, "rrClock", strings::get("reader.clock"));
-    clockOption = clock.add("rrShowClock", strings::get("common.on"));
-    clockHideOption = clock.add("rrHideClock", strings::get("common.off"));
-    (inputs.showClock ? clockOption : clockHideOption)->setChecked(true);
+    sizeRow(false);
+    sizeRow(true);
+    auto switchRow = [custom, customRows](const char *name, const QString &label, QVector<QPushButton *> &buttons) {
+        ui::SegmentedRow row(custom, customRows, name, label);
+        for (const bool enabled : {false, true}) {
+            auto *button =
+                row.add(QString(name) + (enabled ? "_on" : "_off"), strings::get(enabled ? "common.on" : "common.off"));
+            button->setProperty("switch_on", enabled);
+            buttons.append(button);
+        }
+    };
+    switchRow("rrHeaderFooterProgressBar", strings::get("header_footer.progress_bar"), progressBarButtons);
 }
 }

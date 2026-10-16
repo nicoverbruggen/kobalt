@@ -134,9 +134,8 @@ public:
         try {
             require(temporary.isValid(), "Cannot create isolated reader state");
             QDir().mkpath(output);
-            require(storage::writeJson(paths.preferences(), {{"dark_mode", theme == "dark"},
-                                                             {"show_clock", true},
-                                                             {"dense_stats_chart", group == "stats-dense"}}),
+            require(storage::writeJson(paths.preferences(),
+                                       {{"dark_mode", theme == "dark"}, {"dense_stats_chart", group == "stats-dense"}}),
                     "Cannot write fixture preferences");
             if (group == "sync") {
                 host.progress = std::make_shared<test::HostProgress>();
@@ -1004,13 +1003,37 @@ public:
         if (group == "layout" || group == "layout-system-rotation") {
             tap("rrNavLayout");
             capture("layout", "rrMargins");
-            for (const auto &part : {"Header", "Footer"}) {
-                capture(QString(part).toLower() + "-sizes", "rr" + QString(part) + "TextSize");
-                tap("rr" + QString(part) + "TextSize_small");
-            }
             tap("rrWider");
             tap("rrVerticalMarginsMore");
             capture("margin-preview", "rrMargins");
+            if (group == "layout-system-rotation")
+                return;
+            // Header and footer: its view and one slot's choices.
+            tap("rrHeaderFooter");
+            capture("header-footer", "rrHeaderFooterView");
+            tap("rrHeaderFooterSlot2");
+            capture("header-footer-fields", "rrHeaderFooterChooser");
+            tap("rrHeaderFooterDone");
+            // The Layout tab closes the view and the panel. Then show each
+            // preset on the page, with the menus closed.
+            tap("rrNavLayout");
+            for (const auto *preset : {"default", "alternative_a", "alternative_b"}) {
+                menu();
+                tap("rrNavLayout");
+                tap("rrHeaderFooter");
+                tap(QString("rrHeaderFooterPreset_") + preset);
+                tap("rrNavLayout");
+                // A new strip height reflows the book before the menu settles.
+                waitFor(
+                    [&] {
+                        return !host.session()->busy() && !visible("rrMenu");
+                    },
+                    "Layout panel did not close");
+                for (int attempt = 0; attempt < 3 && visible("rrControlsTop"); ++attempt)
+                    pageTap();
+                require(!visible("rrControlsTop"), "Reading menu did not close");
+                capture(QString("reading-") + QString(preset).replace('_', '-'));
+            }
             return;
         }
         if (group == "chapters") {

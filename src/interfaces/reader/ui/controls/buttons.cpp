@@ -261,7 +261,10 @@ void DropdownButton::paintEvent(QPaintEvent *) {
         drawInterfaceText(painter, label, elideInterfaceText(text(), painter.font(), label.width()),
                           Qt::AlignLeft | Qt::AlignVCenter);
     const int size = m::choices::fontArrowSize;
-    controlIcon(property("opens_upward").toBool() ? ControlIcon::Up : ControlIcon::Down, ink)
+    const auto arrow = forward                             ? ControlIcon::Next
+                       : property("opens_upward").toBool() ? ControlIcon::Up
+                                                           : ControlIcon::Down;
+    controlIcon(arrow, ink)
         .paint(&painter, QRect(width() - m::choices::fontArrowRight - size / 2, (height() - size) / 2, size, size));
 }
 

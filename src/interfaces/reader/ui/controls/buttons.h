@@ -88,6 +88,14 @@ private:
 class DropdownButton : public Button {
 public:
     explicit DropdownButton(QWidget *parent);
+    // A forward button opens another page instead of a list, so it shows a
+    // right chevron in place of the arrow.
+    void setForward(bool value) {
+        if (forward == value)
+            return;
+        forward = value;
+        update();
+    }
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -100,6 +108,9 @@ protected:
     virtual SampleAppearance sampleAppearance() const {
         return {};
     }
+
+private:
+    bool forward = false;
 };
 class FontButton : public DropdownButton {
 public:

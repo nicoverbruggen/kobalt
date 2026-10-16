@@ -10,8 +10,11 @@ inline constexpr int maximumLineSpacing = 300;
 inline constexpr int defaultVariableFontWeight = 450;
 
 namespace appearance {
-inline constexpr std::array<const char *, 7> layoutKeys{
-    "show_header", "show_footer", "header_text_size", "footer_text_size", "show_clock", "orientation", "auto_rotate"};
+// Saved per book. The old header, footer and clock keys stay for books saved
+// before header and footer presets; see header_footer.h.
+inline constexpr std::array<const char *, 8> layoutKeys{"header_footer",    "show_header",      "show_footer",
+                                                        "header_text_size", "footer_text_size", "show_clock",
+                                                        "orientation",      "auto_rotate"};
 // Book layout takes precedence over legacy global layout values.
 // Converts the legacy global Bionic Reading key unless Bold Reading is already set.
 QJsonObject readerPreferences(const QJsonObject &global, const QJsonObject &book);

@@ -7,6 +7,7 @@ set(KOBALT_READER_INTERFACE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/settings/settings_panel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/settings/dictionaries_page.cpp
     ${CMAKE_CURRENT_LIST_DIR}/settings/appearance_panel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/settings/header_footer_panel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/window/appearance_edit_session.cpp
     ${CMAKE_CURRENT_LIST_DIR}/interface.cpp
     ${CMAKE_CURRENT_LIST_DIR}/views/opening.cpp

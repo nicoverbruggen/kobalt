@@ -106,16 +106,20 @@ int main(int argc, char **argv) {
     ui::readerStyle(settings, ui::styles::reader());
     auto *typography = new QWidget(tabs);
     auto *layout = new QWidget(tabs);
+    auto *headerFooter = new QWidget(tabs);
     tabs->addTab(typography, "Typography");
     tabs->addTab(layout, "Page layout");
+    tabs->addTab(headerFooter, "Header and footer");
     auto *typeRows = new QVBoxLayout(typography);
     auto *pageRows = new QVBoxLayout(layout);
-    for (auto *rows : {typeRows, pageRows}) {
+    auto *headerFooterRows = new QVBoxLayout(headerFooter);
+    for (auto *rows : {typeRows, pageRows, headerFooterRows}) {
         rows->setContentsMargins(ui::metrics::panel::contentMargins);
         rows->setSpacing(ui::metrics::control::rowGap);
     }
     kobalt::reader::AppearancePanelInputs appearanceInputs;
-    kobalt::reader::AppearancePanel appearance({typography, layout, typeRows, pageRows}, appearanceInputs);
+    kobalt::reader::AppearancePanel appearance({typography, layout, headerFooter, typeRows, pageRows, headerFooterRows},
+                                               appearanceInputs);
     const int sampleHalfPoints = 21;
     appearance.sizeSlider->setValue(sampleHalfPoints);
     appearance.spacingSlider->setValue(120);
@@ -128,6 +132,7 @@ int main(int argc, char **argv) {
     pageRows->addStretch();
     ui::readerStyle(typography, ui::styles::reader());
     ui::readerStyle(layout, ui::styles::reader());
+    ui::readerStyle(headerFooter, ui::styles::reader());
     QObject::connect(appearance.sizeSlider, &QSlider::valueChanged, sample, [sample](int halfPoints) {
         sample->setFont(ui::interfaceFont(kobalt::halfPointPixels(halfPoints)));
         sample->setStyleSheet(QString("font-size:%1px;").arg(kobalt::halfPointPixels(halfPoints)));

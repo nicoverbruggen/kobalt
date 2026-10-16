@@ -47,6 +47,53 @@ def cutout_insets(text):
     return values.pop()
 
 
+SLOT_NAMES = ('top_left', 'top_center', 'top_right', 'bottom_left', 'bottom_center', 'bottom_right')
+PRESET_SLOTS = {
+    'default': ('time', 'chapter', 'chapter_page', 'nothing', 'book_page', 'nothing'),
+    'alternative_a': ('time', 'chapter_and_page', 'nothing', 'nothing', 'title_and_page', 'nothing'),
+    'alternative_b': ('nothing', 'time', 'nothing', 'chapter_pages_left', 'nothing', 'nothing'),
+}
+
+
+def reader_chrome(settings):
+    """Return (header size, footer size, progress bar), as headerfooter::select does.
+
+    A size is None when its strip is not drawn: Off, or no slot shows anything.
+    """
+    def layout(slots, header='small', footer='small', bar=True):
+        return dict(slots=list(slots), header_size=header, footer_size=footer, progress_bar=bar)
+
+    def custom(fallback):
+        saved = settings.get('header_footer_custom')
+        if not isinstance(saved, dict):
+            return fallback
+        result = dict(fallback, slots=[saved.get(name, slot) for name, slot in zip(SLOT_NAMES, fallback['slots'])])
+        for key in ('header_size', 'footer_size'):
+            if saved.get(key) in ('off', 'small', 'medium', 'large'):
+                result[key] = saved[key]
+        if isinstance(saved.get('progress_bar'), bool):
+            result['progress_bar'] = saved['progress_bar']
+        return result
+
+    standard = layout(PRESET_SLOTS['default'])
+    preset = settings.get('header_footer')
+    if isinstance(preset, str):
+        chosen = custom(standard) if preset == 'custom' else layout(
+            PRESET_SLOTS.get(preset, PRESET_SLOTS['default']), bar=preset != 'alternative_b')
+    else:
+        header, clock = settings.get('show_header', True), settings.get('show_clock', True)
+        def shown(key): return settings.get(key) if settings.get(key) in ('medium', 'large') else 'small'
+        slots = ['time' if clock else 'nothing'] + (['chapter', 'chapter_page'] if header else ['nothing'] * 2)
+        legacy = layout(slots + ['nothing', 'book_page', 'nothing'],
+                        shown('header_text_size') if header or clock else 'off',
+                        shown('footer_text_size') if settings.get('show_footer', True) else 'off',
+                        settings.get('show_progress_bar', True))
+        chosen = legacy if legacy == standard else custom(legacy)
+    def strip(size, slots): return size if size != 'off' and any(slot != 'nothing' for slot in slots) else None
+    return (strip(chosen['header_size'], chosen['slots'][:3]), strip(chosen['footer_size'], chosen['slots'][3:]),
+            chosen['progress_bar'])
+
+
 def reader_geometry(event, density, settings):
     """Reconstruct the surface from resizeText's engine viewport and reading chrome.
 
@@ -57,9 +104,10 @@ def reader_geometry(event, density, settings):
         raise ValueError('Geometry evidence is not a main reader resize')
     density = max(100, min(600, density))
     def px(design): return int(design * density / 300 + .5)
-    def strip(key): return px({'medium': 64, 'large': 80}.get(settings.get(key), 48))
-    top = strip('header_text_size') if settings.get('show_header', True) else px(36) if settings.get('show_clock', True) else 0
-    bottom = (strip('footer_text_size') if settings.get('show_footer', True) else 0) + (px(24) if settings.get('show_progress_bar', True) else 0)
+    def strip(size): return px({'medium': 64, 'large': 80}.get(size, 48)) if size else 0
+    header, footer, bar = reader_chrome(settings)
+    top = strip(header)
+    bottom = strip(footer) + (px(24) if bar else 0)
     return dict(event, width=event.get('viewport_width', 0),
                 height=event.get('viewport_height', 0) + top + bottom,
                 reading_top=top, reading_bottom=bottom,

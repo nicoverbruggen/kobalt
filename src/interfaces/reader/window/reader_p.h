@@ -144,9 +144,9 @@ private:
     kobalt::ui::Panel *general;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption, *smoothOption, *progressOption, *animationOption, *edgeLightOption, *denseGraphOption,
-        *pinStatsOption, *heavierTextOption;
-    QPushButton *autoRotateOption, *clockOption, *clockHideOption;
+    QCheckBox *darkOption, *smoothOption, *animationOption, *edgeLightOption, *denseGraphOption, *pinStatsOption,
+        *heavierTextOption;
+    QPushButton *autoRotateOption;
     QCheckBox *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;
     bool hideNativeStatus() const;
     QJsonObject preferences;
@@ -172,8 +172,32 @@ private:
     QVector<QPushButton *> rotationButtons;
     bool restoringDefaults = false, themeReady = false, darkTheme = false;
     kobalt::ui::FontButton *fontButton;
-    QVector<QPushButton *> alignmentButtons, hyphenButtons, headerSizeButtons, footerSizeButtons;
-    void syncChromeSizeButtons();
+    QVector<QPushButton *> alignmentButtons, hyphenButtons;
+    // Header and footer. The preset is saved per book; the Custom layout is
+    // shared by every book that selects it.
+    kobalt::headerfooter::Preset chromePreset = kobalt::headerfooter::Preset::Default;
+    kobalt::ui::DropdownButton *headerFooterRow = nullptr;
+    kobalt::reader::SlotMap *slotMap = nullptr;
+    QVector<kobalt::reader::PresetCard *> presetCards;
+    QVector<QPushButton *> headerSizeButtons, footerSizeButtons, progressBarButtons;
+    // Header and footer and the field list fill the reading area like
+    // Chapters, over the Layout panel, which stays open beneath them.
+    kobalt::reader::HeaderFooterView *headerFooterView = nullptr;
+    kobalt::reader::FieldChooser *fieldChooser = nullptr;
+    QWidget *chromeView() const;
+    void openHeaderFooterView();
+    void closeChromeViews();
+    kobalt::headerfooter::Values chromeValues();
+    kobalt::headerfooter::Layout customChrome() const;
+    // Reads the preset and layout from the preferences and shows them.
+    void loadChrome();
+    // Saves the preset, and the Custom layout when given, then shows them.
+    bool saveChrome(kobalt::headerfooter::Preset preset, const kobalt::headerfooter::Layout *custom = nullptr);
+    void syncChromeControls();
+    void openFieldChooser(int slot);
+    void closeFieldChooser();
+    // True when a slot shows something that changes with the clock.
+    bool chromeTicks() const;
     kobalt::ui::SettingSlider *sizeSlider, *opticalSizeSlider, *weightSlider, *variableWeightSlider, *spacingSlider,
         *marginSlider, *verticalMarginSlider, *bookSlider;
     kobalt::reader::AppearanceEditSession appearanceEdit;

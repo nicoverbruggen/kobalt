@@ -230,7 +230,10 @@ void Reader::progressTick() {
 }
 
 QVector<QWidget *> Reader::popups() const {
-    return {busyNotice,
+    // Header and footer and the field list cover the panels, under every other pop-up.
+    return {headerFooterView,
+            fieldChooser,
+            busyNotice,
             brightnessNotice,
             fontDefaultDialog.data(),
             linkDialog.data(),
@@ -290,6 +293,10 @@ bool Reader::event(QEvent *event) {
 
 bool Reader::eventFilter(QObject *watched, QEvent *event) {
     const auto type = event->type();
+    if (watched == menu && type == QEvent::Hide && fieldChooser) {
+        fieldChooser->hide();
+        headerFooterView->hide();
+    }
     if (watched == brightnessNotice && type == QEvent::Hide && isVisible() && !lifecycleHidden && !closing &&
         !exportRunning && !exitPending && !services.suspended()) {
         requestFlash("light-swipe");
@@ -756,7 +763,9 @@ void Reader::goToPassage(const QString &target) {
     if (target.isEmpty() || model->busy() || closing || lifecycleHidden || services.suspended()) {
         return;
     }
-    const LinkVisit origin{model->state().value("position").toString(), model->page(), page->chapterTitle};
+    const LinkVisit origin{
+        model->state().value("position").toString(), model->page(),
+        (model->chapterTitle().isEmpty() ? strings::get("reader.reading") : model->chapterTitle()).toUpper()};
     if (!model->goTo(target)) {
         return;
     }
@@ -987,10 +996,10 @@ void Reader::syncLinkDiscovery() {
         // number. Without a footer it stays just above the bottom edge.
         QRect strip = page->footerTextRect();
         if (strip.isEmpty())
-            strip = QRect(0, height() - page->bottomHeight() - m::reading::stripHeight(page->footerSize), width(),
-                          m::reading::stripHeight(page->footerSize));
+            strip = QRect(0, height() - page->bottomHeight() - m::reading::stripHeight(page->chrome.footerSize),
+                          width(), m::reading::stripHeight(page->chrome.footerSize));
         strip.translate(page->mapTo(this, QPoint()));
-        const int text = page->footerTextPixels;
+        const int text = page->footerTextPixels();
         linkIndicator->setText(QString::number(count));
         linkIndicator->setAccessibleName(label);
         linkIndicator->setToolTip(label);
@@ -1017,9 +1026,9 @@ void Reader::syncLinkDiscovery() {
         // The label replaces the header or footer strip, never the book text,
         // in the strip's own face and size. Without a strip that fits, a tap on
         // unlinked text still leaves.
-        const bool top = fits(page->topHeight(), page->headerTextPixels);
+        const bool top = fits(page->topHeight(), page->headerTextPixels());
         const int strip = top ? page->topHeight() : page->bottomHeight();
-        const int text = top ? page->headerTextPixels : page->footerTextPixels;
+        const int text = top ? page->headerTextPixels() : page->footerTextPixels();
         linkDiscovery->setVisible(top || fits(strip, text));
         linkDiscovery->setEdges({});
         linkDiscovery->setDividers(top ? Qt::BottomEdge : Qt::TopEdge);
@@ -1082,10 +1091,13 @@ void Reader::syncNavigation() {
         }
     }
     const bool chapters = choices->isVisible() && !choosingTypography;
+    // Header and footer and the field list take the place Chapters takes, under the Layout tab.
+    auto *cover = chromeView();
     const bool pinned = statsPinned();
     using Nav = kobalt::NavigationDestination;
     const auto update = [&] {
-        const int active = chapters                                                                ? int(Nav::Chapters)
+        const int active = cover                                                                   ? int(Nav::Layout)
+                           : chapters                                                              ? int(Nav::Chapters)
                            : choosingTypography && choices->isVisible() && choices->isFontPicker() ? int(Nav::Text)
                            : menu->isVisible()       ? (panels->currentIndex() == 0 ? int(Nav::Text) : int(Nav::Layout))
                            : lightPopup->isVisible() ? int(Nav::Light)
@@ -1094,8 +1106,10 @@ void Reader::syncNavigation() {
         navigation->update(
             size(),
             {bottomControls, menu, chapterGraph,
-             bookmarkList->isVisible() ? static_cast<QWidget *>(bookmarkList) : static_cast<QWidget *>(choices),
-             chapters || bookmarkList->isVisible(),
+             cover                       ? cover
+             : bookmarkList->isVisible() ? static_cast<QWidget *>(bookmarkList)
+                                         : static_cast<QWidget *>(choices),
+             cover || chapters || bookmarkList->isVisible(),
              topControls->isVisible() && !searchPanel->isVisible() && !acknowledgments->isVisible(),
              !model->busy() && !appearanceEdit.applying(), services.lightAvailable(), active,
              linkReturnAvailable ? strings::get("reader.return_page").arg(linkHistory.last().page + 1) : QString(),
@@ -1446,7 +1460,7 @@ void Reader::save(bool snapshot) {
         saveTimer->stop();
     QJsonObject state;
     if (!book->checkpoint(&state)) {
-        page->progress = strings::get("reader.could_not_save_reading_position");
+        page->notice = strings::get("reader.could_not_save_reading_position");
         page->refreshContent();
     }
 #ifdef KOBALT_READER_HARDWARE
@@ -1507,8 +1521,9 @@ void Reader::save(bool snapshot) {
     state["typography_button_font"] = QFontInfo(findChild<QPushButton *>("rrTypography")->font()).family();
     state["benchmark_typography"] = model->temporaryTypography();
     state["display_settings"] = preferences;
-    state["header_text_pixels"] = page->headerTextPixels;
-    state["footer_text_pixels"] = page->footerTextPixels;
+    state["header_text_pixels"] = page->headerTextPixels();
+    state["footer_text_pixels"] = page->footerTextPixels();
+    state["header_footer_preset"] = kobalt::headerfooter::presetValue(chromePreset);
     state["reading_top"] = page->topHeight();
     state["reading_bottom"] = page->bottomHeight();
     state["reading_image_height"] = model->image().height();
@@ -1517,8 +1532,7 @@ void Reader::save(bool snapshot) {
     state["auto_rotation_available"] = orientation && orientation->automaticAvailable();
     state["viewport_width"] = width();
     state["viewport_height"] = height();
-    state["clock_text"] = page->clockText;
-    state["header_text"] = page->chapterTitle;
+    state["header_text"] = page->headerText();
     state["contents_page"] = choices->chapterPage();
     state["font_samples"] = choices->fontSamples();
     state["native_font_families"] = QJsonArray::fromStringList(pickerNativeFamilies);

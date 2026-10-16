@@ -4,6 +4,8 @@
 
 ## v1.0-beta.4
 
+- Use the Arabic text font before the math fallback so Arabic letters join correctly.
+
 - Use real bold and available italic fonts for non-CJK fallback text in books and the reading interface.
 
 - Refresh the page and bookmark ribbon together when jumping to a bookmark or returning to the previous passage.

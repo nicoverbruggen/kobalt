@@ -31,10 +31,11 @@ inline constexpr auto publisherSansFontFace = "NV Legible Next";
 // Bundled face for the generic monospace family.
 inline constexpr auto monospaceFontFace = "IBM Plex Mono";
 // Bundled faces, in order, for characters that the reading font lacks.
+// Arabic precedes Math, whose Arabic glyphs do not join into words.
 // The CJK face has full coverage and localized glyphs selected by HarfBuzz
 // from the book or element language. Untagged text uses its Japanese forms.
 inline constexpr auto fallbackFontFaces =
-    "Noto Serif|Noto Sans Math|Noto Serif CJK JP|Noto Naskh Arabic|Noto Serif Hebrew|Noto Serif Armenian|Noto Serif Georgian|Noto Serif Devanagari|Noto Serif Bengali|Noto Serif Tamil|Noto Serif Thai";
+    "Noto Serif|Noto Naskh Arabic|Noto Sans Math|Noto Serif CJK JP|Noto Serif Hebrew|Noto Serif Armenian|Noto Serif Georgian|Noto Serif Devanagari|Noto Serif Bengali|Noto Serif Tamil|Noto Serif Thai";
 struct ReaderSource;
 enum class OpeningStage { Content, Text, Styles, Pages, Ready };
 using OpeningProgress = std::function<void(OpeningStage, int)>;

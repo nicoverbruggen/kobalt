@@ -6,8 +6,24 @@
 #include <QGuiApplication>
 
 #include <lvfntman.h>
+#include <lvdrawbuf.h>
+#include <vector>
 
 #include <cstring>
+
+namespace {
+std::vector<lUInt32> shapedPixels(LVFontRef font, const lString32 &text) {
+    LVColorDrawBuf buffer(512, 160, 32);
+    buffer.Clear(0xffffff);
+    buffer.SetTextColor(0);
+    font->DrawTextString(&buffer, 0, 100 - font->getBaseline(), text.c_str(), text.length(), U'?');
+    std::vector<lUInt32> pixels;
+    for (int y = 0; y < buffer.GetHeight(); ++y)
+        for (int x = 0; x < buffer.GetWidth(); ++x)
+            pixels.push_back(buffer.GetPixel(x, y));
+    return pixels;
+}
+}
 
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
@@ -73,5 +89,17 @@ int main(int argc, char **argv) {
             }
         }
     }
-    puts("PASS: real fallback styles, missing-glyph rendering and complete font-picker families");
+    require(fontMan->SetFallbackFontFaces(lString8(kobalt::fallbackFontFaces)),
+            "Cannot restore production fallback order");
+    for (const bool bold : {false, true}) {
+        const auto primary = fontMan->GetFont(64, bold ? 700 : 400, false, css_ff_serif, lString8("Instrument Serif"));
+        const auto arabic = fontMan->GetFont(64, bold ? 700 : 400, false, css_ff_serif, lString8("Noto Naskh Arabic"));
+        const lString32 word(U"العربية");
+        const auto joined = shapedPixels(arabic, word);
+        require(joined != shapedPixels(arabic, lString32(U"ا\u200cل\u200cع\u200cر\u200cب\u200cي\u200cة")),
+                "Arabic shaping reference did not distinguish joined letters");
+        require(shapedPixels(primary, word) == joined,
+                "Production fallback order lost Arabic joining or the requested weight");
+    }
+    puts("PASS: real fallback styles, Arabic joining and complete font-picker families");
 }

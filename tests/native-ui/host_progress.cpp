@@ -19,7 +19,7 @@ public:
         return std::exchange(progress->changed, false);
     }
     bool write(const ReadingProgress &expected, const QString &location, double percent, bool finished,
-               ReadingProgress *verified, QString *error) override {
+               const ReadingActivity &, ReadingProgress *verified, QString *error) override {
         if (progress->failWrite) {
             if (error) {
                 *error = "The database is busy.";
@@ -42,7 +42,7 @@ public:
             *verified = progress->current;
         return true;
     }
-    void observeReading(double, const QString &) override {}
+    void observeReading(const ReadingActivity &) override {}
     void stopReading() override {}
 
 private:

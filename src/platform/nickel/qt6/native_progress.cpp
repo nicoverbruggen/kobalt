@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "reading/reading_bridge.h"
 #include "support/strings.h"
 #include "platform/nickel/common/native_database_wait.h"
 #include "platform/nickel/common/native_progress.h"
@@ -54,6 +55,10 @@ struct Api {
     void (*firstTime)(void *,
                       const QVariant &) = symbol<decltype(firstTime)>("_ZN7Content19setFirstTimeReadingERK8QVariant");
     void (*percent)(void *, const QVariant &) = symbol<decltype(percent)>("_ZN7Content14setPercentReadERK8QVariant");
+    void (*setBookEstimate)(Volume *, const QVariant &) =
+        symbol<decltype(setBookEstimate)>("_ZN6Volume21setRestOfBookEstimateERK8QVariant");
+    void (*setChapterEstimate)(Volume *, const QVariant &) =
+        symbol<decltype(setChapterEstimate)>("_ZN6Volume25setCurrentChapterEstimateERK8QVariant");
     bool (*update)(const QString &, const QVariantMap &, const QVariantMap &, const QString &) =
         symbol<decltype(update)>("_ZN13VolumeManager12updateFieldsERK7QStringRK4QMapIS0_8QVariantES7_S2_");
     void *(*refresh)(const QString &) =
@@ -158,7 +163,7 @@ QVariantMap NativeProgress::persisted(QString *error) const {
         if (db.open()) {
             QSqlQuery query(db);
             query.prepare(
-                "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading FROM content WHERE ContentID = ? AND ContentType = 6");
+                "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate FROM content WHERE ContentID = ? AND ContentType = 6");
             query.addBindValue(book);
             if (query.exec() && query.next()) {
                 const auto record = query.record();
@@ -182,7 +187,7 @@ ReadingProgress NativeProgress::read(QString *error) const {
     return value;
 }
 bool NativeProgress::write(const ReadingProgress &expected, const QString &position, double percent, bool finished,
-                           ReadingProgress *verified, QString *error) {
+                           ReadingProgress *verified, QString *error, const ReadingEstimates *estimates) {
     const auto fail = [error](const QString &message) {
         if (error)
             *error = message;
@@ -241,6 +246,12 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     native.status(&volume, finished ? 2 : 1);
     native.firstTime(&volume, QVariant(false));
     native.percent(&volume, QVariant(finished ? 100.0 : qBound(0.0, percent, 99.0)));
+    if (estimates && native.setBookEstimate && native.setChapterEstimate) {
+        if (estimates->bookMilliseconds >= 0)
+            native.setBookEstimate(&volume, QVariant(finished ? 0 : int(estimates->bookMilliseconds / 1000)));
+        if (estimates->chapterMilliseconds >= 0)
+            native.setChapterEstimate(&volume, QVariant(finished ? 0 : int(estimates->chapterMilliseconds / 1000)));
+    }
     auto after = native.values(&volume);
     if (timeOnly) {
         // Nickel stores the time in whole seconds, as updateBookmark does.
@@ -273,12 +284,14 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     const auto stored = persisted(error);
     const auto actual = snapshot(stored);
     const auto wanted = snapshot(after);
-    const bool matches = actual == wanted &&
-                         stored.value("___PercentRead").toDouble() == after.value("___PercentRead").toDouble()
-                         // A time-only record leaves the sync flag alone: Kobo's cloud does not
-                         // sync sideloaded EPUB files, and only the bookmark call clears it.
-                         && (timeOnly || !stored.value("ReadStateSynced").toBool()) &&
-                         !stored.value("FirstTimeReading").toBool();
+    const bool matches =
+        actual == wanted &&
+        stored.value("___PercentRead").toDouble() == after.value("___PercentRead").toDouble()
+        // A time-only record leaves the sync flag alone: Kobo's cloud does not
+        // sync sideloaded EPUB files, and only the bookmark call clears it.
+        && (timeOnly || !stored.value("ReadStateSynced").toBool()) && !stored.value("FirstTimeReading").toBool() &&
+        stored.value("RestOfBookEstimate").toInt() == after.value("RestOfBookEstimate").toInt() &&
+        stored.value("CurrentChapterEstimate").toInt() == after.value("CurrentChapterEstimate").toInt();
     if (!matches) {
         // A native notification is not proof of persistence. Discard its cache
         // if the independently committed row does not match.

@@ -59,6 +59,7 @@ struct Api {
     void (*saveEvents)(QObject *) = symbol<decltype(saveEvents)>("_ZN11EventEngine17savePendingEventsEv");
     bool (*flushEvents)(const QString &) = symbol<decltype(flushEvents)>("_ZN12EventManager5flushERK7QString");
     int (*time)(const Volume *) = symbol<decltype(time)>("_ZNK6Volume16timeSpentReadingEv");
+    double (*pace)(const Volume &) = symbol<decltype(pace)>("_ZN22ReadingVelocityTracker14secondsPerWordERK6Volume");
     void (*setTime)(Volume *,
                     const QVariant &) = symbol<decltype(setTime)>("_ZN6Volume19setTimeSpentReadingERK8QVariant");
     bool (*begin)(QString) = symbol<decltype(begin)>("_ZN15DatabaseAdapter16beginTransactionE7QString");
@@ -193,7 +194,7 @@ NativeReadingSession::~NativeReadingSession() {
 bool NativeReadingSession::available() {
     return api().ready();
 }
-void NativeReadingSession::start(double value, const QString &anchor) {
+void NativeReadingSession::start(const ReadingActivity &activity) {
     if (running || !available() || !api().open() || !workerReady() || api().tolino(api().device()))
         return;
     auto *engine = api().engine();
@@ -201,8 +202,9 @@ void NativeReadingSession::start(double value, const QString &anchor) {
     if (api().values(&volume).value("ContentID").toString() != book)
         return;
     account = api().account();
-    percent = qBound(0.0, value, 100.0);
-    position = anchor;
+    percent = qBound(0.0, activity.percent, 100.0);
+    activity_.start(activity);
+    paceDirty_ = true;
     SessionPosition state;
     state.percent = percent;
     QElapsedTimer timer;
@@ -219,13 +221,16 @@ void NativeReadingSession::start(double value, const QString &anchor) {
         "reading-session-start",
         kobalt::qt::object({{"persisted", persisted}, {"sideload_mode", sideload}, {"milliseconds", timer.elapsed()}}));
 }
-void NativeReadingSession::page(double value, const QString &anchor) {
-    percent = qBound(0.0, value, 100.0);
-    if (!running || anchor == position)
+void NativeReadingSession::page(const ReadingActivity &activity) {
+    percent = qBound(0.0, activity.percent, 100.0);
+    if (!running)
         return;
-    position = anchor;
+    int words = 0;
+    if (!activity_.observe(activity, &words))
+        return;
     if (!api().open() || api().account() != account) {
         running = false;
+        secondsPerWord_ = -1;
         return;
     }
     auto volume = api().get(book, api().dbName(api().device()));
@@ -233,16 +238,44 @@ void NativeReadingSession::page(double value, const QString &anchor) {
         return;
     // Nickel handles page activity and subscription accounting. Its event
     // engine intentionally ignores page events in sideload mode.
-    api().fire(api().engine(), "pageTurned", volume, {});
+    api().fire(api().engine(), "pageTurned", volume, {{"wordsRead", words}});
+    paceDirty_ = true;
+}
+bool NativeReadingSession::estimates(const ReadingActivity &activity, ReadingEstimates *result) {
+    if (!api().pace || !api().open() || !workerReady() || (!running && secondsPerWord_ <= 0))
+        return false;
+    if (running && paceDirty_) {
+        double pace = -1;
+        const bool queried = kobalt::qt::invoke(
+            api().engine(),
+            [&] {
+                const auto volume = api().get(book, api().dbName(api().device()));
+                if (api().values(&volume).value("ContentID").toString() == book)
+                    pace = api().pace(volume);
+            },
+            Qt::BlockingQueuedConnection);
+        if (!queried || !std::isfinite(pace) || pace <= 0) {
+            *result = ReadingEstimates{};
+            return true;
+        }
+        secondsPerWord_ = pace;
+        paceDirty_ = false;
+    }
+    *result = nickel::readingEstimates(activity, secondsPerWord_);
+    return true;
 }
 void NativeReadingSession::stop() {
 #ifndef KOBALT_READER_HARDWARE
     if (testActive == this)
         testActive = nullptr;
 #endif
-    if (!std::exchange(running, false))
+    if (!running)
         return;
+    ReadingEstimates remaining;
+    estimates(activity_.current(), &remaining);
+    running = false;
     if (!api().open() || !workerReady() || api().account() != account) {
+        secondsPerWord_ = -1;
         diagnostic("reading-session-discarded");
         return;
     }
@@ -274,9 +307,10 @@ void NativeReadingSession::testCommand() {
     if (testActive && testActive->book == "file:///mnt/onboard/reader-fixture.kepub.epub" && testActive->running &&
         workerReady()) {
         const auto book = testActive->book;
+        const auto activity = testActive->activity_.current();
         kobalt::qt::invoke(
             api().engine(),
-            [book] {
+            [book, activity] {
                 struct Event {
                     void *words[2];
                     Event(const Event &) = delete;
@@ -289,8 +323,19 @@ void NativeReadingSession::testCommand() {
                 const auto extra = symbol<QVariantMap (*)(const Event *)>("_ZNK5Event9extraDataEv");
                 const int type = 46;
                 auto event = get(type, book, QString());
+                const auto data = extra(&event);
+                const auto volume = api().get(book, api().dbName(api().device()));
+                const double pace = api().pace ? api().pace(volume) : -1;
+                const auto estimate = nickel::readingEstimates(activity, pace);
                 diagnostic("reading-session-pages",
-                           kobalt::qt::object({{"pages", extra(&event).value("PagesTurnedThisSession").toInt()}}),
+                           kobalt::qt::object({{"pages", data.value("PagesTurnedThisSession").toInt()},
+                                               {"word_samples", data.value("wordCounts").toList().size()},
+                                               {"last_words", data.value("wordCounts").toList().isEmpty()
+                                                                  ? 0
+                                                                  : data.value("wordCounts").toList().last().toInt()},
+                                               {"seconds_per_word", pace},
+                                               {"chapter_ms", double(estimate.chapterMilliseconds)},
+                                               {"book_ms", double(estimate.bookMilliseconds)}}),
                            false);
             },
             Qt::BlockingQueuedConnection);

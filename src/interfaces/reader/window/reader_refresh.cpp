@@ -486,12 +486,12 @@ void Reader::updateMenuStatus() {
         updateReadingStats();
 }
 
-// Session minutes, the word count and times at the session's pace for Stats.
+// Stats and the reading strips use the same platform or session estimates.
 void Reader::updateReadingStats() {
     const auto reading = book->readingMilliseconds();
-    const int chapterLeft = model->chapterPages() > 0 ? model->chapterPages() - model->chapterPage() + 1 : -1;
-    chapterGraph->setReading(int(reading / 60000), model->totalWords(), book->pace().estimate(chapterLeft, reading),
-                             book->pace().estimate(model->pages() - model->page(), reading));
+    const auto estimates = book->estimates();
+    chapterGraph->setReading(int(reading / 60000), model->totalWords(), estimates.chapterMilliseconds,
+                             estimates.bookMilliseconds);
 }
 
 }

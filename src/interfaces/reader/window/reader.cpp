@@ -1529,6 +1529,10 @@ void Reader::save(bool snapshot) {
                                                {"mapped_pages", pages},
                                                {"current", model->graphSelection().current},
                                                {"next", model->graphSelection().next}});
+    const auto estimates = book->estimates();
+    state["reading_estimates"] = kobalt::qt::object({{"chapter_ms", double(estimates.chapterMilliseconds)},
+                                                     {"book_ms", double(estimates.bookMilliseconds)},
+                                                     {"learning", estimates.learningPace}});
 
 #endif
     state["resource_cache"] = model->resourceStats();

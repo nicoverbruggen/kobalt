@@ -44,6 +44,7 @@ public:
     void stopReading();
     // Active time for this opening, excluding sleep and hidden reader time.
     qint64 readingMilliseconds() const;
+    ReadingEstimates estimates() const;
     // Forward turns in this opening, for the Stats time estimates.
     ReadingPace &pace() {
         return pace_;
@@ -76,6 +77,7 @@ public:
     bool saveDictionaryChoice(const QString &id);
 
 private:
+    ReadingActivity readingActivity() const;
     std::unique_ptr<ReaderSession> model;
     QString statePath, identity_;
     storage::Paths paths_;

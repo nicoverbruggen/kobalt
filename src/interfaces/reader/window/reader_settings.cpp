@@ -38,12 +38,10 @@ kobalt::headerfooter::Values Reader::chromeValues() {
     values.battery = battery.percent;
     values.charging = battery.charging;
     values.deviceStatus = !hideNativeStatus();
-    // The same estimates as Stats, at this session's pace.
-    const auto reading = book->readingMilliseconds();
-    const int chapterLeft = model->chapterPages() > 0 ? model->chapterPages() - model->chapterPage() + 1 : -1;
-    values.chapterMilliseconds = book->pace().estimate(chapterLeft, reading);
-    values.bookMilliseconds = book->pace().estimate(model->pages() - model->page(), reading);
-    values.learningPace = book->pace().estimate(0, reading) < 0;
+    const auto estimates = book->estimates();
+    values.chapterMilliseconds = estimates.chapterMilliseconds;
+    values.bookMilliseconds = estimates.bookMilliseconds;
+    values.learningPace = estimates.learningPace;
     return values;
 }
 

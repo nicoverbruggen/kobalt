@@ -4,6 +4,7 @@
 #include <QVariantMap>
 
 namespace kobalt {
+struct ReadingEstimates;
 class NativeProgress : public QObject {
     Q_OBJECT
 public:
@@ -12,7 +13,7 @@ public:
     static bool available();
     ReadingProgress read(QString *error = nullptr) const;
     bool write(const ReadingProgress &expected, const QString &location, double percent, bool finished,
-               ReadingProgress *verified, QString *error);
+               ReadingProgress *verified, QString *error, const ReadingEstimates *estimates = nullptr);
     static void disconnected();
     bool deviceTransition() const {
         return transitioning;

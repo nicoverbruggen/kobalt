@@ -48,6 +48,9 @@ struct Calls {
     bool finished = false;
     QString location;
     ReadingProgress current{"store-id", "chapter.xhtml#one", 1, 1, true};
+    ReadingEstimates estimate;
+    ReadingActivity writtenActivity;
+    bool providesEstimates = false;
 };
 class Bridge final : public ReadingBridge {
 public:
@@ -69,8 +72,9 @@ public:
         return std::exchange(calls.changed, false);
     }
     bool write(const ReadingProgress &expected, const QString &location, double, bool finished,
-               ReadingProgress *verified, QString *error) override {
+               const ReadingActivity &activity, ReadingProgress *verified, QString *error) override {
         ++calls.writes;
+        calls.writtenActivity = activity;
         calls.finished = finished;
         calls.location = location;
         require(expected == calls.current, "Bridge received a stale expected baseline");
@@ -84,8 +88,12 @@ public:
         *verified = calls.current;
         return true;
     }
-    void observeReading(double, const QString &) override {
+    void observeReading(const ReadingActivity &) override {
         ++calls.observed;
+    }
+    bool estimates(const ReadingActivity &, ReadingEstimates *result) override {
+        *result = calls.estimate;
+        return calls.providesEstimates;
     }
     void stopReading() override {
         ++calls.stopped;
@@ -224,6 +232,8 @@ int main(int argc, char **argv) {
         require(!storage::readJson(paths.preferences()).contains("show_clock"),
                 "Book layout changed global preferences");
         require(!local.canWriteNative() && !local.deviceTransition(), "Local book acquired platform services");
+        require(local.estimates().learningPace && local.estimates().bookMilliseconds == -1,
+                "Standalone book stopped using its session pace");
         local.pollProgress();
         local.observeProgress();
         require(!local.readProgress().valid && !local.pendingProgress(), "Local book invented external progress");
@@ -265,6 +275,15 @@ int main(int argc, char **argv) {
                          std::make_unique<Bridge>(calls), calls.current, calls.current);
         book.observeReading();
         require(calls.observed == 1, "Platform activity was not recorded");
+        calls.providesEstimates = true;
+        calls.estimate = ReadingEstimates{12000, 45000, false};
+        require(book.estimates().chapterMilliseconds == 12000 && book.estimates().bookMilliseconds == 45000 &&
+                    !book.estimates().learningPace,
+                "Platform estimates did not replace the session learning delay");
+        calls.estimate = ReadingEstimates{};
+        require(book.estimates().bookMilliseconds == -1 && !book.estimates().learningPace,
+                "Unavailable platform counts became a local learning estimate");
+        calls.providesEstimates = false;
         calls.transition = true;
         book.observeReading();
         require(book.deviceTransition() && !book.canWriteNative() && calls.observed == 1 && calls.stopped == 1,
@@ -278,8 +297,15 @@ int main(int argc, char **argv) {
         require(book.pendingProgress(), "External progress change did not create a conflict");
         require(!book.writeNative("position", {}) && calls.writes == 0, "Conflict was overwritten without a choice");
         book.acknowledge(book.candidate(), false);
+        require(book.session()->turn(1), "Cannot turn before saving native progress");
+        waitUntil([&] {
+            return !book.session()->busy();
+        });
         require(book.writeNative("position", {}) && calls.writes == 1 && calls.location == "position",
                 "Acknowledged progress was not written");
+        require(calls.observed == 1 && calls.writtenActivity.page == book.session()->page() &&
+                    calls.writtenActivity.position == book.session()->state().value("position").toString(),
+                "Native estimate used the preceding observed page when saving a completed turn");
         QJsonObject snapshot;
         require(book.checkpoint(&snapshot), "Platform checkpoint failed");
         require(snapshot.value("nickel_progress").toObject() == calls.current.json() &&

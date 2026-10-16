@@ -12,6 +12,8 @@
 
 ## v1.0-beta.4
 
+- Use Nickel's reading pace for Kobo time estimates and report page word counts to its reading history. Android keeps its session-based estimates.
+
 - Update only the changed fill in the book-layout progress bar, avoiding repeated refreshes of the whole bar.
 
 - Prefer script text fonts before the math fallback, and keep MathML equations on Noto Sans Math when changing the reading font.

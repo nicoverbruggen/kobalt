@@ -21,6 +21,7 @@
 #include "assets/assets.h"
 #include "assets/bundled_fonts.h"
 #include "interfaces/reader/views/reading_page.h"
+#include "interfaces/reader/views/sleep_screen.h"
 #include "interfaces/reader/settings/dictionaries_page.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/metrics.h"
@@ -154,6 +155,20 @@ public:
             host.configureServices = [this, state = lookup, desktop = group == "native-ui",
                                       catalogue = discoverReadingFonts(fonts.sources)](ReaderHostServices &services) {
                 services.desktopUi = desktop;
+                if (!desktop) {
+                    auto automatic = std::make_shared<bool>(true);
+                    services.automaticBookOpening = [automatic] {
+                        return *automatic;
+                    };
+                    services.setAutomaticBookOpening = [automatic](bool enabled) {
+                        *automatic = enabled;
+                        return true;
+                    };
+                    services.presentation = [](QWidget *) {
+                        return std::make_unique<test::HostPresentation>(
+                            std::make_shared<test::SleepPresentationState>());
+                    };
+                }
                 services.systemRotation = this->group == "layout-system-rotation";
                 if (this->group == "bluetooth")
                     services.observeBluetooth = [this](QObject *, std::function<void(bool)> changed) {
@@ -582,6 +597,23 @@ public:
         const bool international = group.startsWith("international-");
         if (international)
             group.remove(0, 14);
+        if (group == "sleep") {
+            find("Alice was beginning");
+            auto *page = static_cast<ReadingPage *>(widget("rrPage"));
+            const QImage reading = page->snapshot(true);
+            QLabel preview(host.window());
+            preview.setObjectName("rrSleepPreview");
+            preview.setGeometry(host.window()->rect());
+            for (bool estimate : {false, true}) {
+                preview.setPixmap(QPixmap::fromImage(reader::sleepScreenImage(
+                    reading, strings::get("sleep.percent_read").arg(42),
+                    estimate ? strings::get("sleep.minutes_left").arg(37) : QString(), theme == "dark")));
+                preview.show();
+                preview.raise();
+                capture(estimate ? "with-time-left" : "reading-page", "rrSleepPreview");
+            }
+            return;
+        }
         if (group == "native-ui") {
             find("Alice was beginning");
             capture("reading-defaults");
@@ -897,7 +929,7 @@ public:
             tap("rrFont");
             tap("rrFontClose");
             tap("rrSettings");
-            for (const auto &tab : {"Display", "Advanced", "Stats", "About"}) {
+            for (const auto &tab : {"Display", "Advanced", "Stats", "System", "About"}) {
                 tap("rrSettings" + QString(tab));
                 capture(QString(tab).toLower(), "rrGeneralSettings");
             }

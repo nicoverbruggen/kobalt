@@ -66,6 +66,12 @@ namespace light {
 inline constexpr auto hintPaperLight = "#e6e6e6", hintPaperDark = "#222222";
 inline constexpr int pollMilliseconds = 500;
 }
+namespace sleep {
+inline constexpr Px inset{48}, bottom{96}, width{620}, padding{36}, gap{20}, lineGap{8}, border{2};
+inline constexpr Px titleText{60}, detailText{32};
+inline constexpr int dimAlpha = 40;
+inline constexpr auto lightPaper = "#ffffff", darkPaper = "#202020";
+}
 namespace settings {
 inline constexpr PxMargins displayMargins{16, 24, 16, 24}, screenMargins{16, 24, 16, 24};
 inline constexpr PxMargins miscellaneousMargins{16, 24, 16, 24};

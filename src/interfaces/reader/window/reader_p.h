@@ -126,6 +126,8 @@ private:
     bool importingProgress = false, comparingProgress = false;
     bool exitPending = false, exportRunning = false;
     bool lifecycleHidden = false;
+    QImage sleepImage;
+    Qt::ScreenOrientation sleepOrientation = Qt::PrimaryOrientation;
     QTimer *clockTimer;
 #ifdef KOBALT_READER_HARDWARE
     const bool liveState = QFile::exists(book->paths().directory + "/live-state");
@@ -146,6 +148,7 @@ private:
     kobalt::LightPanel *lightPopup = nullptr;
     QCheckBox *darkOption, *smoothOption, *animationOption, *edgeLightOption, *denseGraphOption, *pinStatsOption,
         *heavierTextOption;
+    QCheckBox *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
     QPushButton *autoRotateOption;
     QCheckBox *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;
     bool hideNativeStatus() const;
@@ -288,6 +291,8 @@ private:
     void applyDarkMode(bool enabled);
     void applyBoldReading(bool enabled);
     void applyHeavierText(bool enabled);
+    void applySleepScreen(bool enabled);
+    void applyAutomaticOpening(bool enabled);
     void applySettings();
     bool writePreferences(const QJsonObject &next);
     void showSettingsWriteError();

@@ -14,6 +14,7 @@ enum SettingsPage {
     AdvancedSettings,
     DictionariesSettings,
     StatsSettings,
+    SystemSettings,
     AboutSettings,
     NativeUiSettings
 };
@@ -24,6 +25,8 @@ struct SettingsPanelInputs {
     bool animationsSupported = false, lightSupported = false, warmthSupported = false;
     bool debugProgressAvailable = false, desktopUi = false;
     bool downloadableDictionaries = true;
+    bool sleepScreenSupported = false;
+    bool automaticBookOpeningSupported = false;
 };
 // Qt parents own every widget. Reader installs policy callbacks after construction.
 class SettingsPanel final : public ui::Panel {
@@ -41,6 +44,7 @@ public:
     ui::DescribedOption *edgeLightOption = nullptr, *denseGraphOption = nullptr, *pinStatsOption = nullptr,
                         *heavierTextOption = nullptr;
     ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
+    ui::DescribedOption *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;

@@ -251,6 +251,9 @@ void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled, st
     const QPointer<QLabel> title = referenceTitle, text = referenceLabel;
     const QPointer<QCheckBox> box = referenceCheck;
     view->installEventFilter(new Fonts(row, [=] {
+        const kobalt::qt::SignalBlocker blocked(check);
+        check->setChecked(enabled());
+        error->hide();
         if (!title || !text || !box)
             return;
         heading->setFont(title->font());

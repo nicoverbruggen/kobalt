@@ -12,6 +12,7 @@ set(KOBALT_READER_INTERFACE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/interface.cpp
     ${CMAKE_CURRENT_LIST_DIR}/views/opening.cpp
     ${CMAKE_CURRENT_LIST_DIR}/views/reading_page.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/views/sleep_screen.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panels/choice_screen.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panels/chapter_contents.cpp
     ${CMAKE_CURRENT_LIST_DIR}/panels/bookmark_list.cpp

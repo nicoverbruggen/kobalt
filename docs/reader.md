@@ -141,6 +141,8 @@ Kobalt also reports reading sessions and page turns to Nickel, including the est
 
 ## Reading interface
 
+On Kobo, the System tab sits above About. Open books automatically in Kobalt uses the same preference as Kobo's Reading settings. A change in either place appears when the other settings page opens. Turning it off keeps the current book open and uses Kobo's reader for future library openings. A failed save keeps the previous selection.
+
 Text and Layout panels measure their visible controls and messages, including optional font controls. They keep their bottom edge above the navigation bar. When the controls exceed the space below the top toolbar, the controls scroll inside the panel. About measures its content and leaves room for the settings tabs beside it.
 
 Normal page turns include non-linear EPUB sections, including covers marked as non-linear. Settings > Advanced > Hide non-linear fragments skips other non-linear sections during page turns. It is off by default. Links, Chapters and page-number navigation can still open hidden sections; page turns within a section already open remain available.
@@ -278,6 +280,8 @@ Ordinary page turns reuse chapter pages and the available font list in memory. C
 ## Sleep, USB and power
 
 Before sleep, Kobalt saves its position and pauses its work. The page stays on screen until Nickel's sleep screen is ready. Kobalt then shows the sleep screen with one full refresh, which also clears the page, so the screen flashes once, as in Nickel's own reader. After wake, Kobalt waits for Nickel's sleep or PIN view to close and for USB storage to finish remounting. It then checks authorization and restores page-turn input before it shows the book again. The frontlight can finish fading in while the page is already visible. If wake or USB cancellation arrives while the previous operation is still releasing resources, Kobalt completes that release before checking authorization again.
+
+On Kobo, Settings > System offers Use Kobalt's sleep screen. It is off by default. When enabled, sleeping with Kobalt in the foreground shows the current reading page slightly darkened, with a card on the left that says Sleeping and shows the percentage read. The card uses Kobalt's interface fonts. Clock slots show a lock icon in the sleep image. The reading page keeps its clock. It also shows the estimated minutes left when Nickel has a reading pace. Menus and dialogs are omitted. An unavailable or changing reading page uses the stock sleep screen. Kobo still controls sleep, wake and PIN entry. The setting does not change Kobo's sleep-screen configuration or sleep outside Kobalt.
 
 Nickel's USB confirmation appears above the open Kobalt page. Cancel keeps the book open.
 

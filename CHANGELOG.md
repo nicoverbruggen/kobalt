@@ -14,6 +14,10 @@
 
 - Use Nickel's reading pace for Kobo time estimates and report page word counts to its reading history. Android keeps its session-based estimates.
 
+- Add System above About in Settings, with an Open books automatically in Kobalt checkbox synchronized with Kobo's Reading settings.
+
+- Add Use Kobalt's sleep screen in Settings > System on Kobo. It is off by default. It shows the dimmed reading page and a left-hand card with Sleeping, percentage read and time left when available. Kobo's PIN prompt is unchanged.
+
 - Update only the changed fill in the book-layout progress bar, avoiding repeated refreshes of the whole bar.
 
 - Prefer script text fonts before the math fallback, and keep MathML equations on Noto Sans Math when changing the reading font.

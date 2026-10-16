@@ -1,6 +1,7 @@
 #include "interfaces/reader/ui/style/theme.h"
 #include "support/qt_font.h"
 #include "interfaces/reader/ui/controls/text.h"
+#include "interfaces/reader/ui/controls/icons.h"
 #include "reading_page.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/private_text.h"
@@ -39,12 +40,25 @@ int iconWidth(const QFont &font, const Content &content) {
         return 0;
     return qCeil(ui::batteryWidth(batteryBody(font))) + (content.text.isEmpty() ? 0 : int(m::reading::batteryGap));
 }
-int contentWidth(const QFont &font, Field field, const Content &content) {
+int contentWidth(const QFont &font, Field field, const Content &content, bool sleeping = false) {
+    if (sleeping && field == Field::Time)
+        return font.pixelSize();
     return textWidth(font, field, content.text) + iconWidth(font, content);
 }
 // Draws one slot within `bounds`, eliding its text when it does not fit.
 void paintContent(QPainter &painter, const QRect &bounds, Field field, const Content &content, Qt::Alignment align,
-                  const QColor &ink, const QColor &paper) {
+                  const QColor &ink, const QColor &paper, bool sleeping) {
+    if (sleeping && field == Field::Time) {
+        const int size = qMin(painter.font().pixelSize(), qMin(bounds.width(), bounds.height()));
+        if (size <= 0)
+            return;
+        const int x = align & Qt::AlignRight     ? bounds.right() + 1 - size
+                      : align & Qt::AlignHCenter ? bounds.x() + (bounds.width() - size) / 2
+                                                 : bounds.x();
+        ui::paintOpeningIcon(painter, ui::ControlIcon::Lock,
+                             QRectF(x, bounds.y() + (bounds.height() - size) / 2.0, size, size), ink);
+        return;
+    }
     if (content.empty() || bounds.width() <= 0)
         return;
     const QFont font = painter.font();
@@ -321,6 +335,19 @@ void ReadingPage::refreshContent(bool reading, bool now) {
 
 void ReadingPage::paintEvent(QPaintEvent *) {
     QPainter painter(this);
+    paintContents(painter);
+}
+
+QImage ReadingPage::snapshot(bool sleeping) const {
+    QImage frame(size(), QImage::Format_RGB32);
+    if (!frame.isNull()) {
+        QPainter painter(&frame);
+        paintContents(painter, sleeping);
+    }
+    return frame;
+}
+
+void ReadingPage::paintContents(QPainter &painter, bool sleeping) const {
     painter.fillRect(rect(), palette().color(QPalette::Window));
     painter.drawImage(0, topHeight(), renderedBody);
     if (!revealedOutlines.isEmpty()) {
@@ -346,8 +373,18 @@ void ReadingPage::paintEvent(QPaintEvent *) {
     for (const auto &r : selection)
         painter.fillRect(r.translated(0, topHeight()), Qt::white);
     painter.restore();
-    painter.drawImage(0, 0, headerPixels);
-    painter.drawImage(0, height() - bottomHeight(), footerPixels);
+    if (sleeping) {
+        painter.save();
+        painter.setFont(font());
+        painter.setPen(palette().color(QPalette::WindowText));
+        paintHeader(painter, true);
+        painter.translate(0, height() - bottomHeight());
+        paintFooter(painter, true);
+        painter.restore();
+    } else {
+        painter.drawImage(0, 0, headerPixels);
+        painter.drawImage(0, height() - bottomHeight(), footerPixels);
+    }
     if (!renderedRibbon.isEmpty()) {
         const QRectF r = renderedRibbon;
         QPolygonF ribbon;
@@ -442,12 +479,12 @@ QImage ReadingPage::renderStrip(int height, const std::function<void(QPainter &)
 // The centre slot is centred on the page, not in a third of it, so a long
 // centre keeps its middle while the sides keep their own width. When the
 // three do not fit, the sides give way first, down to a third each.
-void ReadingPage::paintSlots(QPainter &painter, const QRect &bounds, bool footer) const {
+void ReadingPage::paintSlots(QPainter &painter, const QRect &bounds, bool footer, bool sleeping) const {
     const int first = footer ? 3 : 0;
     const QFont font = painter.font();
     int widths[3];
     for (int slot = 0; slot < 3; ++slot)
-        widths[slot] = contentWidth(font, chrome.slotFields[first + slot], slotContents[first + slot]);
+        widths[slot] = contentWidth(font, chrome.slotFields[first + slot], slotContents[first + slot], sleeping);
     const int side = m::reading::headerSide, gap = m::reading::headerTextGap;
     // The bookmark ribbon hangs left of the top-right slot; keep text off it.
     const int ribbon = footer ? 0 : qRound(width() * .036) + gap;
@@ -471,25 +508,25 @@ void ReadingPage::paintSlots(QPainter &painter, const QRect &bounds, bool footer
     }
     const auto ink = palette().color(QPalette::WindowText), paper = palette().color(QPalette::Window);
     paintContent(painter, QRect(side, bounds.y(), qMax(0, leftRoom), bounds.height()), chrome.slotFields[first],
-                 slotContents[first], Qt::AlignLeft, ink, paper);
+                 slotContents[first], Qt::AlignLeft, ink, paper, sleeping);
     if (!centre.isEmpty())
         paintContent(painter, centre, chrome.slotFields[first + 1], slotContents[first + 1], Qt::AlignHCenter, ink,
-                     paper);
+                     paper, sleeping);
     paintContent(painter, QRect(width() - side - qMax(0, rightRoom), bounds.y(), qMax(0, rightRoom), bounds.height()),
-                 chrome.slotFields[first + 2], slotContents[first + 2], Qt::AlignRight, ink, paper);
+                 chrome.slotFields[first + 2], slotContents[first + 2], Qt::AlignRight, ink, paper, sleeping);
 }
 
-void ReadingPage::paintHeader(QPainter &painter) const {
+void ReadingPage::paintHeader(QPainter &painter, bool sleeping) const {
     QFont font = painter.font();
     font.setPixelSize(headerTextPixels());
     painter.setFont(font);
     if (showHeader())
-        paintSlots(painter, headerTextRect(), false);
+        paintSlots(painter, headerTextRect(), false, sleeping);
     if (panelBelowHeader)
         painter.fillRect(0, topHeight() - m::control::border, width(), m::control::border, ui::dividerColor(this));
 }
 
-void ReadingPage::paintFooter(QPainter &painter) const {
+void ReadingPage::paintFooter(QPainter &painter, bool sleeping) const {
     if (showFooter()) {
         QFont font = painter.font();
         font.setPixelSize(footerTextPixels());
@@ -499,7 +536,7 @@ void ReadingPage::paintFooter(QPainter &painter) const {
             const int room = width() - 2 * m::reading::headerSide;
             ui::drawInterfaceText(painter, bounds, ui::elideInterfaceText(notice, font, room), Qt::AlignCenter);
         } else
-            paintSlots(painter, bounds, true);
+            paintSlots(painter, bounds, true, sleeping);
     }
     if (showProgress()) {
         const auto ink = palette().color(QPalette::WindowText);

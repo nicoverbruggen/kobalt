@@ -22,7 +22,8 @@ struct BatteryStatus {
 // Constructed by the host and moved into one reader window. Queries stay live
 // across sleep and capability changes. Factories return independently owned
 // non-null controllers; they never return a borrowed native handle. Every
-// callback except debugProgressAction, observeBluetooth and remoteKeyActivity is required,
+// callback except automaticBookOpening, setAutomaticBookOpening,
+// debugProgressAction, observeBluetooth and remoteKeyActivity is required,
 // including unsupported hosts.
 struct ReaderHostServices {
     // Desktop-only presentation preferences; fixtures retain device chrome.
@@ -31,6 +32,10 @@ struct ReaderHostServices {
     std::function<bool()> devicePreview;
     bool systemRotation = false;
     bool downloadableDictionaries = true;
+    // Optional host reader-selection preference. Both callbacks are supplied
+    // together; a successful write affects future book openings.
+    std::function<bool()> automaticBookOpening;
+    std::function<bool(bool)> setAutomaticBookOpening;
     std::function<QString()> clock;
     std::function<BatteryStatus()> battery;
     // Optional on unsupported hosts. The host owns the subscription under
@@ -55,9 +60,10 @@ struct ReaderHostServices {
     std::function<bool()> browserAvailable;
     std::function<bool(const QUrl &, QWidget *)> openBrowser;
     bool complete() const {
-        return clock && battery && pageButtons && reverseLandscapeButtons && pageButtonDirection && fontFamilies &&
-               uiFont && suspended && lightAvailable && animationsAvailable && cancelAnimation && light && dictionary &&
-               keyboard && presentation && browserAvailable && openBrowser;
+        return bool(automaticBookOpening) == bool(setAutomaticBookOpening) && clock && battery && pageButtons &&
+               reverseLandscapeButtons && pageButtonDirection && fontFamilies && uiFont && suspended &&
+               lightAvailable && animationsAvailable && cancelAnimation && light && dictionary && keyboard &&
+               presentation && browserAvailable && openBrowser;
     }
 };
 }

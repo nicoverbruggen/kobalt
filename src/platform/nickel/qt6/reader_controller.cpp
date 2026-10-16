@@ -119,18 +119,20 @@ void updatePrerendering() {
     nh_log("reader: background prerendering %s", next ? "suppressed" : "returned to native policy");
 }
 
+bool setAlternativeEnabled(bool on) {
+    auto config = readJson(selectionPath);
+    config["enabled"] = on;
+    if (!writeJson(selectionPath, config))
+        return false;
+    updatePrerendering();
+    return true;
+}
+
 extern "C" __attribute__((visibility("default"))) void kobalt_settings_constructor(QWidget *view, QWidget *parent) {
     settingsConstructor(view, parent);
     if (!settingsReady)
         return;
-    kobalt::installNativeReaderSetting(view, alternativeEnabled, [](bool on) {
-        auto config = readJson(selectionPath);
-        config["enabled"] = on;
-        if (!writeJson(selectionPath, config))
-            return false;
-        updatePrerendering();
-        return true;
-    });
+    kobalt::installNativeReaderSetting(view, alternativeEnabled, setAlternativeEnabled);
 }
 #ifdef KOBALT_READER_HARDWARE
 bool armFlag(const char *path, const QByteArray &message) {
@@ -306,6 +308,8 @@ public:
             return;
         }
         CoordinatorBindings bindings{enabled};
+        bindings.automaticBookOpening = alternativeEnabled;
+        bindings.setAutomaticBookOpening = setAlternativeEnabled;
         auto *candidate = new ReaderCoordinator(environment(), bindings, qApp);
         if (!candidate->available() || reentered) {
             delete candidate;

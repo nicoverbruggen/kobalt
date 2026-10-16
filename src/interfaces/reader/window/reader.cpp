@@ -9,6 +9,7 @@
 #include "support/strings.h"
 #include "ui/input.h"
 #include "interfaces/reader/ui/style/fonts.h"
+#include "interfaces/reader/views/sleep_screen.h"
 #include "interfaces/reader/ui/style/styles.h"
 #include "platform/api/kobo_refresh.h"
 #include "reading/appearance_settings.h"
@@ -50,6 +51,7 @@ Reader::~Reader() {
     lightPopup->changed = {};
     delete lightPopup;
     light.reset();
+    presentation->clearSleepScreen();
     presentation->resumeBackground();
     for (int id : registeredFonts)
         QFontDatabase::removeApplicationFont(id);
@@ -74,6 +76,8 @@ void Reader::prepareUsb(std::function<void()> finished) {
     prepareTransition(std::move(finished), 2000);
 }
 void Reader::prepareTransition(std::function<void()> finished, int timeoutMs) {
+    sleepImage = {};
+    presentation->clearSleepScreen();
     auto elapsed = std::make_shared<QElapsedTimer>();
     elapsed->start();
     model->cancelPendingTurn();
@@ -118,6 +122,28 @@ void Reader::sleepReader() {
     setProperty("reader_sleep_clean_pending", true);
     model->cancelPendingTurn();
     book->stopReading();
+    sleepImage = {};
+    // RGB32 needs four bytes per pixel. Bound the optional capture to 16 MiB;
+    // oversized viewports keep Nickel's sleep screen instead.
+    const qint64 sleepPixels = qint64(page->width()) * page->height();
+    const auto *modal = QApplication::activeModalWidget();
+    const bool foreground = !modal || modal == this || isAncestorOf(modal);
+    if (preferences.value("kobalt_sleep_screen").toBool(false) && presentation->supportsSleepScreen() && foreground &&
+        sleepPixels > 0 && sleepPixels <= 4 * 1024 * 1024 && readyForPresentation() && !appearanceEdit.panelOpen() &&
+        !model->temporaryTypography()) {
+        QImage frame = page->snapshot(true);
+        if (!frame.isNull()) {
+            // Capture only the page, including its header and footer. Menus,
+            // dialogs and a temporary typography preview are not sleep content.
+            const int percent = qBound(0, int(100.0 * model->page() / qMax(1, model->pages())), 100);
+            const auto remaining = book->estimates().bookMilliseconds;
+            sleepOrientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
+            sleepImage = sleepScreenImage(
+                std::move(frame), strings::get("sleep.percent_read").arg(percent),
+                remaining < 0 ? QString() : strings::get("sleep.minutes_left").arg((remaining + 59999) / 60000),
+                darkTheme);
+        }
+    }
     services.cancelAnimation();
     page->animationDirection = 0;
     setProperty("reader_animation_direction", 0);
@@ -148,8 +174,12 @@ void Reader::cancelWake() {
 }
 
 void Reader::sleepViewReady() {
-    if (!lifecycleHidden)
+    if (!lifecycleHidden || !isVisible())
         return;
+    if (!sleepImage.isNull()) {
+        presentation->presentSleepScreen(std::move(sleepImage), sleepOrientation);
+        sleepImage = {};
+    }
     // Hiding a top-level window immediately submits the backing store
     // underneath it. Paint Nickel's sleep view first, or that store still
     // contains the library. Do not pump unrelated events during handoff.
@@ -165,6 +195,8 @@ void Reader::sleepViewReady() {
 }
 
 void Reader::wakeReader() {
+    sleepImage = {};
+    presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
     lifecycleHidden = false;
     if (finishDialog)

@@ -97,6 +97,11 @@ bool alternativeEnabled() {
         return true;
     return readJson(selectionPath).value("enabled").toBool(false);
 }
+bool setAlternativeEnabled(bool on) {
+    auto config = readJson(selectionPath);
+    config["enabled"] = on;
+    return writeJson(selectionPath, config);
+}
 #ifdef KOBALT_READER_HARDWARE
 bool armFlag(const char *path, const QByteArray &message) {
     const int fd = ::open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644);
@@ -270,6 +275,8 @@ public:
             return;
         }
         CoordinatorBindings bindings{enabled};
+        bindings.automaticBookOpening = alternativeEnabled;
+        bindings.setAutomaticBookOpening = setAlternativeEnabled;
         bindings.installInput = kobalt::nickel4::installTouchInput;
         if (nativeHomeKeyFilter && dlsym(RTLD_DEFAULT, "_ZN20MainWindowController14sharedInstanceEv") &&
             dlsym(RTLD_DEFAULT, "_ZN20MainWindowController5clearEP18AbstractControllerb")) {
@@ -314,11 +321,7 @@ public:
         }
 #endif
         watchReadingSettings(candidate, [](QWidget *view) {
-            kobalt::installNativeReaderSetting(view, alternativeEnabled, [](bool on) {
-                auto config = readJson(selectionPath);
-                config["enabled"] = on;
-                return writeJson(selectionPath, config);
-            });
+            kobalt::installNativeReaderSetting(view, alternativeEnabled, setAlternativeEnabled);
         });
         controller = candidate;
         retry.stop();

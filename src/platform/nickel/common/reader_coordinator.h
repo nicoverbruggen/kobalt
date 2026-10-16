@@ -31,6 +31,8 @@ struct CoordinatorBindings {
     void (*goHome)() = nullptr;
     const void *(*publicationKeys)(const NativeOpening &) = nullptr;
     void (*publicationMismatch)(const NativePublication &, const QString &, const QString &) = nullptr;
+    bool (*automaticBookOpening)() = nullptr;
+    bool (*setAutomaticBookOpening)(bool) = nullptr;
 };
 // Called by Nickel's Home key filter before it clears native navigation.
 bool interceptHomeKey(QKeyEvent *event);

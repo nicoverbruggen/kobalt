@@ -467,6 +467,16 @@
 "settings.dark_description" = "Light text on a dark background.";
 "settings.display" = "Display";
 "settings.advanced" = "Advanced";
+"settings.system" = "System";
+"settings.automatic_book_opening" = "Open books automatically in Kobalt";
+"settings.automatic_book_opening_description" = "Use Kobalt when opening supported books from your library. This is the same setting as in Kobo's Reading settings.";
+"settings.kobalt_sleep_screen" = "Use Kobalt's sleep screen";
+"settings.kobalt_sleep_screen_description" = "Uses a special sleep screen when you put the device to sleep while using Kobalt.";
+"sleep.sleeping" = "Sleeping";
+/* Arguments: %1 */
+"sleep.percent_read" = "%1% read";
+/* Arguments: %1 */
+"sleep.minutes_left" = "%1 min to go";
 "settings.stats" = "Stats";
 "settings.about" = "About";
 "settings.ui" = "UI";

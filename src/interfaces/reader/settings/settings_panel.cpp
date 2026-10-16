@@ -55,11 +55,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsPages->setObjectName("rrSettingsPages");
     readerStyle(settingsPages, styles::tabFrame());
     auto *tabGroup = new QButtonGroup(this);
-    const char *tabNames[] = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries", "rrSettingsStats",
-                              "rrSettingsAbout"};
-    const QStringList tabs = {strings::get("settings.display"), strings::get("settings.advanced"),
+    const char *tabNames[] = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries",
+                              "rrSettingsStats",   "rrSettingsSystem",   "rrSettingsAbout"};
+    const QStringList tabs = {strings::get("settings.display"),      strings::get("settings.advanced"),
                               strings::get("settings.dictionaries"), strings::get("settings.stats"),
-                              strings::get("settings.about")};
+                              strings::get("settings.system"),       strings::get("settings.about")};
     for (int index = 0; index < tabs.size(); ++index) {
         auto *button = makeButton(this, settingsTabs, tabNames[index], tabs[index], [this, index] {
             settingsPages->setCurrentIndex(index);
@@ -77,7 +77,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             button->style()->polish(button);
         });
         settingsTabs->setStretch(index, 1);
-        if (index == DictionariesSettings && !inputs.downloadableDictionaries) {
+        if ((index == DictionariesSettings && !inputs.downloadableDictionaries) ||
+            (index == SystemSettings && !inputs.sleepScreenSupported && !inputs.automaticBookOpeningSupported)) {
             button->setEnabled(false);
             button->hide();
             settingsTabs->setStretch(index, 0);
@@ -172,6 +173,25 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                            strings::get("settings.pin_stats_description"));
     statsRows->addWidget(pinStatsOption);
     statsRows->addStretch(1);
+    auto *systemPage = new QWidget(settingsPages);
+    systemPage->setObjectName("rrSystemOptions");
+    settingsPages->addWidget(systemPage);
+    auto *systemRows = new QVBoxLayout(systemPage);
+    systemRows->setContentsMargins(0, 0, 0, 0);
+    systemRows->setSpacing(0);
+    automaticOpeningOption =
+        check(systemPage, "rrAutomaticBookOpening", strings::get("settings.automatic_book_opening"),
+              strings::get("settings.automatic_book_opening_description"));
+    automaticOpeningOption->setVisible(inputs.automaticBookOpeningSupported);
+    systemRows->addWidget(automaticOpeningOption);
+    sleepScreenOption = check(systemPage, "rrKobaltSleepScreen", strings::get("settings.kobalt_sleep_screen"),
+                              strings::get("settings.kobalt_sleep_screen_description"));
+    sleepScreenOption->setVisible(inputs.sleepScreenSupported);
+    systemRows->addWidget(sleepScreenOption);
+    if (inputs.sleepScreenSupported) {
+        deviceOptions << sleepScreenOption;
+    }
+    systemRows->addStretch(1);
     auto *aboutPage = new QWidget(settingsPages);
     aboutPage->setObjectName("rrAbout");
     settingsPages->addWidget(aboutPage);
@@ -311,12 +331,13 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsError->hide();
     generalRows->addWidget(settingsError);
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int index) {
-        settingsTabButtons[index == NativeUiSettings ? 5 : index]->setChecked(true);
+        settingsTabButtons[index]->setChecked(true);
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = {
-        hideNonlinearOption, linkIndicatorOption, darkOption,        bionicOption,     animationOption,
-        smoothOption,        edgeLightOption,     heavierTextOption, denseGraphOption, pinStatsOption};
+    QVector<ui::DescribedOption *> options = {hideNonlinearOption, linkIndicatorOption, darkOption,
+                                              bionicOption,        animationOption,     smoothOption,
+                                              edgeLightOption,     heavierTextOption,   denseGraphOption,
+                                              pinStatsOption,      sleepScreenOption,   automaticOpeningOption};
     if (inputs.desktopUi)
         options << hideStatusOption << hideDeviceOptionsOption;
     for (auto *option : options) {

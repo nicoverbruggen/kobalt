@@ -24,6 +24,7 @@ GROUPS = {
     'reading': ('alice', 'Reading page and menu'),
     'bluetooth': ('alice', 'Bluetooth status beside the battery, with controls shown and hidden'),
     'settings': ('alice', 'Every settings tab, restore confirmation and refresh picker'),
+    'sleep': ('alice', 'Kobalt sleep card over the reading page; native sleep and PIN are tested separately'),
     'bionic': ('alice', 'Word-prefix emphasis with bold text'),
     'typography': ('alice', 'Text panel, font picker and appearance previews'),
     'embedded-fonts': ('embedded-fonts', 'Publisher font count and selection with a real embedded family'),
@@ -65,7 +66,7 @@ GROUPS = {
 
 }
 EXCLUSIONS = {
-    'platform_ui': 'Native OS file pickers, keyboards, sleep, USB and PIN screens belong to the host platform.',
+    'platform_ui': 'Native OS file pickers, keyboards, sleep transitions, USB and PIN screens belong to the host platform.',
     'transient_ui': 'Opening progress depends on worker timing. Delayed relayout indicators use controlled elapsed-time captures and behavioral tests.',
     'platform_failures': 'Platform authorization and book-opening failures remain in the integration tests.',
     'content_variations': 'Font picker captures cover its first three pages; licenses use one example. These are UI states, not every possible item.',

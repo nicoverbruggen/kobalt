@@ -68,6 +68,8 @@ public:
     std::function<void(QPoint)> tapped;
     std::function<void(int)> swiped;
     ReadingPage(QWidget *parent, std::function<void()> cancelAnimation);
+    // Copy the cached page and chrome without widget layout or backing-store work.
+    QImage snapshot(bool sleeping = false) const;
     void cleanRefresh(bool clean);
     void refreshContent(bool reading = false, bool now = false);
     // Set before refreshContent when the engine prepared the changed rectangle
@@ -92,7 +94,7 @@ private:
         std::tuple<Slots, std::array<headerfooter::Field, 3>, QString, bool, bool, qreal, int, int, qint64, int>;
     Slots stripSlots(bool footer) const;
     std::array<headerfooter::Field, 3> stripFields(bool footer) const;
-    void paintSlots(QPainter &painter, const QRect &bounds, bool footer) const;
+    void paintSlots(QPainter &painter, const QRect &bounds, bool footer, bool sleeping = false) const;
     bool panelBelowHeader = false;
     HeaderState headerState;
     FooterState footerState;
@@ -102,8 +104,9 @@ private:
     int renderedTop = -1, renderedBottom = -1;
     QRect renderedRibbon;
     QImage renderStrip(int height, const std::function<void(QPainter &)> &draw);
-    void paintHeader(QPainter &painter) const;
-    void paintFooter(QPainter &painter) const;
+    void paintHeader(QPainter &painter, bool sleeping = false) const;
+    void paintFooter(QPainter &painter, bool sleeping = false) const;
+    void paintContents(QPainter &painter, bool sleeping = false) const;
     int headerRightWidth() const;
     QTimer holdTimer;
     QVector<QRect> selection, revealedLinks;

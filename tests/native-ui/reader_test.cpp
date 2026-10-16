@@ -25,6 +25,7 @@
 #include "interfaces/reader/views/navigation.h"
 #include "interfaces/reader/panels/link_panel.h"
 #include "interfaces/reader/views/reading_page.h"
+#include "interfaces/reader/views/sleep_screen.h"
 #include "interfaces/reader/ui/style/metrics.h"
 #include "support/strings.h"
 #include "host_services.h"
@@ -1326,12 +1327,12 @@ private slots:
         QCOMPARE(panel->objectName(), QString("rrGeneralSettings"));
         QVERIFY(panel->isHidden());
         QVERIFY(panel->settingsError->isHidden());
-        QCOMPARE(panel->settingsPages->count(), 5);
-        const QStringList pages = {"rrDisplayOptions", "rrAdvancedOptions", "rrDictionaries", "rrStatsOptions",
-                                   "rrAbout"};
+        QCOMPARE(panel->settingsPages->count(), 6);
+        const QStringList pages = {"rrDisplayOptions", "rrAdvancedOptions", "rrDictionaries",
+                                   "rrStatsOptions",   "rrSystemOptions",   "rrAbout"};
         for (int index = 0; index < pages.size(); ++index)
             QCOMPARE(panel->settingsPages->widget(index)->objectName(), pages[index]);
-        QCOMPARE(panel->settingsTabButtons.size(), 5);
+        QCOMPARE(panel->settingsTabButtons.size(), 6);
         auto *sections = panel->findChild<QBoxLayout *>("settingsSectionLayout");
         QVERIFY(sections);
         QCOMPARE(sections->direction(), QBoxLayout::LeftToRight);
@@ -1340,20 +1341,25 @@ private slots:
         QCOMPARE(static_cast<QBoxLayout *>(rail->layout())->direction(), QBoxLayout::TopToBottom);
         QCOMPARE(rail->width(), int(ui::metrics::chrome::railWidth));
         const QStringList tabNames = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries",
-                                      "rrSettingsStats", "rrSettingsAbout"};
+                                      "rrSettingsStats",   "rrSettingsSystem",   "rrSettingsAbout"};
         for (int index = 0; index < tabNames.size(); ++index)
             QCOMPARE(panel->settingsTabButtons[index]->objectName(), tabNames[index]);
         for (auto *option : panel->findChildren<ui::DescribedOption *>())
             QVERIFY(option->presentation().indicator == ui::DescribedOption::Indicator::Square);
         QCOMPARE(panel->smoothOption->presentation().minimumRowHeight, int(ui::metrics::chrome::listActionHeight));
         QVERIFY(!panel->findChild<QPushButton *>("rrManageDictionaries"));
-        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 10);
+        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 12);
+        QVERIFY(panel->sleepScreenOption->isHidden());
+        QVERIFY(panel->automaticOpeningOption->isHidden());
+        QVERIFY(panel->settingsTabButtons[reader::SystemSettings]->isHidden());
         QCOMPARE(panel->bionicOption->parentWidget(), panel->settingsPages->widget(reader::DisplaySettings));
         QVERIFY(!panel->animationOption->isEnabled());
         QVERIFY(!panel->edgeLightOption->isEnabled());
         QVERIFY(!panel->debugProgress);
         QVERIFY(!panel->findChild<QLabel *>("rrAboutCommit")->isHidden());
         for (int index = 0; index < panel->settingsTabButtons.size(); ++index) {
+            if (!panel->settingsTabButtons[index]->isEnabled())
+                continue;
             panel->settingsTabButtons[index]->click();
             QCOMPARE(panel->settingsPages->currentIndex(), index);
             QVERIFY(panel->settingsTabButtons[index]->isChecked());
@@ -1368,10 +1374,51 @@ private slots:
         inputs.animationsSupported = true;
         inputs.lightSupported = true;
         inputs.warmthSupported = true;
+        inputs.sleepScreenSupported = true;
+        inputs.automaticBookOpeningSupported = true;
         auto *supported = new reader::SettingsPanel(&owner, inputs);
         QVERIFY(supported->animationOption->isEnabled());
         QVERIFY(supported->edgeLightOption->isEnabled());
+        QVERIFY(!supported->sleepScreenOption->isHidden());
+        QCOMPARE(supported->sleepScreenOption->presentation().indicator, ui::DescribedOption::Indicator::Square);
     }
+    void systemSettingsFitBesideTheRail_data() {
+        QTest::addColumn<int>("ppi");
+        QTest::newRow("212") << 212;
+        QTest::newRow("300") << 300;
+    }
+    void systemSettingsFitBesideTheRail() {
+        QFETCH(int, ppi);
+        struct RestoreDensity {
+            int value = ui::density();
+            ~RestoreDensity() {
+                ui::setDensity(value);
+            }
+        } restore;
+        ui::setDensity(ppi);
+        QWidget owner;
+        owner.resize(1680, 1264);
+        owner.setFont(ui::interfaceFont());
+        reader::SettingsPanelInputs inputs;
+        inputs.sleepScreenSupported = true;
+        inputs.automaticBookOpeningSupported = true;
+        reader::SettingsPanel panel(&owner, inputs);
+        panel.settingsPages->setCurrentIndex(reader::SystemSettings);
+        const QSize available(1680, 920);
+        const int height = panel.fitContent(available);
+        QVERIFY(height <= available.height());
+        panel.resize(available.width(), height);
+        owner.show();
+        panel.show();
+        QCoreApplication::processEvents();
+        for (auto *option : {panel.sleepScreenOption, panel.automaticOpeningOption}) {
+            QVERIFY(option->isVisible());
+            QCOMPARE(option->parentWidget(), panel.settingsPages->widget(reader::SystemSettings));
+            QVERIFY(panel.rect().contains(QRect(option->mapTo(&panel, QPoint()), option->size())));
+        }
+        QCOMPARE(panel.settingsTabButtons[reader::SystemSettings + 1]->objectName(), QString("rrSettingsAbout"));
+    }
+
     void settingsContentMeasurement() {
         QWidget owner;
         owner.resize(nativeSize);
@@ -1536,6 +1583,254 @@ private slots:
         QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
         QTRY_VERIFY(!indicator->isVisible());
     }
+    void automaticBookOpeningUsesTheHostPreference() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        bool enabled = true, fail = false;
+        int writes = 0;
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.automaticBookOpening = [&] {
+                return enabled;
+            };
+            services.setAutomaticBookOpening = [&](bool next) {
+                ++writes;
+                if (fail)
+                    return false;
+                enabled = next;
+                return true;
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *settings = host.window()->findChild<QPushButton *>("rrSettings");
+        settings->click();
+        host.window()->findChild<QPushButton *>("rrSettingsSystem")->click();
+        auto *option = host.window()->findChild<QCheckBox *>("rrAutomaticBookOpening");
+        QVERIFY(option && option->isVisible() && option->isChecked());
+        const auto position = host.session()->state().value("position").toString();
+        option->click();
+        QVERIFY(!enabled && !option->isChecked());
+        QCOMPARE(writes, 1);
+        QVERIFY(host.window()->isVisible());
+        QCOMPARE(host.session()->state().value("position").toString(), position);
+        settings->click();
+        // The native settings page changed the same host preference.
+        enabled = true;
+        settings->click();
+        QVERIFY(option->isChecked());
+        QCOMPARE(writes, 1);
+        fail = true;
+        option->click();
+        QVERIFY(enabled && option->isChecked());
+        QCOMPARE(writes, 2);
+        auto *panel = dynamic_cast<reader::SettingsPanel *>(host.window()->findChild<QWidget *>("rrGeneralSettings"));
+        QVERIFY(panel && !panel->settingsError->isHidden());
+        QVERIFY(!storage::readJson(paths.preferences()).contains("automatic_book_opening"));
+    }
+
+    void customSleepSettingPersistsAndRollsBackFailedWrites() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        auto sleep = std::make_shared<test::SleepPresentationState>();
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        host.configureServices = [sleep](ReaderHostServices &services) {
+            services.presentation = [sleep](QWidget *) {
+                return std::make_unique<test::HostPresentation>(sleep);
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        auto *option = host.window()->findChild<QCheckBox *>("rrKobaltSleepScreen");
+        QVERIFY(option);
+        QVERIFY(!option->isChecked());
+        option->click();
+        QVERIFY(storage::readJson(paths.preferences()).value("kobalt_sleep_screen").toBool());
+        option->click();
+        QVERIFY(!storage::readJson(paths.preferences()).value("kobalt_sleep_screen").toBool());
+        QVERIFY(QFile::remove(paths.preferences()));
+        QVERIFY(QDir().mkpath(paths.preferences()));
+        option->click();
+        QVERIFY(!option->isChecked());
+        auto *panel = dynamic_cast<reader::SettingsPanel *>(host.window()->findChild<QWidget *>("rrGeneralSettings"));
+        QVERIFY(panel);
+        QVERIFY(!panel->settingsError->isHidden());
+    }
+
+    void customSleepScreenIsOptIn_data() {
+        QTest::addColumn<bool>("supported");
+        QTest::addColumn<bool>("enabled");
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("stock-default") << true << false << false;
+        QTest::newRow("custom-light") << true << true << false;
+        QTest::newRow("custom-dark") << true << true << true;
+        QTest::newRow("unsupported-host") << false << true << false;
+    }
+    void customSleepScreenIsOptIn() {
+        QFETCH(bool, supported);
+        QFETCH(bool, enabled);
+        QFETCH(bool, dark);
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.preferences(), {{"kobalt_sleep_screen", enabled}, {"dark_mode", dark}}));
+        auto sleep = std::make_shared<test::SleepPresentationState>();
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        host.configureServices = [sleep, supported](ReaderHostServices &services) {
+            services.presentation = [sleep, supported](QWidget *) {
+                return std::make_unique<test::HostPresentation>(supported ? sleep : nullptr);
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = host.window()->findChild<QWidget *>("rrPage");
+        QVERIFY(page);
+        const auto original = page->grab().toImage();
+        host.window()->sleepReader();
+        QVERIFY(host.window()->isVisible());
+        QVERIFY(sleep->image.isNull());
+        host.window()->sleepViewReady();
+        QCOMPARE(sleep->presented, supported && enabled ? 1 : 0);
+        QVERIFY(!host.window()->isVisible());
+        if (supported && enabled) {
+            QCOMPARE(sleep->image.size(), original.size());
+            QVERIFY(sleep->image != original);
+            const auto copy = sleep->image;
+            host.window()->sleepViewReady();
+            QCOMPARE(sleep->presented, 1);
+            QCOMPARE(sleep->image, copy);
+        }
+        host.window()->wakeReader();
+        QVERIFY(sleep->image.isNull());
+        QVERIFY(host.window()->isVisible());
+        QTRY_VERIFY(!host.session()->busy());
+    }
+
+    void sleepScreenDimsOnlyItsOwnedPage_data() {
+        QTest::addColumn<int>("ppi");
+        QTest::addColumn<bool>("dark");
+        for (int ppi : {212, 300}) {
+            QTest::newRow(qPrintable(QString::number(ppi) + "-light")) << ppi << false;
+            QTest::newRow(qPrintable(QString::number(ppi) + "-dark")) << ppi << true;
+        }
+    }
+    void sleepScreenDimsOnlyItsOwnedPage() {
+        QFETCH(int, ppi);
+        QFETCH(bool, dark);
+        const int previous = ui::density();
+        ui::setDensity(ppi);
+        QImage page(1072, 1448, QImage::Format_RGB32);
+        page.fill(dark ? QColor(48, 48, 48) : QColor(Qt::white));
+        const auto original = page;
+        const auto frame = reader::sleepScreenImage(page, "42% read", "37 min to go", dark);
+        QCOMPARE(page, original);
+        QCOMPARE(frame.size(), page.size());
+        QVERIFY(qGray(frame.pixel(1000, 200)) < qGray(page.pixel(1000, 200)));
+        QVERIFY(frame != reader::sleepScreenImage(page, "42% read", {}, dark));
+        QVERIFY(reader::sleepScreenImage({}, "42% read", {}, dark).isNull());
+        ui::setDensity(previous);
+    }
+
+    void sleepSnapshotMatchesTheDisplayedPage_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void sleepSnapshotMatchesTheDisplayedPage() {
+        QFETCH(bool, dark);
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.preferences(), {{"dark_mode", dark}}));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        page->bookmarked = true;
+        page->refreshContent();
+        page->mark({QRect(30, 40, 120, 25)});
+        page->revealLinks({QRect(60, 100, 180, 30)});
+        const auto displayed = page->grab().toImage().convertToFormat(QImage::Format_RGB32);
+        const auto snapshot = page->snapshot();
+        QCOMPARE(snapshot, displayed);
+        QCOMPARE(page->snapshot(), snapshot);
+    }
+
+    void sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage_data() {
+        QTest::addColumn<int>("ppi");
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<int>("slot");
+        for (int ppi : {212, 300})
+            for (bool dark : {false, true})
+                for (int slot = 0; slot < headerfooter::slotCount; ++slot)
+                    QTest::newRow(qPrintable(QString("%1-%2-%3").arg(ppi).arg(dark).arg(slot))) << ppi << dark << slot;
+    }
+    void sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage() {
+        QFETCH(int, ppi);
+        QFETCH(bool, dark);
+        QFETCH(int, slot);
+        struct RestoreDensity {
+            int value = ui::density();
+            ~RestoreDensity() {
+                ui::setDensity(value);
+            }
+        } restore;
+        ui::setDensity(ppi);
+        ReadingPage page(nullptr, [] {});
+        page.resize(800, 1100);
+        auto palette = page.palette();
+        palette.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
+        palette.setColor(QPalette::WindowText, dark ? Qt::white : Qt::black);
+        page.setPalette(palette);
+        page.setFont(ui::chromeFont(24));
+        page.chrome.slotFields.fill(headerfooter::Field::Nothing);
+        page.chrome.slotFields[slot] = headerfooter::Field::Time;
+        const int other = headerfooter::footerSlot(slot) ? 1 : 4;
+        page.chrome.slotFields[other] = headerfooter::Field::BookPage;
+        page.slotContents[other].text = "3 / 12";
+        page.slotContents[slot].text = "09:00";
+        page.image = QImage(page.width(), page.height() - page.topHeight() - page.bottomHeight(), QImage::Format_RGB32);
+        page.image.fill(Qt::gray);
+        page.refreshContent();
+        const auto reading = page.snapshot();
+        const auto sleeping = page.snapshot(true);
+        QVERIFY(sleeping != reading);
+        QCOMPARE(page.snapshot(), reading);
+        QCOMPARE(page.slotContents[slot].text, QString("09:00"));
+        const QRect body(0, page.topHeight(), page.width(), page.image.height());
+        QCOMPARE(sleeping.copy(body), reading.copy(body));
+        const QRect otherStrip = headerfooter::footerSlot(slot)
+                                     ? QRect(0, 0, page.width(), page.topHeight())
+                                     : QRect(0, page.height() - page.bottomHeight(), page.width(), page.bottomHeight());
+        QCOMPARE(sleeping.copy(otherStrip), reading.copy(otherStrip));
+        page.slotContents[slot].text = "23:59";
+        page.refreshContent();
+        QCOMPARE(page.snapshot(true), sleeping);
+        QVERIFY(page.snapshot() != reading);
+        page.chrome.slotFields[slot] = headerfooter::Field::BookTitle;
+        page.slotContents[slot] = {};
+        page.refreshContent();
+        const auto blank = page.snapshot();
+        QVERIFY(sleeping != blank);
+        QCOMPARE(page.snapshot(true), blank);
+    }
+
     void pageTurnsResumeWhenReaderIsShownAfterSleep() {
         test::ReaderHost host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};

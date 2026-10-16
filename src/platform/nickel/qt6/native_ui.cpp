@@ -19,6 +19,8 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QKeyEvent>
+#include <QEvent>
+#include <utility>
 #include <QLocale>
 #include <QMetaType>
 #include <QSettings>
@@ -197,6 +199,23 @@ void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled, st
         } else
             error->hide();
     });
+    class SelectionState final : public QObject {
+    public:
+        SelectionState(QObject *parent, std::function<void()> refresh) : QObject(parent), refresh(std::move(refresh)) {}
+        bool eventFilter(QObject *, QEvent *event) override {
+            if (event->type() == QEvent::Show)
+                refresh();
+            return false;
+        }
+
+    private:
+        std::function<void()> refresh;
+    };
+    view->installEventFilter(new SelectionState(row, [=] {
+        const kobalt::qt::SignalBlocker blocked(check);
+        check->setChecked(enabled());
+        error->hide();
+    }));
     auto *divider = new QFrame(section);
     divider->setFixedHeight(1);
     divider->setStyleSheet("background:#999;");

@@ -823,6 +823,8 @@ void Reader::buildSettings() {
     settingsInputs.animationsSupported = services.animationsAvailable();
     settingsInputs.lightSupported = services.lightAvailable();
     settingsInputs.warmthSupported = warmthSupported;
+    settingsInputs.sleepScreenSupported = presentation->supportsSleepScreen();
+    settingsInputs.automaticBookOpeningSupported = services.automaticBookOpening && services.setAutomaticBookOpening;
 #ifndef KOBALT_READER_HARDWARE
     settingsInputs.debugProgressAvailable = true;
 #endif
@@ -890,6 +892,8 @@ void Reader::buildSettings() {
     denseGraphOption = settings->denseGraphOption;
     pinStatsOption = settings->pinStatsOption;
     heavierTextOption = settings->heavierTextOption;
+    sleepScreenOption = settings->sleepScreenOption;
+    automaticOpeningOption = settings->automaticOpeningOption;
     linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
     bionicOption = settings->bionicOption;
@@ -904,6 +908,12 @@ void Reader::buildSettings() {
     });
     connect(heavierTextOption, &QCheckBox::clicked, this, [this](bool enabled) {
         applyHeavierText(enabled);
+    });
+    connect(sleepScreenOption, &QCheckBox::clicked, this, [this](bool enabled) {
+        applySleepScreen(enabled);
+    });
+    connect(automaticOpeningOption, &QCheckBox::clicked, this, [this](bool enabled) {
+        applyAutomaticOpening(enabled);
     });
     connect(refreshButton, &QPushButton::clicked, this, [this] {
         openScreenRefresh();

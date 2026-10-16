@@ -120,6 +120,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
     kobalt::ui::setInterfaceWeight(kobalt::ui::interfaceWeightSteps(preferences));
     // Set only our window; native Nickel controls keep their own font.
     setFont(kobalt::ui::interfaceFont());
+    kobalt::ui::keepInterfaceUnhinted(this);
     readerStyle(this, styles::reader());
     buildReadingPage();
     startClockTimer();

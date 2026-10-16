@@ -149,6 +149,7 @@ void SearchPanel::invalidateRows() {
 }
 QFont SearchPanel::excerptFont() const {
     QFont font = excerptFamily.isEmpty() ? ui::interfaceFont() : QFont(excerptFamily);
+    font.setHintingPreference(QFont::PreferNoHinting);
     font.setWeight(QFont::Normal);
     font.setItalic(false);
     font.setPixelSize(m::search::excerptText);

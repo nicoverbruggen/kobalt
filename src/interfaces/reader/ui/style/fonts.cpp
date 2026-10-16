@@ -122,6 +122,10 @@ QString family(FamilyIndex index, const QString &missing = {}) {
 }
 QFont sizedFont(const QString &family, int pixels) {
     QFont font(family);
+    // Draw unhinted, as the private FreeType path does, so both paths keep
+    // the letters' shapes and widths. At 212 ppi and above, hinting distorts
+    // more than it sharpens on e-paper.
+    font.setHintingPreference(QFont::PreferNoHinting);
     font.setWeight(QFont::Normal);
     if (pixels > 0)
         font.setPixelSize(pixels);
@@ -234,6 +238,7 @@ QFont renewedFont(const QFont &font) {
     // Qt 5.2 does not restore a pixel size from the description.
     if (font.pixelSize() > 0)
         renewed.setPixelSize(font.pixelSize());
+    renewed.setHintingPreference(font.hintingPreference());
     return renewed;
 }
 void refreshInterfaceText(QWidget *root) {
@@ -254,6 +259,30 @@ void refreshInterfaceText(QWidget *root) {
         widget->update();
     }
 }
+namespace {
+class UnhintedFonts final : public QObject {
+public:
+    explicit UnhintedFonts(QWidget *window) : QObject(window), window(window) {}
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (event->type() != QEvent::FontChange && event->type() != QEvent::Polish)
+            return false;
+        auto *widget = qobject_cast<QWidget *>(object);
+        if (!widget || widget->font().hintingPreference() == QFont::PreferNoHinting || widget->window() != window)
+            return false;
+        // Setting the font again sends another font change, which now matches.
+        auto font = widget->font();
+        font.setHintingPreference(QFont::PreferNoHinting);
+        widget->setFont(font);
+        return false;
+    }
+
+private:
+    QWidget *window;
+};
+}
+void keepInterfaceUnhinted(QWidget *window) {
+    QCoreApplication::instance()->installEventFilter(new UnhintedFonts(window));
+}
 QFont interfaceFont(int pixels) {
     return sizedFont(family(Sans), pixels);
 }
@@ -268,6 +297,7 @@ QFont captionFont(int pixels) {
 }
 QFont brandFont(int pixels, bool italic) {
     QFont font(family(Serif, "serif"));
+    font.setHintingPreference(QFont::PreferNoHinting);
     font.setPixelSize(pixels);
     font.setWeight(QFont::Normal);
     font.setItalic(italic);

@@ -631,6 +631,35 @@ int main(int argc, char **argv) {
     }
     {
         using namespace kobalt::ui;
+        // Interface text is unhinted on every path, including style sheet
+        // fonts that resolve against an interface font.
+        for (const auto &font : {interfaceFont(24), chromeFont(24), captionFont(), brandFont(24)})
+            require(font.hintingPreference() == QFont::PreferNoHinting, "Interface font asks for hinting");
+        QWidget parent;
+        parent.setFont(interfaceFont());
+        QLabel styled(&parent);
+        styled.setStyleSheet("font-size:20px;font-weight:600;");
+        styled.ensurePolished();
+        require(styled.font().hintingPreference() == QFont::PreferNoHinting,
+                "Style sheet font lost the interface hinting preference");
+        // Qt 5.2 polishes style sheet fonts with the default hinting. The
+        // window's keeper turns such a font back to unhinted.
+        QWidget window;
+        keepInterfaceUnhinted(&window);
+        QLabel reset(&window);
+        QFont polished = interfaceFont(20);
+        polished.setHintingPreference(QFont::PreferDefaultHinting);
+        reset.setFont(polished);
+        require(reset.font().hintingPreference() == QFont::PreferNoHinting,
+                "Window kept a font with the default hinting");
+        QWidget elsewhere;
+        QLabel outside(&elsewhere);
+        outside.setFont(polished);
+        require(outside.font().hintingPreference() == QFont::PreferDefaultHinting,
+                "Hinting keeper changed a widget in another window");
+    }
+    {
+        using namespace kobalt::ui;
         for (int id = int(ControlIcon::Search); id <= int(ControlIcon::More); ++id) {
             const auto black =
                 controlIcon(ControlIcon(id)).pixmap(64, 64).toImage().convertToFormat(QImage::Format_ARGB32);

@@ -21,6 +21,9 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed = nullptr
 bool initializeOpeningFonts(const AssetBundle &assets);
 // Register bundled faces; never change Nickel's application font.
 QFont interfaceFont(int pixels = -1);
+// Keep every widget in this window unhinted. Qt 5.2 polishes a style sheet
+// font with the default hinting, which drops the interface fonts' preference.
+void keepInterfaceUnhinted(QWidget *window);
 QFont chromeFont(int pixels = -1);
 QFont brandFont(int pixels, bool italic = false);
 // Uppercase, spaced monospace for notes, counts and section captions.

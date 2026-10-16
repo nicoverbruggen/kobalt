@@ -161,6 +161,7 @@ void DictionaryPanel::open(const QString &word, const DictionaryResult &result, 
 }
 QFont DictionaryPanel::bookFont(int pixels) const {
     QFont font = bookFamily.isEmpty() ? ui::interfaceFont(pixels) : QFont(bookFamily);
+    font.setHintingPreference(QFont::PreferNoHinting);
     font.setWeight(QFont::Normal);
     font.setItalic(false);
     font.setPixelSize(pixels);

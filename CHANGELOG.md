@@ -6,6 +6,8 @@
 
 - Use Phosphor icons throughout the reader. The bottom tabs have larger icons and labels, aligned on one line.
 
+- Draw interface text without font hinting on Kobo, matching the reading text and keeping small labels true to their shapes.
+
 ## v1.0-beta.4
 
 - Use the Arabic text font before the math fallback so Arabic letters join correctly.

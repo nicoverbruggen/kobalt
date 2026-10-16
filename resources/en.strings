@@ -290,6 +290,12 @@
 "header_footer.field.time" = "Time";
 "header_footer.field.chapter_time_left" = "Time left in chapter";
 "header_footer.field.book_time_left" = "Time left in book";
+"header_footer.field.chapter_percent" = "Percent of chapter";
+"header_footer.field.book_percent" = "Percent of book";
+"header_footer.field.battery_warning" = "Battery warning";
+/* Arguments: %1 */
+"header_footer.field_description.battery_warning" = "Shows the battery only below %1%.";
+"header_footer.field_description.time_left" = "Estimated from your reading pace.";
 
 /* image */
 "image.unavailable" = "Image could not be loaded";

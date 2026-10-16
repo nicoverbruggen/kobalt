@@ -4,7 +4,7 @@
 #include <array>
 
 namespace kobalt::headerfooter {
-// What one slot shows. The chooser lists the fields in this order.
+// What one slot shows. Saved layouts name fields by fieldValue.
 enum class Field {
     Nothing,
     BookTitle,
@@ -20,13 +20,28 @@ enum class Field {
     Time,
     ChapterTimeLeft,
     BookTimeLeft,
+    ChapterPercent,
+    BookPercent,
+    BatteryWarning,
 };
+// Every field, for reading saved layouts.
 inline constexpr Field fields[] = {
     Field::Nothing,         Field::BookTitle,      Field::Author,           Field::Chapter,
     Field::ChapterPage,     Field::BookPage,       Field::ChapterPagesLeft, Field::ChapterAndPage,
     Field::TitleAndPage,    Field::BatteryPercent, Field::Battery,          Field::Time,
-    Field::ChapterTimeLeft, Field::BookTimeLeft,
+    Field::ChapterTimeLeft, Field::BookTimeLeft,   Field::ChapterPercent,   Field::BookPercent,
+    Field::BatteryWarning,
 };
+// The fields a slot offers, grouped: the book, the chapter, the whole book,
+// the device, then the fields that need a description to explain them.
+inline constexpr Field choosableFields[] = {
+    Field::Nothing,          Field::BookTitle,      Field::Author,         Field::Chapter,  Field::ChapterPage,
+    Field::ChapterPagesLeft, Field::ChapterPercent, Field::ChapterAndPage, Field::BookPage, Field::BookPercent,
+    Field::TitleAndPage,     Field::Time,           Field::BatteryPercent, Field::Battery,  Field::BatteryWarning,
+    Field::ChapterTimeLeft,  Field::BookTimeLeft,
+};
+// Battery warning shows the battery only below this percentage.
+inline constexpr int batteryWarningBelow = 20;
 
 // Slots 0 to 2 are the header's left, centre and right. Slots 3 to 5 are the footer's.
 inline constexpr int slotCount = 6;
@@ -119,6 +134,8 @@ Content content(Field field, const Values &values, bool uppercase);
 bool pageCount(Field field);
 
 QString fieldLabel(Field field);
+// A line that explains a field whose name does not, or an empty string.
+QString fieldDescription(Field field);
 QString slotLabel(int slot);
 QString presetLabel(Preset preset);
 }

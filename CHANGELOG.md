@@ -2,7 +2,7 @@
 
 - Add optional `userstyle.css` for book styling. Edits apply when reopening a book and do not affect installation checks.
 
-- Choose what the header and footer show. Layout > Header and footer offers three presets, Kobalt, Bookish and Ember, and a Custom layout with six slots for the title, author, chapter, page counts, battery, time and time left. Each book keeps its own preset. The book progress bar moved from Settings > Display into the presets.
+- Choose what the header and footer show. Layout > Header and footer offers three presets, Kobalt, Bookish and Ember, and a Custom layout with six slots for the title, author, chapter, page counts, percent read, time left, battery, a low battery warning and time. Each book keeps its own preset. The book progress bar moved from Settings > Display into the presets.
 
 - Use Phosphor icons throughout the reader. The bottom tabs have larger icons and labels, aligned on one line.
 

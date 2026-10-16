@@ -3,6 +3,9 @@
 #include "support/strings.h"
 #include "check.h"
 
+#include <algorithm>
+#include <iterator>
+
 using namespace kobalt;
 using namespace kobalt::headerfooter;
 
@@ -108,6 +111,37 @@ int main() {
     require(battery.batteryIcon && battery.text.isEmpty() && battery.battery == 80, "Battery is not an icon");
     require(content(Field::BatteryPercent, values, false).text == strings::get("common.percent").arg(80),
             "Battery percentage is missing");
+    // Percent done counts the page being read; the last page is 100%.
+    require(content(Field::ChapterPercent, values, false).text == strings::get("common.percent").arg(30),
+            "Percent of chapter is wrong");
+    require(content(Field::BookPercent, values, false).text == strings::get("common.percent").arg(3),
+            "Percent of book is wrong");
+    {
+        auto last = values;
+        last.page = last.pages;
+        require(content(Field::BookPercent, last, false).text == strings::get("common.percent").arg(100),
+                "The last page is not 100%");
+    }
+    // Battery warning shows the battery only below its threshold.
+    require(content(Field::BatteryWarning, values, false).empty(), "Battery warning showed at 80%");
+    {
+        auto low = values;
+        low.battery = batteryWarningBelow - 1;
+        const auto warning = content(Field::BatteryWarning, low, false);
+        require(warning.batteryIcon && warning.text == strings::get("common.percent").arg(batteryWarningBelow - 1),
+                "Battery warning did not show a low battery");
+        low.battery = batteryWarningBelow;
+        require(content(Field::BatteryWarning, low, false).empty(), "Battery warning showed at the threshold");
+    }
+    // Only the fields whose names do not explain them carry a description.
+    for (const auto field : fields)
+        require(fieldDescription(field).isEmpty() ==
+                    (field != Field::BatteryWarning && field != Field::ChapterTimeLeft && field != Field::BookTimeLeft),
+                "A field has the wrong description");
+    // Every field is offered, each once.
+    for (const auto field : fields)
+        require(std::count(std::begin(choosableFields), std::end(choosableFields), field) == 1,
+                "A field is not offered exactly once");
     require(content(Field::ChapterTimeLeft, values, false).empty(), "Time left showed without a chapter length");
     values.learningPace = true;
     require(content(Field::ChapterTimeLeft, values, false).text == strings::get("header_footer.learning_pace") &&

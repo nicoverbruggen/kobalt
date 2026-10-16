@@ -183,9 +183,8 @@ inline constexpr Px valueText{control::captionValueText}, emptyText{chrome::capt
 inline constexpr Px miniatureWidth{184}, selectedBorder{5};
 inline constexpr Px miniatureTop{spacing::section}, nameGap{spacing::row}, nameHeight{control::segmentHeight};
 inline constexpr Px namePadding{control::segmentHorizontalPadding};
-// Field rows are list rows at the reader's step height, so every field fits a
-// portrait page on six-inch screens.
-inline constexpr Px fieldRowHeight{control::stepSize};
+// Field rows are one-line list rows, as in Chapters. Described fields grow.
+inline constexpr Px fieldRowHeight{list::oneLine};
 // Dashes stand for slot text inside a miniature; they are drawing sizes.
 inline constexpr Px dashHeight{6}, shortDash{22}, longDash{46};
 

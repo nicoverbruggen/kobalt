@@ -468,11 +468,14 @@ FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent) {
     list = new ui::RadioList(this);
     list->setObjectName("rrHeaderFooterFields");
     list->setMinimumRowHeight(hf::fieldRowHeight);
-    for (const auto field : headerfooter::fields)
-        list->add("rrHeaderFooterField_" + headerfooter::fieldValue(field), headerfooter::fieldLabel(field));
+    // Only the described fields need the room for a second line.
+    list->setUniformRows(false);
+    for (const auto field : headerfooter::choosableFields)
+        list->add("rrHeaderFooterField_" + headerfooter::fieldValue(field), headerfooter::fieldLabel(field),
+                  headerfooter::fieldDescription(field));
     list->chosen = [this](int index) {
         if (selected)
-            selected(headerfooter::fields[index]);
+            selected(headerfooter::choosableFields[index]);
     };
     // Rows that do not fit go to further pages, with the same pager as Chapters.
     pager = new ui::PagerBar(this, "rrHeaderFooterFields");
@@ -494,7 +497,7 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
     title->setText(strings::get("header_footer.customize_slot").arg(headerfooter::slotLabel(slot)));
     const auto &rows = list->options();
     for (int index = 0; index < rows.size(); ++index) {
-        const auto field = headerfooter::fields[index];
+        const auto field = headerfooter::choosableFields[index];
         auto shown = headerfooter::content(field, values, uppercase);
         // Each row shows what the slot would: text, a battery, or both.
         if (shown.text.isEmpty() && !shown.batteryIcon)
@@ -509,31 +512,53 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
             list->setCurrent(index);
     }
     this->uppercase->setChecked(uppercase);
-    // Open on the page that holds the slot's field.
+    // Open on the page that holds the slot's field. The chooser may not have
+    // its final size yet, so the page is chosen once it has room for rows.
     page = 0;
+    openRow = 0;
     for (int index = 0; index < rows.size(); ++index)
-        if (headerfooter::fields[index] == current)
-            page = index / qMax(1, perPage());
+        if (headerfooter::choosableFields[index] == current)
+            openRow = index;
     arrange();
 }
 
-int FieldChooser::perPage() const {
+QVector<int> FieldChooser::pageStarts() const {
+    // Fill each page with the rows that fit, at their own heights. Leave room
+    // for the pager only when the list needs more than one page.
     const int listTop = m::chrome::actionHeight + m::list::headerHeight;
-    const int available = height() - listTop;
-    int count = qMax(1, available / int(hf::fieldRowHeight));
-    // Leave room for the pager only when the list needs more than one page.
-    if (list->options().size() > count)
-        count = qMax(1, (available - m::chrome::actionHeight) / int(hf::fieldRowHeight));
-    return count;
+    const auto starts = [this](int available) {
+        QVector<int> result{0};
+        int used = 0;
+        for (int index = 0; index < list->options().size(); ++index) {
+            const int row = list->rowHeight(index, width());
+            if (used > 0 && used + row > available) {
+                result.append(index);
+                used = 0;
+            }
+            used += row;
+        }
+        return result;
+    };
+    const auto single = starts(height() - listTop);
+    return single.size() > 1 ? starts(height() - listTop - m::chrome::actionHeight) : single;
 }
 
 void FieldChooser::arrange() {
-    const int count = perPage(), pages = (int(list->options().size()) + count - 1) / count;
+    const auto starts = pageStarts();
+    const int pages = starts.size();
+    if (openRow >= 0 && height() > m::chrome::actionHeight + m::list::headerHeight + hf::fieldRowHeight) {
+        page = 0;
+        while (page + 1 < pages && starts[page + 1] <= openRow)
+            ++page;
+        openRow = -1;
+    }
     page = qBound(0, page, pages - 1);
     pager->setPage(page, pages);
     const int listTop = m::chrome::actionHeight + m::list::headerHeight;
-    list->showRows(page * count, count);
-    list->setGeometry(0, listTop, width(), count * int(hf::fieldRowHeight));
+    const int first = starts[page];
+    const int count = (page + 1 < pages ? starts[page + 1] : int(list->options().size())) - first;
+    list->showRows(first, count);
+    list->setGeometry(0, listTop, width(), list->heightForWidth(width()));
 }
 
 void FieldChooser::paintEvent(QPaintEvent *event) {

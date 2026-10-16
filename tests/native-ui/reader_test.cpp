@@ -3654,9 +3654,24 @@ private slots:
         QVERIFY(chooser->y() < view->y());
         QCOMPARE(chooser->geometry().bottom(), view->geometry().bottom());
         QCOMPARE(currentPage(), int(Fields));
-        // Every field fits on one portrait page, so no pager shows.
-        QVERIFY(!visible("rrHeaderFooterFieldsNext"));
-        QVERIFY(visible("rrHeaderFooterField_book_time_left"));
+        // The list opens on the page that holds the slot's field.
+        auto *currentField = host.window()->findChild<QAbstractButton *>(
+            "rrHeaderFooterField_" + headerfooter::fieldValue(page->chrome.slotFields[2]));
+        QVERIFY(currentField && currentField->isVisible() && currentField->isChecked());
+        // The described fields come last, each taller than a plain row.
+        auto *nextFields = host.window()->findChild<QPushButton *>("rrHeaderFooterFieldsNext");
+        auto *previousFields = host.window()->findChild<QPushButton *>("rrHeaderFooterFieldsPrevious");
+        QVERIFY(nextFields && previousFields);
+        while (nextFields->isVisible() && nextFields->isEnabled())
+            QVERIFY(click(canvas, nextFields));
+        for (const char *name : {"rrHeaderFooterField_battery_warning", "rrHeaderFooterField_chapter_time_left",
+                                 "rrHeaderFooterField_book_time_left"}) {
+            auto *row = host.window()->findChild<QWidget *>(name);
+            QVERIFY(row && row->isVisible());
+            QVERIFY(row->height() > int(ui::metrics::headerFooter::fieldRowHeight));
+        }
+        while (previousFields->isVisible() && previousFields->isEnabled())
+            QVERIFY(click(canvas, previousFields));
         // The title names the slot; Uppercase is a checkbox in the bar.
         QCOMPARE(host.window()->findChild<QLabel *>("rrHeaderFooterChooserTitle")->text(),
                  strings::get("header_footer.customize_slot").arg(headerfooter::slotLabel(2)));
@@ -3777,6 +3792,23 @@ private slots:
         QVERIFY(host.window()->findChild<QPushButton *>("rrHeaderTextSize_small")->isChecked());
         QVERIFY(host.window()->findChild<QPushButton *>("rrFooterTextSize_off")->isChecked());
     }
+    void fieldChooserOpensOnItsFieldBeforeItHasASize() {
+        // The reader opens the list before it places it. The page that holds
+        // the slot's field is chosen once the list has room for its rows.
+        QWidget owner;
+        owner.resize(1680, 1100);
+        reader::FieldChooser chooser(&owner);
+        headerfooter::Values values;
+        chooser.open(2, headerfooter::Field::ChapterPage, values, false);
+        chooser.setGeometry(0, 0, 1680, 1100);
+        owner.show();
+        chooser.show();
+        QCoreApplication::processEvents();
+        auto *next = chooser.findChild<QPushButton *>("rrHeaderFooterFieldsNext");
+        QVERIFY(next && next->isVisible() && next->isEnabled());
+        auto *field = chooser.findChild<QAbstractButton *>("rrHeaderFooterField_chapter_page");
+        QVERIFY(field && field->isVisible() && field->isChecked());
+    }
     void fieldChooserPagesInsteadOfScrolling() {
         // Kobalt has no scroll bars: fields that do not fit go to pages.
         QWidget owner;
@@ -3798,7 +3830,8 @@ private slots:
         QVERIFY(last->isVisible() && last->isChecked());
         QVERIFY(!first->isVisible());
         QVERIFY(!next->isEnabled());
-        previous->click();
+        while (previous->isEnabled())
+            previous->click();
         QVERIFY(first->isVisible() && !last->isVisible());
         // Every visible row ends above the pager.
         auto *pager = chooser.findChild<QLabel *>("rrHeaderFooterFieldsPage")->parentWidget();
@@ -3815,9 +3848,12 @@ private slots:
         QVERIFY2(held != idle, qPrintable(held.name() + " " + idle.name()));
         QTest::mouseRelease(first, Qt::LeftButton, Qt::NoModifier, first->rect().center());
         // With room for every row, one page and no pager.
+        auto *list = chooser.findChild<ui::RadioList *>("rrHeaderFooterFields");
+        int rowsHeight = 0;
+        for (int index = 0; index < list->options().size(); ++index)
+            rowsHeight += list->rowHeight(index, 1264);
         chooser.setGeometry(0, 0, 1264,
-                            int(ui::metrics::chrome::actionHeight) + int(ui::metrics::list::headerHeight) +
-                                14 * int(ui::metrics::headerFooter::fieldRowHeight));
+                            int(ui::metrics::chrome::actionHeight) + int(ui::metrics::list::headerHeight) + rowsHeight);
         QCoreApplication::processEvents();
         QVERIFY(!next->isVisible());
         QVERIFY(first->isVisible() && last->isVisible());

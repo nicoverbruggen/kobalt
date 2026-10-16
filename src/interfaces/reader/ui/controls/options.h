@@ -55,9 +55,10 @@ private:
 };
 
 // A pick-one list: a row per choice with a radio on the left, its label and
-// an optional description or value. Rows share one height, the tallest any
-// row needs and at least the minimum, with dividers between them. A held row
-// shows the pressed gray. Owners that page the list show a range of rows.
+// an optional description or value. By default rows share one height, the
+// tallest any row needs and at least the minimum; otherwise each row is as
+// tall as it needs. Dividers sit between rows. A held row shows the pressed
+// gray. Owners that page the list show a range of rows.
 class RadioList : public QWidget {
 public:
     explicit RadioList(QWidget *parent);
@@ -68,7 +69,10 @@ public:
     void setCurrent(int index);
     void setMinimumRowHeight(int pixels);
     void setTopDivider(bool shown);
+    // False lets each row take the height it needs.
+    void setUniformRows(bool uniform);
     int rowHeight(int width) const;
+    int rowHeight(int index, int width) const;
     // Shows `count` rows from `first`, one under the other.
     void showRows(int first, int count);
     bool hasHeightForWidth() const override {
@@ -84,7 +88,7 @@ protected:
 private:
     QVector<DescribedOption *> rows;
     int minimum = 0, first = 0, count = -1;
-    bool topDivider = false;
+    bool topDivider = false, uniformRows = true;
     void arrange();
 };
 }

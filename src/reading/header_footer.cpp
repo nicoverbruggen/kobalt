@@ -26,6 +26,10 @@ QString timeLeft(qint64 milliseconds, bool learningPace) {
                                    : strings::get("stats.duration_hours").arg(minutes / 60).arg(minutes % 60);
     return strings::get("header_footer.time_left").arg(time);
 }
+// How far along: the last page reads 100%.
+QString percentDone(int page, int pages) {
+    return pages > 0 ? strings::get("common.percent").arg(qRound(100.0 * qBound(0, page, pages) / pages)) : QString();
+}
 // Beside a name the page reads 5 of 33, so the slash does not compete with
 // the dot between the two parts.
 QString pageOf(int page, int pages) {
@@ -122,6 +126,12 @@ QString fieldValue(Field field) {
         return QStringLiteral("chapter_time_left");
     case Field::BookTimeLeft:
         return QStringLiteral("book_time_left");
+    case Field::ChapterPercent:
+        return QStringLiteral("chapter_percent");
+    case Field::BookPercent:
+        return QStringLiteral("book_percent");
+    case Field::BatteryWarning:
+        return QStringLiteral("battery_warning");
     }
     return QStringLiteral("nothing");
 }
@@ -250,8 +260,11 @@ Content content(Field field, const Values &values, bool uppercase) {
         break;
     case Field::BatteryPercent:
     case Field::Battery:
+    case Field::BatteryWarning:
+        if (field == Field::BatteryWarning && (values.battery < 0 || values.battery >= batteryWarningBelow))
+            break;
         if (values.deviceStatus) {
-            if (field == Field::BatteryPercent && values.battery >= 0)
+            if (field != Field::Battery && values.battery >= 0)
                 result.text = strings::get("common.percent").arg(values.battery);
             result.batteryIcon = true;
             result.battery = values.battery;
@@ -267,6 +280,12 @@ Content content(Field field, const Values &values, bool uppercase) {
         break;
     case Field::BookTimeLeft:
         result.text = timeLeft(values.bookMilliseconds, values.learningPace);
+        break;
+    case Field::ChapterPercent:
+        result.text = percentDone(values.chapterPage, values.chapterPages);
+        break;
+    case Field::BookPercent:
+        result.text = percentDone(values.page, values.pages);
         break;
     }
     if (uppercase)
@@ -308,8 +327,26 @@ QString fieldLabel(Field field) {
         return strings::get("header_footer.field.chapter_time_left");
     case Field::BookTimeLeft:
         return strings::get("header_footer.field.book_time_left");
+    case Field::ChapterPercent:
+        return strings::get("header_footer.field.chapter_percent");
+    case Field::BookPercent:
+        return strings::get("header_footer.field.book_percent");
+    case Field::BatteryWarning:
+        return strings::get("header_footer.field.battery_warning");
     }
     return {};
+}
+
+QString fieldDescription(Field field) {
+    switch (field) {
+    case Field::BatteryWarning:
+        return strings::get("header_footer.field_description.battery_warning").arg(batteryWarningBelow);
+    case Field::ChapterTimeLeft:
+    case Field::BookTimeLeft:
+        return strings::get("header_footer.field_description.time_left");
+    default:
+        return {};
+    }
 }
 
 QString slotLabel(int slot) {

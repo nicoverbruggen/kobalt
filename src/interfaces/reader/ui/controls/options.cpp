@@ -271,6 +271,16 @@ void RadioList::setTopDivider(bool shown) {
     topDivider = shown;
     arrange();
 }
+void RadioList::setUniformRows(bool uniform) {
+    uniformRows = uniform;
+    arrange();
+    updateGeometry();
+}
+int RadioList::rowHeight(int index, int width) const {
+    if (uniformRows || index < 0 || index >= rows.size())
+        return rowHeight(width);
+    return qMax(minimum, rows[index]->heightForWidth(width));
+}
 int RadioList::rowHeight(int width) const {
     int height = minimum;
     for (const auto *row : rows)
@@ -278,8 +288,11 @@ int RadioList::rowHeight(int width) const {
     return height;
 }
 int RadioList::heightForWidth(int width) const {
-    const int shown = count < 0 ? int(rows.size()) : qMin(count, int(rows.size()) - first);
-    return qMax(0, shown) * rowHeight(width);
+    const int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
+    int height = 0;
+    for (int index = first; index < last; ++index)
+        height += rowHeight(index, width);
+    return height;
 }
 QSize RadioList::sizeHint() const {
     return {width(), heightForWidth(width())};
@@ -294,8 +307,8 @@ void RadioList::resizeEvent(QResizeEvent *) {
     arrange();
 }
 void RadioList::arrange() {
-    const int height = rowHeight(width());
     const int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
+    int top = 0;
     for (int index = 0; index < rows.size(); ++index) {
         auto *row = rows[index];
         const bool shown = index >= first && index < last;
@@ -303,8 +316,11 @@ void RadioList::arrange() {
         look.dividers = Edges(Qt::BottomEdge) | (topDivider && index == first ? Edges(Qt::TopEdge) : Edges{});
         row->setPresentation(look);
         row->setVisible(shown);
-        if (shown)
-            row->setGeometry(0, (index - first) * height, width(), height);
+        if (shown) {
+            const int height = rowHeight(index, width());
+            row->setGeometry(0, top, width(), height);
+            top += height;
+        }
     }
 }
 }

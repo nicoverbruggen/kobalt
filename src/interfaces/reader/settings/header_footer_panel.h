@@ -125,8 +125,10 @@ private:
     ui::RadioList *list;
     QPushButton *finish;
     ui::DescribedOption *uppercase;
-    int currentSlot = -1, page = 0;
-    int perPage() const;
+    // The row of the slot's field until the page that holds it is chosen.
+    int currentSlot = -1, page = 0, openRow = -1;
+    // The first row of each page.
+    QVector<int> pageStarts() const;
     void arrange();
 };
 }

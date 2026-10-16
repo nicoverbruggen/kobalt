@@ -1554,6 +1554,8 @@ int main(int argc, char **argv) {
         using namespace kobalt::ui;
         QWidget host;
         host.setFont(interfaceFont());
+        // As the reader window does, so style sheet fonts stay unhinted on Qt 5.2.
+        keepInterfaceUnhinted(&host);
         readerStyle(&host, styles::reader());
         auto *plain = new QLabel("Swipe along edges to adjust frontlight", &host);
         plain->setGeometry(10, 10, 880, 60);

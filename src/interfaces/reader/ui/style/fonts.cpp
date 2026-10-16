@@ -232,12 +232,25 @@ int interfaceWeight() {
     return registration().steps < 0 ? requestedSteps : registration().steps;
 }
 QFont renewedFont(const QFont &font) {
-    // A copy shares the loaded faces. Build a new font from the description.
+    // A copy shares the loaded faces, so build a new font from the attributes.
+    // Qt 5.2 cannot read back its own description once a font has a hinting
+    // preference, so the description is not used.
     QFont renewed(font.family());
-    renewed.fromString(font.toString());
-    // Qt 5.2 does not restore a pixel size from the description.
     if (font.pixelSize() > 0)
         renewed.setPixelSize(font.pixelSize());
+    else if (font.pointSizeF() > 0)
+        renewed.setPointSizeF(font.pointSizeF());
+    renewed.setWeight(font.weight());
+    renewed.setStyle(font.style());
+    renewed.setUnderline(font.underline());
+    renewed.setStrikeOut(font.strikeOut());
+    renewed.setFixedPitch(font.fixedPitch());
+    renewed.setStyleHint(font.styleHint(), font.styleStrategy());
+    renewed.setStretch(font.stretch());
+    renewed.setCapitalization(font.capitalization());
+    renewed.setLetterSpacing(font.letterSpacingType(), font.letterSpacing());
+    renewed.setWordSpacing(font.wordSpacing());
+    renewed.setKerning(font.kerning());
     renewed.setHintingPreference(font.hintingPreference());
     return renewed;
 }

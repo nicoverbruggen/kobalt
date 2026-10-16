@@ -10,6 +10,7 @@
 #include "support/strings.h"
 #include <QPainter>
 #include <QStackedWidget>
+#include <QtMath>
 
 namespace kobalt::reader {
 namespace c = ui::metrics::chrome;
@@ -62,7 +63,9 @@ public:
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     }
     void setSampleFace(const QString &face) {
-        const auto next = ui::fontSample(face);
+        auto next = ui::fontSample(face);
+        // Samples are sized for the 40 pixel cell icons; grow with the tab icon.
+        next.setPixelSize(qRound(next.pixelSize() * qreal(c::tabIcon) / c::cellIcon));
         if (sample == next)
             return;
         sample = next;
@@ -82,16 +85,21 @@ protected:
         if (!isEnabled())
             painter.setOpacity(.45);
         const auto color = active ? paper : ink;
-        if (glyph == ui::ControlIcon::Typography) {
-            painter.setPen(color);
-            painter.setFont(sample);
-            ui::drawOpticalText(painter, QRect(0, ui::px(16), width(), c::cellIcon), QStringLiteral("Aa"), true);
-        } else
-            ui::controlIcon(glyph, color)
-                .paint(&painter, QRect((width() - c::cellIcon) / 2, ui::px(16), c::cellIcon, c::cellIcon));
+        // The labels are capitals, so the cap height is their ink. Centering
+        // the icon box and that ink as one group lines every tab up.
+        const auto label = ui::interfaceFont(c::tabText);
+        const int capital = qCeil(QFontMetricsF(label).tightBoundingRect(QStringLiteral("H")).height());
+        const int top = (height() - c::tabIcon - c::tabGap - capital) / 2;
+        const QRect icon((width() - c::tabIcon) / 2, top, c::tabIcon, c::tabIcon);
         painter.setPen(color);
-        painter.setFont(ui::interfaceFont(c::tabText));
-        painter.drawText(QRect(ui::px(2), ui::px(62), width() - ui::px(4), ui::px(36)), Qt::AlignCenter, text());
+        if (glyph == ui::ControlIcon::Typography) {
+            painter.setFont(sample);
+            ui::drawOpticalText(painter, QRect(0, icon.top(), width(), icon.height()), QStringLiteral("Aa"), true);
+        } else
+            ui::controlIcon(glyph, color).paint(&painter, icon);
+        painter.setFont(label);
+        ui::drawOpticalText(painter, QRect(ui::px(2), icon.bottom() + 1 + c::tabGap, width() - ui::px(4), capital),
+                            text(), true);
     }
 
 private:

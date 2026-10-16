@@ -114,7 +114,9 @@ inline constexpr auto dividerLight = "#b8b8b8", dividerDark = "#666666";
 inline constexpr Px statusHeight{60}, actionHeight{112}, heavyRule{3};
 inline constexpr Px headerHeight{statusHeight + actionHeight};
 inline constexpr Px cellWidth{118}, cellIcon{40}, backIcon{44}, inset{36};
-inline constexpr Px labelText{30}, descriptionText{25}, countText{28}, tabText{24}, titleText{about::exitText};
+inline constexpr Px labelText{30}, descriptionText{25}, countText{28}, tabText{26}, titleText{about::exitText};
+// A bottom tab centers its icon and label as one group.
+inline constexpr Px tabIcon{48}, tabGap{10};
 inline constexpr Px captionText{22}, captionSpacing{2}, numberText{22};
 inline constexpr Px listActionHeight{list::twoLines}, optionHeight{186}, checkSize{48};
 inline constexpr Px railWidth{268}, railRowHeight{120}, railText{28}, railInset{28};

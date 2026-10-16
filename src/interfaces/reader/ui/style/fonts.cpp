@@ -127,6 +127,12 @@ QFont sizedFont(const QString &family, int pixels) {
     // more than it sharpens on e-paper.
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setWeight(QFont::Normal);
+    // Set every face attribute, so a painter or widget never fills one in
+    // from the widget font. Nickel's style sheet makes check boxes italic.
+    font.setStyle(QFont::StyleNormal);
+    font.setUnderline(false);
+    font.setOverline(false);
+    font.setStrikeOut(false);
     if (pixels > 0)
         font.setPixelSize(pixels);
     return font;

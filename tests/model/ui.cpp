@@ -640,6 +640,16 @@ int main(int argc, char **argv) {
         // fonts that resolve against an interface font.
         for (const auto &font : {interfaceFont(24), chromeFont(24), captionFont(), brandFont(24)})
             require(font.hintingPreference() == QFont::PreferNoHinting, "Interface font asks for hinting");
+        // Nickel's style sheet makes check boxes italic, and a text link is
+        // underlined. Painting resolves a font against its widget's, so the
+        // interface fonts set these themselves and stay upright and plain.
+        QFont decorated;
+        decorated.setItalic(true);
+        decorated.setUnderline(true);
+        for (const auto &font : {interfaceFont(24), chromeFont(24), captionFont()}) {
+            const auto painted = font.resolve(decorated);
+            require(!painted.italic() && !painted.underline(), "Interface font took a widget's italic or underline");
+        }
         QWidget parent;
         parent.setFont(interfaceFont());
         QLabel styled(&parent);

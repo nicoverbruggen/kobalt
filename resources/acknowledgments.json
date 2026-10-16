@@ -264,13 +264,13 @@
   },
   {
     "group": "icons",
-    "name": "Lucide",
-    "version": "951813ce76a8",
-    "description": "Reader interface icons, by the Lucide and Feather contributors.",
-    "license": "ISC and MIT",
-    "url": "https://lucide.dev",
+    "name": "Phosphor Icons",
+    "version": "2b75f3ad12b4",
+    "description": "Reader interface icons, regular weight, by Helena Zhang, Tobias Fried and the Phosphor contributors.",
+    "license": "MIT",
+    "url": "https://phosphoricons.com",
     "notices": [
-      "Lucide"
+      "Phosphor-MIT"
     ]
   },
   {

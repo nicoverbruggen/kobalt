@@ -4,6 +4,8 @@
 
 - Choose what the header and footer show. Layout > Header and footer offers three presets, Kobalt, Bookish and Ember, and a Custom layout with six slots for the title, author, chapter, page counts, battery, time and time left. Each book keeps its own preset. The book progress bar moved from Settings > Display into the presets.
 
+- Use Phosphor icons throughout the reader. The bottom tabs have larger icons and labels, aligned on one line.
+
 ## v1.0-beta.4
 
 - Use the Arabic text font before the math fallback so Arabic letters join correctly.

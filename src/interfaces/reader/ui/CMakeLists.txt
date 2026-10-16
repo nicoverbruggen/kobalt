@@ -40,13 +40,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 target_compile_options(reader-widgets PRIVATE -Wall -Wextra -Werror -fvisibility=hidden)
 get_filename_component(KOBALT_ICON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
-file(GLOB READER_ICON_SVGS CONFIGURE_DEPENDS "${KOBALT_ICON_ROOT}/resources/icons/lucide/*.svg")
+file(GLOB READER_ICON_SVGS CONFIGURE_DEPENDS "${KOBALT_ICON_ROOT}/resources/icons/phosphor/*.svg")
 set(READER_ICON_GEOMETRY "${CMAKE_CURRENT_BINARY_DIR}/reader_icon_vectors.h")
 add_custom_command(OUTPUT "${READER_ICON_GEOMETRY}"
     COMMAND "${Python3_EXECUTABLE}" "${KOBALT_ICON_ROOT}/tools/ui_icon_vectors.py"
-        "${KOBALT_ICON_ROOT}/resources/icons/lucide" "${READER_ICON_GEOMETRY}"
+        "${KOBALT_ICON_ROOT}/resources/icons/phosphor" "${READER_ICON_GEOMETRY}"
     DEPENDS "${KOBALT_ICON_ROOT}/tools/ui_icon_vectors.py"
-        "${KOBALT_ICON_ROOT}/resources/icons/lucide/manifest.json" ${READER_ICON_SVGS}
+        "${KOBALT_ICON_ROOT}/resources/icons/phosphor/manifest.json" ${READER_ICON_SVGS}
     VERBATIM)
 target_sources(reader-widgets PRIVATE "${READER_ICON_GEOMETRY}")
 target_include_directories(reader-widgets PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")

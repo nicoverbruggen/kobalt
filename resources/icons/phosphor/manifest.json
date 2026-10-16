@@ -1,0 +1,118 @@
+{
+  "project": "Phosphor Icons",
+  "repository": "https://github.com/phosphor-icons/core",
+  "revision": "2b75f3ad12b420c9504ef05df8d2564a28f8500e",
+  "version": "2.1.1",
+  "weight": "regular",
+  "license": "MIT",
+  "files": [
+    {
+      "file": "arrow-left.svg",
+      "sha256": "3c2001cf957d182fc54927e4b286cc8cf66dd97830f441ca2650d42a63a9006a"
+    },
+    {
+      "file": "arrow-u-up-left.svg",
+      "sha256": "37975867f2e89f745250d3601a5674ca37883a8d79f52abcb082beba4df28df7"
+    },
+    {
+      "file": "bluetooth.svg",
+      "sha256": "b7acd2d97b06217902bfe61cafd4dda5432a0823ebee5cca8a26175efab46b91"
+    },
+    {
+      "file": "book-open.svg",
+      "sha256": "b38cdb3a15dcf00cfa4811e318b021e25c6a87b47acbb11888e16d107a5642da"
+    },
+    {
+      "file": "bookmark-simple.svg",
+      "sha256": "493a836009ab98f8d4ca84f088cc03f2785cdee86daa1643e003865ff3168b41"
+    },
+    {
+      "file": "bug.svg",
+      "sha256": "05041640c72e5cccc75ffe9b5138ff173c8097ee75183f231deeadcdf108dd0a"
+    },
+    {
+      "file": "caret-down.svg",
+      "sha256": "53f0cf2d0b144ac3cb07e353e0cd0853ffb3ed432d741460ce288edfcb0924b1"
+    },
+    {
+      "file": "caret-left.svg",
+      "sha256": "623bf248fe21a8170344e168aaac2e174119cea5d7c5d0fb0dc84f581009475f"
+    },
+    {
+      "file": "caret-right.svg",
+      "sha256": "e6dec01e074807965b7f3146b976a9b5e82c31d9c2c88aeb52e77cc2ab16c1d7"
+    },
+    {
+      "file": "caret-up.svg",
+      "sha256": "bccc26004e73e5de783ac6dde607e3671e776261d81972ccdbd296b4aca21ca9"
+    },
+    {
+      "file": "chart-bar.svg",
+      "sha256": "d161e503af4f5386a370ffd742d19d85e98625fd6d6eadbabbdb36d58dcca22c"
+    },
+    {
+      "file": "dots-three.svg",
+      "sha256": "ca4e748007101155641ec3041cd129bb03a8030d0eed16e313b9dd75e6beac77"
+    },
+    {
+      "file": "download-simple.svg",
+      "sha256": "c48678aa09b44ba4974954690ee6cc846379c448a7214f8c802604c2a1562014"
+    },
+    {
+      "file": "file-x.svg",
+      "sha256": "f27c09b92f424e1fdda308284ec89d528eb05e590bedab9a3ca021cd4594611f"
+    },
+    {
+      "file": "layout.svg",
+      "sha256": "7436c160d3f420240b3efa5b2c156ee7e8ca850222b2f98d26c50418b1921b0c"
+    },
+    {
+      "file": "link.svg",
+      "sha256": "526d89480e3064c614b7d46a93888c187696d7776f684527d48eb94e2d7cd5d4"
+    },
+    {
+      "file": "list.svg",
+      "sha256": "fb1851842c74b40a3f42ce3d6ae0e67ede556b624218e79c0f4ead7d9ceec51f"
+    },
+    {
+      "file": "lock.svg",
+      "sha256": "7f9e0acc09a417a48328cd5b74e95de98989c5af1710ca5da705179da75c72d9"
+    },
+    {
+      "file": "magnifying-glass.svg",
+      "sha256": "f9fa2561978a9a3291e8ae0ebfcb651104f5069fade8f84871627bca68889cde"
+    },
+    {
+      "file": "minus.svg",
+      "sha256": "5a068d1cfd707fde5ddb0ce0623958123b6a5afba98401318983aeb0fdad6382"
+    },
+    {
+      "file": "plus.svg",
+      "sha256": "d688feb9dd2e41c1721d6906a05a2a42e18cd774762fe706d72b2bdfd91cddc4"
+    },
+    {
+      "file": "sliders-horizontal.svg",
+      "sha256": "1d937baa3bc51ec4052364edf30cf8991d550920534f5d413eb9f60535cc1916"
+    },
+    {
+      "file": "sun.svg",
+      "sha256": "8df1c7b747774f8b2c1fe353b1b785c74aac35bfa50f2ed7d8d9a85a4191b2ac"
+    },
+    {
+      "file": "text-aa.svg",
+      "sha256": "e964560ce335191f6bfc660ee8be894d6459561516152f9fceaddb0b8d00b0d2"
+    },
+    {
+      "file": "text-align-justify.svg",
+      "sha256": "ed0ca3e27ec011906d1f584daefde881c52e902bd4886c0fa76cac0596931a23"
+    },
+    {
+      "file": "text-align-left.svg",
+      "sha256": "4d166977720d3beb386288a8607fbb36134fef06fdd99496ab09cf2d2da211b5"
+    },
+    {
+      "file": "x.svg",
+      "sha256": "7397b15e1fa66eaf6ff9b59fe91d483cb5c3bcf75b2fe052097ab6f0593b513a"
+    }
+  ]
+}

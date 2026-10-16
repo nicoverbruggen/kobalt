@@ -652,30 +652,6 @@ int main(int argc, char **argv) {
     }
     {
         using namespace kobalt::ui;
-        // Each chapters bar covers whole pixels at the sizes the reader draws.
-        for (int size : {int(metrics::chrome::cellIcon), int(metrics::control::chapterIconSize),
-                         2 * int(metrics::chrome::cellIcon)}) {
-            const auto image =
-                controlIcon(ControlIcon::Chapters).pixmap(size, size).toImage().convertToFormat(QImage::Format_ARGB32);
-            require(image.width() == size, "Chapters icon lacks a pixmap at its drawn size");
-            QVector<int> bars;
-            int run = 0;
-            for (int y = 0; y < size; ++y) {
-                const int alpha = qAlpha(image.pixel(size / 3, y));
-                require(alpha == 0 || alpha == 255, "Chapters icon bar falls between pixels");
-                if (alpha)
-                    ++run;
-                else if (run) {
-                    bars.append(run);
-                    run = 0;
-                }
-            }
-            require(bars.size() == 3 && bars[0] == bars[1] && bars[1] == bars[2],
-                    "Chapters icon bars differ in thickness");
-        }
-    }
-    {
-        using namespace kobalt::ui;
         const int savedDensity = density();
         for (int ppi : {167, 212, 300}) {
             setDensity(ppi);

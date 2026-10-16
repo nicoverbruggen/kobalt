@@ -41,6 +41,8 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.moveTo(x1, y1);
         path.lineTo(x2, y2);
     };
+    // Phosphor has no vertical swipe gesture, and the device drawings show
+    // the side buttons, so these stay Kobalt's own artwork.
     if (icon == ControlIcon::Swipe) {
         result.canvas = 24;
         result.stroke = 1.5;
@@ -61,103 +63,6 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.cubicTo(21, 13, 22, 15, 21, 18);
         path.lineTo(20, 21);
         path.closeSubpath();
-    } else if (icon == ControlIcon::Bluetooth) {
-        result.canvas = 24;
-        lucideGeometry(QStringLiteral("bluetooth"), path, result.stroke);
-    } else if (icon == ControlIcon::Download) {
-        line(32, 10, 32, 44);
-        path.moveTo(21, 33);
-        path.lineTo(32, 44);
-        path.lineTo(43, 33);
-        line(18, 53, 46, 53);
-    } else if (icon == ControlIcon::Lock || icon == ControlIcon::FileWarning) {
-        result.canvas = 24;
-        result.stroke = 1.6;
-        if (icon == ControlIcon::Lock) {
-            path.addRoundedRect(QRectF(4, 10, 16, 11), 2, 2);
-            path.moveTo(8, 10);
-            path.lineTo(8, 7);
-            path.cubicTo(8, 1.7, 16, 1.7, 16, 7);
-            path.lineTo(16, 10);
-        } else {
-            path.moveTo(14, 2);
-            path.lineTo(6, 2);
-            path.quadTo(4, 2, 4, 4);
-            path.lineTo(4, 20);
-            path.quadTo(4, 22, 6, 22);
-            path.lineTo(18, 22);
-            path.quadTo(20, 22, 20, 20);
-            path.lineTo(20, 8);
-            path.lineTo(14, 2);
-            path.lineTo(14, 8);
-            path.lineTo(20, 8);
-            line(12, 11, 12, 14);
-        }
-        // A zero-length path is not stroked by Qt; add the round dot as ink.
-        QPainterPathStroker stroker;
-        stroker.setWidth(result.stroke);
-        stroker.setCapStyle(result.cap);
-        stroker.setJoinStyle(result.join);
-        path = stroker.createStroke(path);
-        path.addEllipse(QPointF(12, icon == ControlIcon::Lock ? 15 : 17), .8, .8);
-        path.setFillRule(Qt::WindingFill);
-        result.filled = true;
-    } else if (icon == ControlIcon::Link) {
-        path.addRoundedRect(QRectF(-24, -10, 28, 20), 10, 10);
-        path.addRoundedRect(QRectF(-4, -10, 28, 20), 10, 10);
-        QTransform transform;
-        transform.translate(32, 32);
-        transform.rotate(-40);
-        path = transform.map(path);
-    } else if (icon == ControlIcon::Dictionary) {
-        path.moveTo(32, 16);
-        path.quadTo(21, 9, 9, 13);
-        path.lineTo(9, 49);
-        path.quadTo(21, 45, 32, 52);
-        path.quadTo(43, 45, 55, 49);
-        path.lineTo(55, 13);
-        path.quadTo(43, 9, 32, 16);
-        path.lineTo(32, 52);
-        line(16, 24, 25, 26);
-        line(39, 26, 48, 24);
-        line(16, 33, 25, 35);
-        line(39, 35, 48, 33);
-    } else if (icon == ControlIcon::Undo) {
-        path.moveTo(12, 27);
-        path.lineTo(34, 27);
-        path.cubicTo(56, 27, 56, 51, 34, 51);
-        line(12, 27, 24, 15);
-        line(12, 27, 24, 39);
-    } else if (icon == ControlIcon::Chapters) {
-        result.filled = true;
-        path.addRect(8, 14, 48, 6);
-        path.addRect(8, 29, 48, 6);
-        path.addRect(8, 44, 33, 6);
-    } else if (icon == ControlIcon::Debug) {
-        result.stroke = 3;
-        path.addEllipse(QRectF(24, 12, 16, 14));
-        path.addRoundedRect(QRectF(20, 23, 24, 29), 10, 10);
-        line(32, 25, 32, 50);
-        for (int y : {28, 38, 48}) {
-            line(12, y, 20, y);
-            line(44, y, 52, y);
-        }
-        line(25, 14, 21, 8);
-        line(39, 14, 43, 8);
-    } else if (icon == ControlIcon::Bookmark) {
-        result.stroke = 4;
-        result.cap = Qt::SquareCap;
-        result.join = Qt::MiterJoin;
-        path.moveTo(19, 10);
-        path.lineTo(45, 10);
-        path.lineTo(45, 54);
-        path.lineTo(32, 43);
-        path.lineTo(19, 54);
-        path.closeSubpath();
-    } else if (icon == ControlIcon::More) {
-        result.filled = true;
-        for (int x : {14, 32, 50})
-            path.addEllipse(QPointF(x, 32), 3.5, 3.5);
     } else if (icon == ControlIcon::RotationBoth) {
         path.addRoundedRect(QRectF(6, 10, 20, 36), 2, 2);
         path.addRoundedRect(QRectF(32, 24, 28, 22), 2, 2);
@@ -179,32 +84,43 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         transform.translate(-12, -12);
         path = transform.map(path);
     } else {
-        static const char *const names[] = {"search",
-                                            "sun-medium",
+        static const char *const names[] = {"magnifying-glass",
+                                            "sun",
                                             "sliders-horizontal",
-                                            "panels-top-left",
+                                            "layout",
                                             "x",
-                                            "list-tree",
-                                            "chart-no-axes-column-increasing",
-                                            "chevron-left",
-                                            "chevron-right",
-                                            "chevron-up",
-                                            "chevron-down",
+                                            "list",
+                                            "chart-bar",
+                                            "caret-left",
+                                            "caret-right",
+                                            "caret-up",
+                                            "caret-down",
                                             "minus",
                                             "plus",
-                                            "text-align-start",
+                                            "text-align-left",
                                             "text-align-justify",
                                             nullptr,
                                             nullptr,
                                             nullptr,
                                             nullptr,
                                             "arrow-left",
-                                            "type"};
-        static_assert(sizeof(names) / sizeof(*names) == size_t(ControlIcon::Typography) + 1);
+                                            "text-aa",
+                                            "dots-three",
+                                            "bug",
+                                            "bookmark-simple",
+                                            "lock",
+                                            "file-x",
+                                            "link",
+                                            "book-open",
+                                            "arrow-u-up-left",
+                                            "download-simple",
+                                            "bluetooth"};
+        static_assert(sizeof(names) / sizeof(*names) == size_t(ControlIcon::Bluetooth) + 1);
         const int index = int(icon);
-        if (index >= 0 && index <= int(ControlIcon::Typography) && names[index]) {
-            result.canvas = 24;
-            lucideGeometry(QString::fromLatin1(names[index]), path, result.stroke);
+        if (index >= 0 && index <= int(ControlIcon::Bluetooth) && names[index]) {
+            result.canvas = 256;
+            result.filled = true;
+            phosphorGeometry(QString::fromLatin1(names[index]), path);
         }
     }
     return result;
@@ -230,25 +146,6 @@ void paintGeometry(QPainter &painter, const Geometry &shape, ControlIcon glyph, 
         painter.translate(-bounds.center());
     } else
         painter.scale(side / shape.canvas, side / shape.canvas);
-    if (glyph == ControlIcon::Chapters) {
-        // Snap in device pixels, including fractional desktop scale factors.
-        const QTransform device = painter.deviceTransform();
-        bool invertible = false;
-        const QTransform inverse = device.inverted(&invertible);
-        if (invertible && device.type() <= QTransform::TxScale && device.m11() > 0 && device.m22() > 0) {
-            painter.setRenderHint(QPainter::Antialiasing, false);
-            const qreal thickness = qMax(1, qRound(6 * qAbs(device.m22())));
-            const qreal pitch = qRound(15 * qAbs(device.m22()));
-            const QPointF first = device.map(QPointF(8, 14));
-            for (int row = 0; row < 3; ++row) {
-                const qreal width = qRound((row == 2 ? 33 : 48) * qAbs(device.m11()));
-                const QRectF pixels(qRound(first.x()), qRound(first.y()) + row * pitch, width, thickness);
-                painter.fillRect(inverse.mapRect(pixels), color);
-            }
-            painter.restore();
-            return;
-        }
-    }
     painter.setPen(shape.filled ? QPen(Qt::NoPen) : QPen(color, shape.stroke, Qt::SolidLine, shape.cap, shape.join));
     painter.setBrush(shape.filled ? QBrush(color) : QBrush(Qt::NoBrush));
     painter.drawPath(shape.path);

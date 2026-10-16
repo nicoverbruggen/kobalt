@@ -198,8 +198,6 @@ QPushButton *SlotMap::cell(int slot) const {
 
 void SlotMap::setSlots(const Layout &next, const SlotContents &contents) {
     const bool repaint = layout != next;
-    const bool resize = layout.headerSize != next.headerSize || layout.footerSize != next.footerSize ||
-                        layout.progressBar != next.progressBar;
     layout = next;
     for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
         const bool footer = headerfooter::footerSlot(slot);
@@ -207,16 +205,16 @@ void SlotMap::setSlots(const Layout &next, const SlotContents &contents) {
         cells[slot]->show(layout.slotFields[slot], contents[slot], size != "off", layout.progressBar,
                           m::reading::textPixels(m::reading::textSize(size), footer));
     }
-    // Larger strips make a taller page, as they do on the reader.
-    if (resize)
-        updateGeometry();
     if (repaint)
         update();
 }
 
 QSize SlotMap::sizeHint() const {
-    const int strips = 2 * hf::mapEdgeInset + slotBoxHeight(layout.headerSize, false) +
-                       slotBoxHeight(layout.footerSize, true) + (layout.progressBar ? progressSpace() : 0);
+    // Room for the largest strips and the bar, whatever the layout shows, so
+    // the sheet keeps its height when a preset or size changes. Smaller
+    // strips leave more page between them, as they do on the reader.
+    const int strips = 2 * hf::mapEdgeInset + slotBoxHeight(QStringLiteral("large"), false) +
+                       slotBoxHeight(QStringLiteral("large"), true) + progressSpace();
     // Two lines with a line gap above and below them. A third line would
     // push the sheet past the screen on a Clara BW.
     const int body = 3 * hf::mapLineGap + hf::mapLineHeight;

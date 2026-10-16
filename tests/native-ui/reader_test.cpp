@@ -3916,12 +3916,15 @@ private slots:
         QTRY_COMPARE(currentPage(), int(Layout));
         QVERIFY(click(canvas, door));
         QTRY_COMPARE(currentPage(), int(View));
-        // A preset applies at once and is saved with the book.
+        // A preset applies at once and is saved with the book. The sheet keeps
+        // its height, though the preset has other strip sizes and no bar.
+        const int sheetHeight = view->height();
         auto *quiet = host.window()->findChild<QPushButton *>("rrHeaderFooterPreset_alternative_b");
         QVERIFY(quiet);
         QVERIFY(click(canvas, quiet));
         QTRY_VERIFY(previewReady());
         QVERIFY(quiet->isChecked());
+        QCOMPARE(view->height(), sheetHeight);
         QCOMPARE(page->chrome, headerfooter::presetLayout(headerfooter::Preset::AlternativeB));
         QVERIFY(!page->showProgress());
         QCOMPARE(storage::readJson(paths.bookState(identity)).value("header_footer").toString(),
@@ -3932,6 +3935,7 @@ private slots:
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderTextSize_medium")));
         QTRY_VERIFY(previewReady());
         QVERIFY(custom->isChecked());
+        QCOMPARE(view->height(), sheetHeight);
         auto adjusted = headerfooter::presetLayout(headerfooter::Preset::AlternativeB);
         adjusted.headerSize = QStringLiteral("medium");
         QCOMPARE(page->chrome, adjusted);
@@ -3982,7 +3986,10 @@ private slots:
             }
         }
         QCOMPARE(storage::readJson(paths.bookState(identity)).value("header_footer").toString(), QString("custom"));
-        QVERIFY(sheetHeights["small"] < sheetHeights["medium"] && sheetHeights["medium"] < sheetHeights["large"]);
+        // The preview's strips grow inside a page of fixed height, so the sheet keeps its height.
+        QCOMPARE(sheetHeights["medium"], sheetHeights["small"]);
+        QCOMPARE(sheetHeights["large"], sheetHeights["small"]);
+        QCOMPARE(sheetHeights["off"], sheetHeights["small"]);
         QCOMPARE(headerTops.size(), 1);
         QCOMPARE(footerGaps.size(), 1);
         QVERIFY2(previewInk["small"] < previewInk["medium"] && previewInk["medium"] < previewInk["large"],

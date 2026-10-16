@@ -429,14 +429,25 @@ void Reader::applyTheme(bool dark) {
     colors.setColor(QPalette::Mid, QColor("#999999"));
     colors.setColor(QPalette::Midlight, dark ? QColor("#333333") : QColor("#dddddd"));
     // Theme this window only. Nickel keeps its own palette when we close.
-    setProperty("reader_dark", dark);
-    setPalette(colors);
-    readerStyle(this, property("reader_style").toString());
-    textRefresh(this);
-    for (auto *widget : findChildren<QWidget *>()) {
+    // Set the palette, then the style sheet, so the sheet's own background
+    // and text colors reach widgets that paint from their palette. Setting a
+    // style sheet takes the gray roles from the platform; no sheet sets them,
+    // so restore the theme's rule and pressed grays afterwards.
+    const auto applyColors = [&colors](QWidget *widget) {
         widget->setPalette(colors);
         if (widget->property("reader_style").isValid())
             readerStyle(widget, widget->property("reader_style").toString());
+        auto styled = widget->palette();
+        for (const auto role : {QPalette::Mid, QPalette::Midlight})
+            for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
+                styled.setColor(group, role, colors.color(group, role));
+        widget->setPalette(styled);
+    };
+    setProperty("reader_dark", dark);
+    applyColors(this);
+    textRefresh(this);
+    for (auto *widget : findChildren<QWidget *>()) {
+        applyColors(widget);
         textRefresh(widget);
         if (auto *button = qobject_cast<QPushButton *>(widget))
             kobalt::ui::refreshButtonIcon(button);

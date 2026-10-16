@@ -199,6 +199,45 @@ private slots:
             QVERIFY(!toolbar->isVisible());
         }
     }
+    void heldButtonsShowPressedState() {
+        // A held reader button must look pressed in the window, through the canvas.
+        Fixture f;
+        QSignalSpy opened(&f.window, &desktop::Window::bookOpened);
+        f.window.openBook(f.book());
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!f.state()["busy"].toBool(), 30000);
+        auto *reader = f.window.readerWindow();
+        auto *page = reader->findChild<ReadingPage *>("rrPage");
+        page->tapped(page->rect().center());
+        reader->findChild<QPushButton *>("rrNavText")->click();
+        auto *font = reader->findChild<QPushButton *>("rrFont");
+        QTRY_VERIFY(font && font->isVisible());
+        auto *canvas = f.window.findChild<QGraphicsView *>();
+        QVERIFY(canvas);
+        const QPoint local(font->width() - 12, 6);
+        const auto shown = [&] {
+            QCoreApplication::processEvents();
+            const auto viewportPoint = canvas->mapFromScene(font->mapTo(reader, local));
+            const auto image = canvas->viewport()->grab().toImage();
+            const qreal dpr = image.devicePixelRatio();
+            return image.pixelColor(qRound(viewportPoint.x() * dpr), qRound(viewportPoint.y() * dpr));
+        };
+        const auto idle = shown();
+        const auto viewportPoint = canvas->mapFromScene(font->mapTo(reader, font->rect().center()));
+        const auto global = canvas->viewport()->mapToGlobal(viewportPoint);
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(viewportPoint), QPointF(global), Qt::LeftButton,
+                          Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &press);
+        QVERIFY(font->isDown());
+        const auto held = shown();
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(QPoint(-50, -50)), QPointF(global), Qt::LeftButton,
+                            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas->viewport(), &release);
+        // The theme's pressed gray, not a platform palette color: setting a
+        // style sheet derives a new palette from the platform.
+        QVERIFY2(idle == QColor(Qt::white), qPrintable(idle.name()));
+        QVERIFY2(held == QColor("#dddddd"), qPrintable(held.name()));
+    }
     void devicePreviewTapAbovePanelClosesIt() {
         // In a device preview only the middle of the page opens the menu. A
         // tall panel can cover that middle, so a tap on the visible page

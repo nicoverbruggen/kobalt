@@ -2410,6 +2410,12 @@ private slots:
         QVERIFY(helpSample);
         QCOMPARE(helpSample->text(), QString("Aa"));
         QCOMPARE(QFontInfo(helpSample->font()).family(), kobalt::test::alternateReadingFace());
+        // The section bar keeps the list gray after the theme sets every
+        // widget's palette; a style sheet background once turned it white.
+        auto *section = host.window()->findChild<QWidget *>("rrFontSectionBar");
+        QVERIFY(section && section->isVisible());
+        const bool dark = host.window()->findChild<QWidget *>("rrPage")->window()->property("reader_dark").toBool();
+        QCOMPARE(section->grab().toImage().pixelColor(1, 1), dark ? QColor("#333333") : QColor("#dddddd"));
         QLabel *defaultCaption = nullptr;
         for (auto *label : host.window()->findChildren<QLabel *>()) {
             if (label->objectName().endsWith("Title") && label->text() == kobalt::test::alternateReadingLabel())

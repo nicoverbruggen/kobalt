@@ -213,7 +213,7 @@ void Panel::paintEvent(QPaintEvent *event) {
     // pass as the controls, without repainting the book underneath.
     {
         QPainter painter(this);
-        painter.fillRect(rect(), palette().color(QPalette::Window));
+        painter.fillRect(rect(), palette().color(fill));
     }
     QFrame::paintEvent(event);
     QPainter painter(this);

@@ -58,6 +58,21 @@ class UIArchitectureTests(unittest.TestCase):
         self.assertTrue(any('reader_settings.cpp' in error for error in errors))
         self.assertTrue(any('reader_appearance.cpp' in error for error in errors))
 
+    def test_plain_colored_backgrounds_are_rejected(self):
+        errors = self.check({'src/reader/panel.cpp': '''
+            void readerStyle(QWidget *widget, const QString &source) {}
+            readerStyle(bar, "background:palette(midlight);");
+            readerStyle(note, styles::font(24) +
+                              "color:black;background-color:#ddd;");
+            readerStyle(label, "background:transparent;color:palette(mid);");
+            readerStyle(page, "background:palette(window);");
+            readerStyle(button, "QPushButton{background:palette(midlight);}");
+            // readerStyle(old, "background:black;");
+        '''})
+        self.assertEqual(len(errors), 2, errors)
+        self.assertIn('background: palette(midlight); use Panel::setFill', errors[0])
+        self.assertIn('background: #ddd', errors[1])
+
     def test_cycles_comments_generated_and_public_qt(self):
         self.assertEqual(self.check({
             'src/' + UI_ROOT + '/a.h': '#include "b.h"\n#include "support/strings.h"\n#include <QtWidgets/QWidget>\n/* #include "reading/book.h" */',

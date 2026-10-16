@@ -187,7 +187,8 @@ ChoiceScreen::ChoiceScreen(QWidget *parent) : kobalt::ui::Panel(parent), navigat
         }
     });
     fontSectionBar = new ui::Panel(this);
-    readerStyle(fontSectionBar, "background:palette(midlight);");
+    fontSectionBar->setObjectName("rrFontSectionBar");
+    fontSectionBar->setFill(QPalette::Midlight);
     fontSection = new QLabel(fontSectionBar);
     fontSection->setObjectName("rrFontSection");
     fontSection->setFont(ui::captionFont(ui::px(18)));

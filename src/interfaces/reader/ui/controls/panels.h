@@ -32,6 +32,12 @@ public:
         dividers = edges;
         update();
     }
+    // The palette role of the panel's paper. The theme sets the palette on
+    // every widget, so a style sheet background would not last.
+    void setFill(QPalette::ColorRole role) {
+        fill = role;
+        update();
+    }
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -39,6 +45,7 @@ protected:
 private:
     Edges separators, dividers;
     bool softEdges = false;
+    QPalette::ColorRole fill = QPalette::Window;
     int edgeWidth = 0; // Zero follows the current density; positive values are explicit widths.
 };
 

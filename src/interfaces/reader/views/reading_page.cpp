@@ -181,6 +181,7 @@ void ReadingPage::revealLinks(const QVector<QRect> &rectangles) {
     QRegion dirty;
     for (const auto &outline : revealedOutlines)
         dirty += outline;
+    const bool wereShown = !revealedLinks.isEmpty();
     revealedLinks = rectangles;
     // Pad each link, then split the space where padded links meet so that
     // links on consecutive lines, as in a contents page, keep separate outlines.
@@ -208,6 +209,13 @@ void ReadingPage::revealLinks(const QVector<QRect> &rectangles) {
                 after.setTop(qMax(after.top(), middle + gap - gap / 2));
             }
         }
+    // Showing or hiding the outlines repaints the whole page as one rectangle:
+    // MediaTek refreshes each page rectangle on its own, which would flash
+    // once per link. A change between two sets of links repaints only their outlines.
+    if (rectangles.isEmpty() == wereShown) {
+        update();
+        return;
+    }
     for (const auto &outline : revealedOutlines)
         dirty += outline;
     if (!dirty.isEmpty())

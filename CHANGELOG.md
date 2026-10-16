@@ -26,6 +26,8 @@
 
 ### Fixed
 
+- Showing and hiding link highlights refreshes the whole page once instead of refreshing each link separately.
+
 - Fixed bugs in text rendering, including Arabic letters that did not join, math equations that lost their font, fallback text without real bold or italic, and visible or missing special spaces.
 
 - Kobo custom dictionaries load when the standard dictionary is not installed, and can be chosen next to a standard dictionary for the same language.

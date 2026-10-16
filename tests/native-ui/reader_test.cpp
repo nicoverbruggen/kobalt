@@ -3589,7 +3589,7 @@ private slots:
         for (int y = bar->mapTo(canvas.surface(), QPoint()).y(); y <= stats->mapTo(canvas.surface(), QPoint()).y(); ++y)
             QVERIFY2(image.pixel(x, y) == ink, qPrintable(QString::number(y)));
     }
-    void linkHighlightsPaintOnlyChangedOutlines() {
+    void linkHighlightsRepaintWholePageOnToggle() {
         ReadingPage page(nullptr, [] {});
         page.resize(400, 600);
         page.image = QImage(400, 480, QImage::Format_RGB32);
@@ -3604,6 +3604,9 @@ private slots:
         const QVector<QRect> lower{QRect(220, 340, 100, 24)};
         QVector<QRect> previous;
         for (const auto &next : {upper, lower, lower, QVector<QRect>{}}) {
+            // Showing or hiding the outlines repaints the whole page as one
+            // rectangle; a change between two sets repaints only the outlines.
+            const bool toggled = previous.isEmpty() != next.isEmpty();
             QRegion allowed;
             const int pad = ui::metrics::links::revealPadding;
             for (const auto &rect : previous + next)
@@ -3612,7 +3615,11 @@ private slots:
             page.revealLinks(next);
             QCoreApplication::processEvents();
             const auto damage = paints.painted;
-            QVERIFY((damage - allowed).isEmpty());
+            if (toggled) {
+                QCOMPARE(damage, QRegion(page.rect()));
+            } else {
+                QVERIFY((damage - allowed).isEmpty());
+            }
             if (previous == next)
                 QVERIFY(damage.isEmpty());
             else

@@ -313,9 +313,10 @@ QString fieldLabel(Field field) {
 }
 
 QString slotLabel(int slot) {
-    static const char *const keys[slotCount] = {"header_footer.slot.top_left",      "header_footer.slot.top_center",
-                                                "header_footer.slot.top_right",     "header_footer.slot.bottom_left",
-                                                "header_footer.slot.bottom_center", "header_footer.slot.bottom_right"};
+    static const char *const keys[slotCount] = {
+        strings::key("header_footer.slot.top_left"),      strings::key("header_footer.slot.top_center"),
+        strings::key("header_footer.slot.top_right"),     strings::key("header_footer.slot.bottom_left"),
+        strings::key("header_footer.slot.bottom_center"), strings::key("header_footer.slot.bottom_right")};
     return slot >= 0 && slot < slotCount ? strings::get(keys[slot]) : QString();
 }
 

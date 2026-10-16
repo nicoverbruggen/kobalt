@@ -3813,6 +3813,34 @@ private slots:
         QTest::qWait(30);
         QCOMPARE(host.session()->page(), 1);
     }
+    void headerFooterPresetLabelsFitSixInchScreen() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        const QSize screen(1072, 1448);
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), screen);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        test::ReaderCanvas canvas(host.window(), screen);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(clickAt(canvas, QPoint(screen.width() / 2, screen.height() / 2)));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout")));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooter")));
+        auto *view = host.window()->findChild<kobalt::reader::HeaderFooterView *>("rrHeaderFooterView");
+        QVERIFY(view);
+        QTRY_VERIFY(view->isVisible());
+        for (const auto *name : {"default", "alternative_a", "alternative_b", "custom"}) {
+            auto *card = view->findChild<QPushButton *>(QString("rrHeaderFooterPreset_%1").arg(name));
+            QVERIFY(card);
+            QVERIFY2(card->height() >= card->minimumSizeHint().height(), qPrintable(card->objectName()));
+            QVERIFY(view->rect().contains(QRect(card->mapTo(view, QPoint()), card->size())));
+        }
+    }
     void headerFooterPresetsApplyAndPersist() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

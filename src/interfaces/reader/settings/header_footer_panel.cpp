@@ -217,8 +217,9 @@ void SlotMap::setSlots(const Layout &next, const SlotContents &contents) {
 QSize SlotMap::sizeHint() const {
     const int strips = 2 * hf::mapEdgeInset + slotBoxHeight(layout.headerSize, false) +
                        slotBoxHeight(layout.footerSize, true) + (layout.progressBar ? progressSpace() : 0);
-    // Three lines with a line gap above and below them.
-    const int body = 4 * hf::mapLineGap + hf::mapLineHeight;
+    // Two lines with a line gap above and below them. A third line would
+    // push the sheet past the screen on a Clara BW.
+    const int body = 3 * hf::mapLineGap + hf::mapLineHeight;
     return {hf::mapRowHeight * 4, qMax(2 * int(hf::mapRowHeight), strips + body) + 2 * int(m::control::border)};
 }
 
@@ -242,16 +243,17 @@ void SlotMap::paintEvent(QPaintEvent *) {
     ui::paintEdges(painter, rect(), ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge, ink,
                    border);
     const int inner = width() - 2 * border;
-    // Three lines of text, the last one shorter, stand for the page between
+    // Two lines of text, the last one shorter, stand for the page between
     // the header and footer slots.
     const int lineLeft = border + hf::mapLineInset, lineWidth = inner - 2 * hf::mapLineInset;
     const int headerBottom = border + hf::mapEdgeInset + slotBoxHeight(layout.headerSize, false);
     const int footerTop = height() - border - hf::mapEdgeInset - (layout.progressBar ? progressSpace() : 0) -
                           slotBoxHeight(layout.footerSize, true);
-    const int first = (headerBottom + footerTop - 2 * hf::mapLineGap - hf::mapLineHeight) / 2;
-    for (int line = 0; line < 3; ++line)
-        painter.fillRect(lineLeft, first + line * hf::mapLineGap, line == 2 ? lineWidth * 3 / 4 : lineWidth,
+    const int first = (headerBottom + footerTop - hf::mapLineGap - hf::mapLineHeight) / 2;
+    for (int line = 0; line < 2; ++line) {
+        painter.fillRect(lineLeft, first + line * hf::mapLineGap, line == 1 ? lineWidth * 3 / 4 : lineWidth,
                          hf::mapLineHeight, lines);
+    }
     if (layout.progressBar) {
         // Where the page draws it: above the bottom edge, across the width.
         const int y = height() - border - progressSpace();

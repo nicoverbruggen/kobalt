@@ -21,6 +21,11 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed = nullptr
 bool initializeOpeningFonts(const AssetBundle &assets);
 // Register bundled faces; never change Nickel's application font.
 QFont interfaceFont(int pixels = -1);
+// How far above its line box centre a block of text must sit to look centred:
+// half of the room above the first line's capitals minus the room below the
+// last line's baseline. Line boxes include descender room, so centring them
+// leaves the letters low.
+int opticalCenterShift(const QFont &first, const QFont &last);
 // Keep every widget in this window unhinted. Qt 5.2 polishes a style sheet
 // font with the default hinting, which drops the interface fonts' preference.
 void keepInterfaceUnhinted(QWidget *window);

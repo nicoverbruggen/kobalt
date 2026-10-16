@@ -299,6 +299,11 @@ private:
     QWidget *window;
 };
 }
+int opticalCenterShift(const QFont &first, const QFont &last) {
+    const QFontMetricsF top(first), bottom(last);
+    const qreal capitals = top.tightBoundingRect(QStringLiteral("H")).height();
+    return qRound((top.ascent() - capitals - bottom.descent()) / 2);
+}
 void keepInterfaceUnhinted(QWidget *window) {
     QCoreApplication::instance()->installEventFilter(new UnhintedFonts(window));
 }

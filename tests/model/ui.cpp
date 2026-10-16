@@ -2995,6 +2995,51 @@ int main(int argc, char **argv) {
         action->click();
         require(clicks == 1, "Action factory does not connect its callback");
     }
+    {
+        // A list action with a note centres both lines on their letters: from
+        // the label's capitals to the note's baseline, as Restore defaults shows.
+        using namespace kobalt::ui;
+        QWidget actionHost;
+        actionHost.setStyleSheet("background:white;");
+        auto *actions = new QVBoxLayout(&actionHost);
+        auto *action = makeCaptionButton(&actionHost, actions, "notedAction", "Restore appearance defaults", [] {});
+        action->setCaption("ASKS FIRST");
+        action->setChevron(true);
+        action->setIconVisible(false);
+        action->setFont(interfaceFont(metrics::text::secondary));
+        action->setFixedSize(900, metrics::about::actionHeight);
+        actionHost.show();
+        app.processEvents();
+        const auto image = action->grab().toImage();
+        const int textRight = image.width() - int(metrics::chrome::actionRight);
+        QVector<int> inkRows;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < textRight; ++x)
+                if (qGray(image.pixel(x, y)) < 128) {
+                    inkRows.append(y);
+                    break;
+                }
+        require(!inkRows.isEmpty(), "List action drew no text");
+        // The note is the last group of rows; its baseline is the commonest column bottom.
+        int noteTop = inkRows.last();
+        for (int i = inkRows.size() - 1; i > 0 && inkRows[i] - inkRows[i - 1] <= 2; --i)
+            noteTop = inkRows[i - 1];
+        QHash<int, int> bottoms;
+        for (int x = 0; x < textRight; ++x)
+            for (int y = image.height() - 1; y >= noteTop; --y)
+                if (qGray(image.pixel(x, y)) < 128) {
+                    ++bottoms[y];
+                    break;
+                }
+        int baseline = noteTop, most = 0;
+        for (auto it = bottoms.cbegin(); it != bottoms.cend(); ++it)
+            if (it.value() > most) {
+                most = it.value();
+                baseline = it.key();
+            }
+        const qreal offset = (inkRows.first() + baseline) / 2.0 - (image.height() - 1) / 2.0;
+        require(qAbs(offset) <= 1.5, "List action text is not centred on its letters");
+    }
     kobalt::ui::SettingSlider slider(&panel, 0, 100);
     slider.resize(300, 72);
     slider.show();

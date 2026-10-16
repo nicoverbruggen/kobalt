@@ -301,8 +301,14 @@ void CaptionButton::paintEvent(QPaintEvent *) {
             icon().paint(&painter,
                          QRect(c::inset - px(7), (height() - c::cellIcon) / 2 + px(1), c::cellIcon, c::cellIcon));
         const int textWidth = width() - left - c::actionRight;
-        painter.drawText(QRect(left, 0, textWidth, height() - (note.isEmpty() ? 0 : px(30))),
-                         Qt::AlignVCenter | Qt::AlignLeft,
+        // The label and its note are one block, centred on its letters. Their
+        // line boxes keep the same centre-to-centre distance as before.
+        const QFont noteFont = captionFont();
+        const int labelHeight = QFontMetrics(label).height(), noteHeight = QFontMetrics(noteFont).height();
+        const int pitch = px(40);
+        const int blockHeight = note.isEmpty() ? labelHeight : labelHeight / 2 + pitch + noteHeight / 2;
+        const int top = (height() - blockHeight) / 2 - opticalCenterShift(label, note.isEmpty() ? label : noteFont);
+        painter.drawText(QRect(left, top, textWidth, labelHeight), Qt::AlignVCenter | Qt::AlignLeft,
                          painter.fontMetrics().elidedText(text(), Qt::ElideRight, textWidth));
         painter.setPen(QPen(palette().color(QPalette::WindowText), px(2)));
         const int x = width() - c::chevronRight, y = height() / 2;
@@ -311,9 +317,9 @@ void CaptionButton::paintEvent(QPaintEvent *) {
             painter.drawLine(x + px(2), y, x - px(8), y + px(10));
         }
         if (!note.isEmpty()) {
-            painter.setFont(captionFont());
+            painter.setFont(noteFont);
             painter.setPen(noteColor(this));
-            painter.drawText(QRect(c::inset, height() / 2 + px(10), textWidth, px(30)),
+            painter.drawText(QRect(c::inset, top + labelHeight / 2 + pitch - noteHeight / 2, textWidth, noteHeight),
                              Qt::AlignLeft | Qt::AlignVCenter,
                              painter.fontMetrics().elidedText(note, Qt::ElideRight, textWidth));
         }

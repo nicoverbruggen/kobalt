@@ -7,8 +7,6 @@
 #include <QPushButton>
 #include <functional>
 
-class QProgressBar;
-
 namespace kobalt::ui {
 // All centered notices share this card, including nonblocking feedback.
 class PopupCard : public Panel {
@@ -64,7 +62,7 @@ private:
     PopupCard *content;
     QWidget *pointer;
     QRect anchor;
-    QProgressBar *loadingProgress = nullptr;
+    ProgressBar *loadingProgress = nullptr;
     QLabel *loadingMessage = nullptr;
 };
 

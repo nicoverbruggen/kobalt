@@ -12,6 +12,22 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override;
 };
+// A percentage bar. Value changes queue only the changed fill for painting.
+class ProgressBar final : public QWidget {
+public:
+    explicit ProgressBar(QWidget *parent);
+    int value() const {
+        return percent;
+    }
+    void setValue(int value);
+
+protected:
+    void paintEvent(QPaintEvent *) override;
+
+private:
+    int percent = 0;
+    QRect fillRect(int value) const;
+};
 class Panel : public QFrame {
 public:
     explicit Panel(QWidget *parent = nullptr, Edges separators = {});

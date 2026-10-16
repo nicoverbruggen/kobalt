@@ -79,14 +79,12 @@ inline QString tab(bool first) {
 inline QString popup() {
     return QString(
                "QLabel{background:palette(window);color:palette(window-text);border:none;font-size:%1px;} "
-               "QPushButton{background:palette(window);color:palette(window-text);font-size:%1px;padding:%2px %6px;min-height:%3px;border:%4px solid palette(dark);} "
-               "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);} "
-               "QProgressBar{background:palette(window);border:%4px solid palette(window-text);height:%5px;min-height:%5px;max-height:%5px;} QProgressBar::chunk{background:palette(window-text);}")
+               "QPushButton{background:palette(window);color:palette(window-text);font-size:%1px;padding:%2px %5px;min-height:%3px;border:%4px solid palette(dark);} "
+               "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);}")
         .arg(metrics::chrome::labelText)
         .arg(metrics::control::outlinedVerticalPadding)
         .arg(metrics::control::outlinedHeight)
         .arg(metrics::control::border)
-        .arg(metrics::notice::progressHeight)
         .arg(metrics::control::outlinedHorizontalPadding);
 }
 inline QString dropdownChoice(bool selected, bool divider) {

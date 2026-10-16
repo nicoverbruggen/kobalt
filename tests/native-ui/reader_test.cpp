@@ -552,7 +552,7 @@ private slots:
         QVERIFY(loading.progressUpdateRect(35, "Applying appearance changes").isEmpty());
         loading.setDelayedProgress(true, 1100, 20, "Applying appearance changes");
         QCoreApplication::processEvents();
-        auto *bar = loading.findChild<QProgressBar *>("rrApplyingProgress");
+        auto *bar = dynamic_cast<ui::ProgressBar *>(loading.findChild<QWidget *>("rrApplyingProgress"));
         QVERIFY(bar);
         QVERIFY(bar->isVisible());
         QCOMPARE(loading.progressUpdateRect(35, "Applying appearance changes"),
@@ -569,6 +569,7 @@ private slots:
         QCOMPARE(paints.count, 0);
         QCoreApplication::processEvents();
         QCOMPARE(paints.count, 1);
+        QVERIFY(paints.painted.boundingRect().width() < bar->width() / 2);
         QVERIFY((ownerPaints.painted - QRegion(QRect(bar->mapTo(&owner, QPoint()), bar->size()))).isEmpty());
 
         paints.count = 0;
@@ -596,6 +597,87 @@ private slots:
         QVERIFY(!bar->isVisible());
         QCOMPARE(paints.count, 0);
         QVERIFY(loading.progressUpdateRect(35, "Applying appearance changes").isEmpty());
+    }
+    void progressPaintsOnlyChangedPixels_data() {
+        QTest::addColumn<int>("ppi");
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("rtl");
+        for (const int ppi : {300, 212}) {
+            for (const bool dark : {false, true}) {
+                for (const bool rtl : {false, true}) {
+                    const auto name =
+                        QString("%1-%2-%3").arg(ppi).arg(dark ? "dark" : "light").arg(rtl ? "rtl" : "ltr");
+                    QTest::newRow(qPrintable(name)) << ppi << dark << rtl;
+                }
+            }
+        }
+    }
+    void progressPaintsOnlyChangedPixels() {
+        QFETCH(int, ppi);
+        QFETCH(bool, dark);
+        QFETCH(bool, rtl);
+        struct RestoreDensity {
+            int value = ui::density();
+            ~RestoreDensity() {
+                ui::setDensity(value);
+            }
+        } restore;
+        ui::setDensity(ppi);
+        QWidget owner;
+        owner.resize(600, 800);
+        ui::ProgressBar bar(&owner);
+        bar.resize(ui::px(472), bar.height());
+        bar.setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight);
+        auto palette = bar.palette();
+        palette.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
+        palette.setColor(QPalette::WindowText, dark ? Qt::white : Qt::black);
+        bar.setPalette(palette);
+        owner.show();
+        QCoreApplication::processEvents();
+        PaintRegions paints, ownerPaints;
+        bar.installEventFilter(&paints);
+        owner.installEventFilter(&ownerPaints);
+        for (const int next : {20, 35, 65, 40, 0, 100}) {
+            const auto before = bar.grab().toImage();
+            paints.painted = {};
+            paints.count = ownerPaints.count = 0;
+            bar.setValue(next);
+            QCOMPARE(paints.count, 0);
+            QCoreApplication::processEvents();
+            QCOMPARE(paints.count, 1);
+            QCOMPARE(ownerPaints.count, 0);
+            const auto damage = paints.painted;
+            const auto after = bar.grab().toImage();
+            QRect changed;
+            for (int y = 0; y < before.height(); ++y) {
+                for (int x = 0; x < before.width(); ++x) {
+                    if (before.pixel(x, y) != after.pixel(x, y)) {
+                        changed = changed.united(QRect(x, y, 1, 1));
+                    }
+                }
+            }
+            QVERIFY(!changed.isEmpty());
+            QCOMPARE(damage, QRegion(changed));
+            const int border = ui::metrics::control::border;
+            QVERIFY(bar.rect().adjusted(border, border, -border, -border).contains(changed));
+        }
+        paints.count = 0;
+        bar.setValue(200);
+        QCoreApplication::processEvents();
+        QCOMPARE(bar.value(), 100);
+        QCOMPARE(paints.count, 0);
+        bar.setValue(-1);
+        QCoreApplication::processEvents();
+        QCOMPARE(bar.value(), 0);
+        bar.resize(2 * int(ui::metrics::control::border) + 12, bar.height());
+        QCoreApplication::processEvents();
+        paints.count = 0;
+        bar.setValue(1);
+        QCoreApplication::processEvents();
+        QCOMPARE(paints.count, 0);
+        bar.setValue(9);
+        QCoreApplication::processEvents();
+        QCOMPARE(paints.count, 1);
     }
     void unchangedLightNoticeDoesNotRepaint() {
         QWidget owner;

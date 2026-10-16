@@ -344,6 +344,8 @@ public:
             QTest::qWait(20);
         }
         require(stable == 3 && !image.isNull(), "Image did not settle: " + name);
+        auto *target = (surface ? surface : host.window())->findChild<QWidget *>(required);
+        require(target && target->isVisible(), "Capture target disappeared: " + required);
         const QString filename = name + ".png";
         require(image.save(output + "/" + filename), "Could not save " + filename);
         QJsonArray widgets;
@@ -940,17 +942,22 @@ public:
         if (group == "typography") {
             tap("rrNavText");
             capture("text", "rrFont");
-            auto *loading = dynamic_cast<ui::ModalOverlay *>(widget("rrUpdatingText")->parentWidget()->parentWidget());
-            require(loading, "Appearance loading modal missing");
-            loading->setDelayedProgress(true, 999, 37);
-            capture("applying-before-delay", "rrFont");
-            loading->setDelayedProgress(true, 1000, 37, strings::get("reader.applying_appearance_changes"));
-            capture("applying-progress", "rrApplyingProgress");
-            loading->setDelayedProgress(true, 1000, 37, strings::get("reader.enabling_bold_reading"));
-            capture("enabling-bionic", "rrApplyingProgress");
-            loading->setDelayedProgress(true, 1000, 37, strings::get("reader.disabling_bold_reading"));
-            capture("disabling-bionic", "rrApplyingProgress");
-            loading->setDelayedProgress(false, 0, 0);
+            auto *idleProgress = widget("rrApplyingProgress");
+            idleProgress->setObjectName("rrIdleApplyingProgress");
+            {
+                // Reader refreshes dismiss its inactive render notice. Use the
+                // same control independently so it stays visible during capture.
+                ui::ModalOverlay loading(host.window());
+                loading.setDelayedProgress(true, 999, 37);
+                capture("applying-before-delay", "rrFont");
+                loading.setDelayedProgress(true, 1000, 37, strings::get("reader.applying_appearance_changes"));
+                capture("applying-progress", "rrApplyingProgress");
+                loading.setDelayedProgress(true, 1000, 37, strings::get("reader.enabling_bold_reading"));
+                capture("enabling-bionic", "rrApplyingProgress");
+                loading.setDelayedProgress(true, 1000, 37, strings::get("reader.disabling_bold_reading"));
+                capture("disabling-bionic", "rrApplyingProgress");
+            }
+            idleProgress->setObjectName("rrApplyingProgress");
             tap("rrFont");
             const QStringList sections{"RECOMMENDED FONTS", "BUILT-IN FONTS", "SIDELOADED FONTS"};
             for (int i = 0; i < sections.size(); ++i) {

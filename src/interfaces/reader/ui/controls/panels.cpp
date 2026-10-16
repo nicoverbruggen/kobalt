@@ -30,6 +30,36 @@ void BrandIcon::paintEvent(QPaintEvent *) {
                    QRectF((width() - size.width()) / 2, (height() - size.height()) / 2, size.width(), size.height()),
                    palette().color(QPalette::WindowText));
 }
+ProgressBar::ProgressBar(QWidget *parent) : QWidget(parent) {
+    setFixedHeight(m::notice::progressHeight + 2 * m::control::border);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setAttribute(Qt::WA_OpaquePaintEvent);
+}
+QRect ProgressBar::fillRect(int value) const {
+    const int border = m::control::border;
+    const QRect inside = rect().adjusted(border, border, -border, -border);
+    const int filled = qMax(0, inside.width()) * value / 100;
+    return QRect(layoutDirection() == Qt::RightToLeft ? inside.right() - filled + 1 : inside.left(), inside.top(),
+                 filled, qMax(0, inside.height()));
+}
+void ProgressBar::setValue(int value) {
+    const int next = qBound(0, value, 100);
+    if (percent == next) {
+        return;
+    }
+    const QRegion changed = QRegion(fillRect(percent)).xored(QRegion(fillRect(next)));
+    percent = next;
+    if (!changed.isEmpty()) {
+        update(changed);
+    }
+}
+void ProgressBar::paintEvent(QPaintEvent *) {
+    QPainter painter(this);
+    const int border = m::control::border;
+    painter.fillRect(rect(), palette().color(QPalette::WindowText));
+    painter.fillRect(rect().adjusted(border, border, -border, -border), palette().color(QPalette::Window));
+    painter.fillRect(fillRect(percent), palette().color(QPalette::WindowText));
+}
 LightSwipeNotice::LightSwipeNotice(QWidget *parent)
     : Panel(parent, Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge) {
     setEdgeWidth(m::chrome::heavyRule);

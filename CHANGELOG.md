@@ -12,6 +12,8 @@
 
 ## v1.0-beta.4
 
+- Update only the changed fill in the book-layout progress bar, avoiding repeated refreshes of the whole bar.
+
 - Prefer script text fonts before the math fallback, and keep MathML equations on Noto Sans Math when changing the reading font.
 
 - Use the Arabic text font before the math fallback so Arabic letters join correctly.

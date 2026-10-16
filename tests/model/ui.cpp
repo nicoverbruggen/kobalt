@@ -373,7 +373,7 @@ int main(int argc, char **argv) {
         loading.fitCard();
         for (qint64 elapsed : {qint64(0), qint64(999), qint64(1000)}) {
             loading.setDelayedProgress(true, elapsed, 37, "Applying appearance changes...");
-            auto *bar = loading.findChild<QProgressBar *>("rrApplyingProgress");
+            auto *bar = dynamic_cast<kobalt::ui::ProgressBar *>(loading.findChild<QWidget *>("rrApplyingProgress"));
             require(bar && bar->value() == 37, "Loading bar does not use reported progress");
             require(loading.isVisible() == (elapsed >= 1000),
                     "Appearance notice appears before one second or fails to appear afterwards");
@@ -389,15 +389,20 @@ int main(int argc, char **argv) {
             loading.setDelayedProgress(true, 1100, 0, message);
             require(loading.findChild<QLabel *>("rrUpdatingText")->text() == message &&
                         loading.card()->findChildren<QLabel *>().size() == 1 &&
-                        loading.findChild<QProgressBar *>("rrApplyingProgress")->value() == 0,
+                        dynamic_cast<kobalt::ui::ProgressBar *>(loading.findChild<QWidget *>("rrApplyingProgress"))
+                                ->value() == 0,
                     "Replacing a relayout reason adds a second label or retains old progress");
         }
         loading.setDelayedProgress(false, 2500, 100);
-        require(!loading.isVisible() && loading.findChild<QProgressBar *>("rrApplyingProgress")->isHidden(),
-                "Completed loading notice remains visible");
+        require(
+            !loading.isVisible() &&
+                dynamic_cast<kobalt::ui::ProgressBar *>(loading.findChild<QWidget *>("rrApplyingProgress"))->isHidden(),
+            "Completed loading notice remains visible");
         loading.setDelayedProgress(true, 0, 0);
-        require(!loading.isVisible() && loading.findChild<QProgressBar *>("rrApplyingProgress")->isHidden(),
-                "A new render inherits the previous loading notice");
+        require(
+            !loading.isVisible() &&
+                dynamic_cast<kobalt::ui::ProgressBar *>(loading.findChild<QWidget *>("rrApplyingProgress"))->isHidden(),
+            "A new render inherits the previous loading notice");
         kobalt::ui::ListRow row(&host);
         row.setTitle("A very long chapter name that must fit in a narrow row");
         require(row.sizeHint().height() == m::list::oneLine, "One-line row has a different height");
@@ -2058,8 +2063,7 @@ int main(int argc, char **argv) {
         opening.setGeometry(host.geometry());
         auto *openingCard = opening.card();
         openingCard->message("Loading book…");
-        auto *bar = new QProgressBar(openingCard);
-        bar->setRange(0, 100);
+        auto *bar = new kobalt::ui::ProgressBar(openingCard);
         bar->setValue(50);
         openingCard->rows()->addWidget(bar);
         openingCard->fitToWidth(450);

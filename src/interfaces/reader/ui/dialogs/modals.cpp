@@ -8,7 +8,6 @@
 #include "../controls/buttons.h"
 #include "../controls/rows.h"
 #include "../controls/text.h"
-#include <QProgressBar>
 #include <QStylePainter>
 #include <QStyleOptionButton>
 #include <QKeyEvent>
@@ -257,10 +256,8 @@ void ModalOverlay::setDelayedProgress(bool active, qint64 elapsedMilliseconds, i
         loadingMessage = content->findChild<QLabel *>("rrUpdatingText");
         if (!loadingMessage)
             loadingMessage = content->message(message, "rrUpdatingText");
-        loadingProgress = new QProgressBar(content);
+        loadingProgress = new ProgressBar(content);
         loadingProgress->setObjectName("rrApplyingProgress");
-        loadingProgress->setRange(0, 100);
-        loadingProgress->setTextVisible(false);
         content->rows()->addWidget(loadingProgress);
         loadingProgress->hide();
         setProperty("reader_standard_modal", true);
@@ -271,22 +268,13 @@ void ModalOverlay::setDelayedProgress(bool active, qint64 elapsedMilliseconds, i
         loadingProgress->isHidden() == showBar || (!message.isEmpty() && loadingMessage->text() != message);
     if (!message.isEmpty())
         loadingMessage->setText(message);
-    // Hide before resetting. QProgressBar::setValue can paint synchronously.
+    // Hide before resetting so dismissal paints only the restored page.
     if (!showBar) {
         hide();
         loadingProgress->hide();
     }
     const int value = active ? qBound(0, percent, 100) : 0;
-    if (loadingProgress->value() != value) {
-        const bool updates = loadingProgress->updatesEnabled();
-        if (updates) {
-            loadingProgress->setUpdatesEnabled(false);
-        }
-        loadingProgress->setValue(value);
-        if (updates) {
-            loadingProgress->setUpdatesEnabled(true);
-        }
-    }
+    loadingProgress->setValue(value);
     loadingProgress->setVisible(showBar);
     if (changed)
         fitCard();

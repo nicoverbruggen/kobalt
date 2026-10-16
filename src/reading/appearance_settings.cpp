@@ -11,9 +11,24 @@ QJsonObject readerPreferences(const QJsonObject &global, const QJsonObject &book
     for (const auto *key : layoutKeys)
         if (book.contains(key))
             result[key] = book.value(key);
+    // A book with no header and footer of its own, old or new, starts with
+    // the preset of the book read last.
+    bool chromeSaved = false;
+    for (const auto *key :
+         {"header_footer", "show_header", "show_footer", "header_text_size", "footer_text_size", "show_clock"}) {
+        chromeSaved = chromeSaved || book.contains(key);
+    }
+    if (!chromeSaved && global.value(lastPresetKey).isString()) {
+        result["header_footer"] = global.value(lastPresetKey);
+    }
     return result;
 }
 QJsonObject globalPreferences(QJsonObject preferences) {
+    // No saved last preset means Kobalt, so a profile that only uses Kobalt never saves one.
+    const auto preset = preferences.value("header_footer");
+    if (preset.isString() && (preferences.contains(lastPresetKey) || preset.toString() != "default")) {
+        preferences[lastPresetKey] = preset;
+    }
     for (const auto *key : layoutKeys)
         preferences.remove(key);
     return preferences;

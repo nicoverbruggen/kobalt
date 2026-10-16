@@ -136,6 +136,25 @@ int main() {
         require(migrated.value("bold_reading") == value && !migrated.contains("bionic_reading"),
                 "Legacy Bionic reading replaced an explicit Bold reading choice");
     }
+    // A book without a header and footer of its own starts with the last preset;
+    // a book with one, even from before presets, keeps it.
+    const auto last = qt::object({{appearance::lastPresetKey, "alternative_b"}});
+    require(appearance::readerPreferences(last, {}).value("header_footer").toString() == "alternative_b" &&
+                appearance::readerPreferences(last, qt::object({{"orientation", "portrait"}}))
+                        .value("header_footer")
+                        .toString() == "alternative_b",
+            "A new book did not start with the last preset");
+    require(appearance::readerPreferences(last, qt::object({{"header_footer", "default"}}))
+                        .value("header_footer")
+                        .toString() == "default" &&
+                !appearance::readerPreferences(last, qt::object({{"show_clock", false}})).contains("header_footer") &&
+                !appearance::readerPreferences({}, {}).contains("header_footer"),
+            "The last preset replaced a book's own header and footer");
+    const auto custom = qt::object({{"header_footer", "custom"}, {appearance::lastPresetKey, "default"}});
+    require(appearance::globalPreferences(custom) == qt::object({{appearance::lastPresetKey, "custom"}}),
+            "A global save did not record the book's preset as the last one");
+    require(appearance::globalPreferences(qt::object({{"header_footer", "default"}})).isEmpty(),
+            "A profile that only uses Kobalt saved a last preset");
     require(!appearance::readerPreferences({}, qt::object({{"bionic_reading", "bold"}})).contains("bold_reading") &&
                 !appearance::readerPreferences({}, {}).contains("bold_reading"),
             "A book-specific legacy setting or a fresh profile enabled global Bold reading");

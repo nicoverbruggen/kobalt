@@ -3813,6 +3813,25 @@ private slots:
         QTest::qWait(30);
         QCOMPARE(host.session()->page(), 1);
     }
+    void openedBookSetsLastPreset() {
+        // Opening a book with a preset of its own makes it the one new books start with.
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        paths.stateReport = paths.directory + "/state.json";
+        const auto identity = QUrl::fromLocalFile(QFileInfo(fixture()).absoluteFilePath()).toString();
+        QJsonObject state;
+        state["book"] = identity;
+        state["header_footer"] = QStringLiteral("alternative_a");
+        QVERIFY(storage::writeJson(paths.bookState(identity), state));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QCOMPARE(storage::readJson(paths.preferences()).value(appearance::lastPresetKey).toString(),
+                 QString("alternative_a"));
+    }
     void headerFooterSheetMeetsToolbar() {
         // The sheet's top, its height and its preferred height, and the toolbar's
         // bottom, on a screen of this height.
@@ -3992,6 +4011,9 @@ private slots:
         QCOMPARE(page->chrome, headerfooter::presetLayout(headerfooter::Preset::AlternativeB));
         QVERIFY(!page->showProgress());
         QCOMPARE(storage::readJson(paths.bookState(identity)).value("header_footer").toString(),
+                 QString("alternative_b"));
+        // The next new book starts with it.
+        QCOMPARE(storage::readJson(paths.preferences()).value(appearance::lastPresetKey).toString(),
                  QString("alternative_b"));
         QCOMPARE(door->text(), headerfooter::presetLabel(headerfooter::Preset::AlternativeB));
         // An edit starts from the preset in force and switches the book to Custom.

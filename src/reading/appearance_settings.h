@@ -15,9 +15,13 @@ namespace appearance {
 inline constexpr std::array<const char *, 8> layoutKeys{"header_footer",    "show_header",      "show_footer",
                                                         "header_text_size", "footer_text_size", "show_clock",
                                                         "orientation",      "auto_rotate"};
+// Saved globally: the header and footer preset of the book opened or changed
+// last. A book without a saved header and footer starts with it.
+inline constexpr auto lastPresetKey = "last_header_footer";
 // Book layout takes precedence over legacy global layout values.
 // Converts the legacy global Bionic Reading key unless Bold Reading is already set.
 QJsonObject readerPreferences(const QJsonObject &global, const QJsonObject &book);
+// Removes the book layout and records the book's preset as the last one.
 QJsonObject globalPreferences(QJsonObject preferences);
 // The saved settings that decide how the book is laid out and drawn. A
 // retained layout is reused only when all of them match.

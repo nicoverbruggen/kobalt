@@ -89,6 +89,21 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
         kobalt::diagnostic("settings-unreadable", {{"status", kobalt::storage::readStatusName(savedSettings.status)}},
                            false);
     preferences = appearance::readerPreferences(savedSettings.object, book->layoutPreferences());
+    // The next new book starts with this book's preset. A damaged settings
+    // file is left for the next settings save to replace.
+    const auto openedPreset = kobalt::headerfooter::presetValue(kobalt::headerfooter::select(preferences).preset);
+    // No saved last preset means Kobalt, so a profile that only uses Kobalt never writes one.
+    const auto lastPreset = savedSettings.object.value(appearance::lastPresetKey)
+                                .toString(kobalt::headerfooter::presetValue(kobalt::headerfooter::Preset::Default));
+    const bool settingsReadable = savedSettings.status == kobalt::storage::ReadStatus::Ok ||
+                                  savedSettings.status == kobalt::storage::ReadStatus::Missing;
+    if (settingsReadable && lastPreset != openedPreset) {
+        auto global = savedSettings.object;
+        global[appearance::lastPresetKey] = openedPreset;
+        if (!writeJson(book->paths().preferences(), global)) {
+            kobalt::diagnostic("last-preset-unsaved", {}, false);
+        }
+    }
     bookmarks = std::make_unique<kobalt::BookmarkSession>(
         *model,
         [this] {

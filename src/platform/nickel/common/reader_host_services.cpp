@@ -132,8 +132,9 @@ ReaderHostServices readerHostServices() {
     result.clock = nativeReaderClock;
     result.battery = [] {
         const auto status = nativeReaderBattery();
-        return BatteryStatus{status.percent, status.charging};
+        return BatteryStatus{status.percent, status.charging, status.fullyCharged};
     };
+    result.observeBattery = observeNativeBattery;
     result.observeBluetooth = observeNativeBluetooth;
     result.remoteKeyActivity = reportNativeBluetoothActivity;
     result.pageButtons = nativeReaderHasPageButtons;
@@ -160,7 +161,9 @@ ReaderHostServices readerHostServices() {
     result.keyboard = [](QWidget *parent, QLineEdit *editor) {
         return std::make_unique<Keyboard>(parent, editor);
     };
-    result.presentation = makeWindowPresentation;
+    result.presentation = [](QWidget *reader) {
+        return makeWindowPresentation(reader, nativeReaderSleepScreenAvailable());
+    };
 #ifndef KOBALT_READER_HARDWARE
     result.debugProgressAction = NativeProgress::testAction;
 #endif

@@ -2,6 +2,7 @@
 #include <functional>
 #include <memory>
 #include <QImage>
+#include <QRect>
 class QDialog;
 class QWidget;
 
@@ -18,6 +19,10 @@ public:
     // The host owns the frame until its native sleep view closes. Failure
     // leaves the stock sleep screen in place. Native unlocking stays with the host.
     virtual bool presentSleepScreen(QImage, Qt::ScreenOrientation) {
+        return false;
+    }
+    // Updates an existing sleep frame only. Never creates a view after wake.
+    virtual bool updateSleepScreen(QImage, const QRect &) {
         return false;
     }
     virtual void clearSleepScreen() {}

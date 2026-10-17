@@ -18,12 +18,13 @@ namespace kobalt {
 struct BatteryStatus {
     int percent = -1;
     bool charging = false;
+    bool fullyCharged = false;
 };
 // Constructed by the host and moved into one reader window. Queries stay live
 // across sleep and capability changes. Factories return independently owned
 // non-null controllers; they never return a borrowed native handle. Every
 // callback except automaticBookOpening, setAutomaticBookOpening,
-// debugProgressAction, observeBluetooth and remoteKeyActivity is required,
+// debugProgressAction, observeBattery, observeBluetooth and remoteKeyActivity is required,
 // including unsupported hosts.
 struct ReaderHostServices {
     // Desktop-only presentation preferences; fixtures retain device chrome.
@@ -32,12 +33,17 @@ struct ReaderHostServices {
     std::function<bool()> devicePreview;
     bool systemRotation = false;
     bool downloadableDictionaries = true;
+    // Optional host-resolved high-resolution cover. The reader decodes it on
+    // its worker and falls back to the publication cover if it is unusable.
+    QString coverImagePath;
     // Optional host reader-selection preference. Both callbacks are supplied
     // together; a successful write affects future book openings.
     std::function<bool()> automaticBookOpening;
     std::function<bool(bool)> setAutomaticBookOpening;
     std::function<QString()> clock;
     std::function<BatteryStatus()> battery;
+    // Optional native notifications. The subscription ends with context.
+    std::function<void(QObject *context, std::function<void()> changed)> observeBattery;
     // Optional on unsupported hosts. The host owns the subscription under
     // context and reports cached state without blocking the reader thread.
     std::function<void(QObject *context, std::function<void(bool)> changed)> observeBluetooth;

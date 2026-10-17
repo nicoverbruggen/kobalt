@@ -30,6 +30,50 @@ protected:
 class WindowPresentationTest : public QObject {
     Q_OBJECT
 private slots:
+    void batteryUpdatesReuseOnlyAnExistingVisibleSleepFrame() {
+        QWidget reader;
+        MainWindowView background;
+        background.resize(320, 480);
+        AbstractPowerView power(&background);
+        power.setGeometry(background.rect());
+        background.show();
+        QApplication::processEvents();
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
+        QImage image(power.size(), QImage::Format_RGB32);
+        image.fill(Qt::gray);
+        QVERIFY(!presentation->updateSleepScreen(image, image.rect()));
+        QVERIFY(presentation->presentSleepScreen(image, Qt::PrimaryOrientation));
+        QPointer<QWidget> frame = power.findChild<QWidget *>("rrSleepFrame");
+        QVERIFY(frame);
+        image.fill(Qt::white);
+        QVERIFY(presentation->updateSleepScreen(image, image.rect()));
+        QCOMPARE(power.findChild<QWidget *>("rrSleepFrame"), frame.data());
+        QCOMPARE(frame->grab().toImage().pixelColor(150, 250), QColor(Qt::white));
+        power.hide();
+        QVERIFY(!presentation->updateSleepScreen(image, image.rect()));
+        presentation->clearSleepScreen();
+        QVERIFY(!frame);
+        power.show();
+        QVERIFY(!presentation->updateSleepScreen(image, image.rect()));
+        QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+    }
+
+    void unsupportedHostsKeepTheNativeSleepScreen() {
+        QWidget reader;
+        MainWindowView background;
+        background.resize(320, 480);
+        AbstractPowerView power(&background);
+        power.setGeometry(background.rect());
+        background.show();
+        QApplication::processEvents();
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, false);
+        QVERIFY(!presentation->supportsSleepScreen());
+        QImage image(power.size(), QImage::Format_RGB32);
+        image.fill(Qt::gray);
+        QVERIFY(!presentation->presentSleepScreen(image, Qt::PrimaryOrientation));
+        QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+    }
+
     void sleepHandoffPaintsQueuedChildUpdatesOnce() {
         QWidget reader;
         MainWindowView background;
@@ -39,7 +83,7 @@ private slots:
         background.show();
         reader.show();
         QApplication::processEvents();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         presentation->pauseBackground();
         QImage image(power.size(), QImage::Format_RGB32);
         image.fill(Qt::gray);
@@ -65,7 +109,7 @@ private slots:
         background.show();
         power.show();
         reader.show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         QVERIFY(presentation->supportsSleepScreen());
         presentation->pauseBackground();
         QImage image(power.size(), QImage::Format_RGB32);
@@ -98,7 +142,7 @@ private slots:
 
     void customSleepFrameRejectsMissingOrAmbiguousPowerViews() {
         QWidget reader, unrelated;
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         QImage image(320, 480, QImage::Format_RGB32);
         image.fill(Qt::white);
         unrelated.show();
@@ -122,7 +166,7 @@ private slots:
         auto *power = new AbstractPowerView(&background);
         background.show();
         power->show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         QImage image(320, 480, QImage::Format_RGB32);
         image.fill(Qt::white);
         QVERIFY(presentation->presentSleepScreen(image, Qt::PrimaryOrientation));
@@ -143,7 +187,7 @@ private slots:
         background.show();
         disabled.show();
         disabled.setUpdatesEnabled(false);
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         presentation->pauseBackground();
         QVERIFY(reader.updatesEnabled());
         QVERIFY(child.updatesEnabled());
@@ -168,7 +212,7 @@ private slots:
         library.show();
         pin.show();
         usb.show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         presentation->pauseBackground(true);
         QVERIFY(!library.updatesEnabled());
         QVERIFY(pin.updatesEnabled());
@@ -182,7 +226,7 @@ private slots:
         QWidget reader, background;
         reader.show();
         background.show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         presentation->pauseBackground();
         QVERIFY(!background.updatesEnabled());
         presentation.reset();
@@ -194,7 +238,7 @@ private slots:
         auto *background = new QWidget;
         reader->show();
         background->show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(reader, true);
         presentation->pauseBackground();
         delete background;
         delete reader;
@@ -210,7 +254,7 @@ private slots:
         dialog.resize(240, 300);
         background.show();
         dialog.show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         QPointer<QLabel> observed;
         int calls = 0;
         presentation->acceptHandoff(dialog, [&] {
@@ -231,7 +275,7 @@ private slots:
     void unparentedHandoffCallsContinuationOnce() {
         QWidget reader;
         QDialog dialog;
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         int calls = 0;
         presentation->acceptHandoff(dialog, [&] {
             ++calls;
@@ -247,7 +291,7 @@ private slots:
         auto *dialog = new QDialog(background);
         background->show();
         dialog->show();
-        auto presentation = kobalt::nickel::makeWindowPresentation(&reader);
+        auto presentation = kobalt::nickel::makeWindowPresentation(&reader, true);
         QPointer<QLabel> cover;
         QPointer<QDialog> guardedDialog(dialog);
         presentation->acceptHandoff(*dialog, [&] {

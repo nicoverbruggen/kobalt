@@ -10,6 +10,7 @@ set(KOBALT_INTEGRATION_SOURCES
     src/platform/nickel/common/reader_coordinator.cpp
     src/platform/nickel/common/reader_host_services.cpp src/platform/nickel/common/window_presentation.cpp
     src/platform/nickel/common/native_bluetooth.cpp
+    src/platform/nickel/common/native_battery.cpp
     src/platform/nickel/qt6/hooks.cpp src/platform/nickel/qt6/reader_controller.cpp
     src/platform/nickel/qt6/native_keyboard.cpp src/platform/nickel/common/native_keyboard.h src/platform/nickel/qt6/native_progress.cpp src/platform/nickel/common/native_progress.h src/platform/nickel/qt6/native_reading_session.cpp src/platform/nickel/qt6/native_authorization.cpp src/platform/nickel/common/native_authorization.h
     src/platform/nickel/common/native_lifecycle.cpp src/platform/nickel/qt6/native_lifecycle.cpp src/platform/nickel/common/native_lifecycle.h src/platform/nickel/qt6/native_dictionary.cpp src/platform/nickel/common/native_dictionary.h src/platform/nickel/qt6/native_light.cpp src/platform/nickel/common/native_light.h

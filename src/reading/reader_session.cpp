@@ -463,7 +463,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     if (outcome.ready() && !cancelled()) {
                         result = capture(*engine, positions, false);
                         result.author = engine->author();
-                        result.cover = engine->coverThumbnail();
+                        result.cover = engine->coverImage({120, 180});
                         report(OpeningStage::Ready, 100);
                     }
                     modelMs = timer.elapsed() - modelStart;
@@ -515,7 +515,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                             report(OpeningStage::Ready, 0);
                             result = capture(*engine, positions, false);
                             result.author = engine->author();
-                            result.cover = engine->coverThumbnail();
+                            result.cover = engine->coverImage({120, 180});
                             report(OpeningStage::Ready, 100);
                         }
                     }
@@ -905,6 +905,26 @@ void ReaderSession::compareNativePosition(const QString &location, std::function
                         result.direction = direction;
                     }
                     finished(result);
+                },
+                Qt::QueuedConnection);
+        },
+        Qt::QueuedConnection);
+}
+void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage)> finished, QString preferredPath) {
+    auto engine = model;
+    const auto lease = lease_;
+    QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+        engineWorker(),
+        [engine, guard, lease, maximumSize, preferredPath, finished] {
+            EngineJob activity;
+            auto image = lease && !lease->revoked() ? engine->coverImage(maximumSize, preferredPath) : QImage();
+            kobalt::qt::invoke(
+                qApp,
+                [guard, lease, image = std::move(image), finished]() mutable {
+                    if (!guard)
+                        return;
+                    finished(guard->lease_ == lease && lease && !lease->revoked() ? std::move(image) : QImage());
                 },
                 Qt::QueuedConnection);
         },

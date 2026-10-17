@@ -6,13 +6,15 @@
 
 - Header and footer customization has been added with a few presets and the option to fully customize both. The _Custom_ preset is saved globally, but needs to be applied on a per-book basis. Books without a saved header and footer start with the last preset used.
 
-- An optional Kobalt sleep screen on Kobo: turn on Use Kobalt's sleep screen in Settings > System. It shows the dimmed reading page with a card for Sleeping, the percentage read and, when known, the time left. It is off by default, and Kobo's PIN prompt is unchanged.
+- Choose a sleep screen in Settings > System on Kobo: Kobo's built-in screen, Kobalt with book cover or Kobalt with the dimmed reading page. The cover option prefers Kobo's full-screen cover, then the embedded cover, then the reading page. Both Kobalt options show reading progress, time left and battery status. Kobo's built-in screen is the default, and its PIN prompt is unchanged.
 
 - Style every book with your own CSS in an optional `.adds/kobalt/userstyle.css`. Any of this CSS is loaded automatically by Kobalt. Use responsibly!
 
 - After jumping to a bookmark, "Return to page" is now offered to take you back to where you came from when you navigated to the bookmark.
 
 ### What's fixed
+
+- The Kobalt sleep screen shows time left in hours and minutes when the estimate exceeds 120 minutes. Its heading shows Sleeping, Charging or Charged, with a battery icon and a smaller monospaced percentage in the top-right corner only while charging or charged. The card updates as charging progresses and returns to Sleeping without a battery display when unplugged.
 
 - Image smoothing and heavier interface text are always on. Their options have been removed from Advanced settings.
 

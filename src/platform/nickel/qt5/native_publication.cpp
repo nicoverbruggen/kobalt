@@ -1,4 +1,5 @@
 #include "platform/nickel/common/native_publication.h"
+#include "platform/nickel/common/native_ui.h"
 #include "platform/nickel/common/publication_source.h"
 #include "publication/native_resources.h"
 #include "native_location.h"
@@ -56,6 +57,7 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     identity_.clear();
     path_.clear();
     location_.clear();
+    coverPath_.clear();
     auto fail = [&](const char *stage, const QString &reason) {
         diagnostic("native-publication-failed", {{"stage", QString::fromLatin1(stage)}});
         if (error)
@@ -96,6 +98,7 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
         return fail("cannot_start_the_native_publication_service",
                     strings::get("error.cannot_start_the_native_publication_service"));
     port_ = source_->port();
+    coverPath_ = nativeReaderCoverPath(volume);
     return true;
 }
 }

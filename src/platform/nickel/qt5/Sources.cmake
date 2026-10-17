@@ -21,6 +21,7 @@ set(KOBALT_INTEGRATION_SOURCES
     src/platform/nickel/common/reader_coordinator.cpp
     src/platform/nickel/common/reader_host_services.cpp src/platform/nickel/common/window_presentation.cpp
     src/platform/nickel/common/native_bluetooth.cpp
+    src/platform/nickel/common/native_battery.cpp
     src/platform/nickel/qt5/hooks.cpp src/platform/nickel/qt5/reader_controller.cpp
     src/platform/nickel/qt5/touch_input.cpp src/platform/nickel/qt5/touch_rotation.cpp
     ${KOBALT_NICKEL4_ADAPTER_SOURCES}

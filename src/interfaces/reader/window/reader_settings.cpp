@@ -243,7 +243,7 @@ void Reader::openSettings() {
     denseGraphOption->setChecked(preferences.value("dense_stats_chart").toBool(false));
     pinStatsOption->setChecked(preferences.value("pin_stats").toBool(false));
     inheritHeaderFooterOption->setChecked(preferences.value(appearance::inheritHeaderFooterKey).toBool(true));
-    sleepScreenOption->setChecked(preferences.value("kobalt_sleep_screen").toBool(false));
+    showSleepScreen();
     if (services.automaticBookOpening)
         automaticOpeningOption->setChecked(services.automaticBookOpening());
     screenRefreshMode = kobalt::screenRefresh(preferences.value("screen_refresh").toString());
@@ -305,7 +305,6 @@ void Reader::applySettings() {
     next["dense_stats_chart"] = denseGraphOption->isChecked();
     next["pin_stats"] = pinStatsOption->isChecked();
     next[appearance::inheritHeaderFooterKey] = inheritHeaderFooterOption->isChecked();
-    next["kobalt_sleep_screen"] = sleepScreenOption->isChecked();
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
     if (services.desktopUi) {
         next["native_hide_status_bar"] = hideStatusOption->isChecked();
@@ -403,20 +402,6 @@ void Reader::applyBoldReading(bool enabled) {
         });
     }
     refresh();
-}
-
-void Reader::applySleepScreen(bool enabled) {
-    auto next = preferences;
-    next["kobalt_sleep_screen"] = enabled;
-    if (!writePreferences(next)) {
-        sleepScreenOption->setChecked(preferences.value("kobalt_sleep_screen").toBool(false));
-        settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
-        settingsError->show();
-        return;
-    }
-    preferences = next;
-    settingsError->clear();
-    settingsError->hide();
 }
 
 void Reader::applyAutomaticOpening(bool enabled) {

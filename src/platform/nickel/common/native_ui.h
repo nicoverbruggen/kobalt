@@ -21,9 +21,15 @@ QStringList nativeReaderFontFamilies();
 struct NativeBatteryStatus {
     int percent = -1;
     bool charging = false;
+    bool fullyCharged = false;
 };
+// Uses Nickel's full-screen cover path, excluding its generic cover IDs.
+// The volume is borrowed only for this GUI-thread call.
+QString nativeReaderCoverPath(const void *volume);
+bool nativeReaderSleepScreenAvailable();
 // GUI thread only, after firmwareSupported() accepts Nickel.
 NativeBatteryStatus nativeReaderBattery();
+void observeNativeBattery(QObject *context, std::function<void()> changed);
 // Observe power state without synchronous native D-Bus getters.
 void observeNativeBluetooth(QObject *context, std::function<void(bool)> changed);
 // Report accepted remote page keys; retain Nickel's idle timeout for other input.

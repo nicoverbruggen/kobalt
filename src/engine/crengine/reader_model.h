@@ -202,7 +202,9 @@ public:
     QString position() const;
     QString title() const;
     QString author() const;
-    QImage coverThumbnail() const;
+    // Decodes the host cover first, then the publication cover, within the
+    // requested size and 4 million pixels. Empty means neither is usable.
+    QImage coverImage(QSize maximumSize, const QString &preferredPath = {}) const;
     QVector<ChapterLink> chapters() const;
     void setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph);
     QVector<ChapterLink> chapterGraph() const;

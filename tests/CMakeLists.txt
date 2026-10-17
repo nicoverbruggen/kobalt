@@ -219,6 +219,9 @@ kobalt_widget_test(nickel-browser-handoff SOURCES "${KOBALT_TESTS}/nickel/browse
     LIBRARIES Qt6::Widgets)
 kobalt_widget_test(nickel-window-presentation SOURCES "${KOBALT_TESTS}/nickel/window_presentation_test.cpp"
     "${KOBALT_ROOT}/src/platform/nickel/common/window_presentation.cpp" LIBRARIES Qt6::Widgets)
+kobalt_widget_test(nickel-battery SOURCES "${KOBALT_TESTS}/nickel/native_battery_test.cpp"
+    "${KOBALT_ROOT}/src/platform/nickel/common/native_battery.cpp" LIBRARIES Qt6::Core ${CMAKE_DL_LIBS})
+set_target_properties(nickel-battery-test PROPERTIES ENABLE_EXPORTS TRUE)
 kobalt_widget_test(nickel-usb-dialog-overlay SOURCES "${KOBALT_TESTS}/nickel/usb_dialog_overlay_test.cpp"
     LIBRARIES Qt6::Widgets)
 kobalt_widget_test(nickel-usb-transition SOURCES "${KOBALT_TESTS}/nickel/usb_transition_test.cpp"

@@ -404,6 +404,13 @@ public:
                              {"dpr", image.devicePixelRatio()},
                              {"style", test::hostStyleProfile},
                              {"font_profile", test::hostFontProvenance()}};
+        if (group == "sleep" && required == "rrSleepPreview") {
+            auto *preview = host.window()->findChild<QWidget *>("rrSleepPreview");
+            require(preview, "Sleep preview unavailable");
+            metadata["battery_percent"] = preview->property("sleep_battery").toInt();
+            metadata["sleep_status"] = preview->property("sleep_status").toString();
+            metadata["sleep_background"] = preview->property("sleep_background").toString();
+        }
         if (group == "dictionary")
             metadata["dictionary_reference"] = "koreader-dicts v1.2.0/en-en";
         if (group == "dictionary" && lookup->mode != "definition")
@@ -601,19 +608,51 @@ public:
             group.remove(0, 14);
         if (group == "sleep") {
             find("Alice was beginning");
+            menu();
+            tap("rrSettings");
+            tap("rrSettingsSystem");
+            capture("settings", "rrSleepScreen");
+            tap("rrSleepScreen");
+            capture("choices", "rrSleepScreenPopup");
+            tap("rrSleep_cover");
+            QImage cover;
+            bool coverReady = false;
+            host.session()->coverImage({2048, 2048}, [&](QImage image) {
+                cover = std::move(image);
+                coverReady = true;
+            });
+            waitFor(
+                [&] {
+                    return coverReady;
+                },
+                "Cover image did not load");
+            require(!cover.isNull(), "Reference book cover is missing");
             auto *page = static_cast<ReadingPage *>(widget("rrPage"));
             const QImage reading = page->snapshot(true);
             QLabel preview(host.window());
             preview.setObjectName("rrSleepPreview");
             preview.setGeometry(host.window()->rect());
-            for (bool estimate : {false, true}) {
+            const auto show = [&](const QString &name, qint64 remaining, int battery, reader::SleepStatus status,
+                                  bool useCover = false) {
+                preview.setProperty("sleep_battery", battery);
+                preview.setProperty("sleep_status", reader::sleepStatusText(status));
+                preview.setProperty("sleep_background", useCover ? "cover" : "page");
                 preview.setPixmap(QPixmap::fromImage(reader::sleepScreenImage(
-                    reading, strings::get("sleep.percent_read").arg(42),
-                    estimate ? strings::get("sleep.minutes_left").arg(37) : QString(), theme == "dark")));
+                    useCover ? reader::sleepCoverBackground(cover, reading.size(), theme == "dark") : reading,
+                    strings::get("sleep.percent_read").arg(42), reader::sleepTimeLeft(remaining), theme == "dark",
+                    battery, status, !useCover)));
                 preview.show();
                 preview.raise();
-                capture(estimate ? "with-time-left" : "reading-page", "rrSleepPreview");
-            }
+                capture(name, "rrSleepPreview");
+            };
+            show("reading-page", -1, 100, reader::SleepStatus::Sleeping);
+            show("with-time-left", 37 * 60000, 100, reader::SleepStatus::Sleeping);
+            show("with-hours-left", 217 * 60000, 100, reader::SleepStatus::Sleeping);
+            show("charging", 217 * 60000, 67, reader::SleepStatus::Charging);
+            show("charged", 217 * 60000, 100, reader::SleepStatus::Charged);
+            show("cover-sleeping", 217 * 60000, 100, reader::SleepStatus::Sleeping, true);
+            show("cover-charging", 217 * 60000, 67, reader::SleepStatus::Charging, true);
+            show("cover-charged", 217 * 60000, 100, reader::SleepStatus::Charged, true);
             return;
         }
         if (group == "native-ui") {

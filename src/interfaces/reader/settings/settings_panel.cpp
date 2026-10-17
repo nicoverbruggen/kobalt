@@ -192,12 +192,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
               strings::get("settings.automatic_book_opening_description"));
     automaticOpeningOption->setVisible(inputs.automaticBookOpeningSupported);
     systemRows->addWidget(automaticOpeningOption);
-    sleepScreenOption = check(systemPage, "rrKobaltSleepScreen", strings::get("settings.kobalt_sleep_screen"),
-                              strings::get("settings.kobalt_sleep_screen_description"));
-    sleepScreenOption->setVisible(inputs.sleepScreenSupported);
-    systemRows->addWidget(sleepScreenOption);
+    sleepScreenButton =
+        ui::makeCaptionButton(systemPage, nullptr, "rrSleepScreen", strings::get("settings.sleep_screen"), [] {});
+    sleepScreenButton->setVisible(inputs.sleepScreenSupported);
+    systemRows->addWidget(sleepScreenButton);
     if (inputs.sleepScreenSupported) {
-        deviceOptions << sleepScreenOption;
+        deviceOptions << sleepScreenButton;
     }
     systemRows->addStretch(1);
     auto *aboutPage = new QWidget(settingsPages);
@@ -346,7 +346,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     QVector<ui::DescribedOption *> options = {hideNonlinearOption, linkIndicatorOption,       darkOption,
                                               bionicOption,        animationOption,           inheritTextLayoutOption,
                                               edgeLightOption,     inheritHeaderFooterOption, denseGraphOption,
-                                              pinStatsOption,      sleepScreenOption,         automaticOpeningOption};
+                                              pinStatsOption,      automaticOpeningOption};
     if (inputs.desktopUi)
         options << hideStatusOption << hideDeviceOptionsOption;
     for (auto *option : options) {
@@ -366,7 +366,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     resetRow->setStretch(0, 0);
     resetRow->setStretch(1, 1);
     resetRow->setStretch(2, 0);
-    for (auto *button : {resetDefaults, refreshButton}) {
+    for (auto *button : {resetDefaults, refreshButton, sleepScreenButton}) {
         button->setRule(Qt::BottomEdge);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults)

@@ -13,6 +13,7 @@
 #include "interfaces/reader/ui/style/styles.h"
 #include "platform/api/kobo_refresh.h"
 #include "reading/appearance_settings.h"
+#include "reading/sleep_screen.h"
 #include "model/page_refresh_regions.h"
 #include "support/diagnostics.h"
 #include "interfaces/reader/ui/style/metrics.h"
@@ -116,6 +117,25 @@ void Reader::prepareTransition(std::function<void()> finished, int timeoutMs) {
         });
 }
 
+void Reader::prepareSleepCover() {
+    const auto request = ++sleepCoverRequest;
+    sleepCover = {};
+    if (!presentation->supportsSleepScreen() || sleep::mode(preferences) != sleep::Mode::Cover) {
+        return;
+    }
+    // Decode off the GUI thread while the book is available. Keep at most
+    // 16 MiB, only for the cover option, and reuse it in either orientation.
+    QPointer<Reader> guard(this);
+    model->coverImage(
+        {2048, 2048},
+        [guard, request](QImage image) {
+            if (guard && guard->sleepCoverRequest == request) {
+                guard->sleepCover = std::move(image);
+            }
+        },
+        services.coverImagePath);
+}
+
 void Reader::sleepReader() {
     if (lifecycleHidden)
         return;
@@ -128,20 +148,27 @@ void Reader::sleepReader() {
     const qint64 sleepPixels = qint64(page->width()) * page->height();
     const auto *modal = QApplication::activeModalWidget();
     const bool foreground = !modal || modal == this || isAncestorOf(modal);
-    if (preferences.value("kobalt_sleep_screen").toBool(false) && presentation->supportsSleepScreen() && foreground &&
-        sleepPixels > 0 && sleepPixels <= 4 * 1024 * 1024 && readyForPresentation() && !appearanceEdit.panelOpen() &&
+    const auto mode = sleep::mode(preferences);
+    if (mode != sleep::Mode::Stock && presentation->supportsSleepScreen() && foreground && sleepPixels > 0 &&
+        sleepPixels <= 4 * 1024 * 1024 && readyForPresentation() && !appearanceEdit.panelOpen() &&
         !model->temporaryTypography()) {
-        QImage frame = page->snapshot(true);
+        const bool useCover = mode == sleep::Mode::Cover && !sleepCover.isNull();
+        QImage frame = useCover ? sleepCoverBackground(sleepCover, page->size(), darkTheme) : page->snapshot(true);
         if (!frame.isNull()) {
             // Capture only the page, including its header and footer. Menus,
             // dialogs and a temporary typography preview are not sleep content.
             const int percent = qBound(0, int(100.0 * model->page() / qMax(1, model->pages())), 100);
             const auto remaining = book->estimates().bookMilliseconds;
+            sleepBattery = services.battery();
+            const auto &battery = sleepBattery;
+            const auto status = battery.fullyCharged ? SleepStatus::Charged
+                                : battery.charging   ? SleepStatus::Charging
+                                                     : SleepStatus::Sleeping;
             sleepOrientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
-            sleepImage = sleepScreenImage(
-                std::move(frame), strings::get("sleep.percent_read").arg(percent),
-                remaining < 0 ? QString() : strings::get("sleep.minutes_left").arg((remaining + 59999) / 60000),
-                darkTheme);
+            sleepProgress = strings::get("sleep.percent_read").arg(percent);
+            sleepRemaining = sleepTimeLeft(remaining);
+            sleepImage = sleepScreenImage(std::move(frame), sleepProgress, sleepRemaining, darkTheme, battery.percent,
+                                          status, !useCover);
         }
     }
     services.cancelAnimation();
@@ -168,6 +195,28 @@ void Reader::prepareWake() {
         presentation->pauseBackground(true);
 }
 
+void Reader::updateSleepBattery() {
+    if (!lifecycleHidden || sleepImage.isNull()) {
+        return;
+    }
+    const auto battery = services.battery();
+    if (battery.charging == sleepBattery.charging && battery.fullyCharged == sleepBattery.fullyCharged &&
+        ((!battery.charging && !battery.fullyCharged) || battery.percent == sleepBattery.percent)) {
+        return;
+    }
+    sleepBattery = battery;
+    const auto status = battery.fullyCharged ? SleepStatus::Charged
+                        : battery.charging   ? SleepStatus::Charging
+                                             : SleepStatus::Sleeping;
+    // Paint over the card in the retained frame. Reusing the composed background
+    // avoids another cover decode or another dimming pass while asleep.
+    sleepImage = sleepScreenImage(std::move(sleepImage), sleepProgress, sleepRemaining, darkTheme, battery.percent,
+                                  status, false);
+    if (!isVisible()) {
+        presentation->updateSleepScreen(sleepImage, sleepScreenCardRect(sleepImage.size(), !sleepRemaining.isEmpty()));
+    }
+}
+
 void Reader::cancelWake() {
     if (lifecycleHidden && !isVisible())
         presentation->resumeBackground();
@@ -177,8 +226,7 @@ void Reader::sleepViewReady() {
     if (!lifecycleHidden || !isVisible())
         return;
     if (!sleepImage.isNull()) {
-        presentation->presentSleepScreen(std::move(sleepImage), sleepOrientation);
-        sleepImage = {};
+        presentation->presentSleepScreen(sleepImage, sleepOrientation);
     }
     // Hiding a top-level window immediately submits the backing store
     // underneath it. Paint Nickel's sleep view first, or that store still
@@ -273,6 +321,7 @@ QVector<QWidget *> Reader::popups() const {
             syncDialog.data(),
             finishDialog.data(),
             refreshPopup.data(),
+            sleepPopup.data(),
             removeDialog.data(),
             customReplaceDialog.data(),
             bookmarkErrorDialog.data(),
@@ -383,6 +432,10 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
     // The overlay itself only receives taps outside the refresh card.
     if (refreshPopup && watched == refreshPopup && type == QEvent::MouseButtonRelease) {
         closeScreenRefresh();
+        return true;
+    }
+    if (sleepPopup && watched == sleepPopup && type == QEvent::MouseButtonRelease) {
+        closeSleepScreen();
         return true;
     }
     // Panels are raised as they open, and a panel created later starts

@@ -22,6 +22,16 @@ public:
         setGeometry(parent->rect());
         parent->installEventFilter(this);
     }
+    void replaceImage(QImage next, const QRect &damage) {
+        image = std::move(next);
+        const auto *screen = QGuiApplication::primaryScreen();
+        const int angle = screen ? screen->angleBetween(orientation, screen->orientation()) : 0;
+        if (!angle) {
+            update(damage.intersected(rect()));
+        } else {
+            update();
+        }
+    }
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override {
@@ -50,17 +60,17 @@ private:
 
 class Presentation final : public WindowPresentation {
 public:
-    explicit Presentation(QWidget *reader) : reader(reader) {}
+    Presentation(QWidget *reader, bool sleepScreenSupported) : reader(reader), sleepSupported(sleepScreenSupported) {}
     ~Presentation() override {
         clearSleepScreen();
         resumeBackground();
     }
     bool supportsSleepScreen() const override {
-        return true;
+        return sleepSupported;
     }
     bool presentSleepScreen(QImage image, Qt::ScreenOrientation orientation) override {
         clearSleepScreen();
-        if (image.isNull()) {
+        if (!sleepSupported || image.isNull()) {
             return false;
         }
         QWidget *powerView = nullptr;
@@ -85,6 +95,13 @@ public:
     }
     void clearSleepScreen() override {
         delete sleepFrame.data();
+    }
+    bool updateSleepScreen(QImage image, const QRect &damage) override {
+        if (!sleepFrame || !sleepFrame->isVisible() || image.isNull()) {
+            return false;
+        }
+        sleepFrame->replaceImage(std::move(image), damage);
+        return true;
     }
     void pauseBackground(bool waking) override {
         if (!reader)
@@ -140,11 +157,12 @@ public:
 
 private:
     QPointer<QWidget> reader;
-    QPointer<QWidget> sleepFrame;
+    bool sleepSupported;
+    QPointer<SleepFrame> sleepFrame;
     QVector<QPointer<QWidget>> paused;
 };
 }
-std::unique_ptr<WindowPresentation> makeWindowPresentation(QWidget *reader) {
-    return std::make_unique<Presentation>(reader);
+std::unique_ptr<WindowPresentation> makeWindowPresentation(QWidget *reader, bool sleepScreenSupported) {
+    return std::make_unique<Presentation>(reader, sleepScreenSupported);
 }
 }

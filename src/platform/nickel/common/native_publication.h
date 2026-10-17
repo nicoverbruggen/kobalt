@@ -48,6 +48,9 @@ public:
     QString location() const {
         return location_;
     }
+    QString coverPath() const {
+        return coverPath_;
+    }
     int port() const {
         return port_;
     }
@@ -56,7 +59,7 @@ public:
 
 private:
     std::unique_ptr<native::PublicationEndpoint> source_;
-    QString identity_, path_, location_;
+    QString identity_, path_, location_, coverPath_;
     int port_ = 0;
     void close();
 };

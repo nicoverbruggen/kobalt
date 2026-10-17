@@ -126,7 +126,10 @@ private:
     bool importingProgress = false, comparingProgress = false;
     bool exitPending = false, exportRunning = false;
     bool lifecycleHidden = false;
-    QImage sleepImage;
+    QImage sleepImage, sleepCover;
+    QString sleepProgress, sleepRemaining;
+    BatteryStatus sleepBattery;
+    quint64 sleepCoverRequest = 0;
     Qt::ScreenOrientation sleepOrientation = Qt::PrimaryOrientation;
     QTimer *clockTimer;
 #ifdef KOBALT_READER_HARDWARE
@@ -148,7 +151,7 @@ private:
     kobalt::LightPanel *lightPopup = nullptr;
     QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption, *denseGraphOption,
         *pinStatsOption, *inheritHeaderFooterOption;
-    QCheckBox *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
+    QCheckBox *automaticOpeningOption = nullptr;
     QPushButton *autoRotateOption;
     QCheckBox *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;
     bool hideNativeStatus() const;
@@ -290,7 +293,11 @@ private:
     void applyEdgeLight();
     void applyDarkMode(bool enabled);
     void applyBoldReading(bool enabled);
-    void applySleepScreen(bool enabled);
+    void prepareSleepCover();
+    void updateSleepBattery();
+    void showSleepScreen();
+    void openSleepScreen();
+    void closeSleepScreen();
     void applyAutomaticOpening(bool enabled);
     void applySettings();
     bool writePreferences(const QJsonObject &next);
@@ -328,6 +335,8 @@ private:
     ui::DescribedOption *bionicOption = nullptr;
     kobalt::ui::CaptionButton *refreshButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> refreshPopup;
+    kobalt::ui::CaptionButton *sleepScreenButton = nullptr;
+    QPointer<kobalt::ui::ModalOverlay> sleepPopup;
     static QString refreshExplanation(kobalt::ScreenRefresh mode);
     static QString refreshLabel(kobalt::ScreenRefresh mode);
     void showScreenRefresh();

@@ -188,6 +188,12 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
             setGeometry(geometry);
     });
     resize(QGuiApplication::primaryScreen()->size());
+    prepareSleepCover();
+    if (services.observeBattery && presentation->supportsSleepScreen()) {
+        services.observeBattery(this, [this] {
+            updateSleepBattery();
+        });
+    }
     connectPageInput();
     // Android can suspend the app without hiding the embedded reader widget.
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] {
@@ -910,7 +916,7 @@ void Reader::buildSettings() {
     denseGraphOption = settings->denseGraphOption;
     pinStatsOption = settings->pinStatsOption;
     inheritHeaderFooterOption = settings->inheritHeaderFooterOption;
-    sleepScreenOption = settings->sleepScreenOption;
+    sleepScreenButton = settings->sleepScreenButton;
     automaticOpeningOption = settings->automaticOpeningOption;
     linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
@@ -924,8 +930,8 @@ void Reader::buildSettings() {
     connect(bionicOption, &QCheckBox::clicked, this, [this](bool enabled) {
         applyBoldReading(enabled);
     });
-    connect(sleepScreenOption, &QCheckBox::clicked, this, [this](bool enabled) {
-        applySleepScreen(enabled);
+    connect(sleepScreenButton, &QPushButton::clicked, this, [this] {
+        openSleepScreen();
     });
     connect(automaticOpeningOption, &QCheckBox::clicked, this, [this](bool enabled) {
         applyAutomaticOpening(enabled);

@@ -68,7 +68,7 @@ inline constexpr int pollMilliseconds = 500;
 }
 namespace sleep {
 inline constexpr Px inset{48}, bottom{96}, width{620}, padding{36}, gap{20}, lineGap{8}, border{2};
-inline constexpr Px titleText{60}, detailText{32};
+inline constexpr Px titleText{60}, detailText{32}, batteryText{28}, batteryGap{12};
 inline constexpr int dimAlpha = 40;
 inline constexpr auto lightPaper = "#ffffff", darkPaper = "#202020";
 }

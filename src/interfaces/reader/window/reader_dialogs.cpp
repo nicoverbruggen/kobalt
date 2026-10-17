@@ -11,6 +11,7 @@
 #include "interfaces/reader/ui/style/metrics.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "reading/appearance_settings.h"
+#include "reading/sleep_screen.h"
 #include "storage/reader_storage.h"
 #include <QDateTime>
 
@@ -707,6 +708,103 @@ void Reader::openScreenRefresh() {
     textRefresh(refreshPopup);
     refreshPopup->show();
     refreshPopup->raise();
+}
+
+namespace {
+QString sleepLabel(sleep::Mode mode) {
+    switch (mode) {
+    case sleep::Mode::Stock:
+        return strings::get("settings.sleep_stock");
+    case sleep::Mode::Cover:
+        return strings::get("settings.sleep_cover");
+    case sleep::Mode::Page:
+        return strings::get("settings.sleep_page");
+    }
+    return {};
+}
+QString sleepExplanation(sleep::Mode mode) {
+    switch (mode) {
+    case sleep::Mode::Stock:
+        return strings::get("settings.sleep_stock_description");
+    case sleep::Mode::Cover:
+        return strings::get("settings.sleep_cover_description");
+    case sleep::Mode::Page:
+        return strings::get("settings.sleep_page_description");
+    }
+    return {};
+}
+}
+
+void Reader::showSleepScreen() {
+    sleepScreenButton->setCaption(sleepLabel(sleep::mode(preferences)).toUpper());
+}
+
+void Reader::closeSleepScreen() {
+    if (!sleepPopup) {
+        return;
+    }
+    sleepPopup->hide();
+    sleepPopup->deleteLater();
+    sleepPopup.clear();
+}
+
+void Reader::openSleepScreen() {
+    if (sleepPopup) {
+        return;
+    }
+    namespace c = m::chrome;
+    sleepPopup = new ui::ModalOverlay(this);
+    sleepPopup->setObjectName("rrSleepScreenPopup");
+    sleepPopup->setGeometry(rect());
+    sleepPopup->installEventFilter(this);
+    sleepPopup->dismissed = [this] {
+        closeSleepScreen();
+    };
+    auto *card = sleepPopup->card();
+    card->rows()->setContentsMargins(2, 2, 2, 2);
+    card->rows()->setSpacing(0);
+    card->rows()->addSpacing(m::notice::cardMargins.top());
+    auto *title = card->title(strings::get("settings.sleep_screen"), "rrSleepScreenTitle");
+    title->setContentsMargins(c::inset, 0, c::inset, 0);
+    card->rows()->addSpacing(m::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    auto *choices = new ui::RadioList(card);
+    choices->setObjectName("rrSleepScreenChoices");
+    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setTopDivider(true);
+    for (const auto mode : sleep::modes) {
+        choices->add("rrSleep_" + sleep::value(mode), sleepLabel(mode), sleepExplanation(mode));
+        if (mode == sleep::mode(preferences)) {
+            choices->setCurrent(choices->options().size() - 1);
+        }
+    }
+    choices->chosen = [this](int index) {
+        auto next = preferences;
+        next[sleep::preferenceKey] = sleep::value(sleep::modes[index]);
+        next.remove("kobalt_sleep_screen");
+        if (writePreferences(next)) {
+            preferences = next;
+            prepareSleepCover();
+            showSleepScreen();
+            settingsError->clear();
+            settingsError->hide();
+        } else {
+            settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
+            settingsError->show();
+        }
+        closeSleepScreen();
+    };
+    card->rows()->addWidget(choices);
+    choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
+    card->fitToWidth(cardWidth);
+    sleepPopup->centerCard();
+    for (auto *widget : sleepPopup->findChildren<QWidget *>()) {
+        textRefresh(widget);
+    }
+    textRefresh(sleepPopup);
+    sleepPopup->show();
+    sleepPopup->raise();
+    sleepPopup->setFocus();
 }
 
 }

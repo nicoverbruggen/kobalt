@@ -1,5 +1,6 @@
 #include "support/strings.h"
 #include "platform/nickel/common/native_publication.h"
+#include "platform/nickel/common/native_ui.h"
 #include "platform/nickel/common/publication_source.h"
 #include "publication/native_resources.h"
 #include "platform/nickel/common/native_location.h"
@@ -70,6 +71,7 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     identity_.clear();
     path_.clear();
     location_.clear();
+    coverPath_.clear();
     auto fail = [&](const QString &reason) {
         close();
         if (error)
@@ -111,6 +113,7 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     if (!source_)
         return false;
     port_ = source_->port();
+    coverPath_ = nativeReaderCoverPath(volume);
     return true;
 }
 

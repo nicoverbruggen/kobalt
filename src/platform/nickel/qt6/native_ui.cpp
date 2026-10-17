@@ -100,6 +100,30 @@ int nativePageButtonDirection(QKeyEvent *event) {
     // physical-button orientation and invertPageTurnButtons mapping.
     return forward(mapped, true) ? 1 : -1;
 }
+bool nativeReaderSleepScreenAvailable() {
+    const auto currentDevice = symbol<const void *(*)()>("_ZN6Device16getCurrentDeviceEv");
+    const auto tolino = symbol<bool (*)(const void *)>("_ZNK6Device8isTolinoEv");
+    const auto *device = currentDevice ? currentDevice() : nullptr;
+    return device && tolino && !tolino(device);
+}
+QString nativeReaderCoverPath(const void *volume) {
+    const auto currentDevice = symbol<const void *(*)()>("_ZN6Device16getCurrentDeviceEv");
+    const auto imageId = symbol<QString (*)(const void *)>("_ZNK7Content10getImageIdEv");
+    const auto defaultCover = symbol<bool (*)(const QString &)>("_ZN5Image19isDefaultCoverImageERK7QString");
+    const auto fileName = symbol<QString (*)(const void *, const void *, const QString &)>(
+        "_ZN5Image11getFileNameERK6DeviceRK6VolumeRK7QString");
+    if (!nativeReaderSleepScreenAvailable() || !volume || !currentDevice || !imageId || !defaultCover || !fileName) {
+        return {};
+    }
+    const auto *device = currentDevice();
+    const auto id = imageId(volume);
+    if (!device || id.isEmpty() || defaultCover(id)) {
+        return {};
+    }
+    // Nickel resolves internal and removable-storage caches for this volume.
+    // N3_FULL is its full-screen image type; do not substitute a library thumbnail.
+    return fileName(device, volume, QStringLiteral("N3_FULL"));
+}
 NativeBatteryStatus nativeReaderBattery() {
     static const auto hardware = symbol<void *(*)()>("_ZN15HardwareFactory14sharedInstanceEv");
     static const auto charging = symbol<bool (*)(void *)>("_ZN17HardwareInterface10isChargingEv");
@@ -112,11 +136,19 @@ NativeBatteryStatus nativeReaderBattery() {
     // in firmware 5.18. Call only an exported hardware implementation we know,
     // not HardwareInterface's base implementation, which always returns 40.
     const auto level = reinterpret_cast<int (*)(const void *)>((*static_cast<void ***>(device))[0x9c / sizeof(void *)]);
-    for (const auto *name :
-         {"_ZNK3MTK15getBatteryLevelEv", "_ZNK6iMX50815getBatteryLevelEv", "_ZNK9AllWinner15getBatteryLevelEv"}) {
-        if (level && level == symbol<int (*)(const void *)>(name)) {
+    struct Implementation {
+        const char *level, *charge;
+    };
+    for (const auto &implementation :
+         {Implementation{"_ZNK3MTK15getBatteryLevelEv", "_ZN3MTK13chargingStateEv"},
+          Implementation{"_ZNK6iMX50815getBatteryLevelEv", "_ZN6iMX50813chargingStateEv"},
+          Implementation{"_ZNK9AllWinner15getBatteryLevelEv", "_ZN9AllWinner13chargingStateEv"}}) {
+        if (level && level == symbol<int (*)(const void *)>(implementation.level)) {
             const int percent = level(device);
-            return {percent >= 0 && percent <= 100 ? percent : -1, charging(device)};
+            // Nickel uses 0 for battery power, 1 for charging and 2 for charged.
+            const auto chargeState = symbol<int (*)(void *)>(implementation.charge);
+            const int state = chargeState ? chargeState(device) : (charging(device) ? 1 : 0);
+            return {percent >= 0 && percent <= 100 ? percent : -1, state == 1 || state == 2, state == 2};
         }
     }
     return {};

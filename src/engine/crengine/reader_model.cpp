@@ -507,39 +507,66 @@ QString ReaderModel::title() const {
 QString ReaderModel::author() const {
     return engine_ ? qstring(engine_->getAuthors()) : QString();
 }
-QImage ReaderModel::coverThumbnail() const {
-    if (!engine_)
+QImage ReaderModel::coverImage(QSize maximumSize, const QString &preferredPath) const {
+    if (!engine_ || maximumSize.isEmpty() || qint64(maximumSize.width()) * maximumSize.height() > 4 * 1024 * 1024) {
         return {};
-    auto stream = engine_->getCoverPageImageStream();
-    if (stream.isNull())
-        return {};
-    const auto length = stream->GetSize();
-    if (!length || length > ResourceCache::budgetBytes)
-        return {};
-    // A resource stream can decode a placeholder while its image is deferred.
-    // Copy the cover bytes before saving a thumbnail that must outlive the book.
-    auto bytes = LVCreateMemoryStream(stream);
-    if (bytes.isNull())
-        return {};
-    auto cover = LVCreateStreamImageSource(bytes);
-    if (cover.isNull() || cover->GetWidth() <= 0 || cover->GetHeight() <= 0)
-        return {};
-    if (quint64(cover->GetWidth()) * quint64(cover->GetHeight()) > imagePixelLimit)
-        return {};
-    const auto size = QSize(cover->GetWidth(), cover->GetHeight()).scaled(120, 180, Qt::KeepAspectRatio);
-    QImage image(size, QImage::Format_RGB32);
-    image.fill(Qt::white);
-    PageDrawBuffer buffer(image, false, true);
-    buffer.Draw(cover, 0, 0, size.width(), size.height(), false);
-    // CREngine leaves the high byte unused; Qt RGB32 requires opaque pixels.
-    const int width = image.width(), height = image.height();
-    for (int y = 0; y < height; ++y) {
-        auto *pixels = reinterpret_cast<quint32 *>(image.scanLine(y));
-        for (int x = 0; x < width; ++x)
-            pixels[x] |= 0xff000000U;
     }
-    return image;
+    const auto decode = [maximumSize](LVStreamRef stream) -> QImage {
+        if (stream.isNull()) {
+            return {};
+        }
+        const auto length = stream->GetSize();
+        if (!length || length > ResourceCache::budgetBytes) {
+            return {};
+        }
+        // A resource stream can decode a placeholder while its image is deferred.
+        // Copy the cover bytes before rendering an image that must outlive the book.
+        auto bytes = LVCreateMemoryStream(stream);
+        if (bytes.isNull()) {
+            return {};
+        }
+        auto cover = LVCreateStreamImageSource(bytes);
+        // Unrecognised formats produce a dummy image with no source stream.
+        // It must not prevent the next cover source from being tried.
+        if (cover.isNull() || !cover->GetSourceStream() || cover->GetWidth() <= 0 || cover->GetHeight() <= 0) {
+            return {};
+        }
+        if (quint64(cover->GetWidth()) * quint64(cover->GetHeight()) > imagePixelLimit) {
+            return {};
+        }
+        auto size = QSize(cover->GetWidth(), cover->GetHeight());
+        if (size.width() > maximumSize.width() || size.height() > maximumSize.height()) {
+            size.scale(maximumSize, Qt::KeepAspectRatio);
+        }
+        if (size.isEmpty()) {
+            return {};
+        }
+        QImage image(size, QImage::Format_RGB32);
+        if (image.isNull()) {
+            return {};
+        }
+        image.fill(Qt::white);
+        PageDrawBuffer buffer(image, false, true);
+        buffer.Draw(cover, 0, 0, size.width(), size.height(), false);
+        // CREngine leaves the high byte unused; Qt RGB32 requires opaque pixels.
+        const int width = image.width(), height = image.height();
+        for (int y = 0; y < height; ++y) {
+            auto *pixels = reinterpret_cast<quint32 *>(image.scanLine(y));
+            for (int x = 0; x < width; ++x) {
+                pixels[x] |= 0xff000000U;
+            }
+        }
+        return image;
+    };
+    if (!preferredPath.isEmpty()) {
+        const auto image = decode(LVOpenFileStream(cre(preferredPath).c_str(), LVOM_READ));
+        if (!image.isNull()) {
+            return image;
+        }
+    }
+    return decode(engine_->getCoverPageImageStream());
 }
+
 QString ReaderModel::position() const {
     return engine_ ? anchor_ : QString();
 }

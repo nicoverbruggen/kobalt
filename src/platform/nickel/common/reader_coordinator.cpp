@@ -715,6 +715,7 @@ void ReaderCoordinator::showReader() {
         std::move(run.model), run.statePath, environment_.paths, run.identity, run.expectedHash,
         kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress)), run.baseline, run.diskBaseline);
     auto services = readerHostServices();
+    services.coverImagePath = run.nativePublication ? run.nativePublication->coverPath() : QString();
     services.automaticBookOpening = bindings_.automaticBookOpening;
     services.setAutomaticBookOpening = bindings_.setAutomaticBookOpening;
     const auto suspended = services.suspended;

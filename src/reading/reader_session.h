@@ -232,6 +232,8 @@ public:
     QImage coverThumbnail() const {
         return documentCover;
     }
+    // Decodes on the engine worker. A cancelled or replaced source returns no image.
+    void coverImage(QSize maximumSize, std::function<void(QImage)> finished, QString preferredPath = {});
     QString chapterTitle() const {
         return frame.state.value("chapter_title").toString();
     }

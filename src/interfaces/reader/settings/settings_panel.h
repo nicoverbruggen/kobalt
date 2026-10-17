@@ -44,7 +44,8 @@ public:
     ui::DescribedOption *edgeLightOption = nullptr, *denseGraphOption = nullptr, *pinStatsOption = nullptr,
                         *inheritHeaderFooterOption = nullptr;
     ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
-    ui::DescribedOption *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
+    ui::DescribedOption *automaticOpeningOption = nullptr;
+    ui::CaptionButton *sleepScreenButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;

@@ -26,6 +26,7 @@
 #include "interfaces/reader/panels/link_panel.h"
 #include "interfaces/reader/views/reading_page.h"
 #include "interfaces/reader/views/sleep_screen.h"
+#include "reading/sleep_screen.h"
 #include "interfaces/reader/ui/style/metrics.h"
 #include "support/strings.h"
 #include "host_services.h"
@@ -1368,8 +1369,8 @@ private slots:
         QVERIFY(!panel->findChild<QCheckBox *>("rrSmoothImages"));
         QVERIFY(!panel->findChild<QCheckBox *>("rrHeavierText"));
         QVERIFY(!panel->findChild<QPushButton *>("rrManageDictionaries"));
-        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 12);
-        QVERIFY(panel->sleepScreenOption->isHidden());
+        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 11);
+        QVERIFY(panel->sleepScreenButton->isHidden());
         QVERIFY(panel->automaticOpeningOption->isHidden());
         QVERIFY(panel->settingsTabButtons[reader::SystemSettings]->isHidden());
         QCOMPARE(panel->bionicOption->parentWidget(), panel->settingsPages->widget(reader::DisplaySettings));
@@ -1399,8 +1400,8 @@ private slots:
         auto *supported = new reader::SettingsPanel(&owner, inputs);
         QVERIFY(supported->animationOption->isEnabled());
         QVERIFY(supported->edgeLightOption->isEnabled());
-        QVERIFY(!supported->sleepScreenOption->isHidden());
-        QCOMPARE(supported->sleepScreenOption->presentation().indicator, ui::DescribedOption::Indicator::Square);
+        QVERIFY(!supported->sleepScreenButton->isHidden());
+        QVERIFY(!supported->findChild<QCheckBox *>("rrKobaltSleepScreen"));
     }
     void systemSettingsFitBesideTheRail_data() {
         QTest::addColumn<int>("ppi");
@@ -1431,7 +1432,7 @@ private slots:
         owner.show();
         panel.show();
         QCoreApplication::processEvents();
-        for (auto *option : {panel.sleepScreenOption, panel.automaticOpeningOption}) {
+        for (auto *option : QVector<QWidget *>{panel.sleepScreenButton, panel.automaticOpeningOption}) {
             QVERIFY(option->isVisible());
             QCOMPARE(option->parentWidget(), panel.settingsPages->widget(reader::SystemSettings));
             QVERIFY(panel.rect().contains(QRect(option->mapTo(&panel, QPoint()), option->size())));
@@ -1660,11 +1661,11 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         storage::Paths paths{directory.path()};
-        auto sleep = std::make_shared<test::SleepPresentationState>();
+        auto sleepState = std::make_shared<test::SleepPresentationState>();
         test::ReaderHost host(paths, testFonts, testPlaceholder);
-        host.configureServices = [sleep](ReaderHostServices &services) {
-            services.presentation = [sleep](QWidget *) {
-                return std::make_unique<test::HostPresentation>(sleep);
+        host.configureServices = [sleepState](ReaderHostServices &services) {
+            services.presentation = [sleepState](QWidget *) {
+                return std::make_unique<test::HostPresentation>(sleepState);
             };
         };
         CloseHost cleanup{host};
@@ -1674,53 +1675,164 @@ private slots:
         host.window()->show();
         QTRY_VERIFY(host.window()->readyForPresentation());
         host.window()->findChild<QPushButton *>("rrSettings")->click();
-        auto *option = host.window()->findChild<QCheckBox *>("rrKobaltSleepScreen");
-        QVERIFY(option);
-        QVERIFY(!option->isChecked());
-        option->click();
-        QVERIFY(storage::readJson(paths.preferences()).value("kobalt_sleep_screen").toBool());
-        option->click();
-        QVERIFY(!storage::readJson(paths.preferences()).value("kobalt_sleep_screen").toBool());
+        host.window()->findChild<QPushButton *>("rrSettingsSystem")->click();
+        auto *button = host.window()->findChild<ui::CaptionButton *>("rrSleepScreen");
+        QVERIFY(button);
+        QCOMPARE(button->caption(), strings::get("settings.sleep_stock").toUpper());
+        const auto before = storage::readJson(paths.preferences());
+        button->click();
+        auto *popup = host.window()->findChild<ui::ModalOverlay *>("rrSleepScreenPopup");
+        QVERIFY(popup && popup->isVisible());
+        QCOMPARE(popup->findChildren<QCheckBox *>().size(), 3);
+        QVERIFY(popup->findChild<QCheckBox *>("rrSleep_stock")->isChecked());
+        QTest::mouseClick(popup, Qt::LeftButton, Qt::NoModifier, QPoint(2, 2));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepScreenPopup"));
+        QCOMPARE(storage::readJson(paths.preferences()), before);
+        button->click();
+        popup = host.window()->findChild<ui::ModalOverlay *>("rrSleepScreenPopup");
+        QVERIFY(popup);
+        QTest::keyClick(popup, Qt::Key_Escape);
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepScreenPopup"));
+        QCOMPARE(storage::readJson(paths.preferences()), before);
+        for (const auto mode : {sleep::Mode::Cover, sleep::Mode::Page, sleep::Mode::Stock, sleep::Mode::Page}) {
+            button->click();
+            auto *option = host.window()->findChild<QCheckBox *>("rrSleep_" + sleep::value(mode));
+            QVERIFY(option && option->isVisible());
+            option->click();
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepScreenPopup"));
+            QCOMPARE(storage::readJson(paths.preferences()).value(sleep::preferenceKey).toString(), sleep::value(mode));
+            QVERIFY(!storage::readJson(paths.preferences()).contains("kobalt_sleep_screen"));
+        }
+        const auto caption = button->caption();
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        button = host.window()->findChild<ui::CaptionButton *>("rrSleepScreen");
+        QCOMPARE(button->caption(), caption);
         QVERIFY(QFile::remove(paths.preferences()));
         QVERIFY(QDir().mkpath(paths.preferences()));
-        option->click();
-        QVERIFY(!option->isChecked());
+        button->click();
+        host.window()->findChild<QCheckBox *>("rrSleep_cover")->click();
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepScreenPopup"));
+        QCOMPARE(button->caption(), caption);
+        button->click();
+        QVERIFY(host.window()->findChild<QCheckBox *>("rrSleep_page")->isChecked());
         auto *panel = dynamic_cast<reader::SettingsPanel *>(host.window()->findChild<QWidget *>("rrGeneralSettings"));
-        QVERIFY(panel);
-        QVERIFY(!panel->settingsError->isHidden());
+        QVERIFY(panel && !panel->settingsError->isHidden());
     }
 
     void customSleepScreenIsOptIn_data() {
         QTest::addColumn<bool>("supported");
         QTest::addColumn<bool>("enabled");
         QTest::addColumn<bool>("dark");
-        QTest::newRow("stock-default") << true << false << false;
-        QTest::newRow("custom-light") << true << true << false;
-        QTest::newRow("custom-dark") << true << true << true;
-        QTest::newRow("unsupported-host") << false << true << false;
+        QTest::addColumn<int>("chargeState");
+        QTest::addColumn<QString>("selectedMode");
+        QTest::addColumn<bool>("hasCover");
+        QTest::addColumn<QString>("hostCover");
+        QTest::newRow("stock-default") << true << false << false << 0 << QString() << false << QString();
+        QTest::newRow("custom-light") << true << true << false << 0 << QString() << false << QString();
+        QTest::newRow("custom-dark") << true << true << true << 0 << QString() << false << QString();
+        QTest::newRow("unsupported-host") << false << true << false << 0 << QString() << false << QString();
+        QTest::newRow("charging-light") << true << true << false << 1 << QString() << false << QString();
+        QTest::newRow("charging-dark") << true << true << true << 1 << QString() << false << QString();
+        QTest::newRow("charged-light") << true << true << false << 2 << QString() << false << QString();
+        QTest::newRow("charged-dark") << true << true << true << 2 << QString() << false << QString();
+        QTest::newRow("cover-light") << true << true << false << 1 << QString("cover") << true << QString();
+        QTest::newRow("cover-dark") << true << true << true << 2 << QString("cover") << true << QString();
+        QTest::newRow("legacy-cover") << true << true << false << 0 << QString() << true << QString();
+        QTest::newRow("page-with-cover") << true << true << false << 0 << QString("page") << true << QString();
+        QTest::newRow("missing-cover") << true << true << false << 0 << QString("cover") << false << QString();
+        QTest::newRow("stock-with-cover") << true << false << false << 0 << QString("stock") << true << QString();
+        QTest::newRow("native-cover") << true << true << false << 0 << QString("cover") << true << QString("valid");
+        QTest::newRow("native-cover-without-embedded")
+            << true << true << true << 1 << QString("cover") << false << QString("valid");
+        QTest::newRow("native-corrupt-fallback")
+            << true << true << false << 0 << QString("cover") << true << QString("corrupt");
+        QTest::newRow("native-missing-text-fallback")
+            << true << true << false << 0 << QString("cover") << false << QString("missing");
+        QTest::newRow("page-ignores-native-cover")
+            << true << true << false << 0 << QString("page") << true << QString("valid");
+        QTest::newRow("unsupported-native-cover")
+            << false << true << false << 0 << QString("cover") << true << QString("valid");
     }
     void customSleepScreenIsOptIn() {
         QFETCH(bool, supported);
         QFETCH(bool, enabled);
         QFETCH(bool, dark);
+        QFETCH(int, chargeState);
+        QFETCH(QString, selectedMode);
+        QFETCH(bool, hasCover);
+        QFETCH(QString, hostCover);
+        QTemporaryDir coverDirectory;
+        QVERIFY(coverDirectory.isValid());
+        const auto coverPath = hostCover.isEmpty() ? QString() : coverDirectory.path() + "/cover.parsed";
+        if (hostCover == "valid") {
+            QImage nativeCover(80, 160, QImage::Format_RGB32);
+            nativeCover.fill(Qt::red);
+            QVERIFY(nativeCover.save(coverPath, "PNG"));
+        } else if (hostCover == "corrupt") {
+            QFile file(coverPath);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.write("not an image") > 0);
+        }
         const auto paths = testPaths();
-        QVERIFY(storage::writeJson(paths.preferences(), {{"kobalt_sleep_screen", enabled}, {"dark_mode", dark}}));
+        QJsonObject preferences{{"kobalt_sleep_screen", enabled}, {"dark_mode", dark}};
+        if (!selectedMode.isEmpty()) {
+            preferences[sleep::preferenceKey] = selectedMode;
+        }
+        QVERIFY(storage::writeJson(paths.preferences(), preferences));
         auto sleep = std::make_shared<test::SleepPresentationState>();
         test::ReaderHost host(paths, testFonts, testPlaceholder);
-        host.configureServices = [sleep, supported](ReaderHostServices &services) {
+        host.configureServices = [sleep, supported, chargeState, coverPath](ReaderHostServices &services) {
+            services.coverImagePath = coverPath;
+            services.battery = [chargeState] {
+                return BatteryStatus{67, chargeState > 0, chargeState == 2};
+            };
             services.presentation = [sleep, supported](QWidget *) {
                 return std::make_unique<test::HostPresentation>(supported ? sleep : nullptr);
             };
         };
         CloseHost cleanup{host};
         QSignalSpy opened(&host, &test::ReaderHost::opened);
-        host.open(fixture(), nativeSize);
+        host.open(hasCover ? qEnvironmentVariable("KOBALT_FIXTURES") + "/deferred-cover.epub" : fixture(), nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         host.window()->show();
         QTRY_VERIFY(host.window()->readyForPresentation());
         auto *page = host.window()->findChild<QWidget *>("rrPage");
         QVERIFY(page);
         const auto original = page->grab().toImage();
+        QImage cover;
+        bool coverReady = false;
+        host.session()->coverImage(
+            {2048, 2048},
+            [&](QImage image) {
+                cover = std::move(image);
+                coverReady = true;
+            },
+            coverPath);
+        QTRY_VERIFY(coverReady);
+        QCOMPARE(!cover.isNull(), hasCover || hostCover == "valid");
+        if (hostCover == "valid") {
+            QCOMPARE(cover.size(), QSize(80, 160));
+            QCOMPARE(cover.pixel(40, 80), qRgb(255, 0, 0));
+        } else if (hasCover) {
+            QCOMPARE(cover.size(), QSize(128, 64));
+            QCOMPARE(host.session()->coverThumbnail().size(), QSize(120, 60));
+        }
+        const bool useCover = sleep::mode(preferences) == sleep::Mode::Cover && !cover.isNull();
+        const auto background = useCover ? reader::sleepCoverBackground(cover, page->size(), dark)
+                                         : static_cast<ReadingPage *>(page)->snapshot(true);
+        const auto status = chargeState == 2   ? reader::SleepStatus::Charged
+                            : chargeState == 1 ? reader::SleepStatus::Charging
+                                               : reader::SleepStatus::Sleeping;
+        const int percent = qBound(0, int(100.0 * host.session()->page() / qMax(1, host.session()->pages())), 100);
+        // This profile has no native reading pace and has not made forward turns.
+        const auto expected = reader::sleepScreenImage(background, strings::get("sleep.percent_read").arg(percent), {},
+                                                       dark, 67, status, !useCover);
         host.window()->sleepReader();
         QVERIFY(host.window()->isVisible());
         QVERIFY(sleep->image.isNull());
@@ -1730,6 +1842,7 @@ private slots:
         if (supported && enabled) {
             QCOMPARE(sleep->image.size(), original.size());
             QVERIFY(sleep->image != original);
+            QCOMPARE(sleep->image, expected);
             const auto copy = sleep->image;
             host.window()->sleepViewReady();
             QCOMPARE(sleep->presented, 1);
@@ -1739,6 +1852,98 @@ private slots:
         QVERIFY(sleep->image.isNull());
         QVERIFY(host.window()->isVisible());
         QTRY_VERIFY(!host.session()->busy());
+    }
+
+    void sleepScreenUpdatesWhilePluggedIn_data() {
+        QTest::addColumn<QString>("mode");
+        QTest::addColumn<bool>("dark");
+        for (const auto &mode : {QString("stock"), QString("page"), QString("cover")}) {
+            QTest::newRow(qPrintable(mode + "-light")) << mode << false;
+            QTest::newRow(qPrintable(mode + "-dark")) << mode << true;
+        }
+    }
+    void sleepScreenUpdatesWhilePluggedIn() {
+        QFETCH(QString, mode);
+        QFETCH(bool, dark);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        QVERIFY(storage::writeJson(paths.preferences(), {{sleep::preferenceKey, mode}, {"dark_mode", dark}}));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        BatteryStatus battery{66, false, false};
+        std::function<void()> changed;
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.battery = [&] {
+                return battery;
+            };
+            services.observeBattery = [&](QObject *, std::function<void()> callback) {
+                changed = std::move(callback);
+            };
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(qEnvironmentVariable("KOBALT_FIXTURES") + "/deferred-cover.epub", nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        bool coverReady = false;
+        host.session()->coverImage({2048, 2048}, [&](QImage) {
+            coverReady = true;
+        });
+        QTRY_VERIFY(coverReady);
+        QVERIFY(changed);
+        changed();
+        QCOMPARE(state->updated, 0);
+        host.window()->sleepReader();
+        battery = {67, true, false};
+        changed();
+        QCOMPARE(state->updated, 0);
+        host.window()->sleepViewReady();
+        if (mode == "stock") {
+            QVERIFY(state->image.isNull());
+            battery = {100, true, true};
+            changed();
+            QCOMPARE(state->updated, 0);
+            host.window()->wakeReader();
+            return;
+        }
+        QCOMPARE(state->presented, 1);
+        const auto initial = state->image;
+        QVERIFY(!initial.isNull());
+        battery.percent = 68;
+        changed();
+        QCOMPARE(state->updated, 1);
+        QVERIFY(state->image != initial);
+        QCOMPARE(state->image.pixel(1000, 200), initial.pixel(1000, 200));
+        QVERIFY(!state->damage.isEmpty());
+        QVERIFY(!state->damage.contains(QPoint(1000, 200)));
+        const auto charging = state->image;
+        changed();
+        QCOMPARE(state->updated, 1);
+        battery = {100, true, true};
+        changed();
+        QCOMPARE(state->updated, 2);
+        QVERIFY(state->image != charging);
+        const auto charged = state->image;
+        battery = {100, false, false};
+        changed();
+        QCOMPARE(state->updated, 3);
+        QVERIFY(state->image != charged);
+        QCOMPARE(state->image.pixel(1000, 200), initial.pixel(1000, 200));
+        const auto unplugged = state->image;
+        battery.percent = 20;
+        changed();
+        QCOMPARE(state->updated, 3);
+        QCOMPARE(state->image, unplugged);
+        host.window()->wakeReader();
+        battery = {21, true, false};
+        changed();
+        QCOMPARE(state->updated, 3);
+        QVERIFY(state->image.isNull());
     }
 
     void sleepScreenDimsOnlyItsOwnedPage_data() {
@@ -1763,6 +1968,26 @@ private slots:
         QVERIFY(qGray(frame.pixel(1000, 200)) < qGray(page.pixel(1000, 200)));
         QVERIFY(frame != reader::sleepScreenImage(page, "42% read", {}, dark));
         QVERIFY(reader::sleepScreenImage({}, "42% read", {}, dark).isNull());
+        for (const int percent : {0, 67, 100}) {
+            QCOMPARE(reader::sleepScreenImage(page, "42% read", "37 min to go", dark, percent,
+                                              reader::SleepStatus::Sleeping),
+                     frame);
+        }
+        const auto charging =
+            reader::sleepScreenImage(page, "42% read", "37 min to go", dark, 67, reader::SleepStatus::Charging);
+        const auto charged =
+            reader::sleepScreenImage(page, "42% read", "37 min to go", dark, 67, reader::SleepStatus::Charged);
+        QVERIFY(charging != charged);
+        QVERIFY(charging != frame && charged != frame);
+        QVERIFY(charged !=
+                reader::sleepScreenImage(page, "42% read", "37 min to go", dark, 100, reader::SleepStatus::Charged));
+        QVERIFY(charging !=
+                reader::sleepScreenImage(page, "42% read", "37 min to go", dark, 23, reader::SleepStatus::Charging));
+        QVERIFY(charging !=
+                reader::sleepScreenImage(page, "42% read", "37 min to go", dark, -1, reader::SleepStatus::Charging));
+        QCOMPARE(reader::sleepStatusText(reader::SleepStatus::Sleeping), QString("Sleeping"));
+        QCOMPARE(reader::sleepStatusText(reader::SleepStatus::Charging), QString("Charging"));
+        QCOMPARE(reader::sleepStatusText(reader::SleepStatus::Charged), QString("Charged"));
         ui::setDensity(previous);
     }
 
@@ -7101,6 +7326,81 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         host.shutdown();
         QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 2, 10000);
+    }
+    void sleepTimeLeftUsesHoursAboveTwoHours() {
+        QCOMPARE(reader::sleepTimeLeft(-1), QString());
+        QCOMPARE(reader::sleepTimeLeft(0), QString("0 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(1), QString("1 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(37 * 60000), QString("37 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(120 * 60000 - 1), QString("120 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(120 * 60000), QString("120 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(120 * 60000 + 1), QString("2 h 1 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(121 * 60000), QString("2 h 1 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(180 * 60000), QString("3 h 0 min to go"));
+        QCOMPARE(reader::sleepTimeLeft(217 * 60000), QString("3 h 37 min to go"));
+    }
+    void sleepScreenModesKeepTheStockDefaultAndMigrateTheOptIn() {
+        QCOMPARE(sleep::mode({}), sleep::Mode::Stock);
+        QCOMPARE(sleep::mode({{"kobalt_sleep_screen", false}}), sleep::Mode::Stock);
+        QCOMPARE(sleep::mode({{"kobalt_sleep_screen", true}}), sleep::Mode::Cover);
+        for (const auto mode : sleep::modes) {
+            QCOMPARE(sleep::mode({{sleep::preferenceKey, sleep::value(mode)}, {"kobalt_sleep_screen", true}}), mode);
+        }
+        for (const auto invalid : {QJsonValue("unknown"), QJsonValue(true), QJsonValue(QJsonValue::Null)}) {
+            QCOMPARE(sleep::mode({{sleep::preferenceKey, invalid}, {"kobalt_sleep_screen", true}}), sleep::Mode::Stock);
+        }
+    }
+    void sleepCoverFitsWithoutCroppingOrDimming() {
+        QImage cover(80, 40, QImage::Format_RGB32);
+        cover.fill(Qt::green);
+        cover.setPixel(0, 0, qRgb(255, 0, 0));
+        const auto original = cover.copy();
+        for (const bool dark : {false, true}) {
+            const auto background = reader::sleepCoverBackground(cover, {800, 1200}, dark);
+            QCOMPARE(background.size(), QSize(800, 1200));
+            QCOMPARE(background.pixel(0, 0), dark ? qRgb(0, 0, 0) : qRgb(255, 255, 255));
+            QCOMPARE(background.pixel(400, 600), qRgb(0, 255, 0));
+            QCOMPARE(background.pixel(0, 400), qRgb(255, 0, 0));
+            QCOMPARE(background.pixel(799, 799), qRgb(0, 255, 0));
+            const auto frame = reader::sleepScreenImage(background, "42% read", "3 h 37 min to go", dark, 67,
+                                                        reader::SleepStatus::Charging, false);
+            QCOMPARE(frame.pixel(400, 600), background.pixel(400, 600));
+            QCOMPARE(frame.pixel(0, 0), background.pixel(0, 0));
+        }
+        QCOMPARE(cover, original);
+        QVERIFY(reader::sleepCoverBackground({}, {800, 1200}, false).isNull());
+        QVERIFY(reader::sleepCoverBackground(cover, {}, false).isNull());
+        QVERIFY(reader::sleepCoverBackground(cover, {4096, 4096}, false).isNull());
+    }
+    void sleepCoverDecodingIsBoundedAndHonorsSourceCancellation() {
+        test::ReaderHost host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(qEnvironmentVariable("KOBALT_FIXTURES") + "/deferred-cover.epub", nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QImage cover;
+        int completed = 0;
+        host.session()->coverImage({60, 90}, [&](QImage image) {
+            cover = std::move(image);
+            ++completed;
+        });
+        QTRY_COMPARE(completed, 1);
+        QCOMPARE(cover.size(), QSize(60, 30));
+        QVERIFY(qGreen(cover.pixel(5, 5)) > qBlue(cover.pixel(5, 5)));
+        QVERIFY(qBlue(cover.pixel(55, 5)) > qGreen(cover.pixel(55, 5)));
+        host.session()->coverImage({4096, 4096}, [&](QImage image) {
+            cover = std::move(image);
+            ++completed;
+        });
+        QTRY_COMPARE(completed, 2);
+        QVERIFY(cover.isNull());
+        host.session()->coverImage({2048, 2048}, [&](QImage image) {
+            cover = std::move(image);
+            ++completed;
+        });
+        host.session()->cancelSource();
+        QTRY_COMPARE(completed, 3);
+        QVERIFY(cover.isNull());
     }
 };
 // QtTest's default main never enters QApplication::exec(). The production

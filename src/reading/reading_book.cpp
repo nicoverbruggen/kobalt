@@ -213,10 +213,21 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot) {
     if (persisted == savedCheckpoint)
         return true;
     const bool saved = storage::writeJson(statePath, persisted);
-    if (saved)
+    if (saved) {
         savedCheckpoint = persisted;
-    else
+        if (!model->temporaryTypography()) {
+            const auto settings = storage::readJsonFile(paths_.preferences());
+            if (settings.status == storage::ReadStatus::Ok || settings.status == storage::ReadStatus::Missing) {
+                auto next = settings.object;
+                appearance::rememberTextLayout(next, state);
+                if (next != settings.object && !storage::writeJson(paths_.preferences(), next)) {
+                    diagnostic("last-text-layout-unsaved", {}, false);
+                }
+            }
+        }
+    } else {
         diagnostic("local-save-failed");
+    }
     return saved;
 }
 }

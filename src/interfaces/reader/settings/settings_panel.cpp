@@ -128,6 +128,15 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *advancedRows = new QVBoxLayout(advancedPage);
     advancedRows->setContentsMargins(m::settings::displayMargins);
     advancedRows->setSpacing(0);
+    inheritTextLayoutOption = check(advancedPage, "rrInheritTextLayout", strings::get("settings.inherit_text_layout"),
+                                    strings::get("settings.inherit_text_layout_description"));
+    advancedRows->addWidget(inheritTextLayoutOption);
+    inheritHeaderFooterOption =
+        check(advancedPage, "rrInheritHeaderFooter", strings::get("settings.inherit_header_footer"),
+              strings::get("settings.inherit_header_footer_description"));
+    advancedRows->addWidget(inheritHeaderFooterOption);
+    inheritTextLayoutOption->setChecked(true);
+    inheritHeaderFooterOption->setChecked(true);
     linkIndicatorOption = check(advancedPage, "rrShowLinkIndicator", strings::get("reader.show_link_indicator"),
                                 strings::get("reader.link_indicator_description"));
     advancedRows->addWidget(linkIndicatorOption);
@@ -334,9 +343,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         settingsTabButtons[index]->setChecked(true);
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = {
-        hideNonlinearOption, linkIndicatorOption, darkOption,     bionicOption,      animationOption,
-        edgeLightOption,     denseGraphOption,    pinStatsOption, sleepScreenOption, automaticOpeningOption};
+    QVector<ui::DescribedOption *> options = {hideNonlinearOption, linkIndicatorOption,       darkOption,
+                                              bionicOption,        animationOption,           inheritTextLayoutOption,
+                                              edgeLightOption,     inheritHeaderFooterOption, denseGraphOption,
+                                              pinStatsOption,      sleepScreenOption,         automaticOpeningOption};
     if (inputs.desktopUi)
         options << hideStatusOption << hideDeviceOptionsOption;
     for (auto *option : options) {

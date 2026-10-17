@@ -165,6 +165,62 @@ int main() {
                 "Engine size limits do not match the 7 to 48 point controls");
     }
     readingPpi.store(300);
+    auto inherited = appearance::typographyDefaults();
+    inherited["font_face"] = QStringLiteral("NV Literata");
+    inherited["font_pixels"] = 60;
+    inherited["line_spacing"] = 175;
+    inherited["margin_pixels"] = 60;
+    inherited["top_margin_pixels"] = 30;
+    inherited["bottom_margin_pixels"] = 36;
+    inherited["text_alignment"] = QStringLiteral("justify");
+    inherited["font_weight"] = 550;
+    inherited["weight_steps"] = 2;
+    inherited["font_optical_size"] = 12;
+    inherited["hyphenation"] = QStringLiteral("on");
+    inherited["position"] = QStringLiteral("chapter#last");
+    inherited["dark_mode"] = true;
+    inherited["header_footer"] = QStringLiteral("alternative_a");
+    QJsonObject nextBook;
+    appearance::rememberTextLayout(nextBook, inherited);
+    require(nextBook.value(appearance::lastTextLayoutKey).toObject().size() == 13,
+            "Last text and layout included unrelated book state");
+    auto initial = appearance::bookDefaults(nextBook);
+    for (const auto *key : appearance::typographyKeys) {
+        require(initial.value(key) == inherited.value(key), "New book lost inherited typography or margins");
+    }
+    require(!initial.contains("position") && !initial.contains("dark_mode") && !initial.contains("header_footer"),
+            "New book inherited unrelated book state");
+    QJsonObject blank;
+    appearance::applyBookDefaults(blank, initial);
+    require(blank.value("font_face") == inherited.value("font_face"), "Empty saved state ignored inherited font");
+    auto own = qt::object({{"font_pixels", 40}, {"position", "chapter#own"}});
+    appearance::applyBookDefaults(own, initial);
+    require(own.value("font_pixels").toInt() == 40 && !own.contains("margin_pixels") &&
+                own.value("position").toString() == "chapter#own",
+            "Inheritance overwrote a book with partial saved typography");
+    nextBook[appearance::inheritTextLayoutKey] = false;
+    auto fixed = appearance::bookDefaults(nextBook);
+    require(fixed.value("font_pixels").toInt() == defaultFontPixels() &&
+                fixed.value("font_face").toString() == defaultFontFace,
+            "Disabling text inheritance did not restore new-book defaults");
+    nextBook["default_font_face"] = QStringLiteral("NV Ancizar Serif");
+    require(appearance::bookDefaults(nextBook).value("font_face").toString() == "NV Ancizar Serif",
+            "Disabling inheritance ignored the user's default font");
+    nextBook[appearance::inheritTextLayoutKey] = true;
+    readingPpi.store(212);
+    initial = appearance::bookDefaults(nextBook);
+    require(initial.value("font_pixels").toInt() == 42 && initial.value("margin_pixels").toInt() == 42 &&
+                initial.value("top_margin_pixels").toInt() == 21 &&
+                initial.value("bottom_margin_pixels").toInt() == 25 && initial.value("line_spacing").toInt() == 175,
+            "Inherited pixel values did not follow the screen density");
+    readingPpi.store(300);
+    auto disabledChrome = last;
+    disabledChrome[appearance::inheritHeaderFooterKey] = false;
+    require(appearance::readerPreferences(disabledChrome, {}).value("header_footer").toString() == "default" &&
+                appearance::readerPreferences(disabledChrome, qt::object({{"header_footer", "alternative_a"}}))
+                        .value("header_footer")
+                        .toString() == "alternative_a",
+            "Disabling header/footer inheritance changed a saved book or kept new books on the last preset");
     const auto retired = qt::object({{"smooth_images", false}, {"heavier_interface_text", false}});
     require(appearance::globalPreferences(retired).isEmpty() && appearance::readerPreferences(retired, {}).isEmpty(),
             "Retired settings survived global preference loading or saving");

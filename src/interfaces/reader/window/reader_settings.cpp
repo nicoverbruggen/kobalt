@@ -234,6 +234,7 @@ void Reader::openSettings() {
     settingsError->clear();
     settingsError->hide();
     darkOption->setChecked(model->state().value("dark_mode").toBool(false));
+    inheritTextLayoutOption->setChecked(preferences.value(appearance::inheritTextLayoutKey).toBool(true));
     hideNonlinearOption->setChecked(model->state().value("hide_nonlinear_fragments").toBool(false));
     animationOption->setChecked(preferences.value("page_animations").toBool(false));
     bionicOption->setChecked(model->state().value("bold_reading").toString("off") == "bold");
@@ -241,6 +242,7 @@ void Reader::openSettings() {
     edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
     denseGraphOption->setChecked(preferences.value("dense_stats_chart").toBool(false));
     pinStatsOption->setChecked(preferences.value("pin_stats").toBool(false));
+    inheritHeaderFooterOption->setChecked(preferences.value(appearance::inheritHeaderFooterKey).toBool(true));
     sleepScreenOption->setChecked(preferences.value("kobalt_sleep_screen").toBool(false));
     if (services.automaticBookOpening)
         automaticOpeningOption->setChecked(services.automaticBookOpening());
@@ -267,7 +269,8 @@ void Reader::fitAppearance() {
 }
 
 bool Reader::writePreferences(const QJsonObject &next) {
-    const auto global = appearance::globalPreferences(next);
+    auto global = appearance::globalPreferences(next);
+    appearance::rememberTextLayout(global, model->state());
     const auto previous = storage::readJson(book->paths().preferences());
     if (!writeJson(book->paths().preferences(), global)) {
         showSettingsWriteError();
@@ -294,12 +297,14 @@ void Reader::applySettings() {
     auto next = preferences;
     next["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     next["dark_mode"] = darkOption->isChecked();
+    next[appearance::inheritTextLayoutKey] = inheritTextLayoutOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     next["page_animations"] = animationOption->isChecked();
     next["show_link_indicator"] = linkIndicatorOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
     next["dense_stats_chart"] = denseGraphOption->isChecked();
     next["pin_stats"] = pinStatsOption->isChecked();
+    next[appearance::inheritHeaderFooterKey] = inheritHeaderFooterOption->isChecked();
     next["kobalt_sleep_screen"] = sleepScreenOption->isChecked();
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
     if (services.desktopUi) {

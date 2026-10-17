@@ -2,6 +2,8 @@
 
 ### What's new
 
+- New books inherit the last book's text style and page margins. Settings > Advanced has separate options for text and layout inheritance and header and footer inheritance, both on by default. Books with saved settings keep them.
+
 - Header and footer customization has been added with a few presets and the option to fully customize both. The _Custom_ preset is saved globally, but needs to be applied on a per-book basis. Books without a saved header and footer start with the last preset used.
 
 - An optional Kobalt sleep screen on Kobo: turn on Use Kobalt's sleep screen in Settings > System. It shows the dimmed reading page with a card for Sleeping, the percentage read and, when known, the time left. It is off by default, and Kobo's PIN prompt is unchanged.

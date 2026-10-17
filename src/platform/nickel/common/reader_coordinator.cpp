@@ -676,7 +676,6 @@ void ReaderCoordinator::load() {
         benchmarkTypographyEnabled ? kobalt::appearance::benchmarkTypography(run.identity) : QJsonObject();
     const auto preferences = kobalt::appearance::readerPreferences(readJson(environment_.paths.preferences()), saved);
     run.orientation->configure(preferences);
-    kobalt::appearance::applyFontDefault(saved, preferences);
     saved["dark_mode"] = preferences.value("dark_mode").toBool(false);
     saved["bold_reading"] = preferences.value("bold_reading").toString("off");
     const auto size = run.interface->readingViewport(QGuiApplication::primaryScreen()->size(), preferences);
@@ -685,7 +684,7 @@ void ReaderCoordinator::load() {
          useNative ? run.diskBaseline.location : run.nativePublication->location(), environment_.paths.layoutCache(),
          run.sourceLease, run.nativePublication->resources(run.sourceLease), positionCodec(),
          environment_.paths.documentCache(), temporaryAppearance, originalAppearance,
-         environment_.paths.directory + "/userstyle.css"},
+         environment_.paths.directory + "/userstyle.css", kobalt::appearance::bookDefaults(preferences)},
         [this](const kobalt::OpeningResult &outcome) {
             run.openingTimings["load_and_layout_ms"] = run.openingTimer.elapsed() - run.layoutStarted;
             if (!outcome.ready()) {

@@ -16,8 +16,20 @@ inline constexpr std::array<const char *, 8> layoutKeys{"header_footer",    "sho
                                                         "header_text_size", "footer_text_size", "show_clock",
                                                         "orientation",      "auto_rotate"};
 // Saved globally: the header and footer preset of the book opened or changed
-// last. A book without a saved header and footer starts with it.
+// last. New books inherit it when header/footer inheritance is enabled.
 inline constexpr auto lastPresetKey = "last_header_footer";
+inline constexpr auto inheritTextLayoutKey = "inherit_text_layout";
+inline constexpr auto inheritHeaderFooterKey = "inherit_header_footer";
+inline constexpr auto lastTextLayoutKey = "last_text_layout";
+inline constexpr std::array<const char *, 12> typographyKeys{
+    "font_face",     "font_pixels",       "line_spacing",         "line_spacing_version",
+    "margin_pixels", "top_margin_pixels", "bottom_margin_pixels", "text_alignment",
+    "weight_steps",  "font_weight",       "font_optical_size",    "hyphenation"};
+// Defaults for a book without saved typography, in the current screen density.
+QJsonObject bookDefaults(const QJsonObject &preferences);
+void applyBookDefaults(QJsonObject &saved, const QJsonObject &defaults);
+// Records only text and page margins. Display choices and reading position stay separate.
+void rememberTextLayout(QJsonObject &preferences, const QJsonObject &state);
 // Book layout takes precedence over legacy global layout values.
 // Converts the legacy global Bionic Reading key unless Bold Reading is already set.
 QJsonObject readerPreferences(const QJsonObject &global, const QJsonObject &book);

@@ -41,7 +41,6 @@ void ReaderHost::open(const QString &path, QSize nativeSize) {
     if (saved.value("book").toString() != identity)
         saved = {};
     const auto settings = appearance::readerPreferences(storage::readJson(paths.preferences()), saved);
-    appearance::applyFontDefault(saved, settings);
     saved["dark_mode"] = settings.value("dark_mode").toBool(false);
     saved["bold_reading"] = settings.value("bold_reading").toString("off");
     orientation.configure(settings);
@@ -51,6 +50,7 @@ void ReaderHost::open(const QString &path, QSize nativeSize) {
     QPointer<ReaderHost> guard(this);
     OpenRequest request{identity, path, viewport, saved, {}, {}, lease, source->resources(lease)};
     request.positions = positions;
+    request.appearanceDefaults = appearance::bookDefaults(settings);
     opening->open(request, [guard, statePath, identity, nativeSize](const OpeningResult &outcome) {
         if (!guard || guard->phase != Phase::Opening)
             return;

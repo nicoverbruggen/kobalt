@@ -49,6 +49,7 @@
 #include <QFontInfo>
 #include <QPushButton>
 #include <QProgressBar>
+#include <QRegion>
 #include <QSignalSpy>
 #include <QTest>
 #include <QFile>
@@ -1360,10 +1361,14 @@ private slots:
             QCOMPARE(panel->settingsTabButtons[index]->objectName(), tabNames[index]);
         for (auto *option : panel->findChildren<ui::DescribedOption *>())
             QVERIFY(option->presentation().indicator == ui::DescribedOption::Indicator::Square);
+        QCOMPARE(panel->inheritTextLayoutOption->presentation().minimumRowHeight,
+                 int(ui::metrics::chrome::optionHeight));
+        QVERIFY(panel->inheritTextLayoutOption->isChecked());
+        QVERIFY(panel->inheritHeaderFooterOption->isChecked());
         QVERIFY(!panel->findChild<QCheckBox *>("rrSmoothImages"));
         QVERIFY(!panel->findChild<QCheckBox *>("rrHeavierText"));
         QVERIFY(!panel->findChild<QPushButton *>("rrManageDictionaries"));
-        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 10);
+        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 12);
         QVERIFY(panel->sleepScreenOption->isHidden());
         QVERIFY(panel->automaticOpeningOption->isHidden());
         QVERIFY(panel->settingsTabButtons[reader::SystemSettings]->isHidden());
@@ -3818,6 +3823,122 @@ private slots:
         QTest::qWait(30);
         QCOMPARE(host.session()->page(), 1);
     }
+    void newBooksInheritAppearance() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        const auto first = directory.path() + "/first.epub";
+        const auto second = directory.path() + "/second.epub";
+        const auto third = directory.path() + "/third.epub";
+        for (const auto &path : {first, second, third}) {
+            QVERIFY(QFile::copy(fixture(), path));
+        }
+        QVERIFY(storage::writeJson(paths.preferences(), {{"smooth_images", false},
+                                                         {"heavier_interface_text", false},
+                                                         {appearance::lastPresetKey, "alternative_a"}}));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        const auto open = [&](const QString &path) {
+            const int count = opened.count();
+            host.open(path, nativeSize);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), count + 1, 30000);
+            QTRY_VERIFY(!host.session()->busy());
+        };
+        const auto close = [&] {
+            host.shutdown();
+            QTRY_VERIFY(host.idle());
+        };
+        const auto matches = [&](const QJsonObject &expected) {
+            for (const auto *key : appearance::typographyKeys) {
+                QCOMPARE(host.session()->state().value(key), expected.value(key));
+            }
+        };
+        open(first);
+        QVERIFY(host.window());
+        QCOMPARE(ui::interfaceWeight(), ui::heavierTextSteps);
+        QVERIFY(!host.window()->findChild<QCheckBox *>("rrSmoothImages"));
+        QVERIFY(!host.window()->findChild<QCheckBox *>("rrHeavierText"));
+        auto style = host.session()->state();
+        style["font_face"] = kobalt::test::alternateReadingFace();
+        style["font_pixels"] = 60;
+        style["line_spacing"] = 180;
+        style["margin_pixels"] = 63;
+        style["top_margin_pixels"] = 33;
+        style["bottom_margin_pixels"] = 36;
+        style["weight_steps"] = 2;
+        style["font_weight"] = 550;
+        style["hyphenation"] = QStringLiteral("on");
+        style["text_alignment"] = QStringLiteral("justify");
+        host.session()->apply(style);
+        QTRY_VERIFY(!host.session()->busy());
+        const auto firstStyle = host.session()->state();
+        close();
+        const auto last = storage::readJson(paths.preferences()).value(appearance::lastTextLayoutKey).toObject();
+        QCOMPARE(last.value("font_pixels").toInt(), 60);
+        QCOMPARE(last.value("top_margin_pixels").toInt(), 33);
+        open(second);
+        QVERIFY(host.window());
+        matches(firstStyle);
+        host.window()->checkpoint();
+        const auto secondIdentity = QUrl::fromLocalFile(second).toString();
+        QCOMPARE(storage::readJson(paths.bookState(secondIdentity)).value("header_footer").toString(),
+                 QString("alternative_a"));
+        style = host.session()->state();
+        style["font_pixels"] = 70;
+        style["margin_pixels"] = 81;
+        host.session()->apply(style);
+        QTRY_VERIFY(!host.session()->busy());
+        const auto secondStyle = host.session()->state();
+        close();
+        open(first);
+        QVERIFY(host.window());
+        matches(firstStyle);
+        QCOMPARE(storage::readJson(paths.preferences())
+                     .value(appearance::lastTextLayoutKey)
+                     .toObject()
+                     .value("font_pixels")
+                     .toInt(),
+                 60);
+        {
+            test::ReaderCanvas canvas(host.window(), nativeSize);
+            canvas.resize(900, 900);
+            canvas.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+            QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+            auto *settings = host.window()->findChild<QPushButton *>("rrSettings");
+            QVERIFY(click(canvas, settings));
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsAdvanced")));
+            for (const auto *name : {"rrInheritTextLayout", "rrInheritHeaderFooter"}) {
+                auto *option = host.window()->findChild<QCheckBox *>(name);
+                QVERIFY(option);
+                QVERIFY(option->isChecked());
+                QVERIFY(click(canvas, option));
+            }
+            QVERIFY(click(canvas, settings));
+            QTRY_VERIFY(!host.session()->busy());
+            matches(firstStyle);
+        }
+        auto global = storage::readJson(paths.preferences());
+        QVERIFY(!global.value(appearance::inheritTextLayoutKey).toBool(true));
+        QVERIFY(!global.value(appearance::inheritHeaderFooterKey).toBool(true));
+        QVERIFY(!global.contains("smooth_images") && !global.contains("heavier_interface_text"));
+        close();
+        open(third);
+        QVERIFY(host.window());
+        matches(appearance::typographyDefaults());
+        host.window()->checkpoint();
+        const auto thirdIdentity = QUrl::fromLocalFile(third).toString();
+        QCOMPARE(storage::readJson(paths.bookState(thirdIdentity)).value("header_footer").toString(),
+                 QString("default"));
+        close();
+        open(second);
+        QVERIFY(host.window());
+        matches(secondStyle);
+        host.window()->checkpoint();
+        QCOMPARE(storage::readJson(paths.bookState(secondIdentity)).value("header_footer").toString(),
+                 QString("alternative_a"));
+    }
     void openedBookSetsLastPreset() {
         // Opening a book with a preset of its own makes it the one new books start with.
         QTemporaryDir directory;
@@ -4430,6 +4551,7 @@ private slots:
         host.open(fixture(), nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         QTRY_VERIFY(!host.session()->busy());
+        saved = storage::readJson(paths.preferences());
         const auto original = host.session()->image();
         const QJsonValue position = host.session()->state()["position"];
         const auto initialMode = enabled ? QStringLiteral("bold") : QStringLiteral("off");
@@ -4552,6 +4674,8 @@ private slots:
         QTest::addColumn<QString>("optionName");
         QTest::addColumn<bool>("immediate");
         QTest::newRow("dark-mode") << QString("rrDarkMode") << true;
+        QTest::newRow("inherit-text-layout") << QString("rrInheritTextLayout") << false;
+        QTest::newRow("inherit-header-footer") << QString("rrInheritHeaderFooter") << false;
     }
     void readerSettingsWriteErrors() {
         QFETCH(QString, optionName);
@@ -4559,14 +4683,15 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         storage::Paths paths{directory.path()};
-        const QJsonObject saved{{"dark_mode", false}, {"heavier_interface_text", true}, {"smooth_images", true}};
-        QVERIFY(storage::writeJson(paths.preferences(), saved));
+        const QJsonObject initial{{"dark_mode", false}, {"heavier_interface_text", true}, {"smooth_images", true}};
+        QVERIFY(storage::writeJson(paths.preferences(), initial));
         test::ReaderHost host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{host};
         QSignalSpy opened(&host, &test::ReaderHost::opened);
         host.open(fixture(), nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         QTRY_VERIFY(!host.session()->busy());
+        const auto saved = storage::readJson(paths.preferences());
         const auto image = host.session()->image();
         const auto interfaceWeight = ui::interfaceWeight();
         test::ReaderCanvas canvas(host.window(), nativeSize);
@@ -5370,7 +5495,13 @@ private slots:
         QVERIFY(passage->geometry().bottom() < pager->parentWidget()->geometry().top());
     }
 
+    void revealLinksWithoutReflow_data() {
+        QTest::addColumn<int>("fontPixels");
+        QTest::newRow("default-size") << defaultFontPixels();
+        QTest::newRow("inherited-size") << 50;
+    }
     void revealLinksWithoutReflow() {
+        QFETCH(int, fontPixels);
         const auto originalPreferences = storage::readJson(testPaths().preferences());
         test::ReaderHost host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -5383,18 +5514,31 @@ private slots:
         canvas.setUpdatesEnabled(true);
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->style(fontPixels, host.session()->spacing()));
+        QTRY_VERIFY(!host.session()->busy());
         auto *indicator = host.window()->findChild<QPushButton *>("rrLinkIndicator");
         auto *reveal = host.window()->findChild<QPushButton *>("rrRevealLinks");
         auto *panel = host.window()->findChild<QWidget *>("rrLinkDiscovery");
         auto *page = host.window()->findChild<ReadingPage *>("rrPage");
         QVERIFY(indicator && reveal && panel && page);
         QVERIFY(!host.session()->pageLinks().isEmpty());
+        // Inherited typography can put a revealed link under the center tap.
+        QRegion menuTaps(QRect(page->width() / 3, page->height() / 3, page->width() / 3, page->height() / 3));
+        const int clearance = ui::px(12);
+        for (const auto &link : host.session()->pageLinks()) {
+            for (const auto &rect : link.rectangles) {
+                menuTaps -=
+                    rect.adjusted(-clearance, -clearance, clearance, clearance).translated(0, page->topHeight());
+            }
+        }
+        QVERIFY(!menuTaps.isEmpty());
+        const auto menuPoint = page->mapTo(canvas.surface(), (*menuTaps.begin()).center());
         QVERIFY(!indicator->isVisible());
         QVERIFY(!panel->isVisible());
         const int pages = host.session()->pages();
         const auto image = host.session()->image().cacheKey();
         const auto position = host.session()->state().value("position").toString();
-        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(clickAt(canvas, menuPoint));
         QTRY_VERIFY(panel->isVisible());
         QCOMPARE(reveal->text(), strings::get("reader.highlight_links").arg(host.session()->pageLinks().size()));
         auto *exitLabel = host.window()->findChild<QLabel *>("rrLinkDiscoveryExit");
@@ -5408,16 +5552,16 @@ private slots:
         QVERIFY(!exitLabel->isVisible());
         QVERIFY(!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
         QVERIFY(!host.window()->findChild<QWidget *>("rrBottomNavigation")->isVisible());
-        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(clickAt(canvas, menuPoint));
         QTRY_VERIFY(reveal->isVisible());
         QVERIFY(click(canvas, reveal));
         QTRY_VERIFY(exitLabel->isVisible());
-        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(clickAt(canvas, menuPoint));
         QTRY_VERIFY(!panel->isVisible());
         QVERIFY(!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
         QVERIFY(!host.window()->findChild<QWidget *>("rrBottomNavigation")->isVisible());
         QCOMPARE(host.session()->state().value("position").toString(), position);
-        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(clickAt(canvas, menuPoint));
         QTRY_VERIFY(reveal->isVisible());
         QVERIFY(click(canvas, reveal));
         QTRY_VERIFY(exitLabel->isVisible());
@@ -5440,7 +5584,7 @@ private slots:
         QVERIFY(!tabs || !tabs->isVisible());
         QVERIFY(click(canvas, dismiss));
         QVERIFY(!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
-        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(clickAt(canvas, menuPoint));
         QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
         // Settings save the indicator independently of publisher styles.
         auto *settings = host.window()->findChild<QPushButton *>("rrSettings");
@@ -5452,7 +5596,7 @@ private slots:
         option->setChecked(true);
         QVERIFY(click(canvas, settings));
         QTRY_VERIFY(!host.session()->busy());
-        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(clickAt(canvas, menuPoint));
         QTRY_VERIFY(indicator->isVisible());
         QCOMPARE(indicator->accessibleName(),
                  strings::get("reader.highlight_links").arg(host.session()->pageLinks().size()));

@@ -185,6 +185,8 @@ int main(int argc, char **argv) {
             require(benchmark.checkpoint(&snapshot), "Benchmark turn checkpoint failed");
             require(appearance::same(storage::readJson(statePath), migratedOriginal),
                     "Turn checkpoint changed original appearance");
+            require(!storage::readJson(paths.preferences()).contains(appearance::lastTextLayoutKey),
+                    "Temporary benchmark typography became the next book's style");
             retained = benchmark.session()->retained();
             require(bool(retained), "Benchmark could not retain its parsed document");
         }

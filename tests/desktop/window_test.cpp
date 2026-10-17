@@ -885,8 +885,9 @@ private slots:
                 toggle->click();
             for (const auto &tab : {"Advanced", "Display"}) {
                 reader->findChild<QPushButton *>(QString("rrSettings") + tab)->click();
-                const QStringList names =
-                    QString(tab) == "Advanced" ? QStringList{} : QStringList{"rrDarkMode", "rrBionicReading"};
+                const QStringList names = QString(tab) == "Advanced"
+                                              ? QStringList{"rrInheritTextLayout", "rrInheritHeaderFooter"}
+                                              : QStringList{"rrDarkMode", "rrBionicReading"};
                 for (const auto &name : names) {
                     auto *option = reader->findChild<QCheckBox *>(name);
                     QVERIFY(option);

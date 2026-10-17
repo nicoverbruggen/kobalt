@@ -146,7 +146,8 @@ private:
     kobalt::ui::Panel *general;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption, *animationOption, *edgeLightOption, *denseGraphOption, *pinStatsOption;
+    QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption, *denseGraphOption,
+        *pinStatsOption, *inheritHeaderFooterOption;
     QCheckBox *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
     QPushButton *autoRotateOption;
     QCheckBox *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;

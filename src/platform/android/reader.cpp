@@ -79,7 +79,6 @@ void ReaderController::begin(const QString &path, QSize pixels) {
     if (saved.value("book").toString() != identity)
         saved = {};
     const auto settings = appearance::readerPreferences(storage::readJson(paths.preferences()), saved);
-    kobalt::appearance::applyFontDefault(saved, settings);
     saved["dark_mode"] = settings.value("dark_mode").toBool(false);
     saved["bold_reading"] = settings.value("bold_reading").toString("off");
     orientation.configure(settings);
@@ -88,6 +87,7 @@ void ReaderController::begin(const QString &path, QSize pixels) {
     QPointer<ReaderController> guard(this);
     OpenRequest request{identity, path, viewport, saved, {}, paths.layoutCache(), lease, source->resources(lease)};
     request.userStyleSheetPath = paths.directory + "/userstyle.css";
+    request.appearanceDefaults = appearance::bookDefaults(settings);
     opening->open(
         std::move(request),
         [guard, identity, statePath, pixels](const OpeningResult &result) {

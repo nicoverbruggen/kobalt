@@ -663,3 +663,7 @@
 
 "reader.hide_nonlinear_fragments" = "Hide non-linear fragments";
 "settings.hide_nonlinear_fragments_description" = "Skip non-linear sections when turning pages. Links, Chapters and page numbers can still open them.";
+"settings.inherit_text_layout" = "Inherit text and layout from the last book";
+"settings.inherit_text_layout_description" = "New books start with the last book's text style and page margins. Custom presets are planned for a future beta.";
+"settings.inherit_header_footer" = "Inherit header and footer from the last book";
+"settings.inherit_header_footer_description" = "New books start with the last book's header and footer. Books with saved settings keep them.";

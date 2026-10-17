@@ -269,6 +269,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     originalAppearance = request.originalAppearance;
     appearance::migrateLineSpacing(originalAppearance);
     const auto pinnedAppearance = temporaryAppearance;
+    const auto appearanceDefaults = std::move(request.appearanceDefaults);
     const auto nativeLocation = std::move(request.platformLocation),
                layoutCachePath = std::move(request.layoutCachePath);
     const auto documentCachePath = std::move(request.documentCachePath);
@@ -313,7 +314,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
         engineWorker(),
         [guard, engine, path, identity, size, saved, nativeLocation, lease, factory, finished, report, systemFont,
          layoutCachePath, documentCachePath, retainedHash, retainedSettings, latest, job, positions, pinnedAppearance,
-         retainedWarning, retainedDetails, userStyleSheetPath]() mutable {
+         retainedWarning, retainedDetails, userStyleSheetPath, appearanceDefaults]() mutable {
             EngineJob activity;
             QElapsedTimer timer;
             timer.start();
@@ -400,6 +401,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 saved["dark_mode"] = dark;
                 saved["hide_nonlinear_fragments"] = hideNonlinear;
                 appearance::migrateLineSpacing(saved);
+                if (!appearanceDefaults.isEmpty()) {
+                    appearance::applyBookDefaults(saved, appearanceDefaults);
+                }
                 if (!pinnedAppearance.isEmpty())
                     appearance::copy(saved, pinnedAppearance);
                 const auto initial = saved.value("position").toString().isEmpty() ? nativeLocation : QString();

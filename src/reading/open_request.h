@@ -23,5 +23,7 @@ struct OpenRequest {
     QJsonObject temporaryAppearance{}, originalAppearance{};
     // Optional user CSS. Read on the engine worker for every opening.
     QString userStyleSheetPath{};
+    // Applied after checking the saved publication fingerprint, before temporary appearance.
+    QJsonObject appearanceDefaults{};
 };
 }

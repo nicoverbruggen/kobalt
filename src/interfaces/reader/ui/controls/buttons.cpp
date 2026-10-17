@@ -165,6 +165,61 @@ void BackButton::paintEvent(QPaintEvent *) {
     painter.setPen(ink);
     painter.drawText(QPointF(m::navigation::labelLeft, center - bounds.center().y() + labelOffset), label);
 }
+TapZoneButton::TapZoneButton(tapZones::Layout layout, bool rightToLeft, QWidget *parent)
+    : Button(parent), layout(layout), rightToLeft(rightToLeft) {
+    setCheckable(true);
+    setFocusPolicy(Qt::NoFocus);
+    readerStyle(this, "QPushButton{border:0;padding:0;min-width:0;min-height:0;}");
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setFixedHeight(sizeHint().height());
+}
+QSize TapZoneButton::sizeHint() const {
+    return {px(200), px(288)};
+}
+void TapZoneButton::paintEvent(QPaintEvent *) {
+    QPainter painter(this);
+    const auto paper = palette().color(QPalette::Window);
+    const auto ink = palette().color(QPalette::WindowText);
+    const auto gray = darkTheme(this) ? QColor("#333333") : QColor("#dddddd");
+    painter.fillRect(rect(), isDown() ? gray : paper);
+    const int diagramHeight = px(200);
+    const int diagramWidth = qMin(px(142), width() - px(24));
+    const QRectF diagram((width() - diagramWidth) / 2, px(16), diagramWidth, diagramHeight);
+    painter.setPen(QPen(ink, px(2)));
+    for (const auto &region : tapZones::regions(layout)) {
+        const auto &r = region.bounds;
+        const QRectF area(diagram.x() + r.x() * diagram.width(), diagram.y() + r.y() * diagram.height(),
+                          r.width() * diagram.width(), r.height() * diagram.height());
+        painter.fillRect(area, region.action == tapZones::Action::Menu ? gray : paper);
+        painter.drawRect(area);
+    }
+    const auto glyph = [&](tapZones::Action action, qreal x, qreal y) {
+        const int side = px(24);
+        const QPointF center(diagram.x() + x * diagram.width(), diagram.y() + y * diagram.height());
+        const QRectF area(center.x() - side / 2., center.y() - side / 2., side, side);
+        if (action == tapZones::Action::Menu) {
+            for (int line = -1; line <= 1; ++line)
+                painter.drawLine(QPointF(area.left(), center.y() + line * px(5)),
+                                 QPointF(area.right(), center.y() + line * px(5)));
+        } else {
+            bool next = action == tapZones::Action::Next;
+            paintOpeningIcon(painter, next != rightToLeft ? ControlIcon::Next : ControlIcon::Previous, area, ink);
+        }
+    };
+    if (layout == tapZones::Layout::OneHanded) {
+        glyph(tapZones::Action::Next, .5, .2);
+        glyph(tapZones::Action::Next, .5, .8);
+        glyph(tapZones::Action::Menu, .5, .5);
+    } else {
+        for (const auto &region : tapZones::regions(layout))
+            glyph(region.action, region.bounds.center().x(), region.bounds.center().y());
+    }
+    painter.setPen(QPen(isChecked() ? ink : gray, px(6)));
+    painter.drawRect(diagram.adjusted(-px(4), -px(4), px(4), px(4)));
+    painter.setPen(ink);
+    painter.setFont(interfaceFont(px(25)));
+    drawInterfaceText(painter, QRect(0, px(232), width(), px(40)), text(), Qt::AlignCenter);
+}
 QPushButton *makeButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,
                         std::function<void()> action) {
     auto *button = new Button(text, parent);

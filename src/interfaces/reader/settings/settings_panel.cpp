@@ -56,14 +56,15 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsPages->setObjectName("rrSettingsPages");
     readerStyle(settingsPages, styles::tabFrame());
     auto *tabGroup = new QButtonGroup(this);
-    const char *tabNames[] = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries",
+    const char *tabNames[] = {"rrSettingsDisplay", "rrSettingsControls", "rrSettingsAdvanced", "rrSettingsDictionaries",
                               "rrSettingsStats",   "rrSettingsSystem",   "rrSettingsAbout"};
-    const ui::ControlIcon tabIcons[] = {ui::ControlIcon::Display,      ui::ControlIcon::Advanced,
-                                        ui::ControlIcon::Dictionaries, ui::ControlIcon::Graph,
-                                        ui::ControlIcon::System,       ui::ControlIcon::About};
-    const QStringList tabs = {strings::get("settings.display"),      strings::get("settings.advanced"),
-                              strings::get("settings.dictionaries"), strings::get("settings.stats"),
-                              strings::get("settings.system"),       strings::get("settings.about")};
+    const ui::ControlIcon tabIcons[] = {
+        ui::ControlIcon::Display, ui::ControlIcon::Swipe,  ui::ControlIcon::Advanced, ui::ControlIcon::Dictionaries,
+        ui::ControlIcon::Graph,   ui::ControlIcon::System, ui::ControlIcon::About};
+    const QStringList tabs = {strings::get("settings.display"),  strings::get("settings.controls"),
+                              strings::get("settings.advanced"), strings::get("settings.dictionaries"),
+                              strings::get("settings.stats"),    strings::get("settings.system"),
+                              strings::get("settings.about")};
     for (int index = 0; index < tabs.size(); ++index) {
         auto *button = makeButton(this, settingsTabs, tabNames[index], tabs[index], [this, index] {
             settingsPages->setCurrentIndex(index);
@@ -122,6 +123,27 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     generalOptions->addWidget(refreshButton, optionIndex++, 0);
     deviceOptions << animationOption << refreshButton;
     generalOptions->setRowStretch(optionIndex, 1);
+    auto *controlsPage = new QWidget(settingsPages);
+    controlsPage->setObjectName("rrControlsOptions");
+    settingsPages->addWidget(controlsPage);
+    auto *controlsRows = new QVBoxLayout(controlsPage);
+    controlsRows->setContentsMargins(0, 0, 0, 0);
+    controlsRows->setSpacing(0);
+    pageNavigationButton = ui::makeCaptionButton(controlsPage, nullptr, "rrPageNavigation",
+                                                 strings::get("settings.page_navigation"), [] {});
+    controlsRows->addWidget(pageNavigationButton);
+    tapZonesButton =
+        ui::makeCaptionButton(controlsPage, nullptr, "rrTapZones", strings::get("settings.tap_zones"), [] {});
+    controlsRows->addWidget(tapZonesButton);
+    const bool lightSupported = inputs.lightSupported;
+    edgeLightOption = check(controlsPage, "rrEdgeLight", strings::get("reader.edge_light"),
+                            !lightSupported          ? strings::get("settings.unsupported_description")
+                            : inputs.warmthSupported ? strings::get("settings.edge_light_description")
+                                                     : strings::get("settings.edge_brightness_description"));
+    edgeLightOption->setEnabled(lightSupported);
+    controlsRows->addWidget(edgeLightOption);
+    deviceOptions << edgeLightOption;
+    controlsRows->addStretch(1);
     auto *advancedPage = new QWidget(settingsPages);
     advancedPage->setObjectName("rrAdvancedOptions");
     settingsPages->addWidget(advancedPage);
@@ -144,14 +166,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         check(advancedPage, "rrHideNonlinearFragments", strings::get("reader.hide_nonlinear_fragments"),
               strings::get("settings.hide_nonlinear_fragments_description"));
     advancedRows->addWidget(hideNonlinearOption);
-    const bool lightSupported = inputs.lightSupported;
-    edgeLightOption = check(advancedPage, "rrEdgeLight", strings::get("reader.edge_light"),
-                            !lightSupported          ? strings::get("settings.unsupported_description")
-                            : inputs.warmthSupported ? strings::get("settings.edge_light_description")
-                                                     : strings::get("settings.edge_brightness_description"));
-    edgeLightOption->setEnabled(lightSupported);
-    advancedRows->addWidget(edgeLightOption);
-    deviceOptions << edgeLightOption;
     auto *resetRow = kobalt::ui::horizontalRow();
     advancedRows->addLayout(resetRow);
     resetRow->addStretch(1);
@@ -324,7 +338,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         button->setCheckable(true);
         tabGroup->addButton(button);
         settingsTabButtons.append(button);
-        settingsTabs->insertWidget(2, button);
+        settingsTabs->insertWidget(AdvancedSettings + 1, button);
         readerStyle(button, styles::tab(false));
         connect(button, &QPushButton::toggled, button, [button](bool on) {
             button->setProperty("kobalt_selected", on);
@@ -366,7 +380,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     resetRow->setStretch(0, 0);
     resetRow->setStretch(1, 1);
     resetRow->setStretch(2, 0);
-    for (auto *button : {resetDefaults, refreshButton, sleepScreenButton}) {
+    for (auto *button : {resetDefaults, refreshButton, sleepScreenButton, pageNavigationButton, tapZonesButton}) {
         button->setRule(Qt::BottomEdge);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults)

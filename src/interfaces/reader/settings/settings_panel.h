@@ -11,6 +11,7 @@
 namespace kobalt::reader {
 enum SettingsPage {
     DisplaySettings,
+    ControlsSettings,
     AdvancedSettings,
     DictionariesSettings,
     StatsSettings,
@@ -46,6 +47,7 @@ public:
     ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
     ui::DescribedOption *automaticOpeningOption = nullptr;
     ui::CaptionButton *sleepScreenButton = nullptr;
+    ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;

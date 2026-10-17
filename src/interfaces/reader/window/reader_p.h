@@ -298,6 +298,12 @@ private:
     void showSleepScreen();
     void openSleepScreen();
     void closeSleepScreen();
+    void showTapZones();
+    void openTapZones();
+    void closeTapZones();
+    void showPageNavigation();
+    void openPageNavigation();
+    void closePageNavigation();
     void applyAutomaticOpening(bool enabled);
     void applySettings();
     bool writePreferences(const QJsonObject &next);
@@ -337,6 +343,8 @@ private:
     QPointer<kobalt::ui::ModalOverlay> refreshPopup;
     kobalt::ui::CaptionButton *sleepScreenButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> sleepPopup;
+    kobalt::ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr;
+    QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup;
     static QString refreshExplanation(kobalt::ScreenRefresh mode);
     static QString refreshLabel(kobalt::ScreenRefresh mode);
     void showScreenRefresh();

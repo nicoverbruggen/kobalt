@@ -11,6 +11,7 @@
 #include "interfaces/reader/ui/style/metrics.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "reading/appearance_settings.h"
+#include "reading/page_navigation.h"
 #include "reading/sleep_screen.h"
 #include "storage/reader_storage.h"
 #include <QDateTime>
@@ -805,6 +806,197 @@ void Reader::openSleepScreen() {
     sleepPopup->show();
     sleepPopup->raise();
     sleepPopup->setFocus();
+}
+
+namespace {
+QString navigationLabel(pageNavigation::Mode mode) {
+    switch (mode) {
+    case pageNavigation::Mode::TapsAndSwipes:
+        return strings::get("settings.navigation_taps_and_swipes");
+    case pageNavigation::Mode::TapsOnly:
+        return strings::get("settings.navigation_taps_only");
+    case pageNavigation::Mode::SwipesOnly:
+        return strings::get("settings.navigation_swipes_only");
+    case pageNavigation::Mode::ButtonsOnly:
+        return strings::get("settings.navigation_buttons_only");
+    }
+    return {};
+}
+QString tapZoneLabel(tapZones::Layout layout) {
+    switch (layout) {
+    case tapZones::Layout::LeftRight:
+        return strings::get("settings.tap_left_right");
+    case tapZones::Layout::TopBottom:
+        return strings::get("settings.tap_top_bottom");
+    case tapZones::Layout::OneHanded:
+        return strings::get("settings.tap_one_handed");
+    }
+    return {};
+}
+QString navigationExplanation(pageNavigation::Mode mode) {
+    switch (mode) {
+    case pageNavigation::Mode::TapsAndSwipes:
+        return strings::get("settings.navigation_taps_and_swipes_description");
+    case pageNavigation::Mode::TapsOnly:
+        return strings::get("settings.navigation_taps_only_description");
+    case pageNavigation::Mode::SwipesOnly:
+        return strings::get("settings.navigation_swipes_only_description");
+    case pageNavigation::Mode::ButtonsOnly:
+        return strings::get("settings.navigation_buttons_only_description");
+    }
+    return {};
+}
+}
+
+void Reader::showTapZones() {
+    tapZonesButton->setCaption(tapZoneLabel(pageNavigation::tapLayout(preferences)).toUpper());
+}
+
+void Reader::closeTapZones() {
+    if (!tapZonesPopup)
+        return;
+    tapZonesPopup->hide();
+    tapZonesPopup->deleteLater();
+    tapZonesPopup.clear();
+}
+
+void Reader::openTapZones() {
+    if (tapZonesPopup)
+        return;
+    namespace c = m::chrome;
+    tapZonesPopup = new ui::ModalOverlay(this);
+    tapZonesPopup->setObjectName("rrTapZonesPopup");
+    tapZonesPopup->setGeometry(rect());
+    tapZonesPopup->installEventFilter(this);
+    tapZonesPopup->dismissed = [this] {
+        closeTapZones();
+    };
+    auto *card = tapZonesPopup->card();
+    card->rows()->setContentsMargins(c::inset, m::notice::cardMargins.top(), c::inset, m::notice::cardMargins.bottom());
+    card->title(strings::get("settings.tap_zones"), "rrTapZonesTitle");
+    card->message(strings::get("settings.tap_zones_hint"), "rrTapZonesHint");
+    auto *row = new QHBoxLayout;
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(m::control::itemGap);
+    card->rows()->addLayout(row);
+    auto *group = new QButtonGroup(card);
+    const bool rtl = model->state().value("page_progression_rtl").toBool();
+    for (const auto layout : tapZones::layouts) {
+        auto *button = new ui::TapZoneButton(layout, rtl, card);
+        button->setObjectName("rrTapZones_" + pageNavigation::tapValue(layout));
+        button->setText(tapZoneLabel(layout));
+        button->setAccessibleName(button->text());
+        button->setChecked(layout == pageNavigation::tapLayout(preferences));
+        group->addButton(button);
+        row->addWidget(button);
+        connect(button, &QPushButton::clicked, this, [this, layout] {
+            auto next = preferences;
+            next[pageNavigation::tapPreferenceKey] = pageNavigation::tapValue(layout);
+            if (layout == tapZones::Layout::OneHanded)
+                next[pageNavigation::preferenceKey] = pageNavigation::value(pageNavigation::Mode::TapsAndSwipes);
+            if (writePreferences(next)) {
+                preferences = next;
+                showTapZones();
+                showPageNavigation();
+                settingsError->clear();
+                settingsError->hide();
+            } else {
+                settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
+                settingsError->show();
+            }
+            closeTapZones();
+        });
+    }
+    card->message(strings::get("settings.tap_one_handed_hint"), "rrTapZonesOneHandedHint");
+    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    tapZonesPopup->centerCard();
+    for (auto *widget : tapZonesPopup->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(tapZonesPopup);
+    tapZonesPopup->show();
+    tapZonesPopup->raise();
+    tapZonesPopup->setFocus();
+}
+
+void Reader::showPageNavigation() {
+    pageNavigationButton->setCaption(
+        navigationLabel(pageNavigation::mode(preferences, services.pageButtons())).toUpper());
+}
+
+void Reader::closePageNavigation() {
+    if (!pageNavigationPopup) {
+        return;
+    }
+    pageNavigationPopup->hide();
+    pageNavigationPopup->deleteLater();
+    pageNavigationPopup.clear();
+}
+
+void Reader::openPageNavigation() {
+    if (pageNavigationPopup) {
+        return;
+    }
+    namespace c = m::chrome;
+    pageNavigationPopup = new ui::ModalOverlay(this);
+    pageNavigationPopup->setObjectName("rrPageNavigationPopup");
+    pageNavigationPopup->setGeometry(rect());
+    pageNavigationPopup->installEventFilter(this);
+    pageNavigationPopup->dismissed = [this] {
+        closePageNavigation();
+    };
+    auto *card = pageNavigationPopup->card();
+    card->rows()->setContentsMargins(2, 2, 2, 2);
+    card->rows()->setSpacing(0);
+    card->rows()->addSpacing(m::notice::cardMargins.top());
+    auto *title = card->title(strings::get("settings.page_navigation"), "rrPageNavigationTitle");
+    title->setContentsMargins(c::inset, 0, c::inset, 0);
+    auto *hint = card->message(strings::get("settings.navigation_menu_hint"), "rrPageNavigationHint");
+    hint->setContentsMargins(c::inset, 0, c::inset, 0);
+    card->rows()->addSpacing(m::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    auto *choices = new ui::RadioList(card);
+    choices->setObjectName("rrPageNavigationChoices");
+    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setTopDivider(true);
+    for (const auto mode : pageNavigation::modes) {
+        if (mode == pageNavigation::Mode::ButtonsOnly && !services.pageButtons()) {
+            continue;
+        }
+        const bool needsSwipes =
+            pageNavigation::tapLayout(preferences) == tapZones::Layout::OneHanded && !pageNavigation::swipes(mode);
+        auto *option =
+            choices->add("rrNavigation_" + pageNavigation::value(mode), navigationLabel(mode),
+                         needsSwipes ? strings::get("settings.navigation_needs_swipes") : navigationExplanation(mode));
+        option->setEnabled(!needsSwipes);
+        if (mode == pageNavigation::mode(preferences, services.pageButtons())) {
+            choices->setCurrent(choices->options().size() - 1);
+        }
+    }
+    choices->chosen = [this](int index) {
+        auto next = preferences;
+        next[pageNavigation::preferenceKey] = pageNavigation::value(pageNavigation::modes[index]);
+        if (writePreferences(next)) {
+            preferences = next;
+            showPageNavigation();
+            settingsError->clear();
+            settingsError->hide();
+        } else {
+            settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
+            settingsError->show();
+        }
+        closePageNavigation();
+    };
+    card->rows()->addWidget(choices);
+    choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
+    card->fitToWidth(cardWidth);
+    pageNavigationPopup->centerCard();
+    for (auto *widget : pageNavigationPopup->findChildren<QWidget *>()) {
+        textRefresh(widget);
+    }
+    textRefresh(pageNavigationPopup);
+    pageNavigationPopup->show();
+    pageNavigationPopup->raise();
+    pageNavigationPopup->setFocus();
 }
 
 }

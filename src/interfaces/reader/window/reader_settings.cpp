@@ -244,6 +244,8 @@ void Reader::openSettings() {
     pinStatsOption->setChecked(preferences.value("pin_stats").toBool(false));
     inheritHeaderFooterOption->setChecked(preferences.value(appearance::inheritHeaderFooterKey).toBool(true));
     showSleepScreen();
+    showPageNavigation();
+    showTapZones();
     if (services.automaticBookOpening)
         automaticOpeningOption->setChecked(services.automaticBookOpening());
     screenRefreshMode = kobalt::screenRefresh(preferences.value("screen_refresh").toString());

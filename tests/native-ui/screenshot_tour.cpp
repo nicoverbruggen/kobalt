@@ -136,7 +136,9 @@ public:
             require(temporary.isValid(), "Cannot create isolated reader state");
             QDir().mkpath(output);
             require(storage::writeJson(paths.preferences(),
-                                       {{"dark_mode", theme == "dark"}, {"dense_stats_chart", group == "stats-dense"}}),
+                                       {{"dark_mode", theme == "dark"},
+                                        {"dense_stats_chart", group == "stats-dense"},
+                                        {"page_navigation", group == "light" ? "buttons_only" : "taps_and_swipes"}}),
                     "Cannot write fixture preferences");
             if (group == "sync") {
                 host.progress = std::make_shared<test::HostProgress>();
@@ -155,6 +157,9 @@ public:
             host.configureServices = [this, state = lookup, desktop = group == "native-ui",
                                       catalogue = discoverReadingFonts(fonts.sources)](ReaderHostServices &services) {
                 services.desktopUi = desktop;
+                services.pageButtons = [this] {
+                    return pageButtonsSupported;
+                };
                 if (!desktop) {
                     auto automatic = std::make_shared<bool>(true);
                     services.automaticBookOpening = [automatic] {
@@ -970,7 +975,7 @@ public:
             tap("rrFont");
             tap("rrFontClose");
             tap("rrSettings");
-            for (const auto &tab : {"Display", "Advanced", "Stats", "System", "About"}) {
+            for (const auto &tab : {"Display", "Controls", "Advanced", "Stats", "System", "About"}) {
                 tap("rrSettings" + QString(tab));
                 capture(QString(tab).toLower(), "rrGeneralSettings");
             }
@@ -995,6 +1000,33 @@ public:
                 tap("rrDictionariesNext");
             capture("dictionaries-other", "rrDictionaries");
             dictionaryManagementFixture = false;
+            tap("rrSettingsControls");
+            tap("rrPageNavigation");
+            capture("page-navigation", "rrPageNavigationPopup");
+            tap("rrNavigation_swipes_only");
+            capture("page-navigation-selected", "rrPageNavigation");
+            tap("rrPageNavigation");
+            tap("rrNavigation_taps_and_swipes");
+            pageButtonsSupported = false;
+            tap("rrPageNavigation");
+            capture("page-navigation-no-buttons", "rrPageNavigationPopup");
+            tap("rrNavigation_taps_and_swipes");
+            pageButtonsSupported = true;
+            tap("rrTapZones");
+            capture("tap-zones", "rrTapZonesPopup");
+            tap("rrTapZones_top_bottom");
+            tap("rrTapZones");
+            capture("tap-zones-top-bottom", "rrTapZonesPopup");
+            tap("rrTapZones_one_handed");
+            capture("tap-zones-one-handed-selected", "rrTapZones");
+            tap("rrTapZones");
+            capture("tap-zones-one-handed", "rrTapZonesPopup");
+            tap("rrTapZones_one_handed");
+            tap("rrPageNavigation");
+            capture("one-handed-navigation", "rrPageNavigationPopup");
+            tap("rrNavigation_taps_and_swipes");
+            tap("rrTapZones");
+            tap("rrTapZones_left_right");
             tap("rrSettingsAdvanced");
             tap("rrRestoreDefaults");
             capture("restore-confirmation", "rrConfirmDefaults");
@@ -1352,6 +1384,7 @@ public:
 
 private:
     bool dictionaryManagementFixture = false;
+    bool pageButtonsSupported = true;
     QString output, group, theme;
     QSize size;
     QTemporaryDir temporary;

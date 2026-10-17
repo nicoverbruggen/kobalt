@@ -18,6 +18,7 @@
 #include "interfaces/reader/settings/settings_panel.h"
 #include "build_info.h"
 #include "reading/appearance_settings.h"
+#include "reading/page_navigation.h"
 #include <QApplication>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -917,6 +918,8 @@ void Reader::buildSettings() {
     pinStatsOption = settings->pinStatsOption;
     inheritHeaderFooterOption = settings->inheritHeaderFooterOption;
     sleepScreenButton = settings->sleepScreenButton;
+    pageNavigationButton = settings->pageNavigationButton;
+    tapZonesButton = settings->tapZonesButton;
     automaticOpeningOption = settings->automaticOpeningOption;
     linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
@@ -932,6 +935,12 @@ void Reader::buildSettings() {
     });
     connect(sleepScreenButton, &QPushButton::clicked, this, [this] {
         openSleepScreen();
+    });
+    connect(tapZonesButton, &QPushButton::clicked, this, [this] {
+        openTapZones();
+    });
+    connect(pageNavigationButton, &QPushButton::clicked, this, [this] {
+        openPageNavigation();
     });
     connect(automaticOpeningOption, &QCheckBox::clicked, this, [this](bool enabled) {
         applyAutomaticOpening(enabled);
@@ -1064,6 +1073,9 @@ void Reader::connectLightGestures() {
 
 void Reader::connectPageInput() {
     page->swiped = [this](int direction) {
+        if (!pageNavigation::swipes(pageNavigation::mode(preferences, services.pageButtons()))) {
+            return;
+        }
         if (revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive() ||
             lookupPending || appearanceEdit.preview() || general->isVisible() || choices->isVisible() ||
             topControls->isVisible())
@@ -1091,7 +1103,10 @@ void Reader::connectPageInput() {
         }
         const bool devicePreview = services.devicePreview && services.devicePreview();
         const qreal y = qreal(point.y()) / qMax(1, page->height());
-        const bool menuTap = x > .33 && x < .67 && (!devicePreview || (y > .33 && y < .67));
+        const auto layout = pageNavigation::tapLayout(preferences);
+        const auto action = tapZones::action(layout, x, y);
+        const bool previewColumn = devicePreview && layout == tapZones::Layout::LeftRight;
+        const bool menuTap = action == tapZones::Action::Menu && (!previewColumn || (y > .33 && y < .67));
         if (topControls->isVisible() || choices->isVisible()) {
             // An open Text or Layout panel can cover the middle of a device
             // preview, so any tap on the page that stays visible closes it.
@@ -1114,10 +1129,15 @@ void Reader::connectPageInput() {
             showControls();
             return;
         }
-        if (devicePreview && x > .33 && x < .67)
+        if (previewColumn && action == tapZones::Action::Menu)
             return;
-        const int direction = x <= .33 ? -1 : 1;
-        turnPage(model->state().value("page_progression_rtl").toBool() ? -direction : direction);
+        if (!pageNavigation::taps(pageNavigation::mode(preferences, services.pageButtons()))) {
+            return;
+        }
+        const int direction = action == tapZones::Action::Previous ? -1 : 1;
+        const bool reverse =
+            layout == tapZones::Layout::LeftRight && model->state().value("page_progression_rtl").toBool();
+        turnPage(reverse ? -direction : direction);
     };
 }
 

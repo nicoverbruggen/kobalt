@@ -146,6 +146,9 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
               services.devicePreview = [this] {
                   return screenPreset != 0;
               };
+              services.pageButtons = [this] {
+                  return screenPreset == 2;
+              };
               services.clock = [this] {
                   return screenPreset ? QStringLiteral("09:00") : QTime::currentTime().toString("HH:mm");
               };

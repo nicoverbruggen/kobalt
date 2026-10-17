@@ -26,6 +26,7 @@
 #include "interfaces/reader/panels/link_panel.h"
 #include "interfaces/reader/views/reading_page.h"
 #include "interfaces/reader/views/sleep_screen.h"
+#include "reading/page_navigation.h"
 #include "reading/sleep_screen.h"
 #include "interfaces/reader/ui/style/metrics.h"
 #include "support/strings.h"
@@ -1329,12 +1330,13 @@ private slots:
         QCOMPARE(panel->objectName(), QString("rrGeneralSettings"));
         QVERIFY(panel->isHidden());
         QVERIFY(panel->settingsError->isHidden());
-        QCOMPARE(panel->settingsPages->count(), 6);
-        const QStringList pages = {"rrDisplayOptions", "rrAdvancedOptions", "rrDictionaries",
-                                   "rrStatsOptions",   "rrSystemOptions",   "rrAbout"};
+        QCOMPARE(panel->settingsPages->count(), 7);
+        const QStringList pages = {"rrDisplayOptions", "rrControlsOptions", "rrAdvancedOptions",
+                                   "rrDictionaries",   "rrStatsOptions",    "rrSystemOptions",
+                                   "rrAbout"};
         for (int index = 0; index < pages.size(); ++index)
             QCOMPARE(panel->settingsPages->widget(index)->objectName(), pages[index]);
-        QCOMPARE(panel->settingsTabButtons.size(), 6);
+        QCOMPARE(panel->settingsTabButtons.size(), 7);
         auto *sections = panel->findChild<QBoxLayout *>("settingsSectionLayout");
         QVERIFY(sections);
         QCOMPARE(sections->direction(), QBoxLayout::LeftToRight);
@@ -1356,8 +1358,9 @@ private slots:
         QVERIFY(rail->width() < withDictionaries);
         panel->showDictionaries(true);
         QCOMPARE(rail->width(), withDictionaries);
-        const QStringList tabNames = {"rrSettingsDisplay", "rrSettingsAdvanced", "rrSettingsDictionaries",
-                                      "rrSettingsStats",   "rrSettingsSystem",   "rrSettingsAbout"};
+        const QStringList tabNames = {"rrSettingsDisplay",      "rrSettingsControls", "rrSettingsAdvanced",
+                                      "rrSettingsDictionaries", "rrSettingsStats",    "rrSettingsSystem",
+                                      "rrSettingsAbout"};
         for (int index = 0; index < tabNames.size(); ++index)
             QCOMPARE(panel->settingsTabButtons[index]->objectName(), tabNames[index]);
         for (auto *option : panel->findChildren<ui::DescribedOption *>())
@@ -1374,6 +1377,10 @@ private slots:
         QVERIFY(panel->automaticOpeningOption->isHidden());
         QVERIFY(panel->settingsTabButtons[reader::SystemSettings]->isHidden());
         QCOMPARE(panel->bionicOption->parentWidget(), panel->settingsPages->widget(reader::DisplaySettings));
+        QCOMPARE(panel->pageNavigationButton->parentWidget(), panel->settingsPages->widget(reader::ControlsSettings));
+        QCOMPARE(panel->edgeLightOption->parentWidget(), panel->settingsPages->widget(reader::ControlsSettings));
+        QCOMPARE(panel->settingsTabButtons[reader::ControlsSettings]->property("reader_tab_icon").toInt(),
+                 int(ui::ControlIcon::Swipe));
         QVERIFY(!panel->animationOption->isEnabled());
         QVERIFY(!panel->edgeLightOption->isEnabled());
         QVERIFY(!panel->debugProgress);
@@ -1440,6 +1447,7 @@ private slots:
         QCOMPARE(panel.settingsTabButtons[reader::SystemSettings + 1]->objectName(), QString("rrSettingsAbout"));
     }
 
+
     void settingsContentMeasurement() {
         QWidget owner;
         owner.resize(nativeSize);
@@ -1496,8 +1504,8 @@ private slots:
         QVERIFY(tab->isHidden());
         QVERIFY(!tab->isEnabled());
         QVERIFY(!panel.dictionaries->installRequested);
-        for (const auto index :
-             {reader::DisplaySettings, reader::AdvancedSettings, reader::StatsSettings, reader::AboutSettings}) {
+        for (const auto index : {reader::DisplaySettings, reader::ControlsSettings, reader::AdvancedSettings,
+                                 reader::StatsSettings, reader::AboutSettings}) {
             auto *button = panel.settingsTabButtons[index];
             QVERIFY(!button->isHidden());
             button->click();
@@ -1723,6 +1731,284 @@ private slots:
         QVERIFY(host.window()->findChild<QCheckBox *>("rrSleep_page")->isChecked());
         auto *panel = dynamic_cast<reader::SettingsPanel *>(host.window()->findChild<QWidget *>("rrGeneralSettings"));
         QVERIFY(panel && !panel->settingsError->isHidden());
+    }
+
+    void pageNavigationPersistsAndRollsBackFailedWrites() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        host.window()->findChild<QPushButton *>("rrSettingsControls")->click();
+        auto *button = host.window()->findChild<ui::CaptionButton *>("rrPageNavigation");
+        QVERIFY(button);
+        QCOMPARE(button->caption(), strings::get("settings.navigation_taps_and_swipes").toUpper());
+        const auto before = storage::readJson(paths.preferences());
+        button->click();
+        auto *popup = host.window()->findChild<ui::ModalOverlay *>("rrPageNavigationPopup");
+        QVERIFY(popup && popup->isVisible());
+        QCOMPARE(popup->findChildren<QCheckBox *>().size(), 4);
+        QVERIFY(popup->findChild<QCheckBox *>("rrNavigation_taps_and_swipes")->isChecked());
+        QTest::mouseClick(popup, Qt::LeftButton, Qt::NoModifier, QPoint(2, 2));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrPageNavigationPopup"));
+        QCOMPARE(storage::readJson(paths.preferences()), before);
+        button->click();
+        popup = host.window()->findChild<ui::ModalOverlay *>("rrPageNavigationPopup");
+        QVERIFY(popup);
+        QTest::keyClick(popup, Qt::Key_Escape);
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrPageNavigationPopup"));
+        QCOMPARE(storage::readJson(paths.preferences()), before);
+        for (const auto mode :
+             {pageNavigation::Mode::TapsOnly, pageNavigation::Mode::SwipesOnly, pageNavigation::Mode::ButtonsOnly,
+              pageNavigation::Mode::TapsAndSwipes, pageNavigation::Mode::SwipesOnly}) {
+            button->click();
+            auto *option = host.window()->findChild<QCheckBox *>("rrNavigation_" + pageNavigation::value(mode));
+            QVERIFY(option && option->isVisible());
+            option->click();
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrPageNavigationPopup"));
+            QCOMPARE(storage::readJson(paths.preferences()).value(pageNavigation::preferenceKey).toString(),
+                     pageNavigation::value(mode));
+        }
+        const auto caption = button->caption();
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        button = host.window()->findChild<ui::CaptionButton *>("rrPageNavigation");
+        QCOMPARE(button->caption(), caption);
+        QVERIFY(QFile::remove(paths.preferences()));
+        QVERIFY(QDir().mkpath(paths.preferences()));
+        button->click();
+        host.window()->findChild<QCheckBox *>("rrNavigation_taps_only")->click();
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrPageNavigationPopup"));
+        QCOMPARE(button->caption(), caption);
+        button->click();
+        QVERIFY(host.window()->findChild<QCheckBox *>("rrNavigation_swipes_only")->isChecked());
+        auto *panel = dynamic_cast<reader::SettingsPanel *>(host.window()->findChild<QWidget *>("rrGeneralSettings"));
+        QVERIFY(panel && !panel->settingsError->isHidden());
+    }
+
+    void tapZonesPersistAndKeepSwipesAvailable() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        const auto settings = [&] {
+            host.window()->findChild<QPushButton *>("rrSettings")->click();
+            host.window()->findChild<QPushButton *>("rrSettingsControls")->click();
+        };
+        settings();
+        auto *button = host.window()->findChild<ui::CaptionButton *>("rrTapZones");
+        QVERIFY(button);
+        QCOMPARE(button->caption(), strings::get("settings.tap_left_right").toUpper());
+        const auto before = storage::readJson(paths.preferences());
+        button->click();
+        auto *popup = host.window()->findChild<ui::ModalOverlay *>("rrTapZonesPopup");
+        QVERIFY(popup && popup->isVisible());
+        QCOMPARE(popup->findChildren<QPushButton *>().size(), 3);
+        QTest::mouseClick(popup, Qt::LeftButton, Qt::NoModifier, QPoint(2, 2));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrTapZonesPopup"));
+        QCOMPARE(storage::readJson(paths.preferences()), before);
+        button->click();
+        popup = host.window()->findChild<ui::ModalOverlay *>("rrTapZonesPopup");
+        QTest::keyClick(popup, Qt::Key_Escape);
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrTapZonesPopup"));
+        QCOMPARE(storage::readJson(paths.preferences()), before);
+        host.window()->findChild<QPushButton *>("rrPageNavigation")->click();
+        host.window()->findChild<QCheckBox *>("rrNavigation_taps_only")->click();
+        for (const auto layout :
+             {tapZones::Layout::OneHanded, tapZones::Layout::LeftRight, tapZones::Layout::TopBottom}) {
+            button->click();
+            host.window()->findChild<QPushButton *>("rrTapZones_" + pageNavigation::tapValue(layout))->click();
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrTapZonesPopup"));
+            QCOMPARE(storage::readJson(paths.preferences()).value(pageNavigation::tapPreferenceKey).toString(),
+                     pageNavigation::tapValue(layout));
+            host.window()->findChild<QPushButton *>("rrPageNavigation")->click();
+            const bool oneHanded = layout == tapZones::Layout::OneHanded;
+            QCOMPARE(host.window()->findChild<QCheckBox *>("rrNavigation_taps_only")->isEnabled(), !oneHanded);
+            QCOMPARE(host.window()->findChild<QCheckBox *>("rrNavigation_buttons_only")->isEnabled(), !oneHanded);
+            QVERIFY(host.window()->findChild<QCheckBox *>("rrNavigation_taps_and_swipes")->isChecked());
+            auto *navigation = host.window()->findChild<ui::ModalOverlay *>("rrPageNavigationPopup");
+            QTest::keyClick(navigation, Qt::Key_Escape);
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrPageNavigationPopup"));
+        }
+        const auto caption = button->caption();
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        settings();
+        button = host.window()->findChild<ui::CaptionButton *>("rrTapZones");
+        QCOMPARE(button->caption(), caption);
+        QVERIFY(QFile::remove(paths.preferences()));
+        QVERIFY(QDir().mkpath(paths.preferences()));
+        button->click();
+        host.window()->findChild<QPushButton *>("rrTapZones_one_handed")->click();
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrTapZonesPopup"));
+        QCOMPARE(button->caption(), caption);
+        button->click();
+        QVERIFY(host.window()->findChild<QPushButton *>("rrTapZones_top_bottom")->isChecked());
+    }
+    void tapZonePresets_data() {
+        QTest::addColumn<QString>("saved");
+        QTest::addColumn<QString>("grid");
+        QTest::addColumn<bool>("rtl");
+        for (bool rtl : {false, true}) {
+            const QByteArray prefix = rtl ? "rtl-" : "ltr-";
+            const QString columns = rtl ? "+M-+M-+M-" : "-M+-M+-M+";
+            QTest::newRow((prefix + "default").constData()) << QString() << columns << rtl;
+            QTest::newRow((prefix + "invalid").constData()) << QString("invalid") << columns << rtl;
+            QTest::newRow((prefix + "left-right").constData()) << QString("left_right") << columns << rtl;
+            QTest::newRow((prefix + "top-bottom").constData()) << QString("top_bottom") << QString("---MMM+++") << rtl;
+            QTest::newRow((prefix + "one-handed").constData()) << QString("one_handed") << QString("++++M++++") << rtl;
+        }
+    }
+    void tapZonePresets() {
+        QFETCH(QString, saved);
+        QFETCH(QString, grid);
+        QFETCH(bool, rtl);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        // Old or edited preferences cannot disable swipes in one-handed mode.
+        QVERIFY(storage::writeJson(paths.preferences(), {{pageNavigation::tapPreferenceKey, saved},
+                                                         {pageNavigation::preferenceKey, "taps_only"}}));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(rtl ? qEnvironmentVariable("KOBALT_FIXTURES") + "/rtl.epub" : fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = host.window()->findChild<ReadingPage *>("rrPage");
+        QVERIFY(page);
+        for (int i = 0; i < 9; ++i) {
+            QVERIFY(host.session()->go(2));
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+            const QPoint target(page->width() * (.15 + (i % 3) * .35), page->height() * (.2 + (i / 3) * .3));
+            QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, target);
+            const int expected = grid[i] == '-' ? 1 : grid[i] == '+' ? 3 : 2;
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == expected);
+            if (grid[i] == 'M') {
+                QVERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+                QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, page->rect().center());
+                QVERIFY(!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+            }
+        }
+        if (saved == "one_handed") {
+            QVERIFY(host.session()->go(2));
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+            const QPoint start(page->width() / 4, page->height() / 2);
+            const QPoint end(page->width() * 3 / 4, page->height() / 2);
+            QTest::mousePress(page, Qt::LeftButton, Qt::NoModifier, start);
+            QMouseEvent move(QEvent::MouseMove, end, page->mapToGlobal(end), Qt::NoButton, Qt::LeftButton,
+                             Qt::NoModifier);
+            QApplication::sendEvent(page, &move);
+            QTest::mouseRelease(page, Qt::LeftButton, Qt::NoModifier, end);
+            const int expected = rtl ? 3 : 1;
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == expected);
+        }
+    }
+
+    void pageNavigationModes_data() {
+        QTest::addColumn<QString>("saved");
+        QTest::addColumn<bool>("buttons");
+        QTest::addColumn<bool>("taps");
+        QTest::addColumn<bool>("swipes");
+        QTest::addColumn<bool>("rtl");
+        for (bool rtl : {false, true}) {
+            const QByteArray prefix = rtl ? "rtl-" : "ltr-";
+            QTest::newRow((prefix + "default").constData()) << QString() << false << true << true << rtl;
+            QTest::newRow((prefix + "both").constData()) << QString("taps_and_swipes") << true << true << true << rtl;
+            QTest::newRow((prefix + "taps").constData()) << QString("taps_only") << false << true << false << rtl;
+            QTest::newRow((prefix + "swipes").constData()) << QString("swipes_only") << false << false << true << rtl;
+            QTest::newRow((prefix + "buttons").constData()) << QString("buttons_only") << true << false << false << rtl;
+            QTest::newRow((prefix + "missing-buttons").constData())
+                << QString("buttons_only") << false << true << true << rtl;
+            QTest::newRow((prefix + "invalid").constData()) << QString("invalid") << false << true << true << rtl;
+        }
+    }
+    void pageNavigationModes() {
+        QFETCH(QString, saved);
+        QFETCH(bool, buttons);
+        QFETCH(bool, taps);
+        QFETCH(bool, swipes);
+        QFETCH(bool, rtl);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        QVERIFY(storage::writeJson(paths.preferences(), {{pageNavigation::preferenceKey, saved}}));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
+        host.configureServices = [buttons](ReaderHostServices &services) {
+            services.pageButtons = [buttons] {
+                return buttons;
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &test::ReaderHost::opened);
+        host.open(rtl ? qEnvironmentVariable("KOBALT_FIXTURES") + "/rtl.epub" : fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = host.window()->findChild<ReadingPage *>("rrPage");
+        QVERIFY(page);
+        QVERIFY(host.session()->go(2));
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+        for (const int direction : {-1, 1}) {
+            const QPoint target(direction < 0 ? page->width() / 5 : page->width() * 4 / 5, page->height() / 2);
+            QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, target);
+            const int expected = 2 + (taps ? direction * (rtl ? -1 : 1) : 0);
+            QTest::qWait(60);
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == expected);
+            QVERIFY(host.session()->go(2));
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+            const QPoint start(page->width() / 2 + direction * page->width() / 4, page->height() / 2);
+            const QPoint end(page->width() / 2 - direction * page->width() / 4, page->height() / 2);
+            QTest::mousePress(page, Qt::LeftButton, Qt::NoModifier, start);
+            QMouseEvent move(QEvent::MouseMove, end, page->mapToGlobal(end), Qt::NoButton, Qt::LeftButton,
+                             Qt::NoModifier);
+            QApplication::sendEvent(page, &move);
+            QTest::mouseRelease(page, Qt::LeftButton, Qt::NoModifier, end);
+            const int swipeExpected = 2 + (swipes ? direction * (rtl ? -1 : 1) : 0);
+            QTest::qWait(60);
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == swipeExpected);
+            QVERIFY(host.session()->go(2));
+            QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+        }
+        host.window()->pageButton(1);
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 3);
+        host.window()->pageButton(-1);
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+        QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, page->rect().center());
+        QVERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+        QCOMPARE(host.session()->page(), 2);
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        host.window()->findChild<QPushButton *>("rrSettingsControls")->click();
+        host.window()->findChild<QPushButton *>("rrPageNavigation")->click();
+        auto *popup = host.window()->findChild<ui::ModalOverlay *>("rrPageNavigationPopup");
+        QVERIFY(popup && popup->isVisible());
+        QCOMPARE(popup->findChildren<QCheckBox *>().size(), buttons ? 4 : 3);
+        QCOMPARE(bool(popup->findChild<QCheckBox *>("rrNavigation_buttons_only")), buttons);
+        const auto selected =
+            pageNavigation::value(pageNavigation::mode({{pageNavigation::preferenceKey, saved}}, buttons));
+        QVERIFY(popup->findChild<QCheckBox *>("rrNavigation_" + selected)->isChecked());
     }
 
     void customSleepScreenIsOptIn_data() {
@@ -7048,7 +7334,11 @@ private slots:
         private:
             State &state;
         };
-        test::ReaderHost host(testPaths(), testFonts, testPlaceholder);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{directory.path()};
+        QVERIFY(storage::writeJson(paths.preferences(), {{pageNavigation::preferenceKey, "buttons_only"}}));
+        test::ReaderHost host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{host};
         host.configureServices = [&](ReaderHostServices &services) {
             services.lightAvailable = [] {

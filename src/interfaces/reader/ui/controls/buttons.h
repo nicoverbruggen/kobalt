@@ -1,5 +1,6 @@
 #pragma once
 #include "icons.h"
+#include "ui/tap_zones.h"
 #include "text.h"
 #include "../style/theme.h"
 #include "../style/metrics.h"
@@ -58,6 +59,20 @@ private:
     int iconLabelGap = 0;
     bool iconAboveLabel = false;
     bool hasConfiguredIcon = false, hasIconTheme = false, iconDark = false;
+};
+
+// A selectable diagram of the actual page hit regions, with a label below it.
+class TapZoneButton : public Button {
+public:
+    TapZoneButton(tapZones::Layout layout, bool rightToLeft, QWidget *parent);
+    QSize sizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent *) override;
+
+private:
+    tapZones::Layout layout;
+    bool rightToLeft;
 };
 
 class BackButton : public Button {

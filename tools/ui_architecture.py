@@ -78,7 +78,7 @@ def dependency_errors(root, folders, *, allowed_path=lambda path: True,
 
 UI_ROOT = 'interfaces/reader/ui'
 UI_HELPERS = frozenset(('support/qt_font.h', 'support/qt_compat.h', 'support/strings.h',
-                        'ui/input.h', 'assets/assets.h', 'assets/bundled_fonts.h',
+                        'ui/input.h', 'ui/tap_zones.h', 'assets/assets.h', 'assets/bundled_fonts.h',
                         'assets/font_catalog.h'))
 RETIRED = re.compile(r'reader_(?:action_\w+|list_action|icon_action|toolbar_action|full_toolbar_cell|side_buttons|icon|list_style)\Z')
 

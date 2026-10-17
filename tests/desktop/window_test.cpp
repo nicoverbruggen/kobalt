@@ -142,6 +142,49 @@ private slots:
         tab->click();
         QCOMPARE(pages->currentIndex(), int(reader::DictionariesSettings));
     }
+    void pageNavigationFollowsPreviewButtons() {
+        Fixture f;
+        auto *picker = f.window.findChild<QComboBox *>("desktopScreenPicker");
+        picker->setCurrentIndex(2);
+        QSignalSpy opened(&f.window, &desktop::Window::bookOpened);
+        f.window.openBook(f.book());
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!f.state()["busy"].toBool(), 30000);
+        auto *reader = f.window.readerWindow();
+        reader->findChild<QPushButton *>("rrSettings")->click();
+        reader->findChild<QPushButton *>("rrSettingsControls")->click();
+        auto *navigation = reader->findChild<QPushButton *>("rrPageNavigation");
+        navigation->click();
+        auto *buttons = reader->findChild<QCheckBox *>("rrNavigation_buttons_only");
+        QVERIFY(buttons && buttons->isVisible());
+        buttons->click();
+        QTRY_VERIFY(!reader->findChild<QWidget *>("rrPageNavigationPopup"));
+        QCOMPARE(storage::readJson(f.paths.preferences()).value("page_navigation").toString(), QString("buttons_only"));
+        auto *page = reader->findChild<ReadingPage *>("rrPage");
+        page->tapped(page->rect().center());
+        const int before = f.state().value("page").toInt();
+        page->swiped(1);
+        QTest::qWait(100);
+        QCOMPARE(f.state().value("page").toInt(), before);
+        for (int preset : {1, 0}) {
+            picker->setCurrentIndex(preset);
+            QTRY_VERIFY_WITH_TIMEOUT(!f.state()["busy"].toBool(), 30000);
+            reader->findChild<QPushButton *>("rrSettings")->click();
+            reader->findChild<QPushButton *>("rrSettingsControls")->click();
+            navigation->click();
+            QVERIFY(!reader->findChild<QCheckBox *>("rrNavigation_buttons_only"));
+            auto *both = reader->findChild<QCheckBox *>("rrNavigation_taps_and_swipes");
+            QVERIFY(both && both->isChecked());
+            auto *popup = reader->findChild<QWidget *>("rrPageNavigationPopup");
+            QTest::keyClick(popup, Qt::Key_Escape);
+            QTRY_VERIFY(!reader->findChild<QWidget *>("rrPageNavigationPopup"));
+            page->tapped(page->rect().center());
+            const int previous = f.state().value("page").toInt();
+            page->swiped(1);
+            QTRY_VERIFY_WITH_TIMEOUT(!f.state()["busy"].toBool() && f.state().value("page").toInt() > previous, 10000);
+        }
+        QCOMPARE(storage::readJson(f.paths.preferences()).value("page_navigation").toString(), QString("buttons_only"));
+    }
     void bookmarkTargetCoversRightThird() {
         Fixture f;
         f.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(2);
@@ -894,11 +937,7 @@ private slots:
                     QTRY_COMPARE(option->height(), option->heightForWidth(option->width()));
                 }
                 if (QString(tab) == "Advanced") {
-                    auto *last = reader->findChild<QCheckBox *>("rrEdgeLight");
-                    QVERIFY(last);
-                    if (!last->isVisible()) {
-                        last = reader->findChild<QCheckBox *>("rrHideNonlinearFragments");
-                    }
+                    auto *last = reader->findChild<QCheckBox *>("rrHideNonlinearFragments");
                     QVERIFY(last);
                     auto *reset = reader->findChild<QPushButton *>("rrRestoreDefaults");
                     QTRY_COMPARE(reset->y(), last->geometry().bottom() + 1);

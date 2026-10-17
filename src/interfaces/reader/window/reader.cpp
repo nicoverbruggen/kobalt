@@ -322,6 +322,8 @@ QVector<QWidget *> Reader::popups() const {
             finishDialog.data(),
             refreshPopup.data(),
             sleepPopup.data(),
+            pageNavigationPopup.data(),
+            tapZonesPopup.data(),
             removeDialog.data(),
             customReplaceDialog.data(),
             bookmarkErrorDialog.data(),
@@ -436,6 +438,14 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
     }
     if (sleepPopup && watched == sleepPopup && type == QEvent::MouseButtonRelease) {
         closeSleepScreen();
+        return true;
+    }
+    if (tapZonesPopup && watched == tapZonesPopup && type == QEvent::MouseButtonRelease) {
+        closeTapZones();
+        return true;
+    }
+    if (pageNavigationPopup && watched == pageNavigationPopup && type == QEvent::MouseButtonRelease) {
+        closePageNavigation();
         return true;
     }
     // Panels are raised as they open, and a panel created later starts

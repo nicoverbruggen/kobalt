@@ -573,8 +573,14 @@
       "scenes": [
         "brightness-swipe",
         "frontlight",
+        "frontlight-automatic-warmth",
         "warmth-swipe",
         "warmth-swipe-cool"
+      ]
+    },
+    "light-sensor": {
+      "scenes": [
+        "frontlight-both-automatic"
       ]
     },
     "links": {

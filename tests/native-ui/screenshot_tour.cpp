@@ -175,6 +175,9 @@ public:
                     };
                 }
                 services.systemRotation = this->group == "layout-system-rotation";
+                if (this->group == "light-sensor") {
+                    services.light = test::hostReaderServices(true).light;
+                }
                 if (this->group == "bluetooth")
                     services.observeBluetooth = [this](QObject *, std::function<void(bool)> changed) {
                         bluetoothChanged = std::move(changed);
@@ -1165,9 +1168,25 @@ public:
             }
             throw std::runtime_error("Chapter picker did not reach its last page");
         }
+        if (group == "light-sensor") {
+            tap("rrNavLight");
+            tap("rrAutomaticBrightness");
+            tap("rrAutomaticWarmth");
+            auto *brightness = qobject_cast<QCheckBox *>(widget("rrAutomaticBrightness"));
+            auto *warmth = qobject_cast<QCheckBox *>(widget("rrAutomaticWarmth"));
+            require(brightness && brightness->isChecked(), "Automatic brightness did not turn on");
+            require(warmth && warmth->isChecked(), "Automatic warmth did not turn on");
+            capture("frontlight-both-automatic", "rrLightPanel");
+            return;
+        }
         if (group == "light") {
             tap("rrNavLight");
             capture("frontlight", "rrLightPanel");
+            auto *automaticWarmth = qobject_cast<QCheckBox *>(widget("rrAutomaticWarmth"));
+            require(automaticWarmth, "Automatic warmth checkbox missing");
+            tap("rrAutomaticWarmth");
+            require(automaticWarmth->isChecked(), "Automatic warmth did not turn on");
+            capture("frontlight-automatic-warmth", "rrLightPanel");
             auto *slider = qobject_cast<QSlider *>(widget("rrBrightness"));
             require(slider, "Brightness slider missing");
             const int initial = slider->value();
@@ -1199,6 +1218,7 @@ public:
             menu();
             tap("rrNavLight");
             require(slider->value() > initial, "Brightness swipe did not update the light service");
+            require(automaticWarmth->isChecked(), "Brightness swipe changed automatic warmth");
             tap("rrNavLight");
             pageTap();
             const QPoint warmStart(page->width() * 19 / 20, page->height() / 4);
@@ -1224,6 +1244,9 @@ public:
             settled();
             require(host.session()->state().value("position").toString() == position,
                     "Warmth swipe changed reader position");
+            menu();
+            tap("rrNavLight");
+            require(!automaticWarmth->isChecked(), "Warmth swipe did not turn off automatic warmth");
             return;
         }
         if (group == "stats") {

@@ -275,6 +275,7 @@ bool clickAt(test::ReaderCanvas &canvas, QPoint point) {
     return true;
 }
 bool click(test::ReaderCanvas &canvas, QWidget *widget) {
+    QCoreApplication::processEvents();
     if (!widget || !widget->isVisible() || !widget->isEnabled())
         return false;
     const QPoint point = widget->mapTo(canvas.surface(), widget->rect().center());
@@ -2630,12 +2631,12 @@ private slots:
         QVERIFY(panel.open());
         QVERIFY(tip->isVisible());
         QVERIFY(tip->wordWrap());
-        QCOMPARE(tip->text(), strings::get("settings.edge_light_description"));
+        QCOMPARE(tip->text(), strings::get("light_panel.swipe_hint"));
         QVERIFY(warmth->isVisible());
         panel.hide();
         light.warm = false;
         QVERIFY(panel.open());
-        QCOMPARE(tip->text(), strings::get("settings.edge_brightness_description"));
+        QCOMPARE(tip->text(), strings::get("light_panel.brightness_swipe_hint"));
         QVERIFY(!warmth->isVisible());
     }
     void smallSliderCaptionsWrap() {

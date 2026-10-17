@@ -13,9 +13,23 @@ namespace kobalt::test {
 namespace {
 class Light final : public LightControls {
 public:
-    Light(QWidget *anchor, bool available) : anchor(anchor), available(available) {}
+    Light(QWidget *anchor, bool available, bool ambientLightSensor)
+        : anchor(anchor), available(available), ambientLightSensor(ambientLightSensor) {}
     bool initialize() override {
         return anchor && available;
+    }
+    bool hasAutomaticBrightness() const override {
+        return anchor && available && ambientLightSensor;
+    }
+    bool automaticBrightness() const override {
+        return hasAutomaticBrightness() && automaticBrightness_;
+    }
+    bool setAutomaticBrightness(bool enabled) override {
+        if (!hasAutomaticBrightness()) {
+            return false;
+        }
+        automaticBrightness_ = enabled;
+        return true;
     }
     bool hasWarmth() const override {
         return anchor && available;
@@ -54,19 +68,25 @@ public:
     bool beginGesture() override {
         if (!initialize())
             return false;
-        if (gestureStart < 0)
+        if (gestureStart < 0) {
             gestureStart = brightness_;
+            gestureAutomatic = automaticBrightness_;
+        }
         return true;
     }
     int setGestureLevel(int value) override {
-        if (initialize() && gestureStart >= 0)
+        if (initialize() && gestureStart >= 0) {
+            automaticBrightness_ = false;
             brightness_ = qBound(0, value, 100);
+        }
         return brightness();
     }
     void finishGesture(bool save) override {
         const int original = std::exchange(gestureStart, -1);
-        if (!save && original >= 0)
+        if (!save && original >= 0) {
             brightness_ = original;
+            automaticBrightness_ = gestureAutomatic;
+        }
     }
     int brightness() const override {
         return hasWarmth() ? brightness_ : 0;
@@ -77,7 +97,7 @@ public:
 
 private:
     QPointer<QWidget> anchor;
-    bool available, automatic_ = false;
+    bool available, ambientLightSensor, automatic_ = false, automaticBrightness_ = false, gestureAutomatic = false;
     int brightness_ = 50, warmth_ = 0, gestureStart = -1;
 };
 class Dictionary final : public DictionaryService {
@@ -116,7 +136,7 @@ private:
     QPointer<QLineEdit> editor;
 };
 }
-ReaderHostServices hostReaderServices() {
+ReaderHostServices hostReaderServices(bool ambientLightSensor) {
     ReaderHostServices result;
     result.browserAvailable = [] {
         return false;
@@ -151,8 +171,8 @@ ReaderHostServices hostReaderServices() {
     result.lightAvailable = fixtureDeviceControls;
     result.animationsAvailable = fixtureDeviceControls;
     result.cancelAnimation = [] {};
-    result.light = [](QWidget *anchor) {
-        return std::make_unique<Light>(anchor, fixtureDeviceControls());
+    result.light = [ambientLightSensor](QWidget *anchor) {
+        return std::make_unique<Light>(anchor, fixtureDeviceControls(), ambientLightSensor);
     };
     result.dictionary = [] {
         return std::make_unique<Dictionary>();

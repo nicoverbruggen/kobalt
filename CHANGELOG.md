@@ -6,6 +6,8 @@
 
 - Choose Left / right, Top / bottom or One-handed in Settings > Controls > Tap zones. One-handed taps turn forward and swipes turn either way. The center zone always opens the menu. Settings options now have section headings.
 
+- Follow Kobo warmth schedule in the Light panel uses the bedtime set in Kobo settings. It keeps Kobo's automatic warmth setting on first open. Manual warmth adjustments turn it off; check it again to resume the schedule.
+
 - New books inherit the last book's text style and page margins. Settings > Advanced has separate options for text and layout inheritance and header and footer inheritance, both on by default. Books with saved settings keep them.
 
 - Header and footer customization has been added with a few presets and the option to fully customize both. The _Custom_ preset is saved globally, but needs to be applied on a per-book basis. Books without a saved header and footer start with the last preset used.

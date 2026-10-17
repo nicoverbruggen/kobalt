@@ -37,6 +37,7 @@ GROUPS = {
     'search': ('alice', 'Search editor, results, pagination and no matches'),
     'bookmarks': ('alice', 'Empty list, ribbon, saved bookmark and removal prompt'),
     'light': ('alice', 'Emulated reader frontlight controls'),
+    'light-sensor': ('alice', 'Emulated frontlight controls with an ambient light sensor'),
     'stats': ('alice', 'Chapter graph'),
     'stats-dense': ('moby-dick', 'Moby Dick with more than one hundred chapters in the dense graph'),
     'about': ('alice', 'Acknowledgments and an example license'),

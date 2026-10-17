@@ -26,8 +26,8 @@ private:
     LightControls &light;
     ui::SettingSlider *brightnessSlider, *warmthSlider;
     QLabel *brightnessValue, *warmthValue, *swipeTip;
-    QWidget *warmthRow, *swipeRow;
-    ui::DescribedOption *automaticBrightness;
+    QWidget *warmthRow, *swipeRow, *automaticRows;
+    ui::DescribedOption *automaticBrightness, *automaticWarmth;
     QTimer poll;
     bool updating = false, warmthAutomatic = false, edgeGesturesEnabled = true;
     int warmthOriginal = -1;

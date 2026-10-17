@@ -4,6 +4,7 @@
 #include "platform/api/light_controls.h"
 
 #include <QCheckBox>
+#include <QFontMetrics>
 #include <QImage>
 #include "interfaces/reader/ui/controls/buttons.h"
 #include <QLabel>
@@ -21,6 +22,8 @@ public:
     bool originalAutomatic = false, warmthEnabled = false;
     int warmthLevel = 0, warmthMin = 0, warmthMax = 100, warmthIncrement = 1;
     int roundWarmthTo = 1, roundBrightnessTo = 1;
+    bool warmthAutomatic = true;
+    int warmthChanges = 0, warmthSaves = 0;
     bool initialize() override {
         return true;
     }
@@ -54,16 +57,25 @@ public:
         return warmthIncrement;
     }
     bool automaticWarmth() const override {
-        return false;
+        return warmthAutomatic;
     }
     int setWarmth(int value) override {
+        if (warmthAutomatic && !setAutomaticWarmth(false)) {
+            return -1;
+        }
         return warmthLevel = qBound(
                    warmthMin, warmthMin + qRound(double(value - warmthMin) / roundWarmthTo) * roundWarmthTo, warmthMax);
     }
     bool saveWarmth() override {
-        return true;
+        ++warmthSaves;
+        return saveAllowed;
     }
-    bool setAutomaticWarmth(bool) override {
+    bool setAutomaticWarmth(bool value) override {
+        ++warmthChanges;
+        if (!saveAllowed) {
+            return false;
+        }
+        warmthAutomatic = value;
         return true;
     }
     bool beginGesture() override {
@@ -263,23 +275,62 @@ private slots:
         parent.resize(width, 1448);
         parent.show();
         Light light;
+        light.warmthEnabled = true;
         kobalt::LightPanel panel(light, &parent);
         QVERIFY(panel.open());
-        auto *option =
-            dynamic_cast<kobalt::ui::DescribedOption *>(panel.findChild<QCheckBox *>("rrAutomaticBrightness"));
-        QVERIFY(option);
-        QCOMPARE(option->presentation().indicator, kobalt::ui::DescribedOption::Indicator::Square);
-        QCOMPARE(option->presentation().labelPixels,
-                 panel.findChild<QLabel *>("rrBrightnessCaption")->font().pixelSize());
-        QCOMPARE(option->presentation().labelPixels, int(kobalt::ui::metrics::chrome::labelText));
-        QVERIFY(panel.rect().contains(option->geometry()));
-        QVERIFY(option->height() >= option->heightForWidth(option->width()));
+        for (const auto *name : {"rrAutomaticBrightness", "rrAutomaticWarmth"}) {
+            auto *option = dynamic_cast<kobalt::ui::DescribedOption *>(panel.findChild<QCheckBox *>(name));
+            QVERIFY(option && option->isVisible());
+            QCOMPARE(option->presentation().indicator, kobalt::ui::DescribedOption::Indicator::Square);
+            QVERIFY(option->presentation().leadingIndicator);
+            QCOMPARE(option->presentation().labelPixels,
+                     panel.findChild<QLabel *>("rrBrightnessCaption")->font().pixelSize());
+            QCOMPARE(option->presentation().labelPixels, int(kobalt::ui::metrics::chrome::labelText));
+            QVERIFY(panel.rect().contains(QRect(option->mapTo(&panel, QPoint()), option->size())));
+            QVERIFY(option->height() >= option->heightForWidth(option->width()));
+        }
+        const auto *brightness = panel.findChild<QCheckBox *>("rrAutomaticBrightness");
+        const auto *warmth = panel.findChild<QCheckBox *>("rrAutomaticWarmth");
+        QCOMPARE(warmth->mapTo(&panel, QPoint()).y(), brightness->mapTo(&panel, QPoint()).y() + brightness->height());
         auto *tip = panel.findChild<QLabel *>("rrLightSwipeTip");
         QVERIFY(tip->wordWrap());
         QVERIFY(tip->font().italic());
         QCOMPARE(tip->font().pixelSize(), int(kobalt::ui::metrics::text::secondary));
         QVERIFY(tip->height() >= tip->heightForWidth(tip->width()));
         QVERIFY(panel.rect().contains(QRect(tip->mapTo(&panel, QPoint()), tip->size())));
+    }
+    void swipeHintFitsSixInch_data() {
+        QTest::addColumn<int>("ppi");
+        QTest::addColumn<int>("width");
+        QTest::addColumn<bool>("warmth");
+        QTest::newRow("300-ppi-both-edges") << 300 << 1072 << true;
+        QTest::newRow("300-ppi-left-edge") << 300 << 1072 << false;
+        QTest::newRow("212-ppi-both-edges") << 212 << 758 << true;
+        QTest::newRow("212-ppi-left-edge") << 212 << 758 << false;
+    }
+    void swipeHintFitsSixInch() {
+        QFETCH(int, ppi);
+        QFETCH(int, width);
+        QFETCH(bool, warmth);
+        struct RestoreDensity {
+            int value = kobalt::ui::density();
+            ~RestoreDensity() {
+                kobalt::ui::setDensity(value);
+            }
+        } restore;
+        kobalt::ui::setDensity(ppi);
+        QWidget parent;
+        parent.resize(width, 1448);
+        parent.show();
+        Light light;
+        light.warmthEnabled = warmth;
+        kobalt::LightPanel panel(light, &parent);
+        QVERIFY(panel.open());
+        const auto *tip = panel.findChild<QLabel *>("rrLightSwipeTip");
+        QVERIFY(tip);
+        QVERIFY2(QFontMetrics(tip->font()).horizontalAdvance(tip->text()) <= tip->width(), qPrintable(tip->text()));
+        QCOMPARE(tip->text().contains("left edge"), !warmth);
+        QCOMPARE(tip->text().contains("edges"), warmth);
     }
     void externalSettingUpdatesWithoutWriting() {
         QWidget parent;
@@ -363,6 +414,135 @@ private slots:
         QCOMPARE(light.level, 50);
         QVERIFY(panel.open());
         QVERIFY(panel.findChild<QCheckBox *>("rrAutomaticBrightness")->isChecked());
+    }
+    void warmthSettingIsInheritedOnFirstOpen_data() {
+        QTest::addColumn<bool>("automatic");
+        QTest::newRow("native-schedule-off") << false;
+        QTest::newRow("native-schedule-on") << true;
+    }
+    void warmthSettingIsInheritedOnFirstOpen() {
+        QFETCH(bool, automatic);
+        QWidget parent;
+        parent.resize(768, 1024);
+        parent.show();
+        Light light;
+        light.supported = false;
+        light.warmthEnabled = true;
+        light.warmthAutomatic = automatic;
+        light.warmthLevel = 40;
+        {
+            kobalt::LightPanel panel(light, &parent);
+            QCOMPARE(light.warmthChanges, 0);
+            QVERIFY(panel.open());
+            auto *option = panel.findChild<QCheckBox *>("rrAutomaticWarmth");
+            QVERIFY(option && option->isVisible());
+            QCOMPARE(option->isChecked(), automatic);
+            QVERIFY(!panel.findChild<QCheckBox *>("rrAutomaticBrightness")->isVisible());
+            QCOMPARE(light.warmthChanges, 0);
+        }
+        QCOMPARE(light.warmthAutomatic, automatic);
+        QCOMPARE(light.warmthLevel, 40);
+        QCOMPARE(light.warmthChanges, 0);
+        QCOMPARE(light.warmthSaves, 0);
+    }
+    void warmthTogglePersistsAcrossPanels() {
+        QWidget parent;
+        parent.resize(768, 1024);
+        parent.show();
+        Light light;
+        light.warmthEnabled = true;
+        {
+            kobalt::LightPanel panel(light, &parent);
+            QVERIFY(panel.open());
+            auto *option = panel.findChild<QCheckBox *>("rrAutomaticWarmth");
+            option->click();
+            QVERIFY(!light.warmthAutomatic && !option->isChecked());
+            option->click();
+            QVERIFY(light.warmthAutomatic && option->isChecked());
+            option->click();
+        }
+        kobalt::LightPanel panel(light, &parent);
+        QVERIFY(panel.open());
+        QVERIFY(!panel.findChild<QCheckBox *>("rrAutomaticWarmth")->isChecked());
+        QCOMPARE(light.warmthChanges, 3);
+        QCOMPARE(light.changes, 0);
+        QVERIFY(light.automatic);
+        QCOMPARE(light.warmthSaves, 0);
+    }
+    void warmthCapabilityAndExternalChanges() {
+        QWidget parent;
+        parent.resize(768, 1024);
+        parent.show();
+        Light light;
+        kobalt::LightPanel panel(light, &parent);
+        QVERIFY(panel.open());
+        auto *option = panel.findChild<QCheckBox *>("rrAutomaticWarmth");
+        QVERIFY(option && !option->isVisible());
+        light.warmthEnabled = true;
+        QTRY_VERIFY(option->isVisible());
+        QVERIFY(option->isChecked());
+        light.warmthAutomatic = false;
+        QTRY_VERIFY(!option->isChecked());
+        light.warmthAutomatic = true;
+        light.warmthLevel = 60;
+        QTRY_VERIFY(option->isChecked());
+        QTRY_COMPARE(panel.findChild<QSlider *>("rrWarmth")->value(), 60);
+        QCOMPARE(light.warmthChanges, 0);
+        QCOMPARE(light.warmthSaves, 0);
+    }
+    void failedWarmthToggleRetainsNativeState() {
+        QWidget parent;
+        parent.resize(768, 1024);
+        parent.show();
+        Light light;
+        light.warmthEnabled = true;
+        light.saveAllowed = false;
+        kobalt::LightPanel panel(light, &parent);
+        QVERIFY(panel.open());
+        auto *option = panel.findChild<QCheckBox *>("rrAutomaticWarmth");
+        option->click();
+        QVERIFY(option->isChecked());
+        QVERIFY(light.warmthAutomatic);
+        QCOMPARE(light.warmthChanges, 1);
+        QCOMPARE(light.warmthSaves, 0);
+        QCOMPARE(light.changes, 0);
+    }
+    void manualWarmthDisablesScheduleAndCancellationRestoresIt() {
+        QWidget parent;
+        parent.resize(768, 1024);
+        parent.show();
+        Light light;
+        light.warmthEnabled = true;
+        light.warmthLevel = 40;
+        kobalt::LightPanel panel(light, &parent);
+        QVERIFY(panel.open());
+        auto *option = panel.findChild<QCheckBox *>("rrAutomaticWarmth");
+        auto *slider = dynamic_cast<kobalt::ui::SettingSlider *>(panel.findChild<QSlider *>("rrWarmth"));
+        QVERIFY(slider);
+        slider->setValue(70);
+        QVERIFY(!option->isChecked());
+        QVERIFY(!light.warmthAutomatic);
+        QCOMPARE(light.warmthLevel, 70);
+        panel.hide();
+        QVERIFY(light.warmthAutomatic);
+        QCOMPARE(light.warmthLevel, 40);
+        QCOMPARE(light.warmthSaves, 0);
+        QVERIFY(panel.open());
+        QVERIFY(option->isChecked());
+        slider->setValue(70);
+        slider->committed(70);
+        panel.hide();
+        QVERIFY(!light.warmthAutomatic);
+        QCOMPARE(light.warmthLevel, 70);
+        QCOMPARE(light.warmthSaves, 1);
+        QVERIFY(panel.open());
+        QVERIFY(!option->isChecked());
+        QVERIFY(light.automatic);
+        option->click();
+        panel.findChild<QSlider *>("rrBrightness")->setValue(60);
+        QCOMPARE(light.warmthChanges, 4);
+        QVERIFY(light.warmthAutomatic);
+        QVERIFY(!light.automatic);
     }
 };
 QTEST_MAIN(LightPanelTest)

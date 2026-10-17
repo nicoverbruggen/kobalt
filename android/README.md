@@ -19,7 +19,13 @@ The build uses these versions:
 | Minimum device API | 28, Android 9 |
 | Default device ABI | arm64-v8a |
 
-Install Python 3.10 or later, CMake, Ninja, pkg-config, patch and a JDK compatible with Qt's Gradle build. Android Studio includes a compatible JDK. Install the matching Qt desktop host tools and Android kit; do not use the Kobo-patched Qt SDK. The dependency URLs and SHA-256 pins are in `dependencies/manifest.json` and `android/dependencies.json`.
+Install Python 3.10 or later, CMake, Ninja, pkg-config and patch. On macOS, install OpenJDK 21 with [Homebrew](https://formulae.brew.sh/formula/openjdk@21):
+
+```sh
+brew install openjdk@21
+```
+
+Install the matching Qt desktop host tools and Android kit; do not use the Kobo-patched Qt SDK. The dependency URLs and SHA-256 pins are in `dependencies/manifest.json` and `android/dependencies.json`.
 
 With Android command-line tools installed, obtain the SDK packages using `sdkmanager`. Review its license prompts:
 
@@ -30,7 +36,7 @@ sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018' 'plat
 Run the following exports in the same terminal as the build command, each time you open a new terminal. You can save these non-secret paths in a local shell setup file and source it before building. For an Apple Silicon macOS installation with Qt under `~/Qt`:
 
 ```sh
-export JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home'
+export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018"
@@ -39,14 +45,7 @@ export QT_ANDROID_ARM64_PATH="$HOME/Qt/6.11.3/android_arm64_v8a"
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 ```
 
-If using the standalone Temurin JDK installed inside the Android SDK instead of Android Studio, replace `JAVA_HOME` and update `PATH`:
-
-```sh
-export JAVA_HOME="$ANDROID_HOME/jdk/jdk-21.0.12.1+1/Contents/Home"
-export PATH="$JAVA_HOME/bin:$PATH"
-```
-
-Use the directory name of your installed JDK if its version differs. Debug builds use the shared `android/debug.keystore` in this repository, independently of `ANDROID_USER_HOME`. Keep this file unchanged so builds from different machines can update the same debug installation.
+Debug builds use the shared `android/debug.keystore` in this repository, independently of `ANDROID_USER_HOME`. Keep this file unchanged so builds from different machines can update the same debug installation.
 
 On Linux, use the installed Linux Qt host kit and local SDK/JDK paths. For an x86_64 emulator, install the Qt Android x86_64 kit and set `QT_ANDROID_PATH` to it. The CI container provides the Linux AMD64 toolchain. Other local host setups need validation.
 

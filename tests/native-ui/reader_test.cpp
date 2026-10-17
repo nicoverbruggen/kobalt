@@ -1350,6 +1350,51 @@ private slots:
                     ++ink;
         QVERIFY(ink > 20);
     }
+    void settingsTabsStayReadableWhilePressed_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("selected");
+        QTest::newRow("light-unselected") << false << false;
+        QTest::newRow("light-selected") << false << true;
+        QTest::newRow("dark-unselected") << true << false;
+        QTest::newRow("dark-selected") << true << true;
+    }
+    void settingsTabsStayReadableWhilePressed() {
+        QFETCH(bool, dark);
+        QFETCH(bool, selected);
+        QWidget owner;
+        owner.resize(nativeSize);
+        owner.setProperty("reader_dark", dark);
+        QPalette palette = owner.palette();
+        const QColor paper = dark ? Qt::black : Qt::white;
+        const QColor ink = dark ? Qt::white : Qt::black;
+        for (const auto role : {QPalette::Window, QPalette::Base, QPalette::Button})
+            palette.setColor(role, paper);
+        for (const auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText})
+            palette.setColor(role, ink);
+        owner.setPalette(palette);
+        reader::SettingsPanel panel(&owner, {});
+        panel.resize(nativeSize.width(), panel.fitContent(nativeSize));
+        owner.show();
+        panel.show();
+        auto *tab = panel.settingsTabButtons[reader::AdvancedSettings];
+        if (selected)
+            tab->click();
+        QTest::mousePress(tab, Qt::LeftButton);
+        QVERIFY(tab->isDown());
+        const auto held = tab->grab().toImage();
+        QCOMPARE(held.pixelColor(5, 5), ink);
+        // Both the icon and label must remain visible against the pressed background.
+        for (int half = 0; half < 2; ++half) {
+            int contrast = 0;
+            for (int y = half * held.height() / 2; y < (half + 1) * held.height() / 2; ++y)
+                for (int x = 5; x < held.width() - 5; ++x)
+                    if (qAbs(held.pixelColor(x, y).lightness() - paper.lightness()) < 32)
+                        ++contrast;
+            QVERIFY(contrast > 10);
+        }
+        QTest::mouseRelease(tab, Qt::LeftButton);
+        QCOMPARE(panel.settingsPages->currentIndex(), int(reader::AdvancedSettings));
+    }
     void settingsPageComposition() {
         QWidget owner;
         reader::SettingsPanelInputs inputs;

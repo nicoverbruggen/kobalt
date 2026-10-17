@@ -18,6 +18,8 @@
 
 ### What's fixed
 
+- Settings tabs keep their icon and label visible while pressed in both themes.
+
 - The Kobalt sleep screen shows time left in hours and minutes when the estimate exceeds 120 minutes. Its heading shows Sleeping, Charging or Charged, with a battery icon and a smaller monospaced percentage in the top-right corner only while charging or charged. The card updates as charging progresses and returns to Sleeping without a battery display when unplugged.
 
 - Image smoothing and heavier interface text are always on. Their options have been removed from Advanced settings.

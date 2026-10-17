@@ -937,10 +937,12 @@ private slots:
                     QTRY_COMPARE(option->height(), option->heightForWidth(option->width()));
                 }
                 if (QString(tab) == "Advanced") {
-                    auto *last = reader->findChild<QCheckBox *>("rrHideNonlinearFragments");
-                    QVERIFY(last);
+                    auto *lastDefault = reader->findChild<QCheckBox *>("rrInheritHeaderFooter");
+                    auto *content = reader->findChild<QWidget *>("rrAdvancedContentSection");
+                    QVERIFY(lastDefault && content);
                     auto *reset = reader->findChild<QPushButton *>("rrRestoreDefaults");
-                    QTRY_COMPARE(reset->y(), last->geometry().bottom() + 1);
+                    QTRY_COMPARE(reset->y(), lastDefault->geometry().bottom() + 1);
+                    QTRY_COMPARE(content->y(), reset->geometry().bottom() + 1);
                 }
             }
         }

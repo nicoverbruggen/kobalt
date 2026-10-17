@@ -5,6 +5,7 @@
 #include "interfaces/reader/ui/dialogs/modals.h"
 #include "dictionaries_page.h"
 #include <QStackedWidget>
+#include <QScrollArea>
 #include <QVector>
 #include <QPointer>
 
@@ -60,6 +61,8 @@ protected:
 
 private:
     QWidget *tabRail = nullptr;
+    QBoxLayout *sectionRows = nullptr;
+    QScrollArea *optionsScroll = nullptr;
     void fitRail();
     QLabel *aboutDescription = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog;

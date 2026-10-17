@@ -4,7 +4,7 @@
 
 - Choose how to turn pages in Settings > Controls > Page navigation: swipes and taps, taps only, swipes only or hardware page turn buttons only on devices with page buttons. The middle tap zone always opens the menu. Controls sits below Display with a hand icon and also contains the frontlight gesture setting.
 
-- Choose Left / right, Top / bottom or One-handed in Settings > Controls > Tap zones. One-handed taps turn forward and swipes turn either way. The center zone always opens the menu.
+- Choose Left / right, Top / bottom or One-handed in Settings > Controls > Tap zones. One-handed taps turn forward and swipes turn either way. The center zone always opens the menu. Settings options now have section headings.
 
 - New books inherit the last book's text style and page margins. Settings > Advanced has separate options for text and layout inheritance and header and footer inheritance, both on by default. Books with saved settings keep them.
 

@@ -101,6 +101,7 @@ public:
     explicit ListHeader(QWidget *parent);
     void setCaptions(const QString &left, const QString &right = {});
     void setTrailingInset(int pixels);
+    void setShaded(bool shaded);
     QLabel *leftLabel() const {
         return left;
     }
@@ -116,6 +117,7 @@ protected:
 private:
     QLabel *left, *right;
     int trailingInset = 0;
+    bool shaded = false;
 };
 // Rows own spacing and caption geometry; panels supply actions and values.
 QHBoxLayout *horizontalRow();

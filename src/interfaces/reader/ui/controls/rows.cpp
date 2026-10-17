@@ -276,9 +276,18 @@ void ListHeader::resizeEvent(QResizeEvent *) {
                       height() - m::control::border);
     right->setGeometry(width() - m::list::inset - trailingInset - side, 0, side, height() - m::control::border);
 }
+void ListHeader::setShaded(bool value) {
+    if (shaded == value)
+        return;
+    shaded = value;
+    update();
+}
 void ListHeader::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    painter.fillRect(rect(), palette().color(QPalette::Window));
+    // Styles can replace Midlight when a list creates headers after theme replay.
+    const auto background =
+        shaded ? (darkTheme(this) ? QColor("#333333") : QColor("#dddddd")) : palette().color(QPalette::Window);
+    painter.fillRect(rect(), background);
     painter.fillRect(0, height() - m::control::border, width(), m::control::border, dividerColor(this));
 }
 QHBoxLayout *horizontalRow() {

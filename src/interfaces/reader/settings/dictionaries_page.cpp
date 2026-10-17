@@ -35,17 +35,6 @@ protected:
         ui::paintEdges(painter, rect(), Qt::BottomEdge, ui::dividerColor(this));
     }
 };
-class DictionaryHeader : public ui::ListHeader {
-public:
-    using ui::ListHeader::ListHeader;
-
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter painter(this);
-        painter.fillRect(rect(), ui::darkTheme(this) ? QColor("#333333") : QColor("#dddddd"));
-        painter.fillRect(0, height() - m::control::border, width(), m::control::border, ui::dividerColor(this));
-    }
-};
 class StorageLabel : public QLabel {
 public:
     using QLabel::QLabel;
@@ -279,7 +268,8 @@ void DictionariesPage::redraw() {
     int y = 0, rowIndex = 0, sectionIndex = 0, languageIndex = 0;
     for (const auto &item : pages[page]) {
         if (!item.caption.isEmpty()) {
-            auto *header = new DictionaryHeader(list);
+            auto *header = new ui::ListHeader(list);
+            header->setShaded(true);
             header->setCaptions(item.caption);
             header->setObjectName(QString(item.language ? "rrDictionaryLanguage%1" : "rrDictionarySection%1")
                                       .arg(item.language ? languageIndex++ : sectionIndex++));

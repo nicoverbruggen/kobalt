@@ -2,6 +2,7 @@
 #include "interfaces/reader/ui/controls/icons.h"
 #include "interfaces/reader/ui/controls/text.h"
 #include "interfaces/reader/ui/controls/options.h"
+#include "interfaces/reader/ui/controls/rows.h"
 #include "interfaces/reader/ui/controls/panels.h"
 #include "interfaces/reader/ui/controls/paged_text.h"
 #include "interfaces/reader/ui/dialogs/modals.h"
@@ -1318,6 +1319,37 @@ private slots:
                 QCOMPARE(clicked.count(), 1);
             }
     }
+    void sectionHeadersKeepTheirThemeAfterPolish_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+    void sectionHeadersKeepTheirThemeAfterPolish() {
+        QFETCH(bool, dark);
+        QWidget owner;
+        owner.setProperty("reader_dark", dark);
+        QPalette palette = owner.palette();
+        palette.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
+        palette.setColor(QPalette::WindowText, dark ? Qt::white : Qt::black);
+        // Dynamic dictionary headers can inherit Qt's default gray after style polish.
+        palette.setColor(QPalette::Midlight, QColor("#cacaca"));
+        owner.setPalette(palette);
+        owner.ensurePolished();
+        ui::ListHeader header(&owner);
+        header.setShaded(true);
+        header.setCaptions("INSTALLED");
+        header.resize(600, header.sizeHint().height());
+        owner.show();
+        header.show();
+        const auto image = header.grab().toImage();
+        QCOMPARE(image.pixelColor(4, 4), dark ? QColor("#333333") : QColor("#dddddd"));
+        int ink = 0;
+        for (int y = 2; y < image.height() - 2; ++y)
+            for (int x = 2; x < image.width() - 2; ++x)
+                if (qAbs(image.pixelColor(x, y).lightness() - image.pixelColor(4, 4).lightness()) > 80)
+                    ++ink;
+        QVERIFY(ink > 20);
+    }
     void settingsPageComposition() {
         QWidget owner;
         reader::SettingsPanelInputs inputs;
@@ -1447,6 +1479,48 @@ private slots:
         QCOMPARE(panel.settingsTabButtons[reader::SystemSettings + 1]->objectName(), QString("rrSettingsAbout"));
     }
 
+    void groupedSettingsScrollWhenNeeded() {
+        QWidget owner;
+        owner.resize(1680, 1264);
+        reader::SettingsPanelInputs inputs;
+        inputs.sleepScreenSupported = true;
+        inputs.automaticBookOpeningSupported = true;
+        inputs.desktopUi = true;
+        reader::SettingsPanel panel(&owner, inputs);
+        panel.settingsPages->setCurrentIndex(reader::AdvancedSettings);
+        const QSize available(1680, 980);
+        QCOMPARE(panel.fitContent(available), available.height());
+        panel.resize(available);
+        owner.show();
+        panel.show();
+        QCoreApplication::processEvents();
+        auto *scroll = panel.findChild<QScrollArea *>("rrSettingsScroll");
+        QVERIFY(scroll && scroll->isVisible());
+        QVERIFY(scroll->verticalScrollBar()->maximum() > 0);
+        scroll->ensureWidgetVisible(panel.hideNonlinearOption);
+        QCoreApplication::processEvents();
+        const QRect last(panel.hideNonlinearOption->mapTo(scroll->viewport(), QPoint()),
+                         panel.hideNonlinearOption->size());
+        QVERIFY(scroll->viewport()->rect().contains(last));
+        panel.settingsPages->setCurrentIndex(reader::ControlsSettings);
+        panel.fitContent(available);
+        QCoreApplication::processEvents();
+        QVERIFY(scroll->isHidden());
+        QVERIFY(!scroll->widget());
+        for (const auto name :
+             {"rrDisplayAppearanceSection", "rrControlsNavigationSection", "rrControlsLightSection",
+              "rrAdvancedDefaultsSection", "rrAdvancedContentSection", "rrStatsGraphSection", "rrStatsMenuSection",
+              "rrSystemReaderSection", "rrSystemSleepSection", "rrUiWindowSection"}) {
+            auto *header = dynamic_cast<ui::ListHeader *>(panel.findChild<QWidget *>(name));
+            QVERIFY(header);
+            QVERIFY(!header->leftLabel()->text().isEmpty());
+        }
+        panel.hideDeviceOptions(true);
+        QVERIFY(panel.findChild<QWidget *>("rrControlsLightSection")->isHidden());
+        QVERIFY(panel.findChild<QWidget *>("rrDisplayScreenSection")->isHidden());
+        QCOMPARE(panel.tapZonesButton->parentWidget(), panel.settingsPages->widget(reader::ControlsSettings));
+        QVERIFY(panel.tapZonesButton->y() > panel.pageNavigationButton->y());
+    }
 
     void settingsContentMeasurement() {
         QWidget owner;
@@ -1472,10 +1546,14 @@ private slots:
         const QSize narrow(600, 1000);
         panel.fitContent(narrow);
         QCOMPARE(description->width(),
-                 narrow.width() - panel.findChild<QWidget *>("rrSettingsRail")->width() - ui::px(32));
+                 narrow.width() - panel.findChild<QWidget *>("rrSettingsRail")->width() -
+                     panel.findChild<QScrollArea *>("rrSettingsScroll")->verticalScrollBar()->sizeHint().width() -
+                     ui::px(32));
         QCOMPARE(description->height(), description->heightForWidth(description->width()));
         QVERIFY(description->height() > wideHeight);
         QVERIFY(panel.settingsPages->height() > aboutHeight);
+        QCOMPARE(panel.fitContent(narrow), narrow.height());
+        QVERIFY(panel.findChild<QScrollArea *>("rrSettingsScroll")->widget());
         description->setText(originalDescription);
         QCOMPARE(panel.fitContent(available), aboutHeight);
         QCOMPARE(description->height(), wideHeight);

@@ -14,6 +14,7 @@
 #include <QGridLayout>
 #include <QStackedWidget>
 #include <QStyle>
+#include <QScrollBar>
 #include <QVBoxLayout>
 #include <QHideEvent>
 
@@ -38,11 +39,13 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     setObjectName("rrGeneralSettings");
     setSoftEdges(true);
     auto *generalRows = new QVBoxLayout(this);
+    generalRows->setSizeConstraint(QLayout::SetNoConstraint);
     generalRows->setContentsMargins(0, 0, 0, 0);
     generalRows->setSpacing(m::panel::gap);
     auto *sections = new QWidget(this);
     generalRows->addWidget(sections, 1);
-    auto *sectionRows = new QBoxLayout(QBoxLayout::LeftToRight, sections);
+    sectionRows = new QBoxLayout(QBoxLayout::LeftToRight, sections);
+    sectionRows->setSizeConstraint(QLayout::SetNoConstraint);
     sectionRows->setObjectName("settingsSectionLayout");
     sectionRows->setContentsMargins(0, 0, 0, 0);
     sectionRows->setSpacing(0);
@@ -52,7 +55,16 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsTabs->setContentsMargins(0, 0, 0, 0);
     settingsTabs->setSpacing(0);
     sectionRows->addWidget(tabRail);
+    optionsScroll = new QScrollArea(sections);
+    optionsScroll->setObjectName("rrSettingsScroll");
+    optionsScroll->setFrameShape(QFrame::NoFrame);
+    optionsScroll->setWidgetResizable(false);
+    optionsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    sectionRows->addWidget(optionsScroll, 1);
+    optionsScroll->hide();
     settingsPages = new QStackedWidget(sections);
+    settingsPages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    settingsPages->layout()->setSizeConstraint(QLayout::SetNoConstraint);
     settingsPages->setObjectName("rrSettingsPages");
     readerStyle(settingsPages, styles::tabFrame());
     auto *tabGroup = new QButtonGroup(this);
@@ -91,13 +103,21 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         }
     }
     sectionRows->addWidget(settingsPages, 1);
+    auto section = [](QWidget *parent, QBoxLayout *rows, const char *name, const QString &caption) {
+        auto *header = new ui::ListHeader(parent);
+        header->setObjectName(name);
+        header->setShaded(true);
+        header->setCaptions(caption.toUpper());
+        header->setFixedHeight(header->sizeHint().height());
+        rows->addWidget(header);
+        return header;
+    };
     auto *displayPage = new QWidget(settingsPages);
     displayPage->setObjectName("rrDisplayOptions");
     settingsPages->addWidget(displayPage);
-    auto *generalOptions = new QGridLayout(displayPage);
+    auto *generalOptions = new QVBoxLayout(displayPage);
     generalOptions->setContentsMargins(m::settings::displayMargins);
-    generalOptions->setHorizontalSpacing(m::settings::columnGap);
-    generalOptions->setVerticalSpacing(0);
+    generalOptions->setSpacing(0);
     auto check = [](QWidget *parent, const char *name, const QString &text, const QString &description) {
         auto *box = new ReaderOption(text, description, parent);
         box->setObjectName(name);
@@ -112,29 +132,32 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     animationOption->setEnabled(animationsSupported);
     bionicOption = check(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
                          strings::get("reader.bionic_description"));
-    int optionIndex = 0;
-    for (auto *option : {darkOption, bionicOption, animationOption}) {
-        option->setMinimumHeight(m::settings::displayOptionHeight);
-        generalOptions->addWidget(option, optionIndex++, 0);
-    }
-    // Refresh the screen shows its choice under the title and picks from a pop-up.
+    section(displayPage, generalOptions, "rrDisplayAppearanceSection", strings::get("settings.section_appearance"));
+    for (auto *option : {darkOption, bionicOption})
+        generalOptions->addWidget(option);
+    auto *screenSection =
+        section(displayPage, generalOptions, "rrDisplayScreenSection", strings::get("settings.section_screen"));
+    generalOptions->addWidget(animationOption);
     refreshButton = ui::makeCaptionButton(displayPage, nullptr, "rrScreenRefresh",
                                           strings::get("reader.refresh_the_screen"), [] {});
-    generalOptions->addWidget(refreshButton, optionIndex++, 0);
-    deviceOptions << animationOption << refreshButton;
-    generalOptions->setRowStretch(optionIndex, 1);
+    generalOptions->addWidget(refreshButton);
+    deviceOptions << screenSection << animationOption << refreshButton;
+    generalOptions->addStretch(1);
     auto *controlsPage = new QWidget(settingsPages);
     controlsPage->setObjectName("rrControlsOptions");
     settingsPages->addWidget(controlsPage);
     auto *controlsRows = new QVBoxLayout(controlsPage);
     controlsRows->setContentsMargins(0, 0, 0, 0);
     controlsRows->setSpacing(0);
+    section(controlsPage, controlsRows, "rrControlsNavigationSection", strings::get("settings.section_navigation"));
     pageNavigationButton = ui::makeCaptionButton(controlsPage, nullptr, "rrPageNavigation",
                                                  strings::get("settings.page_navigation"), [] {});
     controlsRows->addWidget(pageNavigationButton);
     tapZonesButton =
         ui::makeCaptionButton(controlsPage, nullptr, "rrTapZones", strings::get("settings.tap_zones"), [] {});
     controlsRows->addWidget(tapZonesButton);
+    auto *lightSection =
+        section(controlsPage, controlsRows, "rrControlsLightSection", strings::get("settings.section_frontlight"));
     const bool lightSupported = inputs.lightSupported;
     edgeLightOption = check(controlsPage, "rrEdgeLight", strings::get("reader.edge_light"),
                             !lightSupported          ? strings::get("settings.unsupported_description")
@@ -142,7 +165,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                                      : strings::get("settings.edge_brightness_description"));
     edgeLightOption->setEnabled(lightSupported);
     controlsRows->addWidget(edgeLightOption);
-    deviceOptions << edgeLightOption;
+    deviceOptions << lightSection << edgeLightOption;
     controlsRows->addStretch(1);
     auto *advancedPage = new QWidget(settingsPages);
     advancedPage->setObjectName("rrAdvancedOptions");
@@ -150,6 +173,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *advancedRows = new QVBoxLayout(advancedPage);
     advancedRows->setContentsMargins(m::settings::displayMargins);
     advancedRows->setSpacing(0);
+    section(advancedPage, advancedRows, "rrAdvancedDefaultsSection", strings::get("settings.section_new_books"));
     inheritTextLayoutOption = check(advancedPage, "rrInheritTextLayout", strings::get("settings.inherit_text_layout"),
                                     strings::get("settings.inherit_text_layout_description"));
     advancedRows->addWidget(inheritTextLayoutOption);
@@ -159,6 +183,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     advancedRows->addWidget(inheritHeaderFooterOption);
     inheritTextLayoutOption->setChecked(true);
     inheritHeaderFooterOption->setChecked(true);
+    section(advancedPage, advancedRows, "rrAdvancedContentSection", strings::get("settings.section_book_content"));
     linkIndicatorOption = check(advancedPage, "rrShowLinkIndicator", strings::get("reader.show_link_indicator"),
                                 strings::get("reader.link_indicator_description"));
     advancedRows->addWidget(linkIndicatorOption);
@@ -167,7 +192,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
               strings::get("settings.hide_nonlinear_fragments_description"));
     advancedRows->addWidget(hideNonlinearOption);
     auto *resetRow = kobalt::ui::horizontalRow();
-    advancedRows->addLayout(resetRow);
+    advancedRows->insertLayout(3, resetRow);
     resetRow->addStretch(1);
     resetDefaults = ui::makeCaptionButton(advancedPage, resetRow, "rrRestoreDefaults",
                                           strings::get("reader.restore_appearance_defaults"), [this] {
@@ -188,9 +213,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *statsRows = new QVBoxLayout(statsPage);
     statsRows->setContentsMargins(m::settings::displayMargins);
     statsRows->setSpacing(0);
+    section(statsPage, statsRows, "rrStatsGraphSection", strings::get("settings.section_chapter_graph"));
     denseGraphOption = check(statsPage, "rrDenseGraph", strings::get("reader.dense_graph"),
                              strings::get("settings.dense_graph_description"));
     statsRows->addWidget(denseGraphOption);
+    section(statsPage, statsRows, "rrStatsMenuSection", strings::get("settings.section_reading_menu"));
     pinStatsOption = check(statsPage, "rrPinStats", strings::get("reader.pin_stats"),
                            strings::get("settings.pin_stats_description"));
     statsRows->addWidget(pinStatsOption);
@@ -201,17 +228,22 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *systemRows = new QVBoxLayout(systemPage);
     systemRows->setContentsMargins(0, 0, 0, 0);
     systemRows->setSpacing(0);
+    section(systemPage, systemRows, "rrSystemReaderSection", strings::get("settings.section_reader"))
+        ->setVisible(inputs.automaticBookOpeningSupported);
     automaticOpeningOption =
         check(systemPage, "rrAutomaticBookOpening", strings::get("settings.automatic_book_opening"),
               strings::get("settings.automatic_book_opening_description"));
     automaticOpeningOption->setVisible(inputs.automaticBookOpeningSupported);
     systemRows->addWidget(automaticOpeningOption);
+    auto *sleepSection =
+        section(systemPage, systemRows, "rrSystemSleepSection", strings::get("settings.section_sleep"));
+    sleepSection->setVisible(inputs.sleepScreenSupported);
     sleepScreenButton =
         ui::makeCaptionButton(systemPage, nullptr, "rrSleepScreen", strings::get("settings.sleep_screen"), [] {});
     sleepScreenButton->setVisible(inputs.sleepScreenSupported);
     systemRows->addWidget(sleepScreenButton);
     if (inputs.sleepScreenSupported) {
-        deviceOptions << sleepScreenButton;
+        deviceOptions << sleepSection << sleepScreenButton;
     }
     systemRows->addStretch(1);
     auto *aboutPage = new QWidget(settingsPages);
@@ -327,7 +359,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                  strings::get("settings.hide_status_bar_description"));
         hideDeviceOptionsOption = check(nativePage, "rrHideDeviceOptions", strings::get("settings.hide_device_options"),
                                         strings::get("settings.hide_device_options_description"));
+        section(nativePage, rows, "rrUiWindowSection", strings::get("settings.section_window"));
         rows->addWidget(hideStatusOption);
+        section(nativePage, rows, "rrUiPreviewSection", strings::get("settings.section_device_preview"));
         rows->addWidget(hideDeviceOptionsOption);
         rows->addStretch(1);
         auto *button = makeButton(this, nullptr, "rrSettingsUI", strings::get("settings.ui"), [this] {
@@ -355,6 +389,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     generalRows->addWidget(settingsError);
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int index) {
         settingsTabButtons[index]->setChecked(true);
+        optionsScroll->verticalScrollBar()->setValue(0);
     });
     settingsTabButtons.first()->setChecked(true);
     QVector<ui::DescribedOption *> options = {hideNonlinearOption, linkIndicatorOption,       darkOption,
@@ -425,24 +460,48 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     hide();
 }
 int SettingsPanel::fitContent(QSize availableSize) {
-    const int contentWidth = qMax(1, availableSize.width() - tabRail->width());
-    auto *description = aboutDescription;
-    description->setFixedWidth(qMin<int>(m::about::textWidth, contentWidth - ui::px(32)));
-    description->setMinimumHeight(0);
-    description->setMaximumHeight(QWIDGETSIZE_MAX);
-    description->setFixedHeight(description->heightForWidth(description->width()));
+    const int fullWidth = qMax(1, availableSize.width() - tabRail->width());
+    const int availableHeight = qMax(1, availableSize.height());
     auto *content = settingsPages->currentWidget();
     content->ensurePolished();
     auto *rows = content->layout();
-    const int contentHeight =
-        qMax(rows->minimumSize().height(),
-             rows->hasHeightForWidth() ? rows->totalHeightForWidth(contentWidth) : rows->sizeHint().height());
-    // A short page still leaves room for every tab in the rail beside it.
-    const int panelHeight = settingsPages->currentIndex() == DictionariesSettings
-                                ? qMax(1, availableSize.height())
-                                : qMax(contentHeight, tabRail->sizeHint().height());
-    settingsPages->setFixedHeight(panelHeight);
-    return panelHeight;
+    const auto measure = [&](int width) {
+        aboutDescription->setFixedWidth(qMax(1, qMin<int>(m::about::textWidth, width - ui::px(32))));
+        aboutDescription->setMinimumHeight(0);
+        aboutDescription->setMaximumHeight(QWIDGETSIZE_MAX);
+        aboutDescription->setFixedHeight(aboutDescription->heightForWidth(aboutDescription->width()));
+        // Update the nested layout before reading the outer page's cached minimum.
+        aboutDescription->parentWidget()->layout()->activate();
+        return qMax(rows->minimumSize().height(),
+                    rows->hasHeightForWidth() ? rows->totalHeightForWidth(width) : rows->sizeHint().height());
+    };
+    const bool dictionaries = settingsPages->currentIndex() == DictionariesSettings;
+    int contentWidth = fullWidth;
+    int contentHeight = dictionaries ? availableHeight : qMax(measure(contentWidth), tabRail->sizeHint().height());
+    const bool overflow = contentHeight > availableHeight;
+    if (overflow) {
+        contentWidth = qMax(1, fullWidth - optionsScroll->verticalScrollBar()->sizeHint().width());
+        contentHeight = qMax(measure(contentWidth), tabRail->sizeHint().height());
+    }
+    // Keep the ordinary hierarchy when everything fits, as the appearance sheet does.
+    if (overflow != (optionsScroll->widget() != nullptr)) {
+        if (overflow) {
+            sectionRows->removeWidget(settingsPages);
+            optionsScroll->setWidget(settingsPages);
+            optionsScroll->show();
+        } else {
+            optionsScroll->takeWidget();
+            settingsPages->setParent(optionsScroll->parentWidget());
+            sectionRows->addWidget(settingsPages, 1);
+            optionsScroll->hide();
+        }
+        settingsPages->show();
+    }
+    settingsPages->setFixedHeight(contentHeight);
+    settingsPages->setMinimumWidth(overflow ? contentWidth : 0);
+    settingsPages->setMaximumWidth(overflow ? contentWidth : QWIDGETSIZE_MAX);
+    optionsScroll->verticalScrollBar()->setPageStep(availableHeight);
+    return qMin(contentHeight, availableHeight);
 }
 SettingsPanel::~SettingsPanel() {
     delete restoreDialog;

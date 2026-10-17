@@ -672,15 +672,16 @@ public:
             tap("rrSettings");
             capture("display-defaults", "rrDarkMode");
             tap("rrSettingsAdvanced");
-            capture("advanced-defaults", "rrSmoothImages");
+            capture("advanced-defaults", "rrInheritTextLayout");
             tap("rrSettingsUI");
             capture("ui-defaults", "rrHideStatusBar");
             tap("rrHideStatusBar");
             tap("rrHideDeviceOptions");
-            pageTap();
+            tap("rrSettings");
             menu();
             capture("menu-device-chrome", "rrMenuClock");
             tap("rrSettings");
+            tap("rrSettingsDisplay");
             capture("display-device-options", "rrScreenRefresh");
             tap("rrSettingsUI");
             capture("ui-device-chrome", "rrHideStatusBar");

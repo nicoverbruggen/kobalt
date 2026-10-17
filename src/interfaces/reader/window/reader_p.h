@@ -146,8 +146,7 @@ private:
     kobalt::ui::Panel *general;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption, *smoothOption, *animationOption, *edgeLightOption, *denseGraphOption, *pinStatsOption,
-        *heavierTextOption;
+    QCheckBox *darkOption, *animationOption, *edgeLightOption, *denseGraphOption, *pinStatsOption;
     QCheckBox *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
     QPushButton *autoRotateOption;
     QCheckBox *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;
@@ -290,7 +289,6 @@ private:
     void applyEdgeLight();
     void applyDarkMode(bool enabled);
     void applyBoldReading(bool enabled);
-    void applyHeavierText(bool enabled);
     void applySleepScreen(bool enabled);
     void applyAutomaticOpening(bool enabled);
     void applySettings();

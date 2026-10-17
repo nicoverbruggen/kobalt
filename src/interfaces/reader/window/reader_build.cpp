@@ -132,7 +132,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
         });
     };
     // Choose the text weight before the first font is used.
-    kobalt::ui::setInterfaceWeight(kobalt::ui::interfaceWeightSteps(preferences));
+    kobalt::ui::setInterfaceWeight(kobalt::ui::heavierTextSteps);
     // Set only our window; native Nickel controls keep their own font.
     setFont(kobalt::ui::interfaceFont());
     kobalt::ui::keepInterfaceUnhinted(this);
@@ -901,12 +901,10 @@ void Reader::buildSettings() {
     }
     settingsPages = settings->settingsPages;
     darkOption = settings->darkOption;
-    smoothOption = settings->smoothOption;
     animationOption = settings->animationOption;
     edgeLightOption = settings->edgeLightOption;
     denseGraphOption = settings->denseGraphOption;
     pinStatsOption = settings->pinStatsOption;
-    heavierTextOption = settings->heavierTextOption;
     sleepScreenOption = settings->sleepScreenOption;
     automaticOpeningOption = settings->automaticOpeningOption;
     linkIndicatorOption = settings->linkIndicatorOption;
@@ -920,9 +918,6 @@ void Reader::buildSettings() {
     });
     connect(bionicOption, &QCheckBox::clicked, this, [this](bool enabled) {
         applyBoldReading(enabled);
-    });
-    connect(heavierTextOption, &QCheckBox::clicked, this, [this](bool enabled) {
-        applyHeavierText(enabled);
     });
     connect(sleepScreenOption, &QCheckBox::clicked, this, [this](bool enabled) {
         applySleepScreen(enabled);
@@ -941,7 +936,6 @@ void Reader::buildSettings() {
     connect(settings->confirmDefaults, &QPushButton::clicked, this, [this] {
         restoringDefaults = true;
         darkOption->setChecked(false);
-        smoothOption->setChecked(true);
         animationOption->setChecked(false);
         bionicOption->setChecked(false);
         screenRefreshMode = kobalt::ScreenRefresh::Smart;

@@ -22,7 +22,7 @@ const ReaderInterface &readerInterface() {
         [](QWidget *background, const QJsonObject &preferences,
            PresentationFactory presentation) -> std::unique_ptr<ReaderOpeningView> {
             // The opening screen uses the first fonts, so choose their weight here.
-            ui::setInterfaceWeight(ui::interfaceWeightSteps(preferences));
+            ui::setInterfaceWeight(ui::heavierTextSteps);
             return createOpening(background, preferences, std::move(presentation));
         },
         readingViewport, ui::setDensity};

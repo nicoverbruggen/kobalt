@@ -425,7 +425,6 @@
 "reader.session_minutes" = "You've been reading for %1 minutes now";
 "reader.sideloaded_fonts" = "Sideloaded Fonts";
 "reader.simulate_nickel_progress_these_controls_change_only_the_synthetic" = "Simulate Nickel progress. These controls change only the synthetic progress test book. No server sync is performed.";
-"reader.smooth_images" = "Smooth images";
 "reader.optical_size" = "Optical size";
 "reader.text_size" = "Text size: ";
 /* Arguments: %1 */
@@ -484,7 +483,6 @@
 "settings.hide_status_bar_description" = "Hide the clock, battery and menu status row on this Mac.";
 "settings.hide_device_options" = "Hide device-only options";
 "settings.hide_device_options_description" = "Hide e-ink refresh, page animations and frontlight gestures. Turn this off to inspect the reader controls.";
-"settings.smoothing_description" = "Softer edges on scaled images.";
 "settings.edge_light_description" = "Swipe up or down along the left edge for brightness, and along the right edge for warmth.";
 "settings.edge_brightness_description" = "Swipe up or down along the left edge for brightness.";
 
@@ -586,8 +584,6 @@
 "settings.dense_graph_description" = "When turned on, the Stats panel shows more chapters at once. If you want wider bars, turn this off.";
 "reader.pin_stats" = "Always show statistics";
 "settings.pin_stats_description" = "Stats stays open above the bottom bar whenever the reading controls are open.";
-"reader.heavier_interface_text" = "More readable interface text";
-"settings.heavier_interface_text_description" = "Draws the text of menus and panels slightly heavier. The book keeps its own weight setting.";
 /* Arguments: %1 */
 "stats.time_left" = "≈ %1 left";
 /* Arguments: %1 */

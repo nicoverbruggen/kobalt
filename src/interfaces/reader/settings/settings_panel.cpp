@@ -128,9 +128,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *advancedRows = new QVBoxLayout(advancedPage);
     advancedRows->setContentsMargins(m::settings::displayMargins);
     advancedRows->setSpacing(0);
-    smoothOption = check(advancedPage, "rrSmoothImages", strings::get("reader.smooth_images"),
-                         strings::get("settings.smoothing_description"));
-    advancedRows->addWidget(smoothOption);
     linkIndicatorOption = check(advancedPage, "rrShowLinkIndicator", strings::get("reader.show_link_indicator"),
                                 strings::get("reader.link_indicator_description"));
     advancedRows->addWidget(linkIndicatorOption);
@@ -146,9 +143,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     edgeLightOption->setEnabled(lightSupported);
     advancedRows->addWidget(edgeLightOption);
     deviceOptions << edgeLightOption;
-    heavierTextOption = check(advancedPage, "rrHeavierText", strings::get("reader.heavier_interface_text"),
-                              strings::get("settings.heavier_interface_text_description"));
-    advancedRows->addWidget(heavierTextOption);
     auto *resetRow = kobalt::ui::horizontalRow();
     advancedRows->addLayout(resetRow);
     resetRow->addStretch(1);
@@ -340,10 +334,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         settingsTabButtons[index]->setChecked(true);
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = {hideNonlinearOption, linkIndicatorOption, darkOption,
-                                              bionicOption,        animationOption,     smoothOption,
-                                              edgeLightOption,     heavierTextOption,   denseGraphOption,
-                                              pinStatsOption,      sleepScreenOption,   automaticOpeningOption};
+    QVector<ui::DescribedOption *> options = {
+        hideNonlinearOption, linkIndicatorOption, darkOption,     bionicOption,      animationOption,
+        edgeLightOption,     denseGraphOption,    pinStatsOption, sleepScreenOption, automaticOpeningOption};
     if (inputs.desktopUi)
         options << hideStatusOption << hideDeviceOptionsOption;
     for (auto *option : options) {
@@ -354,7 +347,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         presentation.labelPixels = c::labelText;
         presentation.descriptionPixels = c::descriptionText;
         presentation.indicatorSize = {c::checkSize, c::checkSize};
-        presentation.minimumRowHeight = option == smoothOption ? c::listActionHeight : c::optionHeight;
+        presentation.minimumRowHeight = c::optionHeight;
         option->setPresentation(presentation);
     }
     generalOptions->setContentsMargins(0, 0, 0, 0);

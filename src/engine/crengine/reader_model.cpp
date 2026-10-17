@@ -400,7 +400,6 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     damage_.clear();
     size_ = size;
     darkMode_ = saved.value("dark_mode").toBool(false);
-    smoothImages_ = saved.value("smooth_images").toBool(true);
     hideNonlinearFragments_ = saved.value("hide_nonlinear_fragments").toBool(false);
     pixels_ = qBound(minimumFontPixels(), saved.value("font_pixels").toInt(defaultFontPixels()), maximumFontPixels());
     spacing_ = qBound(100, saved.value("line_spacing").toInt(defaultLineSpacing), maximumLineSpacing);
@@ -621,7 +620,6 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     const auto alignment = settings.value("text_alignment").toString(alignment_);
     const auto hyphenation = settings.value("hyphenation").toString(hyphenation_);
     const bool dark = settings.value("dark_mode").toBool(darkMode_);
-    const bool smooth = settings.value("smooth_images").toBool(smoothImages_);
     const bool hideNonlinear = settings.value("hide_nonlinear_fragments").toBool(hideNonlinearFragments_);
     if (!engine_ || pixels < minimumFontPixels() || pixels > maximumFontPixels() || spacing < 100 ||
         spacing > maximumLineSpacing || margin < 0 || margin > maximumMarginPixels() || topMargin < 0 ||
@@ -640,8 +638,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
                         face != face_ || defaultFace != defaultFace_ || margin != margin_ || topMargin != topMargin_ ||
                         bottomMargin != bottomMargin_ || alignment != alignment_ || hyphenation != hyphenation_;
     const bool resized = size != size_;
-    if (!styled && !resized && weight == weight_ && dark == darkMode_ && smooth == smoothImages_ &&
-        hideNonlinear == hideNonlinearFragments_)
+    if (!styled && !resized && weight == weight_ && dark == darkMode_ && hideNonlinear == hideNonlinearFragments_)
         return true;
     const QString anchor = position();
     OpeningCallback callback(engine_, std::move(progress));
@@ -660,7 +657,6 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     bionic_ = bionic;
     darkMode_ = dark;
     activateFontParameters();
-    smoothImages_ = smooth;
     hideNonlinearFragments_ = hideNonlinear;
     if (styled) {
         setExtraFontWeight(0);
@@ -860,7 +856,7 @@ QImage ReaderModel::image(int pageNumber) {
         result = QImage(size_, QImage::Format_RGB32);
     if (result.isNull())
         return {};
-    PageDrawBuffer buffer(result, darkMode_, smoothImages_);
+    PageDrawBuffer buffer(result, darkMode_, true);
     engine_->Draw(buffer, -1, pageNumber, false);
     // CREngine composites into 0x00RRGGBB. Qt's opaque RGB32 contract requires
     // 0xffRRGGBB, including when a painter uses this image as a source.
@@ -1142,7 +1138,6 @@ QJsonObject ReaderModel::state() const {
                                {"bold_reading", bionic_},
                                {"hyphenation", hyphenation_},
                                {"dark_mode", darkMode_},
-                               {"smooth_images", smoothImages_},
                                {"hide_nonlinear_fragments", hideNonlinearFragments_},
                                {"dom_version", domVersion_},
                                {"page_progression_rtl", engine_ && engine_->getDocument()->getProps()->getStringDef(

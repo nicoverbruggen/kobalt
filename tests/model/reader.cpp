@@ -943,15 +943,16 @@ int main(int argc, char **argv) {
             sizes[it.key()] = it.value().size();
         kobalt::ReaderModel scaled(kobalt::test::readerFonts());
         require(scaled.openResources(resources, sizes, QSize(600, 800), {}, &error), qPrintable(error));
-        require(scaled.state().value("smooth_images").toBool(false), "Image smoothing is not on by default");
+        require(!scaled.state().contains("smooth_images"), "Retired smoothing option was persisted");
         require(scaled.image(0).text("kobalt.animation_text_only") == "false",
                 "Grayscale image page eligible for animation");
         const auto smooth = scaled.image(0);
         const auto position = scaled.position();
         const auto pages = scaled.pages();
-        require(scaled.applyAppearance(kobalt::qt::object({{"smooth_images", false}})) && scaled.cachedPages() == 0,
-                "Smoothing did not clear cached pages");
-        const auto sharp = scaled.image(0);
+        const auto cached = scaled.cachedPages();
+        require(scaled.applyAppearance(kobalt::qt::object({{"smooth_images", false}})) &&
+                    scaled.cachedPages() == cached && hash(scaled.image(0)) == hash(smooth),
+                "Retired smoothing option changed output or discarded cached pages");
         auto grayPixels = [](const QImage &image) {
             int count = 0;
             for (int y = 0; y < image.height(); ++y)
@@ -961,18 +962,18 @@ int main(int argc, char **argv) {
                 }
             return count;
         };
-        require(hash(sharp) != hash(smooth) && grayPixels(smooth) > grayPixels(sharp) + 100,
-                "Image smoothing did not interpolate the enlarged image");
+        require(grayPixels(smooth) > 100, "Image smoothing did not interpolate the enlarged image");
         require(scaled.pages() == pages && scaled.position() == position, "Image smoothing changed layout or position");
         kobalt::ReaderModel preview(kobalt::test::readerFonts()), reopened(kobalt::test::readerFonts());
-        require(preview.openPreview(scaled, QSize(600, 800), &error) && hash(preview.image(0)) == hash(sharp),
-                "Preview lost the smoothing setting");
-        require(reopened.openResources(resources, sizes, QSize(600, 800), scaled.state(), &error) &&
-                    hash(reopened.image(0)) == hash(sharp),
-                "Reopening lost the smoothing setting");
+        require(preview.openPreview(scaled, QSize(600, 800), &error) && hash(preview.image(0)) == hash(smooth),
+                "Preview lost image smoothing");
+        require(reopened.openResources(resources, sizes, QSize(600, 800),
+                                       kobalt::qt::object({{"smooth_images", false}}), &error) &&
+                    hash(reopened.image(0)) == hash(smooth),
+                "An old saved false value disabled image smoothing");
         require(scaled.applyAppearance(kobalt::qt::object({{"smooth_images", true}})) &&
                     hash(scaled.image(0)) == hash(smooth),
-                "Re-enabling smoothing changed its output");
+                "Retired smoothing value changed its output");
     }
     {
         auto placeholder = kobalt::imagePlaceholder(QSize(8000, 8000));

@@ -885,14 +885,20 @@ private slots:
                 toggle->click();
             for (const auto &tab : {"Advanced", "Display"}) {
                 reader->findChild<QPushButton *>(QString("rrSettings") + tab)->click();
-                const QStringList names = QString(tab) == "Advanced" ? QStringList{"rrSmoothImages", "rrHeavierText"}
-                                                                     : QStringList{"rrDarkMode", "rrBionicReading"};
+                const QStringList names =
+                    QString(tab) == "Advanced" ? QStringList{} : QStringList{"rrDarkMode", "rrBionicReading"};
                 for (const auto &name : names) {
                     auto *option = reader->findChild<QCheckBox *>(name);
+                    QVERIFY(option);
                     QTRY_COMPARE(option->height(), option->heightForWidth(option->width()));
                 }
                 if (QString(tab) == "Advanced") {
-                    auto *last = reader->findChild<QCheckBox *>("rrHeavierText");
+                    auto *last = reader->findChild<QCheckBox *>("rrEdgeLight");
+                    QVERIFY(last);
+                    if (!last->isVisible()) {
+                        last = reader->findChild<QCheckBox *>("rrHideNonlinearFragments");
+                    }
+                    QVERIFY(last);
                     auto *reset = reader->findChild<QPushButton *>("rrRestoreDefaults");
                     QTRY_COMPARE(reset->y(), last->geometry().bottom() + 1);
                 }

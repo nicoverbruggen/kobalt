@@ -234,7 +234,6 @@ void Reader::openSettings() {
     settingsError->clear();
     settingsError->hide();
     darkOption->setChecked(model->state().value("dark_mode").toBool(false));
-    smoothOption->setChecked(model->state().value("smooth_images").toBool(true));
     hideNonlinearOption->setChecked(model->state().value("hide_nonlinear_fragments").toBool(false));
     animationOption->setChecked(preferences.value("page_animations").toBool(false));
     bionicOption->setChecked(model->state().value("bold_reading").toString("off") == "bold");
@@ -242,7 +241,6 @@ void Reader::openSettings() {
     edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
     denseGraphOption->setChecked(preferences.value("dense_stats_chart").toBool(false));
     pinStatsOption->setChecked(preferences.value("pin_stats").toBool(false));
-    heavierTextOption->setChecked(preferences.value("heavier_interface_text").toBool(true));
     sleepScreenOption->setChecked(preferences.value("kobalt_sleep_screen").toBool(false));
     if (services.automaticBookOpening)
         automaticOpeningOption->setChecked(services.automaticBookOpening());
@@ -296,14 +294,12 @@ void Reader::applySettings() {
     auto next = preferences;
     next["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     next["dark_mode"] = darkOption->isChecked();
-    next["smooth_images"] = smoothOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     next["page_animations"] = animationOption->isChecked();
     next["show_link_indicator"] = linkIndicatorOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
     next["dense_stats_chart"] = denseGraphOption->isChecked();
     next["pin_stats"] = pinStatsOption->isChecked();
-    next["heavier_interface_text"] = heavierTextOption->isChecked();
     next["kobalt_sleep_screen"] = sleepScreenOption->isChecked();
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
     if (services.desktopUi) {
@@ -336,7 +332,6 @@ void Reader::applySettings() {
     auto settings =
         appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()->requestedState() : model->state();
     settings["dark_mode"] = darkOption->isChecked();
-    settings["smooth_images"] = smoothOption->isChecked();
     settings["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     settings["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     if (restoringDefaults) {
@@ -401,32 +396,6 @@ void Reader::applyBoldReading(bool enabled) {
             settings["bold_reading"] = mode;
             preview.apply(settings);
         });
-    }
-    refresh();
-}
-
-// Like dark mode, the text weight changes as soon as it is chosen, so the
-// two weights can be compared with Settings open.
-void Reader::applyHeavierText(bool enabled) {
-    if (model->temporaryTypography())
-        return;
-    auto next = preferences;
-    next["heavier_interface_text"] = enabled;
-    if (!writePreferences(next)) {
-        heavierTextOption->setChecked(preferences.value("heavier_interface_text").toBool(true));
-        settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
-        settingsError->show();
-        return;
-    }
-    preferences = next;
-    settingsError->clear();
-    settingsError->hide();
-    QElapsedTimer timer;
-    timer.start();
-    if (kobalt::ui::setInterfaceWeight(kobalt::ui::interfaceWeightSteps(preferences))) {
-        kobalt::ui::refreshInterfaceText(this);
-        kobalt::diagnostic("ui-weight",
-                           {{"steps", kobalt::ui::interfaceWeight()}, {"elapsed_ms", double(timer.elapsed())}}, false);
     }
     refresh();
 }

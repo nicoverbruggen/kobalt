@@ -10,7 +10,7 @@ using namespace kobalt;
 int main() {
     // Appearance settings decide the layout. The list must stay complete, because a
     // missing key would let a retained layout survive a changed setting.
-    require(appearance::keys.size() == 17, "The appearance keys changed without this check");
+    require(appearance::keys.size() == 16, "The appearance keys changed without this check");
 
     const auto from = qt::object({{"font_pixels", 40},
                                   {"line_spacing", QJsonValue(QJsonValue::Null)},
@@ -165,6 +165,9 @@ int main() {
                 "Engine size limits do not match the 7 to 48 point controls");
     }
     readingPpi.store(300);
+    const auto retired = qt::object({{"smooth_images", false}, {"heavier_interface_text", false}});
+    require(appearance::globalPreferences(retired).isEmpty() && appearance::readerPreferences(retired, {}).isEmpty(),
+            "Retired settings survived global preference loading or saving");
     const auto defaults = appearance::typographyDefaults();
     require(defaults.value("font_face").toString() == defaultFontFace &&
                 defaults.value("font_pixels").toInt() == defaultFontPixels() &&
@@ -183,7 +186,7 @@ int main() {
             "Default text size did not follow the screen density");
     readingPpi.store(300);
     const auto benchmark = appearance::benchmarkTypography("file:///mnt/onboard/kobalt-benchmark.kepub.epub");
-    require(benchmark.size() == 16 && benchmark.value("font_face").toString().isEmpty() &&
+    require(benchmark.size() == 15 && benchmark.value("font_face").toString().isEmpty() &&
                 benchmark.value("font_pixels").toInt() == defaultFontPixels() &&
                 benchmark.value("margin_pixels").toInt() == 60 && benchmark.value("top_margin_pixels").toInt() == 60 &&
                 benchmark.value("line_spacing").toInt() == 144 && !benchmark.value("dark_mode").toBool() &&

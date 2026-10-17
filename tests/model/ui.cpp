@@ -1634,12 +1634,7 @@ int main(int argc, char **argv) {
         };
         require(fits(plain) && fits(rich), "Regular text does not fit its widget");
         const auto regularPixels = plain->grab().toImage();
-        require(interfaceWeight() == 0 && interfaceWeightSteps({}) == heavierTextSteps,
-                "Interface text is not heavier by default");
-        require(interfaceWeightSteps(kobalt::qt::object({{"heavier_interface_text", false}})) == 0,
-                "Turning the option off kept heavier text");
-        require(interfaceWeightSteps(kobalt::qt::object({{"heavier_interface_text", true}})) == heavierTextSteps,
-                "The option does not select heavier text");
+        require(interfaceWeight() == 0, "Regular font fixture changed its weight");
         kobalt::ChapterGraph graph(&host);
         graph.resize(900, kobalt::ui::metrics::chapters::graphHeight);
         graph.setProgress("A chapter with a title that needs layout", 4, 10, 12, 25, 100);

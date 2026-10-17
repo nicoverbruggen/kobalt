@@ -223,12 +223,12 @@ The Light tab is shown only when the host can control the frontlight. Android ha
 Settings has the following tabs:
 
 - Display: dark mode, Bold Reading, page animations and how often the screen refreshes. Page animations apply only while reading in Kobalt; a handoff to Nickel uses Nickel's own page turns.
-- Advanced: smooth images, link indicator, edge swipes for the frontlight, More readable interface text and Restore appearance defaults.
+- Advanced: link indicator, edge swipes for the frontlight and Restore appearance defaults.
 - Dictionaries: browse, install and remove downloaded dictionaries. This tab is available on Android and in the desktop app's Fill window mode.
 - Stats: Compact chapter graphs, off by default, and Always show statistics, off by default. With it on, Stats has no tab in the bottom bar. It opens above the tabs whenever the reading controls open. It hides while Settings is open, and while another panel overlaps it, such as Text, Layout, Light or Chapters.
 - About: version and Qt build, such as "Version 1.0-beta.1 (Qt5)", the short commit of the sources, with `*` when they had uncommitted changes, the description "An experimental alternative EPUB reader." and acknowledgments.
 
-More readable interface text is on by default. It draws all of Kobalt's own text slightly heavier: menus, panels, Settings, Stats and the header and footer. It does not change the book text, which has its own weight setting. The interface adds 3/256 em to each stroke with the same FreeType emboldening as three steps of the reading weight, and keeps every letter's advance, so no text moves or wraps differently. The change applies at once. The interface uses renamed copies of IBM Plex Sans, IBM Plex Mono and Instrument Serif, called Kobalt UI Sans, Kobalt UI Mono and Kobalt UI Serif, and writes the heavier copies to temporary files outside user storage when it registers the fonts. Search excerpts in the book's font keep their weight.
+Kobalt always smooths scaled images and draws its own text slightly heavier: menus, panels, Settings, Stats and the header and footer. It does not change the book text, which has its own weight setting. The interface adds 3/256 em to each stroke with the same FreeType emboldening as three steps of the reading weight, and keeps every letter's advance, so no text moves or wraps differently. The interface uses renamed copies of IBM Plex Sans, IBM Plex Mono and Instrument Serif, called Kobalt UI Sans, Kobalt UI Mono and Kobalt UI Serif, and writes the heavier copies to temporary files outside user storage when it registers the fonts. Search excerpts in the book's font keep their weight.
 
 Text and Layout settings are saved per book, including the header and footer preset and Kobo orientation. Settings apply to every book. Existing global layout values are used until a book saves its own layout; later global preference saves remove those legacy values. Android continues to follow system rotation.
 

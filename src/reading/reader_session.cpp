@@ -393,13 +393,11 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
             if (outcome.ready()) {
                 const auto bionic = saved.value("bold_reading");
                 const auto dark = saved.value("dark_mode");
-                const auto smooth = saved.value("smooth_images");
                 const auto hideNonlinear = saved.value("hide_nonlinear_fragments");
                 if (!savedMatches)
                     saved = {};
                 saved["bold_reading"] = bionic;
                 saved["dark_mode"] = dark;
-                saved["smooth_images"] = smooth;
                 saved["hide_nonlinear_fragments"] = hideNonlinear;
                 appearance::migrateLineSpacing(saved);
                 if (!pinnedAppearance.isEmpty())

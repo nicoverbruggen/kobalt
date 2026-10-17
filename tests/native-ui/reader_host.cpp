@@ -43,7 +43,6 @@ void ReaderHost::open(const QString &path, QSize nativeSize) {
     const auto settings = appearance::readerPreferences(storage::readJson(paths.preferences()), saved);
     appearance::applyFontDefault(saved, settings);
     saved["dark_mode"] = settings.value("dark_mode").toBool(false);
-    saved["smooth_images"] = settings.value("smooth_images").toBool(true);
     saved["bold_reading"] = settings.value("bold_reading").toString("off");
     orientation.configure(settings);
     const QSize viewport = readerInterface().readingViewport(nativeSize, settings);

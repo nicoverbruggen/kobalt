@@ -8,6 +8,8 @@ QJsonObject readerPreferences(const QJsonObject &global, const QJsonObject &book
         result["bold_reading"] = result.value("bionic_reading");
     }
     result.remove("bionic_reading");
+    result.remove("smooth_images");
+    result.remove("heavier_interface_text");
     for (const auto *key : layoutKeys)
         if (book.contains(key))
             result[key] = book.value(key);
@@ -31,6 +33,8 @@ QJsonObject globalPreferences(QJsonObject preferences) {
     }
     for (const auto *key : layoutKeys)
         preferences.remove(key);
+    preferences.remove("smooth_images");
+    preferences.remove("heavier_interface_text");
     return preferences;
 }
 void copy(QJsonObject &to, const QJsonObject &from) {
@@ -68,8 +72,7 @@ QJsonObject benchmarkTypography(const QString &identity) {
                        {"font_optical_size", 0},
                        {"bold_reading", "off"},
                        {"hyphenation", QStringLiteral("off")},
-                       {"dark_mode", false},
-                       {"smooth_images", true}});
+                       {"dark_mode", false}});
 }
 QJsonObject typographyDefaults() {
     return qt::object({{"font_face", QString::fromLatin1(defaultFontFace)},

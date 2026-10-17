@@ -12,6 +12,8 @@
 
 ### What's fixed
 
+- Image smoothing and heavier interface text are always on. Their options have been removed from Advanced settings.
+
 - On Kobo, your e-reader will now wake faster from sleep: it won't wait for the frontlight to be ready to refresh the screen.
 
 - New icons throughout the reader. The bottom tabs have larger icons and labels on one line, Settings opens from a gear in the toolbar, and each Settings tab shows an icon above its label.

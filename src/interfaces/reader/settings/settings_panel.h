@@ -40,9 +40,8 @@ public:
     ui::DescribedOption *hideStatusOption = nullptr, *hideDeviceOptionsOption = nullptr;
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
-    ui::DescribedOption *darkOption = nullptr, *smoothOption = nullptr, *animationOption = nullptr;
-    ui::DescribedOption *edgeLightOption = nullptr, *denseGraphOption = nullptr, *pinStatsOption = nullptr,
-                        *heavierTextOption = nullptr;
+    ui::DescribedOption *darkOption = nullptr, *animationOption = nullptr;
+    ui::DescribedOption *edgeLightOption = nullptr, *denseGraphOption = nullptr, *pinStatsOption = nullptr;
     ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
     ui::DescribedOption *sleepScreenOption = nullptr, *automaticOpeningOption = nullptr;
     ui::DescribedOption *bionicOption = nullptr;

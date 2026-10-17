@@ -1360,9 +1360,10 @@ private slots:
             QCOMPARE(panel->settingsTabButtons[index]->objectName(), tabNames[index]);
         for (auto *option : panel->findChildren<ui::DescribedOption *>())
             QVERIFY(option->presentation().indicator == ui::DescribedOption::Indicator::Square);
-        QCOMPARE(panel->smoothOption->presentation().minimumRowHeight, int(ui::metrics::chrome::listActionHeight));
+        QVERIFY(!panel->findChild<QCheckBox *>("rrSmoothImages"));
+        QVERIFY(!panel->findChild<QCheckBox *>("rrHeavierText"));
         QVERIFY(!panel->findChild<QPushButton *>("rrManageDictionaries"));
-        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 12);
+        QCOMPARE(panel->findChildren<ui::DescribedOption *>().size(), 10);
         QVERIFY(panel->sleepScreenOption->isHidden());
         QVERIFY(panel->automaticOpeningOption->isHidden());
         QVERIFY(panel->settingsTabButtons[reader::SystemSettings]->isHidden());
@@ -2031,6 +2032,11 @@ private slots:
     }
     void settingsDefaultsDraft() {
         test::ReaderHost host(testPaths(), testFonts, testPlaceholder);
+        host.configureServices = [](ReaderHostServices &services) {
+            services.animationsAvailable = [] {
+                return true;
+            };
+        };
         CloseHost cleanup{host};
         QSignalSpy opened(&host, &test::ReaderHost::opened);
         host.open(fixture(), nativeSize);
@@ -2046,21 +2052,20 @@ private slots:
         QTRY_VERIFY(settings->isVisible() && settings->isEnabled());
         QVERIFY(click(canvas, settings));
         auto *pages = host.window()->findChild<QStackedWidget *>("rrSettingsPages");
-        auto *smooth = host.window()->findChild<QCheckBox *>("rrSmoothImages");
+        auto *animation = host.window()->findChild<QCheckBox *>("rrPageAnimations");
         QVERIFY(pages);
-        QVERIFY(smooth);
+        QVERIFY(animation);
         QVERIFY(host.window()->findChild<QCheckBox *>("rrShowProgress") == nullptr);
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsAdvanced")));
-        QTRY_VERIFY(smooth->isVisible());
+        QTRY_VERIFY(animation->isVisible());
         auto *dense = host.window()->findChild<QCheckBox *>("rrDenseGraph");
         QVERIFY(dense);
         QVERIFY(!dense->isChecked());
         // A settings draft must not reach storage when opening or keeping the restore dialog.
         const QString settingsPath = testPaths().preferences();
         const auto saved = storage::readJson(settingsPath);
-        if (smooth->isChecked())
-            QVERIFY(click(canvas, smooth));
-        QVERIFY(!smooth->isChecked());
+        if (!animation->isChecked())
+            QVERIFY(click(canvas, animation));
+        QVERIFY(animation->isChecked());
         auto *advanced = host.window()->findChild<QPushButton *>("rrSettingsAdvanced");
         QVERIFY(advanced);
         QVERIFY(click(canvas, advanced));
@@ -2077,7 +2082,7 @@ private slots:
         QVERIFY(keep);
         QVERIFY(click(canvas, keep));
         QCOMPARE(pages->currentIndex(), int(reader::AdvancedSettings));
-        QVERIFY(!smooth->isChecked());
+        QVERIFY(animation->isChecked());
         QVERIFY(restore->isEnabled());
         QCOMPARE(storage::readJson(settingsPath), saved);
         QVERIFY(click(canvas, restore));
@@ -2085,7 +2090,7 @@ private slots:
         QVERIFY(confirm);
         QVERIFY(click(canvas, confirm));
         QCOMPARE(pages->currentIndex(), int(reader::AdvancedSettings));
-        QVERIFY(smooth->isChecked());
+        QVERIFY(!animation->isChecked());
         QVERIFY(!dense->isChecked());
         QVERIFY(!restore->isEnabled());
         QCOMPARE(storage::readJson(settingsPath), saved);
@@ -2093,7 +2098,7 @@ private slots:
         auto *panel = host.window()->findChild<QWidget *>("rrGeneralSettings");
         QVERIFY(panel);
         QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible() && !host.session()->busy(), 10000);
-        QVERIFY(storage::readJson(settingsPath).value("smooth_images").toBool());
+        QVERIFY(!storage::readJson(settingsPath).value("page_animations").toBool(true));
         host.shutdown();
         QTRY_VERIFY(host.idle());
     }
@@ -4547,8 +4552,6 @@ private slots:
         QTest::addColumn<QString>("optionName");
         QTest::addColumn<bool>("immediate");
         QTest::newRow("dark-mode") << QString("rrDarkMode") << true;
-        QTest::newRow("interface-weight") << QString("rrHeavierText") << true;
-        QTest::newRow("deferred-smooth-images") << QString("rrSmoothImages") << false;
     }
     void readerSettingsWriteErrors() {
         QFETCH(QString, optionName);
@@ -4573,7 +4576,7 @@ private slots:
         QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
         auto *settings = host.window()->findChild<QPushButton *>("rrSettings");
         QVERIFY(click(canvas, settings));
-        if (optionName == "rrHeavierText" || optionName == "rrSmoothImages")
+        if (!immediate)
             QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsAdvanced")));
         auto *option = host.window()->findChild<QCheckBox *>(optionName);
         QVERIFY(option);

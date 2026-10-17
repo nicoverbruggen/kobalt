@@ -269,7 +269,7 @@ private:
     int domVersion_ = 0;
     QString hyphenation_ = "off";
     bool darkMode_ = false;
-    bool smoothImages_ = true, hideNonlinearFragments_ = false;
+    bool hideNonlinearFragments_ = false;
     QMap<int, QImage> cache_;
     // One retired page, owned only by this model. Never retain client images.
     QImage spareImage_;

@@ -233,6 +233,7 @@ void Window::startDeviceLifecycle() {
 }
 #ifdef KOBALT_KINDLE_NATIVE_TESTING
 void Window::simulatePowerEvent(const QByteArray &event) { device->simulatePowerEvent(event); }
+void Window::simulateBattery(int percent, bool charging) { device->simulateBattery(percent, charging); }
 #endif
 void Window::updateSleepView() {
     if (!device->state().sleeping)

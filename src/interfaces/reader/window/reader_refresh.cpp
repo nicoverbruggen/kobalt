@@ -497,6 +497,22 @@ void Reader::updateGraph() {
                               model->page(), model->pages());
 }
 
+void Reader::refreshStatus() {
+    if (closing || lifecycleHidden || !isVisible() || services.suspended())
+        return;
+    if (topControls->isVisible()) {
+        updateMenuStatus();
+        return;
+    }
+    if (!chromeTicks() || general->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible() ||
+        linksActive())
+        return;
+    const auto before = page->slotContents;
+    showChapterText();
+    if (page->slotContents != before)
+        page->refreshContent();
+}
+
 void Reader::updateMenuStatus() {
     const auto time = services.clock();
     if (menuClock->text() != time)

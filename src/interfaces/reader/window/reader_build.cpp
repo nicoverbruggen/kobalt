@@ -344,6 +344,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
             const auto battery = services.battery();
             lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0 && battery.percent <= 5;
             updateSleepBattery();
+            refreshStatus();
         });
     }
     book->onCheckpointFailed([this] { localSaveDue = true; });
@@ -482,18 +483,7 @@ void Reader::startClockTimer() {
         if (!isVisible() || services.suspended())
             return;
         startClock();
-        if (topControls->isVisible()) {
-            updateMenuStatus();
-            return;
-        }
-        if (!chromeTicks() || general->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible() ||
-            linksActive())
-            return;
-        const auto before = page->slotContents;
-        showChapterText();
-        if (page->slotContents == before)
-            return;
-        page->refreshContent(true);
+        refreshStatus();
     });
     startClock();
 }

@@ -35,6 +35,11 @@ public:
     const QImage &sleepFrame() const { return sleepFrame_; }
 #ifdef KOBALT_KINDLE_NATIVE_TESTING
     void simulatePowerEvent(const QByteArray &event) { powerEvent(event); }
+    void simulateBattery(int percent, bool charging) {
+        state_.battery = {percent, charging, false};
+        emit batteryChanged();
+        emit changed();
+    }
 #endif
     static DeviceState decode(const QMap<QString, PropertyReply> &values);
     static int percentToLevel(int percent, int maximum);

@@ -170,6 +170,30 @@ bool checkReaderInput(Window &window, ReadingPage &page) {
     auto *canvas = static_cast<android::WidgetCanvas *>(window.findChild<QGraphicsView *>("kindleReaderCanvas"));
     if (!canvas || canvas->content != page.window())
         return false;
+    {
+        QScopedValueRollback<headerfooter::Layout> restoreChrome(page.chrome);
+        page.chrome.slotFields[2] = headerfooter::Field::BatteryPercent;
+        const auto body = page.image;
+        window.simulateBattery(43, false);
+        if (!page.slotContents[2].text.contains("43")) {
+            qCritical() << "Battery notification did not update the awake header";
+            return false;
+        }
+        page.tapped(page.rect().center());
+        auto *battery = page.window()->findChild<QWidget *>("rrMenuBattery");
+        if (!battery || !battery->isVisible())
+            return false;
+        const auto before = battery->grab().toImage();
+        window.simulateBattery(72, true);
+        if (battery->grab().toImage() == before || page.image != body) {
+            qCritical() << "Battery notification did not update the menu without changing the page body";
+            return false;
+        }
+        page.tapped(page.rect().center());
+        window.simulateBattery(44, false);
+        if (!page.slotContents[2].text.contains("44"))
+            return false;
+    }
     auto *start = window.findChild<android::StartScreen *>();
     auto *libraryKeyboard = start ? start->library()->findChild<QWidget *>("widgetKeyboard") : nullptr;
     if (!libraryKeyboard || !libraryKeyboard->isHidden())

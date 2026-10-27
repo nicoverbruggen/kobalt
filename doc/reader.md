@@ -4,6 +4,8 @@ This document describes what Kobalt does on a device today: which builds exist, 
 
 ## Builds and firmware
 
+Battery notifications update the visible reading menu and battery fields in the header and footer without waiting for the minute clock. Status updates preserve the book page and do not request a page-turn animation. Hidden or suspended readers do not repaint their awake status.
+
 Kobalt has two Kobo builds. Each build matches the Qt version of its firmware.
 
 | Build | Firmware | Qt | System package |

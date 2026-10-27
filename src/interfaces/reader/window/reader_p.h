@@ -442,6 +442,7 @@ private:
 
     void startClock();
     void updateMenuStatus();
+    void refreshStatus();
     void updateReadingStats();
     void configureNavigation();
     void activateNavigation(kobalt::NavigationDestination destination);

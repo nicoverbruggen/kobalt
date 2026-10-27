@@ -29,6 +29,7 @@ public:
     void startDeviceLifecycle();
 #ifdef KOBALT_KINDLE_NATIVE_TESTING
     void simulatePowerEvent(const QByteArray &event);
+    void simulateBattery(int percent, bool charging);
 #endif
 signals:
     void bookOpened();

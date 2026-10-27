@@ -194,10 +194,32 @@ bool checkReaderInput(Window &window, ReadingPage &page) {
             qCritical() << "Battery notification did not update the awake header";
             return false;
         }
+        window.simulateBattery(-1, false);
+        if (!page.slotContents[2].empty()) {
+            qCritical() << "Unknown battery left a reading header icon";
+            return false;
+        }
+        window.simulateBattery(0, false);
+        if (!page.slotContents[2].batteryIcon)
+            return false;
+        window.simulateBattery(43, false);
         page.tapped(page.rect().center());
         auto *battery = page.window()->findChild<QWidget *>("rrMenuBattery");
         if (!battery || !battery->isVisible())
             return false;
+        window.simulateBattery(-1, false);
+        auto *label = qobject_cast<QLabel *>(battery);
+        if (!label || !label->text().isEmpty()) {
+            qCritical() << "Unknown battery left a menu percentage";
+            return false;
+        }
+        const auto unknownBattery = battery->grab().toImage();
+        window.simulateBattery(0, false);
+        if (label->text().isEmpty() || battery->grab().toImage() == unknownBattery) {
+            qCritical() << "A valid empty battery must differ from an unknown battery";
+            return false;
+        }
+        window.simulateBattery(43, false);
         const auto before = battery->grab().toImage();
         window.simulateBattery(72, true);
         if (battery->grab().toImage() == before || page.image != body) {

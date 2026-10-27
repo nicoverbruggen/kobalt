@@ -828,6 +828,15 @@ int main(int argc, char **argv) {
         BatteryIndicator battery(nullptr);
         readerStyle(&battery, "background:white;color:black;");
         battery.show();
+        for (int percent : {-1, 101}) {
+            battery.setStatus(percent, false);
+            app.processEvents();
+            require(battery.text().isEmpty(), "Unknown battery exposed a percentage");
+            const auto image = battery.grab().toImage();
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x)
+                    require(qGray(image.pixel(x, y)) >= 128, "Unknown battery drew an empty gauge");
+        }
         int previous = -1;
         for (int percent : {0, 10, 25, 50, 75, 90, 100}) {
             battery.setStatus(percent, false);

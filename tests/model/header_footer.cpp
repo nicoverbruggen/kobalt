@@ -204,6 +204,13 @@ int main() {
             "Percentage-only battery layout did not round-trip");
     require(field(QStringLiteral("battery_percent")) == Field::BatteryPercent,
             "The existing battery percentage choice changed");
+    for (int percent : {-1, 101, 0}) {
+        auto sample = values;
+        sample.battery = percent;
+        for (auto field : {Field::Battery, Field::BatteryPercent, Field::BatteryWarning})
+            require(content(field, sample, false).empty() == (percent != 0),
+                    "Unknown battery must be hidden while a valid zero remains visible");
+    }
     // The first page is 0%; the last page is 100%, with nearest-integer rounding.
     require(content(Field::ChapterPercent, values, false).text == strings::get("common.percent").arg(26),
             "Percent of chapter is wrong");

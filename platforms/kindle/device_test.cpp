@@ -107,9 +107,43 @@ printf '%s\n' "$5" > "$root/$4"
         check(wait([&] { return failed && next; }) && elapsed.elapsed() < 1500, "Timed-out property blocked the query queue");
         properties.stop();
     }
+    write(root + "/fail-BTstate", "1");
     auto device = std::make_shared<Device>(commands);
+    bool earlyBattery = false;
+    QObject::connect(device.get(), &Device::batteryChanged, [&] {
+        if (device->state().battery.percent == 70 && !device->initialized())
+            earlyBattery = true;
+    });
     check(wait([&] { return device->initialized(); }), "Initial device sample never completed");
+    check(earlyBattery, "Battery publication waited for unrelated status queries");
     check(device->state().battery.percent == 70 && device->state().brightness == 18, "Initial device readback");
+    write(root + "/isCharging", "1");
+    for (const auto &invalid : {QByteArray("bad"), QByteArray("101"), QByteArray("-1")}) {
+        write(root + "/battLevel", invalid);
+        bool completed = false;
+        auto sampled = QObject::connect(device.get(), &Device::changed, [&] { completed = true; });
+        device->refresh();
+        check(wait([&] { return completed; }) && device->state().battery.percent == 70 && device->state().battery.charging,
+              "Invalid battery reply discarded the last valid percentage");
+        QObject::disconnect(sampled);
+    }
+    write(root + "/fail-battLevel", "1");
+    write(root + "/fail-isCharging", "1");
+    bool batteryPollDone = false;
+    auto batteryPoll = QObject::connect(device.get(), &Device::changed, [&] { batteryPollDone = true; });
+    device->refresh();
+    check(wait([&] { return batteryPollDone; }) && device->state().battery.percent == 70 && device->state().battery.charging,
+          "Failed battery read discarded the last valid percentage");
+    QObject::disconnect(batteryPoll);
+    write(root + "/battLevel", "0");
+    write(root + "/isCharging", "0");
+    batteryPollDone = false;
+    batteryPoll = QObject::connect(device.get(), &Device::changed, [&] { batteryPollDone = true; });
+    device->refresh();
+    check(wait([&] { return batteryPollDone; }) && device->state().battery.percent == 0,
+          "Valid empty battery was hidden by stale cache");
+    QObject::disconnect(batteryPoll);
+    write(root + "/battLevel", "70");
     auto light = makeLight(device);
     check(light->initialize() && light->hasWarmth() && !light->hasAutomaticBrightness() && !light->hasAutomaticWarmth(),
           "Standard PW5 exposed unsupported automatic controls");

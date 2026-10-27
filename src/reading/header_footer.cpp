@@ -313,7 +313,7 @@ Content content(Field field, const Values &values, bool uppercase) {
     case Field::BatteryWarning:
         if (field == Field::BatteryWarning && (values.battery < 0 || values.battery >= batteryWarningBelow))
             break;
-        if (values.deviceStatus) {
+        if (values.deviceStatus && values.battery >= 0 && values.battery <= 100) {
             if (field != Field::Battery && values.battery >= 0)
                 result.text = strings::get("common.percent").arg(values.battery);
             result.batteryIcon = field != Field::BatteryPercentOnly;

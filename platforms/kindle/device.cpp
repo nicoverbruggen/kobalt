@@ -117,6 +117,9 @@ void Device::refresh() {
     auto publish = [this, revision] {
         const auto previous = state_;
         state_ = decode(sample);
+        // Battery replies are published as they arrive. The rest of this
+        // status batch must not replace them with a failed read.
+        state_.battery = previous.battery;
         if (lifecycle)
             state_.sleeping = previous.sleeping;
         if (revision != lightRevision) {
@@ -171,6 +174,22 @@ void Device::refresh() {
     for (int index = 0; index < requested.size(); ++index) {
         const auto property = requested.at(index);
         properties.read(property, [this, property, last = index == requested.size() - 1, publish](PropertyReply reply) {
+            if (property.name == "battLevel" || property.name == "isCharging") {
+                const auto value = integer(reply, 0, property.name == "battLevel" ? 100 : 1);
+                if (value) {
+                    const auto previous = state_.battery;
+                    if (property.name == "battLevel")
+                        state_.battery.percent = *value;
+                    else
+                        state_.battery.charging = *value == 1;
+                    if (previous.percent != state_.battery.percent || previous.charging != state_.battery.charging) {
+                        QPointer<Device> guard(this);
+                        emit batteryChanged();
+                        if (!guard)
+                            return;
+                    }
+                }
+            }
             sample.insert(property.name, std::move(reply));
             if (!last)
                 return;

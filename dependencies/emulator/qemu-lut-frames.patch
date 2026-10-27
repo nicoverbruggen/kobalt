@@ -1,0 +1,348 @@
+--- a/hw/display/mt8113_hwtcon.c
++++ b/hw/display/mt8113_hwtcon.c
+@@ -54,6 +54,7 @@
+ #define PAPER_TCTOP_IMG_ST_ADDR  0xdf08
+ #define PAPER_TCTOP_PIPELINE_FLAG 0xdf0c
+ #define PAPER_TCTOP_PIPELINE_CLEAR BIT(15)
++#define PAPER_TCTOP_PIPELINE_LUT_OVERRIDE BIT(2)
+ 
+ #define MDP_RDMA_EN              0x7000
+ #define MDP_RDMA_SRC_CON         0x7030
+@@ -163,8 +164,6 @@
+ {
+     size_t buffer_size;
+     unsigned bytes_per_pixel;
+-    uint8_t frame_min = UINT8_MAX;
+-    uint8_t frame_max = 0;
+ 
+     if (!s->iommu || !s->fb_iova || !s->fb_width || !s->fb_height ||
+         !s->fb_source_width || !s->fb_source_height ||
+@@ -186,26 +185,6 @@
+     }
+     s->pending_fb_buffer_ready = true;
+     s->scanout_captures++;
+-    if (s->last_update_width && s->last_update_height &&
+-        (uint64_t)s->last_update_x + s->last_update_width <=
+-            s->fb_source_width &&
+-        (uint64_t)s->last_update_y + s->last_update_height <=
+-            s->fb_source_height) {
+-        for (uint32_t y = 0; y < s->last_update_height; y++) {
+-            size_t offset = (size_t)(s->last_update_y + y) * s->fb_pitch +
+-                            (size_t)s->last_update_x * bytes_per_pixel;
+-
+-            for (uint32_t x = 0; x < s->last_update_width; x++) {
+-                uint8_t value = s->pending_fb_buffer[
+-                    offset + (size_t)x * bytes_per_pixel];
+-
+-                frame_min = MIN(frame_min, value);
+-                frame_max = MAX(frame_max, value);
+-            }
+-        }
+-        s->last_frame_min = frame_min;
+-        s->last_frame_max = frame_max;
+-    }
+     return true;
+ }
+ 
+@@ -314,7 +293,8 @@
+ static bool mt8113_hwtcon_retain_boot_blank(MT8113HWTCONState *s,
+                                              bool full_panel_update,
+                                              bool nonuniform_frame,
+-                                             bool uniform_blank)
++                                             bool uniform_blank,
++                                             uint32_t pipeline_flags)
+ {
+     int64_t now_ms = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
+ 
+@@ -328,7 +308,7 @@
+         s->boot_handoff_active = false;
+     }
+     if (s->boot_handoff_active && full_panel_update && uniform_blank &&
+-        (s->last_pipeline_flags & BIT(0))) {
++        (pipeline_flags & BIT(0))) {
+         s->boot_handoff_active = false;
+         s->boot_blank_retentions++;
+         return true;
+@@ -339,55 +319,48 @@
+     return false;
+ }
+ 
+-static bool mt8113_hwtcon_publish_pending_frame(MT8113HWTCONState *s)
++static bool mt8113_hwtcon_publish_pending_frame(MT8113HWTCONState *s,
++                                                 unsigned lut)
+ {
++    MT8113HWTCONFrame *frame = &s->lut_frames[lut];
+     size_t buffer_size;
+-    unsigned bytes_per_pixel;
+     bool full_panel_update;
+     bool nonuniform_frame;
+     bool uniform_white;
+ 
+-    if (!s->pending_fb_buffer_ready || !s->last_update_width ||
+-        !s->last_update_height ||
+-        (uint64_t)s->last_update_x + s->last_update_width >
+-            s->fb_source_width ||
+-        (uint64_t)s->last_update_y + s->last_update_height >
+-            s->fb_source_height) {
++    if (!frame->pixels) {
+         return false;
+     }
+-    full_panel_update = s->last_update_x == 0 && s->last_update_y == 0 &&
+-        s->last_update_width == s->fb_source_width &&
+-        s->last_update_height == s->fb_source_height;
+-    nonuniform_frame = s->last_frame_min != s->last_frame_max;
+-    uniform_white = s->fb_format == MDP_RDMA_FORMAT_Y8 &&
+-        s->last_frame_min == s->last_frame_max &&
+-        (s->last_frame_min & 0xf8) == 0xf0;
++    if (frame->source_width != s->fb_source_width ||
++        frame->source_height != s->fb_source_height ||
++        frame->format != s->fb_format) {
++        mt8113_hwtcon_frame_clear(frame);
++        s->scanout_read_failures++;
++        return false;
++    }
++    full_panel_update = frame->x == 0 && frame->y == 0 &&
++        frame->width == frame->source_width &&
++        frame->height == frame->source_height;
++    nonuniform_frame = frame->minimum != frame->maximum;
++    uniform_white = frame->format == MDP_RDMA_FORMAT_Y8 &&
++        frame->minimum == frame->maximum &&
++        (frame->minimum & 0xf8) == 0xf0;
+     if (mt8113_hwtcon_retain_boot_blank(s, full_panel_update,
+-                                         nonuniform_frame, uniform_white)) {
+-        /*
+-         * MT8110's Linux display stack submits a full white staging image
+-         * after U-Boot has painted the physical e-ink panel and before the
+-         * loading artwork.  The controller's logical working buffer must
+-         * accept that update, but presenting it as an LCD frame erases the
+-         * retained splash for the whole userspace startup.
+-         */
+-        s->pending_fb_buffer_ready = false;
++                                      nonuniform_frame, uniform_white,
++                                      frame->flags)) {
++        mt8113_hwtcon_frame_clear(frame);
+         return false;
+     }
+-    bytes_per_pixel = s->fb_format == MDP_RDMA_FORMAT_RGBA8888 ? 4 : 1;
+     buffer_size = (size_t)s->fb_pitch * s->fb_source_height;
+     s->fb_buffer = g_realloc(s->fb_buffer, buffer_size);
+     if (!s->fb_buffer_ready) {
+         memset(s->fb_buffer, 0xff, buffer_size);
+     }
+-    for (uint32_t y = 0; y < s->last_update_height; y++) {
+-        size_t offset = (size_t)(s->last_update_y + y) * s->fb_pitch +
+-                        (size_t)s->last_update_x * bytes_per_pixel;
+-
+-        memcpy(s->fb_buffer + offset, s->pending_fb_buffer + offset,
+-               (size_t)s->last_update_width * bytes_per_pixel);
++    if (!mt8113_hwtcon_frame_publish(frame, s->fb_buffer,
++                                     buffer_size, s->fb_pitch)) {
++        s->scanout_read_failures++;
++        return false;
+     }
+-    s->pending_fb_buffer_ready = false;
+     s->fb_buffer_ready = true;
+     return true;
+ }
+@@ -493,7 +466,8 @@
+         if (mt8113_hwtcon_retain_boot_blank(
+                 s, full_panel_update, frame_min != frame_max,
+                 frame_min == frame_max &&
+-                (frame_min == 0 || frame_min == UINT8_MAX))) {
++                (frame_min == 0 || frame_min == UINT8_MAX),
++                s->last_pipeline_flags)) {
+             s->scanout_dirty = false;
+             s->fb_buffer_ready = false;
+             return;
+@@ -1281,7 +1255,7 @@
+ 
+             s->waveform_triggers++;
+             if (s->image_scanout_active &&
+-                mt8113_hwtcon_publish_pending_frame(s)) {
++                mt8113_hwtcon_publish_pending_frame(s, lut)) {
+                 s->scanout_dirty = true;
+             } else if (s->cfa_active) {
+                 /* CFA memory becomes visible on the physical panel only when
+@@ -1356,13 +1330,42 @@
+             }
+             *void_lut = pipeline_flag & PAPER_TCTOP_PIPELINE_CLEAR ?
+                 BIT(1) : 0;
+-            if (s->image_scanout_active &&
+-                working_buffer_update &&
+-                mt8113_hwtcon_capture_pending_frame(s) &&
+-                mt8113_hwtcon_update_working_image(
+-                    s, !(pipeline_flag & PAPER_TCTOP_PIPELINE_CLEAR),
+-                    !dual_mode || dual_second)) {
+-                *void_lut |= BIT(0);
++            if (s->image_scanout_active && working_buffer_update) {
++                MT8113HWTCONFrame *frame = &s->lut_frames[lut];
++
++                mt8113_hwtcon_frame_clear(frame);
++                if ((pipeline_flag & PAPER_TCTOP_PIPELINE_CLEAR) &&
++                    !s->last_update_width && !s->last_update_height) {
++                    /* The swipe preamble clears LUT ownership with an empty
++                     * region. It does not submit pixels for publication. */
++                } else if (mt8113_hwtcon_capture_pending_frame(s)) {
++                    if (mt8113_hwtcon_update_working_image(
++                            s, !(pipeline_flag & (PAPER_TCTOP_PIPELINE_CLEAR |
++                                                 PAPER_TCTOP_PIPELINE_LUT_OVERRIDE)),
++                            !(pipeline_flag & PAPER_TCTOP_PIPELINE_LUT_OVERRIDE) &&
++                            (!dual_mode || dual_second))) {
++                        *void_lut |= BIT(0);
++                    } else if (pipeline_flag & PAPER_TCTOP_PIPELINE_LUT_OVERRIDE) {
++                        /* This changes LUT ownership, not gray values. It is
++                         * not VOID merely because the pixels are unchanged.
++                         * Its waveform still has to release the assigned LUT. */
++                    } else if (mt8113_hwtcon_frame_capture(
++                                   frame, s->pending_fb_buffer,
++                                   s->fb_source_width, s->fb_source_height,
++                                   s->fb_pitch,
++                                   s->fb_format == MDP_RDMA_FORMAT_RGBA8888 ? 4 : 1,
++                                   s->fb_format, pipeline_flag,
++                                   s->last_update_x, s->last_update_y,
++                                   s->last_update_width, s->last_update_height)) {
++                        /* Swipe stages several regions before any waveform
++                         * starts. Retain each region under its assigned LUT
++                         * until that LUT's shadow-update command commits it. */
++                        s->last_frame_min = frame->minimum;
++                        s->last_frame_max = frame->maximum;
++                    } else {
++                        s->scanout_read_failures++;
++                    }
++                }
+             }
+             if (dual_second) {
+                 s->dual_pipeline_pending = false;
+@@ -1409,6 +1412,9 @@
+      */
+     s->bank[0].regs[(SMI_COMMON_OFFSET + SMI_DEBUG_MISC) / 4] =
+         SMI_DEBUG_MISC_IDLE;
++    for (unsigned lut = 0; lut < ARRAY_SIZE(s->lut_frames); lut++) {
++        mt8113_hwtcon_frame_clear(&s->lut_frames[lut]);
++    }
+     s->pending_luts = 0;
+     s->fb_iova = 0;
+     s->fb_base_iova = 0;
+@@ -1628,6 +1634,9 @@
+     s->fb_buffer = NULL;
+     g_free(s->pending_fb_buffer);
+     s->pending_fb_buffer = NULL;
++    for (unsigned lut = 0; lut < ARRAY_SIZE(s->lut_frames); lut++) {
++        mt8113_hwtcon_frame_clear(&s->lut_frames[lut]);
++    }
+     g_free(s->working_image_buffer);
+     s->working_image_buffer = NULL;
+     s->working_image_buffer_size = 0;
+--- a/include/hw/display/mt8113_hwtcon.h
++++ b/include/hw/display/mt8113_hwtcon.h
+@@ -8,6 +8,7 @@
+ #define HW_DISPLAY_MT8113_HWTCON_H
+ 
+ #include "hw/core/sysbus.h"
++#include "hw/display/mt8113_hwtcon_frame.h"
+ #include "hw/misc/mt8113_iommu.h"
+ #include "qemu/timer.h"
+ #include "ui/console.h"
+@@ -55,6 +56,7 @@
+     MT8113IOMMUState *iommu;
+     uint8_t *fb_buffer;
+     uint8_t *pending_fb_buffer;
++    MT8113HWTCONFrame lut_frames[64];
+     uint8_t *working_image_buffer;
+     size_t working_image_buffer_size;
+     uint32_t fb_iova;
+--- a/include/hw/display/mt8113_hwtcon_frame.h
++++ b/include/hw/display/mt8113_hwtcon_frame.h
+@@ -0,0 +1,92 @@
++/*
++ * HWTCON pipeline snapshots awaiting their waveform LUT commit.
++ * SPDX-License-Identifier: GPL-2.0-or-later
++ */
++#ifndef HW_DISPLAY_MT8113_HWTCON_FRAME_H
++#define HW_DISPLAY_MT8113_HWTCON_FRAME_H
++
++#include <glib.h>
++#include <stdbool.h>
++#include <stdint.h>
++#include <string.h>
++
++typedef struct MT8113HWTCONFrame {
++    uint8_t *pixels;
++    uint32_t x, y, width, height;
++    uint32_t source_width, source_height, format, flags;
++    unsigned bytes_per_pixel;
++    uint8_t minimum, maximum;
++} MT8113HWTCONFrame;
++
++static inline void mt8113_hwtcon_frame_clear(MT8113HWTCONFrame *frame)
++{
++    g_free(frame->pixels);
++    memset(frame, 0, sizeof(*frame));
++}
++
++static inline bool mt8113_hwtcon_frame_capture(
++    MT8113HWTCONFrame *frame, const uint8_t *pixels,
++    uint32_t source_width, uint32_t source_height, size_t pitch,
++    unsigned bytes_per_pixel, uint32_t format, uint32_t flags,
++    uint32_t x, uint32_t y, uint32_t width, uint32_t height)
++{
++    size_t row_bytes;
++
++    mt8113_hwtcon_frame_clear(frame);
++    if (!pixels || !width || !height || !source_width || !source_height ||
++        source_width > 4096 || source_height > 4096 ||
++        (bytes_per_pixel != 1 && bytes_per_pixel != 4) ||
++        pitch < (size_t)source_width * bytes_per_pixel ||
++        pitch > 64 * 1024 ||
++        (uint64_t)x + width > source_width ||
++        (uint64_t)y + height > source_height) {
++        return false;
++    }
++    row_bytes = (size_t)width * bytes_per_pixel;
++    frame->pixels = g_try_malloc(row_bytes * height);
++    if (!frame->pixels) {
++        return false;
++    }
++    frame->x = x;
++    frame->y = y;
++    frame->width = width;
++    frame->height = height;
++    frame->source_width = source_width;
++    frame->source_height = source_height;
++    frame->bytes_per_pixel = bytes_per_pixel;
++    frame->format = format;
++    frame->flags = flags;
++    frame->minimum = UINT8_MAX;
++    for (uint32_t row = 0; row < height; row++) {
++        const uint8_t *in = pixels + (size_t)(y + row) * pitch +
++                            (size_t)x * bytes_per_pixel;
++        memcpy(frame->pixels + row * row_bytes, in, row_bytes);
++        for (uint32_t column = 0; column < width; column++) {
++            uint8_t value = in[column * bytes_per_pixel];
++            frame->minimum = MIN(frame->minimum, value);
++            frame->maximum = MAX(frame->maximum, value);
++        }
++    }
++    return true;
++}
++
++static inline bool mt8113_hwtcon_frame_publish(
++    MT8113HWTCONFrame *frame, uint8_t *destination, size_t bytes,
++    size_t pitch)
++{
++    size_t row_bytes = (size_t)frame->width * frame->bytes_per_pixel;
++    bool valid = frame->pixels && destination &&
++        pitch >= (size_t)frame->source_width * frame->bytes_per_pixel &&
++        pitch <= 64 * 1024 && bytes >= pitch * frame->source_height;
++
++    if (valid) {
++        for (uint32_t row = 0; row < frame->height; row++) {
++            memcpy(destination + (size_t)(frame->y + row) * pitch +
++                   (size_t)frame->x * frame->bytes_per_pixel,
++                   frame->pixels + row * row_bytes, row_bytes);
++        }
++    }
++    mt8113_hwtcon_frame_clear(frame);
++    return valid;
++}
++#endif

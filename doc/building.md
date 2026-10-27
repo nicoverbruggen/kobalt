@@ -175,6 +175,36 @@ After building `kindle-native`, run `bash platforms/kindle/preview.sh` from the 
 
 Run `bash platforms/kindle/capture.sh` to capture the library, keyboard pages, cover, body text and settings headlessly at PW5 resolution. It uses a temporary profile, removes that profile after the run, and writes grayscale PNGs, an overview and a checksum manifest to `build/screenshots/kindle/`. It replaces a previous capture set only after the new run completes and refuses an unrelated output directory. Native status is unavailable unless a test fixture supplies it; those screenshots do not show real device readings. Inspect the images before judging the UI. The native `kindle.preview` test also checks that scaling keeps the reader's PW5 layout dimensions and preserves rendered pages through save and reopen.
 
+For stock PW5 firmware emulation, prepare the headless emulator separately:
+
+```sh
+bash platforms/kindle/emulator/prepare.sh
+bash platforms/kindle/emulator/run.sh pw5-test
+```
+
+Preparation builds a container for the Docker engine's native architecture and reuses its cached QEMU build. It applies `dependencies/emulator/qemu-lut-frames.patch` to retain each prepared display region until its waveform slot commits. The preparation step runs the snapshot regression with address and undefined-behavior sanitizers, then lets Ninja check the cached emulator build. It verifies pinned [eink-emulator](https://github.com/katadelos/eink-emulator/tree/81ae873f57ea5a8aba71a00774118dc3ad8462e7), QEMU, KindleTool, Amazon firmware 5.19.2 and jb.sh downloads. Firmware, sources, guest disks and caches stay under ignored `build/` folders. Set `JOBS` to change the default four QEMU build workers. The scripts use the selected Docker context or `DOCKER_HOST` and keep Docker configuration under `build/kindle-sdk/docker-config/` unless `DOCKER_CONFIG` is set.
+
+The runner accepts a new lowercase guest name and starts PW5 firmware 5.19.2 with upstream `--jbsh`. Jailbreak installation runs during the first boot; this does not install KUALA or Kobalt. The runner prints its container name and SSH command. QEMU binds SSH to container loopback, so use `docker exec` rather than a host SSH port. In another terminal, query its QMP socket with `docker exec kobalt-kindle-emulator-pw5-test python3 /emu/scripts/eink-qmp.py --machine pw5-test status`. Stop the runner with Ctrl-C or TERM. It stops its QEMU process and removes only its own container and guest directory, including the guest disk. It preserves prepared firmware and shared base images. Existing guest names are refused. The guest is temporary; do not use this runner for state that must survive shutdown.
+
+Allow several minutes for first boot and stock-framework restarts. SSH availability and `lab126_gui start/running` do not prove that Home is interactive. Check a screenshot, open Library, cancel the registration dialog if shown, and open Search to confirm that its keyboard appears. Use the current scanout's pixel coordinates with QMP `tap`; PW5 uses 1236 × 1648 pixels. An early unchanged screenshot is not enough to diagnose a failed touch. Reader `page-turn-painted` and `neighbours-end` diagnostics also precede graphics-proxy presentation. Before comparing checkpoint screenshots, allow the framebuffer to settle and confirm matching body pixels in repeated captures without input; exclude the changing clock. In the emulator, a capture five seconds after neighbour preparation showed the new page while the immediate capture still showed the old page.
+
+After Home is interactive and SSH is ready, deploy the built package and fixture from the container. First-boot firmware 5.19.2 left the emulator's user storage mounted with noexec. The command below enables execution only for that temporary guest mount. Keep large ZIPs on `/mnt/us`; `/var/tmp` is a small RAM filesystem. These commands use the emulator's generated test key:
+
+```sh
+container=kobalt-kindle-emulator-pw5-test
+docker exec "$container" bash -euc '
+  key=(-F /dev/null -i /emu/build/ssh/id_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+  scp -O "${key[@]}" -P 2222 /work/build/kindle/Kobalt-kindle-prototype.zip root@127.0.0.1:/mnt/us/
+  scp -O "${key[@]}" -P 2222 /work/tests/fixtures/trevelyans-type-tester.kepub.epub root@127.0.0.1:/mnt/us/documents/
+  ssh "${key[@]}" -p 2222 root@127.0.0.1 "mount -i -o remount,exec /mnt/us && cd /mnt/us && unzip -o Kobalt-kindle-prototype.zip >/dev/null && sh kobalt/launcher/launch.sh"
+'
+mkdir -p build/kindle-emulator/results
+docker exec "$container" python3 /emu/scripts/eink-qmp.py --machine pw5-test screendump /work/build/kindle-emulator/results/manual.png
+docker exec "$container" python3 /emu/scripts/eink-qmp.py --machine pw5-test tap 170 420
+```
+
+Wait for the library before sending the cover tap. Use `--hold 1` with `tap` for a held contact. SSH launch tests the supervisor directly. Testing the user launch path also requires an extension launcher, such as KUALA, installed in the guest. Emulator checks exercise the firmware kernel, framebuffer and input stack. They do not establish physical panel quality, real touch timing, suspend or USB handoff behavior.
+
 ## Dependencies and validation
 
 CREngine and its text/image libraries use the versions and patches recorded in this worktree. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. Build directories are separated by compiler, SDK, source manifest and recipe identity. This initial setup invalidates the dependency set when its recipes, patches or source pins change; application-only changes reuse it.

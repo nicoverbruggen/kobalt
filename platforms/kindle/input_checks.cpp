@@ -3,6 +3,7 @@
 #include "platforms/android/canvas.h"
 #include "platforms/android/start_screen.h"
 #include "interfaces/library/library_view.h"
+#include "interfaces/reader_window.h"
 #include "interfaces/reader/views/reading_page.h"
 #include <QApplication>
 #include <QDebug>
@@ -169,6 +170,20 @@ bool checkLibraryInput(Window &window) {
 bool checkReaderInput(Window &window, ReadingPage &page) {
     auto *canvas = static_cast<android::WidgetCanvas *>(window.findChild<QGraphicsView *>("kindleReaderCanvas"));
     if (!canvas || canvas->content != page.window())
+        return false;
+    const auto sleep = window.readerWindow()->powerScreenSnapshot();
+    bool comparedProgress = false;
+    for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
+        if (page.chrome.slotFields[slot] != headerfooter::Field::BookPercent)
+            continue;
+        comparedProgress = true;
+        if (sleep.image.isNull() || page.slotContents[slot].text != QString::number(sleep.percent) + "%") {
+            qCritical() << "Sleep progress differs from the reading strip" << sleep.percent
+                       << page.slotContents[slot].text;
+            return false;
+        }
+    }
+    if (!comparedProgress)
         return false;
     {
         QScopedValueRollback<headerfooter::Layout> restoreChrome(page.chrome);

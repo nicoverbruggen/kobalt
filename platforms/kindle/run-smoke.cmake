@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.22)
+if(NOT IS_ABSOLUTE "${APP}" OR NOT IS_ABSOLUTE "${ROOT}" OR NOT IS_ABSOLUTE "${BUILD}")
+    message(FATAL_ERROR "APP, ROOT and BUILD must be absolute paths")
+endif()
+string(RANDOM LENGTH 16 ALPHABET 0123456789abcdef suffix)
+set(profile "${BUILD}/test-tmp/smoke-${suffix}")
+file(MAKE_DIRECTORY "${profile}/tmp")
+set(book "${ROOT}/tests/fixtures/trevelyans-type-tester.kepub.epub")
+string(SHA256 book_key "file://${book}")
+set(legacy "${profile}/data/config/${book_key}.json")
+file(MAKE_DIRECTORY "${profile}/data/config")
+file(WRITE "${legacy}" "{\"schema\":1,\"book\":\"file://${book}\",\"kindle_migration_probe\":{\"preserve\":true}}")
+if(PREVIEW)
+    set(preview --preview)
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env "QT_QPA_PLATFORM=minimal:enable_fonts:freetype" "TMPDIR=${profile}/tmp"
+    KOBALT_KINDLE_MIGRATION_CHECK=1
+    "${APP}" ${preview} --smoke-test --profile "${profile}/data" --library "${ROOT}/tests/fixtures"
+    --book "${ROOT}/tests/fixtures/trevelyans-type-tester.kepub.epub"
+    RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE errors TIMEOUT 80)
+if(result STREQUAL "0" AND (NOT EXISTS "${profile}/data/config/kobalt.sqlite" OR EXISTS "${legacy}"))
+    set(result "SQLite migration did not publish the database and archive the JSON source")
+endif()
+file(REMOVE_RECURSE "${profile}")
+if(NOT result STREQUAL "0")
+    message(FATAL_ERROR "Kindle standalone check failed (${result})\n${output}\n${errors}")
+endif()
+message(STATUS "${output}${errors}")

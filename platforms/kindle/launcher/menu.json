@@ -1,0 +1,9 @@
+{
+    "items": [
+        {
+            "name": "Start Kobalt prototype",
+            "priority": 1,
+            "action": "sh /mnt/us/kobalt/launcher/launch.sh"
+        }
+    ]
+}

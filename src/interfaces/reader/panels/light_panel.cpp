@@ -76,7 +76,7 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     });
     brightnessSlider =
         ui::sliderRow(this, rows, "rrBrightness", "rrBrightnessValue", strings::get("light_panel.brightness"),
-                      "rrBrightnessLess", "rrBrightnessMore", 0, 100, 1, {}, {}, "%");
+                      "rrBrightnessLess", "rrBrightnessMore", 0, 100, light.brightnessStep(), {}, {}, "%");
     brightnessSlider->setMarkers({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100});
     warmthSlider = ui::sliderRow(this, rows, "rrWarmth", "rrWarmthValue", strings::get("light_panel.warmth"),
                                  "rrWarmthLess", "rrWarmthMore", 0, 100, 10, {}, {}, "%");

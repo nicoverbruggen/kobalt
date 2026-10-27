@@ -1,0 +1,10 @@
+ARG KOBALT_RUNTIME_BASE=ubuntu:24.04
+FROM ${KOBALT_RUNTIME_BASE}
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    binutils build-essential ca-certificates cmake curl e2fsprogs git libarchive-dev \
+    nettle-dev patch pkg-config qemu-user xz-utils zlib1g-dev zstd \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV HOME=/sdk/home
+WORKDIR /work

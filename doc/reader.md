@@ -15,6 +15,8 @@ The first public beta, `v1.0-beta.1`, includes only the Qt5 package. Qt6 remains
 
 No build checks the device model or display driver. At startup, each build checks its required Nickel symbols and the registered size of Nickel's `Volume` type. The `qt5` build finds the unexported orientation singleton by its machine code and requires it to match exactly once. If a check fails, Nickel keeps its own reader. A release that keeps every symbol but changes another object size or a virtual-table slot is not detected.
 
+The separate Kindle prototype targets a jailbroken Paperwhite 11/PW5 with firmware 5.19.2 and KUALA. It has its own library, keyboard, brightness and warmth controls, battery percentage and connection indicators. Back to library closes a book; Exit Kobalt restores the stock interface. Keep `kobalt/data/` when updating. See [Kindle prototype](building.md#kindle-prototype) for building, installation, emulation and the remaining physical-device checks.
+
 ## macOS testing app
 
 The Mac app uses the same reader controls and renderer as the mobile app. The title bar is blank and keeps the standard window controls. The app opens in the [library](#library). Open an unprotected EPUB from there, File → Open EPUB, Command-O, Finder's Open With, or by dropping one EPUB onto the window. Each opened book joins the library. File → Add Library Folder scans a folder. Removing a book from the library never deletes the file. Opening another book saves and closes the current book. The reader's Exit Kobalt button returns to the library.

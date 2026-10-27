@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<extension>
+    <information>
+        <name>Kobalt prototype</name>
+        <version>0.1</version>
+        <author>Kobalt contributors</author>
+        <id>kobalt.prototype</id>
+    </information>
+    <menus>
+        <menu type="json" dynamic="true">menu.json</menu>
+    </menus>
+</extension>

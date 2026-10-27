@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "kindle",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../build/kindle",
+      "toolchainFile": "$env{KOBALT_KINDLE_QT}/lib/cmake/Qt6/qt.toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "QT_HOST_PATH": "$env{KOBALT_KINDLE_QT_HOST}",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/../../build/kindle/package/kobalt"
+      }
+    },
+    {
+      "name": "kindle-native",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../build/kindle-native",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "KOBALT_KINDLE_NATIVE_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {"name": "kindle", "configurePreset": "kindle", "jobs": 2},
+    {"name": "kindle-native", "configurePreset": "kindle-native", "jobs": 2}
+  ],
+  "testPresets": [
+    {"name": "kindle-native", "configurePreset": "kindle-native", "output": {"outputOnFailure": true}}
+  ]
+}

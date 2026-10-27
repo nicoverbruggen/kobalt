@@ -37,6 +37,8 @@ public:
     virtual int setGestureLevel(int percent) = 0;
     virtual void finishGesture(bool save) = 0;
     virtual int brightness() const = 0;
+    // Percentage step for buttons on hosts with quantized light levels.
+    virtual int brightnessStep() const { return 1; }
     virtual bool gesturing() const = 0;
 };
 }

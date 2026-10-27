@@ -13,7 +13,6 @@
 #include <QFileInfo>
 #include <QLineEdit>
 #include <QLabel>
-#include <QHBoxLayout>
 #include <QApplication>
 #include <QWindow>
 #include <QPushButton>
@@ -53,23 +52,6 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     layout->setSpacing(0);
     stack = new QStackedWidget(this);
     layout->addWidget(stack, 1);
-    exit = new QPushButton(tr("Exit Kobalt"), this);
-    exit->setObjectName("kindleExit");
-    exit->setMinimumHeight(90);
-    auto footerFont = ui::interfaceFont();
-    footerFont.setPixelSize(32);
-    exit->setFont(footerFont);
-    exit->setFocusPolicy(Qt::NoFocus);
-    auto *footer = new QHBoxLayout;
-    status = new QLabel(this);
-    status->setObjectName("kindleDeviceStatus");
-    footerFont.setPixelSize(28);
-    status->setFont(footerFont);
-    status->setMargin(8);
-    status->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    footer->addWidget(status, 1);
-    footer->addWidget(exit);
-    layout->addLayout(footer);
     sleepView = new SleepView(this);
     sleepView->setObjectName("kindleSleepView");
     sleepView->setAutoFillBackground(true);
@@ -82,16 +64,6 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     retirementView->setObjectName("kindleRetirementView");
     retirementView->setScaledContents(true);
     retirementView->hide();
-    auto updateStatus = [this] {
-        const auto &state = device->state();
-        const auto battery = state.battery.percent < 0 ? tr("Battery unavailable")
-            : tr("%1% battery%2").arg(state.battery.percent).arg(state.battery.charging ? tr(" (charging)") : QString());
-        const auto wifi = !state.wifi.enabled ? tr("Wi-Fi off") : state.wifi.connected ? tr("Wi-Fi connected") : tr("Wi-Fi disconnected");
-        status->setText(battery + QStringLiteral("   |   ") + wifi + '\n' +
-                        (state.bluetoothConnected ? tr("Bluetooth connected") : tr("Bluetooth disconnected")));
-    };
-    connect(device.get(), &Device::changed, this, updateStatus);
-    updateStatus();
     connect(device.get(), &Device::sleepingChanged, this, &Window::sleepingChanged);
     connect(device.get(), &Device::sleepFrameChanged, this, &Window::updateSleepView);
     connect(device.get(), &Device::usbRequested, this, &QWidget::close);
@@ -107,8 +79,8 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
             standby.stop();
     });
     qApp->installEventFilter(this);
-    connect(exit, &QPushButton::clicked, this, &QWidget::close);
     start = new android::StartScreen(readerServices(device).presentation, store, stack);
+    connect(start, &android::StartScreen::libraryExitRequested, this, &QWidget::close);
     start->setDark(controller.preferences().value("dark_mode").toBool(false));
     canvas = new android::WidgetCanvas(stack);
     canvas->setObjectName("kindleReaderCanvas");
@@ -193,8 +165,6 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         if (!failed)
             start->showLibrary();
         stack->setCurrentWidget(start);
-        exit->show();
-        status->show();
         this->layout()->activate();
         sizeCanvas();
         retirementView->hide();
@@ -297,18 +267,11 @@ void Window::sizeCanvas() {
     if (preview) {
         const QSize pixels(1236, 1648);
         const qreal scale = qMin(qreal(width()) / pixels.width(), qreal(height()) / pixels.height());
-        exit->setMinimumHeight(qMax(1, qRound(90 * scale)));
-        auto font = ui::interfaceFont();
-        font.setPixelSize(qMax(1, qRound(32 * scale)));
-        exit->setFont(font);
-        font.setPixelSize(qMax(1, qRound(28 * scale)));
-        status->setFont(font);
-        status->setMargin(qMax(1, qRound(8 * scale)));
         if (auto *reader = controller.window())
             reader->resize(pixels);
         canvas->setTransform(QTransform::fromScale(scale, scale));
         canvas->setSceneRect(QRectF(QPointF(), pixels));
-        start->setLibraryScale({pixels.width(), pixels.height() - 90}, scale, true, 1);
+        start->setLibraryScale(pixels, scale, true, 1);
     } else {
         canvas->fitContent();
     }
@@ -347,7 +310,6 @@ void Window::openBook(const QString &path) {
     if (!device->initialized()) {
         pendingOpen = path;
         start->showOpening();
-        exit->hide();
         return;
     }
     const auto absolute = QFileInfo(path).absoluteFilePath();
@@ -358,11 +320,9 @@ void Window::openBook(const QString &path) {
     failed = false;
     if (libraryKeyboard)
         libraryKeyboard->hide();
-    exit->hide();
-    status->hide();
     start->showOpening();
     stack->setCurrentWidget(start);
-    // Wait for hiding the library-only Exit button to restore the full viewport.
+    // Use the allocated reading area before the hidden canvas is first shown.
     layout()->activate();
     controller.open(absolute, readerPixels());
 }
@@ -370,8 +330,6 @@ void Window::closeBook() {
     if (!pendingOpen.isEmpty()) {
         pendingOpen.clear();
         start->showLibrary();
-        exit->show();
-        status->show();
     }
     controller.close();
 }

@@ -63,17 +63,26 @@ void captureScreens(Window &window, const QString &book, const QString &director
                 return;
             if (!save("01-library")) return;
             auto *start = window.findChild<android::StartScreen *>();
-            auto *search = start ? start->library()->findChild<QAbstractButton *>("librarySearch") : nullptr;
-            if (!search) { fail(QStringLiteral("Library search is unavailable")); return; }
-            search->click();
-            state->stage = -1;
+            auto *more = start ? start->library()->findChild<QAbstractButton *>("libraryMore") : nullptr;
+            if (!more) { fail(QStringLiteral("Library menu is unavailable")); return; }
+            more->click();
+            state->stage = -3;
             state->settled.restart();
             return;
         }
         if (state->stage < 0) {
             if (state->settled.elapsed() < 300)
                 return;
-            if (state->stage == -1) {
+            if (state->stage == -3) {
+                if (!save("07-library-more")) return;
+                auto *start = window.findChild<android::StartScreen *>();
+                start->library()->dismiss();
+                auto *search = start->library()->findChild<QAbstractButton *>("librarySearch");
+                if (!search) { fail(QStringLiteral("Library search is unavailable")); return; }
+                search->click();
+                state->stage = -1;
+                state->settled.restart();
+            } else if (state->stage == -1) {
                 if (!save("05-keyboard")) return;
                 auto *start = window.findChild<android::StartScreen *>();
                 auto *symbols = start ? start->library()->findChild<QAbstractButton *>("widgetKeyboardSymbols") : nullptr;

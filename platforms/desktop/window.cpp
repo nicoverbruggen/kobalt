@@ -341,6 +341,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     stack->addWidget(start);
     stack->addWidget(canvas);
     connect(start, &android::StartScreen::exitRequested, this, &QWidget::close);
+    connect(start, &android::StartScreen::libraryExitRequested, this, &QWidget::close);
     auto *file = menuBar()->addMenu(tr("File"));
     auto *open = file->addAction(tr("Open EPUB…"), this, &Window::chooseBook);
     open->setShortcut(QKeySequence::Open);

@@ -50,6 +50,7 @@ void StartScreen::buildLibrary() {
     view->openFile = [this] {
         emit libraryOpenRequested();
     };
+    view->exitApp = [this] { emit libraryExitRequested(); };
     view->rescan = [this] {
         store.scan();
     };

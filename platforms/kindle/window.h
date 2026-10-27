@@ -47,8 +47,7 @@ private:
     QStackedWidget *stack;
     android::StartScreen *start;
     android::WidgetCanvas *canvas;
-    QPushButton *exit;
-    QLabel *status, *sleepView, *retirementView;
+    QLabel *sleepView, *retirementView;
     QTimer standby;
     std::unique_ptr<KeyboardController> libraryKeyboard;
     QPointer<QLineEdit> libraryQuery;

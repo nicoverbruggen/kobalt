@@ -56,7 +56,6 @@ private:
 ReaderHostServices readerServices(std::shared_ptr<Device> device) {
     ReaderHostServices result;
     result.deviceName = QStringLiteral("Kindle");
-    result.backButtonLabel = strings::get("library.back");
     result.colorDisplay = [] {
         return false;
     };

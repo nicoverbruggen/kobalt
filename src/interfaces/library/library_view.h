@@ -40,7 +40,7 @@ public:
 
     std::function<void(const QString &key)> openBook, removeFolder, removeBook;
     std::function<void(const QString &key, Book::Mark mark)> markBook;
-    std::function<void()> addFolder, openFile, rescan;
+    std::function<void()> addFolder, openFile, rescan, exitApp;
     std::function<void(const Settings &settings)> settingsChanged;
     // On Android a book opened on its own is Kobalt's copy, which removal
     // deletes. The confirmation says so.

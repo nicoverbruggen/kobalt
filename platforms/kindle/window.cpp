@@ -320,7 +320,13 @@ void Window::setPreview(bool enabled) {
     sizeCanvas();
 }
 QSize Window::readerPixels() const {
-    return preview ? QSize(1236, 1648) : canvas->pixelSize();
+    if (preview)
+        return {1236, 1648};
+    // The hidden canvas has not received its first resize yet. Open at the
+    // space allocated to it, rather than paginating at its default size.
+    const auto size = stack->contentsRect().size();
+    const auto dpr = canvas->devicePixelRatioF();
+    return {qRound(size.width() * dpr), qRound(size.height() * dpr)};
 }
 void Window::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);

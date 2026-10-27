@@ -1,5 +1,7 @@
 # Native validation
 
+The Kindle menu-dismissal regression checks that the production canvas forwards the reader's cleaning request to the native display surface. It failed before the adapter consumed `reader_full_flash` and passes with that connection. It also checks that later paints preserve a pending full refresh and do not repeat a consumed request. The native Kindle suite and rebuilt ARM package's ABI, dependency, power-helper and stock-runtime reading checks pass. After deployment, the user confirmed that full refreshes work on the physical PW5. This is user-reported hardware verification; the native checks establish the request path rather than the panel's cleaning waveform.
+
 On Linux, `platform.screensaver-loader` verifies that Screensaver discovery opens library handles only after `dl_iterate_phdr` returns. This prevents a loader-lock inversion with concurrent library loading. The shutdown tests retain coverage of both Screensaver hook orders and delayed saves.
 
 `platform.startup-recovery` checks repeated interrupted initialization, successful retries, later stock-reader crashes, normal shutdown, legacy marker migration, timestamp-independent failure counts, a retry after damaged records, durable removal notices and their cleanup after recovery, failed notice writes, and refusal of unsafe or unavailable storage. It exercises the production recovery file handling without a Kobo. Full loader removal and restart behavior also require device validation.

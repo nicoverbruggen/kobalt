@@ -98,6 +98,13 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
                 direction = 0;
         }
         if (windowHandle()) {
+            // Forward the reader's cleaning request with the painted frame.
+            // Leave it pending until a native surface exists, and never clear
+            // a full refresh already waiting for the QPA flush.
+            if (reader && reader->property("reader_full_flash").toBool()) {
+                windowHandle()->setProperty("kobalt.fullRefresh", true);
+                reader->setProperty("reader_full_flash", false);
+            }
             if (closing || device->state().sleeping || stack->currentWidget() != canvas ||
                 QApplication::activeModalWidget() || retirementView->isVisible())
                 direction = 0;

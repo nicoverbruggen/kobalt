@@ -204,7 +204,31 @@ bool checkReaderInput(Window &window, ReadingPage &page) {
             qCritical() << "Battery notification did not update the menu without changing the page body";
             return false;
         }
+        // Drain the menu's paint before checking its dismissal. The native
+        // platform leaves the QPA request available for inspection.
+        canvas->viewport()->grab();
+        auto *surface = window.windowHandle();
+        if (!surface)
+            return false;
+        surface->setProperty("kobalt.fullRefresh", false);
         page.tapped(page.rect().center());
+        canvas->viewport()->grab();
+        if (!surface->property("kobalt.fullRefresh").toBool() ||
+            page.window()->property("reader_full_flash").toBool()) {
+            qCritical() << "Menu dismissal did not forward and consume the reader's full refresh";
+            return false;
+        }
+        canvas->viewport()->grab();
+        if (!surface->property("kobalt.fullRefresh").toBool()) {
+            qCritical() << "A later paint cleared the pending full refresh";
+            return false;
+        }
+        surface->setProperty("kobalt.fullRefresh", false);
+        canvas->viewport()->grab();
+        if (surface->property("kobalt.fullRefresh").toBool()) {
+            qCritical() << "An ordinary paint repeated the consumed full refresh";
+            return false;
+        }
         window.simulateBattery(44, false);
         if (!page.slotContents[2].text.contains("44"))
             return false;

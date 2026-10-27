@@ -190,14 +190,16 @@ else
 fi
 trap terminate INT TERM
 
-export QT_QPA_PLATFORM=kindle
-export QT_QPA_PLATFORM_PLUGIN_PATH="$APP_DIR/plugins/platforms"
-export QT_PLUGIN_PATH="$APP_DIR/plugins"
-export QT_QPA_FONTDIR="$APP_DIR/assets/fonts"
-export LD_LIBRARY_PATH="$APP_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export KOBALT_KINDLE_HOME="$APP_DIR"
-export KOBALT_KINDLE_RUN_DIR="$RUN_DIR"
-export KOBALT_KINDLE_POWER_BRIDGE="$RUN_DIR/power-bridge"
+# Stock recovery commands must keep their original library environment even
+# when the app cannot execute or its bundled libraries cannot be mapped.
+QT_QPA_PLATFORM=kindle \
+QT_QPA_PLATFORM_PLUGIN_PATH="$APP_DIR/plugins/platforms" \
+QT_PLUGIN_PATH="$APP_DIR/plugins" \
+QT_QPA_FONTDIR="$APP_DIR/assets/fonts" \
+LD_LIBRARY_PATH="$APP_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+KOBALT_KINDLE_HOME="$APP_DIR" \
+KOBALT_KINDLE_RUN_DIR="$RUN_DIR" \
+KOBALT_KINDLE_POWER_BRIDGE="$RUN_DIR/power-bridge" \
 "$APP_DIR/bin/kobalt" --assets "$APP_DIR/assets" "$@" &
 child=$!
 wait "$child"

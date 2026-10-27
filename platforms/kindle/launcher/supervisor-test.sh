@@ -13,6 +13,21 @@ export KINDLE_TEST_VOLUME_PID
 trap 'kill -CONT "$KINDLE_TEST_VOLUME_PID" 2>/dev/null || :; kill -TERM "$KINDLE_TEST_VOLUME_PID" 2>/dev/null || :; wait "$KINDLE_TEST_VOLUME_PID" 2>/dev/null || :; rm -rf "$TEST_DIR"' EXIT HUP INT TERM
 mkdir -p "$TEST_DIR/tools" "$TEST_DIR/app/bin" "$TEST_DIR/app/logs"
 export KINDLE_TEST_ROOT="$TEST_DIR"
+storage_check=$(dirname "$SUPERVISOR")/check-storage.sh
+printf 'root / ext4 rw 0 0\nfsp /mnt/us fuse.fsp rw,noexec 0 0\n' >"$TEST_DIR/mounts"
+if sh "$storage_check" /mnt/us/kobalt "$TEST_DIR/mounts"; then
+    echo 'Storage check accepted noexec.' >&2; exit 1
+fi
+# A similarly named sibling is not covered by /mnt/us.
+sh "$storage_check" /mnt/user/kobalt "$TEST_DIR/mounts"
+printf 'bind /mnt/us/kobalt ext4 rw 0 0\n' >>"$TEST_DIR/mounts"
+sh "$storage_check" /mnt/us/kobalt "$TEST_DIR/mounts"
+printf 'bind /mnt/us/my\\040app ext4 rw 0 0\n' >>"$TEST_DIR/mounts"
+sh "$storage_check" '/mnt/us/my app' "$TEST_DIR/mounts"
+: >"$TEST_DIR/mounts"
+if sh "$storage_check" /mnt/us/kobalt "$TEST_DIR/mounts"; then
+    echo 'Storage check accepted an unknown mount.' >&2; exit 1
+fi
 cat >"$TEST_DIR/tools/status" <<'EOF'
 #!/bin/sh
 if [ "$1" = volumd ]; then echo "volumd start/running, process $KINDLE_TEST_VOLUME_PID"; exit 0; fi
@@ -26,6 +41,10 @@ EOF
 cat >"$TEST_DIR/tools/start" <<'EOF'
 #!/bin/sh
 echo start >>"$KINDLE_TEST_ROOT/actions"
+case "${LD_LIBRARY_PATH:-}" in "$KINDLE_TEST_ROOT/app/lib"*)
+    echo 'Stock recovery inherited application libraries.' >&2
+    exit 97
+esac
 [ "${KINDLE_TEST_START_FAIL:-0}" = 0 ]
 EOF
 cat >"$TEST_DIR/tools/usleep" <<'EOF'
@@ -40,6 +59,7 @@ cat >"$TEST_DIR/app/bin/kobalt" <<'EOF'
 #!/bin/sh
 case "$(ps -o stat= -p "$KINDLE_TEST_VOLUME_PID")" in *T*) ;; *) exit 99 ;; esac
 [ "$(pwd)" = / ] || exit 98
+case "${LD_LIBRARY_PATH:-}" in "$KINDLE_TEST_ROOT/app/lib"*) ;; *) exit 96 ;; esac
 echo app >>"$KINDLE_TEST_ROOT/actions"
 mkdir "$KOBALT_KINDLE_RUN_DIR/waveform-abandoned"
 exit "${KINDLE_TEST_APP_EXIT:-0}"
@@ -78,6 +98,12 @@ run_case
 [ "$result" = 0 ] && [ ! -e "$TEST_DIR/run" ]
 [ "$(cat "$TEST_DIR/delays")" = delay ]
 [ "$(cat "$TEST_DIR/actions")" = "$(printf 'stop\napp\nstart')" ]
+# Execution can still fail after preflight, for example after a mount change.
+chmod -x "$TEST_DIR/app/bin/kobalt"
+run_case
+[ "$result" = 126 ] && [ ! -e "$TEST_DIR/run" ]
+[ "$(cat "$TEST_DIR/actions")" = "$(printf 'stop\nstart')" ]
+chmod +x "$TEST_DIR/app/bin/kobalt"
 export KINDLE_TEST_APP_EXIT=23
 run_case
 [ "$result" = 23 ] && [ ! -e "$TEST_DIR/run" ]

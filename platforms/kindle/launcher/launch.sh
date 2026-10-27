@@ -14,6 +14,7 @@ fi
 [ -x "$APP_DIR/bin/kobalt" ] || { echo 'Kobalt executable is missing.' >&2; exit 1; }
 [ -x "$APP_DIR/bin/kobalt-power-bridge" ] || { echo 'Kindle power bridge is missing.' >&2; exit 1; }
 [ -f "$APP_DIR/launcher/supervisor.sh" ] || exit 1
+sh "$APP_DIR/launcher/check-storage.sh" "$APP_DIR" || exit 1
 for tool in status start stop nohup usleep readlink ps grep umount lipc-get-prop lipc-set-prop; do
     command -v "$tool" >/dev/null || { echo "Required Kindle command missing: $tool" >&2; exit 1; }
 done

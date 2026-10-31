@@ -4,6 +4,9 @@
 /* acknowledgments */
 "common.save" = "Save";
 "bookmarks.pin" = "Pin bookmark";
+"bookmarks.modify" = "Modify bookmark";
+"bookmarks.actions" = "Bookmark actions";
+"bookmarks.remove_this" = "Remove this bookmark";
 "bookmarks.edit_pin" = "Edit pinned bookmark";
 "bookmarks.pin_name" = "Bookmark name";
 "bookmarks.unpin" = "Unpin bookmark";

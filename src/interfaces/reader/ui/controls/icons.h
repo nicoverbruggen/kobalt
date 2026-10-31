@@ -90,7 +90,8 @@ enum class ControlIcon {
     MagicWand,
     Hidden,
     Star,
-    Map
+    Map,
+    Pin
 };
 // Paint vectors at the target resolution without an intermediate icon bitmap.
 void paintOpeningIcon(QPainter &painter, ControlIcon icon, const QRectF &bounds, QColor color);

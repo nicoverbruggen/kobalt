@@ -681,16 +681,22 @@ void Reader::syncPinnedBookmarks() {
         !(fieldChooser && fieldChooser->isVisible()) && !(headerFooterView && headerFooterView->isVisible());
     pinnedBookmarks->setVisible(visible);
     if (!visible) return;
-    const int cell = qMin<int>(m::chrome::cellWidth, width() / BookmarkStore::maxPins);
-    const int height = m::chrome::actionHeight;
-    pinnedBookmarks->setGeometry(0, topControls->geometry().bottom() + 1, width(), height);
-    const int left = (width() - cell * pins.size()) / 2;
+    const int padding = ui::px(12), edgeGap = ui::px(20);
+    const int top = topControls->geometry().bottom() + 1;
+    const int bottom = bottomControls->isVisible() ? bottomControls->y() : height();
+    const int room = qMax(1, bottom - top);
+    const int cell = qMax(1, qMin<int>(m::chrome::actionHeight,
+        (room - 2 * padding) / BookmarkStore::maxPins));
+    const int side = qMax(1, cell - 2 * padding);
+    const int trayHeight = cell * pins.size() + 2 * padding;
+    pinnedBookmarks->setGeometry(width() - cell - edgeGap, top + (room - trayHeight) / 2,
+                                 cell, trayHeight);
     for (int i = 0; i < pinnedButtons.size(); ++i) {
         auto *button = pinnedButtons[i];
         button->setVisible(i < pins.size());
         if (i >= pins.size()) continue;
         const auto &pin = pins[i];
-        button->setGeometry(left + i * cell, 0, cell, height);
+        button->setGeometry(padding, padding + i * cell + (cell - side) / 2, side, side);
         button->setGlyph(ui::bookmarkIcon(pin.icon));
         const auto name = pin.name.isEmpty() ? pin.chapter : pin.name;
         button->setAccessibleName(name);
@@ -698,6 +704,7 @@ void Reader::syncPinnedBookmarks() {
         button->setProperty("bookmark_position", pin.position);
         button->setEnabled(bookmarks->pageOf(pin.position) >= 0);
     }
+    pinnedBookmarks->update();
     pinnedBookmarks->raise();
 }
 

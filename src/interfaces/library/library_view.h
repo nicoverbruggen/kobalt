@@ -17,7 +17,6 @@ namespace kobalt::library {
 class BookPages;
 class FolderPage;
 class SortSheet;
-class MoreSheet;
 
 // The Android and desktop library. It draws in device pixels on the reader's
 // canvas, with the reader's header, rows, pager and dialogs. The host owns the
@@ -64,7 +63,7 @@ private:
     ui::PagerBar *pager;
     QWidget *empty;
     SortSheet *sortSheet = nullptr;
-    MoreSheet *moreSheet = nullptr;
+    ui::ActionMenu *moreSheet = nullptr;
     FolderPage *folderPage = nullptr;
     ui::ModalOverlay *overlay = nullptr;
     QTimer *throttle;

@@ -380,6 +380,9 @@ struct Fixture {
         return widget ? widget : window.findChild<QWidget *>(name);
     }
     bool press(const char *name) { return click(widget(name)); }
+    bool bookmarkAction(const char *action) {
+        return press("rrBookmarkMore0") && QTest::qWaitFor([&] { return visible(action); }, 5000) && press(action);
+    }
     bool pressAnnotationExport(const char *action = "rrAnnotationExportHtml") {
         if (!press("rrAnnotationMore")) return false;
         if (!QTest::qWaitFor([this, action] { return visible(action); })) return false;
@@ -1051,7 +1054,7 @@ void tour(Fixture &fixture, const QString &name, bool screenshots) {
     QTRY_VERIFY(fixture.visible("rrBookmark0"));
     QVERIFY(scene("bookmarks"));
     if (screenshots) {
-        QVERIFY(fixture.press("rrBookmarkRemove0"));
+        QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
         QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
         QVERIFY(scene("bookmark-remove"));
         QVERIFY(fixture.press("rrKeepBookmark"));
@@ -1406,13 +1409,17 @@ void checkPinnedBookmarks(int preset, bool dark) {
         QTRY_VERIFY(fixture.visible("rrBookmarkList"));
         auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
         list->setSortOrder("newest");
-        QTRY_VERIFY(fixture.visible("rrBookmarkPin0"));
-        QVERIFY(fixture.press("rrBookmarkPin0"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkMore0"));
+        if (i == 1) QVERIFY(capture(fixture, name + "-pinned-bookmark-list"));
+        QVERIFY(fixture.press("rrBookmarkMore0"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkRowActions"));
+        QVERIFY(fixture.widget("rrBookmarkDelete")->height() >= int(ui::metrics::chrome::menuActionHeight));
+        QVERIFY(fixture.press("rrBookmarkPin"));
         if (i == 8) {
             QTRY_VERIFY(fixture.visible("rrPinLimit"));
             QVERIFY(capture(fixture, name + "-pinned-bookmark-limit"));
             QVERIFY(fixture.press("rrPinLimitClose"));
-            QVERIFY(!qobject_cast<QPushButton *>(fixture.widget("rrBookmarkPin0"))->isChecked());
+            QVERIFY(!fixture.visible("rrBookmarkRowActions"));
             QVERIFY(fixture.press("rrBookmarkListClose"));
             break;
         }
@@ -1423,9 +1430,9 @@ void checkPinnedBookmarks(int preset, bool dark) {
             input->setText("Cancelled name");
             QVERIFY(fixture.press("rrPinCancel"));
             QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-            QVERIFY(!qobject_cast<QPushButton *>(fixture.widget("rrBookmarkPin0"))->isChecked());
+            QVERIFY(!fixture.visible("rrBookmarkRowActions"));
             QVERIFY(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString().isEmpty());
-            QVERIFY(fixture.press("rrBookmarkPin0"));
+            QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
             QTRY_VERIFY(fixture.visible("rrPinName"));
             input = qobject_cast<QLineEdit *>(fixture.widget("rrPinName"));
         }
@@ -1437,13 +1444,14 @@ void checkPinnedBookmarks(int preset, bool dark) {
         QVERIFY(fixture.press("rrPinSave"));
         QTRY_VERIFY(!fixture.visible("rrPinEditor"));
         QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), token);
-        if (i == 0) QVERIFY(capture(fixture, name + "-pinned-bookmark-list"));
         QVERIFY(fixture.press("rrBookmarkListClose"));
         QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
         auto *bar = fixture.widget("rrPinnedBookmarks");
         auto *first = fixture.widget("rrPinnedBookmark0");
         auto *last = fixture.widget(QString("rrPinnedBookmark%1").arg(i).toLatin1().constData());
-        QCOMPARE(first->x(), bar->width() - (last->x() + last->width()));
+        QCOMPARE(first->y(), bar->height() - (last->y() + last->height()));
+        QCOMPARE(first->x(), last->x());
+        QCOMPARE(bar->geometry().right(), fixture.window.readerWindow()->width() - 1 - ui::px(20));
         if (i == 0) {
             QCOMPARE(first->accessibleName(), QString("Map"));
             QVERIFY(capture(fixture, name + "-pinned-bookmark-single"));
@@ -1453,6 +1461,7 @@ void checkPinnedBookmarks(int preset, bool dark) {
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
         }
+        if (i == 3) QVERIFY(capture(fixture, name + "-pinned-bookmark-four"));
         if (i == 7) QVERIFY(capture(fixture, name + "-pinned-bookmark-eight"));
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!fixture.visible("rrPinnedBookmarks"));
@@ -1472,12 +1481,16 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QVERIFY(fixture.press("rrBookmarks"));
     auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
     list->setSortOrder("position");
-    QVERIFY(fixture.press("rrBookmarkPin0"));
+    QVERIFY(fixture.press("rrBookmarkMore0"));
+    QTRY_VERIFY(fixture.visible("rrBookmarkPin"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-actions"));
+    QVERIFY(fixture.press("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinRemove"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-edit"));
     QVERIFY(fixture.press("rrPinRemove"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
     QTRY_VERIFY(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString().isEmpty());
-    QVERIFY(fixture.press("rrBookmarkPin0"));
+    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinName"));
     qobject_cast<QLineEdit *>(fixture.widget("rrPinName"))->setText(QString::fromUtf8("Carte 日本語"));
     // A pending bookmark refresh may raise the list behind an open editor.
@@ -2186,7 +2199,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBookmarks"));
         QVERIFY(fixture.press("rrBookmarks"));
-        QTRY_VERIFY(fixture.visible("rrBookmarkRemove0"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkMore0"));
         QVERIFY(fixture.widget("rrAnnotationMore")->isVisible());
         QVERIFY(fixture.widget("rrAnnotationMore")->isEnabled());
         QVERIFY(fixture.press("rrAnnotationMore"));
@@ -2195,13 +2208,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.widget("rrAnnotationExportMarkdown")->isEnabled());
         QVERIFY(fixture.click(fixture.widget("rrAnnotationActions"), QPoint(5, 5)));
         QTRY_VERIFY(!fixture.widget("rrAnnotationActions"));
-        QVERIFY(fixture.press("rrBookmarkRemove0"));
+        QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
         QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
         QCOMPARE(fixture.stored("bookmarks.json", "bookmarks"), original);
         QVERIFY(fixture.press("rrKeepBookmark"));
         QTRY_VERIFY(!fixture.visible("rrRemoveBookmark"));
         QCOMPARE(fixture.stored("bookmarks.json", "bookmarks"), original);
-        QVERIFY(fixture.press("rrBookmarkRemove0"));
+        QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
         QTRY_VERIFY(fixture.visible("rrConfirmRemoveBookmark"));
         QVERIFY(fixture.press("rrConfirmRemoveBookmark"));
         QTRY_VERIFY(!fixture.visible("rrRemoveBookmark"));
@@ -3932,7 +3945,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrBookmarks"));
         QVERIFY(bookmarksTab->isChecked());
         QTRY_VERIFY(fixture.visible("rrBookmark0"));
-        QVERIFY(fixture.press("rrBookmarkRemove0"));
+        QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
         QTRY_VERIFY(fixture.visible("rrConfirmRemoveBookmark"));
         QVERIFY(fixture.press("rrConfirmRemoveBookmark"));
         QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 0);
@@ -7005,7 +7018,7 @@ private slots:
             QVERIFY(capture(fixture, name + (reading ? "-grid" : "-grid-new")));
             const auto press = [view](const char *control) {
                 auto *button = view->findChild<QAbstractButton *>(control);
-                QVERIFY2(button && button->isVisible() && button->isEnabled(), control);
+                QTRY_VERIFY2(button && button->isVisible() && button->isEnabled(), control);
                 button->click();
             };
             const auto bookMenu = [view] {
@@ -7241,7 +7254,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1262;
+    int expectedScreenshots = lightGallery ? 84 : 1280;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

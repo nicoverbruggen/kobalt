@@ -261,6 +261,7 @@ protected:
 class CellButton : public Button {
 public:
     CellButton(ControlIcon icon, QWidget *parent, int iconPixels = metrics::chrome::cellIcon);
+    void setCircular(bool value) { circular = value; update(); }
     void setInverted(bool value) {
         if (inverted == value) {
             return;
@@ -305,6 +306,7 @@ private:
     int iconPixels;
     Edges rule;
     bool inverted = false;
+    bool circular = false;
     int maximumLabelLines = 1;
     int trailingInset = metrics::chrome::inset;
 };

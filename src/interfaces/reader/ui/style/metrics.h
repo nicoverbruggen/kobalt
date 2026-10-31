@@ -158,7 +158,7 @@ inline constexpr IconPx tabIcon{48};
 inline constexpr Px tabGap{10};
 inline constexpr TextPx captionText{22}, numberText{22};
 inline constexpr Px captionSpacing{2};
-inline constexpr Px listActionHeight{list::twoLines}, optionHeight{list::twoLines}, checkSize{48};
+inline constexpr Px listActionHeight{list::twoLines}, menuActionHeight{128}, optionHeight{list::twoLines}, checkSize{48};
 // Settings tabs stack an icon over a label, as the bottom tabs do. The rail
 // is as wide as its widest label with this margin on each side.
 inline constexpr Px railRowHeight{124}, railInset{28};

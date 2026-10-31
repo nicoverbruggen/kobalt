@@ -22,7 +22,9 @@ public:
         setAccessibleName(item.text);
         setFocusPolicy(Qt::StrongFocus);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        setFixedHeight(m::list::oneLine);
+        readerStyle(this, QString("QPushButton{min-height:%1px;max-height:%1px;padding:0;border:none;}")
+                              .arg(int(m::chrome::menuActionHeight)));
+        setFixedHeight(m::chrome::menuActionHeight);
     }
 
 protected:
@@ -41,8 +43,15 @@ protected:
         const int textLeft = left + iconSize + m::chrome::selectorGap;
         painter.setFont(interfaceFont(m::chrome::labelText));
         painter.setPen(isEnabled() ? foreground : colors.color(QPalette::Mid));
-        const int available = qMax(1, width() - textLeft - m::chrome::inset);
-        drawInterfaceText(painter, QRect(textLeft, 0, available, height()), elideInterfaceText(text(), painter.font(), available), Qt::AlignLeft | Qt::AlignVCenter);
+        const int chevronSpace = item.chevron ? int(m::chrome::cellIcon + m::chrome::selectorGap) : 0;
+        const int available = qMax(1, width() - textLeft - m::chrome::inset - chevronSpace);
+        if (item.chevron) {
+            const int side = m::chrome::cellIcon;
+            controlIcon(ControlIcon::Next, foreground).paint(
+                &painter, QRect(width() - m::chrome::inset - side, (height() - side) / 2, side, side));
+        }
+        drawOpticalText(painter, QRect(textLeft, 0, available, height()),
+                        elideInterfaceText(text(), painter.font(), available));
     }
 
 private:

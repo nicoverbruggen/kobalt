@@ -573,35 +573,6 @@ protected:
     }
 };
 
-// The More choices use the same input barrier and backdrop as book actions.
-class MoreSheet final : public ui::ModalOverlay {
-public:
-    explicit MoreSheet(QWidget *parent) : ui::ModalOverlay(parent) {
-        setObjectName("libraryMoreSheet");
-        auto *rows = card()->rows();
-        rows->setContentsMargins(c::heavyRule, c::heavyRule, c::heavyRule, c::heavyRule);
-        rows->setSpacing(0);
-        const auto row = [this, rows](const char *name, const QString &title, ui::ControlIcon icon,
-                                      ui::ListRow::Accessory accessory) {
-            auto *created = new ui::ListRow(card());
-            created->setObjectName(name);
-            created->setTitle(title);
-            created->setAccessory(accessory);
-            created->setLeadingIcon(icon);
-            created->setEnabled(true);
-            rows->addWidget(created);
-            return created;
-        };
-        addFolder = row("libraryMoreAddFolder", strings::get("library.add_folder"), ui::ControlIcon::FolderPlus, {});
-        openBook = row("libraryMoreOpenBook", strings::get("library.open_book"), ui::ControlIcon::Dictionary, {});
-        folders = row("libraryMoreFolders", strings::get("library.folders"), ui::ControlIcon::Folders,
-                      ui::ListRow::Chevron{});
-        setDimmed(true);
-        setProperty("reader_standard_modal", true);
-    }
-    ui::ListRow *addFolder, *openBook, *folders;
-};
-
 // The folders the library scans, with the controls to add, remove and rescan.
 class FolderPage final : public ui::Panel {
 public:
@@ -1313,22 +1284,23 @@ void LibraryView::showMoreSheet() {
     }
     closeOverlay();
     if (!moreSheet) {
-        moreSheet = new MoreSheet(this);
+        moreSheet = new ui::ActionMenu(this, {}, {
+            ui::actionItem(strings::get("library.add_folder"), "libraryMoreAddFolder", ui::ControlIcon::FolderPlus,
+                           [this] {
+                               if (addFolder)
+                                   QTimer::singleShot(0, this, addFolder);
+                           }),
+            ui::actionItem(strings::get("library.open_book"), "libraryMoreOpenBook", ui::ControlIcon::Dictionary,
+                           [this] {
+                               if (openFile)
+                                   QTimer::singleShot(0, this, openFile);
+                           }),
+            ui::actionItem(strings::get("library.folders"), "libraryMoreFolders", ui::ControlIcon::Folders,
+                           [this] { showFolders(); }, true),
+        });
+        moreSheet->setObjectName("libraryMoreSheet");
         moreSheet->dismissed = [this] { closeOverlay(); };
-        connect(moreSheet->addFolder, &QPushButton::clicked, this, [this] {
-            closeOverlay();
-            if (addFolder)
-                QTimer::singleShot(0, this, addFolder);
-        });
-        connect(moreSheet->openBook, &QPushButton::clicked, this, [this] {
-            closeOverlay();
-            if (openFile)
-                QTimer::singleShot(0, this, openFile);
-        });
-        connect(moreSheet->folders, &QPushButton::clicked, this, [this] {
-            closeOverlay();
-            showFolders();
-        });
+        moreSheet->setDimmed(true);
         setDark(dark);
     }
     moreSheet->setGeometry(rect());

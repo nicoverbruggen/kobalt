@@ -25,7 +25,7 @@ struct BookmarkRow {
 };
 
 // The Bookmarks list covers the header's action row with its own bar, like
-// the Chapters list. Rows go to their page; each row's remove cell asks first.
+// the Chapters list. Bookmark rows open a page or an actions menu.
 class BookmarkList : public ui::Panel {
 public:
     explicit BookmarkList(QWidget *parent, KeyboardFactory keyboard = {});
@@ -67,11 +67,11 @@ private:
     QVector<BookmarkRow> visibleDetails;
     bool visibleDetailsReady = false;
     QVector<QPushButton *> buttons, removes;
-    QVector<ui::CellButton *> pins;
     KeyboardFactory makeKeyboard;
     std::unique_ptr<KeyboardController> keyboard;
     QPointer<ui::ModalOverlay> pinPopup;
     void openPin(const BookmarkRow &row);
+    void openRowActions(const BookmarkRow &row);
     void closePin();
     void placePin();
     QPushButton *bookmarksTab, *annotationsTab;

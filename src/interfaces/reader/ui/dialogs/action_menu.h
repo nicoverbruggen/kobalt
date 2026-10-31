@@ -16,10 +16,11 @@ struct ActionMenuItem {
     bool hasIcon = false;
     ControlIcon icon = ControlIcon::More;
     std::function<void()> triggered;
+    bool chevron = false;
 };
 inline ActionMenuItem actionItem(const QString &text, const QString &name, ControlIcon icon,
-                                 std::function<void()> triggered) {
-    return {text, name, true, icon, std::move(triggered)};
+                                 std::function<void()> triggered, bool chevron = false) {
+    return {text, name, true, icon, std::move(triggered), chevron};
 }
 
 // A card with a header and a list of actions, one full-width row each, with

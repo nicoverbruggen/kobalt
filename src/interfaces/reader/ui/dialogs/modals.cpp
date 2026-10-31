@@ -72,6 +72,12 @@ public:
                               styles::font(m::chrome::labelText, primary) + "}");
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     }
+    QSize sizeHint() const override {
+        auto size = Button::sizeHint();
+        const int vertical = m::control::outlinedVerticalPadding + m::control::border;
+        size.setHeight(qMax<int>(m::chrome::actionHeight, fontMetrics().height() + 2 * vertical));
+        return size;
+    }
 
 protected:
     void paintEvent(QPaintEvent *) override {

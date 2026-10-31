@@ -1833,6 +1833,14 @@ private slots:
         QVERIFY(!row()->captionLabel()->text().contains("Dotted underline"));
         QVERIFY(row()->captionLabel()->text().contains(QLocale().toString(late.toLocalTime(), "HH:mm")));
         const int annotationHeight = row()->height();
+        const auto annotationImage = row()->grab().toImage();
+        auto pinned = a;
+        pinned.pinName = "Reference";
+        pinned.pinIcon = "map";
+        list.showBookmarks({pinned});
+        list.showAnnotations({c, b, a});
+        QCoreApplication::processEvents();
+        QCOMPARE(row()->grab().toImage(), annotationImage);
         QCOMPARE(list.findChild<QPushButton *>("rrMarksSort")->y(), list.findChild<QPushButton *>("rrAnnotationsTab")->y());
         auto *sortControl = list.findChild<QPushButton *>("rrMarksSort");
         const auto sortImage = sortControl->grab().toImage();
@@ -1902,9 +1910,9 @@ private slots:
         bookmark->click();
         QCOMPARE(selected, QString("first"));
         QVERIFY(bookmark->detailLabel()->wordWrap());
-        QCOMPARE(bookmark->height(), annotationHeight);
+        QCOMPARE(bookmark->height(), annotationHeight - (int(ui::px(12)) - int(ui::px(4))));
         QCOMPARE(bookmark->titleLabel()->font().pixelSize(), int(ui::px(24)));
-        QVERIFY(bookmark->detailLabel()->y() - bookmark->titleLabel()->geometry().bottom() >= ui::px(12));
+        QVERIFY(bookmark->detailLabel()->y() - bookmark->titleLabel()->geometry().bottom() >= ui::px(4));
         if (!captureRoot.isEmpty())
             QVERIFY(owner.grab().save(captureRoot + QString("/bookmarks-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
         QVERIFY(bookmark->captionLabel()->text().contains(QLocale().toString(late.toLocalTime(), "HH:mm")));
@@ -1955,7 +1963,8 @@ private slots:
             QCoreApplication::processEvents();
             const QString prefix = annotations ? "rrAnnotation" : "rrBookmark";
             auto *middle = list.findChild<QWidget *>(prefix + "1");
-            auto *removeMiddle = list.findChild<QPushButton *>(prefix + "Remove1");
+            const QString actionPrefix = prefix + (annotations ? "Remove" : "More");
+            auto *removeMiddle = list.findChild<QPushButton *>(actionPrefix + "1");
             QVERIFY(middle && removeMiddle);
             const int middleY = middle->y(), middleHeight = middle->height();
             for (const auto &order : {QStringLiteral("newest"), QStringLiteral("oldest"), QStringLiteral("position")}) {
@@ -1963,7 +1972,7 @@ private slots:
                 QCoreApplication::processEvents();
                 for (int index = 0; index < 4; ++index) {
                     auto *item = list.findChild<QWidget *>(prefix + QString::number(index));
-                    auto *remove = list.findChild<QWidget *>(prefix + "Remove" + QString::number(index));
+                    auto *remove = list.findChild<QWidget *>(actionPrefix + QString::number(index));
                     QVERIFY(item && remove && item->isVisible() && remove->isVisible());
                     QCOMPARE(remove->geometry(), QRect(item->geometry().right() + 1 - ui::metrics::chrome::cellWidth,
                                                       item->y(), ui::metrics::chrome::cellWidth, item->height()));
@@ -1971,7 +1980,13 @@ private slots:
                 if (order == "newest") {
                     QVERIFY(middle->y() < middleY);
                     QCOMPARE(middle->height(), middleHeight);
+                    removed.clear();
                     removeMiddle->click();
+                    if (!annotations) {
+                        auto *remove = owner.findChild<QPushButton *>("rrBookmarkDelete");
+                        QVERIFY(remove && remove->isVisible());
+                        remove->click();
+                    }
                     QCOMPARE(removed, QString("second"));
                 }
             }

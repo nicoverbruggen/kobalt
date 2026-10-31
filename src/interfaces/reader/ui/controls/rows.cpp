@@ -13,9 +13,39 @@
 
 namespace kobalt::ui {
 namespace m = metrics;
+namespace {
+class RowTitle final : public PrivateTextLabel {
+public:
+    using PrivateTextLabel::PrivateTextLabel;
+    std::optional<ControlIcon> icon;
+    bool optical = false;
+    int iconInset() const {
+        return icon ? fontMetrics().height() + qMax(0, int(m::chrome::selectorGap) - px(5)) : 0;
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        if (!optical) {
+            PrivateTextLabel::paintEvent(event);
+            return;
+        }
+        QPainter painter(this);
+        painter.setFont(font());
+        const auto ink = palette().color(QPalette::WindowText);
+        painter.setPen(ink);
+        const int side = fontMetrics().height();
+        const int center = alignment().testFlag(Qt::AlignBottom)
+            ? height() - interfaceLineHeight(font()) / 2 : height() / 2;
+        if (icon)
+            controlIcon(*icon, ink).paint(&painter, QRect(0, center - side / 2, side, side));
+        const int start = iconInset();
+        drawOpticalText(painter, QRect(start, center - side / 2, qMax(0, width() - start), side), text());
+    }
+};
+}
 ListRow::ListRow(QWidget *parent) : Button(parent) {
     readerStyle(this, "QPushButton{border:none;padding:0;min-height:0;background:transparent;}");
-    title = new PrivateTextLabel(this);
+    title = new RowTitle(this);
     detail = new PrivateTextLabel(this);
     caption = new PrivateTextLabel(this);
     leading = new PrivateTextLabel(this);
@@ -51,6 +81,18 @@ void ListRow::setTitle(const QString &text) {
     setText(text);
     setAccessibleName(text);
     arrange();
+}
+void ListRow::setTitleIcon(std::optional<ControlIcon> icon, bool alignWithoutIcon) {
+    auto *label = static_cast<RowTitle *>(title);
+    const bool optical = icon.has_value() || alignWithoutIcon;
+    if (titleIcon == icon && label->optical == optical)
+        return;
+    titleIcon = icon;
+    label->icon = icon;
+    label->optical = optical;
+    title->update();
+    arrange();
+    update();
 }
 void ListRow::setDetailLines(int lines) {
     lines = qBound(1, lines, 3);
@@ -281,8 +323,9 @@ void ListRow::arrange() {
     const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
     const int top = lines == 1 ? 0 : int(m::list::lineInset);
     const int lineHeight = qMax(1, (height() - 2 * top - titleGap - m::control::border) / lines);
+    const int titleInset = static_cast<RowTitle *>(title)->iconInset();
     title->setGeometry(start, top, textWidth, lineHeight);
-    title->setText(title->elidedText(titleText, textWidth));
+    title->setText(title->elidedText(titleText, qMax(0, textWidth - titleInset)));
     int line = 1;
     detail->setVisible(!detailText.isEmpty());
     caption->setVisible(!captionText.isEmpty());

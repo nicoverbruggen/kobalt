@@ -49,7 +49,13 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.lineTo(x2, y2);
     };
     // Keyboard symbols use the same 24-unit grid and stroke as our other drawings.
-    if (icon == ControlIcon::Star) {
+    if (icon == ControlIcon::Pin) {
+        result.canvas = 24;
+        result.stroke = 1.5;
+        path.moveTo(8, 3); path.lineTo(16, 3); path.lineTo(15, 10);
+        path.lineTo(19, 14); path.lineTo(5, 14); path.lineTo(9, 10); path.closeSubpath();
+        line(12, 14, 12, 22);
+    } else if (icon == ControlIcon::Star) {
         result.canvas = 24;
         result.stroke = 1.5;
         path.moveTo(12, 2); path.lineTo(15, 8.5); path.lineTo(22, 9.5);
@@ -454,7 +460,7 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
          icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight &&
          (icon < ControlIcon::Rows || icon > ControlIcon::Export) &&
          (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn) &&
-         (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Map)))
+         (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Pin)))
         return {};
     return QIcon(new VectorIconEngine(icon, color, sideButtons));
 }

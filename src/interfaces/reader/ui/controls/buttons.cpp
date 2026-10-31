@@ -607,6 +607,19 @@ void CellButton::paintEvent(QPaintEvent *) {
     const bool active = isEnabled() && (isDown() || isChecked());
     const auto paper = palette().color(inverted ? QPalette::WindowText : QPalette::Window);
     const auto ink = palette().color(inverted ? QPalette::Window : QPalette::WindowText);
+    if (circular) {
+        painter.setRenderHint(QPainter::Antialiasing);
+        const qreal inset = int(m::control::border) / 2.0;
+        if (active) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(ink);
+            painter.drawEllipse(QRectF(rect()).adjusted(inset, inset, -inset, -inset));
+        }
+        if (!isEnabled()) painter.setOpacity(.45);
+        controlIcon(glyph, active ? paper : ink).paint(&painter,
+            QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels, iconPixels));
+        return;
+    }
     painter.fillRect(rect(), active ? ink : paper);
     paintEdges(painter, rect(), rule, palette().color(QPalette::Mid));
     if (!isEnabled())

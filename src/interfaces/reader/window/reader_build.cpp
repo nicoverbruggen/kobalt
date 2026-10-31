@@ -47,6 +47,33 @@ using kobalt::Choice;
 using kobalt::ChoiceScreen;
 
 namespace {
+class BookmarkTray final : public ui::Panel {
+public:
+    explicit BookmarkTray(QWidget *parent) : ui::Panel(parent) { setAttribute(Qt::WA_OpaquePaintEvent, false); }
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const qreal inset = int(m::control::border) / 2.0;
+        const auto bounds = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
+        const qreal radius = bounds.width() / 2;
+        painter.setPen(QPen(palette().color(QPalette::WindowText), m::control::border));
+        painter.setBrush(palette().color(QPalette::Window));
+        painter.drawRoundedRect(bounds, radius, radius);
+        painter.setPen(QPen(ui::dividerColor(this), m::control::border));
+        const int dividerInset = width() / 4;
+        QPushButton *previous = nullptr;
+        for (auto *button : findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly)) {
+            if (button->isHidden())
+                continue;
+            if (previous) {
+                const qreal y = (previous->geometry().bottom() + 1 + button->y()) / 2.0;
+                painter.drawLine(QPointF(dividerInset, y), QPointF(width() - dividerInset, y));
+            }
+            previous = button;
+        }
+    }
+};
 class ReturnTitle final : public ui::InterfaceLabel {
 public:
     using ui::InterfaceLabel::InterfaceLabel;
@@ -781,11 +808,12 @@ void Reader::buildOverlays() {
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
     choices = new ChoiceScreen(this);
     choices->hide();
-    pinnedBookmarks = new ui::Panel(this);
+    pinnedBookmarks = new BookmarkTray(this);
     pinnedBookmarks->setObjectName("rrPinnedBookmarks");
     pinnedBookmarks->hide();
     for (int i = 0; i < BookmarkStore::maxPins; ++i) {
         auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks);
+        button->setCircular(true);
         button->setObjectName(QString("rrPinnedBookmark%1").arg(i));
         pinnedButtons.append(button);
         connect(button, &QPushButton::clicked, this, [this, button] {

@@ -106,7 +106,10 @@ void ReaderOrientation::start(Qt::ScreenOrientation orientation) {
     if (rotationOwnership) {
         rotationOwnership(true);
     }
-    auto initial = waking ? currentOrientation : Qt::PrimaryOrientation;
+    // Quarter-turn sleep restores Nickel's geometry in currentOrientation.
+    // freeze() kept the reading orientation separately, so waking does not
+    // need another sensor sample to restore it.
+    auto initial = waking ? heldOrientation : Qt::PrimaryOrientation;
 #ifndef KOBALT_NO_SENSORS
     if (sensor) {
         if (!waking) {

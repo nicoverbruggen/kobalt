@@ -35,8 +35,9 @@ public:
     void configure(const QJsonObject &settings);
     // Start in a permitted sensor or shown orientation. After a sleep handoff,
     // resume without replacing the original nativeOrientation with Nickel's
-    // temporary wake orientation. Discard samples received during sleep and
-    // resume rotation only from readings received after start().
+    // temporary wake orientation. Restore the reading orientation saved by
+    // freeze(), then follow fresh awake readings. Discard sleep samples and
+    // the stale public sensor cache; the shared sensor has no polling API.
     void start(Qt::ScreenOrientation nativeOrientation);
     // Restore nativeOrientation, unless it is PrimaryOrientation. Sleep keeps
     // a same-axis orientation until wake or a final stop(), including when the

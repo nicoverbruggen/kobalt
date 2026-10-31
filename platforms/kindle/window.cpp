@@ -79,7 +79,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
             standby.stop();
     });
     qApp->installEventFilter(this);
-    start = new android::StartScreen(readerServices(device).presentation, store, stack);
+    start = new android::StartScreen(readerServices(device).presentation, store, {}, stack);
     connect(start, &android::StartScreen::libraryExitRequested, this, &QWidget::close);
     start->setDark(controller.preferences().value("dark_mode").toBool(false));
     canvas = new android::WidgetCanvas(stack);

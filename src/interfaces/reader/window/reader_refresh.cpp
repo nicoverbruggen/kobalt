@@ -510,7 +510,7 @@ void Reader::refreshStatus() {
     const auto before = page->slotContents;
     showChapterText();
     if (page->slotContents != before)
-        page->refreshContent();
+        page->refreshContent(true);
 }
 
 void Reader::updateMenuStatus() {

@@ -41,6 +41,8 @@ endif()
 configure_file("${source}/support/build_info.h.in" build_info.h @ONLY)
 
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS "${source}/*.cpp" "${source}/*.h")
+# The scenario player is built only into evaluation builds.
+list(FILTER shared EXCLUDE REGEX "/src/scenario/")
 list(REMOVE_ITEM shared "${source}/publication/loopback.cpp")
 set(adapters main.cpp window.cpp window.h services.cpp services.h display.cpp device.cpp device.h properties.cpp properties.h
     ../android/reader.cpp ../android/reader.h ../android/start_screen.cpp ../android/start_screen.h)

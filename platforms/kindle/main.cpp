@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
         }
     }
     kindle::Window window(paths,
-                          engineFontInputs(assets, {}, profile + "/fonts", {}),
+                          engineFontInputs(assets, {}, profile + "/fonts"),
                           placeholderFontFamily(assets, copies), parser.value("library"));
     TerminationHandler termination;
     if (!termination.install(window)) {

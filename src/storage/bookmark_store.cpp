@@ -184,6 +184,8 @@ QJsonObject bookmarkJson(const Bookmark &bookmark) {
     object["chapter"] = bookmark.chapter;
     object["excerpt"] = bookmark.excerpt;
     object["created"] = bookmark.created.toUTC().toString(Qt::ISODate);
+    if (!bookmark.name.isEmpty()) object["name"] = bookmark.name;
+    if (!bookmark.icon.isEmpty()) object["icon"] = bookmark.icon;
     return object;
 }
 bool bookmarkFromJson(const QJsonObject &object, Bookmark *bookmark) {
@@ -194,6 +196,11 @@ bool bookmarkFromJson(const QJsonObject &object, Bookmark *bookmark) {
     bookmark->chapter = object.value("chapter").toString().left(512);
     bookmark->excerpt = object.value("excerpt").toString().left(512);
     bookmark->created = QDateTime::fromString(object.value("created").toString(), Qt::ISODate).toUTC();
+    for (const auto &key : {"name", "icon"})
+        if (object.contains(key) && !object.value(key).isString()) return false;
+    bookmark->name = object.value("name").toString();
+    bookmark->icon = object.value("icon").toString();
+    if (bookmark->name.size() > 128 || bookmark->icon.size() > 64) return false;
     return true;
 }
 
@@ -246,9 +253,10 @@ bool BookmarkStore::readFolder(const QString &folder, QString *error) {
         return false;
     }
     QVector<Bookmark> loaded;
+    int pins = 0;
     for (const auto &value : rows) {
         Bookmark bookmark;
-        if (!bookmarkFromJson(value.toObject(), &bookmark)) {
+        if (!bookmarkFromJson(value.toObject(), &bookmark) || (bookmark.pinned() && ++pins > maxPins)) {
             if (error)
                 *error = "invalid";
             return false;
@@ -333,6 +341,13 @@ bool BookmarkStore::load(QString *error) {
 }
 
 bool BookmarkStore::save(QString *error) {
+    int pins = 0;
+    for (const auto &bookmark : bookmarks_) {
+        if (bookmark.name.size() > 128 || bookmark.icon.size() > 64 || (bookmark.pinned() && ++pins > maxPins)) {
+            if (error) *error = "invalid-bookmark-pins";
+            return false;
+        }
+    }
     // A failed read is not an empty list. Keep the old file for recovery.
     if (loadFailed_) {
         if (error)
@@ -433,7 +448,9 @@ bool BookmarkStore::merge(const std::function<int(const QString &)> &page,
     QVector<Bookmark> unresolved;
     for (const auto &bookmark : bookmarks_) {
         const int number = page(bookmark.position);
-        if (number < 0)
+        // Named shortcuts retain their exact anchors across reflow, even when
+        // several shortcuts now resolve to the same page.
+        if (number < 0 || bookmark.pinned())
             unresolved.append(bookmark);
         else
             pages[number].append(bookmark);
@@ -449,7 +466,13 @@ bool BookmarkStore::merge(const std::function<int(const QString &)> &page,
         for (const auto &bookmark : it.value())
             if (bookmark.created.isValid() && (!oldest.isValid() || bookmark.created < oldest))
                 oldest = bookmark.created;
-        result.append(atPage(it.key(), oldest));
+        const auto replacement = atPage(it.key(), oldest);
+        const bool pinnedAnchor = std::any_of(unresolved.begin(), unresolved.end(), [&](const Bookmark &bookmark) {
+            return bookmark.pinned() && bookmark.position == replacement.position;
+        });
+        // Position identifies rows in the session and editor. A retained pin
+        // already represents this anchor; do not create a second identity.
+        if (!pinnedAnchor) result.append(replacement);
         changed = true;
     }
     // Keep the stored order when nothing merged.

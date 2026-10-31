@@ -781,7 +781,21 @@ void Reader::buildOverlays() {
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
     choices = new ChoiceScreen(this);
     choices->hide();
-    bookmarkList = new kobalt::BookmarkList(this);
+    pinnedBookmarks = new ui::Panel(this);
+    pinnedBookmarks->setObjectName("rrPinnedBookmarks");
+    pinnedBookmarks->hide();
+    for (int i = 0; i < BookmarkStore::maxPins; ++i) {
+        auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks);
+        button->setObjectName(QString("rrPinnedBookmark%1").arg(i));
+        pinnedButtons.append(button);
+        connect(button, &QPushButton::clicked, this, [this, button] {
+            if (button->isEnabled()) goToPassage(button->property("bookmark_position").toString());
+        });
+    }
+    bookmarkList = new kobalt::BookmarkList(this, services.keyboard);
+    bookmarkList->pinRequested = [this](const QString &position, const QString &name, const QString &icon) {
+        return bookmarks->setPin(position, name, icon);
+    };
     bookmarkList->actionsRequested = [this] { openMarksActions(); };
     bookmarkList->annotationDetails = [this](const QStringList &ids, QVector<BookmarkRow> *rows) {
         QVector<HighlightExcerpt> excerpts;

@@ -13,9 +13,11 @@ struct Bookmark {
     QString chapter;   // The chapter title when the bookmark was made.
     QString excerpt;   // The first words of the page.
     QDateTime created; // UTC.
+    QString name = {}, icon = {};
+    bool pinned() const { return !icon.isEmpty(); }
     bool operator==(const Bookmark &other) const {
         return position == other.position && chapter == other.chapter && excerpt == other.excerpt &&
-               created == other.created;
+               created == other.created && name == other.name && icon == other.icon;
     }
 };
 
@@ -26,6 +28,7 @@ struct Bookmark {
 class BookmarkStore {
 public:
     static constexpr int maxBookmarks = 2000;
+    static constexpr int maxPins = 8;
     static constexpr qint64 maxFileBytes = 1024 * 1024;
 
     // The folder name for a book, or an empty string when it has no stable key.

@@ -294,6 +294,8 @@ private:
     AppearanceSheet *menu;
     QFrame *bottomControls;
     kobalt::ui::Panel *topControls = nullptr;
+    kobalt::ui::Panel *pinnedBookmarks = nullptr;
+    QVector<kobalt::ui::CellButton *> pinnedButtons;
     kobalt::ToolbarComposition toolbarComposition;
     std::unique_ptr<kobalt::reader::Navigation> navigation;
     QVector<QWidget *> topActions;
@@ -447,6 +449,7 @@ private:
     void activateNavigation(kobalt::NavigationDestination destination);
     QRect panelBounds(int panelHeight) const;
     void syncNavigation();
+    void syncPinnedBookmarks();
     void syncStatusBoundary();
     bool statusBoundaryPending = false;
     void showControls();

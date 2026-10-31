@@ -2,6 +2,20 @@
 "reader.book_beautifier" = "Book normalization";
 
 /* acknowledgments */
+"common.save" = "Save";
+"bookmarks.pin" = "Pin bookmark";
+"bookmarks.edit_pin" = "Edit pinned bookmark";
+"bookmarks.pin_name" = "Bookmark name";
+"bookmarks.unpin" = "Unpin bookmark";
+"bookmarks.pin_limit" = "You can pin up to eight bookmarks in this book. Unpin one to add another.";
+"bookmarks.icon_map" = "Map";
+"bookmarks.icon_star" = "Star";
+"bookmarks.icon_bookmark" = "Bookmark";
+"bookmarks.icon_compass" = "Compass";
+"bookmarks.icon_dictionary" = "Dictionary";
+"bookmarks.icon_chapters" = "Chapters";
+"bookmarks.icon_home" = "Home";
+"bookmarks.icon_link" = "Link";
 "acknowledgments.acknowledgments" = "Acknowledgments";
 "acknowledgments.kobalt_is_distributed_under_the_gnu_agpl_v3_without_any_warranty" = "Kobalt is distributed under the GNU AGPL v3, without any warranty.";
 "acknowledgments.group_author" = "Also by the author";

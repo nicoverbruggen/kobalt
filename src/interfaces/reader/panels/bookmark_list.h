@@ -9,6 +9,7 @@
 #include <QStringList>
 #include "interfaces/reader/ui/dialogs/modals.h"
 #include <functional>
+#include "platform/api/keyboard_controller.h"
 
 namespace kobalt {
 struct BookmarkRow {
@@ -20,13 +21,17 @@ struct BookmarkRow {
     QString style = {};
     QString color = QStringLiteral("gray");
     int sourceOrder = -1;
+    QString pinName = {}, pinIcon = {};
 };
 
 // The Bookmarks list covers the header's action row with its own bar, like
 // the Chapters list. Rows go to their page; each row's remove cell asks first.
 class BookmarkList : public ui::Panel {
 public:
-    explicit BookmarkList(QWidget *parent);
+    explicit BookmarkList(QWidget *parent, KeyboardFactory keyboard = {});
+    ~BookmarkList() override;
+    QWidget *pinDialog() const { return pinPopup.data(); }
+    std::function<bool(const QString &, const QString &, const QString &)> pinRequested;
     void showBookmarks(QVector<BookmarkRow> rows);
     void showAnnotations(QVector<BookmarkRow> rows, bool loading = false);
     void setSortOrder(const QString &order);
@@ -49,6 +54,7 @@ protected:
     void resizeEvent(QResizeEvent *) override;
     void hideEvent(QHideEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *object, QEvent *event) override;
 
 private:
     void showItems(QVector<BookmarkRow> list, bool annotationTab, bool pending = false);
@@ -61,6 +67,13 @@ private:
     QVector<BookmarkRow> visibleDetails;
     bool visibleDetailsReady = false;
     QVector<QPushButton *> buttons, removes;
+    QVector<ui::CellButton *> pins;
+    KeyboardFactory makeKeyboard;
+    std::unique_ptr<KeyboardController> keyboard;
+    QPointer<ui::ModalOverlay> pinPopup;
+    void openPin(const BookmarkRow &row);
+    void closePin();
+    void placePin();
     QPushButton *bookmarksTab, *annotationsTab;
     ui::CellButton *sortButton;
     ui::CellButton *moreButton;

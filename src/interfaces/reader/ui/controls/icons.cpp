@@ -14,6 +14,13 @@
 #include <reader_icon_vectors.h>
 
 namespace kobalt::ui {
+QStringList bookmarkIconNames() { return {"map", "star", "bookmark", "compass", "dictionary", "chapters", "home", "link"}; }
+ControlIcon bookmarkIcon(const QString &name) {
+    const ControlIcon icons[] = {ControlIcon::Map, ControlIcon::Star, ControlIcon::Bookmark, ControlIcon::Compass,
+                                 ControlIcon::Dictionary, ControlIcon::Chapters, ControlIcon::Home, ControlIcon::Link};
+    const int index = bookmarkIconNames().indexOf(name);
+    return index < 0 ? ControlIcon::Star : icons[index];
+}
 namespace m = metrics;
 namespace {
 struct Geometry {
@@ -42,7 +49,20 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.lineTo(x2, y2);
     };
     // Keyboard symbols use the same 24-unit grid and stroke as our other drawings.
-    if (icon == ControlIcon::KeyboardShift) {
+    if (icon == ControlIcon::Star) {
+        result.canvas = 24;
+        result.stroke = 1.5;
+        path.moveTo(12, 2); path.lineTo(15, 8.5); path.lineTo(22, 9.5);
+        path.lineTo(17, 14.5); path.lineTo(18, 22); path.lineTo(12, 18.5);
+        path.lineTo(6, 22); path.lineTo(7, 14.5); path.lineTo(2, 9.5);
+        path.lineTo(9, 8.5); path.closeSubpath();
+    } else if (icon == ControlIcon::Map) {
+        result.canvas = 24;
+        result.stroke = 1.5;
+        path.moveTo(2, 5); path.lineTo(8, 2); path.lineTo(16, 5); path.lineTo(22, 2);
+        path.lineTo(22, 19); path.lineTo(16, 22); path.lineTo(8, 19); path.lineTo(2, 22);
+        path.closeSubpath(); line(8, 2, 8, 19); line(16, 5, 16, 22);
+    } else if (icon == ControlIcon::KeyboardShift) {
         result.canvas = 24;
         result.stroke = 1.5;
         path.moveTo(12, 3);
@@ -434,7 +454,7 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
          icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight &&
          (icon < ControlIcon::Rows || icon > ControlIcon::Export) &&
          (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn) &&
-         (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Hidden)))
+         (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Map)))
         return {};
     return QIcon(new VectorIconEngine(icon, color, sideButtons));
 }

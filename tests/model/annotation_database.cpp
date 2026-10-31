@@ -78,6 +78,50 @@ void legacyCurrent(const QString &root) {
     require(highlights.save(), "Cannot seed current highlights");
     qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
 }
+void pinnedBookmarks() {
+    QTemporaryDir root;
+    auto pinned = bookmark();
+    pinned.name = QString::fromUtf8("Carte 日本語"); pinned.icon = "map";
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");
+    BookmarkStore legacy(root.path(), identity, fingerprint, "Book");
+    legacy.setBookmarks({pinned}); require(legacy.save(), "Cannot save legacy pin");
+    BookmarkStore legacyAgain(root.path(), identity, fingerprint, "Book");
+    require(legacyAgain.load() && legacyAgain.bookmarks().first() == pinned, "Legacy pin did not round trip");
+    qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
+    BookmarkStore store(root.path(), identity, fingerprint, "Book");
+    require(store.load() && store.bookmarks().first() == pinned, "Import lost pin metadata");
+    auto second = pinned; second.position = "another anchor"; second.name = "Second"; second.icon = "future-icon";
+    store.setBookmarks({pinned, second}); require(store.save(), "Cannot add second pin");
+    require(!store.merge([](const QString &) { return 1; }, [](int, const QDateTime &) { return bookmark(); }),
+            "Reflow merged pinned anchors");
+    auto ordinaryA = bookmark(); ordinaryA.position = "ordinary A";
+    auto ordinaryB = bookmark(); ordinaryB.position = "ordinary B";
+    BookmarkStore merging = store;
+    merging.setBookmarks({pinned, ordinaryA, ordinaryB});
+    require(merging.merge([](const QString &) { return 1; }, [](int, const QDateTime &) { return bookmark(); }) &&
+            merging.bookmarks() == QVector<Bookmark>({pinned}), "Ordinary merge duplicated a pinned anchor");
+    BookmarkStore again(root.path(), identity, fingerprint, "Book");
+    require(again.load() && again.bookmarks() == QVector<Bookmark>({pinned, second}), "Pin metadata changed on reload");
+    sql(root.path(), "CREATE TRIGGER deny_pin BEFORE INSERT ON profile_state WHEN NEW.name LIKE 'bookmark-pins:%' BEGIN SELECT RAISE(ABORT,'injected'); END");
+    auto edited = pinned; edited.name = "Changed";
+    store.setBookmarks({edited}); require(!store.save(), "Pin write unexpectedly succeeded");
+    require(again.load() && again.bookmarks() == QVector<Bookmark>({pinned, second}), "Failed pin write changed bookmarks");
+    sql(root.path(), "DROP TRIGGER deny_pin");
+    require(store.save(), "Pin retry failed");
+    require(again.load() && again.bookmarks() == QVector<Bookmark>({edited}), "Pin retry lost metadata");
+    BookmarkStore stale = again;
+    edited.icon.clear(); edited.name.clear(); store.setBookmarks({edited}); require(store.save(), "Unpin failed");
+    stale.setBookmarks({pinned}); require(!stale.save(), "Stale pin writer replaced newer data");
+    require(again.load() && !again.bookmarks().first().pinned(), "Unpin did not persist");
+    QVector<Bookmark> many;
+    for (int i = 0; i < 9; ++i) { auto b = pinned; b.position = QString::number(i); many.append(b); }
+    store.setBookmarks(many); require(!store.save(), "Nine pins accepted");
+    require(again.load() && !again.bookmarks().first().pinned(), "Rejected pins replaced saved bookmarks");
+    sql(root.path(), "UPDATE profile_state SET format=99 WHERE name LIKE 'bookmark-pins:%'");
+    require(!again.load(), "Unsupported pin format accepted");
+    again.setBookmarks({pinned}); require(!again.save(), "Unsupported pin format overwritten");
+    storage::closeProfile();
+}
 void verifyHighlight(const Highlight &a, const Highlight &b) {
     require(highlightJson(a) == highlightJson(b), "Highlight field, Unicode or provenance changed");
 }
@@ -939,6 +983,7 @@ int main(int argc, char **argv) {
         std::_Exit(0); // End without closing the profile, like a crash.
     }
     defaultBackend(); profileDatabaseLocation();
+    pinnedBookmarks();
     beta3(); atomicMigration(); malformedProfile(); versionsAndCorruption(); editsAndFailures(); adoption(); quotas(); tamperedQuota();
     compactHighlights(); compactBounds(); compactCapacity();
     deletionPreservesRows(); orderChangesAndLimits();

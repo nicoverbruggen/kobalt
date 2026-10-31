@@ -1381,6 +1381,117 @@ void checkHeaderFooterSizes(int preset, bool dark) {
 }
 }
 
+void checkPinnedBookmarks(int preset, bool dark) {
+    Fixture fixture(dark);
+    QVERIFY(fixture.prepared);
+    fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+    const auto name = screenshotVariant(preset, dark);
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    openPrologueBody(fixture);
+    QString firstPosition;
+    for (int i = 0; i < 9; ++i) {
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+        QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), i + 1);
+        QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), i + 1);
+        if (i == 0) {
+            firstPosition = fixture.stored("bookmarks.json", "bookmarks").first().toObject()["position"].toString();
+            fixBookmarkDates(fixture);
+        }
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkList"));
+        auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
+        list->setSortOrder("newest");
+        QTRY_VERIFY(fixture.visible("rrBookmarkPin0"));
+        QVERIFY(fixture.press("rrBookmarkPin0"));
+        if (i == 8) {
+            QTRY_VERIFY(fixture.visible("rrPinLimit"));
+            QVERIFY(capture(fixture, name + "-pinned-bookmark-limit"));
+            QVERIFY(fixture.press("rrPinLimitClose"));
+            QVERIFY(!qobject_cast<QPushButton *>(fixture.widget("rrBookmarkPin0"))->isChecked());
+            QVERIFY(fixture.press("rrBookmarkListClose"));
+            break;
+        }
+        QTRY_VERIFY(fixture.visible("rrPinEditor"));
+        auto *input = qobject_cast<QLineEdit *>(fixture.widget("rrPinName"));
+        QVERIFY(input);
+        if (i == 0) {
+            input->setText("Cancelled name");
+            QVERIFY(fixture.press("rrPinCancel"));
+            QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+            QVERIFY(!qobject_cast<QPushButton *>(fixture.widget("rrBookmarkPin0"))->isChecked());
+            QVERIFY(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString().isEmpty());
+            QVERIFY(fixture.press("rrBookmarkPin0"));
+            QTRY_VERIFY(fixture.visible("rrPinName"));
+            input = qobject_cast<QLineEdit *>(fixture.widget("rrPinName"));
+        }
+        input->setText(i == 0 ? "Map" : QString("Reference %1").arg(i + 1));
+        const auto token = ui::bookmarkIconNames()[i];
+        QVERIFY(!ui::controlIcon(ui::bookmarkIcon(token)).isNull());
+        QVERIFY(fixture.press(("rrPinIcon_" + token).toLatin1().constData()));
+        if (i == 0) QVERIFY(capture(fixture, name + "-pinned-bookmark-editor"));
+        QVERIFY(fixture.press("rrPinSave"));
+        QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+        QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), token);
+        if (i == 0) QVERIFY(capture(fixture, name + "-pinned-bookmark-list"));
+        QVERIFY(fixture.press("rrBookmarkListClose"));
+        QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+        auto *bar = fixture.widget("rrPinnedBookmarks");
+        auto *first = fixture.widget("rrPinnedBookmark0");
+        auto *last = fixture.widget(QString("rrPinnedBookmark%1").arg(i).toLatin1().constData());
+        QCOMPARE(first->x(), bar->width() - (last->x() + last->width()));
+        if (i == 0) {
+            QCOMPARE(first->accessibleName(), QString("Map"));
+            QVERIFY(capture(fixture, name + "-pinned-bookmark-single"));
+            QVERIFY(fixture.press("rrNavStats"));
+            QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+            QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+            QVERIFY(fixture.press("rrNavStats"));
+            QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+        }
+        if (i == 7) QVERIFY(capture(fixture, name + "-pinned-bookmark-eight"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrPinnedBookmarks"));
+        advanceIntoBody(fixture);
+    }
+    QVERIFY(fixture.press("rrPinnedBookmark0"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position").toString(), firstPosition);
+    QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(fixture.window.idle());
+    fixture.window.openBook(book);
+    QTRY_COMPARE(opened.count(), 3); // Includes the fixed-date reopening.
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmark7"));
+    QVERIFY(fixture.press("rrBookmarks"));
+    auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
+    list->setSortOrder("position");
+    QVERIFY(fixture.press("rrBookmarkPin0"));
+    QTRY_VERIFY(fixture.visible("rrPinRemove"));
+    QVERIFY(fixture.press("rrPinRemove"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QTRY_VERIFY(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString().isEmpty());
+    QVERIFY(fixture.press("rrBookmarkPin0"));
+    QTRY_VERIFY(fixture.visible("rrPinName"));
+    qobject_cast<QLineEdit *>(fixture.widget("rrPinName"))->setText(QString::fromUtf8("Carte 日本語"));
+    // A pending bookmark refresh may raise the list behind an open editor.
+    list->raise();
+    QCoreApplication::processEvents();
+    auto *icon = fixture.widget("rrPinIcon_compass");
+    auto *reader = fixture.window.readerWindow();
+    QCOMPARE(reader->childAt(icon->mapTo(reader, icon->rect().center())), icon);
+    QVERIFY(fixture.press("rrPinIcon_compass"));
+    QVERIFY(fixture.press("rrPinSave"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["name"].toString(), QString::fromUtf8("Carte 日本語"));
+}
+
 class DesktopTests final : public QObject {
     Q_OBJECT
 private slots:
@@ -2054,6 +2165,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::newRow("light") << false;
         QTest::newRow("dark") << true;
     }
+    void pinnedBookmarks_data() { screenshotVariants(); }
+    void pinnedBookmarks() { QFETCH(int, preset); QFETCH(bool, dark); checkPinnedBookmarks(preset, dark); }
     void bookmarks() {
         QFETCH(bool, dark);
         Fixture fixture(dark);
@@ -5977,6 +6090,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 class ScreenshotTests final : public QObject {
     Q_OBJECT
 private slots:
+    void pinnedBookmarks_data() { screenshotVariants(); }
+    void pinnedBookmarks() { QFETCH(int, preset); QFETCH(bool, dark); checkPinnedBookmarks(preset, dark); }
     void headerFooterSizes_data() { screenshotVariants(); }
     void headerFooterSizes() {
         QFETCH(int, preset);

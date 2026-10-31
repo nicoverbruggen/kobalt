@@ -657,12 +657,48 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const {
             if (link.page >= 0 && row.page >= 0 && link.page <= row.page)
                 row.chapter = link.title;
         row.excerpt = kobalt::excerptAfterChapter(row.excerpt, row.chapter);
+        row.pinName = list[i].name;
+        row.pinIcon = list[i].icon;
         rows.append(row);
     }
     std::stable_sort(rows.begin(), rows.end(), [](const kobalt::BookmarkRow &a, const kobalt::BookmarkRow &b) {
         return (a.page < 0 ? INT_MAX : a.page) < (b.page < 0 ? INT_MAX : b.page);
     });
     return rows;
+}
+
+void Reader::syncPinnedBookmarks() {
+    if (!pinnedBookmarks) return;
+    QVector<Bookmark> pins;
+    for (const auto &item : bookmarks->bookmarks())
+        if (item.pinned() && pins.size() < BookmarkStore::maxPins) pins.append(item);
+    const bool visible = !pins.isEmpty() && topControls->isVisible() && !model->busy() &&
+        !lifecycleHidden && !closing && !services.suspended() && !annotationMode && !seekOpen &&
+        !appearanceEdit.panelOpen() && !general->isVisible() && !menu->isVisible() && !choices->isVisible() &&
+        !chapterGraph->isVisible() && !lightPopup->isVisible() && !bookmarkList->isVisible() &&
+        !acknowledgments->isVisible() && !searchPanel->isVisible() && !dictionaryPanel->isVisible() &&
+        !linksActive() && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog &&
+        !(fieldChooser && fieldChooser->isVisible()) && !(headerFooterView && headerFooterView->isVisible());
+    pinnedBookmarks->setVisible(visible);
+    if (!visible) return;
+    const int cell = qMin<int>(m::chrome::cellWidth, width() / BookmarkStore::maxPins);
+    const int height = m::chrome::actionHeight;
+    pinnedBookmarks->setGeometry(0, topControls->geometry().bottom() + 1, width(), height);
+    const int left = (width() - cell * pins.size()) / 2;
+    for (int i = 0; i < pinnedButtons.size(); ++i) {
+        auto *button = pinnedButtons[i];
+        button->setVisible(i < pins.size());
+        if (i >= pins.size()) continue;
+        const auto &pin = pins[i];
+        button->setGeometry(left + i * cell, 0, cell, height);
+        button->setGlyph(ui::bookmarkIcon(pin.icon));
+        const auto name = pin.name.isEmpty() ? pin.chapter : pin.name;
+        button->setAccessibleName(name);
+        button->setToolTip(name);
+        button->setProperty("bookmark_position", pin.position);
+        button->setEnabled(bookmarks->pageOf(pin.position) >= 0);
+    }
+    pinnedBookmarks->raise();
 }
 
 // Only the choices whose name does not say what they do get a description,

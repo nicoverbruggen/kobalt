@@ -328,6 +328,22 @@ bool BookmarkSession::remove(const QString &position) {
         return false;
     return save(kept, keptPages, "removed");
 }
+bool BookmarkSession::setPin(const QString &position, const QString &name, const QString &icon) {
+    if (!writable() || name.size() > 128 || icon.size() > 64) return false;
+    auto list = store->bookmarks();
+    int count = 0;
+    for (const auto &item : list) count += item.pinned();
+    for (auto &item : list) {
+        if (item.position != position) continue;
+        if (!icon.isEmpty() && !item.pinned() && count >= BookmarkStore::maxPins) return false;
+        item.name = icon.isEmpty() ? QString() : name.trimmed();
+        item.icon = icon;
+        if (!save(list, pages_, "pin")) return false;
+        if (changed) changed();
+        return true;
+    }
+    return false;
+}
 BookmarkSession::Toggle BookmarkSession::toggle(int current) {
     if (loadFailed_) {
         if (failed)

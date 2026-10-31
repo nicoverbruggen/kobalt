@@ -482,7 +482,7 @@ qint64 totalBytes(const QHash<QString, int> &sizes, int kind) {
 }
 bool same(const Highlight &a, const Highlight &b) {
     return a.id == b.id && a.start == b.start && a.end == b.end && a.text == b.text && a.chapter == b.chapter &&
-           a.detailsLoaded == b.detailsLoaded &&
+           a.detailsLoaded == b.detailsLoaded && a.bookmarkName == b.bookmarkName && a.bookmarkIcon == b.bookmarkIcon &&
            a.created == b.created && a.color == b.color && a.style == b.style && a.note == b.note &&
            a.chosenStart == b.chosenStart && a.chosenEnd == b.chosenEnd &&
            a.sentenceStartPolicy == b.sentenceStartPolicy && a.sentenceEndPolicy == b.sentenceEndPolicy;
@@ -500,7 +500,7 @@ void validate(const QVector<Highlight> &rows, int kind, bool allowCompact = fals
             else check(validHighlight(h), "invalid-highlight");
         }
         else check(!h.start.isEmpty() && h.start.size() <= 4096 && h.chapter.size() <= 512 &&
-                   h.text.size() <= 512, "invalid-bookmark");
+                   h.text.size() <= 512 && h.bookmarkName.size() <= 128 && h.bookmarkIcon.size() <= 64, "invalid-bookmark");
     }
 }
 QVector<Highlight> normalized(const QVector<Bookmark> &marks) {
@@ -513,9 +513,45 @@ QVector<Highlight> normalized(const QVector<Bookmark> &marks) {
         Highlight h;
         h.id = key + '-' + QString::number(occurrences[key]++);
         h.start = b.position; h.chapter = b.chapter; h.text = b.excerpt; h.created = b.created;
+        h.bookmarkName = b.name; h.bookmarkIcon = b.icon;
         rows.append(h);
     }
     return rows;
+}
+// Optional profile record, updated in the same transaction and revision as
+// its bookmark list. Missing metadata means an ordinary bookmark.
+QJsonObject readPins(Connection &c, const QString &key) {
+    QSqlQuery q(c.db);
+    check(q.prepare("SELECT format,length(CAST(payload AS BLOB)),CAST(payload AS BLOB) FROM profile_state WHERE name=?"), "invalid-database");
+    q.addBindValue("bookmark-pins:" + key);
+    check(q.exec(), "invalid-database");
+    if (!q.next()) { check(!q.lastError().isValid(), "invalid-database"); return {}; }
+    check(q.value(0).toInt() == 1 && q.value(1).toInt() <= 16384, "invalid-bookmark-pins");
+    const auto document = QJsonDocument::fromJson(q.value(2).toByteArray());
+    check(document.isObject(), "invalid-bookmark-pins");
+    const auto pins = document.object();
+    check(pins.size() <= BookmarkStore::maxPins, "invalid-bookmark-pins");
+    for (auto it = pins.begin(); it != pins.end(); ++it) {
+        const auto pin = it.value().toObject();
+        check(it.value().isObject() && pin.value("name").isString() && pin.value("icon").isString() &&
+              pin.value("name").toString().size() <= 128 && !pin.value("icon").toString().isEmpty() &&
+              pin.value("icon").toString().size() <= 64, "invalid-bookmark-pins");
+    }
+    return pins;
+}
+void writePins(Connection &c, const QString &key, const QVector<Highlight> &rows) {
+    const auto old = readPins(c, key);
+    QJsonObject pins;
+    for (const auto &row : rows)
+        if (!row.bookmarkIcon.isEmpty())
+            pins[row.id] = QJsonObject{{"name", row.bookmarkName}, {"icon", row.bookmarkIcon}};
+    check(pins.size() <= BookmarkStore::maxPins, "bookmark-pin-limit");
+    if (pins == old) return;
+    const auto payload = QJsonDocument(pins).toJson(QJsonDocument::Compact);
+    check(payload.size() <= 16384, "storage-limit");
+    QSqlQuery q(c.db);
+    check(q.prepare("INSERT OR REPLACE INTO profile_state(name,format,revision,payload) VALUES(?,1,0,CAST(? AS TEXT))"), "database-write");
+    q.addBindValue("bookmark-pins:" + key); q.addBindValue(payload); execute(q);
 }
 void putBook(Connection &c, const AnnotationBook &book) {
     check(QJsonDocument(qt::object({{"version", 1}, {"identity", book.identity}, {"title", book.title},
@@ -641,6 +677,14 @@ QVector<Highlight> readRows(Connection &c, const QString &key, int kind, Annotat
     check(!q.lastError().isValid(), "invalid-database");
     check(rows.size() == expected && loaded.rowBytes.size() == rows.size() && totalBytes(loaded.rowBytes, kind) == bytes,
           "invalid-database");
+    if (kind == bookmarkKind) {
+        const auto pins = readPins(c, key);
+        for (auto &row : rows) {
+            const auto pin = pins.value(row.id).toObject();
+            row.bookmarkName = pin.value("name").toString();
+            row.bookmarkIcon = pin.value("icon").toString();
+        }
+    }
     *state = loaded;
     return rows;
 }
@@ -779,6 +823,7 @@ void ensureBook(Connection &c, const AnnotationBook &book, const LegacyReader &r
         list.addBindValue(rows.size()); list.addBindValue(bytes); execute(list);
         QSqlQuery insert(c.db); prepareInsert(insert);
         for (int i = 0; i < rows.size(); ++i) insertRow(insert, book, kind, rows[i], i, state.rowBytes.value(rows[i].id));
+        if (kind == bookmarkKind) writePins(c, book.key, rows);
     }
     c.commit();
 }
@@ -862,6 +907,7 @@ void saveRows(const AnnotationBook &book, int kind, const QVector<Highlight> &ro
         reorder.bindValue(0, next.ordinals[i]); reorder.bindValue(1, book.key); reorder.bindValue(2, kind);
         reorder.bindValue(3, sqlUtf8(rows[i].id)); execute(reorder);
     }
+    if (kind == bookmarkKind) writePins(c, book.key, rows);
     c.commit();
     next.revision++; next.adoptedFrom.clear(); *state = next;
 }
@@ -1030,7 +1076,7 @@ bool AnnotationDatabase::load(const AnnotationBook &book, QVector<Bookmark> *row
         QString problem;
         if (!loadRows(book, bookmarkKind, &result, &loaded, &problem)) throw Failure{problem};
         QVector<Bookmark> bookmarks;
-        for (const auto &h : result) bookmarks.append({h.start, h.chapter, h.text, h.created});
+        for (const auto &h : result) bookmarks.append({h.start, h.chapter, h.text, h.created, h.bookmarkName, h.bookmarkIcon});
         *rows = std::move(bookmarks); *state = loaded;
     });
 }

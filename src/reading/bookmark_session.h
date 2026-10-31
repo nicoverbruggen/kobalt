@@ -57,6 +57,7 @@ public:
     // Removes the bookmark on `page`, or starts adding one there.
     Toggle toggle(int page);
     bool remove(const QString &position);
+    bool setPin(const QString &position, const QString &name, const QString &icon);
     const QVector<int> &pages() const {
         return pages_;
     }

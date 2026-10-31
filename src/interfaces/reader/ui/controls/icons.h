@@ -88,13 +88,17 @@ enum class ControlIcon {
     Paragraph,
     SpreadVertical,
     MagicWand,
-    Hidden
+    Hidden,
+    Star,
+    Map
 };
 // Paint vectors at the target resolution without an intermediate icon bitmap.
 void paintOpeningIcon(QPainter &painter, ControlIcon icon, const QRectF &bounds, QColor color);
 // Use 90% of Bluetooth's visible height, centered on its intersection.
 void paintWifiStatusIcon(QPainter &painter, ControlIcon icon, const QRectF &bounds, QColor color);
 QIcon controlIcon(ControlIcon icon, QColor color = Qt::black, bool sideButtons = false);
+QStringList bookmarkIconNames();
+ControlIcon bookmarkIcon(const QString &name);
 // These Qt-facing helpers configure shared Button instances.
 // Original asset selection leaves the button painter unchanged.
 void buttonIcon(QPushButton *button, ControlIcon icon);

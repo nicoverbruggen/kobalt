@@ -541,6 +541,7 @@ QVector<QWidget *> Reader::popups() const {
             fontDefaultDialog.data(),
             settingsFontPopup.data(),
             kosyncPage ? kosyncPage->editorDialog.data() : nullptr,
+            bookmarkList ? bookmarkList->pinDialog() : nullptr,
             kosyncDialog.data(),
             linkDialog.data(),
             debugDialog.data(),
@@ -1600,6 +1601,7 @@ void Reader::syncLinkDiscovery() {
 }
 
 void Reader::syncNavigation() {
+    syncPinnedBookmarks();
     updateKosyncToolbar();
     syncStatusBoundary();
     if (navigation) {

@@ -22,7 +22,7 @@ inline QString screenshotGroup(const QString &scene) {
     if (scene.startsWith("kosync-")) return "Settings and About";
     if (scene.startsWith("beautifier-")) return "Typography";
     if (scene.startsWith("settings") || scene == "about" || scene == "acknowledgments" || scene.startsWith("license")) return "Settings and About";
-    if (scene.startsWith("annotation") || scene == "annotating" || scene.startsWith("bookmark")) return "Bookmarks and annotations";
+    if (scene.startsWith("annotation") || scene == "annotating" || scene.startsWith("bookmark") || scene.startsWith("pinned-bookmark")) return "Bookmarks and annotations";
     if (scene.startsWith("vertical-") || scene == "layout" || scene.startsWith("header-footer")) return "Layout";
     if (scene.startsWith("fonts") || scene.startsWith("text") || scene.startsWith("bionic") || scene.startsWith("embedded-")) return "Typography";
     if (scene.startsWith("maths")) return "Mathematics";
@@ -59,6 +59,11 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"bookmark-remove", "Remove a bookmark"},
         {"bookmarked", "Bookmarked page"},
         {"bookmarks", "Saved bookmarks"},
+        {"pinned-bookmark-editor", "Choose a bookmark name and icon"},
+        {"pinned-bookmark-list", "Pinned bookmark in the list"},
+        {"pinned-bookmark-single", "Single bookmark shortcut"},
+        {"pinned-bookmark-eight", "Eight bookmark shortcuts"},
+        {"pinned-bookmark-limit", "Bookmark shortcut limit"},
         {"chapters", "Chapter list"},
         {"cover", "Book cover"},
         {"dictionaries", "Manage dictionaries"},

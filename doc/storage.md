@@ -20,6 +20,10 @@ Legacy JSON bookmarks and annotations share `annotations/<book-key>/`. `book.jso
 
 `bookmarks.json` has `version: 1` and a `bookmarks` array. Each bookmark stores `position`, `chapter`, `excerpt` and `created`. Positions are canonical CREngine XPointers, not page numbers. Dates are UTC ISO 8601 strings.
 
+Bookmarks support optional `name` and `icon` strings, limited to 128 and 64 UTF-16 code units. Missing fields mean an ordinary bookmark. A nonempty icon pins the bookmark; each book permits eight pins. Unknown icon tokens retain their stored value and display a star. Pinned bookmarks retain their exact anchors when reflow places several bookmarks on one page. Ordinary bookmarks still merge.
+
+SQLite stores pin metadata in a format-1 `profile_state` record named `bookmark-pins:<book-key>`, keyed by the bookmark row ID. The bookmark transaction reads and writes this bounded record with the list and uses the list revision for stale-writer protection. A failed pin write rolls back the entire bookmark edit. Import and changed-file adoption preserve pins. The optional record keeps database schema 3 and bookmark JSON format 1. Older builds do not display or maintain pins; writing a profile with an older build is not a supported way to edit pinned bookmarks.
+
 `highlights.json` has `version: 1` and a `highlights` array. Each entry stores `id`, `start`, `end`, `text`, `chapter` and `created`. Optional `color` defaults to `gray`; optional `style` defaults to `shaded`. Supported styles are `shaded`, `underline` and `dotted`. Unknown color and style tokens survive edits and use a display fallback. Optional `sentence_start` and `sentence_end` objects preserve endpoint provenance through `enabled` and `chosen_start` or `chosen_end`.
 
 An optional `note` string holds plain text for a future note editor. Missing notes mean empty text. Notes preserve Unicode and line breaks and are limited to 65,536 UTF-16 code units. Passage edits and appearance changes preserve the note. Beta 4 does not expose a note editor. Adding this optional field does not change format version 1.

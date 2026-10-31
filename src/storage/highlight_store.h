@@ -19,6 +19,8 @@ struct Highlight {
     QString note = {};
     // Compact database records omit text, chapter and note until requested.
     bool detailsLoaded = true;
+    // Bookmark-only metadata carried by the shared annotation transaction.
+    QString bookmarkName = {}, bookmarkIcon = {};
 };
 struct HighlightExcerpt { QString id, text, chapter; };
 QJsonObject highlightJson(const Highlight &highlight);

@@ -31,7 +31,7 @@ This build is for renderer testing. It has no Nickel library integration, bright
 
 ## Installation
 
-For the first public beta, download `Kobalt-qt5.zip` from the release. To build a firmware 4 package locally, run `bash platforms/kobo/build.sh qt5` and use `build/kobo-qt5/Kobalt-qt5.zip`.
+For the first public beta, download `Kobalt-qt5.zip` from the release. To build a firmware 4 package locally with release logging, run `KOBALT_VERBOSE_DIAGNOSTICS=OFF bash platforms/kobo/build.sh qt5` and use `build/kobo-qt5/Kobalt-qt5.zip`. Without that setting, the build enables verbose diagnostics and produces `Kobalt-qt5-diagnostic.zip`.
 
 1. Extract the full ZIP on your computer and show hidden files.
 2. Copy the complete `.adds` folder from the ZIP to the root of the Kobo drive. Merge folders and replace matching package files. Keep other apps, settings and reading data.
@@ -83,9 +83,9 @@ Support files are in `.adds/kobalt/`. Annotation exports are in `Kobalt/Annotati
 | `reopen-layout.json` | Up to 20 layout-check results, keyed by archive digest, at most 8 KiB |
 | `.cache/` | Parsed books and their pages, so a book that was opened before opens without parsing. At most 128 MiB; the oldest books are removed first. Kobalt deletes any other file in this folder |
 | `crash-reporting/` | One report for each of the last 20 crashes of Nickel, see below |
-| `diagnostics/events.jsonl`, `diagnostics/events.jsonl.previous` | Event log, two files of at most 128 KiB each |
+| `diagnostics/events.jsonl`, `diagnostics/events.jsonl.previous` | Event log, two files of at most 128 KiB each. With verbose diagnostics, the current file and five older files of at most 16 MiB each, and `session-context.json`. See [Native validation](validation.md#page-turn-diagnostics) |
 | `scenarios/scenarios.json`, `scenarios.jsonl` | Evaluation packages only: the performance scenarios that Kobalt runs after the first book opens, and their results. See [Release evaluation](release-evaluation.md#device-scenarios) |
-| `diagnostics/state.json`, `diagnostics/session.json` | Only when a `diagnostics-enabled` file exists: reader state from the last close, sleep or shutdown, and session status. Create `live-state` to write `state.json` on every save instead |
+| `diagnostics/state.json`, `diagnostics/session.json` | Only when a `diagnostics-enabled` file exists or the build has verbose diagnostics: reader state from the last close, sleep or shutdown, and session status. Create `live-state` to write `state.json` on every save instead |
 | `startup-session`, `startup-removed.txt`, `active-session.json` | Recovery markers, see above |
 | `uninstall`, `uninstall-now` | Removal control, see above |
 | `doc` | Short user instructions |

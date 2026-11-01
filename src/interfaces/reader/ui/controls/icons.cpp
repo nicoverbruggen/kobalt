@@ -121,17 +121,18 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.moveTo(2, 5); path.lineTo(8, 2); path.lineTo(16, 5); path.lineTo(22, 2);
         path.lineTo(22, 19); path.lineTo(16, 22); path.lineTo(8, 19); path.lineTo(2, 22);
         path.closeSubpath(); line(8, 2, 8, 19); line(16, 5, 16, 22);
-    } else if (icon == ControlIcon::KeyboardShift) {
+    } else if (icon == ControlIcon::KeyboardShift || icon == ControlIcon::KeyboardCapsLock) {
         result.canvas = 24;
         result.stroke = 1.5;
         path.moveTo(12, 3);
         path.lineTo(21, 12);
         path.lineTo(16, 12);
-        path.lineTo(16, 21);
-        path.lineTo(8, 21);
+        path.lineTo(16, icon == ControlIcon::KeyboardCapsLock ? 17 : 21);
+        path.lineTo(8, icon == ControlIcon::KeyboardCapsLock ? 17 : 21);
         path.lineTo(8, 12);
         path.lineTo(3, 12);
         path.closeSubpath();
+        if (icon == ControlIcon::KeyboardCapsLock) line(8, 21, 16, 21);
     } else if (icon == ControlIcon::KeyboardBackspace) {
         result.canvas = 24;
         result.stroke = 1.5;

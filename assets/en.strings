@@ -1211,6 +1211,7 @@
 
 /* widget keyboard */
 "keyboard.shift" = "Shift";
+"keyboard.caps_lock" = "Caps Lock on";
 "keyboard.symbols" = "Symbols";
 "keyboard.space" = "Space";
 "keyboard.backspace" = "Backspace";

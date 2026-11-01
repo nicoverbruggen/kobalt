@@ -9,6 +9,7 @@
 #include "interfaces/reader/ui/controls/keyboard.h"
 #include <QApplication>
 #include <QLineEdit>
+#include <QLocale>
 #include <QFontInfo>
 #include <QKeyEvent>
 #include <QElapsedTimer>
@@ -90,6 +91,34 @@ void checkKeyboardInputStaysInEditor() {
                 for (int i = 0; i < 100; ++i) QTest::mouseClick(first, Qt::LeftButton);
                 require(page.editorDialog && input->text() == prefix + "qqqw" + QString(100, QChar('q')),
                         "rapid key clicks continue editing after gaps and cancelled presses");
+                if (QString(field) == "rrKosyncPassword") {
+                    input->clear();
+                    auto *shift = panel->findChild<QPushButton *>("widgetKeyboardShift");
+                    auto *reveal = dialog->findChild<QPushButton *>("rrKosyncPasswordReveal");
+                    QTest::mouseClick(shift, Qt::LeftButton);
+                    QTest::mouseClick(first, Qt::LeftButton);
+                    QTest::mouseClick(second, Qt::LeftButton);
+                    require(input->text() == "Qw" && input->echoMode() == QLineEdit::Password && !shift->isChecked(),
+                            "masked passwords consume Shift after one letter");
+                    reveal->click();
+                    require(input->displayText() == "Qw", "Show reveals the exact mixed-case draft");
+                    shift->click(); shift->click();
+                    const auto lockedIcon = shift->icon().cacheKey();
+                    require(shift->accessibleName() == strings::get("keyboard.caps_lock"), "locked Shift has an explicit accessible name");
+                    QTest::mouseClick(first, Qt::LeftButton);
+                    QTest::mouseClick(second, Qt::LeftButton);
+                    reveal->click();
+                    require(input->text() == "QwQW" && input->echoMode() == QLineEdit::Password && shift->isChecked(),
+                            "Caps Lock remains active through password reveal and hiding");
+                    require(shift->icon().cacheKey() == lockedIcon, "typing while locked keeps the lock icon");
+                    dialog->findChild<QPushButton *>("rrKosyncEditSave")->click();
+                    QApplication::processEvents();
+                    require(page.takePassword() == "QwQW", "saving passes the exact mixed-case password to the account owner");
+                    page.findChild<QPushButton *>(field)->click();
+                    dialog = page.editorDialog.data();
+                    shift = dialog->findChild<QPushButton *>("widgetKeyboardShift");
+                    require(!shift->isChecked(), "a new password editor starts in lowercase");
+                }
                 dialog->findChild<QPushButton *>("rrKosyncEditCancel")->click();
                 require(!page.editorDialog, "Cancel still closes the account editor");
                 QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
@@ -100,6 +129,7 @@ void checkKeyboardInputStaysInEditor() {
 }
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+    QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
     app.setStyle(QStyleFactory::create("Fusion"));
     app.setPalette(ui::readerPalette(app.palette(), false));
     ui::setInterfaceWeight(ui::heavierTextSteps);

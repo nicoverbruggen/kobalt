@@ -8,11 +8,14 @@
 #include "ui/hold_timer.h"
 #include "ui/input.h"
 #include <QEvent>
+#include <QApplication>
 #include <QGridLayout>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QElapsedTimer>
 #include <QLineEdit>
+#include <QLocale>
 #include <QPointer>
 #include <QPushButton>
 #include <QStringList>
@@ -22,6 +25,32 @@
 
 namespace kobalt::ui {
 namespace {
+class ShiftButton final : public Button {
+public:
+    using Button::Button;
+    quint32 releasedAt = 0;
+    bool pointerRelease = false;
+protected:
+    void mouseReleaseEvent(QMouseEvent *event) override {
+        // Compare source times even when e-ink painting delays both taps.
+        QPointer<ShiftButton> guard(this);
+        releasedAt = quint32(event->timestamp());
+        pointerRelease = event->timestamp() != 0;
+        Button::mouseReleaseEvent(event);
+        if (guard) pointerRelease = false;
+    }
+};
+QStringList alphabetRows() {
+    switch (QLocale().language()) {
+    case QLocale::German: return {"", "qwertzuiop", "asdfghjkl", "yxcvbnm"};
+    case QLocale::French:
+        if (QLocale().name() != QStringLiteral("fr_CA"))
+            return {"", "azertyuiop", "qsdfghjklm", "wxcvbn"};
+        break;
+    default: break;
+    }
+    return {"", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
+}
 void characterFont(QPushButton *key) {
     readerStyle(key, QStringLiteral("QPushButton{font-family:\"@ui-font-family@\";font-size:%1px;border-radius:%2px;}")
                         .arg(px(48)).arg(px(12)));
@@ -82,27 +111,45 @@ public:
                 keys[row].append(key);
                 QObject::connect(key, &QPushButton::clicked, this, [this, key] {
                     closeAccents();
-                    if (this->editor)
-                        this->editor->insert(key->property("keyboard.character").toString());
+                    insert(key->property("keyboard.character").toString(), !symbolPage);
                 });
             }
             line->addStretch();
         }
         auto *actions = new QHBoxLayout;
         layout->addLayout(actions);
-        shift = new Button(panel);
+        shift = new ShiftButton(panel);
         symbols = new QPushButton(panel);
         symbols->setAccessibleName(strings::get("keyboard.symbols"));
         shift->setObjectName("widgetKeyboardShift");
         symbols->setObjectName("widgetKeyboardSymbols");
         shift->setCheckable(true);
         symbols->setCheckable(true);
-        QObject::connect(shift, &QPushButton::toggled, this, [this](bool enabled) { uppercase = enabled; render(); });
-        QObject::connect(symbols, &QPushButton::toggled, this, [this](bool enabled) { symbolPage = enabled; render(); });
+        QObject::connect(shift, &QPushButton::clicked, this, [this] {
+            const auto interval = quint32(QApplication::doubleClickInterval());
+            const bool doubleTap = shift->pointerRelease && pointerShift
+                ? quint32(shift->releasedAt - shiftedAt) <= interval
+                : shiftTap.isValid() && shiftTap.elapsed() <= interval;
+            if (caseMode == Case::Lower) {
+                caseMode = Case::Once;
+                shiftedAt = shift->releasedAt;
+                pointerShift = shift->pointerRelease;
+                shiftTap.start();
+            } else {
+                caseMode = caseMode == Case::Once && doubleTap ? Case::Locked : Case::Lower;
+                endShiftTap();
+            }
+            render();
+        });
+        QObject::connect(symbols, &QPushButton::toggled, this, [this](bool enabled) {
+            endShiftTap();
+            symbolPage = enabled;
+            render();
+        });
         auto *space = new QPushButton(strings::get("keyboard.space"), panel);
         erase = new Button(panel);
         done = new Button(strings::get("keyboard.done"), panel);
-        for (const auto &item : {qMakePair(shift, ControlIcon::KeyboardShift),
+        for (const auto &item : {qMakePair(static_cast<Button *>(shift), ControlIcon::KeyboardShift),
                                  qMakePair(erase, ControlIcon::KeyboardBackspace),
                                  qMakePair(done.data(), ControlIcon::KeyboardReturn)}) {
             buttonIcon(item.first, item.second);
@@ -131,11 +178,11 @@ public:
         render();
         QObject::connect(space, &QPushButton::clicked, this, [this] {
             closeAccents();
-            if (this->editor)
-                this->editor->insert(QStringLiteral(" "));
+            insert(QStringLiteral(" "), true);
         });
         QObject::connect(erase, &QPushButton::clicked, this, [this] {
             closeAccents();
+            endShiftTap();
             if (this->editor)
                 this->editor->backspace();
         });
@@ -294,9 +341,8 @@ private:
             platform::textRefresh(choice);
             grid->addWidget(choice, index / columns, index % columns);
             QObject::connect(choice, &QPushButton::clicked, this, [this, value] {
-                const auto target = editor;
                 closeAccents();
-                if (target) target->insert(value);
+                insert(value, true);
             });
         }
         const int width = qMin(panel->width(), qMax(columns * pressedKey->width(), popup->minimumSizeHint().width()));
@@ -317,16 +363,43 @@ private:
                 host->setProperty("reader_keyboard_bounds", QRect());
         }
     }
-    const QStringList letterRows{"", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
+    const QStringList letterRows = alphabetRows();
     const QStringList symbolRows{"1234567890", "!@#$%^&*()", "-_=+[]{}\\|", ";:'\",.<>/?`~"};
     std::array<QVector<QPushButton *>, 4> keys;
     std::array<QWidget *, 4> rowWidgets;
-    Button *shift = nullptr, *erase = nullptr;
+    ShiftButton *shift = nullptr;
+    Button *erase = nullptr;
     QPushButton *symbols = nullptr;
     QHBoxLayout *lastRow = nullptr;
-    bool uppercase = false, symbolPage = false;
+    enum class Case { Lower, Once, Locked };
+    Case caseMode = Case::Lower;
+    bool symbolPage = false;
+    QElapsedTimer shiftTap;
+    quint32 shiftedAt = 0;
+    bool pointerShift = false;
+    void endShiftTap() {
+        shiftTap.invalidate();
+        pointerShift = false;
+    }
+    void insert(const QString &text, bool consumeShift) {
+        endShiftTap();
+        if (!editor) return;
+        QPointer<WidgetKeyboard> guard(this);
+        const auto before = editor->text();
+        const bool selected = editor->hasSelectedText();
+        editor->insert(text);
+        if (!guard) return;
+        if (editor && consumeShift && caseMode == Case::Once &&
+            (editor->text() != before || (selected && !editor->hasSelectedText()))) {
+            caseMode = Case::Lower;
+            render();
+        }
+    }
     void render() {
         closeAccents();
+        shift->setChecked(caseMode != Case::Lower);
+        buttonIcon(shift, caseMode == Case::Locked ? ControlIcon::KeyboardCapsLock : ControlIcon::KeyboardShift);
+        shift->setAccessibleName(strings::get(caseMode == Case::Locked ? "keyboard.caps_lock" : "keyboard.shift"));
         const auto &rows = symbolPage ? symbolRows : letterRows;
         symbols->setText(symbolPage ? QStringLiteral("ABC") : QStringLiteral("123"));
         shift->setVisible(!symbolPage);
@@ -348,7 +421,7 @@ private:
             for (int column = 0; column < keys[row].size(); ++column) {
                 auto *key = keys[row][column];
                 const auto character = column < rows[row].size() ? rows[row].mid(column, 1) : QString();
-                const auto shown = uppercase && !symbolPage ? character.toUpper() : character;
+                const auto shown = caseMode != Case::Lower && !symbolPage ? character.toUpper() : character;
                 key->setProperty("keyboard.character", shown);
                 key->setText(shown == "&" ? QStringLiteral("&&") : shown);
                 characterFont(key);

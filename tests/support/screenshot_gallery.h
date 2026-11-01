@@ -208,6 +208,10 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"widget-keyboard-libron-300ppi", "Keyboard with Libron"},
         {"widget-keyboard-mono-300ppi", "Keyboard with interface font"},
         {"widget-keyboard-symbols", "Keyboard symbols"},
+        {"widget-keyboard-shift", "Keyboard one-shot Shift"},
+        {"widget-keyboard-caps-lock", "Keyboard Caps Lock"},
+        {"widget-keyboard-qwertz", "German QWERTZ keyboard"},
+        {"widget-keyboard-azerty", "French AZERTY keyboard"},
     };
     if (titles.contains(scene)) return titles[scene];
     const auto page = QRegularExpression("^(.+)-(\\d+)$").match(scene);

@@ -6884,6 +6884,9 @@ private slots:
     void widgetKeyboard() {
         QFETCH(int, preset);
         QFETCH(bool, dark);
+        const QLocale originalLocale;
+        const auto restoreLocale = qScopeGuard([originalLocale] { QLocale::setDefault(originalLocale); });
+        QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
         Fixture fixture(dark, false, true);
         QVERIFY(fixture.prepared);
         fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
@@ -6916,6 +6919,11 @@ private slots:
         const auto name = QStringList{"fill", "six-inch", "seven-inch"}.at(preset) +
                           ('-' + screenshotTheme(dark)) + "-widget-keyboard";
         QVERIFY(capture(fixture, name));
+        shift->click();
+        QVERIFY(capture(fixture, name + "-shift"));
+        shift->click();
+        QVERIFY(capture(fixture, name + "-caps-lock"));
+        shift->click();
         {
             const QSize expected = preset == 1 ? QSize(1072, 1448) : QSize(1264, 1680);
             QCOMPARE(view->size(), expected);
@@ -6960,6 +6968,15 @@ private slots:
         QVERIFY(symbols);
         symbols->click();
         QVERIFY(capture(fixture, name + "-symbols"));
+        const auto submitText = keyboard->findChild<QPushButton *>("widgetKeyboardDone")->text();
+        keyboard->hide();
+        for (const auto &locale : {QStringLiteral("de_DE"), QStringLiteral("fr_FR")}) {
+            QLocale::setDefault(QLocale(locale));
+            auto regional = ui::makeWidgetKeyboard(view, editor);
+            regional->setSubmitText(submitText);
+            QVERIFY(regional->show());
+            QVERIFY(capture(fixture, name + (locale == "de_DE" ? "-qwertz" : "-azerty")));
+        }
     }
     void lightGestureFeedback_data() { screenshotVariants(); }
     void lightGestureFeedback() {
@@ -7976,7 +7993,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1418;
+    int expectedScreenshots = lightGallery ? 84 : 1442;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

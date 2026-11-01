@@ -40,6 +40,7 @@
 #include <QApplication>
 #include <QFontDatabase>
 #include <QLocale>
+#include <QScopeGuard>
 #include <QDir>
 #include <QDialog>
 #include <QTimer>
@@ -567,6 +568,7 @@ private slots:
         };
         typePage();
         QVERIFY(action("widgetKeyboardShift"));
+        QVERIFY(action("widgetKeyboardShift"));
         typePage();
         QVERIFY(action("widgetKeyboardSymbols"));
         QCOMPARE(panel->findChild<QPushButton *>("widgetKeyboardSymbols")->text(), QString("ABC"));
@@ -661,7 +663,6 @@ private slots:
         QCOMPARE(editor.text(), QString::fromUtf8("éİ"));
         panel->findChild<QPushButton *>("widgetKeyboardDelete")->click();
         QCOMPARE(editor.text(), QString::fromUtf8("é"));
-        panel->findChild<QPushButton *>("widgetKeyboardShift")->click();
         QTest::mousePress(e, Qt::LeftButton);
         QTRY_VERIFY(panel->findChild<QWidget *>("widgetKeyboardAccents"));
         QEvent cancel(QEvent::TouchCancel);
@@ -695,6 +696,153 @@ private slots:
         send(e, QEvent::MouseButtonRelease, 7000);
         QCOMPARE(editor.text(), QString::fromUtf8("ée"));
         QVERIFY(!panel->findChild<QWidget *>("widgetKeyboardAccents"));
+    }
+    void widgetKeyboardLayouts_data() {
+        QTest::addColumn<QString>("localeName");
+        QTest::addColumn<QStringList>("rows");
+        const QStringList qwerty{"qwertyuiop", "asdfghjkl", "zxcvbnm"};
+        QTest::newRow("Dutch") << QString("nl_NL") << qwerty;
+        QTest::newRow("English") << QString("en_GB") << qwerty;
+        QTest::newRow("German") << QString("de_DE") << QStringList{"qwertzuiop", "asdfghjkl", "yxcvbnm"};
+        QTest::newRow("French") << QString("fr_FR") << QStringList{"azertyuiop", "qsdfghjklm", "wxcvbn"};
+        QTest::newRow("French-Canada") << QString("fr_CA") << qwerty;
+        QTest::newRow("fallback") << QString("ja_JP") << qwerty;
+    }
+    void widgetKeyboardLayouts() {
+        QFETCH(QString, localeName);
+        QFETCH(QStringList, rows);
+        const QLocale original;
+        const auto restore = qScopeGuard([original] { QLocale::setDefault(original); });
+        QLocale::setDefault(QLocale(localeName));
+        QWidget host;
+        host.resize(1072, 1448);
+        QLineEdit editor(&host);
+        auto keyboard = ui::makeWidgetKeyboard(&host, &editor);
+        host.show();
+        QVERIFY(keyboard->show());
+        auto *panel = host.findChild<QWidget *>("widgetKeyboard");
+        for (int row = 0; row < rows.size(); ++row) {
+            QString actual;
+            for (int column = 0; column < rows[row].size(); ++column) {
+                auto *key = panel->findChild<QPushButton *>(QString("widgetKey%1_%2").arg(row + 1).arg(column));
+                QVERIFY(key && key->isVisible());
+                actual += key->property("keyboard.character").toString();
+                key->click();
+            }
+            QCOMPARE(actual, rows[row]);
+        }
+        QCOMPARE(editor.text(), rows.join(""));
+        auto *symbols = panel->findChild<QPushButton *>("widgetKeyboardSymbols");
+        symbols->click(); symbols->click();
+        QCOMPARE(panel->findChild<QPushButton *>("widgetKey1_0")->text(), rows[0].left(1));
+    }
+    void widgetKeyboardCase_data() { variants(); }
+    void widgetKeyboardCase() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        QWidget host;
+        host.setProperty("reader_dark", dark);
+        host.resize(ui::px(1072), ui::px(1448));
+        ui::applyReaderPalette(&host, ui::readerPalette(host.palette(), dark));
+        QLineEdit editor(&host);
+        auto keyboard = ui::makeWidgetKeyboard(&host, &editor);
+        host.show();
+        QVERIFY(keyboard->show());
+        auto *panel = host.findChild<QWidget *>("widgetKeyboard");
+        auto *shift = panel->findChild<QPushButton *>("widgetKeyboardShift");
+        auto *q = panel->findChild<QPushButton *>("widgetKey1_0");
+        auto *w = panel->findChild<QPushButton *>("widgetKey1_1");
+        auto *symbols = panel->findChild<QPushButton *>("widgetKeyboardSymbols");
+        auto *erase = panel->findChild<QPushButton *>("widgetKeyboardDelete");
+        auto *space = panel->findChild<QPushButton *>("widgetKeyboardSpace");
+        const auto tap = [&](ulong stamp, bool second = false) {
+            pointerEvent(shift, second ? QEvent::MouseButtonDblClick : QEvent::MouseButtonPress,
+                         stamp, shift->rect().center());
+            pointerEvent(shift, QEvent::MouseButtonRelease, stamp + 20, shift->rect().center());
+        };
+        tap(1000);
+        const auto once = shift->grab().toImage();
+        QVERIFY(shift->isChecked());
+        q->click(); w->click();
+        QCOMPARE(editor.text(), QString("Qw"));
+        QVERIFY(!shift->isChecked());
+        tap(2000); tap(2100, true);
+        QVERIFY(shift->isChecked());
+        QCOMPARE(shift->accessibleName(), strings::get("keyboard.caps_lock"));
+        QVERIFY(shift->grab().toImage() != once);
+        q->click(); w->click(); space->click();
+        QCOMPARE(editor.text(), QString("QwQW "));
+        QVERIFY(shift->isChecked());
+        symbols->click();
+        panel->findChild<QPushButton *>("widgetKey0_0")->click();
+        symbols->click(); q->click();
+        QCOMPARE(editor.text(), QString("QwQW 1Q"));
+        tap(2300); q->click();
+        QVERIFY(editor.text().endsWith("Qq"));
+        // Queued events must respect the real gap, not their delivery speed.
+        tap(3000); tap(5000);
+        QVERIFY(!shift->isChecked());
+        // Unsigned source-clock wrap still permits a real double tap.
+        tap(0xffffff00u); tap(0x20u);
+        QCOMPARE(shift->accessibleName(), strings::get("keyboard.caps_lock"));
+        tap(0x80u);
+        tap(6000); erase->click();
+        QVERIFY(shift->isChecked());
+        symbols->click();
+        panel->findChild<QPushButton *>("widgetKey0_0")->click();
+        symbols->click();
+        QVERIFY(shift->isChecked());
+        q->click(); w->click();
+        QVERIFY(editor.text().endsWith("1Qw"));
+        QVERIFY(!shift->isChecked());
+        tap(7000); space->click();
+        QVERIFY(!shift->isChecked());
+        editor.setText("q"); editor.selectAll();
+        tap(8000); q->click();
+        QCOMPARE(editor.text(), QString("Q"));
+        QVERIFY(!shift->isChecked());
+        editor.setMaxLength(1);
+        tap(9000); w->click();
+        QCOMPARE(editor.text(), QString("Q"));
+        QVERIFY(shift->isChecked());
+        erase->click(); w->click();
+        QCOMPARE(editor.text(), QString("W"));
+        QVERIFY(!shift->isChecked());
+        editor.setMaxLength(256);
+        editor.clear();
+        auto *e = panel->findChild<QPushButton *>("widgetKey1_2");
+        tap(10000);
+        pointerEvent(e, QEvent::MouseButtonPress, 11000, e->rect().center());
+        pointerEvent(e, QEvent::MouseButtonRelease, 11600, e->rect().center());
+        QVERIFY(panel->findChild<QWidget *>("widgetKeyboardAccents"));
+        QTest::keyClick(&editor, Qt::Key_Escape);
+        QVERIFY(shift->isChecked());
+        QCOMPARE(editor.text(), QString());
+        e->click();
+        QCOMPARE(editor.text(), QString("E"));
+        QVERIFY(!shift->isChecked());
+        tap(12000);
+        pointerEvent(e, QEvent::MouseButtonPress, 13000, e->rect().center());
+        pointerEvent(e, QEvent::MouseButtonRelease, 13600, e->rect().center());
+        auto *popup = panel->findChild<QWidget *>("widgetKeyboardAccents");
+        QVERIFY(popup);
+        auto *acute = popup->findChild<QPushButton *>("widgetAccent00c9");
+        QVERIFY(acute);
+        acute->click();
+        QCOMPARE(editor.text(), QString::fromUtf8("EÉ"));
+        QVERIFY(!shift->isChecked());
+        const auto untimedTap = [&] {
+            pointerEvent(shift, QEvent::MouseButtonPress, 0, shift->rect().center());
+            pointerEvent(shift, QEvent::MouseButtonRelease, 0, shift->rect().center());
+        };
+        // The Qt5 touch fallback synthesizes mouse events without timestamps.
+        untimedTap();
+        QTest::qWait(QApplication::doubleClickInterval() + 50);
+        untimedTap();
+        QVERIFY(!shift->isChecked());
+        untimedTap(); untimedTap();
+        QCOMPARE(shift->accessibleName(), strings::get("keyboard.caps_lock"));
     }
     void widgetKeyboardLifetime() {
         QWidget host;
@@ -3186,6 +3334,7 @@ private slots:
 int main(int argc, char **argv) {
     qputenv("QT_QPA_PLATFORM", "minimal:enable_fonts:freetype");
     QApplication app(argc, argv);
+    QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
     if (QGuiApplication::platformName() != "minimal")
         return 2;
     app.setStyle("Fusion");

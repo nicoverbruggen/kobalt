@@ -81,6 +81,7 @@ enum class ControlIcon {
     WifiHigh,
     WifiDisconnected,
     KeyboardShift,
+    KeyboardCapsLock,
     KeyboardBackspace,
     KeyboardReturn,
     // Styling settings rows.

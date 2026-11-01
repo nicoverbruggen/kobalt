@@ -119,16 +119,19 @@ int main(int argc, char **argv) {
         }
     });
     auto *standby = PowerManager::sharedInstance();
-    kobalt::nativeSuspendDevice = kobalt::nativeSuspendDeviceWithAlarm = [](void *manager, const QString &mode) {
-        require(manager == PowerManager::sharedInstance() && mode == "mem", "Suspend hook changed its native arguments");
+    kobalt::nativeSuspendDevice = kobalt::nativeSuspendDeviceWithAlarm = [](void *manager, const QString &wakeupCount) {
+        require(manager == PowerManager::sharedInstance() && wakeupCount == "123", "Suspend hook changed its native arguments");
     };
     kobalt::NativeLifecycle lifecycle(nullptr);
     require(lifecycle.connected(), "Mock Nickel managers did not connect");
+    require(!kobalt::NativeLifecycle::protectStandbyInput(), "Reader input guard activated without a reader");
+    lifecycle.readerInputActive = [] { return true; };
+    require(kobalt::NativeLifecycle::protectStandbyInput(), "Active reader did not enable the input guard");
     require(observedPower.value("standby_request").toBool() && observedPower.value("standby_resume").toBool(),
             "Standby signal capabilities were not recorded");
     emit standby->aboutToSuspend(nullptr);
-    kobalt_suspend_device(standby, QStringLiteral("mem"));
-    kobalt_suspend_device_with_alarm(standby, QStringLiteral("mem"));
+    kobalt_suspend_device(standby, QStringLiteral("123"));
+    kobalt_suspend_device_with_alarm(standby, QStringLiteral("123"));
     emit standby->resumed();
     require(requested == 1 && resumed == 1 && suspendStarts == 2 && suspendEnds == 2,
             "Standby transitions or paired suspend operation records were lost");
@@ -149,6 +152,7 @@ int main(int argc, char **argv) {
         const int before = sleepHandoffs;
         power->asleep = true;
         emit power->aboutToSleep();
+        require(!kobalt::NativeLifecycle::protectStandbyInput(), "Sleep-screen suspension kept the reading input guard");
         power->visible = true;
         if (!bypassHook)
             kobalt_show_sleep_view(power);

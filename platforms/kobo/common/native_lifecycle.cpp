@@ -6,6 +6,7 @@
 #include "engine/crengine/engine_activity.h"
 #include "storage/profile_database.h"
 #include "support/diagnostics.h"
+#include "standby_input.h"
 #include <QPointer>
 #include <QCoreApplication>
 #include <QEvent>
@@ -152,13 +153,15 @@ bool NativeLifecycle::eventFilter(QObject *object, QEvent *event) {
 bool (*nativeCanSuspend)(void *);
 void (*nativeSuspendDevice)(void *, const QString &);
 void (*nativeSuspendDeviceWithAlarm)(void *, const QString &);
-extern "C" __attribute__((visibility("default"))) void kobalt_suspend_device(void *manager, const QString &mode) {
+extern "C" __attribute__((visibility("default"))) void kobalt_suspend_device(void *manager, const QString &wakeupCount) {
+    StandbyInputScope input(NativeLifecycle::protectStandbyInput(), wakeupCount);
     DiagnosticOperation operation("nickel-suspend-device");
-    nativeSuspendDevice(manager, mode);
+    nativeSuspendDevice(manager, wakeupCount);
 }
-extern "C" __attribute__((visibility("default"))) void kobalt_suspend_device_with_alarm(void *manager, const QString &mode) {
+extern "C" __attribute__((visibility("default"))) void kobalt_suspend_device_with_alarm(void *manager, const QString &wakeupCount) {
+    StandbyInputScope input(NativeLifecycle::protectStandbyInput(), wakeupCount);
     DiagnosticOperation operation("nickel-suspend-device-with-alarm");
-    nativeSuspendDeviceWithAlarm(manager, mode);
+    nativeSuspendDeviceWithAlarm(manager, wakeupCount);
 }
 void (*nativeUsbConnect)(void *);
 void (*nativeUsbWorkflow)(void *);
@@ -228,7 +231,8 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent) {
         const auto leaving = connect(standby(), SIGNAL(resumed()), this, SLOT(standbyResumed()), Qt::DirectConnection);
         if (diagnosticsActive())
             diagnostic("power-observer", {{"standby_request", bool(entering)}, {"standby_resume", bool(leaving)},
-                {"suspend_call", bool(nativeSuspendDevice)}, {"alarm_suspend_call", bool(nativeSuspendDeviceWithAlarm)}}, false);
+                {"suspend_call", bool(nativeSuspendDevice)}, {"alarm_suspend_call", bool(nativeSuspendDeviceWithAlarm)},
+                {"kernel_input_guard", bool(nativePowerStringToFile && (nativeSuspendDevice || nativeSuspendDeviceWithAlarm))}}, false);
     }
     connected_ = a && resuming && b && c && d;
     if (connected_) {
@@ -313,6 +317,9 @@ void NativeLifecycle::finishWake() {
     if (wake) {
         wake();
     }
+}
+bool NativeLifecycle::protectStandbyInput() {
+    return active && !active->blocked() && active->readerInputActive && active->readerInputActive();
 }
 bool NativeLifecycle::canSuspend() {
     // Active storage work must finish before standby. Only low battery

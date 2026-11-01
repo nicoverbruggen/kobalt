@@ -112,6 +112,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
             status("authorization-lost");
         }, false);
     };
+    lifecycle->readerInputActive = [this] { return run.reader && run.reader->isVisible(); };
     lifecycle->beforeStandby = [this] {
         return busy || !run.reader || run.reader->flushBeforeStandby();
     };

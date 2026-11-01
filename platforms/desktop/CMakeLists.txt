@@ -372,6 +372,7 @@ if(BUILD_TESTING)
     add_executable(kobalt-shutdown-tests "${KOBALT_ROOT}/tests/kobo_shutdown.cpp"
         "${KOBALT_ROOT}/platforms/kobo/common/startup_recovery.c"
         "${KOBALT_ROOT}/platforms/kobo/common/native_lifecycle.cpp"
+        "${KOBALT_ROOT}/platforms/kobo/common/standby_input.cpp"
         "${KOBALT_ROOT}/platforms/kobo/common/screensaver_compatibility.cpp")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(kobalt-screensaver-loader-tests "${KOBALT_ROOT}/tests/screensaver_loader.cpp"
@@ -391,7 +392,7 @@ if(BUILD_TESTING)
     add_dependencies(kobalt-shutdown-tests kobalt-screensaver-fixture)
     set_target_properties(kobalt-shutdown-tests PROPERTIES ENABLE_EXPORTS ON)
     target_compile_definitions(kobalt-shutdown-tests PRIVATE KOBALT_CONFIG_DIR="." KOBALT_SYSTEM_FONT_DIRECTORY="")
-    target_link_libraries(kobalt-shutdown-tests PRIVATE kobalt-regression-runtime Qt6::Test)
+    target_link_libraries(kobalt-shutdown-tests PRIVATE kobalt-regression-runtime Qt6::Test Qt6::GuiPrivate)
     target_compile_options(kobalt-shutdown-tests PRIVATE -Wall -Wextra -Werror)
     add_dependencies(kobalt-tests kobalt-shutdown-tests)
     add_test(NAME platform.shutdown COMMAND "${CMAKE_COMMAND}"
@@ -516,10 +517,11 @@ if(BUILD_TESTING)
                 set_target_properties(kobalt-${name}-tests PROPERTIES AUTOMOC ON ENABLE_EXPORTS ON)
             elseif(check STREQUAL "native_lifecycle")
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/native_lifecycle.cpp"
+                    "${KOBALT_ROOT}/platforms/kobo/common/standby_input.cpp"
                     "${KOBALT_ROOT}/platforms/kobo/common/startup_recovery.c"
                     "${KOBALT_ROOT}/platforms/kobo/common/screensaver_compatibility.cpp"
                     "${KOBALT_ROOT}/platforms/kobo/common/native_lifecycle.h")
-                target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime Qt6::Widgets Qt6::Sql)
+                target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime Qt6::Widgets Qt6::Sql Qt6::GuiPrivate)
                 target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}")
                 target_compile_definitions(kobalt-${name}-tests PRIVATE KOBALT_READER_HARDWARE
                     KOBALT_CONFIG_DIR="/unused" KOBALT_SYSTEM_FONT_DIRECTORY="/unused")
@@ -534,8 +536,13 @@ if(BUILD_TESTING)
                 target_link_libraries(kobalt-${name}-tests PRIVATE Qt6::Widgets)
                 target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}" "${source}")
             elseif(check STREQUAL "touch_rotation")
-                target_link_libraries(kobalt-${name}-tests PRIVATE Qt6::Gui)
+                target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/standby_input.cpp")
+                target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime Qt6::GuiPrivate)
                 target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}")
+            elseif(check STREQUAL "standby_input")
+                target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/standby_input.cpp")
+                target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}")
+                target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime Qt6::GuiPrivate)
             elseif(group STREQUAL "component" OR check STREQUAL "reader_orientation")
                 target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-desktop kobalt-core)
             else()
@@ -619,7 +626,7 @@ if(BUILD_TESTING)
         library kosync)
     kobalt_regressions(model font_axes touch_rotation)
     kobalt_regressions(platform reader_orientation font_sources system_fonts nickel_dictionary_selection
-        nickel_reading_pace_cache nickel_reading_save nickel_session_calls nickel_book_menu nickel_font_scale native_progress native_sync_network native_lifecycle usb_removal page_transition_native page_animation)
+        nickel_reading_pace_cache nickel_reading_save nickel_session_calls nickel_book_menu nickel_font_scale native_progress native_sync_network native_lifecycle standby_input usb_removal page_transition_native page_animation)
     kobalt_regressions(engine vertical_spacing source_index columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
         fallback_styles svg_limits image_proportions whitespace links search word_selection reader publisher_markup local_reader document_word_count document_cache alternate_layout)
     kobalt_regressions(component ui acknowledgments kosync_ui)

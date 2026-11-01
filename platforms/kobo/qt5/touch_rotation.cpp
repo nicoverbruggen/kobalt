@@ -1,4 +1,5 @@
 #include "touch_rotation.h"
+#include "../common/standby_input.h"
 
 #include <QGuiApplication>
 #include <QFile>
@@ -84,6 +85,7 @@ void configureTouchRotation(bool enabled, Qt::ScreenOrientation orientation, int
 }
 extern "C" __attribute__((visibility("default"))) QPoint kobalt_touch_map_from_device(const void *self,
                                                                                       const QPoint &point) {
+    standbyTouchAcquired();
     struct Scope {
         bool saved = mappingTouch;
         Scope() {

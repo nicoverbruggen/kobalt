@@ -1921,10 +1921,10 @@ void Reader::pageButton(int direction, quint32 sourceTime, bool userInput) {
         linksActive() || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible() ||
         lightPopup->isVisible())
         return;
-    turnPage(direction, sourceTime, userInput);
+    turnPage(direction, sourceTime, userInput, pageNavigation::InputClock::Key);
 }
 
-void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {
+void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, pageNavigation::InputClock clock) {
     if (annotationSaving) {
         return;
     }
@@ -1936,7 +1936,7 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {
         book->deviceTransition() || appearanceEdit.panelOpen() || appearanceEdit.applying())
         return;
     if (!pageTurnClock.isValid()) pageTurnClock.start();
-    const bool accepted = !userInput || pageTurnFilter.accept(sourceTime, pageTurnClock.elapsed());
+    const bool accepted = !userInput || pageTurnFilter.accept(sourceTime, pageTurnClock.elapsed(), clock);
     if (kobalt::diagnosticsActive())
         kobalt::diagnostic("page-turn-input", {{"direction", direction}, {"source_ms", double(sourceTime)},
             {"accepted", accepted}, {"busy", model->busy()}, {"page", model->page()}}, false);

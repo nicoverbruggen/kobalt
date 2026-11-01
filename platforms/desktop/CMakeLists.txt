@@ -451,7 +451,7 @@ if(BUILD_TESTING)
     add_dependencies(kobalt-tests kobalt-reader-ui-tests)
     foreach(check widgetKeyboardEntry widgetKeyboardAccents widgetKeyboardLayouts widgetKeyboardCase widgetKeyboardLifetime
             pagedListSwipes pagedSwipesRespectControls pagedFontSwipesKeepHolds
-            pageTurnTapFilter holdSourceTime holdTimerDoesNotRepeatOnRelease fontHoldCancellation fontSelectionDoesNotToggle
+            pageTurnTapFilter pageTurnFilterSeparatesInputClocks holdSourceTime holdTimerDoesNotRepeatOnRelease fontHoldCancellation fontSelectionDoesNotToggle
             holdCallbackCanDeleteReader canvasPreservesTouchTime cancelledCanvasTouchRestoresSlider
             canvasCancellationCanDeleteTarget
             canvasCancellationKeepsReentrantGesture

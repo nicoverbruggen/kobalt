@@ -298,6 +298,19 @@ private slots:
         QVERIFY(fallback.accept(8000, 400));
         QVERIFY(!fallback.accept(0, 500)); // Mixed input uses delivery time.
     }
+    void pageTurnFilterSeparatesInputClocks() {
+        pageNavigation::TapFilter filter;
+        using Clock = pageNavigation::InputClock;
+        // Recorded Libra timestamps after suspension: touch includes time
+        // asleep, while page buttons use a clock that excludes it.
+        QVERIFY(filter.accept(4778052, 0, Clock::Pointer));
+        QVERIFY(filter.accept(1233250, 930, Clock::Key));
+        QVERIFY(!filter.accept(1233380, 5000, Clock::Key)); // Queued duplicate.
+        QVERIFY(filter.accept(1236767, 6000, Clock::Key));
+        QVERIFY(!filter.accept(4789322, 6100, Clock::Pointer)); // Mixed duplicate.
+        QVERIFY(filter.accept(4789322, 6300, Clock::Pointer));
+        QVERIFY(filter.accept(1245159, 7962, Clock::Key));
+    }
     void holdSourceTime_data() {
         QTest::addColumn<quint32>("pressed");
         QTest::addColumn<quint32>("released");

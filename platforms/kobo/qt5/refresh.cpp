@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "../display/annotation_damage.h"
 #include "platform/api/kobo_refresh.h"
 #include "refresh.h"
@@ -453,10 +454,12 @@ void pageRefresh(QWidget *widget, bool clean, bool) {
 extern "C" __attribute__((visibility("default"))) void kobalt_reader_flush(QBackingStore *store, const QRegion &region,
                                                                            QWindow *target, const QPoint &offset,
                                                                            const kobalt::platform::FlushFlags &flags) {
+    kobalt::DiagnosticOperation operation("display-flush");
     kobalt::platform::flushReader(store, region, target, offset, flags);
 }
 extern "C" __attribute__((visibility("default"))) void
 kobalt_reader_flush32(QBackingStore *store, const QRegion &region, QWindow *target, const QPoint &offset,
                       const kobalt::platform::FlushFlags32 &flags) {
+    kobalt::DiagnosticOperation operation("display-flush");
     kobalt::platform::flushReader32(store, region, target, offset, flags);
 }

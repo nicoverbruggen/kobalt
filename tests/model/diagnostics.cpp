@@ -55,6 +55,26 @@ int main(int argc, char **argv) {
     kobalt::initializeDiagnostics(directory.path());
     if (!kobalt::diagnosticsActive())
         qFatal("Initialized diagnostics reported inactive");
+    QJsonObject startedOperation, endedOperation;
+    kobalt::setDiagnosticObserver([&](const QJsonObject &entry) {
+        if (entry.value("operation").toString() != "test-operation") return;
+        if (entry.value("event").toString() == "operation-start") startedOperation = entry;
+        if (entry.value("event").toString() == "operation-end") endedOperation = entry;
+    });
+    {
+        kobalt::DiagnosticOperation operation("test-operation");
+        if (startedOperation.isEmpty() || !endedOperation.isEmpty())
+            qFatal("Operation start was not recorded before work");
+    }
+    if (endedOperation.value("operation_id") != startedOperation.value("operation_id") ||
+        endedOperation.value("elapsed_ms").toDouble(-1) < 0 ||
+        !startedOperation.value("main_thread").toBool() || startedOperation.value("thread").toString().isEmpty())
+        qFatal("Operation correlation, duration or thread was lost");
+    kobalt::setDiagnosticObserver({});
+    kobalt::flushDiagnostics();
+    // Normal logs keep the small production limit, including across a queued
+    // profile/mode switch. Verbose retention is checked separately below.
+    kobalt::initializeDiagnostics(directory.path(), false);
     const auto path = (directory.path() + "/" + "events.jsonl");
     auto writer = [] {
         for (int i = 0; i < 600; ++i) {
@@ -186,6 +206,51 @@ int main(int argc, char **argv) {
     if (!sampled.load() || sampledMemory.value("kobalt_rss_kib").toDouble() < 4096 ||
         sampledMemory.value("kobalt_peak_kib").toDouble() < 4096 || grown.back() != 1)
         qFatal("Kobalt's memory share did not follow its base");
+    // Replay more than five minutes at a faster event rate than the device
+    // trace. Preserve its first input, render, standby and final save records.
+    QTemporaryDir verbose;
+    kobalt::initializeDiagnostics(verbose.path(), true);
+    kobalt::diagnostic("power-observer", {{"standby_request", true}, {"standby_resume", true}});
+    kobalt::diagnostic("standby-request");
+    kobalt::diagnostic("standby-resumed");
+    for (int turn = 0; turn < 1200; ++turn) {
+        kobalt::diagnostic("retention-turn", {{"sequence", turn}, {"test_source_ms", turn * 300},
+            {"padding", QString(512, 'x')}});
+        if (turn % 256 == 255) kobalt::flushDiagnostics();
+    }
+    kobalt::diagnostic("retention-final-save");
+    kobalt::flushDiagnostics();
+    const auto verbosePath = verbose.path() + "/events.jsonl";
+    auto retained = read(verbosePath);
+    if (retained.size() <= 256 * 1024 || !retained.contains("standby-request") ||
+        !retained.contains("standby-resumed") || !retained.contains("\"sequence\":0,") ||
+        !retained.contains("\"sequence\":1199,") || !retained.contains("retention-final-save"))
+        qFatal("Verbose trace lost the beginning of a six-minute replay");
+    // Force more than five real 16 MiB rotations in bounded chunks. Context must survive,
+    // while each event file stays bounded and ends on a complete JSON record.
+    for (int batch = 0; batch < 128; ++batch) {
+        for (int i = 0; i < 512; ++i)
+            kobalt::diagnostic("retention-load", {{"batch", batch}, {"row", i}, {"padding", QString(2048, 'x')}});
+        kobalt::flushDiagnostics();
+    }
+    for (int generation = 0; generation <= 5; ++generation) {
+        const auto file = verbosePath + (generation == 0 ? QString() : generation == 1
+            ? QStringLiteral(".previous") : QStringLiteral(".previous.") + QString::number(generation));
+        const auto data = read(file);
+        if (data.isEmpty() || data.size() > 16 * 1024 * 1024 || !data.endsWith('\n'))
+            qFatal("Verbose rotation exceeded its file bound");
+        for (const auto &line : data.split('\n'))
+            if (!line.isEmpty() && !QJsonDocument::fromJson(line).isObject())
+                qFatal("Verbose rotation broke a JSON record");
+    }
+    if (QFile::exists(verbosePath + ".previous.6")) qFatal("Verbose history exceeded five files");
+    const auto oldest = read(verbosePath + ".previous.5");
+    if (oldest.contains("retention-turn")) qFatal("Oldest history was not replaced after five rotations");
+    const auto context = QJsonDocument::fromJson(read(verbose.path() + "/session-context.json")).object();
+    if (context.value("startup").toObject().value("log_limit_bytes").toInt() != 16 * 1024 * 1024 ||
+        context.value("startup").toObject().value("log_history_files").toInt() != 5 ||
+        !context.value("power_observer").toObject().value("standby_resume").toBool())
+        qFatal("Rotation lost startup or power context");
     QTemporaryDir deadline;
     kobalt::initializeDiagnostics(deadline.path(), false);
     const auto deadlinePath = deadline.path() + "/events.jsonl";

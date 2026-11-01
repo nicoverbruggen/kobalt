@@ -164,8 +164,12 @@ int PageAnimation::submit(Ioctl next, int fd, unsigned long request, void *argum
     if (!failed) {
         // Submission wait does not mean the panel has finished its last band.
         uint32_t completion[2] = {original[6], 0};
-        if (next(fd, waitComplete, completion) < 0)
+        DiagnosticOperation operation("display-wait-complete");
+        const int completed = next(fd, waitComplete, completion);
+        if (completed < 0)
             failed = errno ? errno : EIO;
+        if (diagnosticsActive())
+            diagnostic("display-complete", {{"marker", double(original[6])}, {"ok", completed >= 0}}, false);
     }
     if (failed) {
         result_ = PageAnimationResult::Fallback;

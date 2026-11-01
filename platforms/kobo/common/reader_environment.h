@@ -3,6 +3,7 @@
 #include "assets/bundled_fonts.h"
 #include "assets/system_fonts.h"
 #include "storage/reader_storage.h"
+#include "storage/record_writer.h"
 #include "support/diagnostics.h"
 
 namespace kobalt::nickel {
@@ -31,7 +32,8 @@ struct ReaderEnvironment {
 #endif
     }
     void reportSession(const QJsonObject &report) const {
-        if (!paths.sessionReport.isEmpty()) storage::writeJson(paths.sessionReport, report);
+        if (!paths.sessionReport.isEmpty())
+            sessionReports.post([path = paths.sessionReport, report] { return storage::writeJson(path, report); }, {});
     }
     AssetBundle assets{QStringLiteral("/mnt/onboard/.adds/kobalt/assets"), QStringLiteral(KOBALT_VERSION)};
     FontCopies fontCopies;
@@ -63,6 +65,7 @@ struct ReaderEnvironment {
     }
 
 private:
+    mutable storage::RecordWriter sessionReports;
     QString placeholder;
     QStringList systemFonts;
     bool systemFontsReady = false;

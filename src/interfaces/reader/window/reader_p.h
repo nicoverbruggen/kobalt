@@ -14,6 +14,7 @@
 #include "reading/reading_book.h"
 #include "reading/appearance_settings.h"
 #include "reading/reader_session.h"
+#include "reading/page_navigation.h"
 #include "reading/kosync.h"
 #include "interfaces/reader/settings/kosync_page.h"
 #include "reading/bookmark_session.h"
@@ -512,7 +513,9 @@ private:
     void dismissProgressChoice();
     void showProgressChoice();
     void buildProgressChoice(const kobalt::ReadingProgress &shown, int direction, bool located);
-    void turnPage(int direction);
+    void turnPage(int direction, quint32 sourceTime = 0, bool userInput = true);
+    pageNavigation::TapFilter pageTurnFilter;
+    QElapsedTimer pageTurnClock;
     bool pageList(int direction);
     // Runs from a tap or swipe until its page is painted; invalid otherwise.
     QElapsedTimer turnStarted;

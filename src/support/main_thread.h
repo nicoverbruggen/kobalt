@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <QElapsedTimer>
+#include "diagnostics.h"
 
 // The page turn is sacred. While a screen takes input, the main thread must
 // not write storage or wait for another thread: a slow SD card or a busy
@@ -68,6 +69,7 @@ public:
     BlockingOperation(const BlockingOperation &) = delete;
     BlockingOperation &operator=(const BlockingOperation &) = delete;
 private:
+    DiagnosticOperation diagnosticOperation;
     const char *operation;
     const char *reason;
     QElapsedTimer elapsed;

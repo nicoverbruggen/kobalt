@@ -1,6 +1,7 @@
 #pragma once
 #include "qt_compat.h"
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QJsonObject>
 #include <QString>
 #include <functional>
@@ -14,6 +15,19 @@ void pauseDiagnostics(bool paused);
 bool diagnosticsActive();
 void initializeDiagnostics(const QString &directory, bool detailed = true);
 bool diagnosticsRequested(const QString &profile);
+// Start/end records survive an unfinished operation. They enqueue only small
+// fields; JSON formatting and file writes stay on the diagnostic worker.
+class DiagnosticOperation {
+public:
+    explicit DiagnosticOperation(const char *operation);
+    ~DiagnosticOperation();
+    DiagnosticOperation(const DiagnosticOperation &) = delete;
+    DiagnosticOperation &operator=(const DiagnosticOperation &) = delete;
+private:
+    const char *operation;
+    quint64 id = 0;
+    QElapsedTimer elapsed;
+};
 enum class DiagnosticSeverity { Activity, Warning, Error };
 // Normal activity is written in unsynced batches. Warnings, errors and
 // explicit lifecycle flushes sync the batch. Formatting runs on the worker.

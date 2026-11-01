@@ -113,7 +113,7 @@ void setViolationHandler(std::function<void(const char *)> value) {
     handler = std::move(value);
 }
 BlockingOperation::BlockingOperation(const char *name, bool enabled)
-    : operation(name), reason(allowed), observe(enabled && mainThread() &&
+    : diagnosticOperation(enabled ? name : nullptr), operation(name), reason(allowed), observe(enabled && mainThread() &&
         (!eventsOnly || delivering > baseline)) {
     if (enabled)
         blocking(name);

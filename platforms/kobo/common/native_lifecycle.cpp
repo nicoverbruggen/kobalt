@@ -150,6 +150,16 @@ bool NativeLifecycle::eventFilter(QObject *object, QEvent *event) {
     return false;
 }
 bool (*nativeCanSuspend)(void *);
+void (*nativeSuspendDevice)(void *, const QString &);
+void (*nativeSuspendDeviceWithAlarm)(void *, const QString &);
+extern "C" __attribute__((visibility("default"))) void kobalt_suspend_device(void *manager, const QString &mode) {
+    DiagnosticOperation operation("nickel-suspend-device");
+    nativeSuspendDevice(manager, mode);
+}
+extern "C" __attribute__((visibility("default"))) void kobalt_suspend_device_with_alarm(void *manager, const QString &mode) {
+    DiagnosticOperation operation("nickel-suspend-device-with-alarm");
+    nativeSuspendDeviceWithAlarm(manager, mode);
+}
 void (*nativeUsbConnect)(void *);
 void (*nativeUsbWorkflow)(void *);
 void (*nativeAboutUsbConnect)(void *);
@@ -209,6 +219,17 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent) {
     if (plugManager) {
         connect(plugManager(), SIGNAL(plugged()), this, SLOT(usbPlugged()), Qt::DirectConnection);
     }
+    // Standby while a reading page stays visible is separate from the sleep
+    // screen workflow. Observe the native signals without requesting a wakeup.
+    const auto standby = symbol<QObject *(*)()>("_ZN12PowerManager14sharedInstanceEv");
+    if (standby && standby()) {
+        const auto entering = connect(standby(), SIGNAL(aboutToSuspend(PermissionRequest*)),
+                                      this, SLOT(standbyRequested()), Qt::DirectConnection);
+        const auto leaving = connect(standby(), SIGNAL(resumed()), this, SLOT(standbyResumed()), Qt::DirectConnection);
+        if (diagnosticsActive())
+            diagnostic("power-observer", {{"standby_request", bool(entering)}, {"standby_resume", bool(leaving)},
+                {"suspend_call", bool(nativeSuspendDevice)}, {"alarm_suspend_call", bool(nativeSuspendDeviceWithAlarm)}}, false);
+    }
     connected_ = a && resuming && b && c && d;
     if (connected_) {
         active = this;
@@ -222,6 +243,12 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent) {
     connect(testTimer, &QTimer::timeout, this, &NativeLifecycle::testCommand);
     testTimer->start(100);
 #endif
+}
+void NativeLifecycle::standbyRequested() {
+    if (diagnosticsActive()) diagnostic("standby-request", {}, false);
+}
+void NativeLifecycle::standbyResumed() {
+    if (diagnosticsActive()) diagnostic("standby-resumed", {}, false);
 }
 void NativeLifecycle::usbPlugged() {
     expectingUsbPrompt = true;

@@ -196,9 +196,12 @@ private:
             // The writer cannot be destroyed while `running` is set. A write
             // that throws counts as failed, so `running` is always cleared.
             bool saved = false;
-            try {
-                saved = write();
-            } catch (...) {
+            {
+                DiagnosticOperation operation("background-profile-write");
+                try {
+                    saved = write();
+                } catch (...) {
+                }
             }
             try {
                 if (done)

@@ -38,6 +38,7 @@ struct ReaderMarkupFrame {
     int resolvedRanges = 0;
 };
 struct ReaderFrame {
+    quint64 renderId = 0;
     int turnDirection = 0;
     QImage image;
     ReaderMarkupFrame markup;
@@ -192,6 +193,7 @@ public:
     void rangeRectGroups(QVector<QPair<QString, QString>> ranges,
                          std::function<void(QVector<QVector<QRect>>)> finished);
     void resize(QSize size);
+    quint64 renderId() const { return frame.renderId; }
     bool busy() const {
         return running;
     }

@@ -269,10 +269,13 @@ void Reader::paintTurn() {
     if (kobalt::refreshOnTurn(mode, pagesSinceFlash, chapterStart))
         requestFlash(mode == kobalt::ScreenRefresh::Smart || mode == kobalt::ScreenRefresh::Chapter ? "chapter"
                                                                                                     : "pages");
+    if (kobalt::diagnosticsActive())
+        kobalt::diagnostic("page-paint-start", {{"render_id", double(model->renderId())}, {"page", model->page()}}, false);
     page->refreshContent(true, true);
     if (turnStarted.isValid()) {
         kobalt::diagnostic("page-turn-painted",
-                           {{"elapsed_ms", turnStarted.nsecsElapsed() / 1e6},
+                           {{"render_id", double(model->renderId())}, {"page", model->page()},
+                            {"elapsed_ms", turnStarted.nsecsElapsed() / 1e6},
                             {"render_ms", rendered},
                             {"paint_ms", painting.nsecsElapsed() / 1e6}},
                            false);

@@ -24,6 +24,8 @@ Use [Release evaluation](doc/release-evaluation.md) to compare a candidate with 
 
 Flag suboptimal approaches before extending them. Identify duplicated build logic, application-side SDK workarounds, dependence on an old worktree, unnecessary rebuilds and unclear ownership. Explain the issue and propose a simpler approach.
 
+Kobo diagnostic packages use the `qt5-diagnostic` and `qt6-diagnostic` presets. See [page-turn diagnostics](doc/validation.md#page-turn-diagnostics) for opt-in markers, event meanings and timing limits. They use the regular reader without the evaluation player.
+
 Do not record fixed test, case, assertion or screenshot totals in documentation or these instructions. Describe coverage and verification commands instead. Use `ctest --preset mac -N`, with optional `-L` or `-R` filters, for the current test inventory. Keep meaningful fixture sizes, limits and measured durations.
 
 When adding a UI screen that needs screenshot coverage, include its scenes in the full gallery in the same change. When adding or removing screenshot scenes, update the full-gallery expected count in `tests/desktop.cpp` in that change. Run `cmake --build --preset mac-screenshots` from `platforms/desktop/` to verify that the complete collection matches that count.

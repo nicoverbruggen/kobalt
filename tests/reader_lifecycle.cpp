@@ -1805,8 +1805,10 @@ private slots:
         host.window()->wakeReader();
         QVERIFY(host.window()->isVisible());
         QTRY_COMPARE(host.window()->size(), screenSize);
+        QTest::qWait(210);
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+        QTest::qWait(210);
         host.window()->pageButton(-1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 1);
     }
@@ -1863,7 +1865,7 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
     }
 
-    void pageGestureBurstKeepsOnePendingTurn() {
+    void pageGestureBurstIgnoresRapidTurns() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
         QSignalSpy opened(&host, &ReaderFixture::opened);
@@ -1888,12 +1890,14 @@ private slots:
         QVERIFY(host.session()->busy());
         for (int i = 0; i < 100; ++i)
             page->tapped(forward);
-        QTRY_COMPARE(host.session()->page(), 4);
+        QTRY_COMPARE(host.session()->page(), 3);
         QTRY_VERIFY(!host.session()->busy());
+        QTest::qWait(210);
         page->swiped(1);
         page->swiped(1);
         page->swiped(-1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 4);
+        QTest::qWait(210);
         page->tapped(forward);
         page->tapped(forward);
         page->tapped(center);
@@ -1901,7 +1905,7 @@ private slots:
         QTRY_VERIFY(!host.session()->busy());
         QTest::qWait(30);
         QCOMPARE(host.session()->page(), 5);
-        // Opening controls discarded the buffered second turn.
+        // The rapid second turn was ignored; the menu tap still works.
         auto *settings = host.window()->findChild<QPushButton *>("rrSettings");
         QVERIFY(settings);
         QTRY_VERIFY(settings->isVisible() && settings->isEnabled());

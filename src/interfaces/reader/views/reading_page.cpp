@@ -887,6 +887,7 @@ bool ReadingPage::event(QEvent *event) {
 void ReadingPage::beginPointer(QPointF point, const QInputEvent *event) {
     cancelHold();
     tracking = true;
+    pressTime = quint32(event->timestamp());
     moved = consumed = false;
     origin = latest = point;
     if (!revealedLinks.isEmpty()) {
@@ -1112,6 +1113,12 @@ void ReadingPage::finishGesture() {
     if (!tracking)
         return;
     tracking = false;
+    // A navigation callback can destroy the reader.
+    struct SourceTime {
+        QPointer<ReadingPage> page;
+        ~SourceTime() { if (page) page->gestureTime = 0; }
+    } sourceTime{this};
+    gestureTime = pressTime;
     if (!revealedLinks.isEmpty()) {
         clearRevealedPress();
         if (!moved && !consumed && tapped)

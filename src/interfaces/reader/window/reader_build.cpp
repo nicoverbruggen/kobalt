@@ -356,7 +356,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
         refreshRenderNotice();
     };
     this->model->turnBoundary = [this](int direction) {
-        turnPage(direction);
+        turnPage(direction, 0, false);
     };
     connect(QGuiApplication::primaryScreen(), &QScreen::geometryChanged, this, [this](const QRect &geometry) {
         if (isVisible() && !closing)
@@ -1587,7 +1587,7 @@ void Reader::connectPageInput() {
             lookupPending || appearanceEdit.preview() || general->isVisible() || choices->isVisible() ||
             topControls->isVisible())
             return;
-        turnPage(model->state().value("page_progression_rtl").toBool() ? -direction : direction);
+        turnPage(model->state().value("page_progression_rtl").toBool() ? -direction : direction, page->gestureTimestamp());
     };
     page->tapped = [this](QPoint point) {
         const QPoint bodyPoint = point - QPoint(0, page->topHeight());
@@ -1656,7 +1656,7 @@ void Reader::connectPageInput() {
         const int direction = action == tapZones::Action::Previous ? -1 : 1;
         const bool reverse =
             layout == tapZones::Layout::LeftRight && model->state().value("page_progression_rtl").toBool();
-        turnPage(reverse ? -direction : direction);
+        turnPage(reverse ? -direction : direction, page->gestureTimestamp());
     };
 }
 

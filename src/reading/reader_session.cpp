@@ -2042,6 +2042,7 @@ void ReaderSession::dispatch(bool pageTurn) {
             },
             Qt::QueuedConnection);
     };
+    if (diagnosticsActive()) diagnostic("render-queued", {{"render_id", double(job)}, {"delta", delta}}, false);
     kobalt::qt::invoke(
         engineWorker(),
         [guard, engine, requested, size, anchor, delta, target, job, lease, progress, positions, markup,
@@ -2050,7 +2051,7 @@ void ReaderSession::dispatch(bool pageTurn) {
             const bool timing = diagnosticsActive();
             QElapsedTimer timer;
             if (timing) timer.start();
-            if (timing) diagnostic("render-start", {{"page_turn", delta != 0}, {"jump", !anchor.isEmpty() || target >= 0}},
+            if (timing) diagnostic("render-start", {{"render_id", double(job)}, {"page_turn", delta != 0}, {"jump", !anchor.isEmpty() || target >= 0}},
                        delta == 0);
             const auto before = engine->state();
             const auto oldSize = engine->viewport();
@@ -2088,11 +2089,12 @@ void ReaderSession::dispatch(bool pageTurn) {
                 engine->preparedDamage(oldImage, result.image.cacheKey(), &result.damage))
                 result.damageFrom = oldImage;
             if (timing)
-                diagnostic("render-end", {{"elapsed_ms", double(timer.elapsed())}, {"failed", !result.error.isEmpty()}},
+                diagnostic("render-end", {{"render_id", double(job)}, {"page", engine->page()}, {"elapsed_ms", double(timer.elapsed())}, {"failed", !result.error.isEmpty()}},
                            result.error.isEmpty() ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
             else
                 diagnostic("render-end", {{"failed", !result.error.isEmpty()}},
                            result.error.isEmpty() ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
+            result.renderId = job;
             const bool failed = !result.error.isEmpty();
             kobalt::qt::invoke(
                 qApp,
@@ -2112,6 +2114,7 @@ void ReaderSession::dispatch(bool pageTurn) {
                                 return;
                             }
                             guard->frame = result;
+                            if (diagnosticsActive()) diagnostic("frame-ready", {{"render_id", double(job)}, {"page", guard->page()}}, false);
                             // A rejected jump or appearance edit can retain a
                             // usable layout while reporting the command error.
                             guard->layoutReady_ = !result.image.isNull() && result.state.value("pages").toInt() > 0;

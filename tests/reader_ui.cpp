@@ -1,5 +1,6 @@
 #include "interfaces/reader/panels/choice_screen.h"
 #include "ui/hold_timer.h"
+#include "reading/page_navigation.h"
 #include "support/paint_regions.h"
 #include "interfaces/reader/ui/controls/keyboard.h"
 #include <QLineEdit>
@@ -276,6 +277,25 @@ private slots:
         QCOMPARE(defaults, 1);
         QCOMPARE(selections, 0);
         QCOMPARE(counter->text(), first);
+    }
+    void pageTurnTapFilter() {
+        pageNavigation::TapFilter filter;
+        QVERIFY(filter.accept(1000, 0));
+        QVERIFY(!filter.accept(1130, 5000)); // A queued tap is still only 130 ms later.
+        QVERIFY(!filter.accept(1199, 5100));
+        QVERIFY(filter.accept(1200, 5101)); // Ignored taps do not extend the window.
+        QVERIFY(filter.accept(2200, 5102)); // Widely spaced queued taps remain valid.
+        QVERIFY(!filter.accept(2100, 5103)); // Reject stale input.
+        pageNavigation::TapFilter wrap;
+        QVERIFY(wrap.accept(0xffffffc0u, 0));
+        QVERIFY(!wrap.accept(0x41u, 10));
+        QVERIFY(wrap.accept(0x88u, 20)); // Exactly 200 ms across source-clock wrap.
+        pageNavigation::TapFilter fallback;
+        QVERIFY(fallback.accept(0, 0));
+        QVERIFY(!fallback.accept(0, 199));
+        QVERIFY(fallback.accept(0, 200));
+        QVERIFY(fallback.accept(8000, 400));
+        QVERIFY(!fallback.accept(0, 500)); // Mixed input uses delivery time.
     }
     void holdSourceTime_data() {
         QTest::addColumn<quint32>("pressed");

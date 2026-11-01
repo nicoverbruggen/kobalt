@@ -116,6 +116,10 @@ Outputs are `build/kobo-qt5/` and `build/kobo-qt6/`. Each contains `libkobalt.so
 
 `bash platforms/kobo/build.sh qt5-eval` and `qt6-eval` build evaluation packages in `build/kobo-qt5-eval/` and `build/kobo-qt6-eval/`. They add the scenario player, the scenario file, the benchmark book and the diagnostics switch; see [Release evaluation](release-evaluation.md#device-scenarios).
 
+### Page-turn diagnostic package
+
+Run `bash platforms/kobo/build.sh qt5-diagnostic` for firmware 4, or `qt6-diagnostic` for firmware 5 and 6. These use the regular reader with verbose diagnostics compiled on. They do not include the evaluation player or test books. Outputs stay in `build/kobo-qt5-diagnostic/` or `build/kobo-qt6-diagnostic/`; package names end in `-diagnostic.zip`. Set `KOBALT_RELEASE_VERSION` to give a test package a distinct displayed version. Normal packages keep verbose logging off unless the profile contains `.adds/kobalt/diagnostics-enabled` or `KOBALT_DIAGNOSTICS=1` is set at startup. See [page-turn diagnostics](validation.md#page-turn-diagnostics) for event meanings and limits.
+
 ## Android
 
 The Android project builds a signed debug APK through Qt's standard CMake `apk` target. It uses the prepared multi-architecture kobuild image; Docker selects its native host variant. Both variants target Android `arm64-v8a`.

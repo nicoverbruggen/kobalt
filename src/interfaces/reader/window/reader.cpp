@@ -613,9 +613,17 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
         type == QEvent::KeyPress) {
         kobalt::diagnosticInput();
     }
+    if (kobalt::diagnosticsActive() && (type == QEvent::TouchBegin || type == QEvent::TouchEnd ||
+        type == QEvent::TouchCancel || type == QEvent::MouseButtonPress || type == QEvent::MouseButtonRelease ||
+        type == QEvent::KeyPress || type == QEvent::KeyRelease)) {
+        const bool input = type != QEvent::TouchCancel;
+        kobalt::diagnostic("input-event", {{"type", int(type)},
+            {"source_ms", input ? double(static_cast<QInputEvent *>(event)->timestamp()) : 0},
+            {"spontaneous", event->spontaneous()}}, false);
+    }
     // Widgets that forward a press, such as a canvas, send a copy without the
     // input's time. Keep the time of the press the platform delivered.
-    if ((type == QEvent::TouchBegin || type == QEvent::MouseButtonPress) && event->spontaneous())
+    if ((type == QEvent::TouchBegin || type == QEvent::MouseButtonPress || type == QEvent::KeyPress) && event->spontaneous())
         lastPressTime = quint32(static_cast<QInputEvent *>(event)->timestamp());
     if (watched == bookmarkList && type == QEvent::Hide)
         closeMarksActions();
@@ -1905,24 +1913,31 @@ void Reader::pageButton(int direction) {
         linksActive() || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible() ||
         lightPopup->isVisible())
         return;
-    turnPage(direction);
+    turnPage(direction, lastPressTime);
 }
 
-void Reader::turnPage(int direction) {
+void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {
     if (annotationSaving) {
         return;
     }
     if (pageScrubber)
         pageScrubber->cancel();
-    if (kobalt::diagnosticsActive())
-        turnStarted.start();
-    else
-        turnStarted.invalidate();
     kobalt::diagnosticInput();
     if (finishDialog || syncDialog || kosyncDialog || annotationErrorDialog || formattingWarningDialog || settingsWriteErrorDialog ||
         !model->canTurn() || closing || exitPending || lifecycleHidden || services.suspended() ||
         book->deviceTransition() || appearanceEdit.panelOpen() || appearanceEdit.applying())
         return;
+    if (!pageTurnClock.isValid()) pageTurnClock.start();
+    const bool accepted = !userInput || pageTurnFilter.accept(sourceTime, pageTurnClock.elapsed());
+    if (kobalt::diagnosticsActive())
+        kobalt::diagnostic("page-turn-input", {{"direction", direction}, {"source_ms", double(sourceTime)},
+            {"accepted", accepted}, {"busy", model->busy()}, {"page", model->page()}}, false);
+    if (!accepted) return;
+    if (kobalt::diagnosticsActive()) {
+        if (!turnStarted.isValid()) turnStarted.start();
+    } else {
+        turnStarted.invalidate();
+    }
     if (!annotationMode && !model->busy() && direction > 0 && model->nextPage() == model->page() &&
         book->offerFinish()) {
         showFinishChoice();
@@ -2443,18 +2458,11 @@ void Reader::save(bool snapshot, bool background, bool persist) {
             pages.append(p);
         return pages;
     }();
-    // The report is for inspection. A save that waits for storage writes it
-    // in place, after dropping an older queued report; any other save queues
-    // it. Pending storage saves include the queue, so sleep, USB and close
-    // still wait for it.
+    // Inspection reports never write or wait on the GUI thread. Pending
+    // storage saves include this queue at sleep, USB and close.
     if (!reportWriter)
         reportWriter = std::make_unique<storage::RecordWriter>();
-    if (persist && !background) {
-        reportWriter->cancel();
-        writeJson(book->paths().stateReport, state);
-    } else {
-        reportWriter->post([path = book->paths().stateReport, state] { return writeJson(path, state); }, {});
-    }
+    reportWriter->post([path = book->paths().stateReport, state] { return writeJson(path, state); }, {});
 }
 
 }

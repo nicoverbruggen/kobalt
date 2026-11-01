@@ -344,7 +344,7 @@ if(BUILD_TESTING)
             appearanceCloseDuringPreview appearanceSleepDuringFirstEdit appearanceDragsDuringPreview
             pageTurnsResumeWhenReaderIsShownAfterSleep clockStopsWhileReaderIsHidden closeWithPendingBookmark
             closeWaitsForLocalSave closeRetriesRequiredNativeSaves quitAfterFailedLocalSaveRetry closeWaitsForNativeTimeBeforePosition revokedNativeDrainRetainsLocalSave
-            pageGestureBurstKeepsOnePendingTurn exitThroughReaderAndReopen exitGuardUsesTapTime staleSearchReplyIgnored searchSurvivesReflow
+            pageGestureBurstIgnoresRapidTurns exitThroughReaderAndReopen exitGuardUsesTapTime staleSearchReplyIgnored searchSurvivesReflow
             searchHighlightClearsOnReflow
             sleepRequestFreezesOrientationBeforeHandoff closePublishesHeldOrientationBeforeBackgroundPaint
             closeRestoresOrientationBeforeBackgroundPaint rotationOwnership customSleepScreenIsOptIn
@@ -450,7 +450,7 @@ if(BUILD_TESTING)
     add_dependencies(kobalt-tests kobalt-reader-ui-tests)
     foreach(check widgetKeyboardEntry widgetKeyboardAccents widgetKeyboardLifetime
             pagedListSwipes pagedSwipesRespectControls pagedFontSwipesKeepHolds
-            holdSourceTime holdTimerDoesNotRepeatOnRelease fontHoldCancellation fontSelectionDoesNotToggle
+            pageTurnTapFilter holdSourceTime holdTimerDoesNotRepeatOnRelease fontHoldCancellation fontSelectionDoesNotToggle
             holdCallbackCanDeleteReader canvasPreservesTouchTime cancelledCanvasTouchRestoresSlider
             canvasCancellationCanDeleteTarget
             canvasCancellationKeepsReentrantGesture

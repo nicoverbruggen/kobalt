@@ -93,6 +93,8 @@ public:
     void revealLinks(const QVector<QRect> &rectangles, const QVector<QRect> &footnotes = {});
     std::function<void(QPoint)> tapped;
     std::function<void(int)> swiped;
+    // Available only while a completed input gesture calls tapped or swiped.
+    quint32 gestureTimestamp() const { return gestureTime; }
     std::function<void()> annotationRequested;
     ReadingPage(QWidget *parent, std::function<void()> cancelAnimation);
     // Copy the cached page and chrome without widget layout or backing-store work.
@@ -173,6 +175,7 @@ private:
     kobalt::ui::BrightnessGesture brightnessGesture;
     void updatePointer();
     void finishGesture();
+    quint32 pressTime = 0, gestureTime = 0;
 };
 
 }

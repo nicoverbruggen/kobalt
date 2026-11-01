@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <unistd.h>
 #include <utility>
 
@@ -432,6 +433,7 @@ public:
     }
     void execute(const QString &statement) { run(db, statement); }
     void begin() {
+        if (diagnosticsActive()) writeTrace = std::make_unique<DiagnosticOperation>("profile-transaction");
         Profile::instance().beginWrite();
         execute("BEGIN IMMEDIATE");
         transaction_ = writing_ = true;
@@ -444,10 +446,12 @@ public:
         // Many write transactions only read or find the record unchanged.
         if (writing_ && scalar(db, "SELECT total_changes()").toLongLong() != changes)
             Profile::instance().committed();
+        writeTrace.reset();
     }
     QSqlDatabase db;
 
 private:
+    std::unique_ptr<DiagnosticOperation> writeTrace;
     bool transaction_ = false, writing_ = false;
     qint64 changes = 0;
 };

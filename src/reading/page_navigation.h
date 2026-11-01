@@ -4,6 +4,27 @@
 #include <QJsonObject>
 
 namespace kobalt::pageNavigation {
+// Compare press times, not delivery times: a slow paint can queue both taps.
+// Rejected taps do not extend the window after the last accepted navigation.
+class TapFilter {
+public:
+    bool accept(quint32 sourceTime, qint64 deliveredTime) {
+        if (seen) {
+            const auto elapsed = sourceTime && previousSource
+                ? qint64(quint32(sourceTime - previousSource)) : deliveredTime - previousDelivery;
+            if (elapsed < 200 || (sourceTime && previousSource && elapsed >= 0x80000000LL))
+                return false;
+        }
+        seen = true;
+        previousSource = sourceTime;
+        previousDelivery = deliveredTime;
+        return true;
+    }
+private:
+    bool seen = false;
+    quint32 previousSource = 0;
+    qint64 previousDelivery = 0;
+};
 enum class BarButtons { Pages, Chapters };
 inline constexpr BarButtons barButtonsModes[] = {BarButtons::Chapters, BarButtons::Pages};
 inline constexpr auto barButtonsKey = "navigation_bar_buttons";

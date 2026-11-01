@@ -9,6 +9,8 @@ namespace kobalt {
 extern void (*nativeShowSleepView)(void *);
 extern void (*nativeHideSleepView)(void *);
 extern bool (*nativeCanSuspend)(void *);
+extern void (*nativeSuspendDevice)(void *, const QString &);
+extern void (*nativeSuspendDeviceWithAlarm)(void *, const QString &);
 extern void (*nativeUsbConnect)(void *);
 extern void (*nativeUsbWorkflow)(void *);
 extern void (*nativeAboutUsbConnect)(void *);
@@ -70,6 +72,8 @@ public:
     bool testSleepCovered = false, testSleepViewReady = false;
 #endif
 private slots:
+    void standbyRequested();
+    void standbyResumed();
     void usbPlugged();
     void aboutToSleep();
     void resumed();

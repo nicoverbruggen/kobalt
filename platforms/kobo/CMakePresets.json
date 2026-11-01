@@ -16,6 +16,18 @@
       "cacheVariables": {"CMAKE_BUILD_TYPE": "RelWithDebInfo", "KOBALT_QT_MAJOR": "6"}
     },
     {
+      "name": "qt5-diagnostic",
+      "inherits": "qt5",
+      "binaryDir": "${sourceDir}/../../build/kobo-qt5-diagnostic",
+      "cacheVariables": {"KOBALT_VERBOSE_DIAGNOSTICS": "ON"}
+    },
+    {
+      "name": "qt6-diagnostic",
+      "inherits": "qt6",
+      "binaryDir": "${sourceDir}/../../build/kobo-qt6-diagnostic",
+      "cacheVariables": {"KOBALT_VERBOSE_DIAGNOSTICS": "ON"}
+    },
+    {
       "name": "qt5-eval",
       "inherits": "qt5",
       "binaryDir": "${sourceDir}/../../build/kobo-qt5-eval",
@@ -31,6 +43,8 @@
   "buildPresets": [
     {"name": "qt5", "configurePreset": "qt5", "jobs": 2, "targets": ["package"]},
     {"name": "qt6", "configurePreset": "qt6", "jobs": 2, "targets": ["package"]},
+    {"name": "qt5-diagnostic", "configurePreset": "qt5-diagnostic", "jobs": 2, "targets": ["package"]},
+    {"name": "qt6-diagnostic", "configurePreset": "qt6-diagnostic", "jobs": 2, "targets": ["package"]},
     {"name": "qt5-eval", "configurePreset": "qt5-eval", "jobs": 2, "targets": ["package"]},
     {"name": "qt6-eval", "configurePreset": "qt6-eval", "jobs": 2, "targets": ["package"]}
   ]

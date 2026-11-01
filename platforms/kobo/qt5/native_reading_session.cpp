@@ -101,6 +101,7 @@ void flushStart(std::function<void()> done) {
     const bool nonblocking = NativeLifecycle::usbSaveAllowed();
     auto completion = std::make_shared<std::function<void()>>(std::move(done));
     if (!kobalt::qt::invoke(engine, [engine, nonblocking, completion] {
+            DiagnosticOperation operation("nickel-session-start-flush");
             QElapsedTimer timer;
             timer.start();
             bool saved = false;
@@ -201,6 +202,7 @@ void flushLater(const std::weak_ptr<NativeReadingSession *> &guard, std::functio
     // wrappers or GUI-owned Volume instances move to a different thread.
     auto completion = std::make_shared<std::function<void(bool)>>(std::move(done));
     if (!kobalt::qt::invoke(engine, [engine, guard, completion] {
+            DiagnosticOperation operation("nickel-session-stop-flush");
             bool saved = false;
             if (!guard.expired() && NativeLifecycle::nativeSessionSaveAllowed() && api().open()) {
                 QElapsedTimer timer;

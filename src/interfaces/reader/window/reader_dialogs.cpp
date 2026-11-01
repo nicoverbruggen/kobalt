@@ -524,7 +524,8 @@ void Reader::askRemoveBookmark(const QString &position) {
         if (remove) {
             bookmarks->remove(position);
             page->bookmarked = bookmarks->marked(model->page());
-            bookmarkList->showBookmarks(bookmarkRows());
+            if (bookmarkList->isVisible() && !bookmarkList->annotationsShown())
+                bookmarkList->showBookmarks(bookmarkRows());
         }
         refresh();
     };

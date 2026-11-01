@@ -1496,6 +1496,12 @@ void checkPinnedBookmarks(int preset, bool dark) {
         QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), i + 1);
         QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), i + 1);
         if (i == 0) {
+            QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+            QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 0);
+            QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), 0);
+            QVERIFY(!fixture.visible("rrRemoveBookmark"));
+            QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+            QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), 1);
             firstPosition = fixture.stored("bookmarks.json", "bookmarks").first().toObject()["position"].toString();
             fixBookmarkDates(fixture);
         }
@@ -1550,7 +1556,6 @@ void checkPinnedBookmarks(int preset, bool dark) {
             QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
             QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
             QVERIFY(qobject_cast<QLabel *>(fixture.widget("rrRemoveBookmarkDetail"))->text().contains(strings::get("bookmarks.remove_pinned_description")));
-            QVERIFY(capture(fixture, name + "-pinned-bookmark-remove"));
             QVERIFY(fixture.press("rrKeepBookmark"));
             QTRY_VERIFY(!fixture.visible("rrRemoveBookmark"));
         }
@@ -1702,6 +1707,41 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QVERIFY(fixture.press("rrPinCancel"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
     QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), QString("diamond"));
+
+    QVERIFY(fixture.press("rrBookmarkListClose"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
+    QVERIFY(fixture.press("rrPinnedBookmark0"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position").toString(), firstPosition);
+    auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+    QTRY_VERIFY(page->bookmarked);
+    const auto beforeRemoval = fixture.stored("bookmarks.json", "bookmarks");
+    QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+    QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
+    QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrRemoveBookmarkPrompt"))->text(),
+             strings::get("bookmarks.remove_pinned_prompt"));
+    QVERIFY(qobject_cast<QLabel *>(fixture.widget("rrRemoveBookmarkDetail"))->text()
+                .contains(strings::get("bookmarks.remove_pinned_description")));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-remove"));
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks"), beforeRemoval);
+    QVERIFY(fixture.press("rrKeepBookmark"));
+    QTRY_VERIFY(!fixture.visible("rrRemoveBookmark"));
+    QVERIFY(page->bookmarked);
+    QVERIFY(!fixture.visible("rrBookmarkList"));
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks"), beforeRemoval);
+    QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+    QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
+    QVERIFY(fixture.press("rrConfirmRemoveBookmark"));
+    QTRY_VERIFY(!fixture.visible("rrRemoveBookmark"));
+    QTRY_VERIFY(!page->bookmarked);
+    QVERIFY(!fixture.visible("rrBookmarkList"));
+    auto remaining = beforeRemoval;
+    for (int i = 0; i < remaining.size(); ++i)
+        if (remaining[i].toObject()["position"].toString() == firstPosition) {
+            remaining.removeAt(i);
+            break;
+        }
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks"), remaining);
 }
 
 void checkPageAnimationCompatibility(int preset, bool dark);

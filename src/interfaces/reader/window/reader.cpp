@@ -1978,6 +1978,14 @@ void Reader::syncBookmarks() {
 }
 
 void Reader::toggleBookmark() {
+    if (model->busy())
+        return;
+    const auto &list = bookmarks->bookmarks();
+    for (int i = 0; i < list.size(); ++i)
+        if (list[i].pinned() && bookmarks->page(i) == model->page()) {
+            askRemoveBookmark(list[i].position);
+            return;
+        }
     if (bookmarks->toggle(model->page()) != kobalt::BookmarkSession::Toggle::Removed)
         return;
     syncBookmarks();

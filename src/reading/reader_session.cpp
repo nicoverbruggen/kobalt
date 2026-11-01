@@ -329,7 +329,8 @@ static bool openAtPlatform(ReaderModel &engine, const PositionCodec &codec, cons
     return true;
 }
 
-void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)> finished, OpeningProgress progress) {
+void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)> finished, OpeningProgress progress,
+                         std::function<void(QImage)> coverReady) {
     syncDigest_.clear();
     syncFilenameDigest_ = kosync::filenameDigest(request.syncFilename.isNull() ? request.path : request.syncFilename);
     if (ownsLease_)
@@ -359,6 +360,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                layoutCachePath = std::move(request.layoutCachePath);
     const auto documentCachePath = std::move(request.documentCachePath);
     const auto userStyleSheetPath = std::move(request.userStyleSheetPath);
+    const auto coverPath = std::move(request.coverImagePath);
     const auto factory = std::move(request.resources);
     running = true;
     retiring = false;
@@ -401,8 +403,21 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
         [guard, engine, path, identity, size, saved, nativeLocation, lease, factory, finished, report, systemFont,
          layoutCachePath, documentCachePath, retainedHash, retainedSettings, latest, job, positions, pinnedAppearance,
          retainedWarning, retainedDetails, userStyleSheetPath, appearanceDefaults, markup, markupGeneration,
-         neighbourCount, restartAtStart]() mutable {
+         neighbourCount, restartAtStart, coverReady, coverPath]() mutable {
             EngineJob activity;
+            bool coverPublished = false;
+            const auto publishCover = [&] {
+                if (coverPublished || !coverReady || !lease || lease->revoked())
+                    return;
+                auto image = engine->coverImage({2048, 2048}, coverPath);
+                coverPublished = !image.isNull();
+                kobalt::qt::invoke(qApp, [guard, lease, job, coverReady, image = std::move(image)]() mutable {
+                    if (guard && guard->revision == job && !lease->revoked())
+                        coverReady(std::move(image));
+                }, Qt::QueuedConnection);
+            };
+            if (!coverPath.isEmpty())
+                publishCover();
             QElapsedTimer timer;
             timer.start();
             diagnostic("open-start");
@@ -559,6 +574,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 if (retainedHit && outcome.ready() && !engine->rebindResources(resources, publication.sizes()))
                     retainedHit = false;
                 if (retainedHit && outcome.ready()) {
+                    publishCover();
                     const auto modelStart = timer.elapsed();
                     if (!engine->applyAppearance(saved, size))
                         outcome = OpeningResult::failed(OpeningFailureKind::InvalidContent,
@@ -619,7 +635,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     const auto modelStart = timer.elapsed();
                     report(OpeningStage::Text, 0);
                     if (outcome.ready() &&
-                        engine->openResources(resources, publication.sizes(), size, saved, nullptr, report, &outcome)) {
+                        engine->openResources(resources, publication.sizes(), size, saved, nullptr, report,
+                                              &outcome, publishCover)) {
                         if (restart)
                             engine->go(0);
                         else if (!initial.isEmpty())

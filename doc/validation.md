@@ -191,6 +191,8 @@ The power-screen checks hold a synthetic database write lock while the GUI submi
 
 `platform.scenario-sleep` checks that the sleep benchmark is opt-in, unsupported hosts skip it, failed writes remain failed trials, warmup results stay out of timing samples, byte counts stay out of timing stages, and in-memory overrides are restored after both failure and success. It uses a controlled host without a reader window.
 
+`ui.openingCoverLayout` checks cover proportions and space above the loading status in portrait and landscape, missing covers and late cover delivery after native handoff. The full gallery includes `loading-cover`, `loading-cover-slow` and `loading-no-cover` in both sizes and all three interface variants. These scenes use the production opening view and its worker-delivered book cover.
+
 ## Book fixtures
 
 The publisher-markup check also uses the unmodified TeX Users Group US English hyphenation exception list, `tests/fixtures/hyphenation/ushyphex.tex`, from [CTAN's hyphenex package](https://mirrors.ctan.org/info/digests/tugboat/hyphenex/ushyphex.tex). Its header permits use, modification and redistribution and retains the 2021 copyright notice. SHA-256 is `9392bd6e14b2f34ebc31d2ba4eddb7d1266bf563bfd89c6161f63cfd7f00ef5c`. The check verifies every permitted and forbidden break in all 1,753 words against the compiled engine, after applying US English's two-letter prefix and three-letter suffix limits. This is a corpus of known difficult words, not a representative measure of general English hyphenation quality. The test needs no download.

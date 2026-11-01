@@ -82,6 +82,13 @@ public:
             platform::textRefresh(widget);
         platform::textRefresh(this);
     }
+    void setCover(QImage image) {
+        if (fallback)
+            return;
+        cover = std::move(image);
+        brand->setVisible(cover.isNull());
+        update();
+    }
     void showFallback(OpeningFallback state) {
         fallback = true;
         automatic = state == OpeningFallback::Protected || state == OpeningFallback::Remembered;
@@ -162,7 +169,7 @@ protected:
         namespace m = ui::metrics::opening;
         QPainter painter(this);
         // Nickel's Qt5 stylesheet paints dialogs white even with a dark palette.
-        // Own the whole splash background, including the area behind the logo.
+        // Own the whole splash background, including the area behind the cover.
         painter.fillRect(rect(), palette().color(QPalette::Window));
         if (!painted) {
             painted = true;
@@ -175,7 +182,14 @@ protected:
         painter.translate(origin());
         painter.scale(scale(), scale());
         const auto ink = palette().color(QPalette::WindowText);
-        ui::paintBrandIcon(painter, fallback && !automatic ? m::failureBrandIcon : m::icon, ink);
+        if (!fallback && !cover.isNull()) {
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            const auto size = QSizeF(cover.size()).scaled(m::cover.size(), Qt::KeepAspectRatio);
+            const QRectF bounds(m::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
+            painter.drawImage(bounds, cover);
+        } else {
+            ui::paintBrandIcon(painter, fallback && !automatic ? m::failureBrandIcon : m::icon, ink);
+        }
         if (fallback) {
             const QRectF bounds = automatic ? m::handoffIcon : m::failureIcon;
             ui::paintOpeningIcon(painter, protectedIcon ? ui::ControlIcon::Lock : ui::ControlIcon::FileWarning, bounds,
@@ -273,6 +287,7 @@ private:
         return {(width() - ui::metrics::opening::referenceWidth * scale()) / 2,
                 (height() - ui::metrics::opening::referenceHeight * scale()) / 2};
     }
+    QImage cover;
     QLabel *brand, *label, *hint, *detail;
     ui::ChoiceModal *failureDialog = nullptr;
     bool storageFailure = false;
@@ -312,6 +327,10 @@ public:
     void showFallback(OpeningFallback state) override {
         if (dialog)
             dialog->showFallback(state);
+    }
+    void setCover(QImage cover) override {
+        if (dialog)
+            dialog->setCover(std::move(cover));
     }
     void setProgress(int percent) override {
         if (!dialog)

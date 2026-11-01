@@ -475,6 +475,7 @@ if(BUILD_TESTING)
             delayedProgressPaintsAfterTheEventLoop
             progressPaintsOnlyChangedPixels
             openingProgressPaintsAfterTheEventLoop
+            openingCoverLayout
             openingFirstPaintCallback
             readingStripChangesLeaveBodyUnpainted
             chapterPageSurvivesLongTitles

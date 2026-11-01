@@ -819,7 +819,7 @@ void ReaderCoordinator::load() {
          run.sourceLease, run.nativePublication->resources(run.sourceLease), positionCodec(),
          environment_.paths.documentCache(), temporaryAppearance, originalAppearance,
          environment_.paths.directory + "/userstyle.css", kobalt::appearance::bookDefaults(preferences), {},
-         run.diskBaseline.valid && run.diskBaseline.status == 2},
+         run.diskBaseline.valid && run.diskBaseline.status == 2, run.nativePublication->coverPath()},
         [this](const kobalt::OpeningResult &outcome) {
             run.openingTimings["load_and_layout_ms"] = run.openingTimer.elapsed() - run.layoutStarted;
             if (!outcome.ready()) {
@@ -836,6 +836,10 @@ void ReaderCoordinator::load() {
         },
         [this](kobalt::OpeningStage stage, int percent) {
             updateOpening(stage, percent);
+        },
+        [this](QImage cover) {
+            if (run.loading)
+                run.loading->setCover(std::move(cover));
         });
 }
 

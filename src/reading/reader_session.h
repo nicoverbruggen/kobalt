@@ -107,7 +107,8 @@ public:
     ~ReaderSession() override;
     // Call after deleting sessions and cancelling their resources.
     static void drain(std::function<void()> finished);
-    void open(OpenRequest request, std::function<void(OpeningResult)> finished, OpeningProgress progress = {});
+    void open(OpenRequest request, std::function<void(OpeningResult)> finished, OpeningProgress progress = {},
+              std::function<void(QImage)> coverReady = {});
     // A fresh facade prevents callbacks from the closed reader reaching a reopen.
     std::unique_ptr<ReaderSession> retained();
     void cancelSource();

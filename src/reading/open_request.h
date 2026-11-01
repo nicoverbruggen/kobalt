@@ -30,5 +30,7 @@ struct OpenRequest {
     QString syncFilename{};
     // A host library can mark a book finished independently of its checkpoint.
     bool restartAtStart = false;
+    // The same optional host cover used by the sleep screen.
+    QString coverImagePath{};
 };
 }

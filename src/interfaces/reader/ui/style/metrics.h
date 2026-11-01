@@ -244,6 +244,7 @@ inline constexpr int hintDelayMilliseconds = 4000;
 inline constexpr qreal referenceWidth = 402, referenceHeight = 543;
 inline constexpr qreal brandText = 40.5, labelText = 14.25, hintText = 8;
 inline const QRectF icon{172, 166, 58.5, 63};
+inline const QRectF cover{91, 63, 220, 330};
 inline constexpr qreal iconBarHeight = 6.5, iconBarPitch = 11.3, finalBarWidth = 42.3;
 inline const QRectF brand{100, 248, 202, 58};
 inline const QRectF label{60, 418, 282, 24};

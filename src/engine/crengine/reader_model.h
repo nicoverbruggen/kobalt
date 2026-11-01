@@ -116,7 +116,7 @@ public:
     bool open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error, OpeningProgress progress = {});
     bool openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes, QSize size,
                        const QJsonObject &saved, QString *error, OpeningProgress progress = {},
-                       OpeningResult *result = nullptr);
+                       OpeningResult *result = nullptr, std::function<void()> coverReady = {});
     bool rebindResources(const std::shared_ptr<ResourceCache> &resources, const QMap<QString, qint64> &sizes);
     // Set before opening. CREngine keeps parsed books and their pages in
     // `directory`, keyed by the publication fingerprint and by `policy`, which
@@ -366,7 +366,7 @@ private:
     // Changed rectangle between two cached page images, by sorted cache keys.
     QMap<QPair<qint64, qint64>, QRect> damage_;
     bool openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved, QString *error,
-                    OpeningProgress progress = {}, OpeningResult *result = nullptr);
+                    OpeningProgress progress = {}, OpeningResult *result = nullptr, std::function<void()> coverReady = {});
     void trim();
     void applyPublisherFontFallbacks();
     void applyStyleSheet();

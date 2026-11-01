@@ -336,12 +336,12 @@ bool ReaderModel::open(QByteArray bytes, QSize size, const QJsonObject &saved, Q
 }
 bool ReaderModel::openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes,
                                 QSize size, const QJsonObject &saved, QString *error, OpeningProgress progress,
-                                OpeningResult *result) {
+                                OpeningResult *result, std::function<void()> coverReady) {
     auto source = std::make_shared<ReaderSource>();
     source->resources = std::move(resources);
     source->sizes = sizes;
     source->container = LVContainerRef(new ResourceContainer(source->resources, sizes));
-    return openSource(std::move(source), size, saved, error, std::move(progress), result);
+    return openSource(std::move(source), size, saved, error, std::move(progress), result, std::move(coverReady));
 }
 bool ReaderModel::rebindResources(const std::shared_ptr<ResourceCache> &resources, const QMap<QString, qint64> &sizes) {
     // Previews retain ReaderSource as their parent. Do not change their access
@@ -360,7 +360,7 @@ QJsonObject ReaderModel::resourceStats() const {
     return result;
 }
 bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved, QString *error,
-                             OpeningProgress progress, OpeningResult *result) {
+                             OpeningProgress progress, OpeningResult *result, std::function<void()> coverReady) {
     if (result)
         *result = {};
     const auto fail = [error, result](OpeningFailureKind kind, const char *reason, const QString &detail = QString()) {
@@ -430,6 +430,8 @@ bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, c
                                                 strings::key("error.the_reading_engine_could_not_open_this_epub"))
                                          : fail(OpeningFailureKind::Io, "opening.resource-read", resourceFailure);
     }
+    if (coverReady)
+        coverReady();
     source_->embeddedFonts = source_->parent ? source_->parent->embeddedFonts : embeddedFontCount();
     applyPublisherFontFallbacks();
     engine_->getDocument()->getProps()->setInt("kobalt.bionic.mode", bionic_ == "bold" ? 1 : 0);

@@ -261,6 +261,10 @@ void ReaderController::begin(const QString &path, QSize pixels) {
             lastStage = stage;
             painted.start();
             emit guard->openingProgress((int(stage) * 100 + percent) / (int(OpeningStage::Ready) + 1));
+        },
+        [guard](QImage cover) {
+            if (guard && guard->phase == Phase::Opening)
+                emit guard->openingCover(std::move(cover));
         });
 }
 void ReaderController::close() {

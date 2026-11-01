@@ -23,6 +23,7 @@ public:
     ~StartScreen() override;
     void showOpening();
     void setProgress(int percent);
+    void setCover(QImage cover);
     // Closes the library's topmost layer. False at the root library.
     bool dismissModal();
     void showLibrary();

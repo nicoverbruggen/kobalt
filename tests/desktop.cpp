@@ -18,6 +18,7 @@
 #include "platforms/android/reader.h"
 #include "platforms/android/window_geometry.h"
 #include <QStackedLayout>
+#include <QProgressBar>
 #include "platforms/android/boox_frame_queue.h"
 #include "interfaces/library/library_view.h"
 #include "library/library_store.h"
@@ -7054,6 +7055,43 @@ private slots:
         QTRY_VERIFY(fixture.visible("rrDictionaryFontSizePopup"));
         QVERIFY(capture(fixture, name + "-dictionary-font-sizes"));
     }
+    void loadingScreens_data() { screenshotVariants(); }
+    void loadingScreens() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        const auto name = screenshotVariant(preset, dark);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        auto *reader = fixture.window.readerWindow();
+        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *view = start->openingCanvas()->content->findChild<QDialog *>("rrOpening");
+        QVERIFY(view);
+        // Keep the production opening, including the cover delivered by its worker.
+        // Reparent it onto the visible reader so the gallery can capture it.
+        view->setParent(reader, Qt::Widget);
+        view->setGeometry(reader->rect());
+        view->show();
+        view->raise();
+        QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+        auto *progress = view->findChild<QProgressBar *>("rrOpeningProgress");
+        progress->setValue(45);
+        QVERIFY(capture(fixture, name + "-loading-cover", view));
+        auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+        QTRY_VERIFY_WITH_TIMEOUT(hint->isVisible(), 5000);
+        QVERIFY(capture(fixture, name + "-loading-cover-slow", view));
+        view->hide();
+        auto baseline = createEmbeddedOpening(reader, desktop::readerServices().presentation);
+        baseline->window()->setGeometry(reader->rect());
+        baseline->setCover({});
+        baseline->setProgress(45);
+        baseline->window()->show();
+        baseline->window()->raise();
+        QVERIFY(capture(fixture, name + "-loading-no-cover", baseline->window()));
+    }
     void saving_data() { screenshotVariants(); }
     void saving() {
         QFETCH(int, preset);
@@ -7993,7 +8031,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1442;
+    int expectedScreenshots = lightGallery ? 84 : 1460;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

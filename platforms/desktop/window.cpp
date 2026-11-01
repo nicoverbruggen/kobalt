@@ -415,6 +415,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     });
     qApp->installEventFilter(this);
     connect(&controller, &android::ReaderController::openingProgress, start, &android::StartScreen::setProgress);
+    connect(&controller, &android::ReaderController::openingCover, start, &android::StartScreen::setCover);
     connect(&controller, &android::ReaderController::opened, this, [this] {
         if (!openedKey.isEmpty())
             store.setOpened(openedKey);

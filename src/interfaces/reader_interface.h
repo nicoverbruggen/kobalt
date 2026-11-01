@@ -15,6 +15,7 @@ public:
     virtual ~ReaderOpeningView() = default;
     virtual QDialog *window() const = 0;
     virtual void setProgress(int percent) = 0;
+    virtual void setCover(QImage cover) = 0;
     // Run after the first visible frame, before expensive opening work starts.
     virtual void afterFirstPaint(std::function<void()> callback) = 0;
     // Replace temporary system faces after the bundled interface fonts load.

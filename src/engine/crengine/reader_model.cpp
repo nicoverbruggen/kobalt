@@ -570,7 +570,7 @@ QString ReaderModel::author() const {
 QImage ReaderModel::coverImage(QSize maximumSize, const QString &preferredPath, QString *usedPath) const {
     if (usedPath)
         usedPath->clear();
-    if (!engine_ || maximumSize.isEmpty() || qint64(maximumSize.width()) * maximumSize.height() > 4 * 1024 * 1024) {
+    if (maximumSize.isEmpty() || qint64(maximumSize.width()) * maximumSize.height() > 4 * 1024 * 1024) {
         return {};
     }
     const auto decode = [maximumSize](LVStreamRef stream) -> QImage {
@@ -628,7 +628,7 @@ QImage ReaderModel::coverImage(QSize maximumSize, const QString &preferredPath, 
             return image;
         }
     }
-    return decode(engine_->getCoverPageImageStream());
+    return engine_ ? decode(engine_->getCoverPageImageStream()) : QImage();
 }
 
 QString ReaderModel::position() const {

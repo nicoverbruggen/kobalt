@@ -2621,6 +2621,54 @@ private slots:
         QCoreApplication::processEvents();
         QCOMPARE(paints.count, 0);
     }
+    void openingCoverLayout() {
+        for (const QSize screen : {QSize(1072, 1448), QSize(1448, 1072), QSize(600, 800)}) {
+            QWidget owner;
+            owner.resize(screen);
+            auto opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
+            auto *view = opening->window();
+            view->setGeometry(owner.rect());
+            owner.show();
+            view->show();
+            QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            for (const QSize size : {QSize(200, 300), QSize(300, 100), QSize(100, 400)}) {
+                QImage cover(size, QImage::Format_RGB32);
+                cover.fill(Qt::red);
+                opening->setCover(cover);
+                opening->setProgress(45);
+                QCoreApplication::processEvents();
+                QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+                auto *progress = view->findChild<QProgressBar *>("rrOpeningProgress");
+                auto *label = view->findChild<QLabel *>("rrOpeningLabel");
+                auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+                QVERIFY(progress->isVisible());
+                QCOMPARE(progress->value(), 45);
+                QVERIFY(label->isVisible());
+                QVERIFY(label->geometry().bottom() < progress->geometry().top());
+                QVERIFY(progress->geometry().bottom() < hint->geometry().top());
+                const qreal scale = qMin(screen.width() / ui::metrics::opening::referenceWidth,
+                                         screen.height() / ui::metrics::opening::referenceHeight);
+                const QPointF origin((screen.width() - ui::metrics::opening::referenceWidth * scale) / 2,
+                                     (screen.height() - ui::metrics::opening::referenceHeight * scale) / 2);
+                const auto area = ui::metrics::opening::cover;
+                const auto fit = QSizeF(size).scaled(area.size(), Qt::KeepAspectRatio);
+                const QRectF bounds(origin + (area.center() - QPointF(fit.width()/2, fit.height()/2)) * scale, fit * scale);
+                const auto pixels = view->grab().toImage();
+                QCOMPARE(pixels.pixelColor(bounds.center().toPoint()), QColor(Qt::red));
+                QVERIFY(bounds.bottom() < label->y());
+                QCOMPARE(pixels.pixelColor(QPoint(qRound(bounds.left()) - 2, qRound(bounds.center().y()))),
+                         view->palette().color(QPalette::Window));
+            }
+            opening->setCover({});
+            QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            opening->showFallback(OpeningFallback::Protected);
+            QImage late(200, 300, QImage::Format_RGB32);
+            late.fill(Qt::red);
+            opening->setCover(late);
+            QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(!view->findChild<QProgressBar *>("rrOpeningProgress")->isVisible());
+        }
+    }
     void openingFirstPaintCallback() {
         QWidget owner;
         owner.resize(600, 800);

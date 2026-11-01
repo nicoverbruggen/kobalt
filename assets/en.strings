@@ -816,8 +816,13 @@
 "bookmarks.save_failed" = "Could not save bookmarks. Your bookmarks have not changed. Check the available storage and try again.";
 "bookmarks.previous" = "Previous bookmarks";
 "bookmarks.next" = "Next bookmarks";
-"bookmarks.remove" = "Remove";
-"bookmarks.remove_prompt" = "Remove this bookmark?";
+"bookmarks.remove" = "Remove bookmark";
+"bookmarks.remove_prompt" = "Remove bookmark?";
+"bookmarks.remove_pinned_prompt" = "Remove pinned bookmark?";
+"bookmarks.remove_description" = "The bookmark will be removed from this book.";
+"bookmarks.remove_pinned_description" = "The bookmark and its shortcut will be removed from this book.";
+"bookmarks.add_current" = "Bookmark current page";
+"bookmarks.remove_current" = "Remove bookmarked page";
 /* Arguments: %1, %2 */
 "bookmarks.remove_detail" = "Page %1 · %2";
 "settings.refresh_smart" = "Smart";

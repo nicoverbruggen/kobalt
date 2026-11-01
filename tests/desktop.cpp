@@ -1394,6 +1394,16 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     openPrologueBody(fixture);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrBookmarks"));
+    QVERIFY(fixture.press("rrAnnotationMore"));
+    QTRY_VERIFY(fixture.visible("rrBookmarkAddCurrent"));
+    QVERIFY(capture(fixture, name + "-bookmark-page-add-menu"));
+    QVERIFY(fixture.click(fixture.widget("rrBookmarkActions"), QPoint(5, 5)));
+    QTRY_VERIFY(!fixture.widget("rrBookmarkActions"));
+    QVERIFY(fixture.press("rrBookmarkListClose"));
+    QVERIFY(fixture.press("rrPage"));
+
     QString firstPosition;
     for (int i = 0; i < 9; ++i) {
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
@@ -1411,6 +1421,13 @@ void checkPinnedBookmarks(int preset, bool dark) {
         list->setSortOrder("newest");
         QTRY_VERIFY(fixture.visible("rrBookmarkMore0"));
         if (i == 1) QVERIFY(capture(fixture, name + "-pinned-bookmark-list"));
+        if (i == 0) {
+            QVERIFY(fixture.press("rrAnnotationMore"));
+            QTRY_VERIFY(fixture.visible("rrBookmarkRemoveCurrent"));
+            QVERIFY(capture(fixture, name + "-bookmark-page-remove-menu"));
+            QVERIFY(fixture.click(fixture.widget("rrBookmarkActions"), QPoint(5, 5)));
+            QTRY_VERIFY(!fixture.widget("rrBookmarkActions"));
+        }
         QVERIFY(fixture.press("rrBookmarkMore0"));
         QTRY_VERIFY(fixture.visible("rrBookmarkRowActions"));
         QVERIFY(fixture.widget("rrBookmarkDelete")->height() >= int(ui::metrics::chrome::menuActionHeight));
@@ -1444,6 +1461,14 @@ void checkPinnedBookmarks(int preset, bool dark) {
         QVERIFY(fixture.press("rrPinSave"));
         QTRY_VERIFY(!fixture.visible("rrPinEditor"));
         QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), token);
+        if (i == 0) {
+            QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
+            QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
+            QVERIFY(qobject_cast<QLabel *>(fixture.widget("rrRemoveBookmarkDetail"))->text().contains(strings::get("bookmarks.remove_pinned_description")));
+            QVERIFY(capture(fixture, name + "-pinned-bookmark-remove"));
+            QVERIFY(fixture.press("rrKeepBookmark"));
+            QTRY_VERIFY(!fixture.visible("rrRemoveBookmark"));
+        }
         QVERIFY(fixture.press("rrBookmarkListClose"));
         QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
         auto *bar = fixture.widget("rrPinnedBookmarks");
@@ -2227,7 +2252,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 1);
         // The list shows the bookmark at once; its save follows on a writer thread.
         QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), 1);
-        const auto original = fixture.stored("bookmarks.json", "bookmarks");
+        auto original = fixture.stored("bookmarks.json", "bookmarks");
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBookmarks"));
         QVERIFY(fixture.press("rrBookmarks"));
@@ -2235,11 +2260,32 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.widget("rrAnnotationMore")->isVisible());
         QVERIFY(fixture.widget("rrAnnotationMore")->isEnabled());
         QVERIFY(fixture.press("rrAnnotationMore"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkRemoveCurrent"));
+        QCOMPARE(qobject_cast<QPushButton *>(fixture.widget("rrBookmarkRemoveCurrent"))->text(), strings::get("bookmarks.remove_current"));
+        QCOMPARE(fixture.widget("rrBookmarkActions")->findChildren<QPushButton *>().size(), 1);
+        QVERIFY(!fixture.visible("rrAnnotationExportHtml"));
+        const auto removePageIcon = fixture.widget("rrAnnotationMore")->grab().toImage();
+        QVERIFY(fixture.press("rrBookmarkRemoveCurrent"));
+        QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 0);
+        QTRY_VERIFY(!page->bookmarked);
+        QTRY_VERIFY(fixture.widget("rrAnnotationMore")->grab().toImage() != removePageIcon);
+        QVERIFY(fixture.press("rrAnnotationMore"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkAddCurrent"));
+        QCOMPARE(qobject_cast<QPushButton *>(fixture.widget("rrBookmarkAddCurrent"))->text(), strings::get("bookmarks.add_current"));
+        QCOMPARE(fixture.widget("rrBookmarkActions")->findChildren<QPushButton *>().size(), 1);
+        QVERIFY(fixture.press("rrBookmarkAddCurrent"));
+        QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 1);
+        QTRY_VERIFY(page->bookmarked);
+        QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), 1);
+        original = fixture.stored("bookmarks.json", "bookmarks");
+        QVERIFY(fixture.press("rrAnnotationsTab"));
+        QVERIFY(fixture.press("rrAnnotationMore"));
         QTRY_VERIFY(fixture.visible("rrAnnotationExportHtml"));
         QVERIFY(!fixture.widget("rrAnnotationExportHtml")->isEnabled());
         QVERIFY(!fixture.widget("rrAnnotationExportMarkdown")->isEnabled());
         QVERIFY(fixture.click(fixture.widget("rrAnnotationActions"), QPoint(5, 5)));
         QTRY_VERIFY(!fixture.widget("rrAnnotationActions"));
+        QVERIFY(fixture.press("rrBookmarksTab"));
         QVERIFY(fixture.bookmarkAction("rrBookmarkDelete"));
         QTRY_VERIFY(fixture.visible("rrRemoveBookmark"));
         QCOMPARE(fixture.stored("bookmarks.json", "bookmarks"), original);
@@ -3826,6 +3872,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.widget("rrAnnotationMore")->isVisible());
         QCOMPARE(fixture.widget("rrAnnotationMore")->x(), moreX);
         QCOMPARE(fixture.widget("rrMarksSort")->x(), sortX);
+        QVERIFY(fixture.press("rrAnnotationMore"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkRemoveCurrent"));
+        QVERIFY(!fixture.visible("rrAnnotationExportHtml"));
+        QVERIFY(fixture.click(fixture.widget("rrBookmarkActions"), QPoint(5, 5)));
+        QTRY_VERIFY(!fixture.widget("rrBookmarkActions"));
+        QVERIFY(fixture.press("rrAnnotationsTab"));
         QVERIFY(fixture.pressAnnotationExport(exportAction));
         QTRY_VERIFY(fixture.visible("rrAnnotationExportConfirm"));
         QVERIFY(!fixture.widget("rrAnnotationExportPicker"));
@@ -7286,7 +7338,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1334;
+    int expectedScreenshots = lightGallery ? 84 : 1352;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

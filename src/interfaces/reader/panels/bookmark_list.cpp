@@ -553,6 +553,10 @@ void BookmarkList::redraw() {
     }
     bookmarksTab->setChecked(!annotations);
     annotationsTab->setChecked(annotations);
+    const bool currentBookmarked = std::any_of(items.cbegin(), items.cend(), [](const BookmarkRow &row) { return row.current; });
+    moreButton->setGlyph(annotations ? ui::ControlIcon::ExportAction
+                                    : currentBookmarked ? ui::ControlIcon::BookmarkRemove : ui::ControlIcon::BookmarkAdd);
+    moreButton->setAccessibleName(strings::get(annotations ? "annotations.export" : "bookmarks.actions"));
     empty->setText(strings::get(loading ? "annotations.loading" : annotations ? "annotations.empty" : "bookmarks.empty"));
     emptyHint->setText(strings::get(annotations ? "annotations.empty_hint" : "bookmarks.empty_hint"));
     page = qBound(0, page, pageCount() - 1);

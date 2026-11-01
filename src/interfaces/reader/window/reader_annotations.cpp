@@ -47,17 +47,33 @@ void Reader::closeMarksActions() {
 void Reader::openMarksActions() {
     if (marksActions || removeDialog || annotationExportPicker || model->busy() ||
         closing || lifecycleHidden || services.suspended() || book->deviceTransition()) return;
-    const ui::ActionMenuHeader header{{}, strings::get("annotations.export"),
-                                      strings::get("annotations.export_compression"), {}};
-    auto *menu = new ui::ActionMenu(this, header,
-        {ui::actionItem(strings::get("annotations.export_markdown"), "rrAnnotationExportMarkdown", ui::ControlIcon::Export,
-                        [this] { askExportMarks(AnnotationExportFormat::Markdown); }),
-         ui::actionItem(strings::get("annotations.export_html"), "rrAnnotationExportHtml", ui::ControlIcon::Export,
-                        [this] { askExportMarks(AnnotationExportFormat::Html); })});
+    ui::ActionMenu *menu;
+    if (bookmarkList->annotationsShown()) {
+        const ui::ActionMenuHeader header{{}, strings::get("annotations.export"),
+                                          strings::get("annotations.export_compression"), {}};
+        menu = new ui::ActionMenu(this, header,
+            {ui::actionItem(strings::get("annotations.export_markdown"), "rrAnnotationExportMarkdown", ui::ControlIcon::Export,
+                            [this] { askExportMarks(AnnotationExportFormat::Markdown); }),
+             ui::actionItem(strings::get("annotations.export_html"), "rrAnnotationExportHtml", ui::ControlIcon::Export,
+                            [this] { askExportMarks(AnnotationExportFormat::Html); })});
+        menu->setObjectName("rrAnnotationActions");
+        const bool enabled = highlights->writable() && highlights->resolved() && !highlights->highlights().isEmpty();
+        for (auto *action : menu->actions()) action->setEnabled(enabled);
+    } else {
+        const int current = model->page();
+        const bool marked = bookmarks->marked(current);
+        menu = new ui::ActionMenu(this, {},
+            {ui::actionItem(strings::get(marked ? "bookmarks.remove_current" : "bookmarks.add_current"),
+                            marked ? "rrBookmarkRemoveCurrent" : "rrBookmarkAddCurrent",
+                            marked ? ui::ControlIcon::BookmarkRemove : ui::ControlIcon::BookmarkAdd,
+                            [this, current, marked] {
+                                if (model->page() == current && bookmarks->marked(current) == marked)
+                                    toggleBookmark();
+                            })});
+        menu->setObjectName("rrBookmarkActions");
+        menu->actions().first()->setEnabled(bookmarks->writable() && bookmarks->resolved() && model->pages() > 0);
+    }
     marksActions = menu;
-    menu->setObjectName("rrAnnotationActions");
-    const bool enabled = highlights->writable() && highlights->resolved() && !highlights->highlights().isEmpty();
-    for (auto *action : menu->actions()) action->setEnabled(enabled);
     menu->dismissed = [this] { closeMarksActions(); };
     menu->setDimmed(true);
     menu->setProperty("reader_standard_modal", true);

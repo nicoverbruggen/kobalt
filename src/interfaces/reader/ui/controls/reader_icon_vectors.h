@@ -3777,5 +3777,39 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path.closeSubpath();
         return true;
     }
+    if (name == QStringLiteral("export")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(216, 112);
+        path.lineTo(216, 208);
+        path.arcTo(QRectF(184, 192, 32, 32), 0, -90);
+        path.lineTo(56, 224);
+        path.arcTo(QRectF(40, 192, 32, 32), -90, -90);
+        path.lineTo(40, 112);
+        path.arcTo(QRectF(40, 96, 32, 32), 180, -90);
+        path.lineTo(80, 96);
+        path.arcTo(QRectF(72, 96, 16, 16), 90, -180);
+        path.lineTo(56, 112);
+        path.lineTo(56, 208);
+        path.lineTo(200, 208);
+        path.lineTo(200, 112);
+        path.lineTo(176, 112);
+        path.arcTo(QRectF(168, 96, 16, 16), -90, -180);
+        path.lineTo(200, 96);
+        path.arcTo(QRectF(184, 96, 32, 32), 90, -90);
+        path.closeSubpath();
+        path.moveTo(93.66, 69.66);
+        path.lineTo(120, 43.31);
+        path.lineTo(120, 136);
+        path.arcTo(QRectF(120, 128, 16, 16), 180, 180);
+        path.lineTo(136, 43.31);
+        path.lineTo(162.34, 69.66);
+        path.arcTo(QRectF(160, 56, 16, 16), 225, 180);
+        path.lineTo(133.66, 18.34);
+        path.arcTo(QRectF(120, 16, 16, 16), 45, 90);
+        path.lineTo(82.34, 58.34);
+        path.arcTo(QRectF(80, 56, 16, 16), 135, 180);
+        path.closeSubpath();
+        return true;
+    }
     return false;
 }

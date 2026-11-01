@@ -72,7 +72,28 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.lineTo(x2, y2);
     };
     // Keyboard symbols use the same 24-unit grid and stroke as our other drawings.
-    if (icon >= ControlIcon::Flag && icon <= ControlIcon::Diamond) {
+    if (icon == ControlIcon::BookmarkAdd || icon == ControlIcon::BookmarkRemove || icon == ControlIcon::ExportAction) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(icon == ControlIcon::ExportAction ? QStringLiteral("export")
+                                                          : QStringLiteral("bookmark-simple"), path);
+        if (icon == ControlIcon::BookmarkAdd) {
+            QPainterPath horizontal, vertical;
+            horizontal.addRect(96, 104, 64, 16);
+            vertical.addRect(120, 80, 16, 64);
+            path = path.united(horizontal.united(vertical));
+        } else if (icon == ControlIcon::BookmarkRemove) {
+            QPainterPath slash;
+            slash.moveTo(40, 32);
+            slash.lineTo(216, 224);
+            QPainterPathStroker stroke;
+            stroke.setCapStyle(Qt::RoundCap);
+            stroke.setWidth(28);
+            path = path.subtracted(stroke.createStroke(slash));
+            stroke.setWidth(16);
+            path = path.united(stroke.createStroke(slash));
+        }
+    } else if (icon >= ControlIcon::Flag && icon <= ControlIcon::Diamond) {
         const char *names[] = {"flag", "heart", "note", "lightbulb", "globe", "mountains", "tree", "moon",
                                "clock", "calendar", "user", "users", "crown", "key", "sword",
                                "quotes", "question", "check-circle", "warning", "chat-circle", "scroll", "image", "books",
@@ -487,7 +508,8 @@ void paintWifiStatusIcon(QPainter &painter, ControlIcon icon, const QRectF &boun
 }
 QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
     if (int(icon) < 0 ||
-        (int(icon) > int(ControlIcon::System) && icon != ControlIcon::PreviousChapter &&
+        (int(icon) > int(ControlIcon::System) && icon != ControlIcon::BookmarkAdd && icon != ControlIcon::BookmarkRemove && icon != ControlIcon::ExportAction &&
+         icon != ControlIcon::PreviousChapter &&
          icon != ControlIcon::NextChapter && icon != ControlIcon::Sync && icon != ControlIcon::Sort &&
          icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight &&
          (icon < ControlIcon::Rows || icon > ControlIcon::Export) &&

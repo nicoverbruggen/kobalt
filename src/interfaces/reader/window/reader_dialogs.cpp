@@ -487,7 +487,12 @@ void Reader::askRemoveBookmark(const QString &position) {
         excerpt = excerpt.left(qMax(40, excerpt.lastIndexOf(' '))) + QString::fromUtf8("…");
     }
     const auto detail = number >= 0 ? strings::get("bookmarks.remove_detail").arg(number + 1).arg(excerpt) : excerpt;
-    auto *choice = new ui::ChoiceModal(this, {detail, strings::get("bookmarks.remove_prompt"), {}},
+    const bool pinned = list[index].pinned();
+    auto description = strings::get(pinned ? "bookmarks.remove_pinned_description" : "bookmarks.remove_description");
+    if (!list[index].name.isEmpty()) description += "\n\n" + list[index].name;
+    description += "\n\n" + detail;
+    auto *choice = new ui::ChoiceModal(this,
+                                       {description, strings::get(pinned ? "bookmarks.remove_pinned_prompt" : "bookmarks.remove_prompt"), {}},
                                        {strings::get("common.cancel"), "rrKeepBookmark"},
                                        {strings::get("bookmarks.remove"), "rrConfirmRemoveBookmark"});
     removeDialog = choice;
@@ -496,7 +501,6 @@ void Reader::askRemoveBookmark(const QString &position) {
     card->findChild<QLabel *>("rrModalTitle")->setObjectName("rrRemoveBookmarkPrompt");
     auto *text = choice->descriptionLabel();
     text->setObjectName("rrRemoveBookmarkDetail");
-    readerStyle(text, styles::font(m::chrome::descriptionText) + "color:palette(placeholder-text);");
     auto finish = [this, position](bool remove) {
         if (!removeDialog)
             return;

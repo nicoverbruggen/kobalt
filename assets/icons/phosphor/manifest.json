@@ -127,6 +127,10 @@
       "sha256": "3e2e2a1f466051a32abed16cd8e6eadf30f9c560aeb6dcf2545f9c8a95ddfdef"
     },
     {
+      "file": "export.svg",
+      "sha256": "b3323cae86c93d7a4d344e921dc1500f97a73c66e5d9f0e6c46aab64e4a6f616"
+    },
+    {
       "file": "eye-slash.svg",
       "sha256": "070b0296a7df89ebf4cec12436e323b5531d458aa9aed3608924085889e1fd17"
     },

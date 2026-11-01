@@ -1950,6 +1950,8 @@ void Reader::toggleBookmark() {
     if (bookmarks->toggle(model->page()) != kobalt::BookmarkSession::Toggle::Removed)
         return;
     syncBookmarks();
+    if (bookmarkList->isVisible() && !bookmarkList->annotationsShown())
+        bookmarkList->showBookmarks(bookmarkRows());
     page->refreshContent();
     saveSoon();
 }

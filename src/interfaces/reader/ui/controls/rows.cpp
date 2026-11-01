@@ -17,10 +17,11 @@ namespace {
 class RowTitle final : public PrivateTextLabel {
 public:
     using PrivateTextLabel::PrivateTextLabel;
-    std::optional<ControlIcon> icon;
+    ControlIcon icon{};
+    bool hasIcon = false;
     bool optical = false;
     int iconInset() const {
-        return icon ? fontMetrics().height() + qMax(0, int(m::chrome::selectorGap) - px(5)) : 0;
+        return hasIcon ? fontMetrics().height() + qMax(0, int(m::chrome::selectorGap) - px(5)) : 0;
     }
 
 protected:
@@ -36,8 +37,8 @@ protected:
         const int side = fontMetrics().height();
         const int center = alignment().testFlag(Qt::AlignBottom)
             ? height() - interfaceLineHeight(font()) / 2 : height() / 2;
-        if (icon)
-            controlIcon(*icon, ink).paint(&painter, QRect(0, center - side / 2, side, side));
+        if (hasIcon)
+            controlIcon(icon, ink).paint(&painter, QRect(0, center - side / 2, side, side));
         const int start = iconInset();
         drawOpticalText(painter, QRect(start, center - side / 2, qMax(0, width() - start), side), text());
     }
@@ -82,13 +83,13 @@ void ListRow::setTitle(const QString &text) {
     setAccessibleName(text);
     arrange();
 }
-void ListRow::setTitleIcon(std::optional<ControlIcon> icon, bool alignWithoutIcon) {
+void ListRow::setTitleIcon(ControlIcon icon, bool visible, bool alignWithoutIcon) {
     auto *label = static_cast<RowTitle *>(title);
-    const bool optical = icon.has_value() || alignWithoutIcon;
-    if (titleIcon == icon && label->optical == optical)
+    const bool optical = visible || alignWithoutIcon;
+    if (label->icon == icon && label->hasIcon == visible && label->optical == optical)
         return;
-    titleIcon = icon;
     label->icon = icon;
+    label->hasIcon = visible;
     label->optical = optical;
     title->update();
     arrange();

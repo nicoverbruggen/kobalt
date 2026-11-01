@@ -544,7 +544,7 @@ void writePins(Connection &c, const QString &key, const QVector<Highlight> &rows
     QJsonObject pins;
     for (const auto &row : rows)
         if (!row.bookmarkIcon.isEmpty())
-            pins[row.id] = QJsonObject{{"name", row.bookmarkName}, {"icon", row.bookmarkIcon}};
+            pins[row.id] = qt::object({{"name", row.bookmarkName}, {"icon", row.bookmarkIcon}});
     check(pins.size() <= BookmarkStore::maxPins, "bookmark-pin-limit");
     if (pins == old) return;
     const auto payload = QJsonDocument(pins).toJson(QJsonDocument::Compact);

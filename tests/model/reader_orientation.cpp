@@ -377,6 +377,7 @@ int main(int argc, char **argv) {
 #else
 #include "platform/api/reader_orientation.h"
 #include <QCoreApplication>
+#include <cstdio>
 #include <cstdlib>
 
 int main(int argc, char **argv) {
@@ -385,27 +386,33 @@ int main(int argc, char **argv) {
     int ownership = 0;
     kobalt::ReaderOrientation rotation(nullptr, [&](Qt::ScreenOrientation value) { shown = value; },
         [&](bool owns) { ownership += owns ? 1 : -1; });
-    auto require = [](bool valid) { if (!valid) std::abort(); };
-    require(!rotation.automaticAvailable() && !rotation.setAutomatic(true));
+    auto require = [](bool valid, const char *message) {
+        if (!valid) {
+            std::fprintf(stderr, "%s\n", message);
+            std::exit(1);
+        }
+    };
+    require(!rotation.automaticAvailable() && !rotation.setAutomatic(true), "Sensorless rotation rejects Auto");
     rotation.configure({{"orientation", int(Qt::InvertedLandscapeOrientation)}, {"auto_rotate", true}});
-    require(rotation.manual() == Qt::InvertedLandscapeOrientation && !rotation.automatic());
+    require(rotation.manual() == Qt::InvertedLandscapeOrientation && !rotation.automatic(), "Sensorless manual preference preserved");
     rotation.start(Qt::PortraitOrientation);
-    require(shown == Qt::InvertedLandscapeOrientation && ownership == 1);
+    require(shown == Qt::InvertedLandscapeOrientation && ownership == 1, "Opening applies manual orientation and acquires ownership");
     rotation.rotate();
-    require(shown == Qt::PortraitOrientation);
+    require(shown == Qt::PortraitOrientation, "Manual rotation wraps to portrait");
     rotation.rotate();
-    require(shown == Qt::LandscapeOrientation);
+    require(shown == Qt::LandscapeOrientation, "Manual rotation advances to landscape");
     rotation.freeze();
     rotation.rotate();
-    require(shown == Qt::LandscapeOrientation);
+    require(shown == Qt::LandscapeOrientation, "Frozen rotation keeps the shown orientation");
+    require(rotation.manual() == Qt::LandscapeOrientation, "Frozen rotation keeps the manual preference");
     rotation.stop(true);
-    require(shown == Qt::PortraitOrientation && ownership == 0);
+    require(shown == Qt::PortraitOrientation && ownership == 0, "Quarter-turn sleep restores native geometry and releases ownership");
     rotation.start(Qt::PortraitOrientation);
-    require(shown == Qt::LandscapeOrientation);
+    require(shown == Qt::LandscapeOrientation, "Wake restores the reading orientation");
     rotation.configure({{"orientation", int(Qt::InvertedPortraitOrientation)}});
-    require(shown == Qt::InvertedPortraitOrientation);
-    require(rotation.settings().value("orientation").toInt() == int(Qt::InvertedPortraitOrientation));
+    require(shown == Qt::InvertedPortraitOrientation, "Awake configuration applies the new orientation");
+    require(rotation.settings().value("orientation").toInt() == int(Qt::InvertedPortraitOrientation), "Settings retain the manual preference");
     rotation.stop();
-    require(shown == Qt::PortraitOrientation && ownership == 0);
+    require(shown == Qt::PortraitOrientation && ownership == 0, "Closing restores native geometry and releases ownership");
 }
 #endif

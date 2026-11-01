@@ -229,7 +229,7 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     QVector<ui::CellButton *> iconButtons;
     for (int i = 0; i < pageSize; ++i) {
         auto *button = new ui::CellButton(ui::ControlIcon::Star, gridWidget, qRound(1.2 * int(c::cellIcon)));
-        button->setRule(Qt::LeftEdge | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge);
+        button->setRule(ui::Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge);
         button->setCheckable(true);
         button->setFixedHeight(c::actionHeight);
         group->addButton(button);
@@ -636,8 +636,7 @@ void BookmarkList::redraw() {
         itemRow->setMetadataFont(ui::interfaceFont(c::captionText));
         itemRow->setTitle(item.pinName.isEmpty() ? chapter : item.pinName);
         itemRow->setTitlePixels(ui::px(24));
-        itemRow->setTitleIcon(annotations || item.pinIcon.isEmpty() ? std::nullopt
-                              : std::optional<ui::ControlIcon>(ui::ControlIcon::Pin), !annotations);
+        itemRow->setTitleIcon(ui::ControlIcon::Pin, !annotations && !item.pinIcon.isEmpty(), !annotations);
         itemRow->setTitleGap(ui::px(annotations ? 12 : 4));
         itemRow->titleLabel()->setAlignment(Qt::AlignLeft | (annotations ? Qt::AlignVCenter : Qt::AlignBottom));
         itemRow->setDetailLines(excerptLines[index]);

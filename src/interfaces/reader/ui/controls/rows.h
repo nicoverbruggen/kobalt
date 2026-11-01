@@ -4,7 +4,6 @@
 #include <QButtonGroup>
 #include <QFrame>
 #include <QPointer>
-#include <optional>
 
 namespace kobalt::ui {
 // Plain-text lists share line spacing, dividers and accessory geometry.
@@ -48,8 +47,8 @@ public:
     };
     explicit ListRow(QWidget *parent);
     void setTitle(const QString &text);
-    // An empty icon keeps the same text alignment as icon titles.
-    void setTitleIcon(std::optional<ControlIcon> icon, bool alignWithoutIcon = true);
+    // A hidden icon keeps the same text alignment unless alignWithoutIcon is false.
+    void setTitleIcon(ControlIcon icon, bool visible = true, bool alignWithoutIcon = true);
     void setDetail(const QString &text);
     void setDetailLines(int lines);
     void setDetailHighlight(const QString &style, QColor color, int lineSpacing);
@@ -104,7 +103,6 @@ private:
     QString titleText, detailText, captionText, leadingText;
     QString labelStyles[5];
     Accessory accessory = None{};
-    std::optional<ControlIcon> titleIcon;
     ControlIcon leadingIcon{};
     bool hasLeadingIcon = false;
     QPointer<QWidget> observedParent;

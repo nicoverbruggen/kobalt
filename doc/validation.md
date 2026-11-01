@@ -12,6 +12,8 @@ Use a prepared native Qt 6.11 or newer Qt 6 SDK. Configure once as described in 
 
 ## Everyday commands
 
+`platform.reader-orientation` checks that a frozen manual turn changes neither the displayed orientation nor the saved manual preference, and that wake restores the reading orientation after a quarter-turn sleep handoff. Sensorless failures print the failed condition. `ui.libraryActionButtons` checks the Library action menu through its public action API, including visible icons, rendered labels, accessibility names and dismissal, in both themes and interface densities.
+
 `ui.pagedListSwipes` drives chapter-list swipes through the production canvas at both interface densities and in both themes. It checks forward, backward and wrapped paging, the existing arrows and ordinary row taps without selecting a chapter during a swipe. `ui.pagedSwipesRespectControls` checks nested paging, disabled arrows, small and vertical movement, held rows, cancellation and controls that own their gestures. `ui.pagedFontSwipesKeepHolds` checks font-cell swipes, default-font holds and delayed held drags without selecting a font during a swipe. These headless checks do not establish physical Kobo or Android touch behavior.
 
 `ui.listPressFeedback` checks that ordinary rows, trailing row actions and popup-menu actions press gray in both themes and display densities. Selected rows and toolbar cells retain their active ink fill.

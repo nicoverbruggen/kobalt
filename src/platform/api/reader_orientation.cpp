@@ -204,6 +204,8 @@ void ReaderOrientation::freeze() {
     heldOrientation = currentOrientation;
 }
 void ReaderOrientation::rotate() {
+    if (frozen)
+        return;
     setAutomatic(false);
     manualOrientation = currentOrientation == Qt::InvertedLandscapeOrientation
                             ? Qt::PortraitOrientation

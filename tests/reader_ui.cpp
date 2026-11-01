@@ -1126,7 +1126,7 @@ private slots:
         view.refresh();
         const auto libraryImage = view.grab().toImage();
         view.findChild<QPushButton *>("libraryMore")->click();
-        auto *menu = dynamic_cast<ui::ModalOverlay *>(view.findChild<QWidget *>("libraryMoreSheet"));
+        auto *menu = dynamic_cast<ui::ActionMenu *>(view.findChild<QWidget *>("libraryMoreSheet"));
         QVERIFY(menu && menu->inputBarrier());
         QCOMPARE(menu->geometry(), view.rect());
         QVERIFY(view.rect().contains(menu->card()->geometry()));
@@ -1135,24 +1135,31 @@ private slots:
         for (const auto &item : {qMakePair("libraryMoreAddFolder", ui::ControlIcon::FolderPlus),
                                   qMakePair("libraryMoreOpenBook", ui::ControlIcon::Dictionary),
                                   qMakePair("libraryMoreFolders", ui::ControlIcon::Folders)}) {
-            auto *row = dynamic_cast<ui::ListRow *>(view.findChild<QPushButton *>(item.first));
+            auto *row = menu->action(item.first);
             QVERIFY(row && row->isVisible());
             const int side = ui::metrics::control::iconSize;
-            const QRect iconArea(ui::metrics::list::inset, (row->height() - side) / 2, side, side);
+            const QRect iconArea(ui::metrics::chrome::inset, (row->height() - side) / 2, side, side);
             QImage expected(side, side, QImage::Format_ARGB32);
             expected.fill(paper);
             {
                 QPainter painter(&expected);
-                ui::Button reference(&view);
-                reference.setIconConfiguration({item.second, ui::IconRendition::Action});
-                reference.icon().paint(&painter, expected.rect());
+                ui::controlIcon(item.second, ink).paint(&painter, expected.rect());
             }
             QImage empty(side, side, QImage::Format_ARGB32);
             empty.fill(paper);
             QVERIFY(expected != empty);
-            QCOMPARE(row->grab().toImage().copy(iconArea).convertToFormat(QImage::Format_ARGB32), expected);
-            QVERIFY(row->titleLabel()->x() >= iconArea.right() + ui::metrics::chrome::selectorGap);
-            QCOMPARE(row->titleLabel()->text(), row->text());
+            const auto labeled = row->grab().toImage();
+            QCOMPARE(labeled.copy(iconArea).convertToFormat(QImage::Format_ARGB32), expected);
+            const auto text = row->text();
+            QVERIFY(!text.isEmpty());
+            QCOMPARE(row->accessibleName(), text);
+            row->setText({});
+            const auto blank = row->grab().toImage();
+            row->setText(text);
+            const int labelLeft = iconArea.right() + 1 + ui::metrics::chrome::selectorGap;
+            const QRect labelArea(labelLeft, 0, row->width() - labelLeft, row->height());
+            QVERIFY(labeled.copy(labelArea) != blank.copy(labelArea));
+            QCOMPARE(labeled.copy(0, 0, labelLeft, row->height()), blank.copy(0, 0, labelLeft, row->height()));
         }
         capture("more");
         QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, QPoint(ui::px(8), view.height() - ui::px(8)));

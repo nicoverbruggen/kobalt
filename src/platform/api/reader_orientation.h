@@ -48,6 +48,7 @@ public:
     // Cancel pending turns and discard readings from the sleep request onward.
     // Keep the filter installed so Nickel cannot rotate the sleep screen.
     void freeze();
+    // Ignore manual turns while frozen so wake can restore the reading orientation.
     void rotate();
     bool setAutomatic(bool enabled);
     void setBlocked(bool blocked);

@@ -96,6 +96,12 @@ Kobalt installs a handler for fatal signals in Nickel when it starts. Each crash
 
 On Kobo models with a physical Home button, pressing it closes Kobalt and returns to Nickel's Home screen. Kobalt saves reading progress before leaving. Any progress or finished-book choice shown during a normal exit still applies. Sleep cancels a pending return to Home and restores any exit choice after wake. In sideload mode, Nickel returns to My Books.
 
+## Layout reuse when rotating
+
+The first switch to a new reading viewport lays out the book. Returning to the previous viewport can reuse its layout while the book and text settings stay unchanged. The source reading position stays the same across both switches. The cache uses actual dimensions and column geometry, so another window size or safe area can require layout again.
+
+The reader retains one alternate layout within a memory budget. A text-setting change, an idle book or a layout above the budget uses normal layout on the next switch. A rotation that changes the engine’s document structure also needs normal layout. Page painting still runs for the selected viewport. Layout reuse does not keep page pictures for both orientations or preload the other orientation.
+
 ## Opening books
 
 The default build opens unencrypted local EPUBs selected through Nickel, regardless of their folder. This includes onboard and SD storage, hidden folders, Kobo's built-in Dropbox and Google Drive downloads, and folders used by third-party sync services. Local files can have any filename or use a symlink; Nickel's EPUB MIME type and Kobalt's archive inspection determine whether they are supported. DRM-free Kobo purchases also open, including extensionless books stored by Nickel. Embedded TrueType and OpenType fonts using IDPF or Adobe font obfuscation are supported. Kobalt checks decoded font bytes with FreeType instead of relying on the manifest's font MIME labels or filename extensions. Inspection accepts at most 16 MiB per obfuscated font and 64 MiB across all obfuscated fonts. Adobe font obfuscation requires a UUID in the book's metadata. These font embedding methods are not DRM. Other resource encryption and unsupported font obfuscation still use Nickel. Book previews, PDFs and protected books use Nickel's reader.

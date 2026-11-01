@@ -403,6 +403,9 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     setExtraFontWeight(0);
     sourceIndex_.reset();
     engine_.reset();
+    alternateViewport_ = {};
+    layoutPpi_ = readingPpi.load();
+    layoutCss_ = userStyleSheet_;
     anchor_.clear();
     contents_.clear();
     graph_.clear();
@@ -773,6 +776,30 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     if (styled || resized || verticalChanged)
         sourceIndex_.reset();
     const QString anchor = position();
+    auto *document = engine_->getDocument();
+    // Snapshots belong to this live publication and parser instance. Invalidate
+    // before any setting or stylesheet edit; only geometry can swap layouts.
+    const bool layoutInputsChanged = styled || verticalChanged || layoutPpi_ != readingPpi.load() ||
+                                     layoutCss_ != userStyleSheet_;
+    if (layoutInputsChanged) {
+        document->clearAlternateLayout();
+        alternateViewport_ = {};
+        layoutPpi_ = readingPpi.load();
+        layoutCss_ = userStyleSheet_;
+    }
+    const bool reuseLayout = !layoutInputsChanged && resized && size == alternateViewport_ &&
+                             columns == alternateColumns_ && columnSpacing == alternateColumnSpacing_;
+    const auto previousSize = size_;
+    const int previousColumns = columns_, previousSpacing = columnSpacing_;
+    if (resized && !reuseLayout && !layoutInputsChanged) {
+        if (document->retainLayout(maxAlternateLayoutBytes)) {
+            alternateViewport_ = size_;
+            alternateColumns_ = columns_;
+            alternateColumnSpacing_ = columnSpacing_;
+        } else {
+            alternateViewport_ = {};
+        }
+    }
     OpeningCallback callback(engine_, std::move(progress));
     pixels_ = pixels;
     spacing_ = spacing;
@@ -849,6 +876,15 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
         return true;
     // Applying a panel can change typography, hyphenation and the viewport together.
     // Set all three before paginating so the book is laid out only once.
+    if (reuseLayout) {
+        if (engine_->swapLayout()) {
+            alternateViewport_ = previousSize;
+            alternateColumns_ = previousColumns;
+            alternateColumnSpacing_ = previousSpacing;
+        } else {
+            alternateViewport_ = {};
+        }
+    }
     engine_->Render();
     return goTo(anchor);
 }
@@ -1031,7 +1067,13 @@ bool ReaderModel::loadNextImage() {
     source_->resources->loadNextImage();
     return refreshImages();
 }
+size_t ReaderModel::alternateLayoutBytes() const {
+    return engine_ ? engine_->getDocument()->alternateLayoutBytes() : 0;
+}
 void ReaderModel::releaseImages() {
+    if (engine_)
+        engine_->getDocument()->clearAlternateLayout();
+    alternateViewport_ = {};
     cache_.clear();
     spareImage_ = {};
     damage_.clear();

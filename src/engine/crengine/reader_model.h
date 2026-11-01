@@ -214,7 +214,7 @@ public:
     void resize(QSize size);
     QImage image(int page);
     bool loadNextImage();
-    // The idle retained book keeps text and pagination, not cached pictures.
+    // The idle book keeps its active layout, not images or an alternate layout.
     void releaseImages();
     // Compares the cached images of two pages ahead of a turn between them.
     // Cache key of a page's cached image, or 0. Never draws.
@@ -260,6 +260,9 @@ public:
     QSize viewport() const {
         return size_;
     }
+    // One alternate viewport, released with an idle book or changed typography.
+    static constexpr size_t maxAlternateLayoutBytes = 4 * 1024 * 1024;
+    size_t alternateLayoutBytes() const;
     int cachedPages() const {
         return cache_.size();
     }
@@ -352,6 +355,9 @@ private:
     int wordSpacing_ = 100;
     int justificationTracking_ = 0;
     QString widowsOrphans_ = "publisher";
+    QSize alternateViewport_;
+    int alternateColumns_ = 1, alternateColumnSpacing_ = 0, layoutPpi_ = 0;
+    QByteArray layoutCss_;
     QMap<int, QImage> cache_;
     // One retired page, owned only by this model. Never retain client images.
     QImage spareImage_;

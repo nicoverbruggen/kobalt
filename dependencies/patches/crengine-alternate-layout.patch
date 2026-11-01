@@ -1,0 +1,213 @@
+--- a/crengine/include/lvtinydom.h
++++ b/crengine/include/lvtinydom.h
+@@ -26,6 +26,9 @@
+ #define __LV_TINYDOM_H_INCLUDED__
+ 
+ #include "crsetup.h"
++#include <memory>
++#include <vector>
++#include <set>
+ 
+ #include "lvtypes.h"
+ #include "lvplatform.h"
+@@ -2744,6 +2747,27 @@
+     bool _parsing;
+     bool _rendered;
+     bool _just_rendered_from_cache;
++
++    // One alternate layout of this document, never another DOM or view.
++    struct LayoutNode {
++        ldomNode *node;
++        lInt32 parent;
++        lUInt16 name;
++        int children;
++        lvdomElementFormatRec rect;
++        css_style_ref_t style;
++        lvdom_element_render_method method;
++    };
++    struct LayoutSnapshot {
++        std::vector<LayoutNode> nodes;
++        SerialBuf pages;
++        DocFileHeader header;
++        int elements, texts;
++        size_t bytes, maxBytes;
++        LayoutSnapshot(int pageBytes) : pages(pageBytes, false), elements(0), texts(0), bytes(0) {}
++    };
++    std::unique_ptr<LayoutSnapshot> _alternateLayout;
++
+     bool _toc_from_cache_valid;
+     lUInt32 _warnings_seen_bitmap;
+     ldomXRangeList _selections;
+@@ -2957,6 +2981,13 @@
+     virtual ~ldomDocument();
+ #if BUILD_LITE!=1
+     bool isRendered() { return _rendered; }
++    // Retain/swap only fully rendered layouts. The caller invalidates on changes
++    // other than viewport geometry. Structural changes reject the snapshot.
++    bool retainLayout(size_t maxBytes);
++    bool swapLayout(LVRendPageList *pages);
++    void clearAlternateLayout() { _alternateLayout.reset(); }
++    size_t alternateLayoutBytes() const { return _alternateLayout ? _alternateLayout->bytes : 0; }
++
+     bool isBeingParsed() { return _parsing; }
+     /// renders (formats) document in memory: returns true if re-rendering needed, false if not
+     virtual bool render( LVRendPageList * pages, LVDocViewCallback * callback, int width, int dy,
+--- a/crengine/src/lvtinydom.cpp
++++ b/crengine/src/lvtinydom.cpp
+@@ -5139,6 +5139,7 @@
+     // keeping alive some font instances (eg. for initial-letter).
+     // Drop them before unregistering document fonts.
+     clearRendBlockCache();
++    clearAlternateLayout();
+ #endif
+     _def_font.Clear();
+     _fonts.clear();
+@@ -19784,6 +19785,110 @@
+ 
+ #if BUILD_LITE!=1
+ 
++// Layout snapshots live only as long as their document. They retain immutable
++// styles and node geometry; text, resources and the DOM are shared. Fonts are
++// resolved through the normal cache-loading path when restoring a layout.
++bool ldomDocument::retainLayout(size_t maxBytes)
++{
++    clearAlternateLayout();
++    if (!_rendered || _partial_rerendering_enabled || _pagesData.error())
++        return false;
++    const size_t base = sizeof(LayoutSnapshot) + _pagesData.size();
++    if (base > maxBytes || size_t(_elemCount + 1) > (maxBytes - base) / sizeof(LayoutNode))
++        return false;
++    std::unique_ptr<LayoutSnapshot> snapshot(new LayoutSnapshot(_pagesData.size()));
++    snapshot->nodes.reserve(_elemCount + 1);
++    snapshot->bytes = base + size_t(_elemCount + 1) * sizeof(LayoutNode);
++    std::set<css_style_rec_t *> styles;
++    for (int i = 0; i <= _elemCount; ++i) {
++        ldomNode *node = &_elemList[i >> TNC_PART_SHIFT][i & TNC_PART_MASK];
++        if (!node->isElement())
++            continue;
++        LayoutNode entry;
++        entry.node = node;
++        entry.parent = node->getParentNode() ? node->getParentNode()->getDataIndex() : 0;
++        entry.name = node->getNodeId();
++        entry.children = node->getChildCount();
++        node->getRenderData(entry.rect);
++        // Snapshots own a style reference, not another node index reference.
++        entry.style = _styles.get(getNodeStyleIndex(node->getDataIndex()));
++        entry.method = node->getRendMethod();
++        // Account for unique retained styles, including their variable data.
++        if (!entry.style.isNull() && styles.insert(entry.style.get()).second) {
++            SerialBuf style(1024, false);
++            entry.style->serialize(style);
++            snapshot->bytes += sizeof(css_style_rec_t) + style.size();
++            if (style.error() || snapshot->bytes > maxBytes)
++                return false;
++        }
++        snapshot->nodes.push_back(entry);
++    }
++    snapshot->pages << _pagesData;
++    if (snapshot->pages.error())
++        return false;
++    snapshot->header = _hdr;
++    snapshot->maxBytes = maxBytes;
++    snapshot->elements = _elemCount;
++    snapshot->texts = _textCount;
++    _alternateLayout = std::move(snapshot);
++    return true;
++}
++
++bool ldomDocument::swapLayout(LVRendPageList *pages)
++{
++    if (!_alternateLayout || !_rendered || _partial_rerendering_enabled)
++        return false;
++    LayoutSnapshot &snapshot = *_alternateLayout;
++    if (snapshot.elements != _elemCount || snapshot.texts != _textCount) {
++        clearAlternateLayout();
++        return false;
++    }
++    // A render can add auto-boxes. Do not apply geometry to a different tree.
++    for (const LayoutNode &entry : snapshot.nodes) {
++        ldomNode *node = entry.node;
++        if (!node->isElement() || node->getNodeId() != entry.name ||
++            node->getChildCount() != entry.children ||
++            (node->getParentNode() ? node->getParentNode()->getDataIndex() : 0) != entry.parent) {
++            clearAlternateLayout();
++            return false;
++        }
++    }
++    // Capture the departing layout before changing any geometry. Both snapshots
++    // fit the same cap; two exist only during this exchange.
++    std::unique_ptr<LayoutSnapshot> target = std::move(_alternateLayout);
++    retainLayout(target->maxBytes);
++    clearRendBlockCache();
++    resetNodeNumberingProps();
++    for (LayoutNode &entry : target->nodes) {
++        entry.node->setRenderData(entry.rect);
++        // The cache loader rebuilds font references from empty node indices.
++        clearNodeStyle(entry.node->getDataIndex());
++        entry.node->setStyle(entry.style);
++        entry.node->setRendMethod(entry.method);
++    }
++    if (!updateLoadedStyles(true)) {
++        clearAlternateLayout();
++        _rendered = false;
++        return false;
++    }
++    _pagesData.swap(target->pages);
++    _hdr = target->header;
++    _nodeStyleHash = 0;
++    _doc_rendering_hash = _hdr.getRenderingHash();
++    _pagesData.setPos(0);
++    pages->clear();
++    if (!pages->deserialize(_pagesData)) {
++        clearAlternateLayout();
++        _rendered = false;
++        return false;
++    }
++    _toc_from_cache_valid = false;
++    m_toc.invalidatePageNumbers();
++    m_pagemap.invalidatePageInfo();
++    setCacheFileStale(true);
++    return true;
++}
++
+ /// save document formatting parameters after render
+ void ldomDocument::updateRenderContext()
+ {
+--- a/crengine/src/lvdocview.cpp
++++ b/crengine/src/lvdocview.cpp
+@@ -587,6 +587,15 @@
+ 	m_is_rendered = false;
+ 	clearImageCache();
+ 	m_doc->clearRendBlockCache();
++}
++
++bool LVDocView::swapLayout() {
++    if (!m_doc || !m_doc->swapLayout(&m_pages))
++        return false;
++    m_section_bounds_valid = false;
++    _posIsSet = false;
++    clearImageCache();
++    return true;
+ }
+ 
+ /// render document, if not rendered
+@@ -4217,7 +4226,7 @@
+ 	clearImageCache();
+ 	//m_drawbuf.Resize(dx, dy);
+ 	if (m_doc) {
+-		m_doc->setScreenSize(m_dx, m_dy); // only used for CSS @media queries
++		m_doc->setScreenSize(dx, dy); // only used for CSS @media queries
+ 		//ldomXPointer bm = getBookmark();
+ 		if (dx != m_dx || dy != m_dy || m_view_mode != DVM_SCROLL
+ 				|| !m_is_rendered) {
+--- a/crengine/include/lvdocview.h
++++ b/crengine/include/lvdocview.h
+@@ -583,6 +583,8 @@
+     void setStatusFontFace( const lString8 & newFace );
+     /// invalidate formatted data, request render
+     void requestRender();
++    /// restore the alternate layout and invalidate view-derived navigation data
++    bool swapLayout();
+     /// invalidate document data, request reload
+     void requestReload();
+     /// invalidate image cache, request redraw

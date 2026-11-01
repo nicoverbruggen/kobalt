@@ -638,12 +638,27 @@ int run(int argc, char **argv) {
         rendered.exec();
         require(session->page() == 1 && appearance::same(appearanceBeforeTurn, session->state()),
                 "An ordinary turn changed appearance");
+        const auto rotationAnchor = session->state().value("position");
+        const auto portraitImage = session->image();
         session->resize(QSize(900, 758));
         require(session->renderProgress().active && session->renderProgress().reason == RenderReason::PageLayout,
                 "Viewport resize did not start layout progress");
         rendered.exec();
         require(session->error().isEmpty() && session->image().size() == QSize(900, 758),
                 "A viewport change without a menu reused the old layout");
+        const auto landscapeImage = session->image();
+        for (const auto size : {QSize(758, 900), QSize(900, 758)}) {
+            renderReports.clear();
+            session->resize(size);
+            rendered.exec();
+            require(session->error().isEmpty() && session->state()["position"] == rotationAnchor,
+                    "A cached session rotation lost its source position");
+            for (const auto &report : renderReports)
+                require(!report.active || report.stage != OpeningStage::Pages,
+                        "A cached session rotation paginated the whole book");
+            require(session->image() == (size.width() < size.height() ? portraitImage : landscapeImage),
+                    "A cached session rotation changed page pixels");
+        }
         session->apply(kobalt::qt::object({{"font_face", "missing-performance-test-font"}}));
         rendered.exec();
         require(!session->error().isEmpty() && !session->renderProgress().active,

@@ -1177,7 +1177,7 @@ void Reader::buildSettings() {
     settingsInputs.commitVisible = kobaltCommit[0] != '\0';
     settingsInputs.qtMajor = QT_VERSION >> 16;
     settingsInputs.downloadableDictionaries = services.downloadableDictionaries;
-    settingsInputs.animationsSupported = services.animationsAvailable();
+    settingsInputs.animationSupport = services.animationSupport();
     settingsInputs.lightSupported = services.lightAvailable();
     settingsInputs.warmthSupported = warmthSupported;
     settingsInputs.sleepScreenSupported = presentation->supportsSleepScreen();

@@ -304,10 +304,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     };
     darkOption =
         check(displayPage, "rrDarkMode", strings::get("reader.dark_mode"), strings::get("settings.dark_description"));
-    const bool animationsSupported = inputs.animationsSupported;
+    const bool animationsSupported = pageAnimationsAvailable(inputs.animationSupport);
+    const auto animationDescription = strings::get(inputs.animationSupport == PageAnimationSupport::Uncertain
+        ? "settings.animations_uncertain_description" : animationsSupported
+        ? "settings.animations_description" : "settings.unsupported_description");
     animationOption = check(displayPage, "rrPageAnimations", strings::get("reader.enable_page_animations"),
-                            animationsSupported ? strings::get("settings.animations_description")
-                                                : strings::get("settings.unsupported_description"));
+                            animationDescription);
     animationOption->setEnabled(animationsSupported);
     bionicOption = check(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
                          strings::get("reader.bionic_description"));

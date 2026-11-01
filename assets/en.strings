@@ -675,7 +675,8 @@
 "search_panel.searching" = "Searching…";
 
 /* settings */
-"settings.animations_description" = "Animate page turns on supported devices. Images refresh after the sweep.";
+"settings.animations_uncertain_description" = "Page animations may not be supported on this device. Turn this off if they do not work correctly.";
+"settings.animations_description" = "Page animations are supported on this device.";
 "settings.unsupported_caption" = "Disabled: unsupported on this device.";
 "settings.unsupported_description" = "Disabled because this option is not supported on this device.";
 "settings.dark_description" = "Light text on a dark background.";

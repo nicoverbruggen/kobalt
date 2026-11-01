@@ -1,4 +1,5 @@
 #pragma once
+#include "page_animation_support.h"
 #include "dictionary_service.h"
 #include "keyboard_controller.h"
 #include "sync_network.h"
@@ -77,7 +78,8 @@ struct ReaderHostServices {
     std::function<int(QKeyEvent *)> pageButtonDirection;
     std::function<QStringList()> fontFamilies;
     std::function<QFont()> uiFont;
-    std::function<bool()> suspended, lightAvailable, animationsAvailable;
+    std::function<bool()> suspended, lightAvailable;
+    std::function<PageAnimationSupport()> animationSupport;
     // Optional: the platform's text size setting, where 1 is standard. On
     // Android and desktop, the reader applies it when a book opens and the
     // Library when it is shown. Kobo applies Nickel's Large Print scale in its
@@ -101,7 +103,7 @@ struct ReaderHostServices {
     bool complete() const {
         return bool(automaticBookOpening) == bool(setAutomaticBookOpening) && clock && battery && pageButtons &&
                reverseLandscapeButtons && pageButtonDirection && fontFamilies && uiFont && suspended &&
-               lightAvailable && animationsAvailable && cancelAnimation && light && dictionary && keyboard &&
+               lightAvailable && animationSupport && cancelAnimation && light && dictionary && keyboard &&
                presentation && browserAvailable && openBrowser;
     }
 };

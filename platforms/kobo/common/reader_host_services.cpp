@@ -153,13 +153,7 @@ ReaderHostServices readerHostServices() {
     result.uiFont = nativeReaderUiFont;
     result.suspended = NativeLifecycle::suspended;
     result.lightAvailable = NativeLight::available;
-    result.animationsAvailable = [] {
-#ifdef KOBALT_PAGE_ANIMATIONS
-        return pageAnimationsAvailable();
-#else
-        return false;
-#endif
-    };
+    result.animationSupport = pageAnimationSupport;
     result.cancelAnimation = cancelPageAnimation;
     result.light = [](QWidget *anchor) {
         return std::make_unique<Light>(anchor);

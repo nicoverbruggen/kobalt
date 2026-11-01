@@ -147,8 +147,8 @@ ReaderHostServices readerServices() {
         return false;
     };
     result.desktopUi = true;
-    result.animationsAvailable = [] {
-        return false;
+    result.animationSupport = [] {
+        return PageAnimationSupport::Unavailable;
     };
     result.cancelAnimation = [] {};
     result.light = [](QWidget *) {

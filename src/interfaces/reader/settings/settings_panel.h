@@ -1,4 +1,5 @@
 #pragma once
+#include "platform/api/page_animation_support.h"
 #include "interfaces/reader/ui/controls/buttons.h"
 #include "interfaces/reader/ui/controls/options.h"
 #include "interfaces/reader/ui/controls/panels.h"
@@ -29,7 +30,8 @@ struct SettingsPanelInputs {
     QString release, commit;
     int qtMajor = 0;
     bool commitVisible = false;
-    bool animationsSupported = false, lightSupported = false, warmthSupported = false;
+    PageAnimationSupport animationSupport = PageAnimationSupport::Unavailable;
+    bool lightSupported = false, warmthSupported = false;
     bool debugProgressAvailable = false;
     bool downloadableDictionaries = true;
     bool sleepScreenSupported = false;

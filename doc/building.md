@@ -97,6 +97,8 @@ CMake generates the English string table from `assets/en.strings` and rejects mi
 
 Kobo uses Nickel's library, so its target excludes the standalone Library model and interface. Shared controls use the C++ library APIs available in the prepared firmware SDK, including the older Qt5 target headers.
 
+Page animations require a working display hook and a recognized hwtcon or mxcfb backend. hwtcon has normal setting text; mxcfb has a compatibility warning. The `-DKOBALT_PAGE_ANIMATIONS=OFF` build option keeps the setting unavailable on either backend. See [reader refresh behavior](reader.md) and the focused animation checks in [Native validation](validation.md).
+
 The Kobo target selects the suspend-inclusive boot clock for reading duration only. Android and desktop keep the Qt elapsed clock. This selection adds no timer or scheduled wakeup.
 
 The `qt5` and `qt6` presets consume prepared kobuild SDKs, including Sensors. Compiler, sysroot and Qt repairs belong in kobuild. Pull the selected SDK images before building:

@@ -242,7 +242,7 @@ void Reader::showPageImage(const QImage &nextImage) {
         page->animationDirection =
             isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() && !general->isVisible() &&
                     !linkReturn->isVisible() && !syncDialog && !kosyncDialog && !finishDialog && !services.suspended() &&
-                    preferences.value("page_animations").toBool(false) && services.animationsAvailable()
+                    preferences.value("page_animations").toBool(false) && pageAnimationsAvailable(services.animationSupport())
                 ? model->turnDirection()
                 : 0;
     }

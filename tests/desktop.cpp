@@ -56,6 +56,7 @@
 #include <lvtinydom.h>
 
 #include <QApplication>
+#include <QAccessible>
 #include <csignal>
 #include <cerrno>
 #include <QAction>
@@ -1688,9 +1689,18 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), QString("diamond"));
 }
 
+void checkPageAnimationCompatibility(int preset, bool dark);
+
 class DesktopTests final : public QObject {
     Q_OBJECT
 private slots:
+    void pageAnimationCompatibility_data() { screenshotVariants(); }
+    void pageAnimationCompatibility() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkPageAnimationCompatibility(preset, dark);
+    }
+
     void galleryWorkerFailure() {
         QTemporaryDir directory(QDir::tempPath() + "/gallery workers-XXXXXX");
         QVERIFY(directory.isValid());
@@ -6618,9 +6628,64 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 };
 
+void checkPageAnimationCompatibility(int preset, bool dark) {
+    for (const auto support : {PageAnimationSupport::Supported, PageAnimationSupport::Uncertain,
+                               PageAnimationSupport::Unavailable}) {
+        Fixture fixture(dark, false, false, false, false, false, [support](ReaderHostServices &services) {
+            services.animationSupport = [support] { return support; };
+        });
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        if (!fixture.visible("rrSettings")) QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrPageAnimations"));
+        auto *option = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrPageAnimations"));
+        auto *darkOption = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrDarkMode"));
+        QVERIFY(option && darkOption);
+        QCOMPARE(option->isEnabled(), pageAnimationsAvailable(support));
+        QCOMPARE(option->accessibleDescription(), strings::get(support == PageAnimationSupport::Uncertain
+            ? "settings.animations_uncertain_description" : support == PageAnimationSupport::Supported
+            ? "settings.animations_description" : "settings.unsupported_description"));
+        auto *accessible = QAccessible::queryAccessibleInterface(option);
+        QVERIFY(accessible);
+        QCOMPARE(accessible->text(QAccessible::Name), strings::get("reader.enable_page_animations"));
+        QCOMPARE(option->font(), darkOption->font());
+        QCOMPARE(option->presentation().labelPixels, darkOption->presentation().labelPixels);
+        QCOMPARE(option->presentation().descriptionPixels, darkOption->presentation().descriptionPixels);
+        QCOMPARE(option->presentation().horizontalInset, darkOption->presentation().horizontalInset);
+        QVERIFY(option->height() >= option->heightForWidth(option->width()));
+        QVERIFY(!option->isChecked());
+        const auto state = support == PageAnimationSupport::Supported ? "supported"
+            : support == PageAnimationSupport::Uncertain ? "uncertain" : "unsupported";
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-settings-animations-" + state));
+        if (option->isEnabled()) {
+            QVERIFY(fixture.press("rrPageAnimations"));
+            QVERIFY(option->isChecked());
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QVERIFY(fixture.press("rrSettings"));
+            QTRY_VERIFY(fixture.visible("rrPageAnimations"));
+            QVERIFY(option->isChecked());
+        } else {
+            option->click();
+            QVERIFY(!option->isChecked());
+        }
+    }
+}
+
 class ScreenshotTests final : public QObject {
     Q_OBJECT
 private slots:
+    void pageAnimationCompatibility_data() { screenshotVariants(); }
+    void pageAnimationCompatibility() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkPageAnimationCompatibility(preset, dark);
+    }
+
     void pinnedBookmarks_data() { screenshotVariants(); }
     void pinnedBookmarks() { QFETCH(int, preset); QFETCH(bool, dark); checkPinnedBookmarks(preset, dark); }
     void headerFooterSizes_data() { screenshotVariants(); }
@@ -7848,7 +7913,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1397;
+    int expectedScreenshots = lightGallery ? 84 : 1415;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

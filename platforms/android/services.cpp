@@ -120,8 +120,8 @@ ReaderHostServices readerServices() {
                 .callObjectMethod("getConfiguration", "()Landroid/content/res/Configuration;");
         return configuration.isValid() ? qreal(configuration.getField<jfloat>("fontScale")) : qreal(1);
     };
-    result.animationsAvailable = [] {
-        return false;
+    result.animationSupport = [] {
+        return PageAnimationSupport::Unavailable;
     };
     result.cancelAnimation = [] {};
     result.light = [](QWidget *) {

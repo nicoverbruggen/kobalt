@@ -404,7 +404,8 @@ QJsonObject styleSamplePageSettings(const QJsonObject &reading) {
     settings["bold_reading"] = QStringLiteral("off");
     settings["word_spacing"] = 100;
     settings["justification_tracking"] = 0;
-    settings["avoid_wasteful_styling"] = true;
+    settings["normalize_page_margins"] = true;
+    settings["reduce_chapter_spacing"] = true;
     settings["columns"] = 1;
     settings["two_columns_landscape"] = false;
     return settings;

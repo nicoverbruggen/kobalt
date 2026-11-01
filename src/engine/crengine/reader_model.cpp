@@ -419,7 +419,9 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     size_ = size;
     darkMode_ = saved.value("dark_mode").toBool(false);
     hideNonlinearFragments_ = saved.value("hide_nonlinear_fragments").toBool(false);
-    avoidWastefulStyling_ = saved.value("avoid_wasteful_styling").toBool(true);
+    const auto normalization = appearance::normalizationSettings(saved);
+    normalizePageMargins_ = normalization.value("normalize_page_margins").toBool();
+    reduceChapterSpacing_ = normalization.value("reduce_chapter_spacing").toBool();
     verticalSpacing_ = appearance::verticalSpacingMode(saved.value("vertical_justification"));
     verticalSpacingScope_ = appearance::verticalSpacingScope(saved.value("vertical_spacing_scope"));
     wordSpacing_ = saved.value("word_spacing").toInt(100);
@@ -502,7 +504,7 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     properties->setInt(PROP_FORMAT_MAX_ADDED_LETTER_SPACING_PERCENT, justificationTracking_);
     properties->setInt(PROP_FLOATING_PUNCTUATION, 0);
     properties->setInt(PROP_RENDER_BLOCK_RENDERING_FLAGS,
-                       avoidWastefulStyling_
+                       reduceChapterSpacing_
                            ? DEF_RENDER_BLOCK_RENDERING_FLAGS
                            : DEF_RENDER_BLOCK_RENDERING_FLAGS & ~BLOCK_RENDERING_DISCARD_FORCED_BREAK_MARGINS);
     // CSS already sizes images against the reading font. The engine's legacy
@@ -696,7 +698,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
         ? appearance::paragraphIndent(settings.value("paragraph_indent")) : paragraphIndent_;
     if (settings.contains("paragraph_indent") && settings.value("paragraph_indent") != paragraphIndent)
         return false;
-    for (const auto *key : appearance::beautifierKeys)
+    for (const auto *key : appearance::normalizationKeys)
         if (settings.contains(key) && !settings.value(key).isBool()) return false;
     const bool beautifierInitials = settings.value("beautifier_initials").toBool(beautifierInitials_);
     const bool beautifierSpacing = settings.value("beautifier_spacing").toBool(beautifierSpacing_);
@@ -729,7 +731,8 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     const auto hyphenation = settings.value("hyphenation").toString(hyphenation_);
     const bool dark = settings.value("dark_mode").toBool(darkMode_);
     const bool hideNonlinear = settings.value("hide_nonlinear_fragments").toBool(hideNonlinearFragments_);
-    const bool avoidWastefulStyling = settings.value("avoid_wasteful_styling").toBool(avoidWastefulStyling_);
+    const bool normalizePageMargins = settings.value("normalize_page_margins").toBool(normalizePageMargins_);
+    const bool reduceChapterSpacing = settings.value("reduce_chapter_spacing").toBool(reduceChapterSpacing_);
     const auto verticalSpacing = settings.contains("vertical_justification")
         ? appearance::verticalSpacingMode(settings.value("vertical_justification")) : verticalSpacing_;
     const auto verticalScope = settings.contains("vertical_spacing_scope")
@@ -761,7 +764,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     // Outline thickness changes pixels only. Keep the formatted page and its anchors.
     const bool thicknessChanged = weight != weight_;
     const bool styled = beautifierInitials != beautifierInitials_ || beautifierSpacing != beautifierSpacing_ ||
-        beautifierIndent != beautifierIndent_ || fallbackFaces != fallbackFaces_ || avoidWastefulStyling != avoidWastefulStyling_ ||
+        beautifierIndent != beautifierIndent_ || fallbackFaces != fallbackFaces_ || normalizePageMargins != normalizePageMargins_ || reduceChapterSpacing != reduceChapterSpacing_ ||
                         wordSpacing != wordSpacing_ || tracking != justificationTracking_ || widowsOrphans != widowsOrphans_ ||
                         bionicChanged || axisChanged || opticalChanged || pixels != pixels_ || spacing != spacing_ ||
                         paragraphSpacing != paragraphSpacing_ ||
@@ -823,7 +826,8 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     darkMode_ = dark;
     activateFontParameters();
     hideNonlinearFragments_ = hideNonlinear;
-    avoidWastefulStyling_ = avoidWastefulStyling;
+    normalizePageMargins_ = normalizePageMargins;
+    reduceChapterSpacing_ = reduceChapterSpacing;
     verticalSpacing_ = verticalSpacing;
     verticalSpacingScope_ = verticalScope;
     engine_->setVerticalSpacing(verticalSpacing_ == "center" ? 2 : verticalSpacing_ == "expand" ? 1 : 0, verticalSpacingScope_ == "protection");
@@ -837,7 +841,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
         properties->setInt(PROP_FORMAT_SPACE_WIDTH_SCALE_PERCENT, wordSpacing_);
         properties->setInt(PROP_FORMAT_MAX_ADDED_LETTER_SPACING_PERCENT, justificationTracking_);
         properties->setInt(PROP_RENDER_BLOCK_RENDERING_FLAGS,
-                           avoidWastefulStyling_
+                           reduceChapterSpacing_
                                ? DEF_RENDER_BLOCK_RENDERING_FLAGS
                                : DEF_RENDER_BLOCK_RENDERING_FLAGS & ~BLOCK_RENDERING_DISCARD_FORCED_BREAK_MARGINS);
         engine_->propsApply(properties);
@@ -931,7 +935,7 @@ void ReaderModel::applyPublisherFontFallbacks() {
 }
 void ReaderModel::applyStyleSheet() {
     QString overrides;
-    if (avoidWastefulStyling_) {
+    if (normalizePageMargins_) {
         overrides = "html,body,DocFragment { margin:0 !important; padding:0 !important; }\n";
     }
     overrides += "svg[data-kobalt-fullpage=\"1\"] { width:100% !important; height:100vh !important; }\n";
@@ -939,7 +943,7 @@ void ReaderModel::applyStyleSheet() {
     // collapsing through the body and disappearing at the page boundary.
     // Round upward in the engine's 1/256 CSS-pixel units so every density keeps it.
     const double boundaryCssPixels = qCeil(256.0 * 96 / readingPpi.load()) / 256.0;
-    if (avoidWastefulStyling_) {
+    if (normalizePageMargins_) {
         overrides += QString("body[data-kobalt-leading-image=\"1\"] { padding-top:%1px !important; }\n")
                          .arg(boundaryCssPixels, 0, 'f', 6);
     }
@@ -1434,7 +1438,7 @@ QJsonObject ReaderModel::state() const {
                                {"hyphenation", hyphenation_},
                                {"dark_mode", darkMode_},
                                {"hide_nonlinear_fragments", hideNonlinearFragments_},
-                               {"avoid_wasteful_styling", avoidWastefulStyling_},
+                               {"normalize_page_margins", normalizePageMargins_}, {"reduce_chapter_spacing", reduceChapterSpacing_},
                                {"vertical_justification", verticalSpacing_},
                                {"vertical_spacing_scope", verticalSpacingScope_},
                                {"columns", columns_},

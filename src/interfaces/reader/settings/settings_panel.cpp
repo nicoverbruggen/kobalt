@@ -19,6 +19,7 @@
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/styles.h"
 #include <QApplication>
+#include <memory>
 #include <QtMath>
 #include <QButtonGroup>
 #include <QGridLayout>
@@ -38,6 +39,8 @@ using ui::readerStyle;
 using ui::makeButton;
 using ReaderOption = ui::DescribedOption;
 namespace {
+QPushButton *segmentButton(QWidget *parent, QHBoxLayout *layout, QButtonGroup *group, const QString &name,
+                           const QString &text);
 // Rendered sample pages for the styling sheet. Page-break settings show a
 // scaled spread. Spacing settings show the top of the first page at full
 // resolution, because scaling would hide the difference. Page spacing adds a
@@ -447,46 +450,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     verticalSpacingScopeButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrVerticalSpacingScope",
         strings::get("settings.vertical_spacing_apply_to"), [] {});
     verticalSpacingScopeButton->setDescription(strings::get("settings.vertical_spacing_scope_description"));
-    section(stylingPage, stylingRows, "rrSmartStylingSection", strings::get("settings.section_smart_styling"));
+    section(stylingPage, stylingRows, "rrNormalizationSection", strings::get("reader.book_beautifier"));
     beautifierButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrBeautifierSettings",
         strings::get("reader.book_beautifier"), [] {});
     beautifierButton->setDescription(strings::get("settings.beautifier_summary"));
-    avoidWastefulStylingOption =
-        check(stylingPage, "rrAvoidWastefulStyling", strings::get("settings.avoid_wasteful_styling"),
-              strings::get("settings.avoid_wasteful_styling_description"));
-    avoidWastefulStylingOption->setChecked(true);
-    stylingRows->addWidget(avoidWastefulStylingOption);
-    // The option changes book CSS in ways its name cannot say, so each change
-    // is listed under it, aligned with its label.
-    auto *changes = new QWidget(stylingPage);
-    changes->setObjectName("rrSmartStylingChanges");
-    auto *changeRows = new QVBoxLayout(changes);
-    changeRows->setContentsMargins(c::inset + m::settings::labelLeft + c::cellIcon + ui::px(20), ui::px(12), c::inset,
-                                   m::settings::descriptionBottom + ui::px(8));
-    changeRows->setSpacing(ui::px(6));
-    auto *changesTitle = new ui::InterfaceLabel(strings::get("settings.avoid_wasteful_styling_changes"), changes);
-    readerStyle(changesTitle, styles::font(c::descriptionText) + "font-style:italic;");
-    changeRows->addWidget(changesTitle);
-    auto *list = new QWidget(changes);
-    auto *items = new QGridLayout(list);
-    items->setContentsMargins(0, 0, 0, 0);
-    items->setHorizontalSpacing(ui::px(10));
-    items->setVerticalSpacing(ui::px(6));
-    items->setColumnStretch(1, 1);
-    int row = 0;
-    for (const auto *key : {"settings.avoid_wasteful_styling_margins", "settings.avoid_wasteful_styling_breaks",
-                            "settings.avoid_wasteful_styling_illustrations"}) {
-        auto *bullet = new ui::InterfaceLabel(QStringLiteral("\u2022"), list);
-        readerStyle(bullet, styles::font(c::descriptionText) + "color:palette(placeholder-text);");
-        items->addWidget(bullet, row, 0, Qt::AlignTop);
-        auto *line = new ui::InterfaceLabel(strings::get(key), list);
-        line->setWordWrap(true);
-        readerStyle(line, styles::font(c::descriptionText) + "color:palette(placeholder-text);");
-        items->addWidget(line, row, 1);
-        ++row;
-    }
-    changeRows->addWidget(list);
-    stylingRows->addWidget(changes);
     section(stylingPage, stylingRows, "rrAdvancedContentSection", strings::get("settings.section_book_content"));
     hideNonlinearOption =
         check(stylingPage, "rrHideNonlinearFragments", strings::get("reader.hide_nonlinear_fragments"),
@@ -504,7 +471,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         ui::buttonIcon(button, icon);
     }
     hideNonlinearOption->setLeadingIcon(ui::ControlIcon::Hidden);
-    avoidWastefulStylingOption->setLeadingIcon(ui::ControlIcon::MagicWand);
     wordSpacingButton->setDescription(strings::get("settings.word_spacing_summary"));
     trackingButton->setDescription(strings::get("settings.justification_tracking_summary"));
     widowsOrphansButton->setDescription(strings::get("settings.widows_orphans_summary"));
@@ -677,8 +643,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         optionPage = 0;
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = {avoidWastefulStylingOption,
-                                              hideNonlinearOption,
+    QVector<ui::DescribedOption *> options = {hideNonlinearOption,
                                               linkIndicatorOption,
                                               darkOption,
                                               bionicOption,
@@ -1105,11 +1070,28 @@ void SettingsPanel::showBeautifier(const QJsonObject &current, std::function<voi
     auto *hint = card->message(strings::get("settings.beautifier_description"));
     hint->setContentsMargins(c::inset, 0, c::inset, m::notice::cardMargins.bottom());
     readerStyle(hint, styles::font(c::descriptionText));
+    auto *presetRow = new QWidget(card);
+    auto *presetLayout = new QHBoxLayout(presetRow);
+    presetLayout->setContentsMargins(c::inset, 0, c::inset, m::notice::cardMargins.bottom());
+    presetLayout->setSpacing(0);
+    auto *presets = new QButtonGroup(card);
+    const QStringList presetNames{"recommended", "full", "custom"};
+    const QStringList presetObjects{"rrNormalizationRecommended", "rrNormalizationFull", "rrNormalizationCustom"};
+    auto draft = std::make_shared<QJsonObject>(appearance::normalizationSettings(current));
+    (*draft)[appearance::normalizationPresetKey] = appearance::normalizationPreset(current);
+    for (int i = 0; i < presetNames.size(); ++i) {
+        auto *button = segmentButton(presetRow, presetLayout, presets, presetObjects[i],
+            strings::get(("settings.normalization_" + presetNames[i]).toUtf8().constData()));
+        button->setChecked(draft->value(appearance::normalizationPresetKey) == presetNames[i]);
+        presets->setId(button, i);
+    }
+    presets->buttons().last()->setProperty("segment_last", true);
+    rows->addWidget(presetRow);
     QVector<ui::DescribedOption *> options;
-    const QStringList names{"rrBeautifierInitials", "rrBeautifierSpacing", "rrBeautifierIndent"};
-    const QStringList labels{"initials", "spacing", "indent"};
-    for (int i = 0; i < int(appearance::beautifierKeys.size()); ++i) {
-        const auto prefix = "settings.beautifier_" + labels[i];
+    const QStringList names{"rrNormalizationMargins", "rrNormalizationChapters", "rrBeautifierInitials", "rrBeautifierSpacing", "rrBeautifierIndent"};
+    const QStringList labels{"settings.normalization_margins", "settings.normalization_chapters", "settings.beautifier_initials", "settings.beautifier_spacing", "settings.beautifier_indent"};
+    for (int i = 0; i < int(appearance::normalizationKeys.size()); ++i) {
+        const auto prefix = labels[i];
         auto *option = new ui::DescribedOption(strings::get(prefix.toUtf8().constData()),
             strings::get((prefix + "_description").toUtf8().constData()), card);
         option->setObjectName(names[i]);
@@ -1125,17 +1107,29 @@ void SettingsPanel::showBeautifier(const QJsonObject &current, std::function<voi
         presentation.indicatorSize = {c::checkSize, c::checkSize};
         presentation.minimumRowHeight = c::optionHeight;
         option->setPresentation(presentation);
-        option->setChecked(current.value(appearance::beautifierKeys[i]).toBool(false));
+        option->setChecked(draft->value(appearance::normalizationKeys[i]).toBool());
+        connect(option, &QCheckBox::clicked, card, [draft, presets, i](bool checked) {
+            (*draft)[appearance::normalizationKeys[i]] = checked;
+            (*draft)[appearance::normalizationPresetKey] = "custom";
+            presets->button(2)->setChecked(true);
+        });
         rows->addWidget(option);
         options.append(option);
+    }
+    for (int i = 0; i < presetNames.size(); ++i) {
+        connect(presets->button(i), &QPushButton::clicked, card, [draft, options, presetNames, i] {
+            if (i < 2) *draft = appearance::normalizationPresetSettings(presetNames[i]);
+            else (*draft)[appearance::normalizationPresetKey] = "custom";
+            for (int j = 0; j < options.size(); ++j)
+                options[j]->setChecked(draft->value(appearance::normalizationKeys[j]).toBool());
+        });
     }
     auto *cancel = ui::makeModalButton(card, {strings::get("common.cancel"), "rrBeautifierCancel"}, false);
     auto *done = ui::makeModalButton(card, {strings::get("common.done"), "rrBeautifierDone"}, true);
     card->adaptiveActions({cancel, done});
     connect(cancel, &QPushButton::clicked, this, [this] { dismissFontChoices(); });
-    connect(done, &QPushButton::clicked, this, [this, options, chosen] {
-        QJsonObject value;
-        for (int i = 0; i < options.size(); ++i) value[appearance::beautifierKeys[i]] = options[i]->isChecked();
+    connect(done, &QPushButton::clicked, this, [this, draft, chosen] {
+        const auto value = *draft;
         dismissFontChoices();
         chosen(value);
     });

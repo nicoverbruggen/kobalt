@@ -727,7 +727,6 @@
 "settings.section_book_content" = "Book content";
 "settings.section_words_letters" = "Words and letters";
 "settings.section_page_breaks" = "Page breaks";
-"settings.section_smart_styling" = "Smart styling";
 "settings.styling_preview_same" = "These sample pages look the same with every option.";
 "settings.justification_tracking" = "Justification tracking";
 "settings.justification_tracking_off" = "Normal";
@@ -984,12 +983,6 @@
 "settings.inherit_header_footer" = "Inherit header and footer from the last book";
 "settings.inherit_header_footer_description" = "New books start with the last book's header and footer. Books with saved settings keep them.";
 
-"settings.avoid_wasteful_styling" = "Reduce publisher spacing";
-"settings.avoid_wasteful_styling_description" = "Use Kobalt's page margins and reduce blank space at chapter starts.";
-"settings.avoid_wasteful_styling_changes" = "What this changes:";
-"settings.avoid_wasteful_styling_margins" = "Ignores the book's own page margins and padding, so your Layout margins apply.";
-"settings.avoid_wasteful_styling_breaks" = "Removes the space a book adds above text that starts on a new page, such as a chapter opening.";
-"settings.avoid_wasteful_styling_illustrations" = "Preserves the book's space above illustrations at chapter starts.";
 
 "settings.minimal_annotation_mode" = "Minimal annotation mode";
 "settings.minimal_annotation_mode_description" = "Hide the annotation bar. Tap text or blank space, then choose Stop highlighting to exit.";
@@ -1223,14 +1216,21 @@
 "keyboard.backspace" = "Backspace";
 "keyboard.done" = "Done";
 
-"settings.beautifier_summary" = "Choose how text initials and ordinary paragraphs are normalized.";
-"settings.beautifier_description" = "Experimental. Checked rules apply to all books. Uncheck every rule to turn off. Your book files are never changed.";
+"settings.beautifier_summary" = "Choose a preset or customize how publisher styling is adjusted.";
+"settings.beautifier_description" = "Experimental. Applies to all books. Uncheck all rules to turn off. Book files are never changed.";
 "settings.beautifier_initials" = "Normalize opening letters";
-"settings.beautifier_initials_description" = "Turn recognized text drop caps into ordinary letters, keeping every character.";
+"settings.beautifier_initials_description" = "Turn text drop caps into ordinary letters.";
 "settings.beautifier_spacing" = "Remove paragraph gaps";
-"settings.beautifier_spacing_description" = "Remove extra space below ordinary prose. Keep recognized scene breaks and special passages.";
+"settings.beautifier_spacing_description" = "Keep recognized scene breaks and special passages.";
 "settings.beautifier_indent" = "Standardize first-line indents";
-"settings.beautifier_indent_description" = "Indent ordinary prose consistently. Your explicit paragraph adjustments take priority.";
-"settings.beautifier_active" = "On · %1 of 3 rules";
+"settings.beautifier_indent_description" = "Your paragraph adjustments take priority.";
 
 "common.done" = "Done";
+
+"settings.normalization_recommended" = "Recommended";
+"settings.normalization_full" = "Full";
+"settings.normalization_custom" = "Custom";
+"settings.normalization_margins" = "Use Kobalt page margins";
+"settings.normalization_margins_description" = "Use the margins set in Layout.";
+"settings.normalization_chapters" = "Reduce chapter-start spacing";
+"settings.normalization_chapters_description" = "Keep space above chapter-opening illustrations.";

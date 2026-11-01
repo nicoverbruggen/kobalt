@@ -5445,11 +5445,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(tracking->height() >= tracking->heightForWidth(tracking->width()));
         const auto *advancedHeading = fixture.widget("rrAdvancedTextSection");
         const auto *breaksHeading = fixture.widget("rrVerticalSpacingSection");
-        const auto *smartHeading = fixture.widget("rrSmartStylingSection");
+        const auto *normalizationHeading = fixture.widget("rrNormalizationSection");
         const auto *contentHeading = fixture.widget("rrAdvancedContentSection");
-        QVERIFY(advancedHeading && breaksHeading && smartHeading && contentHeading);
-        QVERIFY(advancedHeading->y() < breaksHeading->y() && breaksHeading->y() < smartHeading->y() &&
-                smartHeading->y() < contentHeading->y());
+        QVERIFY(advancedHeading && breaksHeading && normalizationHeading && contentHeading);
+        QVERIFY(advancedHeading->y() < breaksHeading->y() && breaksHeading->y() < normalizationHeading->y() &&
+                normalizationHeading->y() < contentHeading->y());
         // Fallback fonts are font defaults, in the Defaults tab with Default font.
         auto *defaultsPage = fixture.widget("rrDefaultsOptions");
         QVERIFY(defaultsPage);
@@ -7310,16 +7310,31 @@ private slots:
         QCOMPARE(fixture.widget("rrBeautifierSettings")->font(), fixture.widget("rrWordSpacing")->font());
         QVERIFY(fixture.press("rrBeautifierSettings"));
         QTRY_VERIFY(fixture.visible("rrBeautifierPopup"));
+        auto *normalizationModal = static_cast<ui::ModalOverlay *>(fixture.widget("rrBeautifierPopup"));
+        QVERIFY(normalizationModal->rect().contains(normalizationModal->card()->geometry()));
         QVERIFY(!fixture.widget("rrBeautifierEnabled"));
         QVERIFY(!fixture.widget("rrBeautifierInitials")->property("checked").toBool());
         QVERIFY(fixture.widget("rrBeautifierInitials")->isEnabled());
+        QVERIFY(!fixture.widget("rrSmartStylingSection"));
+        QVERIFY(!fixture.widget("rrAvoidWastefulStyling"));
+        QVERIFY(fixture.widget("rrNormalizationRecommended")->property("checked").toBool());
+        QVERIFY(fixture.widget("rrNormalizationMargins")->property("checked").toBool());
+        QVERIFY(fixture.widget("rrNormalizationChapters")->property("checked").toBool());
         QVERIFY(capture(fixture, name + "-beautifier-off"));
+        QVERIFY(fixture.press("rrNormalizationFull"));
+        QVERIFY(capture(fixture, name + "-beautifier-full"));
+        for (const auto *rule : {"rrNormalizationMargins", "rrNormalizationChapters", "rrBeautifierInitials", "rrBeautifierSpacing", "rrBeautifierIndent"})
+            QVERIFY(fixture.widget(rule)->property("checked").toBool());
+        QVERIFY(fixture.press("rrNormalizationCustom"));
+        QVERIFY(fixture.widget("rrBeautifierIndent")->property("checked").toBool());
+        QVERIFY(fixture.press("rrNormalizationRecommended"));
         auto *initials = static_cast<ui::DescribedOption *>(fixture.widget("rrBeautifierInitials"));
         QVERIFY(initials->presentation().leadingIndicator);
-        QVERIFY(initials->presentation().dividers.testFlag(Qt::TopEdge));
+        QVERIFY(initials->presentation().dividers.testFlag(Qt::BottomEdge));
         // Tap the description side of the row, well away from its left checkbox.
         QVERIFY(fixture.click(initials, QPoint(initials->width() * 3 / 4, initials->height() * 2 / 3)));
         QTRY_VERIFY(initials->isChecked());
+        QVERIFY(fixture.widget("rrNormalizationCustom")->property("checked").toBool());
         QVERIFY(capture(fixture, name + "-beautifier-rules"));
         QVERIFY(fixture.press("rrBeautifierCancel"));
         QTRY_VERIFY(!fixture.widget("rrBeautifierPopup"));
@@ -7333,6 +7348,8 @@ private slots:
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_VERIFY(fixture.state().value("beautifier_initials").toBool());
         QVERIFY(!fixture.state().value("beautifier_spacing").toBool());
+        QVERIFY(fixture.state().value("normalize_page_margins").toBool());
+        QVERIFY(fixture.state().value("reduce_chapter_spacing").toBool());
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsStyling"));
         QVERIFY(revealSettingsOption(fixture, "rrBeautifierSettings"));
@@ -7959,7 +7976,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1415;
+    int expectedScreenshots = lightGallery ? 84 : 1418;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

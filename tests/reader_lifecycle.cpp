@@ -267,7 +267,8 @@ public:
         const auto preferences = appearance::readerPreferences(storage::readJson(paths.preferences()), saved);
         saved["dark_mode"] = preferences.value("dark_mode").toBool();
         saved["bold_reading"] = preferences.value("bold_reading").toString("off");
-        saved["avoid_wasteful_styling"] = preferences.value("avoid_wasteful_styling").toBool(true);
+        for (const auto *key : appearance::normalizationKeys)
+            saved[key] = appearance::normalizationSettings(preferences).value(key);
         (rotation ? rotation : &orientation)->configure(preferences);
         opening = std::make_unique<ReaderSession>(fonts, placeholder);
         session_ = opening.get();

@@ -7,6 +7,30 @@
 #include <QStringList>
 
 namespace kobalt::appearance {
+QJsonObject normalizationSettings(const QJsonObject &settings) {
+    auto result = beautifierSettings(settings);
+    const bool legacy = settings.value("avoid_wasteful_styling").toBool(true);
+    result["normalize_page_margins"] = settings.value("normalize_page_margins").toBool(legacy);
+    result["reduce_chapter_spacing"] = settings.value("reduce_chapter_spacing").toBool(legacy);
+    return result;
+}
+QJsonObject normalizationPresetSettings(const QString &preset) {
+    QJsonObject result;
+    for (int i = 0; i < int(normalizationKeys.size()); ++i)
+        result[normalizationKeys[i]] = preset == "full" || i < 2;
+    result[normalizationPresetKey] = preset;
+    return result;
+}
+QString normalizationPreset(const QJsonObject &settings) {
+    if (settings.value(normalizationPresetKey) == "custom") return QStringLiteral("custom");
+    const auto rules = normalizationSettings(settings);
+    for (const auto *preset : {"recommended", "full"}) {
+        auto expected = normalizationPresetSettings(preset);
+        expected.remove(normalizationPresetKey);
+        if (rules == expected) return QString::fromLatin1(preset);
+    }
+    return QStringLiteral("custom");
+}
 QJsonObject readerPreferences(const QJsonObject &global, const QJsonObject &book) {
     auto result = globalPreferences(global);
     if (!result.contains("bold_reading") && result.contains("bionic_reading")) {
@@ -38,6 +62,14 @@ QJsonObject globalPreferences(QJsonObject preferences) {
         const auto rules = beautifierSettings(preferences);
         for (const auto *key : beautifierKeys) preferences[key] = rules.value(key);
         preferences.remove("book_beautifier");
+    }
+    bool hasNormalization = preferences.contains("avoid_wasteful_styling") || preferences.contains(normalizationPresetKey);
+    for (const auto *key : normalizationKeys) hasNormalization |= preferences.contains(key);
+    if (hasNormalization) {
+        const auto normalization = normalizationSettings(preferences);
+        for (const auto *key : normalizationKeys) preferences[key] = normalization.value(key);
+        preferences[normalizationPresetKey] = normalizationPreset(preferences);
+        preferences.remove("avoid_wasteful_styling");
     }
     if (!preferences.contains("header_footer") && preferences.value(lastPresetKey).isString())
         preferences["header_footer"] = preferences.value(lastPresetKey);
@@ -76,7 +108,7 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
         preferences.remove(key);
     for (const auto *key : {"dark_mode", "hide_tab_labels", "inherit_text_layout", "two_columns_landscape",
                             "page_animations", "show_link_indicator", "edge_light_gestures", "show_light_gesture_feedback", "dense_stats_chart",
-                            "hide_nonlinear_fragments", "avoid_wasteful_styling",
+                            "hide_nonlinear_fragments", "normalize_page_margins", "reduce_chapter_spacing",
                             "minimal_annotation_mode", "show_header", "show_footer", "show_clock", "auto_rotate"})
         if (preferences.contains(key) && !preferences.value(key).isBool()) preferences.remove(key);
     for (const auto *key : beautifierKeys)
@@ -137,8 +169,8 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
 }
 QJsonObject bookDefaults(const QJsonObject &preferences) {
     auto defaults = typographyDefaults();
-    const auto beautifier = beautifierSettings(preferences);
-    for (const auto *key : beautifierKeys) defaults[key] = beautifier.value(key);
+    const auto normalization = normalizationSettings(preferences);
+    for (const auto *key : normalizationKeys) defaults[key] = normalization.value(key);
     defaults.remove("font_face");
     applyFontDefault(defaults, preferences);
     defaults["vertical_justification"] = verticalSpacingMode(preferences.value("vertical_justification"));
@@ -194,8 +226,9 @@ void applyBookDefaults(QJsonObject &saved, const QJsonObject &defaults) {
     applyFontDefault(saved, defaults);
     for (const auto *key : marginKeys)
         saved[key] = defaults.value(key);
-    const auto beautifier = beautifierSettings(defaults);
-    for (const auto *key : beautifierKeys) saved[key] = beautifier.value(key);
+    const auto normalization = normalizationSettings(defaults);
+    for (const auto *key : normalizationKeys) saved[key] = normalization.value(key);
+    saved.remove("avoid_wasteful_styling");
     saved.remove("book_beautifier");
     // Settings choices replace stale book values.
     saved["columns"] = 1;

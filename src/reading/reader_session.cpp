@@ -483,7 +483,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 const auto bionic = saved.value("bold_reading");
                 const auto dark = saved.value("dark_mode");
                 const auto hideNonlinear = saved.value("hide_nonlinear_fragments");
-                const auto avoidWastefulStyling = saved.value("avoid_wasteful_styling");
+                const auto normalization = appearance::normalizationSettings(saved);
                 const auto landscapeColumns = saved.value("two_columns_landscape");
                 const auto columnSpacing = saved.value("column_spacing_percent");
                 const auto wordSpacing = saved.value("word_spacing");
@@ -496,7 +496,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 saved["bold_reading"] = bionic;
                 saved["dark_mode"] = dark;
                 saved["hide_nonlinear_fragments"] = hideNonlinear;
-                saved["avoid_wasteful_styling"] = avoidWastefulStyling;
+                for (const auto *key : appearance::normalizationKeys) saved[key] = normalization.value(key);
                 saved["two_columns_landscape"] = landscapeColumns;
                 saved["column_spacing_percent"] = columnSpacing;
                 saved["word_spacing"] = wordSpacing;

@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     }
     require(model.applyAppearance(kobalt::qt::object({{"text_alignment", "publisher"}})) && model.image(0) == original,
             "Publisher alignment did not restore the original layout");
-    auto marginImage = [&](const QByteArray &body, int margin, int ppi = 300) {
+    auto marginImage = [&](const QByteArray &body, int margin, int ppi = 300, QJsonObject settings = {}) {
         const int callerPpi = kobalt::readingPpi.exchange(ppi);
         auto pageData = data;
         pageData["c.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>"
@@ -117,7 +117,8 @@ int main(int argc, char **argv) {
             std::make_shared<std::atomic_bool>(false));
         kobalt::ReaderModel page(kobalt::test::readerFonts());
         // Leave room for the device-scaled image and authored spacing.
-        require(page.openResources(cache, pageSizes, QSize(1600, 1800), kobalt::qt::object({{"margin_pixels", margin}}),
+        settings["margin_pixels"] = margin;
+        require(page.openResources(cache, pageSizes, QSize(1600, 1800), settings,
                                    &error),
                 qPrintable(error));
         const auto image = page.image(0);
@@ -144,6 +145,15 @@ int main(int argc, char **argv) {
     require(bounds(bare, 0).y() == 0 && bounds(edge, 0).x() == 0 && bounds(edge, 0).y() == 251 &&
                 bounds(parentMargin, 0).y() == 251 && bounds(imageMargin, 0).y() == 126,
             "The leading image or its parent lost publisher spacing");
+    for (bool margins : {false, true}) {
+        for (bool chapters : {false, true}) {
+            const QJsonObject rules{{"normalize_page_margins", margins}, {"reduce_chapter_spacing", chapters}};
+            const auto plain = marginImage(barePicture, 0, 300, rules);
+            const auto spaced = marginImage(picture, 0, 300, rules);
+            require(bounds(spaced, 0).top() >= bounds(plain, 0).top() + 240,
+                "Independent spacing rules removed a chapter-opening illustration's margin");
+        }
+    }
     const auto bare212 = marginImage(barePicture, 0, 212);
     const auto parent212 =
         marginImage(QByteArray(picture).replace("margin-top:40px!important", "margin-top:0"), 0, 212);

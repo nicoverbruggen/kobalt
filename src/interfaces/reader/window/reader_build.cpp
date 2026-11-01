@@ -1262,7 +1262,6 @@ void Reader::buildSettings() {
     hideTabLabelsOption = settings->hideTabLabelsOption;
     linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
-    avoidWastefulStylingOption = settings->avoidWastefulStylingOption;
     connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
         settings->showColumnSpacingChoices(settingsColumnSpacing, [this, settings](int percent) {
             settingsColumnSpacing = percent;
@@ -1424,7 +1423,7 @@ void Reader::buildSettings() {
         settingsVerticalSpacingScope = "all";
         settingsParagraphSpacing = -1;
         settingsParagraphIndent = -1;
-        settingsBeautifier = appearance::beautifierSettings({});
+        settingsBeautifier = appearance::normalizationPresetSettings("recommended");
         showAdvancedText();
         screenRefreshMode = kobalt::ScreenRefresh::Smart;
         showScreenRefresh();

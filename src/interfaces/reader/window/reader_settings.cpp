@@ -277,7 +277,6 @@ void Reader::openSettings() {
     darkOption->setChecked(model->state().value("dark_mode").toBool(false));
     inheritTextLayoutOption->setChecked(preferences.value(appearance::inheritTextLayoutKey).toBool(true));
     hideNonlinearOption->setChecked(model->state().value("hide_nonlinear_fragments").toBool(false));
-    avoidWastefulStylingOption->setChecked(model->state().value("avoid_wasteful_styling").toBool(true));
     auto *displaySettings = static_cast<SettingsPanel *>(general);
     settingsVerticalSpacing = appearance::verticalSpacingMode(model->state().value("vertical_justification"));
     settingsVerticalSpacingScope = appearance::verticalSpacingScope(model->state().value("vertical_spacing_scope"));
@@ -288,7 +287,8 @@ void Reader::openSettings() {
     settingsWordSpacing = model->state().value("word_spacing").toInt(100);
     settingsParagraphSpacing = appearance::paragraphSpacing(preferences.value("paragraph_spacing"));
     settingsParagraphIndent = appearance::paragraphIndent(preferences.value("paragraph_indent"));
-    settingsBeautifier = appearance::beautifierSettings(preferences);
+    settingsBeautifier = appearance::normalizationSettings(preferences);
+    settingsBeautifier[appearance::normalizationPresetKey] = appearance::normalizationPreset(preferences);
     settingsTracking = model->state().value("justification_tracking").toInt(0);
     settingsWidowsOrphans = model->state().value("widows_orphans").toString("publisher");
     showAdvancedText();
@@ -318,11 +318,8 @@ void Reader::openSettings() {
 
 void Reader::showAdvancedText(int changed) {
     auto *panel = static_cast<SettingsPanel *>(general);
-    int rules = 0;
-    for (const auto *key : {"beautifier_initials", "beautifier_spacing", "beautifier_indent"})
-        rules += settingsBeautifier.value(key).toBool();
-    panel->beautifierButton->setCaption(rules > 0
-        ? strings::get("settings.beautifier_active").arg(rules).toUpper() : strings::get("common.off").toUpper());
+    const auto preset = appearance::normalizationPreset(settingsBeautifier);
+    panel->beautifierButton->setCaption(strings::get(("settings.normalization_" + preset).toUtf8().constData()).toUpper());
     const QString wordSpacing = settingsWordSpacing == 80 ? "narrow" : settingsWordSpacing == 120 ? "wide" : "normal";
     panel->wordSpacingButton->setCaption(strings::get(("settings.word_spacing_" + wordSpacing).toUtf8().constData()).toUpper());
     panel->paragraphSpacingButton->setCaption(strings::get("settings.paragraph_adjustments_value")
@@ -376,7 +373,7 @@ void Reader::renderStylingSamples(int requested) {
     settings["word_spacing"] = settingsWordSpacing;
     settings["paragraph_spacing"] = settingsParagraphSpacing;
     settings["paragraph_indent"] = settingsParagraphIndent;
-    for (const auto *key : appearance::beautifierKeys) settings[key] = settingsBeautifier.value(key);
+    for (const auto *key : appearance::normalizationKeys) settings[key] = settingsBeautifier.value(key);
     settings["justification_tracking"] = settingsTracking;
     settings["widows_orphans"] = settingsWidowsOrphans;
     settings["vertical_justification"] = settingsVerticalSpacing;
@@ -527,7 +524,6 @@ void Reader::applySettings() {
     next["dark_mode"] = darkOption->isChecked();
     next[appearance::inheritTextLayoutKey] = inheritTextLayoutOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
-    next["avoid_wasteful_styling"] = avoidWastefulStylingOption->isChecked();
     next["vertical_justification"] = settingsVerticalSpacing;
     next["vertical_spacing_scope"] = settingsVerticalSpacingScope;
     next.remove("columns");
@@ -536,7 +532,9 @@ void Reader::applySettings() {
     next["word_spacing"] = settingsWordSpacing;
     next["paragraph_spacing"] = settingsParagraphSpacing;
     next["paragraph_indent"] = settingsParagraphIndent;
-    for (const auto *key : appearance::beautifierKeys) next[key] = settingsBeautifier.value(key);
+    for (const auto *key : appearance::normalizationKeys) next[key] = settingsBeautifier.value(key);
+    next[appearance::normalizationPresetKey] = appearance::normalizationPreset(settingsBeautifier);
+    next.remove("avoid_wasteful_styling");
     next["justification_tracking"] = settingsTracking;
     next["widows_orphans"] = settingsWidowsOrphans;
     next["page_animations"] = animationOption->isChecked();
@@ -583,7 +581,6 @@ void Reader::applySettings() {
         settings[key] = preferences.value(key).toString();
     settings["dark_mode"] = darkOption->isChecked();
     settings["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
-    settings["avoid_wasteful_styling"] = avoidWastefulStylingOption->isChecked();
     settings["vertical_justification"] = preferences.value("vertical_justification");
     settings["vertical_spacing_scope"] = preferences.value("vertical_spacing_scope");
     settings["columns"] = 1;
@@ -592,7 +589,7 @@ void Reader::applySettings() {
     settings["word_spacing"] = settingsWordSpacing;
     settings["paragraph_spacing"] = settingsParagraphSpacing;
     settings["paragraph_indent"] = settingsParagraphIndent;
-    for (const auto *key : appearance::beautifierKeys) settings[key] = settingsBeautifier.value(key);
+    for (const auto *key : appearance::normalizationKeys) settings[key] = settingsBeautifier.value(key);
     settings["justification_tracking"] = settingsTracking;
     settings["widows_orphans"] = settingsWidowsOrphans;
     settings["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");

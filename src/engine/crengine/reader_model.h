@@ -350,7 +350,7 @@ private:
     QString hyphenation_ = "off";
     bool darkMode_ = false;
     bool hideNonlinearFragments_ = false;
-    bool avoidWastefulStyling_ = true;
+    bool normalizePageMargins_ = true, reduceChapterSpacing_ = true;
     QString verticalSpacing_ = "off", verticalSpacingScope_ = "all";
     int wordSpacing_ = 100;
     int justificationTracking_ = 0;

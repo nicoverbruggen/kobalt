@@ -65,16 +65,17 @@ int main(int argc, char **argv) {
         require(heading.pages() == 2, "Heading lost its chapter break");
         const auto original = heading.image(1);
         const auto trimmed = ink(original);
-        require(heading.state().value("avoid_wasteful_styling").toBool(), "Space saving is not on by default");
-        require(heading.applyAppearance({{"avoid_wasteful_styling", false}}), "Cannot preserve publisher spacing");
+        require(heading.state().value("reduce_chapter_spacing").toBool(), "Space saving is not on by default");
+        require(heading.applyAppearance({{"reduce_chapter_spacing", false}}), "Cannot preserve publisher spacing");
+        require(heading.state().value("normalize_page_margins").toBool(), "Chapter spacing changed the margin rule");
         const auto preserved = ink(heading.image(1));
         std::printf("%d ppi heading top: trimmed=%d preserved=%d\n", ppi, trimmed.top(), preserved.top());
         require(preserved.top() >= trimmed.top() + 60, "Forced break discarded publisher top margin");
         kobalt::ReaderModel preview(kobalt::test::readerFonts());
         QString error;
         require(preview.openPreview(heading, QSize(800, 1000), &error), qPrintable(error));
-        require(!preview.state().value("avoid_wasteful_styling").toBool(), "Preview lost publisher spacing preference");
-        require(heading.applyAppearance({{"avoid_wasteful_styling", true}}), "Cannot restore space saving");
+        require(!preview.state().value("reduce_chapter_spacing").toBool(), "Preview lost publisher spacing preference");
+        require(heading.applyAppearance({{"reduce_chapter_spacing", true}}), "Cannot restore space saving");
         require(heading.image(1) == original, "Spacing toggle did not restore original layout");
 
         QTemporaryDir cache;
@@ -89,7 +90,7 @@ int main(int argc, char **argv) {
             kobalt::ReaderModel cached(kobalt::test::readerFonts());
             cached.setDocumentCache(cache.path(), "spacing-fixture", "page-layout-test", 4096);
             open(cached, "<h2>Chapter heading</h2>", "h2{margin:2em 0;font-size:1em}",
-                 {{"avoid_wasteful_styling", false}}, QSize(800, 1000), true);
+                 {{"reduce_chapter_spacing", false}}, QSize(800, 1000), true);
             require(cached.openedFromCache(), "Spacing fixture did not reopen from its document cache");
             require(ink(cached.image(1)).top() == preserved.top(), "Document cache retained trimmed publisher margins");
         }
@@ -97,7 +98,8 @@ int main(int argc, char **argv) {
         kobalt::ReaderModel margins(kobalt::test::readerFonts());
         open(margins, "<p>Body margins</p>", "body{margin:20px;padding:10px}");
         const auto zero = ink(margins.image(0));
-        require(margins.applyAppearance({{"avoid_wasteful_styling", false}}), "Cannot restore body margins");
+        require(margins.applyAppearance({{"normalize_page_margins", false}}), "Cannot restore body margins");
+        require(margins.state().value("reduce_chapter_spacing").toBool(), "Margin rule changed chapter spacing");
         const auto authored = ink(margins.image(0));
         require(authored.left() > zero.left() + 30 && authored.top() > zero.top() + 10,
                 "Publisher body spacing was still overridden");
@@ -122,7 +124,7 @@ int main(int argc, char **argv) {
                     verse,
                     "<div class='outer'><div class='inner'><p>First verse line.</p><p>Second verse line.</p></div></div>",
                     ".outer{display:table;width:100%;height:100%;position:fixed}.inner{display:table-cell;vertical-align:middle}",
-                    {{"avoid_wasteful_styling", avoid}}, size, true, true);
+                    {{"reduce_chapter_spacing", avoid}}, size, true, true);
                 require(verse.pages() == 3, "Table did not start its own chapter page");
                 require(!verse.pageExcerpt(0).contains("verse"), "Table text leaked into previous chapter");
                 require(verse.pageExcerpt(2).startsWith("Next chapter"),

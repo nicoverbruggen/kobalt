@@ -1110,7 +1110,7 @@ void SettingsPanel::showBeautifier(const QJsonObject &current, std::function<voi
         option->setChecked(draft->value(appearance::normalizationKeys[i]).toBool());
         connect(option, &QCheckBox::clicked, card, [draft, presets, i](bool checked) {
             (*draft)[appearance::normalizationKeys[i]] = checked;
-            (*draft)[appearance::normalizationPresetKey] = "custom";
+            (*draft)[appearance::normalizationPresetKey] = QStringLiteral("custom");
             presets->button(2)->setChecked(true);
         });
         rows->addWidget(option);
@@ -1119,7 +1119,7 @@ void SettingsPanel::showBeautifier(const QJsonObject &current, std::function<voi
     for (int i = 0; i < presetNames.size(); ++i) {
         connect(presets->button(i), &QPushButton::clicked, card, [draft, options, presetNames, i] {
             if (i < 2) *draft = appearance::normalizationPresetSettings(presetNames[i]);
-            else (*draft)[appearance::normalizationPresetKey] = "custom";
+            else (*draft)[appearance::normalizationPresetKey] = QStringLiteral("custom");
             for (int j = 0; j < options.size(); ++j)
                 options[j]->setChecked(draft->value(appearance::normalizationKeys[j]).toBool());
         });

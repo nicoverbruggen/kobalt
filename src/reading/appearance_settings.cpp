@@ -22,7 +22,7 @@ QJsonObject normalizationPresetSettings(const QString &preset) {
     return result;
 }
 QString normalizationPreset(const QJsonObject &settings) {
-    if (settings.value(normalizationPresetKey) == "custom") return QStringLiteral("custom");
+    if (settings.value(normalizationPresetKey) == QStringLiteral("custom")) return QStringLiteral("custom");
     const auto rules = normalizationSettings(settings);
     for (const auto *preset : {"recommended", "full"}) {
         auto expected = normalizationPresetSettings(preset);

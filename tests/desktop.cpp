@@ -1503,9 +1503,39 @@ void checkPinnedBookmarks(int preset, bool dark) {
         QTRY_VERIFY(!fixture.visible("rrPinnedBookmarks"));
         advanceIntoBody(fixture);
     }
+    const auto readingOrigin = fixture.state().value("position");
     QVERIFY(fixture.press("rrPinnedBookmark0"));
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     QTRY_COMPARE(fixture.state().value("position").toString(), firstPosition);
+    for (int shortcut : {2, 4}) {
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+        const auto destination = fixture.widget(QString("rrPinnedBookmark%1").arg(shortcut).toLatin1().constData())
+                                     ->property("bookmark_position").toString();
+        QVERIFY(fixture.press(QString("rrPinnedBookmark%1").arg(shortcut).toLatin1().constData()));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("position").toString(), destination);
+    }
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavSeek"));
+    QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+    QVERIFY(fixture.press("rrScrubberReturn"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position"), readingOrigin);
+    advanceIntoBody(fixture);
+    const auto nextOrigin = fixture.state().value("position");
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+    QVERIFY(fixture.press("rrPinnedBookmark0"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position").toString(), firstPosition);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavSeek"));
+    QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+    QVERIFY(fixture.press("rrScrubberReturn"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position"), nextOrigin);
+
     QVERIFY(!fixture.visible("rrPinnedBookmarks"));
     fixture.window.readerWindow()->close();
     QTRY_VERIFY(fixture.window.idle());

@@ -1261,13 +1261,14 @@ bool Reader::openLink(QPoint point, bool direct) {
     return false;
 }
 
-void Reader::goToPassage(const QString &target) {
+void Reader::goToPassage(const QString &target, bool pinnedShortcut) {
     if (target.isEmpty() || model->busy() || closing || lifecycleHidden || services.suspended()) {
         return;
     }
     const LinkVisit origin{
         model->state().value("position").toString(), model->page(),
-        (model->chapterTitle().isEmpty() ? strings::get("reader.reading") : model->chapterTitle()).toUpper()};
+        (model->chapterTitle().isEmpty() ? strings::get("reader.reading") : model->chapterTitle()).toUpper(),
+        pinnedShortcut};
     if (!model->goTo(target)) {
         return;
     }

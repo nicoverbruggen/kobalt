@@ -164,7 +164,10 @@ void Reader::syncFrameState() {
         // Accept the visit only after the engine confirms a different passage.
         const auto origin = std::exchange(pendingPassage, {});
         if (model->error().isEmpty() && model->state().value("position").toString() != origin.position) {
-            linkHistory.append(origin);
+            // One return point covers a chain of pinned reference shortcuts.
+            // Ordinary links can still nest above it and return normally.
+            if (!origin.pinnedShortcut || linkHistory.isEmpty() || !linkHistory.last().pinnedShortcut)
+                linkHistory.append(origin);
         }
     }
     if (returningFromLink && !model->busy()) {

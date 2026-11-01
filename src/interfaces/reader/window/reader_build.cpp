@@ -818,7 +818,7 @@ void Reader::buildOverlays() {
         button->setObjectName(QString("rrPinnedBookmark%1").arg(i));
         pinnedButtons.append(button);
         connect(button, &QPushButton::clicked, this, [this, button] {
-            if (button->isEnabled()) goToPassage(button->property("bookmark_position").toString());
+            if (button->isEnabled()) goToPassage(button->property("bookmark_position").toString(), true);
         });
     }
     bookmarkList = new kobalt::BookmarkList(this, services.keyboard);

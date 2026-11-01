@@ -404,6 +404,7 @@ private:
         QString position;
         int page;
         QString chapter;
+        bool pinnedShortcut = false;
     };
     QVector<LinkVisit> linkHistory;
     LinkVisit pendingPassage{};
@@ -426,7 +427,7 @@ private:
     void dismissLinks();
     void updateLinkReturn();
     bool openLink(QPoint point, bool direct = false);
-    void goToPassage(const QString &target);
+    void goToPassage(const QString &target, bool pinnedShortcut = false);
     kobalt::DictionaryPanel *dictionaryPanel = nullptr;
     std::unique_ptr<kobalt::DictionaryService> dictionary;
     QString lookupText;

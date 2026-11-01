@@ -428,6 +428,12 @@ void Client::sendRequest(const QByteArray &method, const QString &path, const QU
         }
         QJsonParseError error;
         const auto document = QJsonDocument::fromJson(*bytes, &error);
+        // Some servers encode absent progress as [] instead of {}.
+        if (method == "GET" && path.startsWith("/syncs/progress/") &&
+            document.isArray() && document.array().isEmpty()) {
+            done(status, {}, {});
+            return;
+        }
         if (error.error != QJsonParseError::NoError || !document.isObject()) {
             diagnostic("kosync-response-invalid", qt::object({{"stage", "json"}, {"parse_error", int(error.error)}}));
             done(status, {}, message("kosync.invalid_response")); return;

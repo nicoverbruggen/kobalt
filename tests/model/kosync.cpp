@@ -1,4 +1,5 @@
 #include "reading/kosync.h"
+#include "support/strings.h"
 #include "check.h"
 #include <QBuffer>
 #include <QCoreApplication>
@@ -522,10 +523,24 @@ int main(int argc, char **argv) {
     const auto digest = QByteArray("900150983cd24fb0d6963f7d28e17f72");
     kosync::Progress received;
     auto pulled = [&](kosync::Progress value, QString failure) { received = value; error = failure; ++completed; };
-    network.response = "{}";
-    client.pull(digest, pulled);
-    wait(client);
-    require(error.isEmpty() && !received.found, "empty progress response means no saved progress");
+    const kosync::Progress local{"/body/DocFragment[2]/body/p[3]/text().0", {}, {}, 0.42};
+    for (const auto &body : {QByteArray("{}"), QByteArray("[]"), QByteArray(" \n[ \n ]\t")}) {
+        network.response = body;
+        const int before = network.calls;
+        bool uploaded = false;
+        client.pull(digest, [&](kosync::Progress remote, QString failure) {
+            pulled(remote, failure);
+            if (!failure.isEmpty()) return;
+            kosync::Reconciler sync;
+            if (sync.observe(remote, local.position, client.deviceId()) != kosync::Reconciler::Action::Upload) return;
+            network.response = "{\"document\":\"" + digest + "\",\"timestamp\":124}";
+            client.push(digest, local, [&](QString failure) { uploaded = failure.isEmpty(); done(failure); });
+        });
+        wait(client);
+        require(error.isEmpty() && !received.found && uploaded && network.calls == before + 2 &&
+                network.operation == QNetworkAccessManager::PutOperation,
+                "an empty object or array permits the first progress upload");
+    }
     network.response = R"({"progress":"/body/DocFragment[2]/body/p[3]/text().0","percentage":0.42,"device":"KOReader","device_id":"other","timestamp":123})";
     client.pull(digest, pulled);
     wait(client);
@@ -540,15 +555,21 @@ int main(int argc, char **argv) {
             payload.value("device_id").toString() == client.deviceId() && payload.value("percentage").toDouble() == 0.42 &&
             payload.value("device").toString() == QString::fromUtf8("Nico’s Kobo"),
             "upload uses stable document and device identity with precise position");
-    for (const auto &body : {QByteArray("[]"), QByteArray("oops"), QByteArray(R"({"percentage":0.5})"),
+    for (const auto &body : {QByteArray("[{}]"), QByteArray("[null]"), QByteArray("null"), QByteArray("oops"), QByteArray(R"({"percentage":0.5})"),
                              QByteArray(17000, 'x')}) {
         network.response = body;
         client.pull(digest, pulled);
         wait(client);
         require(!error.isEmpty() && !received.found, "malformed or oversized responses cannot supply progress");
     }
-    network.response = "{}";
-    for (const int status : {301, 401, 404, 500}) {
+    network.response = "[]";
+    client.login("https://another.example", "reader", "secret", done);
+    wait(client);
+    require(error == strings::get("kosync.invalid_response"), "an empty array cannot authenticate an account");
+    client.push(digest, local, done);
+    wait(client);
+    require(error == strings::get("kosync.invalid_response"), "an empty array cannot acknowledge an upload");
+    for (const int status : {204, 301, 401, 404, 500, 502}) {
         network.status = status;
         const int before = network.calls;
         client.pull(digest, pulled);

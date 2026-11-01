@@ -74,6 +74,8 @@ These checks do not establish exact position compatibility with KOReader or phys
 
 `desktop.dictionaryBookSearch` drives word selection, the dictionary action, edited lookup submission and cancellation, real search results, result navigation and Return to original position. It checks the icon action and fixed-width dictionary selector across short, multilingual and long dictionary names in the existing header without an extra row, selection cleanup and a hidden keyboard at both reader sizes in light, dark and 150% interface text. `desktop.dictionaryBookSearchUnicode` searches the focused lookup EPUB through dictionary editing and the production worker for accented, astral and multiword terms, preserves a query longer than the former search-field limit, and checks immediate dismissal and reader hiding. The full dictionary gallery includes the action and prefilled results at both sizes in all three interface variants. These headless checks do not establish physical Kobo or Android keyboard and touch behavior.
 
+The `session.reading-book` regression checks cold and retained reopening of finished books, host-finished openings, unfinished position restoration, and preservation of book preferences and annotations with SQLite and diagnostic JSON storage. `desktop.restartFinishedBooks` marks a book finished through the Library, reopens it at the start, then verifies that subsequent reading resumes normally. The Library model check verifies that reopening clears both reader-finished and explicitly finished status. Physical Kobo and Android reopening still require device validation.
+
 ## Test inventory
 
 | Group | Checks | Purpose |

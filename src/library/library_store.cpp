@@ -159,8 +159,8 @@ void Store::setOpened(const QString &key) {
         return;
     auto &book = data.books[key];
     book.opened = now();
-    if (book.mark == Book::Mark::Unread)
-        book.mark = Book::Mark::None;
+    book.mark = Book::Mark::None;
+    book.finished = false;
     touch();
 }
 void Store::setProgress(const QString &key, int percent, bool finished) {

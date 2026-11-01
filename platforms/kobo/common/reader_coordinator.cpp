@@ -793,8 +793,10 @@ void ReaderCoordinator::load() {
     const bool unread = kobalt::resetNativeUnread(saved, run.diskBaseline);
     const bool useNative = unread || kobalt::preferNativeProgress(run.diskBaseline, savedBaseline);
     run.baseline = run.diskBaseline.valid ? run.diskBaseline : savedBaseline;
-    if (useNative)
+    if (useNative) {
         saved.remove("position");
+        saved.remove("finished_position");
+    }
     if (!run.model)
         run.model = std::make_unique<kobalt::ReaderSession>(environment_.fonts(), environment_.placeholderFamily());
     run.sourceLease = std::make_shared<kobalt::SourceLease>();
@@ -816,7 +818,8 @@ void ReaderCoordinator::load() {
         {run.identity, run.filePath, size, saved, nativeLocation, environment_.paths.layoutCache(),
          run.sourceLease, run.nativePublication->resources(run.sourceLease), positionCodec(),
          environment_.paths.documentCache(), temporaryAppearance, originalAppearance,
-         environment_.paths.directory + "/userstyle.css", kobalt::appearance::bookDefaults(preferences)},
+         environment_.paths.directory + "/userstyle.css", kobalt::appearance::bookDefaults(preferences), {},
+         run.diskBaseline.valid && run.diskBaseline.status == 2},
         [this](const kobalt::OpeningResult &outcome) {
             run.openingTimings["load_and_layout_ms"] = run.openingTimer.elapsed() - run.layoutStarted;
             if (!outcome.ready()) {

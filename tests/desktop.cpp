@@ -2345,6 +2345,34 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
         QCOMPARE(fixture.state().value("position").toString(), position);
     }
+    void restartFinishedBooks() {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        QVERIFY(fixture.state().value("page").toInt() > 0);
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(fixture.window.idle());
+        auto *start = fixture.window.findChild<android::StartScreen *>();
+        QVERIFY(start && start->library());
+        start->library()->markBook(QFileInfo(book).absoluteFilePath(), library::Book::Mark::Finished);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 2);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(fixture.state().value("page").toInt(), 0);
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() > 0);
+        const auto position = fixture.state().value("position").toString();
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(fixture.window.idle());
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 3);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(fixture.state().value("position").toString(), position);
+    }
     void errors() {
         Fixture fixture;
         QVERIFY(fixture.prepared);

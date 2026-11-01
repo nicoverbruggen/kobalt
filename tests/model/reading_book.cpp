@@ -174,12 +174,15 @@ int main(int argc, char **argv) {
     require(temporary.isValid(), "Cannot create state directory");
     storage::Paths paths{temporary.path()};
     const auto open = [&](QSize size = QSize(758, 900), const QJsonObject &state = QJsonObject(),
-                          const QString &identity = QStringLiteral("test-book"), PositionCodec positions = {}) {
-        auto session = std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+                          const QString &identity = QStringLiteral("test-book"), PositionCodec positions = {},
+                          bool restart = false, std::unique_ptr<ReaderSession> session = {}) {
+        if (!session) session = std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         bool ready = false;
         auto lease = std::make_shared<SourceLease>();
         OpenRequest request{identity, path, size, state, {}, {}, lease, nativeResourceFactory(path, server.port(), lease)};
         request.positions = positions;
+        request.restartAtStart = restart;
+        if (restart) request.platformLocation = "invalid-finished-native-location";
         session->open(std::move(request),
                       [&](const OpeningResult &result) {
                           require(result.ready(), qPrintable(openingMessage(result)));
@@ -205,6 +208,8 @@ int main(int argc, char **argv) {
             require(storage::writeBookState(finishPaths, identity, original, finishPaths.bookState(identity)),
                     "Cannot prepare finish state");
             auto session = open();
+            require(session->style(32, 150), "Cannot set finish-book appearance");
+            waitUntil([&] { return !session->busy(); });
             require(session->go(session->pages() - 1), "Cannot reach finish page");
             waitUntil([&] { return !session->busy(); });
             const auto hash = session->sourceHash();
@@ -240,6 +245,39 @@ int main(int argc, char **argv) {
             book.markFinished();
             require(!book.checkpointState().value("finished_position").toString().isEmpty(),
                     "Suppressing the prompt disabled explicit finishing");
+            require(book.checkpoint(&snapshot), "Cannot save finished checkpoint");
+            const auto finished = storage::readBookState(finishPaths, identity).object;
+            // Reopening must reset progress without resetting book preferences or annotations.
+            auto reopened = open(QSize(758, 900), finished, identity);
+            require(reopened->page() == 0 && reopened->fontSize() == book.session()->fontSize(),
+                    "Finished book did not restart with its saved appearance");
+            auto retained = book.session()->retained();
+            require(bool(retained), "Cannot retain finished document");
+            retained = open(QSize(758, 900), finished, identity, {}, false, std::move(retained));
+            require(retained->page() == 0, "Retained finished book did not restart");
+            ReadingBook restarted(std::move(reopened), finishPaths.bookState(identity), finishPaths, identity, hash, nullptr, {}, {});
+            require(restarted.checkpoint(&snapshot), "Cannot save restarted checkpoint");
+            const auto started = storage::readBookState(finishPaths, identity).object;
+            require(started.value("finished_position").toString().isEmpty() &&
+                        started.value("dictionary_id") == original.value("dictionary_id") &&
+                        started.value("extra") == original.value("extra") &&
+                        started.value("suppress_finish_prompt").toBool(),
+                    "Restart changed book preferences or retained the finished marker");
+            require(bookmarks.load() && bookmarks.bookmarks() == savedBookmarks && highlights.load() &&
+                        highlights.highlights().first().note == annotation.note,
+                    "Restart changed annotations");
+            auto reading = finished;
+            reading.remove("finished_position");
+            auto continued = open(QSize(758, 900), reading, identity);
+            require(continued->page() == continued->pages() - 1, "Unfinished book lost its saved position");
+            auto hostFinished = open(QSize(758, 900), reading, identity, {}, true);
+            require(hostFinished->page() == 0, "Host-finished book did not restart");
+            auto hostFirstOpen = open(QSize(758, 900), {}, identity, {}, true);
+            require(hostFirstOpen->page() == 0, "First host-finished opening restored its native final location");
+            auto hostRetained = continued->retained();
+            require(bool(hostRetained), "Cannot retain host-finished document");
+            hostRetained = open(QSize(758, 900), reading, identity, {}, true, std::move(hostRetained));
+            require(hostRetained->page() == 0, "Retained host-finished book did not restart");
         }
         storage::closeProfile();
     }

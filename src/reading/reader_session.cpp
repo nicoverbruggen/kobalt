@@ -348,6 +348,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     const auto lease = lease_;
     const auto path = std::move(request.path), identity = std::move(request.identity);
     const auto size = request.size;
+    const bool restartAtStart = request.restartAtStart;
     auto saved = std::move(request.saved);
     temporaryAppearance = request.temporaryAppearance;
     originalAppearance = request.originalAppearance;
@@ -400,7 +401,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
         [guard, engine, path, identity, size, saved, nativeLocation, lease, factory, finished, report, systemFont,
          layoutCachePath, documentCachePath, retainedHash, retainedSettings, latest, job, positions, pinnedAppearance,
          retainedWarning, retainedDetails, userStyleSheetPath, appearanceDefaults, markup, markupGeneration,
-         neighbourCount]() mutable {
+         neighbourCount, restartAtStart]() mutable {
             EngineJob activity;
             QElapsedTimer timer;
             timer.start();
@@ -509,7 +510,12 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 }
                 if (!pinnedAppearance.isEmpty())
                     appearance::copy(saved, pinnedAppearance);
-                const auto initial = saved.value("position").toString().isEmpty() ? nativeLocation : QString();
+                const bool restart = restartAtStart || !saved.value("finished_position").toString().isEmpty();
+                // Keep the saved position until the document loads: it selects
+                // the DOM version used by existing bookmarks and annotations.
+                if (restart)
+                    saved.remove("imported_native_location");
+                const auto initial = !restart && saved.value("position").toString().isEmpty() ? nativeLocation : QString();
                 auto resources = factory(publication.sizes(), systemFont, contentRejected);
                 if (!resources)
                     outcome = OpeningResult::failed(OpeningFailureKind::HostUnavailable,
@@ -557,6 +563,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     if (!engine->applyAppearance(saved, size))
                         outcome = OpeningResult::failed(OpeningFailureKind::InvalidContent,
                                                         strings::key("error.cannot_restore_the_retained_appearance"));
+                    else if (restart)
+                        engine->go(0);
                     else if (!initial.isEmpty())
                         locate(initial);
                     else if (!saved.value("position").toString().isEmpty() &&
@@ -612,7 +620,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     report(OpeningStage::Text, 0);
                     if (outcome.ready() &&
                         engine->openResources(resources, publication.sizes(), size, saved, nullptr, report, &outcome)) {
-                        if (!initial.isEmpty())
+                        if (restart)
+                            engine->go(0);
+                        else if (!initial.isEmpty())
                             locate(initial);
                         if (outcome.ready()) {
                             report(OpeningStage::Ready, 0);

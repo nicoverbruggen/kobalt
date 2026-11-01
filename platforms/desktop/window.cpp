@@ -416,6 +416,8 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     qApp->installEventFilter(this);
     connect(&controller, &android::ReaderController::openingProgress, start, &android::StartScreen::setProgress);
     connect(&controller, &android::ReaderController::opened, this, [this] {
+        if (!openedKey.isEmpty())
+            store.setOpened(openedKey);
         auto *reader = controller.window();
         canvas->setContent(reader, renderingDpi != 0, renderingDpi ? renderingDpi / 300.0 : 1.0);
         stack->setCurrentWidget(canvas);
@@ -578,10 +580,10 @@ void Window::openBook(const QString &path) {
     if (closing || (controller.window() && controller.path() == absolute))
         return;
     recordProgress();
+    const bool restart = store.index().books.value(absolute).status() == library::Status::Finished;
     // Every entry point, including Finder and drag-and-drop, joins the library.
     if (store.index().books.contains(absolute) || store.addBook(absolute)) {
         openedKey = absolute;
-        store.setOpened(absolute);
     }
     failed = false;
     sizeCanvas();
@@ -590,7 +592,7 @@ void Window::openBook(const QString &path) {
     deviceFrame->next->setEnabled(false);
     start->showOpening();
     stack->setCurrentWidget(start);
-    controller.open(absolute, pixels());
+    controller.open(absolute, pixels(), {}, restart);
 }
 void Window::turnPage(int direction, bool hardware) {
     auto *reader = controller.window();

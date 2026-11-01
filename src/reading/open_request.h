@@ -28,5 +28,7 @@ struct OpenRequest {
     // Original basename when the host materializes the book under another name.
     // Null uses path; explicitly empty means the source filename is unavailable.
     QString syncFilename{};
+    // A host library can mark a book finished independently of its checkpoint.
+    bool restartAtStart = false;
 };
 }

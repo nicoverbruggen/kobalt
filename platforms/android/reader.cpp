@@ -80,16 +80,18 @@ bool ReaderController::resetBook(const QString &path) {
     // old settings or progress on the next opening.
     return storage::writeBookState(paths, identity, {{"book", identity}});
 }
-void ReaderController::open(const QString &path, QSize pixels, QString sourceKey) {
+void ReaderController::open(const QString &path, QSize pixels, QString sourceKey, bool restartAtStart) {
     if (phase == Phase::Reading && path == current)
         return;
     if (!idle()) {
         pending = path;
         pendingSourceKey = std::move(sourceKey);
         pendingSize = pixels;
+        pendingRestartAtStart = restartAtStart;
         retire();
         return;
     }
+    this->restartAtStart = restartAtStart;
     currentSourceKey = std::move(sourceKey);
     begin(path, pixels);
 }
@@ -170,6 +172,7 @@ void ReaderController::begin(const QString &path, QSize pixels) {
     // An absent legacy name must not silently identify the internal hashed filename.
     if (request.syncFilename.isNull()) request.syncFilename = QStringLiteral("");
 #endif
+    request.restartAtStart = restartAtStart;
     request.userStyleSheetPath = paths.directory + "/userstyle.css";
     request.appearanceDefaults = appearance::bookDefaults(settings);
     opening->open(
@@ -308,6 +311,7 @@ void ReaderController::release() {
             guard->phase = Phase::Idle;
             reportBookClose(std::exchange(guard->closing, {}));
             if (!guard->pending.isEmpty()) {
+                guard->restartAtStart = std::exchange(guard->pendingRestartAtStart, false);
                 guard->currentSourceKey = std::exchange(guard->pendingSourceKey, {});
                 guard->begin(std::exchange(guard->pending, {}), guard->pendingSize);
             } else

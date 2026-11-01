@@ -187,6 +187,8 @@ public:
         });
         connect(&controller, &android::ReaderController::openingProgress, start, &android::StartScreen::setProgress);
         connect(&controller, &android::ReaderController::opened, this, [this] {
+            if (!openedKey.isEmpty())
+                store.setOpened(openedKey);
             auto *reader = controller.window();
             canvas->setContent(reader);
             setPalette(reader->palette());
@@ -342,8 +344,7 @@ private:
         }
         pendingPath.clear();
         openedPath = path;
-        if (!openedKey.isEmpty())
-            store.setOpened(openedKey);
+        const bool restart = store.index().books.value(openedKey).status() == library::Status::Finished;
         if (controller.window() && controller.path() == path)
             return;
         failedOpening = false;
@@ -355,7 +356,7 @@ private:
         layout->setStackingMode(QStackedLayout::StackAll);
         android::activity("showReading");
         layout->activate();
-        controller.open(path, pixels(), openedKey);
+        controller.open(path, pixels(), openedKey, restart);
     }
     bool eventFilter(QObject *object, QEvent *event) override {
         auto *reader = controller.window();

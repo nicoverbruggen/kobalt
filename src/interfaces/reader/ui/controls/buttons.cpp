@@ -461,7 +461,7 @@ void CaptionButton::paintEvent(QPaintEvent *) {
     if (mode == Presentation::ListAction) {
         namespace c = m::chrome;
         QPainter painter(this);
-        painter.fillRect(rect(), isEnabled() && isDown() ? sectionColor(this) : palette().color(QPalette::Window));
+        painter.fillRect(rect(), isEnabled() && isDown() ? themeColors(this).pressedPaper : palette().color(QPalette::Window));
         paintEdges(painter, rect(), rule, dividerColor(this));
         if (!isEnabled())
             painter.setOpacity(.45);
@@ -516,7 +516,7 @@ void CaptionButton::paintEvent(QPaintEvent *) {
     }
     namespace c = m::chrome;
     QPainter painter(this);
-    painter.fillRect(rect(), isEnabled() && isDown() ? sectionColor(this) : palette().color(QPalette::Window));
+    painter.fillRect(rect(), isEnabled() && isDown() ? themeColors(this).pressedPaper : palette().color(QPalette::Window));
     paintEdges(painter, rect(), rule, dividerColor(this));
     const auto ink = palette().color(QPalette::WindowText);
     controlIcon(glyph, ink).paint(&painter, QRect(c::inset, (height() - c::cellIcon) / 2, c::cellIcon, c::cellIcon));
@@ -604,7 +604,8 @@ int CellButton::widthForLabel(int maximumWidth) const {
 }
 void CellButton::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    const bool active = isEnabled() && (isDown() || isChecked());
+    const bool pressed = isEnabled() && isDown();
+    const bool active = isEnabled() && (isChecked() || (pressed && !grayPress));
     const auto paper = palette().color(inverted ? QPalette::WindowText : QPalette::Window);
     const auto ink = palette().color(inverted ? QPalette::Window : QPalette::WindowText);
     if (circular) {
@@ -620,7 +621,7 @@ void CellButton::paintEvent(QPaintEvent *) {
             QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels, iconPixels));
         return;
     }
-    painter.fillRect(rect(), active ? ink : paper);
+    painter.fillRect(rect(), active ? ink : pressed && grayPress ? themeColors(this).pressedPaper : paper);
     paintEdges(painter, rect(), rule, palette().color(QPalette::Mid));
     if (!isEnabled())
         painter.setOpacity(.45);

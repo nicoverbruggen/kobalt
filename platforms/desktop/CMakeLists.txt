@@ -468,6 +468,7 @@ if(BUILD_TESTING)
             regularIconWeight
             annotationModeNotice
             continuationHintClears
+            listPressFeedback
             marksSortingAndAnnotationRows
             annotationDetailsOnlyLoadVisiblePage
             hidingSelectionMenuKeepsDamageCompact

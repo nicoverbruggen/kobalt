@@ -188,6 +188,7 @@ void ListRow::setMetadataFont(const QFont &font) {
 QPushButton *ListRow::addAction(const QString &name, const QString &accessibleName) {
     if (!action) {
         auto *cell = new CellButton(ControlIcon::Close, this);
+        cell->setGrayPress(true);
         cell->setRule(Edges(Qt::LeftEdge) | Qt::BottomEdge);
         action = cell;
     }

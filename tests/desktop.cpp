@@ -3876,7 +3876,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, point);
                 QTRY_VERIFY(action && !action->isDown());
                 QTRY_COMPARE(sample(), normal);
-                QCOMPARE(pressed, QColor(dark ? Qt::white : Qt::black));
+                QCOMPARE(pressed, ui::themeColors(dark).pressedPaper);
             }
         }
         const int currentPage = fixture.state().value("page").toInt();

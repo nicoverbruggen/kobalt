@@ -13,7 +13,7 @@ namespace kobalt::ui {
 namespace m = metrics;
 namespace {
 // One action: an optional icon and a label across the card's full width,
-// with a divider above. A held row inverts its background, icon and label.
+// with a divider above. A held row uses the shared gray list feedback.
 class ActionRow final : public Button {
 public:
     ActionRow(const ActionMenuItem &item, bool divider, QWidget *parent)
@@ -33,8 +33,8 @@ protected:
         const auto colors = parentWidget() ? parentWidget()->palette() : palette();
         const auto paper = colors.color(QPalette::Window), ink = colors.color(QPalette::WindowText);
         const bool pressed = isEnabled() && isDown();
-        const auto foreground = pressed ? paper : ink;
-        painter.fillRect(rect(), pressed ? ink : paper);
+        const auto foreground = ink;
+        painter.fillRect(rect(), pressed ? themeColors(this).pressedPaper : paper);
         if (divider)
             painter.fillRect(0, 0, width(), m::control::border, dividerColor(this));
         const int iconSize = m::control::iconSize, left = m::chrome::inset;

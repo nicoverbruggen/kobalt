@@ -14,6 +14,7 @@
 #include "interfaces/reader/ui/controls/text.h"
 #include "interfaces/reader/ui/controls/paging.h"
 #include "interfaces/reader/ui/dialogs/modals.h"
+#include "interfaces/reader/ui/dialogs/action_menu.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/metrics.h"
 #include "interfaces/reader/ui/style/scale.h"
@@ -1762,6 +1763,42 @@ private slots:
             QTRY_VERIFY(paints.painted.contains(gap));
             QCOMPARE(owner.grab().toImage().copy(gap), blank);
         }
+    }
+    void listPressFeedback_data() { variants(); }
+    void listPressFeedback() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        QWidget host;
+        host.setProperty("reader_dark", dark);
+        host.setPalette(ui::readerPalette(host.palette(), dark));
+        host.resize(ui::px(1072), ui::px(1448));
+        ui::ListRow row(&host);
+        row.resize(ui::px(700), ui::px(160));
+        auto *more = row.addAction("more", "More");
+        row.setActionIcon(ui::ControlIcon::More);
+        ui::ActionMenu menu(&host, {}, {ui::actionItem("Modify bookmark", "modify", ui::ControlIcon::Pin, {})});
+        menu.setPalette(host.palette());
+        menu.card()->setPalette(host.palette());
+        menu.fitCard();
+        const auto background = [](QWidget *widget) { return widget->grab().toImage().pixelColor(ui::px(8), ui::px(8)); };
+        const auto gray = ui::themeColors(dark).pressedPaper;
+        row.setDown(true);
+        QCOMPARE(background(&row), gray);
+        more->setDown(true);
+        QCOMPARE(background(more), gray);
+        auto *action = menu.action("modify");
+        action->setDown(true);
+        QCOMPARE(background(action), gray);
+        action->setDown(false);
+        QCOMPARE(background(action), ui::themeColors(dark).paper);
+        row.setCheckable(true);
+        row.setChecked(true);
+        QCOMPARE(background(&row), ui::themeColors(dark).ink);
+        ui::CellButton toolbar(ui::ControlIcon::Search, &host);
+        toolbar.resize(ui::px(112), ui::px(112));
+        toolbar.setDown(true);
+        QCOMPARE(background(&toolbar), ui::themeColors(dark).ink);
     }
     void marksSortingAndAnnotationRows_data() { variants(); }
     void marksSortingAndAnnotationRows() {

@@ -16,6 +16,8 @@ The retired `native_hide_status_bar` preference is removed when settings are nor
 
 Book state now lives in `kobalt.sqlite`. Legacy book state uses a host-selected prefix followed by the SHA-256 of the UTF-8 book identity and `.json`. Its `schema` is `1`. The `book` and `fingerprint` fields identify the publication. It stores the canonical reading position, book-specific text preferences and native progress reconciliation fields. Globally owned layout preferences remain in global settings. Marking a book unread resets its position and book-specific preferences, but keeps annotations.
 
+`suppress_finish_prompt` is an optional book-state Boolean. Missing or invalid values use false. True suppresses only that book’s finish prompt. It uses the existing publication identity and checkpoint writer, and survives reopening and restarting. Mark as unread clears it with other book-specific settings. Book-record format 1, legacy JSON schema 1 and database schema 3 stay unchanged. Reading positions, annotations and preferences keep their existing meaning.
+
 Legacy JSON bookmarks and annotations share `annotations/<book-key>/`. `book.json` has `version: 1`, `identity`, `title` and `fingerprint`. Book keys come from `BookmarkStore::bookKey`: native book identities remain stable across downloads; sideloaded books use their content fingerprint. A changed file can adopt annotations from the previous record of the same path.
 
 `bookmarks.json` has `version: 1` and a `bookmarks` array. Each bookmark stores `position`, `chapter`, `excerpt` and `created`. Positions are canonical CREngine XPointers, not page numbers. Dates are UTC ISO 8601 strings.

@@ -41,6 +41,8 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     if (this->bridge)
         resetNativeUnread(saved, reconciliation.baseline());
     preservedState = saved;
+    if (saved.value("book").toString() == identity_)
+        finishPromptSuppressed = saved.value("suppress_finish_prompt").toBool(false);
     const auto preferences = appearance::readerPreferences(
         storage::readPreferences(paths_.preferences()).object, saved.value("book").toString() == identity_ ? saved : QJsonObject());
     for (const auto *key : appearance::layoutKeys)
@@ -438,6 +440,9 @@ qint64 ReadingBook::readingMilliseconds() const {
     return completedReadingMilliseconds + (activeReading.isValid() ? activeReading.elapsed() : 0);
 }
 bool ReadingBook::offerFinish() const {
+    return !finishPromptSuppressed && canFinish();
+}
+bool ReadingBook::canFinish() const {
     if (released || (bridge && !bridge->writable()) || model->busy() || model->pages() <= 0 ||
         !model->error().isEmpty())
         return false;
@@ -449,7 +454,7 @@ bool ReadingBook::offerFinish() const {
     return model->page() * 10 >= model->pages() * 9 || model->nextPage() == model->page();
 }
 void ReadingBook::markFinished() {
-    if (offerFinish())
+    if (canFinish())
         acceptedFinishedAnchor = model->state().value("position").toString();
 }
 ReadingProgress ReadingBook::readProgress() const {
@@ -568,6 +573,7 @@ QJsonObject ReadingBook::checkpointState() const {
     state["schema"] = 1;
     state["nickel_progress"] = baseline.json();
     state["finished_position"] = acceptedFinishedAnchor;
+    state["suppress_finish_prompt"] = finishPromptSuppressed;
     // For the Android and desktop library, which shows progress without
     // opening the book.
     if (model->pages() > 0)

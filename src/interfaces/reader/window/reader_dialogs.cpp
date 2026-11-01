@@ -406,13 +406,27 @@ void Reader::showFinishChoice() {
     finishDialog->setGeometry(rect());
     auto *card = finishDialog->card();
     card->findChild<QLabel *>("rrModalTitle")->setObjectName("rrFinishBookPrompt");
-    auto choose = [this](bool finished) {
+    auto *suppress = new ui::DescribedOption(strings::get("finish.dont_ask_again"), {}, card);
+    suppress->setObjectName("rrSuppressFinishPrompt");
+    auto look = suppress->presentation();
+    look.indicator = ui::DescribedOption::Indicator::Square;
+    look.indicatorSize = QSize(m::chrome::checkSize, m::chrome::checkSize);
+    look.labelPixels = m::chrome::labelText;
+    look.minimumRowHeight = m::chrome::actionHeight;
+    look.dividers = Qt::TopEdge;
+    look.horizontalInset = m::chrome::inset;
+    suppress->setPresentation(look);
+    // Keep the checkbox above the connected confirmation footer.
+    card->rows()->insertWidget(card->rows()->count() - 1, suppress);
+    auto choose = [this, suppress](bool finished) {
         if (!finishDialog)
             return;
         if (services.suspended() || book->deviceTransition() || model->busy())
             return;
         if (finished)
             book->markFinished();
+        if (suppress->isChecked())
+            book->suppressFinishPrompt();
         finishDialog->hide();
         finishDialog->deleteLater();
         finishDialog.clear();

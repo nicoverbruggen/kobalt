@@ -72,7 +72,8 @@ DescribedOption::DescribedOption(const QString &text, const QString &description
     auto policy = sizePolicy();
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
-    setMinimumHeight(description.isEmpty() ? m::control::stepSize : m::settings::optionHeight);
+    appearance.minimumRowHeight = description.isEmpty() ? m::control::stepSize : m::settings::optionHeight;
+    setMinimumHeight(appearance.minimumRowHeight);
     setFocusPolicy(Qt::NoFocus);
 }
 void DescribedOption::setPreview(QWidget *widget, QSize size) {
@@ -125,7 +126,7 @@ int DescribedOption::descriptionTop() const {
 }
 int DescribedOption::heightForWidth(int width) const {
     if (description.isEmpty() && !preview)
-        return m::control::stepSize;
+        return qMax<int>(appearance.minimumRowHeight, m::control::stepSize);
     QFont descriptionFont = font();
     descriptionFont.setPixelSize(appearance.descriptionPixels);
     descriptionFont.setWeight(QFont::Normal);

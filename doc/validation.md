@@ -66,6 +66,8 @@ These checks do not establish exact position compatibility with KOReader or phys
 
 `model.header-footer` checks the percentage-only battery field, including zero, unknown charge, charging, hidden device status and saved-layout round trips. `desktop.batteryPercentageOnly` selects it through the paged chooser and checks persistence after reopening in both themes.
 
+`lifecycle.finishPromptPersistence` selects the per-book finish-prompt dismissal through the production dialog, closes and reopens the book, then repeats the suppression and other-book checks in a fresh process. The finish-choice lifecycle matrix checks both actions with and without suppression through sleep and close requests. `session.reading-book` checks the optional field’s default and invalid values, both storage backends, saved position and extra-field preservation, and explicit finishing after suppression. The existing finish-book gallery scene includes the checkbox at both sizes and in all interface variants. It checks that the checkbox row matches each modal action’s height, the row’s top divider and that the connected footer reaches the card’s bottom edge. These checks do not establish physical Kobo or Android behavior.
+
 ## Test inventory
 
 | Group | Checks | Purpose |

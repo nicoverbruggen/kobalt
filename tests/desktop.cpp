@@ -6573,7 +6573,21 @@ private slots:
         QCOMPARE(fixture.state().value("pages").toInt(), 1);
         fixture.window.readerWindow()->pageButton(1);
         QTRY_VERIFY(fixture.visible("rrFinishBook"));
+        auto *option = fixture.window.readerWindow()->findChild<QCheckBox *>("rrSuppressFinishPrompt");
+        QVERIFY(option && option->isVisible() && !option->isChecked());
+        const auto *dialog = static_cast<ui::ModalOverlay *>(fixture.window.readerWindow()->findChild<QWidget *>("rrFinishBook"));
+        QVERIFY(dialog && dialog->card()->rect().contains(option->geometry()));
         QVERIFY(capture(fixture, name + "-finish-book"));
+        QCOMPARE(option->height(), int(ui::metrics::chrome::actionHeight));
+        const auto *primary = dialog->findChild<QPushButton *>("rrMarkFinished");
+        const auto *secondary = dialog->findChild<QPushButton *>("rrStillReading");
+        QCOMPARE(option->height(), primary->height());
+        QCOMPARE(option->height(), secondary->height());
+        QCOMPARE(secondary->geometry().bottom(), dialog->card()->height() - 3);
+        const auto frame = dialog->card()->grab().toImage();
+        QCOMPARE(frame.pixelColor(option->x() + 10, option->y()), ui::dividerColor(option));
+        if (primary->y() == secondary->y())
+            QCOMPARE(frame.pixelColor(primary->x(), primary->geometry().bottom()), ui::dividerColor(primary));
         QVERIFY(fixture.press("rrStillReading"));
     }
     void dictionary_data() { screenshotVariants(); }

@@ -7,6 +7,8 @@
 #include "reading/reader_session.h"
 #include "storage/reader_storage.h"
 #include "storage/annotation_database.h"
+#include "storage/bookmark_store.h"
+#include "storage/highlight_store.h"
 #include "storage/record_writer.h"
 #include "storage/profile_database.h"
 #include "support/diagnostics.h"
@@ -188,6 +190,60 @@ int main(int argc, char **argv) {
         });
         return session;
     };
+    // Optional book state must survive both supported backends without
+    // changing reading data or whether a book is finished.
+    for (const auto *backend : {"0", "1"}) {
+        qputenv("KOBALT_ANNOTATIONS_SQLITE", backend);
+        QTemporaryDir profile;
+        require(profile.isValid(), "Finish profile unavailable");
+        storage::Paths finishPaths{profile.path()};
+        for (const auto &flag : {QJsonValue(), QJsonValue("invalid"), QJsonValue(true)}) {
+            const QString identity = "finish-book";
+            QJsonObject original{{"schema", 1}, {"book", identity}, {"extra", QJsonObject{{"keep", "value"}}},
+                                 {"suppress_finish_prompt", flag}, {"dictionary_id", "dictionary"}};
+            if (flag.isNull()) original.remove("suppress_finish_prompt");
+            require(storage::writeBookState(finishPaths, identity, original, finishPaths.bookState(identity)),
+                    "Cannot prepare finish state");
+            auto session = open();
+            require(session->go(session->pages() - 1), "Cannot reach finish page");
+            waitUntil([&] { return !session->busy(); });
+            const auto hash = session->sourceHash();
+            ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths, identity, hash, nullptr, {}, {});
+            require(book.offerFinish() == !flag.toBool(false), "Missing or invalid finish flag changed default");
+            const auto position = book.checkpointState().value("position");
+            BookmarkStore bookmarks(finishPaths.annotations(), identity, hash, "Finish test", finishPaths.database());
+            HighlightStore highlights(finishPaths.annotations(), identity, hash, "Finish test", finishPaths.database());
+            require(bookmarks.load() && highlights.load(), "Cannot load finish annotations");
+            const QVector<Bookmark> savedBookmarks{{position.toString(), "chapter", "excerpt", QDateTime::fromString("2026-11-01T09:00:00Z", Qt::ISODate)}};
+            auto annotation = Highlight{};
+            annotation.id = "finish-annotation";
+            annotation.start = position.toString();
+            annotation.end = position.toString() + ".1";
+            annotation.text = "Saved passage";
+            annotation.created = QDateTime::currentDateTimeUtc();
+            annotation.note = "Keep this note";
+            bookmarks.setBookmarks(savedBookmarks);
+            highlights.setHighlights({annotation});
+            require(bookmarks.save() && highlights.save(), "Cannot prepare finish annotations");
+            book.suppressFinishPrompt();
+            require(!book.offerFinish(), "Suppression still offers finish");
+            QJsonObject snapshot;
+            require(book.checkpoint(&snapshot), "Suppression checkpoint failed");
+            const auto stored = storage::readBookState(finishPaths, identity, finishPaths.bookState(identity)).object;
+            require(stored.value("suppress_finish_prompt").toBool() && stored.value("extra") == original.value("extra") &&
+                        stored.value("dictionary_id") == original.value("dictionary_id") && stored.value("position") == position &&
+                        stored.value("finished_position").toString().isEmpty(),
+                    "Suppression changed saved position, finish state or supported extra fields");
+            require(bookmarks.load() && bookmarks.bookmarks() == savedBookmarks && highlights.load() &&
+                        highlights.highlights().size() == 1 && highlights.highlights().first().note == annotation.note,
+                    "Suppression changed bookmarks or annotations");
+            book.markFinished();
+            require(!book.checkpointState().value("finished_position").toString().isEmpty(),
+                    "Suppressing the prompt disabled explicit finishing");
+        }
+        storage::closeProfile();
+    }
+    qunsetenv("KOBALT_ANNOTATIONS_SQLITE");
     const auto historyValue = [&](const QString &statement) {
         QVariant value;
         require(AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {

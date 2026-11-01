@@ -90,6 +90,7 @@ public:
     }
     bool offerFinish() const;
     void markFinished();
+    void suppressFinishPrompt() { finishPromptSuppressed = true; }
     void pollProgress();
     void invalidateProgress() {
         progressPoll.invalidate();
@@ -133,6 +134,8 @@ public:
     bool saveDictionaryChoice(const QString &id);
 
 private:
+    bool canFinish() const;
+    bool finishPromptSuppressed = false;
     struct ActivitySave;
     void writeActivity(std::shared_ptr<ActivitySave>, int attempt);
     void resumeActivityCheckpoints();

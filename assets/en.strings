@@ -772,6 +772,7 @@
 "settings.edge_brightness_description" = "Swipe up or down along the left edge for brightness.";
 
 /* finish */
+"finish.dont_ask_again" = "Don’t ask again for this book";
 "finish.prompt" = "Have you finished this book?";
 "finish.still_reading" = "Still reading";
 "finish.mark_finished" = "Mark as finished";

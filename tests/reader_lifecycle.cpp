@@ -65,6 +65,8 @@
 #include <QOrientationSensor>
 #endif
 #include <QPointer>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QScreen>
 #ifndef KOBALT_NO_SENSORS
@@ -3244,14 +3246,20 @@ private slots:
     void finishChoiceSurvivesSleepAndRequiresActiveReader_data() {
         QTest::addColumn<bool>("markFinished");
         QTest::addColumn<bool>("exitRequested");
-        QTest::newRow("still-reading") << false << false;
-        QTest::newRow("mark-finished") << true << false;
-        QTest::newRow("exit-still-reading") << false << true;
-        QTest::newRow("exit-mark-finished") << true << true;
+        QTest::addColumn<bool>("suppress");
+        QTest::newRow("suppress-still-reading") << false << false << true;
+        QTest::newRow("suppress-mark-finished") << true << false << true;
+        QTest::newRow("suppress-exit-still-reading") << false << true << true;
+        QTest::newRow("suppress-exit-mark-finished") << true << true << true;
+        QTest::newRow("still-reading") << false << false << false;
+        QTest::newRow("mark-finished") << true << false << false;
+        QTest::newRow("exit-still-reading") << false << true << false;
+        QTest::newRow("exit-mark-finished") << true << true << false;
     }
     void finishChoiceSurvivesSleepAndRequiresActiveReader() {
         QFETCH(bool, markFinished);
         QFETCH(bool, exitRequested);
+        QFETCH(bool, suppress);
         QTemporaryDir root;
         QVERIFY(root.isValid());
         auto paths = testPaths();
@@ -3283,6 +3291,9 @@ private slots:
         QTRY_VERIFY((dialog = host.window()->findChild<QWidget *>("rrFinishBook")) && dialog->isVisible());
         auto *choice = dialog->findChild<QPushButton *>(markFinished ? "rrMarkFinished" : "rrStillReading");
         QVERIFY(choice);
+        auto *suppression = dialog->findChild<QCheckBox *>("rrSuppressFinishPrompt");
+        QVERIFY(suppression);
+        suppression->setChecked(suppress);
         if (exitRequested) {
             // Home can request close while a choice is already open.
             // Repeated close requests must keep that choice unresolved.
@@ -3311,7 +3322,97 @@ private slots:
             QVERIFY(!host.idle());
             QCOMPARE(host.progress->current.status, 1);
             host.window()->pageButton(1);
+            if (suppress) {
+                QTest::qWait(100);
+                QVERIFY(!host.window()->findChild<QWidget *>("rrFinishBook"));
+            } else {
+                QTRY_VERIFY((dialog = host.window()->findChild<QWidget *>("rrFinishBook")) && dialog->isVisible());
+            }
+        }
+    }
+
+    void finishPromptPersistence() {
+        // A fresh process must restore the choice without any prior Reader state.
+        const auto inherited = qEnvironmentVariable("KOBALT_TEST_FINISH_PROFILE");
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        auto paths = testPaths();
+        paths.directory = inherited.isEmpty() ? root.path() : inherited;
+        const auto bookPath = inherited.isEmpty() ? textBook : qEnvironmentVariable("KOBALT_TEST_FINISH_BOOK");
+        const auto identity = QUrl::fromLocalFile(QFileInfo(bookPath).absoluteFilePath()).toString();
+        if (inherited.isEmpty()) {
+            ReaderFixture host(paths, testFonts, testPlaceholder);
+            CloseHost cleanup{host};
+            QSignalSpy opened(&host, &ReaderFixture::opened);
+            host.open(bookPath, nativeSize);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+            Canvas canvas(host.window(), nativeSize);
+            canvas.resize(900, 900);
+            canvas.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+            QTRY_VERIFY(!host.session()->busy());
+            QVERIFY(host.session()->go(host.session()->pages() - 1));
+            QTRY_VERIFY(!host.session()->busy());
+            host.window()->pageButton(1);
+            QPointer<QWidget> dialog;
             QTRY_VERIFY((dialog = host.window()->findChild<QWidget *>("rrFinishBook")) && dialog->isVisible());
+            auto *option = dialog->findChild<QCheckBox *>("rrSuppressFinishPrompt");
+            QVERIFY(option);
+            option->click();
+            dialog->findChild<QPushButton *>("rrStillReading")->click();
+            QTRY_VERIFY(!dialog);
+            QVERIFY(!host.window()->close());
+            QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
+        }
+        const auto saved = storage::readBookState(paths, identity).object;
+        QVERIFY(saved.value("suppress_finish_prompt").toBool());
+        QVERIFY(!saved.value("position").toString().isEmpty());
+        {
+            ReaderFixture host(paths, testFonts, testPlaceholder);
+            CloseHost cleanup{host};
+            QSignalSpy opened(&host, &ReaderFixture::opened);
+            host.open(bookPath, nativeSize);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+            Canvas canvas(host.window(), nativeSize);
+            canvas.resize(900, 900);
+            canvas.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+            QTRY_VERIFY(!host.session()->busy());
+            QVERIFY(host.session()->go(host.session()->pages() - 1));
+            QTRY_VERIFY(!host.session()->busy());
+            host.window()->pageButton(1);
+            QTest::qWait(100);
+            QVERIFY(!host.window()->findChild<QWidget *>("rrFinishBook"));
+            QVERIFY(!host.window()->close());
+            QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
+            const auto otherBook = root.path() + "/other.epub";
+            QVERIFY(QFile::copy(bookPath, otherBook));
+            host.open(otherBook, nativeSize);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+            Canvas otherCanvas(host.window(), nativeSize);
+            otherCanvas.resize(900, 900);
+            otherCanvas.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&otherCanvas));
+            QTRY_VERIFY(!host.session()->busy());
+            QVERIFY(host.session()->go(host.session()->pages() - 1));
+            QTRY_VERIFY(!host.session()->busy());
+            host.window()->pageButton(1);
+            QTRY_VERIFY(host.window()->findChild<QWidget *>("rrFinishBook"));
+            host.window()->findChild<QPushButton *>("rrMarkFinished")->click();
+            QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
+        }
+        storage::closeProfile();
+        if (inherited.isEmpty()) {
+            QProcess child;
+            auto environment = QProcessEnvironment::systemEnvironment();
+            environment.insert("KOBALT_TEST_FINISH_PROFILE", paths.directory);
+            environment.insert("KOBALT_TEST_FINISH_BOOK", bookPath);
+            child.setProcessEnvironment(environment);
+            child.setProcessChannelMode(QProcess::MergedChannels);
+            child.start(QCoreApplication::applicationFilePath(), {"finishPromptPersistence"});
+            QVERIFY(child.waitForFinished(60000));
+            const auto output = child.readAll();
+            QVERIFY2(child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0, output.constData());
         }
     }
 

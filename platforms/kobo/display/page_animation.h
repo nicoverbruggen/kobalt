@@ -38,10 +38,10 @@ private:
     int repairFd_ = -1;
     uint32_t repairMarker_ = 0;
 };
-// Page turn animations follow NickelDissolve on the Clara Colour, Libra Colour
-// and Clara BW, which use MediaTek's hwtcon driver. Kobo's firmware names the
-// model in PRODUCT. The Elipsa 2E also uses hwtcon but is not supported, and
-// Tolino models wait for official Tolino support.
+// Page turn animations follow NickelDissolve on the Clara Colour, Libra Colour,
+// Clara BW and their Tolino counterparts, which use MediaTek's hwtcon driver.
+// The firmware names the model in PRODUCT. The Elipsa 2E also uses hwtcon but
+// is not supported.
 enum class AnimationPanel { None, Mono, Colour };
 AnimationPanel animationPanel(const QByteArray &product, const QByteArray &driver);
 // This device's panel, read once from PRODUCT and the framebuffer driver.

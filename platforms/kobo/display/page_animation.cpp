@@ -25,7 +25,7 @@ void PageAnimation::arm(int direction, const QRect &update, bool dark, bool vert
     armed_ = std::chrono::steady_clock::now();
 }
 AnimationPanel animationPanel(const QByteArray &product, const QByteArray &driver) {
-    if (driver != "hwtcon" || product.contains("Tolino"))
+    if (driver != "hwtcon")
         return AnimationPanel::None;
     if (product.startsWith("monza"))
         return AnimationPanel::Colour;

@@ -1485,13 +1485,9 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QTRY_VERIFY(fixture.visible("rrBookmarkPin"));
     QVERIFY(capture(fixture, name + "-pinned-bookmark-actions"));
     QVERIFY(fixture.press("rrBookmarkPin"));
-    QTRY_VERIFY(fixture.visible("rrPinRemove"));
-    QVERIFY(capture(fixture, name + "-pinned-bookmark-edit"));
-    QVERIFY(fixture.press("rrPinRemove"));
-    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QTRY_VERIFY(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString().isEmpty());
-    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinName"));
+    QVERIFY(!fixture.widget("rrPinRemove"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-edit"));
     qobject_cast<QLineEdit *>(fixture.widget("rrPinName"))->setText(QString::fromUtf8("Carte 日本語"));
     // A pending bookmark refresh may raise the list behind an open editor.
     list->raise();
@@ -1503,6 +1499,42 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QVERIFY(fixture.press("rrPinSave"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
     QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["name"].toString(), QString::fromUtf8("Carte 日本語"));
+    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+    QTRY_VERIFY(fixture.visible("rrPinIconsNext"));
+    auto *pinKeyboard = fixture.widget("rrPinEditor")->findChild<QWidget *>("widgetKeyboard");
+    QVERIFY(pinKeyboard && !pinKeyboard->isVisible());
+    QVERIFY(!fixture.widget("rrPinIconsPrevious")->isEnabled());
+    for (int iconPage = 2; iconPage <= 4; ++iconPage) {
+        QVERIFY(fixture.press("rrPinIconsNext"));
+        QTRY_COMPARE(qobject_cast<QLabel *>(fixture.widget("rrPinIconsPage"))->text(), QString("%1 of 4").arg(iconPage));
+        QVERIFY(capture(fixture, name + QString("-pinned-bookmark-icons-page%1").arg(iconPage)));
+    }
+    QVERIFY(fixture.visible("rrPinIcon_diamond"));
+    QVERIFY(!fixture.widget("rrPinIconsNext")->isEnabled());
+    QVERIFY(fixture.press("rrPinIcon_diamond"));
+    QVERIFY(fixture.press("rrPinIconsPrevious"));
+    QVERIFY(fixture.press("rrPinIconsNext"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
+    auto *nameInput = fixture.widget("rrPinName");
+    QCOMPARE(reader->childAt(nameInput->mapTo(reader, nameInput->rect().center())), nameInput);
+    QVERIFY(fixture.press("rrPinName"));
+    QTRY_VERIFY(pinKeyboard->isVisible());
+    QTRY_VERIFY(!fixture.visible("rrPinIconSection"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-name"));
+    QVERIFY(fixture.click(pinKeyboard->findChild<QPushButton *>("widgetKeyboardDone")));
+    QTRY_VERIFY(!pinKeyboard->isVisible());
+    QTRY_VERIFY(fixture.visible("rrPinIcon_diamond"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
+    QVERIFY(fixture.press("rrPinSave"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString(), QString("diamond"));
+    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+    QTRY_VERIFY(fixture.visible("rrPinIcon_diamond"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
+    QVERIFY(fixture.press("rrPinIconsPrevious"));
+    QVERIFY(fixture.press("rrPinCancel"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString(), QString("diamond"));
 }
 
 class DesktopTests final : public QObject {
@@ -7254,7 +7286,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1280;
+    int expectedScreenshots = lightGallery ? 84 : 1334;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

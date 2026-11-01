@@ -18,6 +18,7 @@
 #include <climits>
 #include <QLineEdit>
 #include <QGridLayout>
+#include <QVBoxLayout>
 #include <QTimer>
 #include <QStyle>
 #include "interfaces/reader/ui/dialogs/action_menu.h"
@@ -129,6 +130,8 @@ void BookmarkList::placePin() {
     pinPopup->setGeometry(parentWidget()->rect());
     const auto bounds = window()->property("reader_keyboard_bounds").toRect();
     const int bottom = bounds.isEmpty() ? pinPopup->height() : pinPopup->mapFrom(window(), bounds.topLeft()).y();
+    if (auto *icons = pinPopup->findChild<QWidget *>("rrPinIconSection"))
+        icons->setVisible(bounds.isEmpty());
     pinPopup->setCardArea(QRect(0, 0, pinPopup->width(), qMax(1, bottom)));
     pinPopup->card()->fitToWidth(qMin<int>(ui::metrics::notice::cardWidth, width() - 2 * ui::metrics::notice::sideClearance));
     pinPopup->centerCard();
@@ -204,55 +207,90 @@ void BookmarkList::openPin(const BookmarkRow &row) {
                                    ui::metrics::notice::cardMargins.right(), ui::metrics::notice::cardGap);
     inputLayout->addWidget(input);
     card->rows()->insertWidget(1, inputRow);
-    auto selected = std::make_shared<QString>(row.pinIcon.isEmpty() ? QStringLiteral("star") : row.pinIcon);
-    auto *gridWidget = new QWidget(card);
+    auto selected = std::make_shared<QString>(row.pinIcon.isEmpty() ? ui::bookmarkIconNames().first() : row.pinIcon);
+    auto *iconSection = new QWidget(card);
+    iconSection->setObjectName("rrPinIconSection");
+    auto *sectionLayout = new QVBoxLayout(iconSection);
+    sectionLayout->setContentsMargins(0, 0, 0, 0);
+    sectionLayout->setSpacing(0);
+    auto *gridWidget = new QWidget(iconSection);
     auto *grid = new QGridLayout(gridWidget);
     grid->setContentsMargins(ui::metrics::notice::cardMargins.left(), 0,
                             ui::metrics::notice::cardMargins.right(), ui::metrics::notice::cardMargins.bottom());
     grid->setSpacing(ui::px(12));
+    for (int row = 0; row < 3; ++row)
+        grid->setRowMinimumHeight(row, c::actionHeight);
     auto *group = new QButtonGroup(gridWidget);
     group->setExclusive(true);
     const auto icons = ui::bookmarkIconNames();
-    for (int i = 0; i < icons.size(); ++i) {
-        const auto token = icons[i];
-        auto *button = new ui::CellButton(ui::bookmarkIcon(token), gridWidget);
+    constexpr int pageSize = 12;
+    const int pageCount = (icons.size() + pageSize - 1) / pageSize;
+    auto page = std::make_shared<int>(qMax(0, int(icons.indexOf(*selected))) / pageSize);
+    QVector<ui::CellButton *> iconButtons;
+    for (int i = 0; i < pageSize; ++i) {
+        auto *button = new ui::CellButton(ui::ControlIcon::Star, gridWidget, qRound(1.2 * int(c::cellIcon)));
         button->setRule(Qt::LeftEdge | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge);
-        button->setObjectName("rrPinIcon_" + token);
-        button->setAccessibleName(strings::get(("bookmarks.icon_" + token).toLatin1().constData()));
         button->setCheckable(true);
-        button->setChecked(*selected == token);
-        button->setMinimumHeight(c::actionHeight);
+        button->setFixedHeight(c::actionHeight);
         group->addButton(button);
         grid->addWidget(button, i / 4, i % 4);
-        connect(button, &QPushButton::clicked, this, [selected, token] { *selected = token; });
+        iconButtons.append(button);
+        connect(button, &QPushButton::clicked, this, [selected, page, icons, i] {
+            const int index = *page * pageSize + i;
+            if (index < icons.size()) *selected = icons[index];
+        });
     }
-    card->rows()->insertWidget(2, gridWidget);
-    const auto finish = [this, dialog, row, input, selected](bool unpin) {
+    sectionLayout->addWidget(gridWidget);
+    auto *pager = new ui::PagerBar(iconSection, "rrPinIcons");
+    sectionLayout->addWidget(pager);
+    pager->setVisible(pageCount > 1);
+    const auto showPage = [this, page, icons, selected, iconButtons, group, pager, pageCount] {
+        group->setExclusive(false);
+        for (int i = 0; i < iconButtons.size(); ++i) {
+            auto *button = iconButtons[i];
+            const int index = *page * pageSize + i;
+            button->setVisible(index < icons.size());
+            if (index >= icons.size()) continue;
+            const auto token = icons[index];
+            button->setObjectName("rrPinIcon_" + token);
+            button->setAccessibleName(strings::get(("bookmarks.icon_" + token).toLatin1().constData()));
+            button->setGlyph(ui::bookmarkIcon(token));
+            button->setChecked(*selected == token);
+        }
+        group->setExclusive(true);
+        pager->setPage(*page, pageCount);
+        placePin();
+    };
+    connect(pager->previous, &QPushButton::clicked, this, [page, showPage] { --*page; showPage(); });
+    connect(pager->next, &QPushButton::clicked, this, [page, showPage] { ++*page; showPage(); });
+    card->rows()->insertWidget(2, iconSection);
+    showPage();
+    const auto finish = [this, dialog, row, input, selected] {
         if (!pinPopup || pinPopup != dialog || !dialog->isVisible()) return;
-        if (!pinRequested || !pinRequested(row.position, unpin ? QString() : input->text(), unpin ? QString() : *selected)) return;
+        if (!pinRequested || !pinRequested(row.position, input->text(), *selected)) return;
         dialog->hide();
         // Submission may be inside the keyboard controller's own callback.
         QTimer::singleShot(0, this, [this, guard = QPointer<ui::ModalOverlay>(dialog)] {
             if (pinPopup == guard) closePin();
         });
     };
-    if (!row.pinIcon.isEmpty()) {
-        auto *unpin = ui::makeModalButton(card, {strings::get("bookmarks.unpin"), "rrPinRemove"}, false);
-        card->rows()->insertWidget(3, unpin);
-        connect(unpin, &QPushButton::clicked, this, [finish] { finish(true); });
-    }
-    connect(dialog->primaryButton(), &QPushButton::clicked, this, [finish] { finish(false); });
+    connect(dialog->primaryButton(), &QPushButton::clicked, this, finish);
     connect(dialog->secondaryButton(), &QPushButton::clicked, this, [this] { closePin(); });
-    connect(input, &QLineEdit::returnPressed, this, [finish] { finish(false); });
+    const auto finishNaming = [this, dialog] {
+        if (pinPopup != dialog) return;
+        if (keyboard) keyboard->hide();
+        dialog->setFocus();
+        placePin();
+    };
+    connect(input, &QLineEdit::returnPressed, this, finishNaming);
     dialog->dismissed = [this] { closePin(); };
-    dialog->setFocusProxy(input);
+    dialog->setFocusPolicy(Qt::StrongFocus);
     placePin(); dialog->show(); dialog->raise();
-    input->setFocus();
+    dialog->setFocus();
     if (makeKeyboard) {
         keyboard = makeKeyboard(dialog, input);
-        keyboard->setSubmitText(strings::get("common.save"));
-        keyboard->submitted = [finish] { finish(false); };
-        keyboard->show();
+        keyboard->setSubmitText(strings::get("keyboard.done"));
+        keyboard->submitted = finishNaming;
         placePin();
     }
 }

@@ -7,6 +7,10 @@
   "license": "MIT",
   "files": [
     {
+      "file": "anchor.svg",
+      "sha256": "5d96f589ed0b0e293511d3e301cadb664c9bb57bcbec3e1414679e078029c5e5"
+    },
+    {
       "file": "arrow-down-right.svg",
       "sha256": "2d974b8c8a4e546b160f11954bfdd5a103ce7f5fab3619c61f48e923efe197e5"
     },
@@ -51,6 +55,10 @@
       "sha256": "05041640c72e5cccc75ffe9b5138ff173c8097ee75183f231deeadcdf108dd0a"
     },
     {
+      "file": "calendar.svg",
+      "sha256": "3b589be35978b8c400a60d6c2154885ea648c20b8947e376ccabfde66ddabda5"
+    },
+    {
       "file": "caret-down.svg",
       "sha256": "53f0cf2d0b144ac3cb07e353e0cd0853ffb3ed432d741460ce288edfcb0924b1"
     },
@@ -67,16 +75,44 @@
       "sha256": "bccc26004e73e5de783ac6dde607e3671e776261d81972ccdbd296b4aca21ca9"
     },
     {
+      "file": "castle-turret.svg",
+      "sha256": "6b92a14d3947eaf040f7eeb5be39c164112db6eafd0ab885bca4302dfdc04216"
+    },
+    {
       "file": "chart-bar.svg",
       "sha256": "d161e503af4f5386a370ffd742d19d85e98625fd6d6eadbabbdb36d58dcca22c"
+    },
+    {
+      "file": "chat-circle.svg",
+      "sha256": "09e36aa820a39bbc8cffe705ad84c836d1e5733f83dc1d2212a965fdacdf4a67"
+    },
+    {
+      "file": "check-circle.svg",
+      "sha256": "e02a080c3d1a758de5c5fd41abd913dec4cffbc70fe1e9637dbf7ce35f377055"
+    },
+    {
+      "file": "clock.svg",
+      "sha256": "b8c6c2899d2b9af48a55ba02ba6d7faf89b757915772dd24f5397f7b0d02aa5c"
+    },
+    {
+      "file": "coffee.svg",
+      "sha256": "4ef8c4f0643ee992bf05f10c51c06d695f5ef924e0a1c85394b7626b548338fd"
     },
     {
       "file": "compass.svg",
       "sha256": "00c7e42415f795fcea90bd9dc0b2c8266b4e9601d2937cb122cd03b7e9e9e198"
     },
     {
+      "file": "crown.svg",
+      "sha256": "f47530eff12e37918f2169f59e6caaa3ba2280d50f1a0cbc78a485bad109eae7"
+    },
+    {
       "file": "desktop.svg",
       "sha256": "875a31fd2dc493c6ba9aa5187a91e0364de6704876704e1bf81ef4b7e785ad79"
+    },
+    {
+      "file": "diamond.svg",
+      "sha256": "7f9ebf5bb51a955c248da77b9b8a50226a7ecd81706b59e78233d7ad2a9d9d45"
     },
     {
       "file": "dots-three.svg",
@@ -107,12 +143,24 @@
       "sha256": "f0a32504218438968347f06762eab67a88f9fc87f6d69e6a71e81da00680f135"
     },
     {
+      "file": "flag.svg",
+      "sha256": "2460f65cc31b6c3ab52ff936b56cfd38b3f179aab5c27fbd810f177d0c7ad24d"
+    },
+    {
+      "file": "flame.svg",
+      "sha256": "48ee36faf3fe2768c2f39dfa19ea82e2e80653d541574dbc8af0d3c6787cbf71"
+    },
+    {
       "file": "flask.svg",
       "sha256": "6fe1929c860962cadddc917a3d119145444537ccaee6a9d618e7d856c16f8501"
     },
     {
       "file": "floppy-disk.svg",
       "sha256": "067b385ee62469be500d2d5bcd10e2aedd7529cd615ed180fa8414aaef0e40ab"
+    },
+    {
+      "file": "flower.svg",
+      "sha256": "f97e3901a7afce79bf6e083eb59d4675a265ae683df630be897fbbf7f5c779c1"
     },
     {
       "file": "folder-plus.svg",
@@ -127,16 +175,40 @@
       "sha256": "ca000a36662d0049d39ea5cbe44a0133960d791dd95dd1929692211355fac4e0"
     },
     {
+      "file": "globe.svg",
+      "sha256": "3b53d207c09fc72de699c8b2149892e065b570b3ae144412ae53244b0a0f7977"
+    },
+    {
+      "file": "heart.svg",
+      "sha256": "312dee73d1d969631d5498012f619ccf4edbdf31e1be3e65af4f4f1b3ac1b2dd"
+    },
+    {
       "file": "highlighter.svg",
       "sha256": "a845539f79ae5c696b46f9a1142fb9180e46bd2098c0912f3b90a4365be9c730"
+    },
+    {
+      "file": "image.svg",
+      "sha256": "642a0575f7b5a7ea2f5fefa6f27a5dc57683911845b85213a7e33652c2a3179d"
     },
     {
       "file": "info.svg",
       "sha256": "438a1f319d53d86e840af73fb7b1d224c9224a437b9fa449a4e2cb45a82a3552"
     },
     {
+      "file": "key.svg",
+      "sha256": "61694102f24a2eb4ce68f337fb6bf81090aef219328cb10dc2bd3f3c9e2ea266"
+    },
+    {
       "file": "layout.svg",
       "sha256": "7436c160d3f420240b3efa5b2c156ee7e8ca850222b2f98d26c50418b1921b0c"
+    },
+    {
+      "file": "lightbulb.svg",
+      "sha256": "b61e4d9685a1d74e579a7dbbe0d5222bdf8dcdcaf5b67825a17ff45363e4fadd"
+    },
+    {
+      "file": "lightning.svg",
+      "sha256": "3a50c776266b21812f8ec5b5a841a81f54aa942569a31eb03a36fb0a5bfbe66e"
     },
     {
       "file": "link.svg",
@@ -163,6 +235,22 @@
       "sha256": "5a068d1cfd707fde5ddb0ce0623958123b6a5afba98401318983aeb0fdad6382"
     },
     {
+      "file": "moon.svg",
+      "sha256": "5c91f82aea4e7b53305bf29628caebc22a1198ba9fa46c62eef13fb8b3c3f21d"
+    },
+    {
+      "file": "mountains.svg",
+      "sha256": "dd6ccafa3d1cf2b38aa72158279e0d090ede7ae2ec278c6358ea98581f660448"
+    },
+    {
+      "file": "music-note.svg",
+      "sha256": "433d99d789fa7f1f43fe9e75e68eb3c546ef7ea7a4c6545c73f2f48f32f376fa"
+    },
+    {
+      "file": "note.svg",
+      "sha256": "8dad2e545c79b0d8eb121a80296053238691af688afae4d1d7629e6c300f3904"
+    },
+    {
       "file": "paint-brush-broad.svg",
       "sha256": "f91cd53b559766993b6b10111077ac90024c9a36fbc8ce4d9c4b2458b4265dba"
     },
@@ -171,16 +259,44 @@
       "sha256": "62f5329938f7bc1d4885b28fcd700d349eadfcfe1b160c9c52eed98608f8933a"
     },
     {
+      "file": "paw-print.svg",
+      "sha256": "da36f1f7ed3d7f32262863c8d0d21230042f5b023e4ca8802a66f400d889d0f6"
+    },
+    {
       "file": "pencil-simple.svg",
       "sha256": "999530da442f44d8cf0054364373d16150f3e082c2ac294a4988a9c3a4295c28"
+    },
+    {
+      "file": "planet.svg",
+      "sha256": "6debb1f42963ba6e1095d993253d2a558c2badb03cadc654e16f2e98dcaefb3d"
     },
     {
       "file": "plus.svg",
       "sha256": "d688feb9dd2e41c1721d6906a05a2a42e18cd774762fe706d72b2bdfd91cddc4"
     },
     {
+      "file": "question.svg",
+      "sha256": "fd9a87cfce2abaa9113058be90e5281da58f665e2185974b80c7425d5c7fe2d6"
+    },
+    {
+      "file": "quotes.svg",
+      "sha256": "e6afaa07d488b94413b5edbbe813d45fa8db5b6c9269a4de3b20bdae77d8a142"
+    },
+    {
+      "file": "rocket.svg",
+      "sha256": "c7f97a562b9da6b8c05e6e6ca7f0af5c63a3bbb93b56d468a58955b70efa651d"
+    },
+    {
+      "file": "scroll.svg",
+      "sha256": "e8e1f6aa3ca71259fe81b9bb9d6b697c69cd614b2126fabcdbc21390857a2ac7"
+    },
+    {
       "file": "selection.svg",
       "sha256": "5fff68fdc60d81f1855302416481dc69fe9f0abfbb353d3bc43f2c24150ab8d4"
+    },
+    {
+      "file": "skull.svg",
+      "sha256": "c62ffcb3e1e7cbd0f2b9ca7bb2074cca7bcbd076d511acce5766e7eb2b10a843"
     },
     {
       "file": "sort-ascending.svg",
@@ -189,6 +305,10 @@
     {
       "file": "sun.svg",
       "sha256": "8df1c7b747774f8b2c1fe353b1b785c74aac35bfa50f2ed7d8d9a85a4191b2ac"
+    },
+    {
+      "file": "sword.svg",
+      "sha256": "faca62b2129859d504c06f2be8d42be04a8d790819d53418e30329806b522e43"
     },
     {
       "file": "text-aa.svg",
@@ -213,6 +333,22 @@
     {
       "file": "trash.svg",
       "sha256": "e6a830c0409f9e101e3695c981eef98427d39fd01f502b9cbd6900930b01f19c"
+    },
+    {
+      "file": "tree.svg",
+      "sha256": "a4878c574c4ff8fcac43187573f5dfb4cb6788f709314eb47564e2ad6681980f"
+    },
+    {
+      "file": "user.svg",
+      "sha256": "787434f7fef95f20e137d309d3c6b8b471548c55c9dfc137ae10625d70959d11"
+    },
+    {
+      "file": "users.svg",
+      "sha256": "b3385e4c6aa03f7e16d1b03887c2cdff9900f5a7edbd5ea5176055938ccfb908"
+    },
+    {
+      "file": "warning.svg",
+      "sha256": "047c8edbdfddb9f1692bbf56acc85b7e4649b567c60eb39470e98e4f9ddc6a2e"
     },
     {
       "file": "wifi-high.svg",

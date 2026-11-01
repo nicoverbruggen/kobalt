@@ -14,10 +14,33 @@
 #include <reader_icon_vectors.h>
 
 namespace kobalt::ui {
-QStringList bookmarkIconNames() { return {"map", "star", "bookmark", "compass", "dictionary", "chapters", "home", "link"}; }
+QStringList bookmarkIconNames() { return {
+        "map", "compass", "home", "flag",
+        "heart", "lightbulb", "people", "tree",
+        "sun", "moon", "crown", "key",
+        "sword", "warning", "scroll", "eye",
+        "castle", "anchor", "paw", "flower",
+        "coffee", "rocket", "lightning", "flame",
+        "planet", "star", "bookmark", "dictionary",
+        "chapters", "link", "note", "globe",
+        "mountains", "clock", "calendar", "person",
+        "pencil", "quotes", "question", "check",
+        "chat", "image", "search", "lock",
+        "books", "music", "skull", "diamond"}; }
 ControlIcon bookmarkIcon(const QString &name) {
-    const ControlIcon icons[] = {ControlIcon::Map, ControlIcon::Star, ControlIcon::Bookmark, ControlIcon::Compass,
-                                 ControlIcon::Dictionary, ControlIcon::Chapters, ControlIcon::Home, ControlIcon::Link};
+    const ControlIcon icons[] = {
+        ControlIcon::Map, ControlIcon::Compass, ControlIcon::Home, ControlIcon::Flag,
+        ControlIcon::Heart, ControlIcon::Lightbulb, ControlIcon::People, ControlIcon::Tree,
+        ControlIcon::Light, ControlIcon::Moon, ControlIcon::Crown, ControlIcon::Key,
+        ControlIcon::Sword, ControlIcon::Warning, ControlIcon::Scroll, ControlIcon::Display,
+        ControlIcon::Castle, ControlIcon::Anchor, ControlIcon::Paw, ControlIcon::Flower,
+        ControlIcon::Coffee, ControlIcon::Rocket, ControlIcon::Lightning, ControlIcon::Flame,
+        ControlIcon::Planet, ControlIcon::Star, ControlIcon::Bookmark, ControlIcon::Dictionary,
+        ControlIcon::Chapters, ControlIcon::Link, ControlIcon::Note, ControlIcon::Globe,
+        ControlIcon::Mountains, ControlIcon::Clock, ControlIcon::Calendar, ControlIcon::Person,
+        ControlIcon::EditHighlight, ControlIcon::Quotes, ControlIcon::Question, ControlIcon::CheckCircle,
+        ControlIcon::Chat, ControlIcon::Image, ControlIcon::Search, ControlIcon::Lock,
+        ControlIcon::Books, ControlIcon::Music, ControlIcon::Skull, ControlIcon::Diamond};
     const int index = bookmarkIconNames().indexOf(name);
     return index < 0 ? ControlIcon::Star : icons[index];
 }
@@ -49,7 +72,16 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.lineTo(x2, y2);
     };
     // Keyboard symbols use the same 24-unit grid and stroke as our other drawings.
-    if (icon == ControlIcon::Pin) {
+    if (icon >= ControlIcon::Flag && icon <= ControlIcon::Diamond) {
+        const char *names[] = {"flag", "heart", "note", "lightbulb", "globe", "mountains", "tree", "moon",
+                               "clock", "calendar", "user", "users", "crown", "key", "sword",
+                               "quotes", "question", "check-circle", "warning", "chat-circle", "scroll", "image", "books",
+                               "castle-turret", "anchor", "paw-print", "flower", "coffee", "music-note", "rocket", "planet",
+                               "lightning", "flame", "skull", "diamond"};
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::Flag)]), path);
+    } else if (icon == ControlIcon::Pin) {
         result.canvas = 24;
         result.stroke = 1.5;
         path.moveTo(8, 3); path.lineTo(16, 3); path.lineTo(15, 10);
@@ -460,7 +492,7 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
          icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight &&
          (icon < ControlIcon::Rows || icon > ControlIcon::Export) &&
          (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn) &&
-         (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Pin)))
+         (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Diamond)))
         return {};
     return QIcon(new VectorIconEngine(icon, color, sideButtons));
 }

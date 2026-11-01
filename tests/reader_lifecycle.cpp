@@ -1865,6 +1865,80 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
     }
 
+    void pageTurnTimingIgnoresNoopNavigation() {
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->go(0));
+        QTRY_VERIFY(!host.session()->busy());
+        QTemporaryDir logs;
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        QJsonObject input, painted;
+        setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event") == "page-turn-input") input = event;
+            if (event.value("event") == "page-turn-painted") painted = event;
+        });
+        struct ResetDiagnostics {
+            ~ResetDiagnostics() { setDiagnosticObserver({}); pauseDiagnostics(true); }
+        } resetDiagnostics;
+        host.window()->pageButton(-1);
+        QVERIFY(!host.session()->busy());
+        QTest::qWait(300);
+        host.window()->pageButton(1);
+        QTRY_VERIFY(!painted.isEmpty());
+        QCOMPARE(host.session()->page(), 1);
+        // Both values use monotonic clocks. Rendering speed does not affect
+        // this comparison; idle time before the real input must be excluded.
+        const auto inputToPaint = painted.value("monotonic_ms").toDouble() - input.value("monotonic_ms").toDouble();
+        QVERIFY(painted.value("elapsed_ms").toDouble() <= inputToPaint + 20);
+    }
+
+    void pageButtonsAfterTouchUseDeliveryTime() {
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->go(0));
+        QTRY_VERIFY(!host.session()->busy());
+        QTemporaryDir logs;
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        QJsonObject input;
+        setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event") == "page-turn-input") input = event;
+        });
+        struct ResetDiagnostics {
+            ~ResetDiagnostics() { setDiagnosticObserver({}); pauseDiagnostics(true); }
+        } resetDiagnostics;
+        auto *page = host.window()->findChild<QWidget *>("rrPage");
+        QVERIFY(page);
+        QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, QPoint(page->width() * 9 / 10, page->height() / 2));
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 1);
+        QVERIFY(input.value("source_ms").toDouble() > 0);
+        QTest::qWait(210);
+        // Host callbacks, including Android buttons, have no Qt source time.
+        host.window()->pageButton(1);
+        QCOMPARE(input.value("source_ms").toDouble(), 0.0);
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+        QTest::qWait(210);
+        host.window()->pageButton(1);
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 3);
+    }
+
     void pageGestureBurstIgnoresRapidTurns() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};

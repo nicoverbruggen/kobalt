@@ -659,7 +659,7 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
                 if (!closing && !book->deviceTransition() && services.remoteKeyActivity)
                     services.remoteKeyActivity(this, key);
                 if (!key->isAutoRepeat())
-                    pageButton(direction);
+                    pageButton(direction, quint32(key->timestamp()));
             }
             event->accept();
             return true;
@@ -1896,6 +1896,10 @@ bool Reader::pageList(int direction) {
 }
 
 void Reader::pageButton(int direction) {
+    pageButton(direction, 0);
+}
+
+void Reader::pageButton(int direction, quint32 sourceTime) {
     if ((direction != -1 && direction != 1) || !isEnabled() || !isVisible() || lifecycleHidden ||
         services.suspended() || closing || appearanceEdit.applying())
         return;
@@ -1913,7 +1917,7 @@ void Reader::pageButton(int direction) {
         linksActive() || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible() ||
         lightPopup->isVisible())
         return;
-    turnPage(direction, lastPressTime);
+    turnPage(direction, sourceTime);
 }
 
 void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {
@@ -1940,6 +1944,7 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {
     }
     if (!annotationMode && !model->busy() && direction > 0 && model->nextPage() == model->page() &&
         book->offerFinish()) {
+        turnStarted.invalidate();
         showFinishChoice();
         return;
     }
@@ -1949,6 +1954,8 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {
             annotationPopover->hide();
         }
         ++savedHighlightEpoch;
+    } else {
+        turnStarted.invalidate();
     }
 }
 

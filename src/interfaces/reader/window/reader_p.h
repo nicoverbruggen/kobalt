@@ -513,6 +513,7 @@ private:
     void dismissProgressChoice();
     void showProgressChoice();
     void buildProgressChoice(const kobalt::ReadingProgress &shown, int direction, bool located);
+    void pageButton(int direction, quint32 sourceTime);
     void turnPage(int direction, quint32 sourceTime = 0, bool userInput = true);
     pageNavigation::TapFilter pageTurnFilter;
     QElapsedTimer pageTurnClock;

@@ -344,7 +344,7 @@ if(BUILD_TESTING)
             appearanceCloseDuringPreview appearanceSleepDuringFirstEdit appearanceDragsDuringPreview
             pageTurnsResumeWhenReaderIsShownAfterSleep clockStopsWhileReaderIsHidden closeWithPendingBookmark
             closeWaitsForLocalSave closeRetriesRequiredNativeSaves quitAfterFailedLocalSaveRetry closeWaitsForNativeTimeBeforePosition revokedNativeDrainRetainsLocalSave
-            pageGestureBurstIgnoresRapidTurns exitThroughReaderAndReopen exitGuardUsesTapTime staleSearchReplyIgnored searchSurvivesReflow
+            pageTurnTimingIgnoresNoopNavigation pageButtonsAfterTouchUseDeliveryTime pageGestureBurstIgnoresRapidTurns exitThroughReaderAndReopen exitGuardUsesTapTime staleSearchReplyIgnored searchSurvivesReflow
             searchHighlightClearsOnReflow
             sleepRequestFreezesOrientationBeforeHandoff closePublishesHeldOrientationBeforeBackgroundPaint
             closeRestoresOrientationBeforeBackgroundPaint rotationOwnership customSleepScreenIsOptIn

@@ -414,6 +414,18 @@ struct Fixture {
         }
         return storage::readJson(paths.stateReport);
     }
+    bool turnPage(int direction) {
+        auto *reader = window.readerWindow();
+        if (!reader) return false;
+        const int previous = state().value("page").toInt();
+        // Separate deliberate setup turns from duplicate input rejected by the reader.
+        QTest::qWait(210);
+        reader->pageButton(direction);
+        return QTest::qWaitFor([&] {
+            const auto current = state();
+            return !current.value("busy").toBool() && current.value("page").toInt() != previous;
+        }, 5000);
+    }
     bool click(QWidget *target, QPoint position = QPoint(-1, -1)) {
         auto *reader = window.readerWindow();
         auto *canvas = window.findChild<QGraphicsView *>();
@@ -836,7 +848,7 @@ void advanceIntoBody(Fixture &fixture) {
     auto *reader = fixture.window.readerWindow();
     QVERIFY(reader);
     const int chapterStart = fixture.state().value("page").toInt();
-    reader->pageButton(1);
+    QVERIFY(fixture.turnPage(1));
     QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("page").toInt() > chapterStart, 30000);
     QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
     auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
@@ -908,7 +920,7 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
             });
             if (fills) return;
             const int previous = fixture.state().value("page").toInt();
-            fixture.window.readerWindow()->pageButton(1);
+            QVERIFY(fixture.turnPage(1));
             QTRY_VERIFY(fixture.state().value("page").toInt() > previous);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
         }
@@ -1427,7 +1439,9 @@ void checkHeaderFooterSizes(int preset, bool dark) {
     QVERIFY(fixture.press("rrHeaderFooterProgressBar_off"));
     QTRY_COMPARE(fixture.state().value("header_footer_preset").toString(), QString("custom"));
     const auto savedCustom = storage::readJson(fixture.paths.preferences()).value(customKey);
+    QCoreApplication::processEvents();
     QVERIFY(fixture.press("rrHeaderFooterPreset_default"));
+    QTRY_COMPARE(fixture.state().value("header_footer_preset").toString(), QString("default"));
     QTRY_COMPARE(header->value(), offSize);
     QVERIFY(fixture.press("rrHeaderTextSizeMore"));
     QTRY_COMPARE(header->value(), smallSize);
@@ -2274,6 +2288,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         openPrologueBody(fixture);
         QVERIFY(hasText(reader->findChild<QWidget *>("rrPage")->grab().toImage()));
         const int page = fixture.state().value("page").toInt();
+        // The preceding navigation used the same 200 ms input guard.
+        QTest::qWait(210);
         reader->pageButton(1);
         QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("page").toInt() > page, 30000);
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
@@ -2502,7 +2518,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), index + 1);
             if (!index) {
                 const int before = fixture.state().value("page").toInt();
-                fixture.window.readerWindow()->pageButton(1);
+                QVERIFY(fixture.turnPage(1));
                 QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() > before);
             }
         }
@@ -3269,7 +3285,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrControlsTop"));
         QVERIFY(!fixture.visible("rrAnnotationHeader"));
         const int bodyPage = fixture.state().value("page").toInt();
-        fixture.window.readerWindow()->pageButton(-1);
+        QVERIFY(fixture.turnPage(-1));
         QTRY_VERIFY(fixture.state().value("page").toInt() < bodyPage && !fixture.state().value("busy").toBool());
         const auto division = fixture.wordRect("division"), published = fixture.wordRect("published"),
                    through = fixture.wordRect("through");
@@ -3293,7 +3309,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.click(page, division.center()));
         QTRY_VERIFY(fixture.visible("rrAnnotationCancel"));
         QVERIFY(fixture.press("rrAnnotationCancel"));
-        fixture.window.readerWindow()->pageButton(1);
+        QVERIFY(fixture.turnPage(1));
         QTRY_VERIFY(fixture.state().value("page").toInt() == bodyPage && !fixture.state().value("busy").toBool());
         QVERIFY(fixture.selectWord(page, first));
         QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty() && !page->annotationHandleRect(false).isEmpty());
@@ -3456,8 +3472,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.state().value("page").toInt() != previousPage);
         QVERIFY(!fixture.visible("rrAnnotationPopover"));
         QCOMPARE(fixture.stored("highlights.json", "highlights").first().toObject(), saved);
-        fixture.window.readerWindow()->pageButton(-1);
+        QVERIFY(fixture.turnPage(-1));
         QTRY_VERIFY(fixture.state().value("page").toInt() == previousPage && !fixture.state().value("busy").toBool());
+        QTest::qWait(210);
         QVERIFY(fixture.drag(page, QPoint(page->width() - 10, page->height() / 2),
                              QPoint(page->width() / 2, page->height() / 2)));
         QTRY_VERIFY(fixture.state().value("page").toInt() != previousPage);
@@ -3587,7 +3604,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         // the Prologue/Chapter One boundary for the section clamp.
         const int advance = sectionBoundary ? (direction > 0 ? 1 : 2) : 3;
         for (int i = 0; i < advance; ++i) {
-            reader->pageButton(1);
+            QVERIFY(fixture.turnPage(1));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
         }
         const int origin = fixture.state().value("page").toInt();
@@ -3704,7 +3721,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         openPrologueBody(fixture);
         auto *reader = fixture.window.readerWindow();
         for (int i = 0; i < 3; ++i) {
-            reader->pageButton(1);
+            QVERIFY(fixture.turnPage(1));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
         }
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
@@ -3721,7 +3738,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrAnnotationSave"));
         QTRY_COMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
         const auto saved = fixture.stored("highlights.json", "highlights");
-        reader->pageButton(-direction);
+        QVERIFY(fixture.turnPage(-direction));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         const int origin = fixture.state().value("page").toInt();
         const auto first = fixture.wordPoint();
@@ -5879,6 +5896,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() > page);
         auto *previous = fixture.window.findChild<QPushButton *>("desktopDevicePrevious");
         QVERIFY(previous);
+        QTest::qWait(210);
         QTest::mouseClick(previous, Qt::LeftButton);
         QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() == page);
     }
@@ -6181,7 +6199,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto destination = fixture.state().value("position");
         for (int i = 0; i < 4; ++i) {
             const int previous = fixture.state().value("page").toInt();
-            fixture.window.readerWindow()->pageButton(1);
+            QVERIFY(fixture.turnPage(1));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             QTRY_VERIFY(fixture.state().value("page").toInt() > previous);
         }
@@ -7515,15 +7533,15 @@ private slots:
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             // Leave and return to clear the transient search-result highlight.
             const int origin = fixture.state().value("page").toInt();
-            fixture.window.readerWindow()->pageButton(1);
+            QVERIFY(fixture.turnPage(1));
             QTRY_COMPARE(fixture.state().value("page").toInt(), origin + 1);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
-            fixture.window.readerWindow()->pageButton(-1);
+            QVERIFY(fixture.turnPage(-1));
             QTRY_COMPARE(fixture.state().value("page").toInt(), origin);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             for (int i = 1; i <= 4; ++i) {
                 QVERIFY(capture(fixture, name + "-equations-" + QString::number(i)));
-                fixture.window.readerWindow()->pageButton(1);
+                if (i < 4) QVERIFY(fixture.turnPage(1));
                 QTRY_VERIFY(!fixture.state().value("busy").toBool());
             }
         }

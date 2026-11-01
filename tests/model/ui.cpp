@@ -2174,7 +2174,7 @@ int main(int argc, char **argv) {
                     ++toggles;
                 });
                 require(option.presentation().indicator == DescribedOption::Indicator::Toggle &&
-                            option.presentation().minimumRowHeight == 116 &&
+                            option.presentation().minimumRowHeight == int(metrics::settings::optionHeight) &&
                             option.presentation().labelPixels == int(metrics::text::body) &&
                             option.presentation().indicatorSize ==
                                 QSize(metrics::settings::toggleWidth, metrics::settings::toggleHeight),
@@ -2239,13 +2239,15 @@ int main(int argc, char **argv) {
                     app.processEvents();
                 }
                 DescribedOption compact("Compact", {}, &host);
+                require(compact.heightForWidth(px(700)) == int(metrics::control::stepSize),
+                        "Compact option default height changed");
                 auto compactPresentation = compact.presentation();
                 compactPresentation.indicator = DescribedOption::Indicator::Radio;
                 compactPresentation.minimumRowHeight = px(150);
                 compact.setPresentation(compactPresentation);
                 require(compact.minimumHeight() == px(150), "Option configuration lost caller minimum height");
-                require(compact.heightForWidth(px(700)) == int(metrics::control::stepSize),
-                        "Compact option height changed with presentation");
+                require(compact.heightForWidth(px(700)) == qMax(px(150), int(metrics::control::stepSize)),
+                        "Compact option ignored the configured minimum height");
             }
         }
         setDensity(savedDensity);

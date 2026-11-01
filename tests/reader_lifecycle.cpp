@@ -1090,7 +1090,7 @@ private slots:
         QCOMPARE(host.session()->state()["margin_pixels"], draft["margin_pixels"]);
         QCOMPARE(host.session()->state()["top_margin_pixels"], draft["top_margin_pixels"]);
         QCOMPARE(host.session()->state()["bottom_margin_pixels"], draft["bottom_margin_pixels"]);
-        QVERIFY(!inspectReader(host)["preview_ready"].toBool());
+        QTRY_VERIFY(!inspectReader(host)["preview_ready"].toBool());
         host.shutdown();
         QTRY_VERIFY(host.idle());
         host.open(fixture(), nativeSize);
@@ -1641,7 +1641,7 @@ private slots:
         } else
             text->click();
         if (edit)
-            QVERIFY(inspectReader(host)["preview_busy"].toBool());
+            QVERIFY(inspectReader(host)["preview_busy"].toBool() || inspectReader(host)["preview_queued"].toBool());
         if (shutdown)
             host.shutdown();
         else
@@ -1673,11 +1673,10 @@ private slots:
         auto *step = sizeStep(host);
         QVERIFY(step);
         step->click();
-        QVERIFY(inspectReader(host)["preview_busy"].toBool());
+        QVERIFY(inspectReader(host)["preview_busy"].toBool() || inspectReader(host)["preview_queued"].toBool());
         host.window()->sleepReader();
         host.window()->sleepViewReady();
-        QTRY_VERIFY(!inspectReader(host)["preview_busy"].toBool());
-        QVERIFY(inspectReader(host)["preview_ready"].toBool());
+        QTRY_VERIFY(inspectReader(host)["preview_ready"].toBool() && !inspectReader(host)["preview_busy"].toBool());
         host.window()->wakeReader();
         auto *font = host.window()->findChild<QPushButton *>("rrFont");
         QVERIFY(font);
@@ -3399,6 +3398,7 @@ private slots:
         } else {
             QVERIFY(!host.idle());
             QCOMPARE(host.progress->current.status, 1);
+            QTest::qWait(210);
             host.window()->pageButton(1);
             if (suppress) {
                 QTest::qWait(100);
@@ -4370,6 +4370,7 @@ private slots:
 
         const auto turn = [&](int direction) {
             const auto before = host.session()->state().value("position");
+            QTest::qWait(210);
             host.window()->pageButton(direction);
             QTRY_VERIFY(!host.session()->busy() && host.session()->state().value("position") != before);
             QTRY_VERIFY(!host.book()->savesPending());
@@ -4543,6 +4544,7 @@ private slots:
         QTRY_COMPARE(stored(), current());
         const auto turn = [&] {
             const auto before = current();
+            QTest::qWait(210);
             host.window()->pageButton(1);
             QTRY_VERIFY(!host.session()->busy() && current() != before);
             QTRY_VERIFY(!host.book()->savesPending());

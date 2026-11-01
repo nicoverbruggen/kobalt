@@ -2453,6 +2453,7 @@ void Reader::save(bool snapshot, bool background, bool persist) {
                                                          : "");
     state["appearance_panel_open"] = appearanceEdit.panelOpen();
     state["preview_ready"] = appearanceEdit.ready();
+    state["preview_queued"] = appearanceEdit.queued();
     state["preview_busy"] = appearanceEdit.preview() && appearanceEdit.preview()->busy();
     state["preview_settings"] = appearanceEdit.ready() ? appearanceEdit.preview()->state() : QJsonObject();
     state["typography_panel"] = menu->isVisible();

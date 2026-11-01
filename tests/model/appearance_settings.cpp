@@ -37,6 +37,20 @@ int main() {
                 "Invalid direct-tap preference did not fall back to the default");
 
 
+    for (bool show : {false, true}) {
+        const auto cleaned = appearance::cleanPreferences({{"schema", 1}, {"show_light_gesture_feedback", show},
+            {"edge_light_gestures", true}, {"future_option", 42}});
+        require(cleaned.value("show_light_gesture_feedback").toBool() == show &&
+            cleaned.value("edge_light_gestures").toBool() && cleaned.value("future_option").toInt() == 42 &&
+            cleaned.value("schema").toInt() == 1, "Light feedback cleanup changed independent preferences or schema");
+        require(appearance::same({}, cleaned), "Light feedback invalidated the book layout");
+    }
+    require(appearance::cleanPreferences({}).value("show_light_gesture_feedback").toBool(true),
+        "Old preferences no longer default to visible feedback");
+    for (const auto &invalid : {QJsonValue(), QJsonValue(0), QJsonValue("false"), QJsonValue(QJsonArray{})})
+        require(appearance::cleanPreferences({{"show_light_gesture_feedback", invalid}})
+            .value("show_light_gesture_feedback").toBool(true), "Invalid feedback preference did not use visible feedback");
+
     const auto dictionary = appearance::cleanPreferences(qt::object({{"dictionary_font_face", "Libron"},
         {"dictionary_font_size", 120}, {"private_optional", "keep"}}));
     require(dictionary.value("dictionary_font_face").toString() == "Libron" &&

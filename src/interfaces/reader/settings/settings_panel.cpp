@@ -372,6 +372,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                                      : strings::get("settings.edge_brightness_description"));
     edgeLightOption->setEnabled(lightSupported);
     controlsRows->addWidget(edgeLightOption);
+    lightGestureFeedbackOption = check(controlsPage, "rrLightGestureFeedback", strings::get("settings.light_gesture_feedback"),
+                                       strings::get("settings.light_gesture_feedback_description"));
+    lightGestureFeedbackOption->setEnabled(lightSupported);
+    controlsRows->addWidget(lightGestureFeedbackOption);
     controlsRows->addStretch(1);
     auto *defaultsPage = new QWidget(settingsPages);
     defaultsPage->setObjectName("rrDefaultsOptions");
@@ -680,6 +684,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                               animationOption,
                                               inheritTextLayoutOption,
                                               edgeLightOption,
+                                              lightGestureFeedbackOption,
                                               denseGraphOption,
                                               hideTabLabelsOption,
                                               automaticOpeningOption,

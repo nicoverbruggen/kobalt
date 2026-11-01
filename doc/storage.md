@@ -10,6 +10,8 @@ The retired `native_hide_status_bar` preference is removed when settings are nor
 
 `tappable_links` is an optional global setting with values `off`, `footnotes` and `all`. Missing or invalid values use Footnotes only. Saved choices are preserved. The value `off` is shown as Always require long press. It does not change the settings schema or parsed-book cache format.
 
+`show_light_gesture_feedback` is an optional global Boolean. Missing or invalid values use true, preserving the existing brightness and warmth popup. False hides only the gesture popup and its cleanup refresh. `edge_light_gestures` still controls whether the gestures are enabled. Both choices persist independently for all books. Settings schema 1 and reading-data formats stay unchanged.
+
 `dictionary_font_face` and `dictionary_font_size` are optional global preferences. An empty or missing face follows the current book’s resolved body font, including its normal reading-font fallback. A missing size uses 100 percent. Supported sizes are 80, 100, 120 and 140 percent. Invalid values use these defaults. These settings affect dictionary definition text, not book layout or saved annotations. They keep preference schema 1.
 
 `vertical_justification` is an optional global setting with values `off`, `expand` and `center`. Missing or invalid values use `off`. The Boolean used by early development builds maps to `expand` or `off`. `vertical_spacing_scope` selects `all` or `protection`; missing or invalid values use `all`. These fields keep settings schema 1 and canonical reading positions. Parsed-book cache format 6 stores source line boxes and whether a page gap was caused by widow/orphan protection. Older rendering caches rebuild without changing saved reading data.

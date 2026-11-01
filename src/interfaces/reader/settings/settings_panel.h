@@ -82,7 +82,7 @@ public:
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
     ui::DescribedOption *darkOption = nullptr, *inheritTextLayoutOption = nullptr, *animationOption = nullptr;
-    ui::DescribedOption *edgeLightOption = nullptr, *denseGraphOption = nullptr;
+    ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr, *denseGraphOption = nullptr;
     ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr,
                         *avoidWastefulStylingOption = nullptr;
     ui::DescribedOption *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr;

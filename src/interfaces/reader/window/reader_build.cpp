@@ -1241,6 +1241,7 @@ void Reader::buildSettings() {
     inheritTextLayoutOption = settings->inheritTextLayoutOption;
     animationOption = settings->animationOption;
     edgeLightOption = settings->edgeLightOption;
+    lightGestureFeedbackOption = settings->lightGestureFeedbackOption;
     denseGraphOption = settings->denseGraphOption;
     sleepScreenButton = settings->sleepScreenButton;
     sleepTileButton = settings->sleepTileButton;
@@ -1512,10 +1513,14 @@ void Reader::connectLightGestures() {
             const int value = light->setWarmth(snapped == 100 ? minimum + range : level);
             if (value < 0)
                 return;
+            if (!preferences.value("show_light_gesture_feedback").toBool(true))
+                return;
             brightnessNotice->setLevel(true, qRound(100.0 * (value - minimum) / range));
         } else {
             const int value = light->setGestureLevel(brightnessInitial + kobalt::ui::BrightnessGesture::change(moved));
             if (value < 0)
+                return;
+            if (!preferences.value("show_light_gesture_feedback").toBool(true))
                 return;
             brightnessNotice->setLevel(false, value);
         }
@@ -1533,7 +1538,7 @@ void Reader::connectLightGestures() {
             if (warmthAutomatic)
                 light->setAutomaticWarmth(true);
         }
-        if (save)
+        if (save && brightnessNotice->isVisible())
             brightnessHide.start();
         else {
             brightnessHide.stop();

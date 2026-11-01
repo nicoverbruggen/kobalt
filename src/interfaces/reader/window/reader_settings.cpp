@@ -296,6 +296,7 @@ void Reader::openSettings() {
     bionicOption->setChecked(model->state().value("bold_reading").toString("off") == "bold");
     linkIndicatorOption->setChecked(preferences.value("show_link_indicator").toBool(false));
     edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
+    lightGestureFeedbackOption->setChecked(preferences.value("show_light_gesture_feedback").toBool(true));
     denseGraphOption->setChecked(preferences.value("dense_stats_chart").toBool(false));
     showSleepScreen();
     showPageNavigation();
@@ -541,6 +542,7 @@ void Reader::applySettings() {
     next["page_animations"] = animationOption->isChecked();
     next["show_link_indicator"] = linkIndicatorOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
+    next["show_light_gesture_feedback"] = lightGestureFeedbackOption->isChecked();
     next["dense_stats_chart"] = denseGraphOption->isChecked();
     next.remove(pageNavigation::barVisibleKey);
     next["minimal_annotation_mode"] = minimalAnnotationOption->isChecked();

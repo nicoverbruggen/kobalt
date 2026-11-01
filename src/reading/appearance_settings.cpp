@@ -75,7 +75,7 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
     for (const auto *key : {"show_header", "show_footer", "show_clock", "show_progress_bar", "header_text_size", "footer_text_size"})
         preferences.remove(key);
     for (const auto *key : {"dark_mode", "hide_tab_labels", "inherit_text_layout", "two_columns_landscape",
-                            "page_animations", "show_link_indicator", "edge_light_gestures", "dense_stats_chart",
+                            "page_animations", "show_link_indicator", "edge_light_gestures", "show_light_gesture_feedback", "dense_stats_chart",
                             "hide_nonlinear_fragments", "avoid_wasteful_styling",
                             "minimal_annotation_mode", "show_header", "show_footer", "show_clock", "auto_rotate"})
         if (preferences.contains(key) && !preferences.value(key).isBool()) preferences.remove(key);

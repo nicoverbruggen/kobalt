@@ -65,6 +65,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QDynamicPropertyChangeEvent>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
@@ -215,6 +216,74 @@ bool largeTextVariant() {
     const char *tag = QTest::currentDataTag();
     return tag && QByteArray(tag).endsWith("-large");
 }
+
+// Exercise the reader's production light handlers without platform hardware.
+struct GestureLightState {
+    bool available = true, warmthSupported = true, failChanges = false, active = false;
+    bool automatic = true, originalAutomatic = true;
+    int brightness = 40, warmth = 30, maximumWarmth = 100;
+    int savedBrightness = -1, savedWarmth = -1, initialBrightness = 40;
+};
+class GestureLight final : public LightControls {
+public:
+    explicit GestureLight(std::shared_ptr<GestureLightState> state) : state(std::move(state)) {}
+    bool initialize() override { return state->available; }
+    bool hasWarmth() const override { return state->warmthSupported; }
+    int warmth() const override { return state->warmth; }
+    int warmthMinimum() const override { return 0; }
+    int warmthMaximum() const override { return state->maximumWarmth; }
+    int warmthStep() const override { return 1; }
+    bool automaticWarmth() const override { return state->automatic; }
+    int setWarmth(int value) override {
+        if (state->failChanges) return -1;
+        state->automatic = false;
+        return state->warmth = value;
+    }
+    bool saveWarmth() override { state->savedWarmth = state->warmth; return true; }
+    bool setAutomaticWarmth(bool value) override { state->automatic = value; return true; }
+    bool beginGesture() override {
+        if (!initialize()) return false;
+        state->active = true;
+        state->initialBrightness = state->brightness;
+        return true;
+    }
+    int setGestureLevel(int value) override {
+        if (state->failChanges) return -1;
+        return state->brightness = qBound(0, value, 100);
+    }
+    void finishGesture(bool save) override {
+        if (save) state->savedBrightness = state->brightness;
+        else state->brightness = state->initialBrightness;
+        state->active = false;
+    }
+    int brightness() const override { return state->brightness; }
+    bool gesturing() const override { return state->active; }
+private:
+    std::shared_ptr<GestureLightState> state;
+};
+
+class LightFeedbackEvents final : public QObject {
+public:
+    explicit LightFeedbackEvents(QWidget *reader, QWidget *notice) : notice(notice) {
+        reader->installEventFilter(this);
+        notice->installEventFilter(this);
+    }
+    int shows = 0, hides = 0, flashes = 0;
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (object == notice) {
+            shows += event->type() == QEvent::Show;
+            hides += event->type() == QEvent::Hide;
+        } else if (event->type() == QEvent::DynamicPropertyChange &&
+                   static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName() == "reader_full_flash" &&
+                   object->property("reader_full_flash").toBool()) {
+            ++flashes;
+        }
+        return false;
+    }
+private:
+    QWidget *notice;
+};
 
 struct Fixture {
     QTemporaryDir directory{QDir::tempPath() + "/kobalt-profile-XXXXXX"};
@@ -4765,6 +4834,154 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QVERIFY(found);
     }
+    void lightGestureFeedback_data() {
+        QTest::addColumn<int>("feedback");
+        QTest::addColumn<bool>("warmth");
+        QTest::addColumn<bool>("save");
+        for (int feedback : {-1, 0, 1})
+            for (bool warmth : {false, true})
+                for (bool save : {false, true})
+                    QTest::newRow(qPrintable(QString("%1-%2-%3").arg(feedback).arg(warmth).arg(save)))
+                        << feedback << warmth << save;
+    }
+    void lightGestureFeedback() {
+        QFETCH(int, feedback);
+        QFETCH(bool, warmth);
+        QFETCH(bool, save);
+        auto light = std::make_shared<GestureLightState>();
+        Fixture fixture(false, false, false, true, false, false, [light](ReaderHostServices &services) {
+            services.lightAvailable = [] { return true; };
+            services.light = [light](QWidget *) { return std::make_unique<GestureLight>(light); };
+        });
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        if (feedback >= 0) preferences["show_light_gesture_feedback"] = bool(feedback);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        auto *notice = fixture.widget("rrBrightnessNotice");
+        auto *reader = fixture.window.readerWindow();
+        QVERIFY(page && notice && page->brightnessEdge && page->warmthEdge);
+        reader->setProperty("reader_full_flash", false);
+        LightFeedbackEvents events(reader, notice);
+        QVERIFY(page->lightStarted(warmth));
+        page->lightChanged(.2);
+        QCOMPARE(notice->isVisible(), feedback != 0);
+        const int adjusted = warmth ? light->warmth : light->brightness;
+        QVERIFY(adjusted > (warmth ? 30 : 40));
+        if (warmth) QVERIFY(!light->automatic);
+        reader->setProperty("reader_full_flash", false);
+        page->lightFinished(save);
+        QCOMPARE(warmth ? light->warmth : light->brightness, save ? adjusted : (warmth ? 30 : 40));
+        QCOMPARE(warmth ? light->savedWarmth : light->savedBrightness, save ? adjusted : -1);
+        if (warmth) QCOMPARE(light->automatic, !save);
+        if (!save) QCOMPARE(reader->property("reader_full_flash").toBool(), feedback != 0);
+        QTRY_VERIFY(!notice->isVisible());
+        // With no popup, neither release nor its delayed timer requests cleanup.
+        if (feedback == 0) {
+            QTest::qWait(1100);
+            QVERIFY(!reader->property("reader_full_flash").toBool());
+        }
+        QCOMPARE(events.shows, feedback != 0 ? 1 : 0);
+        QCOMPARE(events.hides, feedback != 0 ? 1 : 0);
+        QCOMPARE(events.flashes, feedback != 0 ? 1 : 0);
+    }
+    void lightGestureUnavailable_data() {
+        QTest::addColumn<bool>("feedback");
+        QTest::addColumn<QString>("failure");
+        for (bool feedback : {false, true})
+            for (const auto *failure : {"host", "disabled", "initialize", "warmth", "range", "brightness-write", "warmth-write"})
+                QTest::newRow(qPrintable(QString("%1-%2").arg(feedback).arg(failure))) << feedback << QString(failure);
+    }
+    void lightGestureUnavailable() {
+        QFETCH(bool, feedback);
+        QFETCH(QString, failure);
+        auto light = std::make_shared<GestureLightState>();
+        light->available = failure != "initialize";
+        light->warmthSupported = failure != "warmth";
+        light->maximumWarmth = failure == "range" ? 0 : 100;
+        light->failChanges = failure.endsWith("-write");
+        Fixture fixture(false, false, false, true, false, false, [light, failure](ReaderHostServices &services) {
+            services.lightAvailable = [failure] { return failure != "host"; };
+            services.light = [light](QWidget *) { return std::make_unique<GestureLight>(light); };
+        });
+        QVERIFY(fixture.prepared);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), {{"show_light_gesture_feedback", feedback},
+            {"edge_light_gestures", failure != "disabled"}}));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        if (failure == "host" || failure == "disabled") {
+            QVERIFY(!page->brightnessEdge && !page->warmthEdge);
+        } else if (failure == "initialize" || failure == "warmth") {
+            QVERIFY(!page->warmthEdge);
+            QVERIFY(!page->lightStarted(true));
+            if (failure == "initialize") QVERIFY(!page->lightStarted(false));
+            else {
+                QVERIFY(page->brightnessEdge);
+                QVERIFY(page->lightStarted(false));
+                page->lightChanged(.2);
+                QVERIFY(light->brightness > 40);
+                QCOMPARE(fixture.visible("rrBrightnessNotice"), feedback);
+                page->lightFinished(false);
+            }
+        } else {
+            QVERIFY(page->lightStarted(failure != "brightness-write"));
+            page->lightChanged(.2);
+            QVERIFY(!fixture.visible("rrBrightnessNotice"));
+            page->lightFinished(false);
+        }
+        QCOMPARE(light->brightness, 40);
+        QCOMPARE(light->warmth, 30);
+        QCOMPARE(light->savedBrightness, -1);
+        QCOMPARE(light->savedWarmth, -1);
+        QVERIFY(!fixture.visible("rrBrightnessNotice"));
+    }
+    void lightGestureFeedbackPersistence() {
+        auto light = std::make_shared<GestureLightState>();
+        Fixture fixture(false, false, false, true, false, false, [light](ReaderHostServices &services) {
+            services.lightAvailable = [] { return true; };
+            services.light = [light](QWidget *) { return std::make_unique<GestureLight>(light); };
+        });
+        QVERIFY(fixture.prepared);
+        for (bool feedback : {false, true}) {
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE(opened.count(), 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsControls"));
+            QVERIFY(revealSettingsOption(fixture, "rrLightGestureFeedback"));
+            auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrLightGestureFeedback"));
+            auto *edge = qobject_cast<QCheckBox *>(fixture.widget("rrEdgeLight"));
+            QVERIFY(option && edge && edge->isChecked());
+            QCOMPARE(option->isChecked(), !feedback);
+            QVERIFY(fixture.press("rrLightGestureFeedback"));
+            QCOMPARE(option->isChecked(), feedback);
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+            QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("show_light_gesture_feedback"), QJsonValue(feedback));
+            QVERIFY(storage::readJson(fixture.paths.preferences()).value("edge_light_gestures").toBool());
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(!fixture.window.readerWindow());
+        }
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page->lightStarted(false));
+        page->lightChanged(.1);
+        QVERIFY(fixture.visible("rrBrightnessNotice"));
+        page->lightFinished(false);
+    }
     void settings() {
         QFETCH(bool, dark);
         Fixture fixture(dark);
@@ -6473,6 +6690,55 @@ private slots:
         symbols->click();
         QVERIFY(capture(fixture, name + "-symbols"));
     }
+    void lightGestureFeedback_data() { screenshotVariants(); }
+    void lightGestureFeedback() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        auto light = std::make_shared<GestureLightState>();
+        Fixture fixture(dark, false, false, true, false, false, [light](ReaderHostServices &services) {
+            services.lightAvailable = [] { return true; };
+            services.light = [light](QWidget *) { return std::make_unique<GestureLight>(light); };
+        });
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        const auto name = screenshotVariant(preset, dark);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(revealSettingsOption(fixture, "rrLightGestureFeedback"));
+        QVERIFY(capture(fixture, name + "-settings-light-feedback"));
+        QVERIFY(fixture.press("rrLightGestureFeedback"));
+        QVERIFY(capture(fixture, name + "-settings-light-feedback-hidden"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        if (fixture.visible("rrControlsTop")) QVERIFY(fixture.press("rrPage"));
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page->lightStarted(false));
+        page->lightChanged(.2);
+        QVERIFY(!fixture.visible("rrBrightnessNotice"));
+        QVERIFY(capture(fixture, name + "-light-feedback-hidden"));
+        page->lightFinished(true);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(revealSettingsOption(fixture, "rrLightGestureFeedback"));
+        QVERIFY(fixture.press("rrLightGestureFeedback"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        if (fixture.visible("rrControlsTop")) QVERIFY(fixture.press("rrPage"));
+        for (bool warmth : {false, true}) {
+            QVERIFY(page->lightStarted(warmth));
+            page->lightChanged(.2);
+            QVERIFY(fixture.visible("rrBrightnessNotice"));
+            QVERIFY(capture(fixture, name + (warmth ? "-warmth-gesture-feedback" : "-brightness-gesture-feedback")));
+            page->lightFinished(false);
+        }
+    }
     void dictionarySettings_data() { screenshotVariants(); }
     void dictionarySettings() {
         QFETCH(int, preset);
@@ -7409,7 +7675,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1352;
+    int expectedScreenshots = lightGallery ? 84 : 1385;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

@@ -41,6 +41,11 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
     }
     static const QMap<QString, QString> titles{
         {"about", "About Kobalt"},
+        {"settings-light-feedback", "Frontlight gesture feedback"},
+        {"settings-light-feedback-hidden", "Frontlight gesture feedback disabled"},
+        {"light-feedback-hidden", "Frontlight adjustment without feedback"},
+        {"brightness-gesture-feedback", "Brightness gesture popup"},
+        {"warmth-gesture-feedback", "Warmth gesture popup"},
         {"acknowledgments", "Acknowledgments"},
         {"alice-reading", "Alice in Wonderland"},
         {"annotating", "Annotation mode"},

@@ -409,6 +409,9 @@ void Reader::buildReadingPage() {
         dictionaryPanel->setBookFont(bookFace());
         dictionaryPanel->open(lookupText, result, lookupBounds);
     };
+    dictionaryPanel->searchRequested = [this](const QString &query) {
+        openSearch(query);
+    };
     dictionaryPanel->chosen = [this](const QString &id) {
         if (lifecycleHidden || services.suspended() || closing)
             return;

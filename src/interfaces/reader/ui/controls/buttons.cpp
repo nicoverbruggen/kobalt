@@ -583,7 +583,8 @@ CellButton::CellButton(ControlIcon icon, QWidget *parent, int iconPixels)
 }
 QSize CellButton::sizeHint() const {
     if (text().isEmpty())
-        return {m::chrome::cellWidth, m::chrome::actionHeight};
+        return {m::chrome::cellWidth + (dropdownIndicator ? px(8) + int(m::chrome::selectorIcon) : 0),
+                m::chrome::actionHeight};
     // Paint with our own font; the reader's button style sets a larger size.
     QFont label = interfaceFont(m::chrome::countText);
     label.setCapitalization(QFont::AllUppercase);
@@ -592,7 +593,7 @@ QSize CellButton::sizeHint() const {
 }
 int CellButton::widthForLabel(int maximumWidth) const {
     if (text().isEmpty())
-        return qMin(maximumWidth, int(m::chrome::cellWidth));
+        return qMin(maximumWidth, sizeHint().width());
     QFont label = interfaceFont(m::chrome::countText);
     label.setCapitalization(QFont::AllUppercase);
     const int reserve = m::chrome::inset + trailingInset + m::chrome::selectorGap + iconPixels;
@@ -627,8 +628,14 @@ void CellButton::paintEvent(QPaintEvent *) {
         painter.setOpacity(.45);
     const auto color = active ? paper : ink;
     if (text().isEmpty()) {
+        const int indicator = dropdownIndicator ? int(m::chrome::selectorIcon) : 0;
+        const int gap = dropdownIndicator ? px(8) : 0;
+        const int left = (width() - iconPixels - gap - indicator) / 2;
         controlIcon(glyph, color)
-            .paint(&painter, QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels, iconPixels));
+            .paint(&painter, QRect(left, (height() - iconPixels) / 2, iconPixels, iconPixels));
+        if (dropdownIndicator)
+            controlIcon(ControlIcon::Down, color)
+                .paint(&painter, QRect(left + iconPixels + gap, (height() - indicator) / 2, indicator, indicator));
         return;
     }
     QFont label = interfaceFont(m::chrome::countText);

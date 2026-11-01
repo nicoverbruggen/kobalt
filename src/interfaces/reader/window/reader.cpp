@@ -1128,11 +1128,15 @@ void Reader::openSeek() {
     pageScrubber->showCurrentPage();
 }
 
-void Reader::openSearch() {
+void Reader::openSearch(const QString &query) {
     model->cancelPendingTurn();
-    if (model->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying())
+    if (!isVisible() || lifecycleHidden || closing || services.suspended() || model->busy() ||
+        appearanceEdit.panelOpen() || appearanceEdit.applying())
         return;
-    dismissLookup();
+    if (query.isEmpty())
+        dismissLookup();
+    else
+        clearAnnotationDraft();
     dismissControls();
     if (searchOriginal.isEmpty()) {
         searchOriginal = model->state().value("position").toString();
@@ -1141,7 +1145,7 @@ void Reader::openSearch() {
     searchPanel->setExcerptFont(bookFace());
     searchPanel->setChapters(model->chapters());
     searchPanel->setGeometry(rect());
-    searchPanel->open(model->state().value("position").toString() != searchOriginal, searchOriginalPage);
+    searchPanel->open(model->state().value("position").toString() != searchOriginal, searchOriginalPage, query);
     if (orientation)
         orientation->setBlocked(true);
     for (auto *widget : searchPanel->findChildren<QWidget *>())

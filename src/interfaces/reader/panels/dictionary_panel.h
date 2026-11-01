@@ -16,7 +16,7 @@ public:
     explicit DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard = {});
     std::function<void()> dismissed;
     std::function<void(QString)> chosen;
-    std::function<void(QString)> requested;
+    std::function<void(QString)> requested, searchRequested;
     std::function<void(const QFont &)> prepareEditorFont;
     void setChoices(QVector<DictionaryChoice> values);
     void setLanguage(const QString &language);
@@ -38,7 +38,7 @@ protected:
 private:
     ui::PagerBar *pages, *choicesPaging;
     std::unique_ptr<KeyboardController> keyboard;
-    ui::CellButton *dictionary, *close, *edit, *submit;
+    ui::CellButton *dictionary, *close, *edit, *submit, *search;
     QLineEdit *query;
     QRect selection;
     bool editing = false;

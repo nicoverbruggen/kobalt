@@ -385,7 +385,7 @@ private:
     void updateOrientationBlock();
     bool rotationControlsBlocked() const;
     void closeSearch();
-    void openSearch();
+    void openSearch(const QString &query = {});
     kobalt::LinkPanel *linkPanel = nullptr;
     QPointer<kobalt::ui::ModalOverlay> linkDialog;
     QPointer<kobalt::ui::ModalOverlay> fontDefaultDialog, settingsFontPopup;

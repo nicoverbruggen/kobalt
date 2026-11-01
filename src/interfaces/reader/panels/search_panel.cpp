@@ -26,7 +26,7 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     back->setAccessibleName(strings::get("common.back"));
     query = new ui::QueryEdit(this);
     query->setObjectName("rrSearchQuery");
-    query->setMaxLength(128);
+    query->setMaxLength(256);
     ui::readerStyle(query, "QLineEdit{border:none;padding:0;background:palette(window);" +
                                ui::styles::font(c::queryText) + "}");
     query->setTextMargins(c::inset - m::control::border, 0, m::search::clearWidth + m::search::clearRight, 0);
@@ -113,7 +113,9 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     });
     hide();
 }
-void SearchPanel::open(bool returnAvailable, int originalPage) {
+void SearchPanel::open(bool returnAvailable, int originalPage, const QString &initialQuery) {
+    if (!initialQuery.isEmpty())
+        query->setText(initialQuery);
     canReturn = returnAvailable;
     invalidateRows();
     original->setCaption(strings::get("search_panel.page_number").arg(originalPage + 1));
@@ -129,6 +131,8 @@ void SearchPanel::open(bool returnAvailable, int originalPage) {
         ui::clearQueryFocus(query);
         keyboard->hide();
     }
+    if (!initialQuery.isEmpty())
+        run();
 }
 void SearchPanel::setExcerptFont(const QString &family) {
     if (family == excerptFamily)

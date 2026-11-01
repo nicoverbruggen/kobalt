@@ -14,6 +14,8 @@ The retired `native_hide_status_bar` preference is removed when settings are nor
 
 `dictionary_font_face` and `dictionary_font_size` are optional global preferences. An empty or missing face follows the current book’s resolved body font, including its normal reading-font fallback. A missing size uses 100 percent. Supported sizes are 80, 100, 120 and 140 percent. Invalid values use these defaults. These settings affect dictionary definition text, not book layout or saved annotations. They keep preference schema 1.
 
+Dictionary-to-book search uses the current lookup term in memory. It adds no saved preferences or book fields and changes no storage or cache format.
+
 `vertical_justification` is an optional global setting with values `off`, `expand` and `center`. Missing or invalid values use `off`. The Boolean used by early development builds maps to `expand` or `off`. `vertical_spacing_scope` selects `all` or `protection`; missing or invalid values use `all`. These fields keep settings schema 1 and canonical reading positions. Parsed-book cache format 6 stores source line boxes and whether a page gap was caused by widow/orphan protection. Older rendering caches rebuild without changing saved reading data.
 
 Book state now lives in `kobalt.sqlite`. Legacy book state uses a host-selected prefix followed by the SHA-256 of the UTF-8 book identity and `.json`. Its `schema` is `1`. The `book` and `fingerprint` fields identify the publication. It stores the canonical reading position, book-specific text preferences and native progress reconciliation fields. Globally owned layout preferences remain in global settings. Marking a book unread resets its position and book-specific preferences, but keeps annotations.

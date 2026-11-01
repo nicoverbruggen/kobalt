@@ -3566,7 +3566,7 @@ int main(int argc, char **argv) {
                 "Keyboard submission must preserve accents, trim whitespace and run once");
         require(panel.geometry() == original && definition->isVisible() && !query->isVisible(),
                 "Submission must restore the original dictionary sheet");
-        require(panel.findChild<QPushButton *>("rrDictionarySelect")->text() == "Spanish",
+        require(panel.findChild<QPushButton *>("rrDictionarySelect")->accessibleDescription() == "Spanish",
                 "Editing must retain the selected dictionary");
         panel.open(requested, missing, selection);
         edit->click();
@@ -3620,6 +3620,11 @@ int main(int argc, char **argv) {
         panel.open("word", result, QRect(100, 100, 40, 40));
         auto *selector = panel.findChild<QPushButton *>("rrDictionarySelect");
         const int currentWidth = selector->width();
+        const auto wordBounds = panel.findChild<QLabel *>("rrDictionaryWord")->geometry();
+        require(currentWidth > int(kobalt::ui::metrics::chrome::cellWidth) && selector->text().isEmpty(),
+                "Dictionary selection must leave room for its icon and menu arrow");
+        require(selector->accessibleDescription() == result.dictionary,
+                "The current dictionary name must remain available to accessibility");
         choices.append({"long", QString(100, 'W')});
         panel.setChoices(choices);
         panel.place(QRect(100, 100, 40, 40));
@@ -3627,12 +3632,14 @@ int main(int argc, char **argv) {
                 "A different dictionary's long name must not widen the current selector");
         result.dictionary = "English";
         panel.open("word", result, QRect(100, 100, 40, 40));
-        require(selector->width() >= kobalt::ui::px(220) && selector->width() < currentWidth,
-                "Dictionary selector must adapt to its current label with a minimum width");
+        require(selector->width() == currentWidth && panel.findChild<QLabel *>("rrDictionaryWord")->geometry() == wordBounds,
+                "Changing dictionary names must not move or resize the lookup header");
         result.dictionary = "English monolingual";
         panel.open("word", result, QRect(100, 100, 40, 40));
+        require(selector->width() == currentWidth && selector->accessibleDescription() == result.dictionary,
+                "A long dictionary name must retain the same icon cell and update accessibility");
         if (qEnvironmentVariableIsSet("KOBALT_DICTIONARY_CONTROLS_CAPTURE"))
-            panel.grab().save(qEnvironmentVariable("KOBALT_DICTIONARY_CONTROLS_CAPTURE") + "/wrapped-selector.png");
+            panel.grab().save(qEnvironmentVariable("KOBALT_DICTIONARY_CONTROLS_CAPTURE") + "/icon-selector.png");
     }
     kobalt::DictionaryPanel dictionary(&reader);
     QVector<kobalt::DictionaryChoice> dictionaries;

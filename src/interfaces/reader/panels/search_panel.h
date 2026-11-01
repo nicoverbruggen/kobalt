@@ -17,7 +17,8 @@ public:
     std::function<void(SearchHit)> selected;
     std::function<void()> dismissed, returnToStart;
     // `originalPage` is the zero-based page that Return to original position opens.
-    void open(bool canReturn, int originalPage);
+    // A supplied lookup query replaces the field and runs the normal search.
+    void open(bool canReturn, int originalPage, const QString &initialQuery = {});
     // Excerpts are book text, so they use the family the book is displayed in.
     void setExcerptFont(const QString &family);
     void setChapters(const QVector<ChapterLink> &links);

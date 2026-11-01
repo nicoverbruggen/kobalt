@@ -91,6 +91,8 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"dictionary-no-definition", "No definition found"},
         {"dictionary-ui", "Dictionary appearance settings"},
         {"dictionary-unavailable", "Dictionary unavailable"},
+        {"dictionary-search-action", "Search in book from a definition"},
+        {"dictionary-search-results", "Book results for the lookup term"},
         {"embedded-fonts", "Publisher font picker"},
         {"embedded-reading", "Reading with a publisher font"},
         {"finish-book", "Finish reading confirmation"},

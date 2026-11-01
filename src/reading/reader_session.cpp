@@ -1481,7 +1481,7 @@ void ReaderSession::cancelSearch() {
 }
 void ReaderSession::search(const QString &query, std::function<void(SearchBatch)> finished) {
     cancelSearch();
-    if (query.trimmed().isEmpty() || query.size() > 128 || !finished) {
+    if (query.trimmed().isEmpty() || query.size() > 256 || !finished) {
         return;
     }
     searchQuery = query.trimmed();

@@ -265,6 +265,7 @@
 "controls.publisher_default" = "Publisher default";
 
 /* dictionary_panel */
+"dictionary_panel.search_in_book" = "Search in book";
 "dictionary_panel.choose_dictionary" = "Choose dictionary";
 "dictionary_panel.close_definition" = "Close definition";
 "dictionary_panel.edit_lookup" = "Edit lookup";

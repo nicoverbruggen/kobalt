@@ -1370,8 +1370,8 @@ QVector<QRect> ReaderModel::rangeRects(const QString &start, const QString &end,
 SearchBatch ReaderModel::searchPage(const QString &query, int number) {
     SearchBatch result;
     result.nextPage = number + 1;
-    result.done = !engine_ || number < 0 || number + 1 >= pages() || query.isEmpty() || query.size() > 128;
-    if (!engine_ || number < 0 || number >= pages() || query.isEmpty() || query.size() > 128)
+    result.done = !engine_ || number < 0 || number + 1 >= pages() || query.isEmpty() || query.size() > 256;
+    if (!engine_ || number < 0 || number >= pages() || query.isEmpty() || query.size() > 256)
         return result;
     auto *doc = engine_->getDocument();
     ldomXPointerEx start(engine_->getPageBookmark(number));

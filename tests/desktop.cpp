@@ -2762,6 +2762,166 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(counter->text(), initial);
         QCOMPARE(fixture.state().value("position"), position);
     }
+    void dictionaryBookSearch_data() { screenshotVariants(); }
+    void dictionaryBookSearch() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *reader = fixture.window.readerWindow();
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        const auto point = fixture.wordPoint();
+        const auto original = fixture.state().value("position");
+        QVERIFY(fixture.selectWord(page, point));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        auto *headword = qobject_cast<QLabel *>(fixture.widget("rrDictionaryWord"));
+        auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+        auto *lookup = qobject_cast<QLineEdit *>(fixture.widget("rrDictionaryQuery"));
+        auto *action = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySearch"));
+        auto *status = qobject_cast<QLabel *>(fixture.widget("rrSearchStatus"));
+        QVERIFY(headword && query && lookup && action && status);
+        const auto selected = headword->text();
+        QCOMPARE(action->accessibleName(), strings::get("dictionary_panel.search_in_book"));
+        QVERIFY(action->text().isEmpty());
+        QVERIFY(action->isVisible());
+        QVERIFY(fixture.widget("rrDictionary")->rect().contains(action->geometry()));
+        QVERIFY(!action->geometry().intersects(fixture.widget("rrDictionaryEdit")->geometry()));
+        QCOMPARE(action->geometry().top(), fixture.widget("rrDictionaryEdit")->geometry().top());
+        QCOMPARE(action->size(), fixture.widget("rrDictionaryEdit")->size());
+        auto *selector = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySelect"));
+        QVERIFY(selector);
+        QVERIFY(selector->width() > action->width());
+        QCOMPARE(selector->height(), action->height());
+        QVERIFY(selector->text().isEmpty());
+        QVERIFY(!action->geometry().intersects(selector->geometry()));
+        QVERIFY(fixture.widget("rrDefinition")->y() <= action->geometry().bottom() + 1 + int(ui::metrics::control::border));
+        QVERIFY(fixture.press("rrDictionarySearch"));
+        QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+        QCOMPARE(query->text(), selected);
+        QVERIFY(!fixture.visible("rrDictionary"));
+        QVERIFY(!query->hasFocus());
+        for (auto *key : reader->findChildren<QPushButton *>("widgetKeyboardDone"))
+            QVERIFY(!key->isVisible());
+        QVERIFY(!page->annotationContains(point - QPoint(0, page->topHeight())));
+        QCOMPARE(fixture.state().value("position"), original);
+        QVERIFY(fixture.press("rrSearchBack"));
+        QVERIFY(fixture.selectWord(page, point));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        QVERIFY(fixture.press("rrDictionaryEdit"));
+        QVERIFY(!action->isVisible());
+        lookup->setText("  Trevelyan  ");
+        QTest::keyClick(lookup, Qt::Key_Return);
+        QTRY_VERIFY(action->isVisible());
+        QCOMPARE(headword->text(), QString("Trevelyan"));
+        // Cancelling an unfinished replacement keeps the current lookup term.
+        QVERIFY(fixture.press("rrDictionaryEdit"));
+        lookup->setText("discard this edit");
+        QTest::keyClick(lookup, Qt::Key_Escape);
+        QTRY_VERIFY(action->isVisible());
+        QVERIFY(fixture.press("rrDictionarySearch"));
+        QCOMPARE(query->text(), QString("Trevelyan"));
+        QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+        QTRY_VERIFY(!status->text().contains("Searching", Qt::CaseInsensitive));
+        QVERIFY(fixture.press("rrSearchResult0"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(!fixture.visible("rrSearch"));
+        QVERIFY(fixture.state().value("position") != original);
+        if (!fixture.visible("rrSearchOpen")) QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSearchOpen"));
+        QVERIFY(fixture.press("rrSearchOpen"));
+        QTRY_VERIFY(fixture.visible("rrSearchOriginal"));
+        QCOMPARE(query->text(), QString("Trevelyan"));
+        QVERIFY(fixture.press("rrSearchOriginal"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("position"), original);
+        QVERIFY(!fixture.visible("rrSearch"));
+        auto *panel = dynamic_cast<DictionaryPanel *>(fixture.widget("rrDictionary"));
+        QVERIFY(panel);
+        DictionaryResult result;
+        result.received = result.restored = true;
+        result.html = "<p>A definition.</p>";
+        QRect wordBounds;
+        for (const auto &name : {QString("English"), QString::fromUtf8("English to 日本語"), QString(100, 'W')}) {
+            result.dictionary = name;
+            panel->open("Trevelyan", result, {100, 100, 40, 40});
+            QVERIFY(selector->width() > action->width());
+            QCOMPARE(selector->height(), action->height());
+            QVERIFY(selector->text().isEmpty());
+            QCOMPARE(selector->accessibleDescription(), name);
+            QCOMPARE(selector->toolTip(), name);
+            const auto bounds = headword->geometry();
+            if (!wordBounds.isNull()) QCOMPARE(bounds, wordBounds);
+            wordBounds = bounds;
+        }
+    }
+    void dictionaryBookSearchUnicode_data() { bookmarks_data(); }
+    void dictionaryBookSearchUnicode() {
+        QFETCH(bool, dark);
+        bool suspended = false;
+        Fixture fixture(dark, false, false, true, false, false, [&](ReaderHostServices &services) {
+            services.suspended = [&] { return suspended; };
+        });
+        QVERIFY(fixture.prepared);
+        const auto longTerm = QString::fromUtf8("é").repeated(140);
+        auto contents = test::lookupBook();
+        contents["one.xhtml"].replace("</body>", ("<p>" + longTerm + "</p></body>").toUtf8());
+        QVERIFY(writeBook(fixture.directory.path(), "lookup.epub", contents));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.path() + "/lookup.epub");
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *panel = dynamic_cast<DictionaryPanel *>(fixture.widget("rrDictionary"));
+        auto *lookup = qobject_cast<QLineEdit *>(fixture.widget("rrDictionaryQuery"));
+        auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+        auto *status = qobject_cast<QLabel *>(fixture.widget("rrSearchStatus"));
+        QVERIFY(panel && lookup && query && status);
+        const auto original = fixture.state().value("position");
+        // Use real dictionary editing, reader dispatch, worker search and result rows.
+        for (const auto &term : {QString::fromUtf8("café"), QString("Hello, world"), QString::fromUtf8("𐐀token")}) {
+            panel->open("old lookup", {}, {100, 100, 40, 40});
+            QVERIFY(fixture.press("rrDictionaryEdit"));
+            lookup->setText(term);
+            QVERIFY(fixture.press("rrDictionarySubmit"));
+            QVERIFY(fixture.press("rrDictionarySearch"));
+            QCOMPARE(query->text(), term);
+            QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+            QVERIFY(fixture.widget("rrSearchResult0")->accessibleName().contains(term));
+            QCOMPARE(fixture.state().value("position"), original);
+            QVERIFY(fixture.press("rrSearchBack"));
+        }
+        panel->open(longTerm, {}, {100, 100, 40, 40});
+        QVERIFY(fixture.press("rrDictionarySearch"));
+        QCOMPARE(query->text(), longTerm);
+        QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+        QVERIFY(fixture.widget("rrSearchResult0")->accessibleName().contains(longTerm));
+        QVERIFY(fixture.press("rrSearchBack"));
+        panel->open("Hello", {}, {100, 100, 40, 40});
+        QVERIFY(fixture.press("rrDictionarySearch"));
+        // Closing immediately must reject late batches and keep the keyboard hidden.
+        QVERIFY(fixture.press("rrSearchBack"));
+        panel->open("Hello", {}, {100, 100, 40, 40});
+        auto *action = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySearch"));
+        QVERIFY(action);
+        suspended = true;
+        action->click();
+        QVERIFY(!fixture.visible("rrSearch"));
+        QVERIFY(panel->isVisible());
+        suspended = false;
+        fixture.window.readerWindow()->hide();
+        action->click();
+        QVERIFY(!fixture.visible("rrSearch"));
+        fixture.window.readerWindow()->show();
+        QCoreApplication::processEvents();
+        QVERIFY(!fixture.visible("rrSearch"));
+        QVERIFY(!fixture.visible("rrDictionary"));
+        QCOMPARE(fixture.state().value("position"), original);
+    }
     void dictionaryEditing_data() { bookmarks_data(); }
     void dictionaryEditing() {
         QFETCH(bool, dark);
@@ -6904,6 +7064,19 @@ private slots:
         result.error = "Dictionary service unavailable";
         panel->open("type", result, {100, 100, 50, 40});
         QVERIFY(capture(fixture, name + "-unavailable"));
+        result.error.clear();
+        result.received = result.restored = true;
+        result.html = "<p><b>Trevelyan</b> The family name of the author of this book.</p>";
+        panel->open("Trevelyan", result, {100, 100, 50, 40});
+        QVERIFY(capture(fixture, name + "-search-action"));
+        QVERIFY(fixture.press("rrDictionarySearch"));
+        auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+        auto *status = qobject_cast<QLabel *>(fixture.widget("rrSearchStatus"));
+        QVERIFY(query && status);
+        QCOMPARE(query->text(), QString("Trevelyan"));
+        QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+        QTRY_VERIFY(!status->text().contains("Searching", Qt::CaseInsensitive));
+        QVERIFY(capture(fixture, name + "-search-results"));
     }
 
     void international_data() {
@@ -7675,7 +7848,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 84 : 1385;
+    int expectedScreenshots = lightGallery ? 84 : 1397;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

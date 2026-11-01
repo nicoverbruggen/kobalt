@@ -57,6 +57,32 @@ env -u KOBALT_RELEASE_VERSION CONTAINER_ENGINE="$scratch/container-engine" \
     KOBALT_TEST_ENGINE_LOG="$scratch/export-engine.log" bash "$exported/platforms/kobo/build.sh" qt6
 grep -Fx 'v9.8.7-beta.6' "$scratch/export-engine.log" > /dev/null
 grep -F 'fffffff OFF' "$scratch/export-engine.log" > /dev/null
+# Direct builds enable diagnostics; an explicit release choice must survive
+# container launch, and diagnostic targets must stay verbose in either mode.
+for target in qt5 qt6; do
+    for mode in default ON OFF; do
+        log="$scratch/diagnostics-$target-$mode.log"
+        if [[ $mode == default ]]; then
+            env -u KOBALT_VERBOSE_DIAGNOSTICS CONTAINER_ENGINE="$scratch/container-engine" \
+                KOBALT_TEST_ENGINE_LOG="$log" bash "$exported/platforms/kobo/build.sh" "$target"
+            expected=ON
+        else
+            KOBALT_VERBOSE_DIAGNOSTICS=$mode CONTAINER_ENGINE="$scratch/container-engine" \
+                KOBALT_TEST_ENGINE_LOG="$log" bash "$exported/platforms/kobo/build.sh" "$target"
+            expected=$mode
+        fi
+        grep -F -- '-DKOBALT_VERBOSE_DIAGNOSTICS="$6"' "$log" > /dev/null
+        grep -F "kobalt-build $target 2 fffffff OFF arm64 fixture-sdk $expected" "$log" > /dev/null
+    done
+    KOBALT_VERBOSE_DIAGNOSTICS=OFF CONTAINER_ENGINE="$scratch/container-engine" \
+        KOBALT_TEST_ENGINE_LOG="$scratch/diagnostic-target.log" bash "$exported/platforms/kobo/build.sh" "$target-diagnostic"
+    grep -F "kobalt-build $target-diagnostic 2 fffffff OFF arm64 fixture-sdk ON" "$scratch/diagnostic-target.log" > /dev/null
+done
+if KOBALT_VERBOSE_DIAGNOSTICS=invalid CONTAINER_ENGINE="$scratch/container-engine" \
+    bash "$exported/platforms/kobo/build.sh" qt5 > "$scratch/error" 2>&1; then
+    echo 'Accepted an invalid diagnostic mode' >&2; exit 1
+fi
+echo 'PASS: direct and release diagnostic build modes'
 if env -u KOBALT_RELEASE_VERSION -u KOBALT_ANDROID_KEYSTORE KOBALT_ANDROID_RELEASE=1 \
     CONTAINER_ENGINE="$scratch/container-engine" bash platforms/android/build.sh > "$scratch/error" 2>&1; then
     echo 'Release checkout accepted a missing version' >&2; exit 1

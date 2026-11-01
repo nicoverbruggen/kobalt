@@ -19,7 +19,7 @@ if [[ $1 == android ]]; then
         bash platforms/android/test-signing.sh "build/android-$arch/android-build/build/outputs/apk/release/android-build-release-unsigned.apk"
     cp "$package" "$package.signing.txt" build/release/
 else
-    bash platforms/kobo/build.sh "$1"
+    KOBALT_VERBOSE_DIAGNOSTICS=OFF bash platforms/kobo/build.sh "$1"
     package="build/kobo-$1/Kobalt-$1.zip"
     cp "$package" build/release/
 fi

@@ -129,7 +129,7 @@ if(KOBALT_QT_MAJOR EQUAL 5)
 endif()
 # An evaluation package adds the scenario player, its scenario file, the test
 # books and the diagnostics switch. Release packages never contain them.
-option(KOBALT_VERBOSE_DIAGNOSTICS "Enable verbose diagnostics without a profile marker" OFF)
+option(KOBALT_VERBOSE_DIAGNOSTICS "Enable verbose diagnostics without a profile marker" ON)
 if(KOBALT_VERBOSE_DIAGNOSTICS)
     set_property(SOURCE "${source}/support/diagnostics.cpp" APPEND PROPERTY
         COMPILE_DEFINITIONS KOBALT_VERBOSE_DIAGNOSTICS=1)

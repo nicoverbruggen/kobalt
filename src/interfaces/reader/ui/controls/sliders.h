@@ -20,6 +20,10 @@ public:
     }
     // Stops are evenly spaced and snap pointer gestures. Buttons retain singleStep().
     void setMarkers(const QVector<int> &values, MarkerMode mode = MarkerMode::Positions);
+    // Extra Stops-mode targets use the existing rail positions without drawing marks or labels.
+    void setAdditionalStops(const QVector<int> &values) {
+        additionalStops = values;
+    }
     // Checkpoints use equal spacing but allow values between the marks.
     void setMarkerLabels(const QStringList &labels);
     void nudge(int steps);
@@ -37,6 +41,7 @@ private:
     bool dotMarkers = false;
     int original = 0;
     QVector<int> markers;
+    QVector<int> additionalStops;
     QStringList markerLabels;
     MarkerMode markerMode = MarkerMode::Positions;
     int positionForValue(int value) const;

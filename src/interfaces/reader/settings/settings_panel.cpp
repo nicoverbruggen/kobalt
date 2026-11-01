@@ -1392,6 +1392,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
             strings::get("settings.paragraph_gap"), "rrParagraphSpacingLess", "rrParagraphSpacingMore",
             -1, 200, 1, {}, {}, {}, {strings::get("reader.publisher_spacing"), "0", "50%", "100%", "150%", "200%"});
         slider->setMarkers({-1, 0, 50, 100, 150, 200}, ui::SettingSlider::MarkerMode::Stops);
+        slider->setAdditionalStops({25, 75, 125, 175});
         description->setText(strings::get("settings.paragraph_choices_description"));
         area->findChild<QLabel *>("rrParagraphSpacingSliderCurrentPrefix")->hide();
         const auto showValue = [slider, area](int value) {
@@ -1406,6 +1407,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
             strings::get("settings.paragraph_indent"), "rrParagraphIndentLess", "rrParagraphIndentMore",
             -1, 300, 1, {}, {}, {}, {strings::get("reader.publisher_spacing"), "0", "100%", "200%", "300%"});
         indentSlider->setMarkers({-1, 0, 100, 200, 300}, ui::SettingSlider::MarkerMode::Stops);
+        indentSlider->setAdditionalStops({25, 50, 75, 125, 150, 175});
         area->findChild<QLabel *>("rrParagraphIndentSliderCurrentPrefix")->hide();
         const auto showIndent = [indentSlider, area](int value) {
             area->findChild<QLabel *>("rrParagraphIndentValue")->setText(

@@ -622,6 +622,7 @@ if(BUILD_TESTING)
     kobalt_regressions(engine vertical_spacing source_index columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
         fallback_styles svg_limits image_proportions whitespace links search word_selection reader publisher_markup local_reader document_word_count document_cache)
     kobalt_regressions(component ui acknowledgments kosync_ui)
+    target_link_libraries(kobalt-ui-tests PRIVATE Qt6::GuiPrivate)
     target_link_libraries(kobalt-kosync-ui-tests PRIVATE Qt6::Test)
     kobalt_regressions(session reading_book bookmark_session highlight_session reader_session)
     kobalt_regressions(resource image_policy resource_provider)

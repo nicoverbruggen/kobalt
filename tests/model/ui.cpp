@@ -53,6 +53,9 @@
 #include <QtMath>
 #include <QKeyEvent>
 #include <QProgressBar>
+#include <QTouchEvent>
+#include <QWindow>
+#include <private/qeventpoint_p.h>
 #include <QRawFont>
 #include <cstdio>
 #include <cstdlib>
@@ -3081,6 +3084,216 @@ int main(int argc, char **argv) {
             }
             settings.dismissFontChoices();
         }
+        int paragraphCommits = 0, chosenGap = -2, chosenIndent = -2;
+        settings.showParagraphAdjustments(-1, 60, [&](int gap, int indent) {
+            ++paragraphCommits;
+            chosenGap = gap;
+            chosenIndent = indent;
+        });
+        app.processEvents();
+        auto *indent = static_cast<kobalt::ui::SettingSlider *>(settings.fontDialog->findChild<QSlider *>("rrParagraphIndentSlider"));
+        auto *gap = static_cast<kobalt::ui::SettingSlider *>(settings.fontDialog->findChild<QSlider *>("rrParagraphSpacingSlider"));
+        require(indent && gap, "Paragraph adjustment sliders are missing");
+        const int inset = kobalt::ui::metrics::control::sliderInset;
+        const auto xAt = [inset](kobalt::ui::SettingSlider *control, double position) {
+            return inset + qRound((control->width() - 2 * inset) * position);
+        };
+        const auto mouse = [](kobalt::ui::SettingSlider *control, QEvent::Type type, int x) {
+            const QPointF local(x, control->height() / 2), global = control->mapToGlobal(local.toPoint());
+            QMouseEvent event(type, local, global, type == QEvent::MouseMove ? Qt::NoButton : Qt::LeftButton,
+                              type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(control, &event);
+        };
+        const QVector<int> indentStops{-1, 0, 25, 50, 75, 100, 125, 150, 175, 200, 300};
+        const QVector<double> indentPositions{0, .25, .3125, .375, .4375, .5, .5625, .625, .6875, .75, 1};
+        for (int i = 0; i < indentStops.size(); ++i) {
+            const int before = paragraphCommits;
+            indent->setValue(60);
+            const int x = xAt(indent, indentPositions[i]);
+            mouse(indent, QEvent::MouseButtonPress, x);
+            require(indent->value() == indentStops[i] && paragraphCommits == before,
+                    "Indent drag missed a hidden quarter stop or committed before release");
+            mouse(indent, QEvent::MouseButtonRelease, x);
+            require(paragraphCommits == before + 1 && chosenIndent == indentStops[i] && chosenGap == -1,
+                    "Indent release did not commit once with the unchanged Publisher gap");
+        }
+        // Sweep both ways to reject extra subdivisions, including above 200%.
+        for (const bool reverse : {false, true}) {
+            QVector<int> visited;
+            const int before = paragraphCommits;
+            const int span = indent->width() - 2 * inset;
+            mouse(indent, QEvent::MouseButtonPress, reverse ? indent->width() : 0);
+            for (int offset = 0; offset <= span; ++offset) {
+                mouse(indent, QEvent::MouseMove, inset + (reverse ? span - offset : offset));
+                if (visited.isEmpty() || visited.last() != indent->value())
+                    visited.append(indent->value());
+            }
+            auto expected = indentStops;
+            if (reverse)
+                std::reverse(expected.begin(), expected.end());
+            require(visited == expected && paragraphCommits == before,
+                    "Indent drag added stops, skipped quarter stops or committed a draft");
+            mouse(indent, QEvent::MouseButtonRelease, reverse ? 0 : indent->width());
+        }
+        for (const bool hide : {false, true}) {
+            indent->setValue(60);
+            const int before = paragraphCommits;
+            mouse(indent, QEvent::MouseButtonPress, xAt(indent, .375));
+            if (hide) {
+                indent->hide();
+                indent->show();
+            } else {
+                QEvent cancel(QEvent::TouchCancel);
+                QApplication::sendEvent(indent, &cancel);
+            }
+            mouse(indent, QEvent::MouseButtonRelease, xAt(indent, .375));
+            require(indent->value() == 60 && paragraphCommits == before,
+                    "Abandoned indent drag lost its fine value or committed");
+        }
+        QPointingDevice touchDevice("indentation test", 1, QInputDevice::DeviceType::TouchScreen,
+                                    QPointingDevice::PointerType::Finger, QInputDevice::Capability::Position, 2, 0);
+        const auto touch = [&](kobalt::ui::SettingSlider *control, QEvent::Type type, QPoint position, bool secondFinger = false) {
+            const auto state = type == QEvent::TouchBegin ? QEventPoint::Pressed :
+                type == QEvent::TouchEnd ? QEventPoint::Released : QEventPoint::Updated;
+            QEventPoint point(0, state, position, control->mapToGlobal(position));
+            QMutableEventPoint::setPosition(point, position);
+            QList<QEventPoint> points{point};
+            if (secondFinger)
+                points.append(QEventPoint(1, QEventPoint::Pressed, position, control->mapToGlobal(position)));
+            QTouchEvent event(type, &touchDevice, Qt::NoModifier, points);
+            QApplication::sendEvent(control, &event);
+        };
+        for (int i = 0; i < indentStops.size(); ++i) {
+            indent->setValue(60);
+            const int before = paragraphCommits;
+            const QPoint point(xAt(indent, indentPositions[i]), indent->height() / 2);
+            touch(indent, QEvent::TouchBegin, point);
+            require(indent->value() == indentStops[i] && paragraphCommits == before,
+                    "Touch indent drag differs from mouse snapping");
+            touch(indent, QEvent::TouchEnd, point);
+            require(paragraphCommits == before + 1 && chosenIndent == indentStops[i],
+                    "Touch indent release did not commit its stop once");
+        }
+        indent->setValue(60);
+        const int beforeTouchCancel = paragraphCommits;
+        const QPoint quarter(xAt(indent, .3125), indent->height() / 2);
+        const QPoint half(xAt(indent, .375), indent->height() / 2);
+        touch(indent, QEvent::TouchBegin, quarter);
+        touch(indent, QEvent::TouchUpdate, half);
+        require(indent->value() == 50 && paragraphCommits == beforeTouchCancel,
+                "Touch movement did not reach a hidden stop without committing");
+        QTouchEvent touchCancel(QEvent::TouchCancel, &touchDevice);
+        QApplication::sendEvent(indent, &touchCancel);
+        touch(indent, QEvent::TouchEnd, half);
+        require(indent->value() == 60 && paragraphCommits == beforeTouchCancel,
+                "Cancelled touch drag lost its fine value or committed");
+        touch(indent, QEvent::TouchBegin, quarter);
+        touch(indent, QEvent::TouchUpdate, half, true);
+        touch(indent, QEvent::TouchEnd, half);
+        require(indent->value() == 60 && paragraphCommits == beforeTouchCancel,
+                "Multi-touch indent drag lost its fine value or committed");
+        indent->setValue(60);
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentMore")->click();
+        require(chosenIndent == 61, "Indent plus did not keep one-percent adjustment");
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentLess")->click();
+        require(chosenIndent == 60, "Indent minus snapped instead of adjusting one percent");
+        indent->setValue(0);
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentLess")->click();
+        require(chosenIndent == -1, "Indent minus did not reach Publisher");
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentMore")->click();
+        require(chosenIndent == 0, "Indent plus did not leave Publisher at zero");
+        const QVector<int> gapStops{-1, 0, 25, 50, 75, 100, 125, 150, 175, 200};
+        const QVector<double> gapPositions{0, .2, .3, .4, .5, .6, .7, .8, .9, 1};
+        for (int i = 0; i < gapStops.size(); ++i) {
+            const QPoint point(xAt(gap, gapPositions[i]), gap->height() / 2);
+            for (const bool useTouch : {false, true}) {
+                gap->setValue(60);
+                const int before = paragraphCommits;
+                if (useTouch)
+                    touch(gap, QEvent::TouchBegin, point);
+                else
+                    mouse(gap, QEvent::MouseButtonPress, point.x());
+                require(gap->value() == gapStops[i] && paragraphCommits == before,
+                        "Paragraph gap missed a quarter stop or committed before release");
+                if (useTouch)
+                    touch(gap, QEvent::TouchEnd, point);
+                else
+                    mouse(gap, QEvent::MouseButtonRelease, point.x());
+                require(chosenGap == gapStops[i] && chosenIndent == 0 && paragraphCommits == before + 1,
+                        "Paragraph gap release did not commit once with unchanged indentation");
+            }
+        }
+        for (const bool reverse : {false, true}) {
+            QVector<int> visited;
+            const int before = paragraphCommits;
+            const int span = gap->width() - 2 * inset;
+            mouse(gap, QEvent::MouseButtonPress, reverse ? gap->width() : 0);
+            for (int offset = 0; offset <= span; ++offset) {
+                mouse(gap, QEvent::MouseMove, inset + (reverse ? span - offset : offset));
+                if (visited.isEmpty() || visited.last() != gap->value())
+                    visited.append(gap->value());
+            }
+            auto expected = gapStops;
+            if (reverse)
+                std::reverse(expected.begin(), expected.end());
+            require(visited == expected && paragraphCommits == before,
+                    "Paragraph gap drag skipped quarter stops or committed a draft");
+            mouse(gap, QEvent::MouseButtonRelease, reverse ? 0 : gap->width());
+        }
+        gap->setValue(60);
+        const int beforeGapCancel = paragraphCommits;
+        const QPoint gapQuarter(xAt(gap, .3), gap->height() / 2);
+        touch(gap, QEvent::TouchBegin, gapQuarter);
+        QTouchEvent gapCancel(QEvent::TouchCancel, &touchDevice);
+        QApplication::sendEvent(gap, &gapCancel);
+        touch(gap, QEvent::TouchEnd, gapQuarter);
+        require(gap->value() == 60 && paragraphCommits == beforeGapCancel,
+                "Cancelled paragraph gap drag lost its fine value or committed");
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
+        require(chosenGap == 61, "Paragraph gap plus did not keep one-percent adjustment");
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
+        require(chosenGap == 60, "Paragraph gap minus snapped instead of adjusting one percent");
+        gap->setValue(0);
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
+        require(chosenGap == -1, "Paragraph gap minus did not reach Publisher");
+        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
+        require(chosenGap == 0, "Paragraph gap plus did not leave Publisher at zero");
+        // Compare complete rail and label pixels with the original visible stops.
+        for (auto *control : {indent, gap}) {
+            for (const bool dark : {false, true}) {
+                QPalette colors = control->palette();
+                colors.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
+                colors.setColor(QPalette::WindowText, dark ? Qt::white : Qt::black);
+                control->setPalette(colors);
+                control->setValue(60);
+                const auto withStops = control->grab().toImage();
+                kobalt::ui::SettingSlider original(nullptr, -1, control->maximum());
+                const bool isIndent = control == indent;
+                const QVector<int> visible = isIndent ? QVector<int>{-1, 0, 100, 200, 300} : QVector<int>{-1, 0, 50, 100, 150, 200};
+                const QStringList labels = isIndent ? QStringList{kobalt::strings::get("reader.publisher_spacing"), "0", "100%", "200%", "300%"} :
+                    QStringList{kobalt::strings::get("reader.publisher_spacing"), "0", "50%", "100%", "150%", "200%"};
+                original.setMarkers(visible, kobalt::ui::SettingSlider::MarkerMode::Stops);
+                original.setMarkerLabels(labels);
+                original.setPalette(colors);
+                original.resize(control->size());
+                original.setValue(60);
+                require(original.grab().toImage() == withStops,
+                        "Paragraph slider differs from the original visible markers and labels");
+                control->setAdditionalStops({});
+                require(control->grab().toImage() == withStops,
+                        "Hidden paragraph stops moved the handle, visible ticks or labels, or drew extra marks");
+                control->setAdditionalStops(isIndent ? QVector<int>{25, 50, 75, 125, 150, 175} : QVector<int>{25, 75, 125, 175});
+                const int markerY = kobalt::ui::metrics::control::sliderLabelHeight +
+                    kobalt::ui::metrics::control::sliderMarkerTop + kobalt::ui::metrics::control::sliderMarkerHeight / 2;
+                for (int i = 0; i < visible.size(); ++i)
+                    require(qGray(withStops.pixel(xAt(control, double(i) / (visible.size() - 1)), markerY)) == (dark ? 255 : 0),
+                            "Paragraph visible ticks no longer use the original equal spacing");
+                for (double position : (isIndent ? QVector<double>{.3125, .375, .4375, .5625, .625, .6875} : QVector<double>{.3, .5, .7, .9}))
+                    require(qGray(withStops.pixel(xAt(control, position), markerY)) == (dark ? 0 : 255),
+                            "Hidden paragraph stop drew a visible tick");
+            }
+        }
+        settings.dismissFontChoices();
     }
     {
         kobalt::ui::PagedText text(&reader);

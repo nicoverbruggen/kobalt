@@ -176,7 +176,18 @@ void SettingSlider::moveTo(qreal x) {
         const int span = qMax(1, width() - 2 * m::control::sliderInset);
         const int index =
             qBound(0, qRound((x - m::control::sliderInset) * (markers.size() - 1) / span), int(markers.size() - 1));
-        setValue(markers[index]);
+        int target = markers[index];
+        qreal distance = qAbs(x - positionForValue(target));
+        for (const int stop : additionalStops) {
+            if (stop < minimum() || stop > maximum())
+                continue;
+            const qreal candidate = qAbs(x - positionForValue(stop));
+            if (candidate < distance || (candidate == distance && stop > target)) {
+                target = stop;
+                distance = candidate;
+            }
+        }
+        setValue(target);
         return;
     }
     const int raw = QStyle::sliderValueFromPosition(minimum(), maximum(), qRound(x) - m::control::sliderInset,

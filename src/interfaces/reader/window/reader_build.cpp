@@ -810,9 +810,10 @@ void Reader::buildOverlays() {
     choices->hide();
     pinnedBookmarks = new BookmarkTray(this);
     pinnedBookmarks->setObjectName("rrPinnedBookmarks");
+    ui::readerStyle(pinnedBookmarks, "QFrame#rrPinnedBookmarks{background:transparent;}");
     pinnedBookmarks->hide();
     for (int i = 0; i < BookmarkStore::maxPins; ++i) {
-        auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks);
+        auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks, qRound(1.2 * int(m::chrome::cellIcon)));
         button->setCircular(true);
         button->setObjectName(QString("rrPinnedBookmark%1").arg(i));
         pinnedButtons.append(button);

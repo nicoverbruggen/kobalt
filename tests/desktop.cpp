@@ -1479,6 +1479,17 @@ void checkPinnedBookmarks(int preset, bool dark) {
         QCOMPARE(bar->geometry().right(), fixture.window.readerWindow()->width() - 1 - ui::px(20));
         if (i == 0) {
             QCOMPARE(first->accessibleName(), QString("Map"));
+            // Rounded corners must reveal the page, including over images.
+            QWidget backdrop(fixture.window.readerWindow());
+            backdrop.setGeometry(bar->geometry());
+            backdrop.setStyleSheet("background:#515151;");
+            backdrop.show();
+            bar->raise();
+            QCoreApplication::processEvents();
+            const auto frame = fixture.window.readerWindow()->grab().toImage();
+            QCOMPARE(frame.pixelColor(bar->pos() + QPoint(2, 2)), QColor("#515151"));
+            backdrop.hide();
+
             QVERIFY(capture(fixture, name + "-pinned-bookmark-single"));
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
@@ -1498,11 +1509,27 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QVERIFY(!fixture.visible("rrPinnedBookmarks"));
     fixture.window.readerWindow()->close();
     QTRY_VERIFY(fixture.window.idle());
+    // Persist a creation order opposite to book order before reopening.
+    const auto current = fixture.state();
+    BookmarkStore reordered(fixture.paths.annotations(), current.value("book").toString(),
+                            current.value("fingerprint").toString().toLatin1(), "Fixture", fixture.paths.database());
+    QVERIFY(reordered.load());
+    auto entries = reordered.bookmarks();
+    QStringList orderedPins;
+    for (const auto &entry : entries)
+        if (entry.pinned()) orderedPins.append(entry.position);
+    std::reverse(entries.begin(), entries.end());
+    reordered.setBookmarks(entries);
+    QVERIFY(reordered.save());
     fixture.window.openBook(book);
     QTRY_COMPARE(opened.count(), 3); // Includes the fixed-date reopening.
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     QVERIFY(fixture.press("rrPage"));
     QTRY_VERIFY(fixture.visible("rrPinnedBookmark7"));
+    for (int i = 0; i < orderedPins.size(); ++i)
+        QTRY_COMPARE(fixture.widget(QString("rrPinnedBookmark%1").arg(i).toLatin1().constData())
+                     ->property("bookmark_position").toString(), orderedPins[i]);
+
     QVERIFY(fixture.press("rrBookmarks"));
     auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
     list->setSortOrder("position");
@@ -1523,7 +1550,7 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QVERIFY(fixture.press("rrPinIcon_compass"));
     QVERIFY(fixture.press("rrPinSave"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["name"].toString(), QString::fromUtf8("Carte 日本語"));
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["name"].toString(), QString::fromUtf8("Carte 日本語"));
     QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinIconsNext"));
     auto *pinKeyboard = fixture.widget("rrPinEditor")->findChild<QWidget *>("widgetKeyboard");
@@ -1552,14 +1579,14 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
     QVERIFY(fixture.press("rrPinSave"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString(), QString("diamond"));
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), QString("diamond"));
     QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinIcon_diamond"));
     QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
     QVERIFY(fixture.press("rrPinIconsPrevious"));
     QVERIFY(fixture.press("rrPinCancel"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString(), QString("diamond"));
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), QString("diamond"));
 }
 
 class DesktopTests final : public QObject {

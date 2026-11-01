@@ -676,6 +676,10 @@ void Reader::syncPinnedBookmarks() {
     QVector<Bookmark> pins;
     for (const auto &item : bookmarks->bookmarks())
         if (item.pinned() && pins.size() < BookmarkStore::maxPins) pins.append(item);
+    std::stable_sort(pins.begin(), pins.end(), [this](const Bookmark &a, const Bookmark &b) {
+        const int aPage = bookmarks->pageOf(a.position), bPage = bookmarks->pageOf(b.position);
+        return (aPage < 0 ? INT_MAX : aPage) < (bPage < 0 ? INT_MAX : bPage);
+    });
     const bool visible = !pins.isEmpty() && topControls->isVisible() && !model->busy() &&
         !lifecycleHidden && !closing && !services.suspended() && !annotationMode && !seekOpen &&
         !appearanceEdit.panelOpen() && !general->isVisible() && !menu->isVisible() && !choices->isVisible() &&

@@ -1899,7 +1899,11 @@ void Reader::pageButton(int direction) {
     pageButton(direction, 0);
 }
 
-void Reader::pageButton(int direction, quint32 sourceTime) {
+void Reader::scriptedPageButton(int direction) {
+    pageButton(direction, 0, false);
+}
+
+void Reader::pageButton(int direction, quint32 sourceTime, bool userInput) {
     if ((direction != -1 && direction != 1) || !isEnabled() || !isVisible() || lifecycleHidden ||
         services.suspended() || closing || appearanceEdit.applying())
         return;
@@ -1917,7 +1921,7 @@ void Reader::pageButton(int direction, quint32 sourceTime) {
         linksActive() || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible() ||
         lightPopup->isVisible())
         return;
-    turnPage(direction, sourceTime);
+    turnPage(direction, sourceTime, userInput);
 }
 
 void Reader::turnPage(int direction, quint32 sourceTime, bool userInput) {

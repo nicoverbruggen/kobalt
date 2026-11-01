@@ -195,7 +195,7 @@ public:
             if (!reader || (name != "PageDown" && name != "PageUp"))
                 return "cannot send key " + name;
             events.skip();
-            reader->pageButton(name == "PageDown" ? 1 : -1);
+            reader->scriptedPageButton(name == "PageDown" ? 1 : -1);
             return {};
         }
         const int timeout = step.value("timeout").toInt(5000);

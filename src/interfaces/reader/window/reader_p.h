@@ -92,6 +92,7 @@ public:
     void progressTick() override;
     void refreshHostPresentation() override;
     void pageButton(int direction) override;
+    void scriptedPageButton(int direction) override;
     bool busy() const override {
         return model->busy() || model->preparingNeighbours() || stylingSamplesPending > 0;
     }
@@ -513,7 +514,7 @@ private:
     void dismissProgressChoice();
     void showProgressChoice();
     void buildProgressChoice(const kobalt::ReadingProgress &shown, int direction, bool located);
-    void pageButton(int direction, quint32 sourceTime);
+    void pageButton(int direction, quint32 sourceTime, bool userInput = true);
     void turnPage(int direction, quint32 sourceTime = 0, bool userInput = true);
     pageNavigation::TapFilter pageTurnFilter;
     QElapsedTimer pageTurnClock;

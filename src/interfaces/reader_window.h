@@ -56,6 +56,9 @@ public:
     virtual void refreshHostPresentation() = 0;
     // Logical forward/backward input, independent of touch swipe direction.
     virtual void pageButton(int direction) = 0;
+    // For the scenario player: a page key that skips the filter for rapid
+    // duplicate input, so a sample measures the turn and not the filter.
+    virtual void scriptedPageButton(int direction) { pageButton(direction); }
     // Whether the reading engine has work in flight, such as a layout, a render
     // or drawing the pages beside the current one.
     virtual bool busy() const { return false; }

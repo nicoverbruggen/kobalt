@@ -39,7 +39,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 32; ++i)
         body += "<p>" + text.repeated(2 + i % 5) + "</p>";
     const auto files = test::publisherPackage("en", "Vertical spacing", {
-        {"c.xhtml", "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0}</style></head><body>" + body + "</body></html>"}},
+        {"c.xhtml", "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0}</style></head><body>"
+            "<div style='border-width:0;border-style:solid'>" + body + "</div></body></html>"}},
         "<itemref idref='c.xhtml'/>");
     require(test::writeBook(directory.path(), "spacing.epub", files), "Write vertical spacing fixture");
     QFile input(directory.path() + "/spacing.epub");
@@ -75,6 +76,23 @@ int main(int argc, char **argv) {
                 "Centered annotation geometry did not follow the text");
         require(model.applyAppearance({{"vertical_justification", "off"}}) && model.image(0) == before,
                 "Off did not restore the original page");
+    }
+
+    for (const auto *side : {"top", "right", "bottom", "left"}) {
+        const auto framed = test::publisherPackage("en", "Framed prose", {
+            {"c.xhtml", "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0}</style></head><body>"
+                "<div style='border-style:solid;border-width:0;border-" + QByteArray(side) + "-width:1px'>" +
+                body + "</div></body></html>"}}, "<itemref idref='c.xhtml'/>");
+        require(test::writeBook(directory.path(), "framed.epub", framed), "Write visible border fixture");
+        QFile framedInput(directory.path() + "/framed.epub");
+        require(framedInput.open(QIODevice::ReadOnly), "Read visible border fixture");
+        ReaderModel model(test::readerFonts());
+        require(model.open(framedInput.readAll(), QSize(800, 973), typography, &error), qPrintable(error));
+        const auto before = model.image(0);
+        for (const auto *mode : {"expand", "center"}) {
+            require(model.applyAppearance({{"vertical_justification", mode}}) && model.image(0) == before,
+                    "Page spacing changed prose inside a visible border");
+        }
     }
 
     const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();

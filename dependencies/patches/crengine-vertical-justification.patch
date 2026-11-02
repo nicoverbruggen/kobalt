@@ -252,12 +252,13 @@
                  // (c_x is advanced together with c_y in the moveDown(margin) below)
                  // Note: we don't use AddSpace, a margin does not have to be arbitrarily
                  // splitted, RN_SPLIT_DISCARD_AT_START ensures it does not continue
-@@ -10145,6 +10146,32 @@
+@@ -10145,6 +10146,35 @@
                  // We have lines of text in 'txform', that we should register
                  // into flow/context for later page splitting.
                  int count = txform->GetLineCount();
 +                // Prose markers exclude headings, preformatted text and media.
 +                // Decorated containers and floats cannot follow independent line offsets.
++                // A border style alone does not decorate a zero-width frame.
 +                bool justify_prose = !flow->isVertical() && enode->getAttributeValue("data-kobalt-prose") == U"1";
 +                for (ldomNode *ancestor = enode; justify_prose && ancestor; ancestor = ancestor->getParentNode()) {
 +                    if (!ancestor->isElement()) continue;
@@ -268,8 +269,10 @@
 +                        (a->white_space != css_ws_normal && a->white_space != css_ws_inherit && a->white_space != css_ws_nowrap) || a->float_ != css_f_none ||
 +                        !a->background_image.empty() ||
 +                        (a->background_color.type == css_val_color && !IS_COLOR_FULLY_TRANSPARENT(a->background_color.value)) ||
-+                        a->border_style_top != css_border_none || a->border_style_bottom != css_border_none ||
-+                        a->border_style_left != css_border_none || a->border_style_right != css_border_none)
++                        (a->border_style_top != css_border_none && a->border_width[0].value > 0) ||
++                        (a->border_style_right != css_border_none && a->border_width[1].value > 0) ||
++                        (a->border_style_bottom != css_border_none && a->border_width[2].value > 0) ||
++                        (a->border_style_left != css_border_none && a->border_width[3].value > 0))
 +                        justify_prose = false;
 +                }
 +                LVArray<ldomNode *> prose_nodes;

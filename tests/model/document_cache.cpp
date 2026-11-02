@@ -33,9 +33,9 @@ int main(int argc, char **argv) {
         require(cacheRoot.isValid(), "Cannot create a document cache directory");
         const auto cacheDirectory = cacheRoot.path() + "/.cache";
         const QByteArray fingerprint(64, 'a'), policy("document-cache-test");
-        require(kobalt::documentCacheChecksum(policy, 1) == kobalt::documentCacheChecksum(policy, 1, 9),
+        require(kobalt::documentCacheChecksum(policy, 1) == kobalt::documentCacheChecksum(policy, 1, 10),
                 "The document cache did not use its declared format version");
-        require(kobalt::documentCacheChecksum(policy, 1, 9) != kobalt::documentCacheChecksum(policy, 1, 8),
+        require(kobalt::documentCacheChecksum(policy, 1, 10) != kobalt::documentCacheChecksum(policy, 1, 9),
                 "An incompatible cache format reused the document cache identity");
         require(kobalt::documentCacheChecksum(policy, 1) != kobalt::documentCacheChecksum(policy, 2),
                 "An incompatible DOM reused the document cache identity");

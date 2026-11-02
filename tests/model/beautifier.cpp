@@ -64,11 +64,71 @@ void compare(const QString &path, const QString &query, const QString &output) {
         {"before_pages", model.pages()}, {"after_pages", afterPages}, {"anchor", hit.start},
         {"off_roundtrip_equal", true}, {"source_unchanged", true}}).toJson());
 }
+void compareLayout(const QString &path, const QString &query, const QString &output) {
+    const auto bytes = read(path);
+    const auto hash = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+    QString error;
+    ReaderModel model(test::readerFonts());
+    require(model.open(bytes, {1072, 1448}, {{"font_pixels", 44}, {"line_spacing_version", 1},
+        {"text_alignment", "publisher"}}, &error), qPrintable(error));
+    const auto hit = find(model, query);
+    require(model.goTo(hit.start), "Cannot open layout comparison passage");
+    require(QDir().mkpath(output), "Cannot create layout comparison directory");
+    const auto settings = model.state();
+    const auto original = model.image(model.page());
+    QJsonObject result;
+    for (const auto *key : {"paragraph_spacing", "paragraph_indent", "line_spacing"}) {
+        require(model.applyAppearance({{key, key == QString("line_spacing") ? 100 : 0}}) && model.goTo(hit.start),
+                "Cannot set first layout comparison value");
+        const auto before = model.image(model.page());
+        require(model.applyAppearance({{key, key == QString("paragraph_spacing") ? 100 : 200}}) && model.goTo(hit.start),
+                "Cannot set second layout comparison value");
+        const auto after = model.image(model.page());
+        result[key] = before != after;
+        require(before.save(output + "/" + key + "-before.png") && after.save(output + "/" + key + "-after.png"),
+                "Cannot save layout comparison images");
+        require(model.applyAppearance(settings) && model.goTo(hit.start) && model.image(model.page()) == original,
+                "Layout comparison did not restore the original page");
+    }
+    const int firstPage = model.page();
+    const int pageCount = model.pages();
+    const int endPage = qMin(model.pages(), firstPage + 32);
+    QVector<QImage> pages;
+    for (int page = firstPage; page < endPage; ++page) pages.append(model.image(page));
+    for (const auto *mode : {"expand", "center"}) {
+        require(model.applyAppearance({{"vertical_justification", mode}, {"vertical_spacing_scope", "all"}}),
+                "Cannot select comparison page spacing");
+        require(model.pages() == pageCount, "Page spacing changed pagination");
+        int changed = 0;
+        for (int page = firstPage; page < endPage; ++page) {
+            const auto after = model.image(page);
+            if (after == pages[page - firstPage]) continue;
+            if (!changed) {
+                require(pages[page - firstPage].save(output + "/" + mode + "-before.png") &&
+                        after.save(output + "/" + mode + "-after.png"), "Cannot save page spacing comparison");
+            }
+            ++changed;
+        }
+        result[QString(mode) + "_changed_pages"] = changed;
+        require(model.applyAppearance(settings) && model.goTo(hit.start) && model.image(model.page()) == original,
+                "Page spacing comparison did not restore the original page");
+    }
+    require(QCryptographicHash::hash(read(path), QCryptographicHash::Sha256).toHex() == hash, "Source EPUB changed");
+    result["source_sha256"] = QString::fromLatin1(hash);
+    result["source_unchanged"] = true;
+    result["roundtrip_equal"] = true;
+    QFile record(output + "/layout-comparison.json");
+    require(record.open(QIODevice::WriteOnly), "Cannot save layout comparison record");
+    record.write(QJsonDocument(result).toJson());
+}
 }
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     if (argc == 5 && QByteArray(argv[1]) == "--compare") {
         compare(QString::fromLocal8Bit(argv[2]), QString::fromUtf8(argv[3]), QString::fromLocal8Bit(argv[4])); return 0;
+    }
+    if (argc == 5 && QByteArray(argv[1]) == "--compare-layout") {
+        compareLayout(QString::fromLocal8Bit(argv[2]), QString::fromUtf8(argv[3]), QString::fromLocal8Bit(argv[4])); return 0;
     }
     const QByteArray prose = " ordinary words continue through the paragraph, with enough text to distinguish prose from a heading or separator. The words keep their original order and their source anchors.";
     QString error;

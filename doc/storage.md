@@ -122,6 +122,8 @@ Annotation exports are compressed ZIP snapshots for reading outside Kobalt. Each
 
 ## Disposable caches
 
+Parsed-book cache format 10 rebuilds paragraph markers for publisher containers with zero-width borders. These containers now allow ordinary paragraph adjustments. Visible borders keep their protection. Older rendering caches rebuild without changing settings, reading positions or annotations.
+
 `.cache/` belongs exclusively to CREngine. Never put settings or annotations there: the engine removes files it does not recognize. It stores parsed books in an engine-specific binary format, with a 128 MiB budget. It is not an interchange or backup format.
 
 The cache checksum includes an explicit Kobalt parser format version and the document DOM version. Build policies on all platforms include the pinned rendering dependency manifest, dependency recipe, patches and bundled hyphenation pattern names and contents. Adding, changing or removing a dictionary rebuilds disposable caches so old pagination does not survive a pattern change. App version strings and UI source changes do not invalidate parsed books. Bump the format version in `documentCacheChecksum` when a parser or preprocessing change makes existing cached documents unsafe to reuse. Density, user CSS and bold-reading variants retain their existing policy checks. Changing typography can still require pagination without reparsing the publication. A dependency or format change can intentionally cause one new parse. The image-proportions engine patch changes this dependency policy, so older image layouts rebuild without a parser-format bump or changes to saved reading data.

@@ -49,7 +49,7 @@ private:
 inline QString documentCacheName(const QByteArray &fingerprint) {
     return QString::fromLatin1(fingerprint);
 }
-inline lUInt32 documentCacheChecksum(const QByteArray &policy, int domVersion, int formatVersion = 9) {
+inline lUInt32 documentCacheChecksum(const QByteArray &policy, int domVersion, int formatVersion = 10) {
     // Bump when the cached book's contents change for a reason the policy
     // does not cover.
     // App releases do not change this identity. Incompatible parser changes do.

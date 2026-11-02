@@ -68,12 +68,16 @@ void markBodyAlignment(ldomDocument *document) {
                 specialClass.match(text(node->getAttributeValue("class"))).hasMatch() ||
                 specialClass.match(type).hasMatch();
             const auto style = node->getStyle();
+            // Publisher exports can leave a border style on a zero-width frame.
+            // Only borders with width need to protect the text inside it.
             if (!style.isNull())
                 frame.paragraphBlocked = frame.paragraphBlocked ||
                     style->white_space == css_ws_pre || style->white_space == css_ws_pre_wrap ||
-                    style->float_ != css_f_none || style->border_style_top != css_border_none ||
-                    style->border_style_bottom != css_border_none || style->border_style_left != css_border_none ||
-                    style->border_style_right != css_border_none ||
+                    style->float_ != css_f_none ||
+                    (style->border_style_top != css_border_none && style->border_width[0].value > 0) ||
+                    (style->border_style_right != css_border_none && style->border_width[1].value > 0) ||
+                    (style->border_style_bottom != css_border_none && style->border_width[2].value > 0) ||
+                    (style->border_style_left != css_border_none && style->border_width[3].value > 0) ||
                     (name == "p" && lUInt32(style->background_color.value) != CSS_COLOR_TRANSPARENT);
             if (node->hasAttribute(attribute))
                 node->setAttributeValue(0, attribute, U"");

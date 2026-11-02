@@ -41,13 +41,20 @@ int main(int argc, char **argv) {
         const QJsonObject settings{{"font_pixels", 40}, {"line_spacing", 150}, {"line_spacing_version", 1},
             {"text_alignment", "publisher"}, {"dark_mode", dark}};
         QMap<QString, qint64> sizes;
-        const auto source = resources("<h2>Chapter heading</h2><p>Firstmarker ordinary prose.</p><p>Secondmarker ordinary prose.</p>", sizes);
+        // Publisher exports can leave a solid border style on a zero-width frame.
+        // Its paragraphs must still support the same adjustments and warm caches.
+        const auto source = resources("<h2>Chapter heading</h2><div style='border-width:0;border-style:solid'>"
+            "<p>Firstmarker ordinary prose.</p><p>Secondmarker ordinary prose.</p></div>", sizes);
         QTemporaryDir cache(QDir::currentPath() + "/paragraph-cache-XXXXXX");
         require(cache.isValid(), "Cannot create paragraph cache");
         kobalt::ReaderModel model(kobalt::test::readerFonts());
         model.setDocumentCache(cache.path(), QByteArray(64, 'a'), "paragraph-gap", 1024 * 1024);
         require(model.openResources(source, sizes, size, settings, &error), qPrintable(error));
         const auto publisher = model.image(0);
+        require(model.applyAppearance({{"line_spacing", 200}}) && model.image(0) != publisher,
+                "Line spacing did not change prose inside a zero-width frame");
+        require(model.applyAppearance({{"line_spacing", 150}}) && model.image(0) == publisher,
+                "Restoring line spacing changed the original frame");
         require(model.state().value("paragraph_spacing").toInt() == -1, "Older book did not use Publisher spacing");
         const auto anchor = model.position();
         require(model.applyAppearance({{"paragraph_spacing", 0}}), "Cannot remove paragraph gaps");
@@ -116,6 +123,15 @@ int main(int argc, char **argv) {
             const auto before = protectedBook.image(0);
             require(protectedBook.applyAppearance({{"paragraph_spacing", 0}, {"paragraph_indent", 200}}) &&
                     protectedBook.image(0) == before, "Paragraph adjustments changed a heading or special block");
+        }
+        for (const auto *side : {"top", "right", "bottom", "left"}) {
+            const auto special = resources("<div style='border-width:0;border-style:solid;border-" + QByteArray(side) +
+                "-width:1px'><p>Firstmarker ordinary prose.</p><p>Secondmarker ordinary prose.</p></div>", sizes);
+            kobalt::ReaderModel framed(kobalt::test::readerFonts());
+            require(framed.openResources(special, sizes, size, settings, &error), qPrintable(error));
+            const auto before = framed.image(0);
+            require(framed.applyAppearance({{"paragraph_spacing", 0}, {"paragraph_indent", 200}}) &&
+                    framed.image(0) == before, "Paragraph adjustments changed text inside a visible border");
         }
     }
     kobalt::readingPpi.store(originalPpi);

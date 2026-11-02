@@ -95,6 +95,7 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"image-viewer-entry", "Image page: zoom and return actions"},
         {"image-viewer-fit", "Image viewer"},
         {"image-viewer-zoomed", "Image viewer: zoom and pan"},
+        {"dictionary-downloading", "Dictionary download in progress"},
         {"dictionaries", "Manage dictionaries"},
         {"dictionary-choices", "Choose a dictionary"},
         {"dictionary-definition", "Dictionary definition"},

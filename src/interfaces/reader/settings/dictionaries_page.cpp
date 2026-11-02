@@ -13,7 +13,7 @@
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QResizeEvent>
-#include <QProgressBar>
+#include <QPixmap>
 #include <QTimer>
 #include <QPainter>
 namespace kobalt::reader {
@@ -65,24 +65,21 @@ protected:
         painter.drawLine(0, 0, width() - 1, 0);
     }
 };
-class CircleProgress : public QProgressBar {
-public:
-    using QProgressBar::QProgressBar;
-
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing);
-        const QRectF circle = QRectF(rect()).adjusted(1, 1, -1, -1);
-        const QColor ink = palette().color(QPalette::WindowText);
-        painter.setPen(QPen(ink, m::control::border));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawEllipse(circle);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(ink);
-        painter.drawPie(circle.adjusted(3, 3, -3, -3), 90 * 16, -value() * 360 * 16 / 100);
-    }
-};
+QIcon transferProgressIcon(int percent, const QColor &ink) {
+    QPixmap image(ui::px(28), ui::px(28));
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QRectF circle = QRectF(image.rect()).adjusted(1, 1, -1, -1);
+    painter.setPen(QPen(ink, m::control::border));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(circle);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(ink);
+    painter.drawPie(circle.adjusted(3, 3, -3, -3), 90 * 16, -percent * 360 * 16 / 100);
+    painter.end();
+    return QIcon(image);
+}
 struct Group {
     QString section, language;
     QVector<DownloadDictionary> entries;
@@ -424,31 +421,21 @@ void DictionariesPage::redraw() {
                 ui::buttonIcon(action, ui::ControlIcon::Download);
             else
                 action->clearIconConfiguration();
-            action->setIconSize(QSize(ui::px(28), ui::px(28)));
         }
+        action->setIconSize(QSize(ui::px(28), ui::px(28)));
         action->setEnabled(installed || active || !working);
         layout->activate();
-        auto *progress = action->findChild<QProgressBar *>();
         if (active) {
             const auto status =
                 unpacking ? strings::get("dictionaries.installing")
                           : strings::get("dictionaries.downloading").arg(bytes(receivedBytes)).arg(bytes(totalBytes));
             action->setToolTip(status);
             action->setAccessibleDescription(status);
-            if (!progress)
-                progress = new CircleProgress(action);
-            progress->setObjectName(QString("rrDictionaryProgress%1").arg(index));
-            progress->setAttribute(Qt::WA_TransparentForMouseEvents);
-            progress->setFocusPolicy(Qt::NoFocus);
-            progress->setRange(0, 100);
-            progress->setValue(percent);
-            progress->setTextVisible(false);
-            progress->setAccessibleName(status);
-            const int diameter = ui::px(28);
-            progress->setGeometry(ui::px(24), (action->height() - diameter) / 2, diameter, diameter);
-            progress->show();
-        } else if (progress) {
-            progress->hide();
+            // Use the button's icon slot so progress and Stop share its
+            // normal spacing and remain centered together at every text size.
+            action->setIcon(transferProgressIcon(percent, action->palette().color(QPalette::WindowText)));
+        } else if (!download) {
+            action->clearIconConfiguration();
         }
         line->show();
         y += item.height;

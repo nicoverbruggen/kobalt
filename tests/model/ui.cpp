@@ -2908,11 +2908,9 @@ int main(int argc, char **argv) {
                     "Download progress rebuilt dictionary rows");
         }
         require(unrelatedPaints.paints == 0, "Download progress repainted an unchanged dictionary row");
-        auto *progress = page.findChild<QProgressBar *>("rrDictionaryProgress0");
-        require(progress && progress->width() == progress->height() && progress->value() > 0,
-                "Circular transfer progress is missing");
-        require(progress->parentWidget() == page.findChild<QPushButton *>("rrDictionaryAction0"),
-                "Progress is not inside the Stop button");
+        auto *stopAction = page.findChild<QPushButton *>("rrDictionaryAction0");
+        require(stopAction && !stopAction->icon().isNull() && stopAction->iconSize().width() == kobalt::ui::px(28),
+                "Transfer progress must use the Stop button's icon slot");
         require(page.findChild<QWidget *>("rrDictionaryRow0")->height() == kobalt::ui::metrics::list::oneLine,
                 "Downloading changed the dictionary row height");
         page.setTransfer({}, 0, 0, false);

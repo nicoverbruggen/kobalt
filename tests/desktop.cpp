@@ -7924,6 +7924,18 @@ private slots:
             QVERIFY2(label->geometry().right() < action->geometry().left(), qPrintable(QString("%1: label right %2, action left %3, row width %4").arg(label->text()).arg(label->geometry().right()).arg(action->geometry().left()).arg(label->parentWidget()->width())));
             QVERIFY(action->width() >= ui::px(60) && action->height() >= ui::px(60));
         }
+        auto *downloadRow = fixture.widget("rrDictionaryRow0");
+        QVERIFY(downloadRow);
+        dictionaries->setTransfer(downloadRow->property("dictionary_id").toString(), 2000000, 3500000, false);
+        dictionaries->setState({}, true, {});
+        QCoreApplication::processEvents();
+        QVERIFY(capture(fixture, name + "-dictionary-downloading"));
+        auto *stopButton = dynamic_cast<ui::Button *>(fixture.widget("rrDictionaryAction0"));
+        QVERIFY(stopButton);
+        QVERIFY2(!stopButton->icon().isNull(), "Transfer progress must reserve an icon slot beside Stop");
+        QVERIFY(ui::interfaceTextWidth(stopButton->text(), stopButton->font()) + stopButton->iconSize().width() + ui::px(12) <= stopButton->width());
+        dictionaries->setTransfer({}, 0, 0, false);
+        dictionaries->setState({}, false, {});
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrDictionaryFontSize"));
         QVERIFY(capture(fixture, name + "-dictionary-ui"));
@@ -8924,7 +8936,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3481;
+    int expectedScreenshots = lightGallery ? 182 : 3494;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

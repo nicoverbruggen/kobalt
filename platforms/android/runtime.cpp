@@ -57,6 +57,9 @@ QSize libraryContentSize() {
 int screenDensity() {
     return qBound(100, int(QNativeInterface::QAndroidApplication::context().callMethod<jint>("readerDensity")), 600);
 }
+void setLibraryDark(bool dark) {
+    QNativeInterface::QAndroidApplication::context().callMethod<void>("readerLibraryDark", jboolean(dark));
+}
 bool refreshAvailable() {
     return QNativeInterface::QAndroidApplication::context().callMethod<jboolean>("readerRefreshAvailable");
 }

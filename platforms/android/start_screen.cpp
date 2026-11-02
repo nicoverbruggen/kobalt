@@ -142,6 +142,8 @@ bool StartScreen::libraryShown() const {
 }
 void StartScreen::setDark(bool value) {
     dark = value;
+    setProperty("reader_dark", dark);
+    ui::applyReaderPalette(this, ui::readerPalette(palette(), dark));
     if (view)
         view->setDark(dark);
     if (canvas) {

@@ -41,7 +41,7 @@ public class KobaltActivity extends QtActivity {
     private BooxRefresh booxRefresh;
     private boolean resumed;
     private boolean ready = false;
-    private boolean reading = false;
+    private boolean reading = false, libraryDark = false;
     private volatile boolean readingGeometryReady = false;
     private volatile boolean libraryGeometryReady = false;
     private volatile long libraryContentSize;
@@ -192,9 +192,9 @@ public class KobaltActivity extends QtActivity {
                 if (reading) controller.hide(WindowInsets.Type.systemBars());
                 else {
                     controller.show(WindowInsets.Type.systemBars());
-                    controller.setSystemBarsAppearance(WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+                    int lightBars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    controller.setSystemBarsAppearance(libraryDark ? 0 : lightBars, lightBars);
                 }
             }
         } else {
@@ -202,8 +202,11 @@ public class KobaltActivity extends QtActivity {
                 | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE : View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                | (libraryDark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR));
         }
+    }
+    public void readerLibraryDark(boolean dark) {
+        runOnUiThread(() -> { libraryDark = dark; if (!reading) immersive(); });
     }
     public void showStartup() { runOnUiThread(() -> { readingGeometryReady = false; libraryGeometryReady = false; reading = false; immersive(); }); }
     public void showReading() { runOnUiThread(() -> { readingGeometryReady = false; libraryGeometryReady = false; reading = true; immersive(); }); }

@@ -1439,6 +1439,34 @@ private slots:
         QCOMPARE(counter->text(), QString("1 of 2"));
         QCOMPARE(pages->geometry().bottom() + 1, pager->y());
     }
+    void libraryThemeSurface_data() { variants(); }
+    void libraryThemeSurface() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        library::Store store(directory.path(), std::make_shared<library::LocalSource>());
+        QWidget host;
+        host.setAutoFillBackground(true);
+        host.setPalette(ui::readerPalette(host.palette(), !dark));
+        host.resize(600, 800);
+        host.setContentsMargins(0, 60, 0, 40);
+        android::StartScreen start(test::makeHostPresentation, store, {}, &host);
+        start.setGeometry(host.contentsRect());
+        host.show();
+        start.show();
+        for (bool next : {dark, !dark, dark}) {
+            start.setDark(next);
+            const auto paper = ui::themeColors(next).paper;
+            QCOMPARE(start.library()->palette().color(QPalette::Window), paper);
+            QCOMPARE(start.palette().color(QPalette::Window), paper);
+            host.setPalette(start.palette());
+            QCoreApplication::processEvents();
+            QCOMPARE(host.grab().toImage().pixelColor(2, 2), paper);
+            QCOMPARE(host.grab().toImage().pixelColor(2, host.height() - 2), paper);
+        }
+    }
     void libraryCanvasFollowsViewport_data() { variants(); }
     void libraryCanvasFollowsViewport() {
         QFETCH(bool, dark);

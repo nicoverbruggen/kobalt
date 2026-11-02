@@ -101,7 +101,7 @@ public:
             store.removeBook(key);
         });
         start->setSingleBooksAreCopies(true);
-        start->setDark(controller.preferences().value("dark_mode").toBool(false));
+        applyLibraryTheme();
         layout->addWidget(start);
         canvas = new android::WidgetCanvas(this);
         layout->addWidget(canvas);
@@ -224,7 +224,7 @@ public:
             android::setPageButtonsAvailable(false);
             openingHandoff.stop();
             layout->setStackingMode(QStackedLayout::StackOne);
-            setPalette(start->palette());
+            applyLibraryTheme();
             android::activity("showStartup");
             setReadingInsets(false);
             start->showLibraryError(error);
@@ -241,11 +241,10 @@ public:
             }
             openingHandoff.stop();
             layout->setStackingMode(QStackedLayout::StackOne);
-            setPalette(start->palette());
+            recordProgress();
+            applyLibraryTheme();
             android::activity("showStartup");
             setReadingInsets(false);
-            recordProgress();
-            start->setDark(controller.preferences().value("dark_mode").toBool(false));
             if (!failedOpening)
                 start->showLibrary();
             libraryPreparedSize = {};
@@ -288,6 +287,12 @@ private:
             return;
         readingInsets = reading;
         fitInsets();
+    }
+    void applyLibraryTheme() {
+        const bool dark = controller.preferences().value("dark_mode").toBool(false);
+        start->setDark(dark);
+        setPalette(start->palette());
+        android::setLibraryDark(dark);
     }
     void fitInsets() {
         const int side = qMax(surfaceInsets.left(), surfaceInsets.right());

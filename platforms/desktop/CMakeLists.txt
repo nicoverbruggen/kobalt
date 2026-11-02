@@ -461,6 +461,7 @@ if(BUILD_TESTING)
             libraryActionButtons
             libraryFolderPicker
             libraryScanCaption
+            libraryThemeSurface
             libraryCanvasFollowsViewport
             booxAppCanvases
             booxLibraryHandoff

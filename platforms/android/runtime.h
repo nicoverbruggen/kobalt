@@ -12,6 +12,7 @@ void setCallbacks(QObject *owner, std::function<void(QString)> openBook, std::fu
                   std::function<void(QString, QString)> folderChosen = {},
                   std::function<void(QSize, QMargins, int corner)> surfaceResized = {});
 void setPageButtonsAvailable(bool available);
+void setLibraryDark(bool dark);
 void activity(const char *method);
 bool readingGeometryReady();
 bool libraryGeometryReady();

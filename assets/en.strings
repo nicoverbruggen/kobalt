@@ -559,8 +559,8 @@
 "reader.debug_progress" = "Debug progress";
 "reader.defaults_selected" = "Defaults selected";
 "reader.duplicate_current_update" = "Duplicate current update";
-"settings.light_gesture_feedback" = "Show frontlight gesture popup";
-"settings.light_gesture_feedback_description" = "Show the level while swiping. Turn off to adjust the light without a popup or its cleanup refresh.";
+"settings.light_gesture_feedback" = "Show frontlight gesture pop-up";
+"settings.light_gesture_feedback_description" = "Show the level after a pause in swiping. Turn off to adjust the light without a pop-up or its cleanup refresh.";
 "reader.edge_light" = "Swipe along edges to adjust frontlight";
 "reader.enable_page_animations" = "Page turn animations";
 "reader.exit" = "Exit Kobalt";

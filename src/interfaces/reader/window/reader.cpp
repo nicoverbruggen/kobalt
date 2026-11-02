@@ -78,6 +78,7 @@ Reader::~Reader() {
     model->turnBoundary = {};
     page->cancelHold();
     brightnessHide.stop();
+    lightFeedback.stop();
     annotationModeHide.stop();
     lightPopup->changed = {};
     delete lightPopup;
@@ -582,6 +583,13 @@ void Reader::raisePopups() {
 }
 
 bool Reader::event(QEvent *event) {
+    // Qt can already be delivering a batch of posted events when input
+    // queues a command. Apply it before this window starts a queued paint.
+    if (event->type() == lightCommandEventType() || event->type() == QEvent::UpdateRequest) {
+        dispatchLightGesture();
+        if (event->type() == lightCommandEventType())
+            return true;
+    }
     if (event->type() == QEvent::UpdateRequest && isVisible()) {
         // Only the plain reading bars can cross an unchanged text page
         // with a partial refresh. Other panels may contain color.

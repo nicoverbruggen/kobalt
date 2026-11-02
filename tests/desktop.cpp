@@ -223,7 +223,7 @@ bool largeTextVariant() {
 struct GestureLightState {
     bool available = true, warmthSupported = true, failChanges = false, active = false;
     bool automatic = true, originalAutomatic = true;
-    int brightness = 40, warmth = 30, maximumWarmth = 100;
+    int brightness = 40, warmth = 30, maximumWarmth = 100, changes = 0;
     int savedBrightness = -1, savedWarmth = -1, initialBrightness = 40;
 };
 class GestureLight final : public LightControls {
@@ -237,6 +237,7 @@ public:
     int warmthStep() const override { return 1; }
     bool automaticWarmth() const override { return state->automatic; }
     int setWarmth(int value) override {
+        ++state->changes;
         if (state->failChanges) return -1;
         state->automatic = false;
         return state->warmth = value;
@@ -250,6 +251,7 @@ public:
         return true;
     }
     int setGestureLevel(int value) override {
+        ++state->changes;
         if (state->failChanges) return -1;
         return state->brightness = qBound(0, value, 100);
     }
@@ -5332,19 +5334,44 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         reader->setProperty("reader_full_flash", false);
         LightFeedbackEvents events(reader, notice);
         QVERIFY(page->lightStarted(warmth));
+        page->lightChanged(.1);
         page->lightChanged(.2);
-        QCOMPARE(notice->isVisible(), feedback != 0);
-        const int adjusted = warmth ? light->warmth : light->brightness;
-        QVERIFY(adjusted > (warmth ? 30 : 40));
+        // Input queues a light command without changing the feedback widgets.
+        QCOMPARE(warmth ? light->warmth : light->brightness, warmth ? 30 : 40);
+        QVERIFY(!notice->isVisible());
+        QCoreApplication::sendPostedEvents(reader);
+        QCOMPARE(light->changes, 1);
+        QVERIFY((warmth ? light->warmth : light->brightness) > (warmth ? 30 : 40));
+        QVERIFY(!notice->isVisible());
+        // A continuous swipe must not repaint the notice at each delivered level.
+        for (int i = 0; i < 5; ++i) {
+            QTest::qWait(40);
+            page->lightChanged(i % 2 ? .1 : .2);
+            QCoreApplication::sendPostedEvents(reader);
+            QVERIFY(!notice->isVisible());
+        }
+        if (feedback != 0) QTRY_VERIFY(notice->isVisible());
+        auto *value = notice->findChild<QLabel *>("rrLightSwipeValue");
+        QVERIFY(value);
+        const auto displayed = value->text();
+        page->lightChanged(.1);
+        QCoreApplication::sendPostedEvents(reader);
+        QCOMPARE(warmth ? light->warmth : light->brightness, warmth ? 50 : 55);
+        QCOMPARE(value->text(), displayed);
+        // Release must not lose the last input or let a cancelled command run later.
+        page->lightChanged(.3);
+        page->lightChanged(.4);
+        const int adjusted = warmth ? 90 : 100;
         if (warmth) QVERIFY(!light->automatic);
         reader->setProperty("reader_full_flash", false);
         page->lightFinished(save);
         QCOMPARE(warmth ? light->warmth : light->brightness, save ? adjusted : (warmth ? 30 : 40));
         QCOMPARE(warmth ? light->savedWarmth : light->savedBrightness, save ? adjusted : -1);
         if (warmth) QCOMPARE(light->automatic, !save);
+        if (save && feedback != 0) QTRY_COMPARE(value->text(), QString::number(adjusted) + '%');
         if (!save) QCOMPARE(reader->property("reader_full_flash").toBool(), feedback != 0);
         QTRY_VERIFY(!notice->isVisible());
-        // With no popup, neither release nor its delayed timer requests cleanup.
+        // With no pop-up, neither release nor its delayed timer requests cleanup.
         if (feedback == 0) {
             QTest::qWait(1100);
             QVERIFY(!reader->property("reader_full_flash").toBool());
@@ -5352,6 +5379,23 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(events.shows, feedback != 0 ? 1 : 0);
         QCOMPARE(events.hides, feedback != 0 ? 1 : 0);
         QCOMPARE(events.flashes, feedback != 0 ? 1 : 0);
+        // Also finish before either the command or feedback has been delivered.
+        const int original = warmth ? light->warmth : light->brightness;
+        QVERIFY(page->lightStarted(warmth));
+        page->lightChanged(-.2);
+        page->lightFinished(save);
+        const int final = save ? original - 30 : original;
+        QCOMPARE(warmth ? light->warmth : light->brightness, final);
+        if (warmth) QCOMPARE(light->automatic, !save);
+        if (save && feedback != 0) {
+            QTRY_VERIFY(notice->isVisible());
+            QTRY_COMPARE(value->text(), QString::number(final) + '%');
+            QTRY_VERIFY(!notice->isVisible());
+        } else {
+            QTest::qWait(200);
+            QVERIFY(!notice->isVisible());
+        }
+        QCOMPARE(warmth ? light->warmth : light->brightness, final);
     }
     void lightGestureUnavailable_data() {
         QTest::addColumn<bool>("feedback");
@@ -5391,13 +5435,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(page->brightnessEdge);
                 QVERIFY(page->lightStarted(false));
                 page->lightChanged(.2);
+                QCoreApplication::sendPostedEvents(fixture.window.readerWindow());
                 QVERIFY(light->brightness > 40);
-                QCOMPARE(fixture.visible("rrBrightnessNotice"), feedback);
+                if (feedback) QTRY_VERIFY(fixture.visible("rrBrightnessNotice"));
                 page->lightFinished(false);
             }
         } else {
             QVERIFY(page->lightStarted(failure != "brightness-write"));
             page->lightChanged(.2);
+            QCoreApplication::sendPostedEvents(fixture.window.readerWindow());
+            QTest::qWait(200);
             QVERIFY(!fixture.visible("rrBrightnessNotice"));
             page->lightFinished(false);
         }
@@ -5443,7 +5490,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
         QVERIFY(page->lightStarted(false));
         page->lightChanged(.1);
-        QVERIFY(fixture.visible("rrBrightnessNotice"));
+        QTRY_VERIFY(fixture.visible("rrBrightnessNotice"));
         page->lightFinished(false);
     }
     void settings() {
@@ -7307,7 +7354,7 @@ private slots:
         for (bool warmth : {false, true}) {
             QVERIFY(page->lightStarted(warmth));
             page->lightChanged(.2);
-            QVERIFY(fixture.visible("rrBrightnessNotice"));
+            QTRY_VERIFY(fixture.visible("rrBrightnessNotice"));
             QVERIFY(capture(fixture, name + (warmth ? "-warmth-gesture-feedback" : "-brightness-gesture-feedback")));
             page->lightFinished(false);
         }

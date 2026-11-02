@@ -15,6 +15,8 @@ namespace lightSwipe {
 inline constexpr Px width{580}, height{252}, inset{64}, iconWidth{140}, iconHeight{156}, gap{48};
 inline constexpr Px percentText{78}, captionText{32}, captionGap{16};
 inline constexpr int hideMilliseconds = 850;
+// Wait for a pause in the swipe before changing e-ink feedback.
+inline constexpr int feedbackMilliseconds = 150;
 }
 namespace spacing {
 inline constexpr Px tight{8}, row{16}, section{24}, gutter{48};

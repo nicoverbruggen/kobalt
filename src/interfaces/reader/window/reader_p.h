@@ -40,6 +40,7 @@
 #include <array>
 #include <atomic>
 #include <QElapsedTimer>
+#include <QEvent>
 #include <QFile>
 #include <QFrame>
 #include <QImage>
@@ -251,6 +252,8 @@ private:
     void showFontDefaultDialog(const QString &face, bool instructions);
     void buildNotices();
     void connectLightGestures();
+    static QEvent::Type lightCommandEventType();
+    void dispatchLightGesture();
     void connectPageInput();
     // The phases of refresh(), in this order.
     bool publishPendingDarkMode();
@@ -318,6 +321,10 @@ private:
     bool raisingPopups = false;
     QPointer<kobalt::ui::ModalOverlay> debugDialog;
     QTimer brightnessHide;
+    QTimer lightFeedback;
+    double lightMovement = 0;
+    int lightFeedbackLevel = -1;
+    bool lightCommandPending = false, lightGestureActive = false;
     int brightnessInitial = 0, warmthInitial = 0;
     bool gestureWarmth = false, warmthAutomatic = false, warmthSupported = false;
     int pendingDarkMode = -1;

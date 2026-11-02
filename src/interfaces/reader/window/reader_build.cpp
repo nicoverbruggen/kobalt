@@ -1489,6 +1489,20 @@ void Reader::buildNotices() {
 }
 
 void Reader::connectLightGestures() {
+    lightFeedback.setSingleShot(true);
+    lightFeedback.setInterval(m::lightSwipe::feedbackMilliseconds);
+    connect(&lightFeedback, &QTimer::timeout, this, [this] {
+        if (lightFeedbackLevel < 0 || !takesInput() || book->deviceTransition() || annotationMode ||
+            model->busy() || general->isVisible() || topControls->isVisible() || appearanceEdit.panelOpen() ||
+            choices->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive() ||
+            lookupPending || syncDialog || kosyncDialog || finishDialog || lightPopup->isVisible())
+            return;
+        brightnessNotice->setLevel(gestureWarmth, lightFeedbackLevel);
+        brightnessNotice->show();
+        brightnessNotice->raise();
+        if (!lightGestureActive)
+            brightnessHide.start();
+    });
     page->lightStarted = [this](bool warmth) {
         if (annotationMode || !isVisible() || services.suspended() || book->deviceTransition() || this->model->busy() ||
             appearanceEdit.preview() || general->isVisible() || topControls->isVisible() || choices->isVisible() ||
@@ -1506,40 +1520,35 @@ void Reader::connectLightGestures() {
             brightnessInitial = light->brightness();
         }
         gestureWarmth = warmth;
+        lightGestureActive = true;
+        lightFeedback.stop();
+        lightFeedbackLevel = -1;
         brightnessHide.stop();
         return true;
     };
     page->lightChanged = [this](double moved) {
-        if (gestureWarmth) {
-            // Like Nickel's slider, a manual change turns automatic warmth off.
-            const int minimum = light->warmthMinimum(), range = light->warmthMaximum() - minimum;
-            if (range <= 0) {
-                return;
-            }
-            const double percent =
-                100.0 * (warmthInitial - minimum) / range + kobalt::ui::BrightnessGesture::change(moved);
-            const int snapped = qBound(0, qRound(percent / 10.) * 10, 100);
-            const int step = qMax(1, light->warmthStep());
-            const int level =
-                qBound(minimum, minimum + qRound(snapped * range / (100.0 * step)) * step, minimum + range);
-            const int value = light->setWarmth(snapped == 100 ? minimum + range : level);
-            if (value < 0)
-                return;
-            if (!preferences.value("show_light_gesture_feedback").toBool(true))
-                return;
-            brightnessNotice->setLevel(true, qRound(100.0 * (value - minimum) / range));
-        } else {
-            const int value = light->setGestureLevel(brightnessInitial + kobalt::ui::BrightnessGesture::change(moved));
-            if (value < 0)
-                return;
-            if (!preferences.value("show_light_gesture_feedback").toBool(true))
-                return;
-            brightnessNotice->setLevel(false, value);
+        lightMovement = moved;
+        lightFeedback.stop();
+        // Keep only the latest position. Deliver it before queued paints, on
+        // the GUI thread required by the native light controller. Feedback
+        // waits for a pause instead of requesting an e-ink flush per move.
+        if (!lightCommandPending) {
+            lightCommandPending = true;
+            QCoreApplication::postEvent(this, new QEvent(lightCommandEventType()), Qt::HighEventPriority);
         }
-        brightnessNotice->show();
-        brightnessNotice->raise();
     };
     page->lightFinished = [this](bool save) {
+        // Release can arrive before the queued command. Save the final level;
+        // cancellation drops it before restoring the original host state.
+        if (save)
+            dispatchLightGesture();
+        lightCommandPending = false;
+        QCoreApplication::removePostedEvents(this, lightCommandEventType());
+        lightGestureActive = false;
+        if (!save) {
+            lightFeedback.stop();
+            lightFeedbackLevel = -1;
+        }
         if (!gestureWarmth)
             light->finishGesture(save);
         else if (save)
@@ -1557,6 +1566,44 @@ void Reader::connectLightGestures() {
             brightnessNotice->hide();
         }
     };
+}
+
+QEvent::Type Reader::lightCommandEventType() {
+    static const auto type = static_cast<QEvent::Type>(QEvent::registerEventType());
+    return type;
+}
+
+void Reader::dispatchLightGesture() {
+    if (!lightCommandPending)
+        return;
+    lightCommandPending = false;
+    const double moved = lightMovement;
+    int feedback = -1;
+    if (gestureWarmth) {
+        // Like Nickel's slider, a manual change turns automatic warmth off.
+        const int minimum = light->warmthMinimum(), range = light->warmthMaximum() - minimum;
+        if (range <= 0)
+            return;
+        const double percent =
+            100.0 * (warmthInitial - minimum) / range + kobalt::ui::BrightnessGesture::change(moved);
+        const int snapped = qBound(0, qRound(percent / 10.) * 10, 100);
+        const int step = qMax(1, light->warmthStep());
+        const int level =
+            qBound(minimum, minimum + qRound(snapped * range / (100.0 * step)) * step, minimum + range);
+        const int value = light->setWarmth(snapped == 100 ? minimum + range : level);
+        if (value < 0)
+            return;
+        feedback = qRound(100.0 * (value - minimum) / range);
+    } else {
+        const int value = light->setGestureLevel(brightnessInitial + kobalt::ui::BrightnessGesture::change(moved));
+        if (value < 0)
+            return;
+        feedback = value;
+    }
+    if (preferences.value("show_light_gesture_feedback").toBool(true)) {
+        lightFeedbackLevel = feedback;
+        lightFeedback.start();
+    }
 }
 
 void Reader::connectPageInput() {

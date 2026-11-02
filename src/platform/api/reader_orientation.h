@@ -30,7 +30,8 @@ public:
     // Ownership begins before the first turn and ends after stop() prepares
     // Nickel's orientation. Repeated start/stop calls do not repeat callbacks.
     ReaderOrientation(QOrientationSensor *sensor, std::function<void(Qt::ScreenOrientation)> turn,
-                      std::function<void(bool)> rotationOwnership = {});
+                      std::function<void(bool)> rotationOwnership = {},
+                      std::function<bool()> nativeRotationAllowed = {});
     ~ReaderOrientation() override;
     void configure(const QJsonObject &settings);
     // Start in a permitted sensor or shown orientation. After a sleep handoff,
@@ -47,6 +48,8 @@ public:
     void stop(bool keepForSleep = false);
     // Cancel pending turns and discard readings from the sleep request onward.
     // Keep the filter installed so Nickel cannot rotate the sleep screen.
+    // The host can permit native sensor delivery while its awake PIN screen
+    // is visible, without resuming the reader or replacing its saved orientation.
     void freeze();
     // Ignore manual turns while frozen so wake can restore the reading orientation.
     void rotate();
@@ -68,6 +71,7 @@ public:
 
 private:
     std::function<void(bool)> rotationOwnership;
+    std::function<bool()> nativeRotationAllowed;
 #ifndef KOBALT_NO_SENSORS
     QPointer<QOrientationSensor> sensor;
 #else

@@ -55,8 +55,10 @@ Qt::ScreenOrientation shownOrientation(const QScreen *screen) {
 }
 
 ReaderOrientation::ReaderOrientation(QOrientationSensor *sensor, std::function<void(Qt::ScreenOrientation)> turn,
-                                     std::function<void(bool)> rotationOwnership)
+                                     std::function<void(bool)> rotationOwnership,
+                                     std::function<bool()> nativeRotationAllowed)
     : rotationOwnership(std::move(rotationOwnership)),
+      nativeRotationAllowed(std::move(nativeRotationAllowed)),
 #ifndef KOBALT_NO_SENSORS
       sensor(sensor),
 #endif
@@ -87,8 +89,12 @@ void ReaderOrientation::configure(const QJsonObject &settings) {
 }
 void ReaderOrientation::start(Qt::ScreenOrientation orientation) {
     if (active) {
-        // Wake can arrive before the sleep view hides the reader.
-        frozen = false;
+        // Wake can arrive before the sleep view hides the reader. Native PIN
+        // rotation may still have changed the screen while we were frozen.
+        if (frozen) {
+            frozen = false;
+            apply(currentOrientation);
+        }
         return;
     }
     const bool waking = sleeping;
@@ -116,7 +122,7 @@ void ReaderOrientation::start(Qt::ScreenOrientation orientation) {
             sensor->addFilter(this);
         }
         const auto *reading = sensor->isActive() ? sensor->reading() : nullptr;
-        // Sleep samples are discarded. The cache still predates sleep.
+        // Sleep and PIN samples must not replace the saved reading orientation.
         if (reading && !waking) {
             heldOrientation = readingOrientation(reading);
             latestReading = reading->orientation();
@@ -248,7 +254,7 @@ void ReaderOrientation::setBlocked(bool value) {
 #ifndef KOBALT_NO_SENSORS
 bool ReaderOrientation::filter(QOrientationReading *reading) {
     if (sleeping || frozen) {
-        return false;
+        return nativeRotationAllowed && nativeRotationAllowed();
     }
     if (!active) {
         return true;

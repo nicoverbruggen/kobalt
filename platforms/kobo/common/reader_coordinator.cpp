@@ -493,7 +493,8 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate) {
         fail(strings::get("reader_controller.native_publication_does_not_match_the_opening_request"));
     } else {
         run.orientation = std::make_unique<kobalt::ReaderOrientation>(
-            kobalt::nativeOrientationSensor(), kobalt::turnReaderScreen, kobalt::ownReaderRotation);
+            kobalt::nativeOrientationSensor(), kobalt::turnReaderScreen, kobalt::ownReaderRotation,
+            kobalt::NativeLifecycle::pinScreenActive);
         run.orientation->configure(kobalt::storage::readPreferences(environment_.paths.preferences()).object);
         run.statePath = environment_.paths.bookState(run.identity);
         load();

@@ -26,6 +26,8 @@ public:
     explicit NativeLifecycle(QObject *parent);
     static bool powerAvailable();
     static bool suspended();
+    // PIN entry can own native rotation while the reader remains suspended.
+    static bool pinScreenActive();
     static bool sleepSaveAllowed();
     static bool usbSaveAllowed();
     // Thread-safe gate for queued session writes. Closed before storage is

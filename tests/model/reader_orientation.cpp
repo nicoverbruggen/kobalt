@@ -110,6 +110,63 @@ void checkNativeHandoff(Factory &factory) {
     f.rotation.stop();
     require(nativeNotifications == count, "Closing asleep does not replay a sensor turn into the sleep screen");
 }
+void checkPinScreenHandoff(Factory &factory) {
+    QOrientationSensor sensor;
+    sensor.setIdentifier("kobalt-lock-test");
+    require(sensor.start(), "Start native sensor for PIN handoff");
+    auto *backend = factory.backend;
+    backend->sample(QOrientationReading::TopUp);
+    bool pin = false;
+    QList<Qt::ScreenOrientation> turns;
+    ReaderOrientation rotation(&sensor, [&](Qt::ScreenOrientation shown) { turns.append(shown); }, {},
+                               [&] { return pin; });
+    rotation.configure({{"auto_rotate", true}});
+    int nativeNotifications = 0;
+    QObject::connect(&sensor, &QSensor::readingChanged, [&] { ++nativeNotifications; });
+    rotation.start(Qt::PortraitOrientation);
+    backend->sample(QOrientationReading::LeftUp);
+    settle();
+    require(turns.last() == Qt::LandscapeOrientation, "Reader rotates before PIN handoff");
+    rotation.freeze();
+    turns.clear();
+    pin = true;
+    backend->sample(QOrientationReading::RightUp);
+    require(nativeNotifications == 1 && turns.isEmpty(), "PIN can rotate before the reader sleep handoff");
+    pin = false;
+    rotation.start(Qt::InvertedLandscapeOrientation);
+    require(turns == QList<Qt::ScreenOrientation>{Qt::LandscapeOrientation},
+            "Unlock before handoff restores the reading orientation");
+    for (int cycle = 0; cycle < 2; ++cycle) {
+        rotation.freeze();
+        rotation.stop(true);
+        const auto beforeSleep = nativeNotifications;
+        backend->sample(QOrientationReading::TopDown);
+        require(nativeNotifications == beforeSleep, "Sleep screen still blocks native sensor delivery");
+        turns.clear();
+        pin = true;
+        backend->sample(QOrientationReading::RightUp);
+        require(nativeNotifications == beforeSleep + 1 &&
+                    sensor.reading()->orientation() == QOrientationReading::RightUp,
+                "Awake PIN screen receives native sensor readings");
+        require(turns.isEmpty(), "PIN rotation does not turn or resume Kobalt");
+        pin = false;
+        backend->sample(QOrientationReading::TopDown);
+        require(nativeNotifications == beforeSleep + 1, "Returning to sleep blocks native readings again");
+        rotation.start(Qt::InvertedLandscapeOrientation);
+        require(turns == QList<Qt::ScreenOrientation>{Qt::LandscapeOrientation},
+                "Unlock restores held reading orientation instead of the PIN orientation");
+        backend->sample(QOrientationReading::LeftUp);
+        require(nativeNotifications == beforeSleep + 1, "Unlocked reader owns sensor delivery again");
+    }
+    rotation.stop(true);
+    pin = true;
+    backend->sample(QOrientationReading::TopDown);
+    rotation.stop();
+    require(turns.last() == Qt::PortraitOrientation, "Closing behind PIN restores the original native orientation");
+    const auto beforeClose = nativeNotifications;
+    backend->sample(QOrientationReading::TopUp);
+    require(nativeNotifications == beforeClose + 1, "Closing behind PIN releases the sensor filter");
+}
 void checkOpening(Factory &factory) {
     for (const auto lock : {Qt::PortraitOrientation, Qt::LandscapeOrientation}) {
         const auto inverted = Qt::ScreenOrientation(int(lock) * 4);
@@ -366,6 +423,7 @@ int main(int argc, char **argv) {
     require(manual.manual() == Qt::InvertedLandscapeOrientation, "Sensorless manual preference preserved");
     checkSleepRequest(factory);
     checkNativeHandoff(factory);
+    checkPinScreenHandoff(factory);
     checkOpening(factory);
     checkSleepLifecycle(factory);
     checkQuarterTurnWake(factory);

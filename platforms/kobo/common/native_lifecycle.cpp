@@ -60,6 +60,11 @@ bool nativeSleeping() {
 bool NativeLifecycle::powerAvailable() {
     return powerApi().available();
 }
+bool NativeLifecycle::pinScreenActive() {
+    const auto &api = powerApi();
+    const auto *power = api.available() ? api.manager() : nullptr;
+    return power && !api.sleeping(power) && api.pin(power);
+}
 bool NativeLifecycle::suspended() {
     static const auto manager = symbol<const void *(*)()>("_ZN19PlugWorkflowManager14sharedInstanceEv");
     static const auto visible = symbol<bool (*)(const void *)>("_ZN19PlugWorkflowManager20pluggedInViewVisibleEv");

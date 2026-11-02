@@ -146,6 +146,26 @@ int main(int argc, char **argv) {
         QCoreApplication::processEvents();
         require(!lifecycle.blocked(), "Wake did not release sleep state");
     };
+    for (int cycle = 0; cycle < 2; ++cycle) {
+        power->asleep = power->visible = true;
+        power->pin = false;
+        emit power->aboutToSleep();
+        require(!kobalt::NativeLifecycle::pinScreenActive(), "Sleep screen permits native PIN rotation");
+        power->pin = true;
+        require(!kobalt::NativeLifecycle::pinScreenActive(), "Sleeping device permits native PIN rotation");
+        power->asleep = false;
+        emit power->resumingFromSleep();
+        QCoreApplication::processEvents();
+        require(kobalt::NativeLifecycle::pinScreenActive(), "Awake PIN did not permit native rotation");
+        require(lifecycle.blocked() && kobalt::NativeLifecycle::suspended(), "PIN entry resumed the reader");
+        power->visible = false;
+        require(kobalt::NativeLifecycle::pinScreenActive(), "PIN rotation depends on the underlying sleep view");
+        power->asleep = true;
+        require(!kobalt::NativeLifecycle::pinScreenActive(), "Returning to sleep retained PIN rotation");
+        wake();
+        require(!kobalt::NativeLifecycle::pinScreenActive(), "Unlock retained PIN rotation");
+    }
+    sleepHandoffs = 0;
     // An old NickelHook user can overwrite our showSleepView hook. Both
     // paths must hand off exactly once after the native sleep view is ready.
     for (bool bypassHook : {true, false}) {

@@ -87,8 +87,13 @@ try {
         near(layout.body.y + layout.body.height / 2, layout.stage.y + layout.stage.height / 2);
         assert.ok(layout.body.x >= 0 && layout.body.x + layout.body.width <= layout.width);
         assert.ok(layout.body.y >= layout.stage.y && layout.body.y + layout.body.height <= layout.stage.y + layout.stage.height + 1);
-        let model = layout.device === 'phone' ? { w: 800, h: 1680, x: 40, y: 40, sw: 720, sh: 1600 } : layout.device !== 'seven-inch' ? { w: 1323, h: 1890, x: 126, y: 150, sw: 1072, sh: 1448 }
-                                                 : { w: 1708, h: 1902, x: 90, y: 111, sw: 1264, sh: 1680 };
+        const models = {
+            'phone': { w: 800, h: 1680, x: 40, y: 40, sw: 720, sh: 1600 },
+            'phone-landscape': { w: 800, h: 1680, x: 40, y: 100, sw: 720, sh: 1480 },
+            'seven-inch': { w: 1708, h: 1902, x: 90, y: 111, sw: 1264, sh: 1680 },
+        };
+        const device = layout.device === 'phone' && layout.landscape ? 'phone-landscape' : layout.device;
+        let model = models[device] || { w: 1323, h: 1890, x: 126, y: 150, sw: 1072, sh: 1448 };
         if (layout.landscape) model = { w: model.h, h: model.w, x: model.h - model.y - model.sh, y: model.x, sw: model.sh, sh: model.sw };
         if (!layout.framed) model = { w: model.sw, h: model.sh, x: 0, y: 0, sw: model.sw, sh: model.sh };
         const scale = layout.body.width / model.w;
@@ -108,7 +113,8 @@ try {
     const literary = manifest.images.filter(image => image.group === 'International books');
     assert.equal(new Set(literary.map(image => image.book.language)).size, 16);
     const literaryScreens = new Set(literary.map(image => image.screen));
-    assert.equal(literary.length, literaryScreens.size * 11);
+    const literaryVariants = new Set(literary.map(image => image.device + '/' + image.theme));
+    assert.equal(literary.length, literaryScreens.size * literaryVariants.size);
     assert.equal(await page.locator('figure:not([hidden])').count(), literaryScreens.size);
     await page.locator('#query').fill('Japanese vertical reading');
     assert.equal(await page.locator('figure:not([hidden])').count(), 1);
@@ -177,7 +183,11 @@ try {
     await page.locator('#text-size').click();
     assert.equal(await page.locator('#text-size').getAttribute('aria-pressed'), 'true');
     assert.equal(await page.locator('#theme').isDisabled(), true);
-    assert.notEqual(await card.locator('img').getAttribute('src'), regular);
+    const largeCapture = manifest.images.find(image => image.screen === 'international-ja-vertical-reading' &&
+        image.device === 'seven-inch' && image.theme === 'large' && image.capture_page === 1);
+    assert.ok(largeCapture);
+    const largeSource = await card.locator('img').getAttribute('src');
+    assert.equal(createHash('sha256').update(Buffer.from(largeSource.split(',')[1], 'base64')).digest('hex'), largeCapture.sha256);
     assert.match(await card.locator('.tag').textContent(), /150%/);
     await page.locator('#text-size').click();
     assert.equal(await page.locator('#theme').isDisabled(), false);

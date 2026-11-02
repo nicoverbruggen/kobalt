@@ -195,7 +195,8 @@ void PopupCard::fitToWidth(int width) {
 }
 
 void PopupCard::fitToHeight(int height) {
-    for (const auto &row : std::as_const(pagedRows))
+    const auto &previousRows = pagedRows;
+    for (const auto &row : previousRows)
         if (row) row->show();
     pagedRows.clear();
     rowPages.clear();
@@ -223,7 +224,12 @@ void PopupCard::fitToHeight(int height) {
     }
     // The pager sits above the actions, or last when the card has none.
     contentRows->removeWidget(rowPager);
-    const int actionsAt = actionRows ? contentRows->indexOf(actionRows) : -1;
+    int actionsAt = -1;
+    for (int index = 0; actionRows && index < contentRows->count(); ++index)
+        if (contentRows->itemAt(index) == actionRows) {
+            actionsAt = index;
+            break;
+        }
     contentRows->insertWidget(actionsAt < 0 ? contentRows->count() : actionsAt, rowPager);
     const int textWidth = width() - contentRows->contentsMargins().left() - contentRows->contentsMargins().right();
     const auto rowHeight = [textWidth](QWidget *row) {
@@ -255,9 +261,11 @@ void PopupCard::fitToHeight(int height) {
 void PopupCard::showRowPage(int page) {
     if (rowPages.isEmpty()) return;
     rowPage = qBound(0, page, int(rowPages.size()) - 1);
-    for (int index = 0; index < rowPages.size(); ++index)
-        for (auto *row : std::as_const(rowPages[index]))
+    for (int index = 0; index < rowPages.size(); ++index) {
+        const auto &rows = rowPages[index];
+        for (auto *row : rows)
             row->setVisible(index == rowPage);
+    }
     rowPager->setPage(rowPage, rowPages.size());
     const int height = contentRows->hasHeightForWidth() ? contentRows->totalHeightForWidth(width())
                                                        : contentRows->totalSizeHint().height();

@@ -362,7 +362,7 @@ static void checkPageFormat() {
                     "Page images did not use the requested format");
             require(rgba[page].convertToFormat(QImage::Format_RGB32) == plain[page],
                     "RGBA page images changed pixels");
-            for (const auto *key : {"kobalt.image_regions", "kobalt.colour_regions", "kobalt.animation_text_only"})
+            for (const auto *key : {"kobalt.image_regions", "kobalt.colour_regions", "kobalt.animation_text_only", "kobalt.image_only"})
                 require(rgba[page].text(key) == plain[page].text(key), "RGBA page images changed page metadata");
         }
         require(plain[0].text("kobalt.colour_regions") != "[]", "Page format fixture has no colour");
@@ -454,6 +454,7 @@ static void checkCssDensity() {
     const char *styles[]{"", "width:30px;height:20px", "width:0.5in;height:0.25in", "width:2em;height:1em",
                          "width:25%;height:auto"};
     QSize sizesAt212[5], sizesAt300[5];
+    QString imageId;
     const int originalPpi = kobalt::readingPpi.load();
     for (const int ppi : {212, 300}) {
         kobalt::readingPpi.store(ppi);
@@ -488,6 +489,14 @@ static void checkCssDensity() {
                         ink = ink.united(QRect(x, y, 1, 1));
                 }
             require(!ink.isEmpty(), "CSS density fixture image is missing");
+            const auto originalImage = model.imageAt(ink.center());
+            const auto id = originalImage.text("kobalt.image_id");
+            require(id.size() == 64, "Image viewer has no stable content identity");
+            if (imageId.isEmpty()) imageId = id;
+            require(id == imageId, "Image identity changed with display size or reading density");
+            require(originalImage.size() == art.size() && originalImage.pixel(0, 0) == qRgb(255, 0, 0),
+                    "Image viewer did not recover the low-resolution source image");
+            require(model.imageAt({799, 999}).isNull(), "Blank paper resolved to an image");
             (ppi == 212 ? sizesAt212 : sizesAt300)[i] = ink.size();
             if (i == 0) {
                 kobalt::ReaderModel preview(kobalt::test::readerFonts());
@@ -495,6 +504,19 @@ static void checkCssDensity() {
                 require(preview.image(0) == rendered, "Preview used a different CSS density");
             }
         }
+    }
+    const QByteArray illustration = "<img src='art.png' style='width:150px;height:80px'/>";
+    for (const auto &body : {illustration, illustration + "<p>A caption</p>", illustration + illustration}) {
+        auto data = base;
+        data["c.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><body>" + body + "</body></html>";
+        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        QString error;
+        QList<QPair<QByteArray, QByteArray>> members;
+        for (auto it = data.cbegin(); it != data.cend(); ++it) members.append({it.key().toUtf8(), it.value()});
+        require(model.open(storedEpub(members), QSize(800, 1000), {{"font_pixels", 24}}, &error), qPrintable(error));
+        const auto rendered = model.image(0);
+        require(!kobalt::pageSingleImage(rendered).isEmpty() == (body == illustration),
+                "Image-only detection included captions or multiple images, or lost the single image");
     }
     kobalt::readingPpi.store(originalPpi);
     for (int i : {0, 1}) {

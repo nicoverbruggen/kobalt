@@ -200,6 +200,71 @@ int main(int argc, char **argv) {
         QTemporaryDir profile;
         require(profile.isValid(), "Finish profile unavailable");
         storage::Paths finishPaths{profile.path()};
+        {
+            const QString identity = "image-views", a(64, 'a'), b(64, 'b');
+            const QJsonObject first{{"id", a}, {"zoom", 2.0}, {"x", .25}, {"y", .75}, {"future", "keep"}};
+            const QJsonObject second{{"id", b}, {"zoom", 4.0}, {"x", .6}, {"y", .4}};
+            const QJsonObject original{{"schema", 1}, {"book", identity}, {"extra", "keep"},
+                {"image_views", QJsonArray{first, second,
+                    QJsonObject{{"id", QString(64, 'c')}, {"zoom", 99}, {"x", .5}, {"y", .5}}}}};
+            require(storage::writeBookState(finishPaths, identity, original), "Cannot seed image views");
+            {
+                auto session = open(QSize(758, 900), {}, identity);
+                const auto hash = session->sourceHash();
+                ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths, identity, hash, nullptr, {}, {});
+                require(book.imageView(a) == first && book.imageView(b) == second &&
+                            book.imageView(QString(64, 'c')).isEmpty(), "Image views lost identity or accepted invalid zoom");
+                require(!book.rememberImageView("invalid", first) &&
+                            !book.rememberImageView(a, {{"zoom", 2}, {"x", -1}, {"y", .5}}) &&
+                            !book.rememberImageView(a, {{"zoom", true}, {"x", .5}, {"y", .5}}),
+                        "Malformed image views were accepted");
+                require(book.rememberImageView(a, {{"zoom", 3}, {"x", .2}, {"y", .7}}), "Cannot update image view");
+                require(book.imageView(a).value("future") == "keep" && book.imageView(b) == second,
+                        "Updating an image changed another image or removed optional fields");
+                require(!book.rememberImageView(a, book.imageView(a)), "An unchanged image view caused another save");
+                QJsonObject snapshot;
+                require(book.checkpoint(&snapshot, true), "Cannot queue image-view checkpoint");
+                waitUntil([&] { return !book.savesPending(); });
+                require(storage::readBookState(finishPaths, identity).object.value("image_views").toArray().size() == 2,
+                        "Background checkpoint lost image views");
+            }
+            auto saved = storage::readBookState(finishPaths, identity).object;
+            auto session = open(QSize(900, 758), saved, identity);
+            const auto hash = session->sourceHash();
+            ReadingBook reopened(std::move(session), finishPaths.bookState(identity), finishPaths, identity, hash, nullptr, {}, {});
+            require(reopened.imageView(a).value("zoom").toDouble() == 3 && reopened.imageView(b) == second,
+                    "Reopening the book lost its image views");
+            require(reopened.rememberImageView(a, {{"zoom", 1}, {"x", .5}, {"y", .5}}) && reopened.imageView(a).isEmpty(),
+                    "Fit did not clear the remembered image view");
+            require(reopened.rememberImageView(b, {{"zoom", 1}, {"x", .5}, {"y", .5}}), "Cannot reset second image");
+            QJsonObject snapshot;
+            require(reopened.checkpoint(&snapshot) &&
+                        !storage::readBookState(finishPaths, identity).object.contains("image_views"),
+                    "Fit restored stale views from the opening record");
+            for (int i = 0; i < 70; ++i)
+                require(reopened.rememberImageView(QString::number(i, 16).rightJustified(64, '0'),
+                            {{"zoom", 2}, {"x", .25}, {"y", .75}}), "Cannot remember bounded image views");
+            require(reopened.checkpointState().value("image_views").toArray().size() == 64 &&
+                        reopened.imageView(QString(64, '0')).isEmpty(), "Image-view history was not bounded");
+            require(reopened.checkpoint(&snapshot), "Cannot save bounded image views");
+            saved = storage::readBookState(finishPaths, identity).object;
+            saved["large_optional"] = QString(10000, 'x');
+            saved["book"] = "image-view-budget";
+            saved.remove("image_views");
+            require(storage::writeBookState(finishPaths, "image-view-budget", saved), "Cannot seed image-view byte budget");
+            auto budgetSession = open();
+            const auto budgetHash = budgetSession->sourceHash();
+            ReadingBook budget(std::move(budgetSession), finishPaths.bookState("image-view-budget"), finishPaths,
+                               "image-view-budget", budgetHash, nullptr, {}, {});
+            for (int i = 0; i < 64; ++i)
+                budget.rememberImageView(QString::number(i, 16).rightJustified(64, '0'), {{"zoom", 2}, {"x", .25}, {"y", .75}});
+            require(budget.checkpoint(&snapshot), "Image views prevented a reading-position checkpoint");
+            const auto bounded = storage::readBookState(finishPaths, "image-view-budget").object;
+            require(bounded.value("large_optional").toString().size() == 10000 &&
+                        bounded.value("image_views").toArray().size() < 64 &&
+                        QJsonDocument(bounded).toJson(QJsonDocument::Compact).size() <= storage::maxJsonBytes,
+                    "Image views did not respect the book byte budget or changed unrelated fields");
+        }
         for (const auto &flag : {QJsonValue(), QJsonValue("invalid"), QJsonValue(true)}) {
             const QString identity = "finish-book";
             QJsonObject original{{"schema", 1}, {"book", identity}, {"extra", QJsonObject{{"keep", "value"}}},

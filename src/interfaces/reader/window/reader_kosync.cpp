@@ -438,7 +438,8 @@ void Reader::showKosyncChoice() {
     if (!kosyncProgress.pending() || kosyncPositionFailed || kosyncPromptDeferred || kosyncDialog || closing || lifecycleHidden || !isVisible() || model->busy() ||
         services.suspended() || book->deviceTransition() || book->pendingProgress() || syncDialog || finishDialog ||
         topControls->isVisible() || general->isVisible() || annotationMode || searchPanel->isVisible() ||
-        dictionaryPanel->isVisible() || linksActive() || lookupPending || appearanceEdit.panelOpen()) return;
+        dictionaryPanel->isVisible() || (imageViewer && imageViewer->isVisible()) ||
+        linksActive() || lookupPending || appearanceEdit.panelOpen()) return;
     const auto remote = kosyncProgress.candidate();
     auto *dialog = new ui::ChoiceModal(this,
         {strings::get("kosync.comparing_positions"),

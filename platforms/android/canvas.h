@@ -16,6 +16,7 @@
 #include <QPaintEvent>
 #include <QtMath>
 #include <functional>
+#include "ui/input.h"
 
 namespace kobalt::android {
 // Qt caches each damaged rectangle, but its default proxy paints their bounding
@@ -101,8 +102,8 @@ private:
     QImage pixels;
 };
 // Keep the existing UI in physical pixels. Qt maps its damage rectangles to
-// the Android surface. Deliver touch as ordinary mouse input because the
-// embedded QWidget does not receive Android's touch events through the proxy.
+// the Android surface. Most controls receive mouse input through the proxy.
+// A widget that sets kobalt_native_touch receives mapped touch contacts instead.
 class WidgetCanvas : public QGraphicsView {
 public:
     explicit WidgetCanvas(QWidget *parent) : QGraphicsView(parent) {
@@ -203,6 +204,27 @@ protected:
         if (type != QEvent::TouchBegin && type != QEvent::TouchUpdate && type != QEvent::TouchEnd)
             return QGraphicsView::viewportEvent(event);
         const auto *touch = static_cast<QTouchEvent *>(event);
+        if (content && type == QEvent::TouchBegin && !touch->points().isEmpty()) {
+            const auto position = mapToScene(touch->points().first().position().toPoint()).toPoint();
+            target = content->childAt(position);
+            if (!target) target = content;
+            nativeTouch = target->property("kobalt_native_touch").toBool();
+        }
+        if (nativeTouch && target && content) {
+            QVector<ui::TouchContact> contacts;
+            for (const auto &point : touch->points()) {
+                const auto scene = mapToScene(point.position().toPoint()).toPoint();
+                contacts.append({point.id(), target->mapFrom(content, scene), point.state() == QEventPoint::Released});
+            }
+            ui::MappedTouchEvent mapped(*touch, std::move(contacts));
+            QApplication::sendEvent(target, &mapped);
+            if (type == QEvent::TouchEnd) {
+                target.clear();
+                nativeTouch = false;
+            }
+            event->accept();
+            return true;
+        }
         if (!content || touch->points().size() != 1) {
             cancel();
             event->accept();
@@ -235,6 +257,7 @@ protected:
 private:
     QPointer<RegionProxy> proxy;
     QPointer<QWidget> target;
+    bool nativeTouch = false;
     bool updatingInputGeometry = false;
     void updateInputGeometry() {
         auto *focus = QGuiApplication::focusObject();
@@ -265,6 +288,7 @@ private:
         // Cancellation handlers can delete the target or start another gesture.
         QPointer<QWidget> cancelled = target;
         target.clear();
+        nativeTouch = false;
         if (cancelled) {
             QTouchEvent event(QEvent::TouchCancel);
             QApplication::sendEvent(cancelled, &event);

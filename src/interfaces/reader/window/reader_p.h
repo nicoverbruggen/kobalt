@@ -21,6 +21,7 @@
 #include "reading/highlight_session.h"
 #include "storage/annotation_export.h"
 #include "interfaces/reader/views/reading_page.h"
+#include "interfaces/reader/views/image_viewer.h"
 #include "interfaces/reader/panels/choice_screen.h"
 #include "interfaces/reader/panels/chapter_graph.h"
 #include "interfaces/reader/settings/acknowledgments.h"
@@ -129,6 +130,8 @@ private:
     QString savedNativeAnchor;
     int savedNativePage = -1, savedNativePages = -1;
     void buildReadingPage();
+    ImageViewer *imageViewer = nullptr;
+    quint64 imageRequest = 0;
     void buildAnnotations();
     void enterAnnotations();
     void leaveAnnotations();
@@ -410,6 +413,8 @@ private:
     void openSettingsFont(const QString &key);
     QPushButton *linkReturn = nullptr;
     bool linkReturnAvailable = false;
+    QString imageSuggestionPosition;
+    bool imageSuggestionDismissed = false;
     struct LinkVisit {
         QString position;
         int page;

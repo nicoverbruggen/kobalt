@@ -125,10 +125,15 @@ public:
         setInvertColors(dark);
         setSmoothScalingImages(smooth);
     }
-    bool hasImages = false;
+    bool hasImages = false, hasText = false;
     QVector<QRect> imageRegions;
     using LVColorDrawBuf::Draw;
     void Draw(int x, int y, const lUInt8 *bitmap, int width, int height, const lUInt32 *palette) override {
+        lvRect clip;
+        GetClipRect(&clip);
+        if (width > 0 && height > 0 && qint64(x) + width > clip.left && x < clip.right &&
+            qint64(y) + height > clip.top && y < clip.bottom)
+            hasText = true;
         const auto color = palette ? palette[0] : GetTextColor();
         const auto background = GetBackgroundColor();
         const bool neutral = qRed(color) == qGreen(color) && qRed(color) == qBlue(color);
@@ -1128,6 +1133,7 @@ QImage ReaderModel::image(int pageNumber) {
             PageDrawBuffer part(column, darkMode_, true);
             engine_->drawColumn(part, pageNumber, i);
             buffer.hasImages |= part.hasImages;
+            buffer.hasText |= part.hasText;
             const int x = engine_->columnOffset(i);
             painter.drawImage(x, 0, column);
             for (const auto &region : part.imageRegions)
@@ -1147,6 +1153,7 @@ QImage ReaderModel::image(int pageNumber) {
                                    format == QImage::Format_RGBX8888);
     usePageFormat(result, format);
     result.setText("kobalt.image_regions", regionMetadata(buffer.imageRegions));
+    result.setText("kobalt.image_only", buffer.imageRegions.size() == 1 && !buffer.hasText ? "true" : "false");
     result.setText(
         "kobalt.colour_regions",
         regionMetadata(hasColor ? (boundedTiles ? colourTileRegions(colourTiles, tileColumns, tileRows, result.size())

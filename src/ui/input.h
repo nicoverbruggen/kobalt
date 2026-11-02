@@ -2,6 +2,7 @@
 #include <QMouseEvent>
 #include <QTouchEvent>
 #include <QVector>
+#include <utility>
 
 namespace kobalt::ui {
 // Keep the Qt 5/6 event API difference out of controls and reading gestures.
@@ -27,7 +28,17 @@ struct TouchContact {
     QPointF position;
     bool released;
 };
+// A graphics canvas forwards the original event and supplies positions in the
+// receiving widget. This avoids depending on Qt's private event-point setters.
+class MappedTouchEvent final : public QTouchEvent {
+public:
+    MappedTouchEvent(const QTouchEvent &source, QVector<TouchContact> positions)
+        : QTouchEvent(source), contacts(std::move(positions)) {}
+    QVector<TouchContact> contacts;
+};
 inline QVector<TouchContact> touchContacts(const QTouchEvent *event) {
+    if (const auto *mapped = dynamic_cast<const MappedTouchEvent *>(event))
+        return mapped->contacts;
     QVector<TouchContact> contacts;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     for (const auto &point : event->points()) {

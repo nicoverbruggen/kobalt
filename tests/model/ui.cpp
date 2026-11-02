@@ -4337,11 +4337,60 @@ int main(int argc, char **argv) {
         using namespace kobalt::ui;
         PageScrubber scrubber(nullptr);
         scrubber.resize(1000, 700);
+        int imageOpens = 0, imageDismissals = 0, returns = 0, stays = 0;
+        scrubber.imageRequested = [&] { ++imageOpens; };
+        scrubber.imageDismissed = [&] { ++imageDismissals; };
+        scrubber.returnRequested = [&] { ++returns; };
+        scrubber.stayRequested = [&] { ++stays; };
+        scrubber.setImageAction("Zoom image");
+        auto *imageAction = scrubber.findChild<QPushButton *>("rrScrubberImage");
+        require(imageAction && !imageAction->isHidden(), "Image suggestion is missing");
+        imageAction->click();
+        scrubber.findChild<QPushButton *>("rrScrubberImageDismiss")->click();
+        require(imageOpens == 1 && imageDismissals == 1 && !returns && !stays,
+                "Image suggestion dispatched return actions");
+        scrubber.setReturnAction("Return to page 8", "Chapter");
+        auto *returnAction = scrubber.findChild<QPushButton *>("rrScrubberReturn");
+        require(returnAction && returnAction->text() == "Return to page 8", "Image suggestion displaced return action");
+        require(!imageAction->isHidden() && !returnAction->isHidden(), "Roomy layout did not show both actions");
+        require(imageAction->geometry().right() < returnAction->geometry().left(), "Image and return actions overlap");
+        imageAction->click();
+        scrubber.findChild<QPushButton *>("rrScrubberImageDismiss")->click();
+
+        returnAction->click();
+        scrubber.findChild<QPushButton *>("rrScrubberStay")->click();
+        require(returns == 1 && stays == 1 && imageOpens == 2 && imageDismissals == 2,
+                "Return action dispatched image actions");
+        scrubber.show();
+        scrubber.resize(400, 700);
+        app.processEvents();
+        require(imageAction->isHidden() && !returnAction->isHidden(), "Narrow layout hid Return or squeezed both actions");
+        scrubber.resize(1000, 700);
+        app.processEvents();
+        require(!imageAction->isHidden() && !returnAction->isHidden(), "Widening did not restore both actions");
+        // Every shown action keeps its full label; resizing across the threshold is reversible.
+        for (int width = 400; width <= 1100; width += 10) {
+            scrubber.resize(width, 700);
+            app.processEvents();
+            if (!imageAction->isHidden()) {
+                require(imageAction->width() >= imageAction->sizeHint().width(), "Image label was squeezed");
+                require(returnAction->width() >= returnAction->sizeHint().width(), "Return label was squeezed");
+                const auto *dismiss = scrubber.findChild<QPushButton *>("rrScrubberImageDismiss");
+                require(dismiss->geometry().right() < returnAction->x(), "Image close overlaps Return");
+            }
+        }
+        scrubber.setReturnAction({}, {});
+        require(!imageAction->isHidden(), "Clearing return action lost image suggestion");
+        scrubber.setImageAction({});
+        require(!scrubber.hasActions(), "Dismissed actions left a floating button");
         QVector<QPair<int, QString>> chapters{{0, "Start"}, {200, "Middle"}, {900, "Later"}, {1500, "End"}};
         const auto checkMarkers = [&] {
             auto *actual = scrubber.slider();
             SettingSlider expected(nullptr, actual->minimum(), actual->maximum());
             expected.setPalette(actual->palette());
+            require(actual->isEnabled() == (actual->maximum() > actual->minimum()),
+                    "Page slider enablement does not match its page range");
+            expected.setEnabled(actual->isEnabled());
             expected.resize(actual->size());
             expected.setDotMarkers(true);
             expected.setValue(actual->value());

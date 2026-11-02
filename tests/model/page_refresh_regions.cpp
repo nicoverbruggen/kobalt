@@ -10,6 +10,24 @@ int main() {
     require(!kobalt::hasVisibleColour(qRgb(100, 110, 100)), "Near-gray pixel counted as colour");
     require(kobalt::hasVisibleColour(qRgb(100, 111, 100)), "Colour threshold excluded a visible tint");
     QImage page(100, 100, QImage::Format_RGB32);
+    page.setText("kobalt.image_regions", "[[10,10,60,80]]");
+    require(kobalt::pageImageAtPoint(page, {40, 50}), "Cover was not an image target");
+    require(!kobalt::pageImageAtPoint(page, {0, 0}), "Paper outside the image became a target");
+    require(kobalt::pageSingleImage(page).isEmpty(), "Unknown text metadata offered image zoom");
+    page.setText("kobalt.image_only", "true");
+    require(kobalt::pageSingleImage(page) == QRect(10, 10, 60, 80), "Image-only cover lost zoom suggestion");
+    page.setText("kobalt.image_only", "false");
+    require(kobalt::pageSingleImage(page).isEmpty(), "Image with text offered zoom suggestion");
+    page.setText("kobalt.image_only", "true");
+    page.setText("kobalt.image_regions", "[[10,10,60,80],[0,0,2,2]]");
+    require(kobalt::pageSingleImage(page).isEmpty(), "Multiple images offered zoom suggestion");
+    page.setText("kobalt.image_regions", "[[10,10,10,10],[0,50,100,5]]");
+    require(kobalt::pageSingleImage(page).isEmpty(), "Small images offered zoom suggestion");
+    require(!kobalt::pageImageAtPoint(page, {15, 15}), "Small ornament became an image target");
+    require(!kobalt::pageImageAtPoint(page, {50, 52}), "Narrow wordmark became an image target");
+    page.setText("kobalt.image_regions", "malformed");
+    require(!kobalt::pageImageAtPoint(page, {40, 50}), "Invalid metadata became an image target");
+    page.setText("kobalt.image_regions", QString());
     const QRegion full(QRect(0, 0, 100, 100));
 
     page.setText("kobalt.animation_text_only", "false");

@@ -9,6 +9,7 @@
 #include "storage/reading_history.h"
 #include <QElapsedTimer>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <memory>
 #include <utility>
 
@@ -132,6 +133,9 @@ public:
         return dictionaryChoice_;
     }
     bool saveDictionaryChoice(const QString &id);
+    QJsonObject imageView(const QString &id) const;
+    // Memory only. The caller can queue the existing background checkpoint.
+    bool rememberImageView(const QString &id, const QJsonObject &view);
 
 private:
     bool canFinish() const;
@@ -184,6 +188,7 @@ private:
     // Keep extra fields from the supported record loaded at opening. Reader
     // fields are regenerated at each checkpoint.
     QJsonObject preservedState;
+    QJsonArray imageViews;
     // The background checkpoint that has not reported back yet.
     QJsonObject pendingCheckpoint;
     std::function<void()> checkpointFailed;

@@ -21,6 +21,7 @@
 #include "storage/reader_storage.h"
 #include "interfaces/reader/settings/settings_panel.h"
 #include "build_info.h"
+#include "model/page_refresh_regions.h"
 #include "reading/appearance_settings.h"
 #include "reading/page_navigation.h"
 #include <QApplication>
@@ -482,6 +483,50 @@ void Reader::buildReadingPage() {
         if (beginAnnotationDrag(point, -1))
             finishAnnotationDrag(false);
     };
+    imageViewer = new ImageViewer(this);
+    imageViewer->rememberView = [this](QString id, QJsonObject view) {
+        if (book->rememberImageView(id, view)) {
+            QJsonObject snapshot;
+            book->checkpoint(&snapshot, true);
+        }
+    };
+    imageViewer->dismissed = [this] {
+        ++imageRequest;
+        page->setFocus();
+        observeReading();
+        page->cleanRefresh(true);
+        updateOrientationBlock();
+    };
+    page->imageHeld = [this](QPoint point) {
+        if (model->busy() || lifecycleHidden || closing || exitPending || exportRunning || annotationSaving ||
+            services.suspended() || book->deviceTransition() ||
+            appearanceEdit.panelOpen() || general->isVisible() || searchPanel->isVisible() ||
+            linksActive() || !pageImageAtPoint(page->image, point))
+            return false;
+        // Small image-only note references keep their link/selection behavior.
+        for (const auto &link : model->pageLinks())
+            if (link.kind == LinkKind::Footnote)
+                for (const auto &rect : link.rectangles)
+                    if (rect.contains(point)) return false;
+        dismissControls();
+        dismissLookup();
+        clearAnnotationDraft();
+        const auto safe = safeArea();
+        imageViewer->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
+        imageViewer->open();
+        observeReading();
+        updateOrientationBlock();
+        const auto request = ++imageRequest;
+        QPointer<Reader> guard(this);
+        model->imageAt(point, [guard, request](QImage image) {
+            if (guard && guard->imageRequest == request && guard->imageViewer->isVisible() &&
+                !guard->lifecycleHidden && !guard->closing) {
+                const auto id = image.text("kobalt.image_id");
+                guard->imageViewer->setImage(std::move(image), guard->book->imageView(id));
+            }
+        });
+        return true;
+    };
     header = new ChapterHeader(page);
     const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
@@ -724,6 +769,15 @@ void Reader::buildBottomControls() {
         if (navigation && navigation->stayRequested) {
             navigation->stayRequested();
         }
+    };
+    pageScrubber->imageRequested = [this] {
+        const auto target = pageSingleImage(page->image);
+        if (!target.isEmpty() && page->imageHeld)
+            page->imageHeld(target.center());
+    };
+    pageScrubber->imageDismissed = [this] {
+        imageSuggestionDismissed = true;
+        syncNavigation();
     };
     pageScrubber->previewRequested = [this](int target, QSize bounds) {
         if (closing || lifecycleHidden || services.suspended())

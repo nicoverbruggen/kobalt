@@ -30,6 +30,8 @@ public:
     }
     void setLinksAction(const QString &label);
     void setReturnAction(const QString &label, const QString &note);
+    // Shows beside Return when both actions fit without shortening their labels.
+    void setImageAction(const QString &label);
     void setBarVisible(bool visible);
     bool hasActions() const {
         return actionsHeight() > 0;
@@ -51,6 +53,7 @@ public:
     std::function<void(int)> accepted;
     std::function<void()> cancelled;
     std::function<void()> linksRequested, returnRequested, stayRequested;
+    std::function<void()> imageRequested, imageDismissed;
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -65,10 +68,11 @@ private:
     RangeOverview *overview;
     QLabel *rangeLabel, *overviewLabel, *rangeStart, *rangeEnd, *overviewStart, *overviewEnd;
     QLabel *chapterLabel;
-    Panel *barRule, *linksRule, *returnRule, *captionBackground, *overviewRule;
+    Panel *barRule, *linksRule, *returnRule, *imageRule, *captionBackground, *overviewRule;
     QWidget *actions;
-    CaptionButton *linksAction, *returnAction;
-    QPushButton *stay;
+    CaptionButton *linksAction, *returnAction, *imageAction;
+    QPushButton *stay, *dismissImage;
+    QString imageLabel;
     QTimer renderTimer;
     QVector<QPair<int, QString>> chapters;
     QVector<int> bookmarkedPages;
@@ -85,7 +89,7 @@ private:
     bool ready = false;
     bool previewDismissible = true;
     QSize pageSize{3, 4};
-    QRect linksFrame, returnFrame;
+    QRect linksFrame, returnFrame, imageFrame;
     QPoint pressPosition;
     bool pointerActive = false, pointerMoved = false;
     int pressedCard = -1;

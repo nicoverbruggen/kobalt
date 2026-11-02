@@ -477,6 +477,14 @@
 
 /* image */
 "image.unavailable" = "Image could not be loaded";
+"image.title" = "Image Viewer";
+"image.loading" = "Loading image…";
+"image.close" = "Close image";
+"image.fit" = "Fit image";
+"image.zoom_suggestion" = "Zoom image";
+"image.dismiss_suggestion" = "Dismiss image suggestion";
+"image.zoom_in" = "Zoom in";
+"image.zoom_out" = "Zoom out";
 
 /* light_panel */
 "light_panel.automatic_brightness" = "Automatic brightness";

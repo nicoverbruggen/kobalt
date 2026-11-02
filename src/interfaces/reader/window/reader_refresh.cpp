@@ -386,7 +386,7 @@ void Reader::syncReadingControls() {
         chapters.append({chapter.page, chapter.title});
     pageScrubber->setChapterJumps(pageNavigation::barButtons(preferences) == pageNavigation::BarButtons::Chapters);
     pageScrubber->setBook(model->page(), model->pages(), chapters, model->image().size());
-    pageScrubber->setEnabled(!model->busy() && model->pages() > 1);
+    pageScrubber->setEnabled(!model->busy());
     const auto chapter = model->chapterTitle().isEmpty() ? strings::get("reader.contents") : model->chapterTitle();
     chapterButton->setText(chapter);
     chapterButton->setAccessibleName(strings::get("reader.contents_detail").arg(chapter));

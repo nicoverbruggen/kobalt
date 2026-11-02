@@ -58,6 +58,28 @@ bool parseRegions(const QImage &image, const char *key, QVector<QRect> &regions)
 }
 }
 
+bool pageImageAtPoint(const QImage &image, QPoint point) {
+    QVector<QRect> regions;
+    if (image.isNull() || !parseRegions(image, "kobalt.image_regions", regions))
+        return false;
+    const quint64 area = quint64(image.width()) * image.height();
+    const int minimumSide = qMin(image.width(), image.height()) * .08;
+    for (const auto &rect : regions)
+        if (rect.contains(point) && rect.width() >= minimumSide && rect.height() >= minimumSide &&
+            quint64(rect.width()) * rect.height() * 20 >= area)
+            return true;
+    return false;
+}
+
+QRect pageSingleImage(const QImage &image) {
+    QVector<QRect> regions;
+    if (image.text("kobalt.image_only") != "true" ||
+        !parseRegions(image, "kobalt.image_regions", regions) || regions.size() != 1 ||
+        !pageImageAtPoint(image, regions.first().center()))
+        return {};
+    return regions.first();
+}
+
 QRegion pageRefreshRegions(const QImage &image, bool colourDevice) {
     if (image.isNull())
         return {};

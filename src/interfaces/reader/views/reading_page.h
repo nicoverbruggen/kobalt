@@ -62,6 +62,8 @@ public:
     QRect ribbonRect() const;
     QRect bookmarkCorner() const;
     std::function<void(QPoint)> held;
+    // An image hold takes precedence over text selection, including annotation mode.
+    std::function<bool(QPoint)> imageHeld;
     // Ends the current touch: no lookup, tap, swipe or light change follows.
     void cancelHold();
     // Stops only the lookup that a long hold would start. A tap or swipe still completes.

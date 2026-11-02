@@ -1465,6 +1465,21 @@ void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> fini
         },
         Qt::QueuedConnection);
 }
+void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished) {
+    if (running)
+        return;
+    auto engine = model;
+    QPointer<ReaderSession> guard(this);
+    const auto job = revision;
+    kobalt::qt::invoke(engineWorker(), [engine, guard, job, point, finished] {
+        EngineJob activity;
+        const auto image = engine->imageAt(point);
+        kobalt::qt::invoke(qApp, [guard, job, image, finished] {
+            if (guard)
+                finished(guard->revision == job && !guard->running ? image : QImage());
+        }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
+}
 void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDetails)> finished) {
     if (running)
         return;

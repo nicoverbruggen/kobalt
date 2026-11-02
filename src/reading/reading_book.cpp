@@ -12,9 +12,27 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QTimer>
+#include <QJsonDocument>
+#include <cmath>
 
 namespace kobalt {
 namespace {
+constexpr int maxImageViews = 64;
+bool validImageId(const QString &id) {
+    if (id.size() != 64) return false;
+    for (const auto c : id)
+        if (!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f')) return false;
+    return true;
+}
+bool validImageView(const QJsonObject &view) {
+    for (const auto *key : {"zoom", "x", "y"}) {
+        const auto value = view.value(key);
+        if (!value.isDouble() || !std::isfinite(value.toDouble())) return false;
+    }
+    return view["zoom"].toDouble() >= 1 && view["zoom"].toDouble() <= 8 &&
+           view["x"].toDouble() >= 0 && view["x"].toDouble() <= 1 &&
+           view["y"].toDouble() >= 0 && view["y"].toDouble() <= 1;
+}
 // The layout memory is a convenience for the next book. Profile preparation
 // moves unusable settings aside. If the file is damaged or replaced by a newer
 // version while a book is open, a close or checkpoint skips the layout memory
@@ -41,6 +59,12 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     if (this->bridge)
         resetNativeUnread(saved, reconciliation.baseline());
     preservedState = saved;
+    if (saved.value("book").toString() == identity_) {
+        for (const auto &value : saved.value("image_views").toArray()) {
+            const auto view = value.toObject();
+            rememberImageView(view.value("id").toString(), view);
+        }
+    }
     if (saved.value("book").toString() == identity_)
         finishPromptSuppressed = saved.value("suppress_finish_prompt").toBool(false);
     const auto preferences = appearance::readerPreferences(
@@ -562,6 +586,35 @@ bool ReadingBook::saveDictionaryChoice(const QString &id) {
     dictionaryChoice_ = previous;
     return false;
 }
+QJsonObject ReadingBook::imageView(const QString &id) const {
+    for (const auto &value : imageViews) {
+        const auto view = value.toObject();
+        if (view.value("id").toString() == id) return view;
+    }
+    return {};
+}
+bool ReadingBook::rememberImageView(const QString &id, const QJsonObject &view) {
+    if (!validImageId(id) || !validImageView(view)) return false;
+    auto next = imageView(id);
+    if (!next.isEmpty()) {
+        bool same = true;
+        for (const auto *key : {"zoom", "x", "y"})
+            same = same && qAbs(next[key].toDouble() - view[key].toDouble()) < 1e-9;
+        if (same) return false;
+    } else if (view.value("zoom").toDouble() == 1) {
+        return false;
+    }
+    for (int i = imageViews.size() - 1; i >= 0; --i)
+        if (imageViews[i].toObject().value("id").toString() == id) imageViews.removeAt(i);
+    if (view.value("zoom").toDouble() != 1) {
+        if (next.isEmpty()) next = view;
+        next["id"] = id;
+        for (const auto *key : {"zoom", "x", "y"}) next[key] = view.value(key);
+        imageViews.append(next);
+        while (imageViews.size() > maxImageViews) imageViews.removeAt(0);
+    }
+    return true;
+}
 QJsonObject ReadingBook::checkpointState() const {
     auto state = model->state();
     state["book"] = identity_;
@@ -574,6 +627,7 @@ QJsonObject ReadingBook::checkpointState() const {
     state["nickel_progress"] = baseline.json();
     state["finished_position"] = acceptedFinishedAnchor;
     state["suppress_finish_prompt"] = finishPromptSuppressed;
+    if (!imageViews.isEmpty()) state["image_views"] = imageViews;
     // For the Android and desktop library, which shows progress without
     // opening the book.
     if (model->pages() > 0)
@@ -589,6 +643,7 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const {
         checkpoint[it.key()] = it.value();
     if (dictionaryChoice_.isEmpty())
         checkpoint.remove("dictionary_id");
+    if (imageViews.isEmpty()) checkpoint.remove("image_views");
     if (model->temporaryTypography())
         appearance::copy(checkpoint, model->persistentState());
     // These describe the displayed frame, not a saved reading position. Drop
@@ -597,6 +652,14 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const {
     for (const auto *key : {"chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
                             "text_font_face", "embedded_font_count", "cached_pages"})
         checkpoint.remove(key);
+    // Image views are optional. Trim their oldest entries rather than letting
+    // them prevent a reading-position checkpoint from fitting its record limit.
+    auto views = checkpoint.value("image_views").toArray();
+    while (!views.isEmpty() && QJsonDocument(checkpoint).toJson(QJsonDocument::Compact).size() > storage::maxJsonBytes) {
+        views.removeAt(0);
+        if (views.isEmpty()) checkpoint.remove("image_views");
+        else checkpoint["image_views"] = views;
+    }
     return checkpoint;
 }
 bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background) {

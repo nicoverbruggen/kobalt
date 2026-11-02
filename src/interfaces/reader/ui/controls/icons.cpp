@@ -72,7 +72,13 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.lineTo(x2, y2);
     };
     // Keyboard symbols use the same 24-unit grid and stroke as our other drawings.
-    if (icon == ControlIcon::BookmarkAdd || icon == ControlIcon::BookmarkRemove || icon == ControlIcon::ExportAction) {
+    if (icon == ControlIcon::FitImage) {
+        line(22, 9, 9, 9); line(9, 9, 9, 22);
+        line(42, 9, 55, 9); line(55, 9, 55, 22);
+        line(9, 42, 9, 55); line(9, 55, 22, 55);
+        line(42, 55, 55, 55); line(55, 55, 55, 42);
+        path.addRect(20, 23, 24, 18);
+    } else if (icon == ControlIcon::BookmarkAdd || icon == ControlIcon::BookmarkRemove || icon == ControlIcon::ExportAction) {
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(icon == ControlIcon::ExportAction ? QStringLiteral("export")
@@ -509,7 +515,7 @@ void paintWifiStatusIcon(QPainter &painter, ControlIcon icon, const QRectF &boun
 }
 QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
     if (int(icon) < 0 ||
-        (int(icon) > int(ControlIcon::System) && icon != ControlIcon::BookmarkAdd && icon != ControlIcon::BookmarkRemove && icon != ControlIcon::ExportAction &&
+        (int(icon) > int(ControlIcon::System) && icon != ControlIcon::BookmarkAdd && icon != ControlIcon::BookmarkRemove && icon != ControlIcon::ExportAction && icon != ControlIcon::FitImage &&
          icon != ControlIcon::PreviousChapter &&
          icon != ControlIcon::NextChapter && icon != ControlIcon::Sync && icon != ControlIcon::Sort &&
          icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight &&

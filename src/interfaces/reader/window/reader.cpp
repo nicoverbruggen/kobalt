@@ -122,6 +122,7 @@ void Reader::observeReading() {
     }
     const bool wasReading = book->readingActive();
     book->observeReading(!topControls->isVisible() && !general->isVisible() && !choices->isVisible() &&
+                         !(imageViewer && imageViewer->isVisible()) &&
                          !dictionaryPanel->isVisible() && !searchPanel->isVisible() && !linksActive() &&
                          !appearanceEdit.panelOpen() && !syncDialog && !kosyncDialog && !finishDialog);
     if (clockTimer && book->readingActive() != wasReading) {
@@ -151,6 +152,7 @@ void Reader::prepareUsb(std::function<void()> finished) {
     prepareTransition(std::move(finished), true);
 }
 void Reader::prepareTransition(std::function<void()> finished, bool usb) {
+    if (imageViewer && imageViewer->isVisible()) imageViewer->closeImage();
     book->retryFailedReadingSave();
     const auto request = ++closeRequest;
     setProperty("reader_transition_save_failed", false);
@@ -345,6 +347,7 @@ sleep::Snapshot Reader::captureSleepScreen() {
 void Reader::sleepReader() {
     // The device is going to sleep; no tap can turn the page until it wakes.
     mainthread::AllowBlocking allow("sleep");
+    if (imageViewer && imageViewer->isVisible()) imageViewer->closeImage();
     book->retryFailedReadingSave();
     if (orientation) {
         orientation->freeze();
@@ -535,7 +538,7 @@ void Reader::progressTick() {
 
 QVector<QWidget *> Reader::popups() const {
     // Header and footer and the field list cover the panels, under every other pop-up.
-    return {annotationPopover,
+    return {imageViewer, annotationPopover,
             headerFooterView,
             fieldChooser,
             busyNotice,
@@ -682,6 +685,14 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
                               type == QEvent::MouseButtonDblClick || type == QEvent::MouseMove ||
                               type == QEvent::TouchBegin || type == QEvent::TouchUpdate || type == QEvent::TouchEnd ||
                               type == QEvent::KeyPress || type == QEvent::KeyRelease || type == QEvent::Shortcut;
+    if (controlInput && imageViewer && imageViewer->isVisible()) {
+        auto *target = qobject_cast<QWidget *>(watched);
+        if (target && (target == this || isAncestorOf(target)) &&
+            target != imageViewer && !imageViewer->isAncestorOf(target)) {
+            event->accept();
+            return true;
+        }
+    }
     if (controlInput && isVisible() && chromeView()) {
         auto *target = qobject_cast<QWidget *>(watched);
         if (target && (target == this || isAncestorOf(target))) {
@@ -960,6 +971,7 @@ void Reader::showEvent(QShowEvent *event) {
 }
 
 void Reader::hideEvent(QHideEvent *event) {
+    if (imageViewer && imageViewer->isVisible()) imageViewer->closeImage();
     if (clockTimer)
         clockTimer->stop();
     if (pageScrubber)
@@ -1005,6 +1017,8 @@ void Reader::resizeEvent(QResizeEvent *) {
         navigation->setSafeArea(safe.top, safe.bottom);
         navigation->setInlineStatus(isShortHeight(height(), ui::density()));
     }
+
+    if (imageViewer) imageViewer->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
     annotationFrame.clear();
     if (annotationPopover)
         annotationPopover->hide();
@@ -1067,6 +1081,7 @@ void Reader::resizeEvent(QResizeEvent *) {
 }
 
 void Reader::closeEvent(QCloseEvent *event) {
+    if (imageViewer && imageViewer->isVisible()) imageViewer->closeImage();
     model->cancelPendingTurn();
     appearanceEdit.clearContinuation();
     closeSearch();
@@ -1128,6 +1143,7 @@ bool Reader::rotationControlsBlocked() const {
 void Reader::updateOrientationBlock() {
     if (orientation)
         orientation->setBlocked(lifecycleHidden || services.suspended() || topControls->isVisible() || model->busy() ||
+                                (imageViewer && imageViewer->isVisible()) ||
                                 appearanceEdit.panelOpen() || bool(syncDialog) || bool(kosyncDialog) || bool(finishDialog) ||
                                 bool(annotationErrorDialog) || bool(formattingWarningDialog) ||
                                 bool(settingsWriteErrorDialog) || dictionaryPanel->isVisible() ||
@@ -1696,6 +1712,24 @@ void Reader::syncNavigation() {
                            : chapterGraph->isVisible() ? int(Nav::Stats)
                            : seekOpen                  ? int(Nav::Seek)
                                                        : -1;
+        const auto position = model->state().value("position").toString();
+        if (imageSuggestionPosition != position) {
+            imageSuggestionPosition = position;
+            imageSuggestionDismissed = false;
+        }
+        const auto imageTarget = pageSingleImage(page->image);
+        bool imageFootnote = false;
+        if (!imageTarget.isEmpty())
+            for (const auto &link : model->pageLinks())
+                if (link.kind == LinkKind::Footnote)
+                    for (const auto &rect : link.rectangles)
+                        imageFootnote |= rect.intersects(imageTarget);
+        const bool imageSuggestion = !imageSuggestionDismissed && !annotationMode && !imageFootnote &&
+                                     !model->busy() && !lifecycleHidden && !closing && !services.suspended() &&
+                                     !lookupPending && !linksActive() && !dictionaryPanel->isVisible() &&
+                                     !syncDialog && !kosyncDialog && !finishDialog &&
+                                     !imageTarget.isEmpty();
+        pageScrubber->setImageAction(imageSuggestion ? strings::get("image.zoom_suggestion") : QString());
         pageScrubber->setReturnAction(
             linkReturnAvailable ? strings::get("reader.return_page").arg(linkHistory.last().page + 1) : QString(),
             linkHistory.isEmpty() || linkHistory.last().chapter.isEmpty()
@@ -1950,6 +1984,7 @@ void Reader::scriptedPageButton(int direction) {
 }
 
 void Reader::pageButton(int direction, quint32 sourceTime, bool userInput) {
+    if (imageViewer && imageViewer->isVisible()) return;
     if ((direction != -1 && direction != 1) || !isEnabled() || !isVisible() || lifecycleHidden ||
         services.suspended() || closing || appearanceEdit.applying())
         return;
@@ -2295,6 +2330,7 @@ bool Reader::pendingStorageSave() const {
            (reportWriter && !reportWriter->idle());
 }
 void Reader::finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed) {
+    if (imageViewer && imageViewer->isVisible()) imageViewer->closeImage();
     ++closeRequest;
     exitPending = exportRunning = false;
     closing = lifecycleHidden = true;

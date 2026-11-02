@@ -1024,7 +1024,8 @@ private slots:
         if (menuView == "stats")
             stats->installEventFilter(&defaultShows);
         else if (menuView == "seek")
-            seek->installEventFilter(&defaultShows);
+            // The slider tracks Navigate; the parent also hosts floating image actions.
+            seek->slider()->installEventFilter(&defaultShows);
         if (action == "tab")
             QVERIFY(click(canvas, tab));
         else if (action == "outside")
@@ -1043,7 +1044,7 @@ private slots:
         const bool restoring = action == "tab" || action == "outside";
         if (restoring) {
             QTRY_COMPARE(stats->isVisible(), menuView == "stats");
-            QTRY_COMPARE(seek->isVisible(), menuView == "seek");
+            QTRY_COMPARE(seek->isVisible() && seek->barBounds().height() > 0, menuView == "seek");
             if (menuView == "seek")
                 QTRY_VERIFY(seek->previewReady());
             QCOMPARE(defaultShows.count, menuView == "none" ? 0 : 1);
@@ -1051,14 +1052,14 @@ private slots:
         } else {
             QCOMPARE(defaultShows.count, 0);
             QTRY_COMPARE(stats->isVisible(), action == "Stats");
-            QTRY_COMPARE(seek->isVisible(), action == "Seek");
+            QTRY_COMPARE(seek->isVisible() && seek->barBounds().height() > 0, action == "Seek");
             if (action == "dismiss") {
                 QVERIFY(!toolbar->isVisible());
                 QVERIFY(!host.window()->findChild<QWidget *>("rrBottomNavigation")->isVisible());
                 QVERIFY(clickAt(canvas, paper));
                 QTRY_VERIFY(toolbar->isVisible());
                 QTRY_COMPARE(stats->isVisible(), menuView == "stats");
-                QTRY_COMPARE(seek->isVisible(), menuView == "seek");
+                QTRY_COMPARE(seek->isVisible() && seek->barBounds().height() > 0, menuView == "seek");
                 QCOMPARE(defaultShows.count, menuView == "none" ? 0 : 1);
             } else {
                 const auto panel = action == "Chapters" ? "rrChoices" : action == "Settings" ? "rrGeneralSettings" : "rrMenu";

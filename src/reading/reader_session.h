@@ -179,6 +179,7 @@ public:
     void annotationRange(const QString &start, const QString &end, std::function<void(TextRange)> finished);
     void textRange(const QString &start, const QString &end, std::function<void(TextRange)> finished);
     void wordAt(QPoint point, std::function<void(WordSelection)> finished);
+    void imageAt(QPoint point, std::function<void(QImage)> finished);
     void linkDetails(const QString &source, std::function<void(LinkDetails)> finished);
     const QVector<PageLink> &pageLinks() const {
         return frame.links;

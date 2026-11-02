@@ -569,6 +569,8 @@ void ReadingPage::triggerHold() {
         return;
     consumed = true;
     brightnessGesture.cancel();
+    if (imageHeld && imageHeld(origin.toPoint() - QPoint(0, topHeight())))
+        return;
     if (annotationInputEnabled && annotationDragStarted) {
         QPointer<ReadingPage> guard(this);
         const bool dragging = annotationDragStarted(origin.toPoint() - QPoint(0, topHeight()), -1);

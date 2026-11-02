@@ -1,3 +1,4 @@
+#include <QtGui/private/qeventpoint_p.h>
 #include "interfaces/reader/ui/controls/options.h"
 #include "interfaces/reader/ui/controls/keyboard.h"
 #include "assets/assets.h"
@@ -7,6 +8,7 @@
 #include "interfaces/reader/ui/style/scale.h"
 #include "interfaces/reader/ui/style/theme.h"
 #include "interfaces/reader/views/reading_page.h"
+#include "model/page_refresh_regions.h"
 #include "interfaces/reader/views/kosync_notice.h"
 #include "platforms/desktop/window.h"
 #include "platforms/desktop/services.h"
@@ -1926,9 +1928,311 @@ void checkPinnedBookmarks(int preset, bool dark) {
 
 void checkPageAnimationCompatibility(int preset, bool dark);
 
+void checkImageViewer(int preset, bool dark, bool screenshots) {
+    Fixture fixture(dark);
+    QVERIFY(fixture.prepared);
+    fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+    auto *view = fixture.window.findChild<QGraphicsView *>();
+    QVERIFY(page && view);
+    const auto name = screenshotVariant(preset, dark);
+    const auto position = fixture.state().value("page");
+    const auto nativePosition = fixture.state().value("position");
+    const auto imagePoint = page->image.rect().center();
+    QVERIFY(pageImageAtPoint(page->image, imagePoint));
+    const auto at = view->mapFromScene(page->mapTo(fixture.window.readerWindow(), imagePoint + QPoint(0, page->topHeight())));
+    const auto openImage = [&] {
+        QTest::mousePress(view->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+        const bool visible = QTest::qWaitFor([&] { return fixture.visible("rrImageViewer"); }, 2000);
+        QTest::mouseRelease(view->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+        return visible;
+    };
+    QVERIFY(!pageSingleImage(page->image).isEmpty());
+    QVERIFY(!fixture.visible("rrScrubberImage"));
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrScrubberImage"));
+    QCOMPARE(qobject_cast<QPushButton *>(fixture.widget("rrScrubberImage"))->text(), QString("Zoom image"));
+    QVERIFY(fixture.press("rrScrubberImage"));
+    QTRY_VERIFY(fixture.visible("rrImageViewer"));
+    auto *image = fixture.widget("rrImageCanvas");
+    QVERIFY(image);
+    QTRY_VERIFY(image->property("imageReady").toBool());
+    QCOMPARE(image->property("imageSize").toSize(), QSize(600, 851));
+    QCOMPARE(image->property("imageZoom").toDouble(), 1.0);
+    // Check the printed cover, not only its dimensions or its paper colour.
+    const auto pixels = image->grab().toImage();
+    int darkPixels = 0;
+    for (int y = pixels.height() / 4; y < pixels.height() / 2; ++y)
+        for (int x = pixels.width() / 4; x < pixels.width() * 3 / 4; ++x) {
+            const auto color = pixels.pixel(x, y);
+            darkPixels += qRed(color) < 80 && qGreen(color) < 80 && qBlue(color) < 80;
+        }
+    QVERIFY2(darkPixels > 1000, "The image viewer lost the cover's printed content");
+    auto *viewer = fixture.widget("rrImageViewer");
+    auto *header = fixture.widget("rrImageHeader");
+    auto *controls = fixture.widget("rrImageControls");
+    auto *fit = qobject_cast<QPushButton *>(fixture.widget("rrImageFit"));
+    auto *title = qobject_cast<QLabel *>(fixture.widget("rrImageTitle"));
+    QVERIFY(viewer && header && controls && fit && title);
+    QCOMPARE(title->text(), QString("Image Viewer"));
+    QCOMPARE(title->font().family(), ui::brandFont(ui::metrics::chrome::titleText).family());
+    QCOMPARE(title->font().pixelSize(), int(ui::metrics::chrome::titleText));
+    QVERIFY(!title->font().bold());
+    QCOMPARE(title->alignment(), Qt::Alignment(Qt::AlignCenter));
+    QVERIFY(qAbs(title->geometry().center().x() - header->rect().center().x()) <= 1);
+    auto *zoomOut = fixture.widget("rrImageZoomOut");
+    auto *zoomIn = fixture.widget("rrImageZoomIn");
+    QVERIFY(!zoomOut->isEnabled());
+    QVERIFY(zoomIn->isEnabled());
+    QVERIFY(fit->text().isEmpty());
+    QCOMPARE(fit->accessibleName(), strings::get("image.fit"));
+    QCOMPARE(fit->x(), 0);
+    QCOMPARE(fit->width(), zoomIn->width());
+    QCOMPARE(zoomOut->geometry().right() + 1, zoomIn->x());
+    QCOMPARE(zoomIn->geometry().right(), controls->width() - 1);
+    const int rule = ui::metrics::control::border;
+    for (const auto *name : {"rrImageZoomOut", "rrImageFit", "rrImageZoomIn"}) {
+        const auto *button = fixture.widget(name);
+        QCOMPARE(button->y(), rule);
+        QCOMPARE(button->height(), controls->height() - rule);
+    }
+    const auto checkRules = [&] {
+        QImage composed(viewer->size(), QImage::Format_RGB32);
+        composed.fill(Qt::magenta);
+        viewer->render(&composed);
+        const auto ink = ui::themeColors(viewer).ink;
+        for (int x = 0; x < composed.width(); ++x) {
+            QCOMPARE(composed.pixelColor(x, header->geometry().bottom()), ink);
+            QCOMPARE(composed.pixelColor(x, controls->y()), ink);
+        }
+    };
+    checkRules();
+    const auto fitPoint = view->mapFromScene(fit->mapTo(fixture.window.readerWindow(), fit->rect().center()));
+    QTest::mousePress(view->viewport(), Qt::LeftButton, Qt::NoModifier, fitPoint);
+    QVERIFY(fit->isDown());
+    const auto pressed = fit->grab().toImage();
+    const auto ink = ui::themeColors(fit).ink;
+    for (const auto &corner : {QPoint(2, 2), QPoint(pressed.width() - 3, 2),
+                               QPoint(2, pressed.height() - 3), QPoint(pressed.width() - 3, pressed.height() - 3)})
+        QCOMPARE(pressed.pixelColor(corner), ink);
+    checkRules();
+    QTest::mouseRelease(view->viewport(), Qt::LeftButton, Qt::NoModifier, fitPoint);
+    QVERIFY(!fixture.visible("rrAnnotationPopover"));
+    if (screenshots) QVERIFY(capture(fixture, name + "-image-viewer-fit"));
+    QVERIFY(fixture.press("rrImageZoomIn"));
+    QVERIFY(fixture.press("rrImageZoomIn"));
+    QVERIFY(fixture.press("rrImageZoomIn"));
+    QVERIFY(image->property("imageZoom").toDouble() > 1.9);
+    const auto center = image->rect().center();
+    QVERIFY(fixture.drag(image, center, center + QPoint(100, 100)));
+    QVERIFY(image->property("imageOffset").toPointF().manhattanLength() > 50);
+    QCOMPARE(image->property("imagePreviewOffset"), image->property("imageOffset"));
+    if (screenshots) QVERIFY(capture(fixture, name + "-image-viewer-zoomed"));
+    const auto enabledPlus = zoomIn->grab().toImage();
+    for (int i = 0; i < 20 && zoomIn->isEnabled(); ++i)
+        QVERIFY(fixture.press("rrImageZoomIn"));
+    QCOMPARE(image->property("imageZoom").toDouble(), 8.0);
+    QVERIFY(!zoomIn->isEnabled());
+    QVERIFY(zoomOut->isEnabled());
+    QVERIFY(zoomIn->grab().toImage() != enabledPlus);
+    QVERIFY(fixture.press("rrImageZoomOut"));
+    QVERIFY(zoomIn->isEnabled());
+    fixture.window.readerWindow()->pageButton(1);
+    QCOMPARE(fixture.state().value("page"), position);
+    const auto rememberedZoom = image->property("imageZoom").toDouble();
+    const auto rememberedOffset = image->property("imageOffset").toPointF();
+    QVERIFY(fixture.press("rrImageClose"));
+    QTRY_VERIFY(!fixture.visible("rrImageViewer"));
+    QVERIFY(openImage());
+    QTRY_VERIFY(image->property("imageReady").toBool());
+    QCOMPARE(image->property("imageZoom").toDouble(), rememberedZoom);
+    QVERIFY((image->property("imageOffset").toPointF() - rememberedOffset).manhattanLength() < 1);
+    if (!screenshots) {
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(fixture.window.idle());
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        image = fixture.widget("rrImageCanvas");
+        QVERIFY(page && image);
+        QVERIFY(openImage());
+        QTRY_VERIFY(image->property("imageReady").toBool());
+        QCOMPARE(image->property("imageZoom").toDouble(), rememberedZoom);
+        QVERIFY((image->property("imageOffset").toPointF() - rememberedOffset).manhattanLength() < 1);
+    }
+    QVERIFY(fixture.press("rrImageZoomOut"));
+    QVERIFY(fixture.press("rrImageFit"));
+    QCOMPARE(image->property("imageZoom").toDouble(), 1.0);
+    QCOMPARE(image->property("imageOffset").toPointF(), QPointF());
+    QVERIFY(!fixture.widget("rrImageZoomOut")->isEnabled());
+    QVERIFY(fixture.widget("rrImageZoomIn")->isEnabled());
+    QVERIFY(fixture.press("rrImageClose"));
+    QTRY_VERIFY(!fixture.visible("rrImageViewer"));
+    QCOMPARE(fixture.state().value("page"), position);
+    QCOMPARE(fixture.state().value("position"), nativePosition);
+    QVERIFY(!image->property("imageReady").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrScrubberImage"));
+    QVERIFY(fixture.press("rrScrubberImageDismiss"));
+    QVERIFY(!fixture.visible("rrScrubberImage"));
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(!fixture.visible("rrScrubberImage"));
+    QVERIFY(fixture.press("rrPage"));
+    // A bookmark jump to the cover offers both actions and preserves the return trip through the viewer.
+    QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+    QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 1);
+    QVERIFY(fixture.turnPage(1));
+    const auto returnPosition = fixture.state().value("position");
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrBookmarks"));
+    QTRY_VERIFY(fixture.visible("rrBookmark0"));
+    QVERIFY(fixture.press("rrBookmark0"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("page"), position);
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+    auto *suggestion = fixture.widget("rrScrubberImage");
+    auto *returnButton = fixture.widget("rrScrubberReturn");
+    const bool bothFit = suggestion->sizeHint().width() + returnButton->sizeHint().width() +
+                         2 * int(ui::metrics::scrubber::closeWidth) + 2 * int(ui::metrics::control::border) +
+                         3 * int(ui::metrics::scrubber::gap) <= fixture.widget("rrPageScrubber")->width();
+    QCOMPARE(suggestion->isVisible(), bothFit);
+    if (bothFit) {
+        QVERIFY(suggestion->geometry().right() < returnButton->x());
+        QVERIFY(suggestion->width() >= suggestion->sizeHint().width());
+        QVERIFY(returnButton->width() >= returnButton->sizeHint().width());
+    }
+    if (screenshots) QVERIFY(capture(fixture, name + "-image-viewer-entry"));
+    if (bothFit) QVERIFY(fixture.press("rrScrubberImage"));
+    else QVERIFY(openImage());
+    QTRY_VERIFY(image->property("imageReady").toBool());
+    QVERIFY(fixture.press("rrImageClose"));
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+    QVERIFY(fixture.press("rrScrubberReturn"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position"), returnPosition);
+    QVERIFY(fixture.turnPage(-1));
+    QTRY_COMPARE(fixture.state().value("page"), position);
+    if (screenshots) return;
+    auto *device = QTest::createTouchDevice();
+    QVERIFY(openImage());
+    QTRY_VERIFY(image->property("imageReady").toBool());
+    QCOMPARE(image->property("imageZoom").toDouble(), 1.0);
+    const auto mapTouch = [&](QPoint point) {
+        return view->mapFromScene(image->mapTo(fixture.window.readerWindow(), point));
+    };
+    const auto touch = [&](QEvent::Type type, QEventPoint::State state, const QList<QPoint> &positions) {
+        QList<QEventPoint> points;
+        for (int i = 0; i < positions.size(); ++i) {
+            const auto local = mapTouch(positions[i]);
+            QEventPoint point(i, state, local, view->viewport()->mapToGlobal(local));
+            QMutableEventPoint::setPosition(point, local);
+            points.append(point);
+        }
+        QTouchEvent event(type, device, Qt::NoModifier, points);
+        QApplication::sendEvent(view->viewport(), &event);
+    };
+    touch(QEvent::TouchBegin, QEventPoint::Pressed, {center - QPoint(60, 0), center + QPoint(60, 0)});
+    touch(QEvent::TouchUpdate, QEventPoint::Updated, {center - QPoint(120, 0), center + QPoint(120, 0)});
+    QVERIFY(image->property("imageZoom").toDouble() > 1.9);
+    touch(QEvent::TouchEnd, QEventPoint::Released, {center - QPoint(120, 0), center + QPoint(120, 0)});
+    QCOMPARE(image->property("imagePreviewZoom"), image->property("imageZoom"));
+    touch(QEvent::TouchBegin, QEventPoint::Pressed, {center});
+    QElapsedTimer burst;
+    burst.start();
+    int previews = 0;
+    auto shown = image->property("imagePreviewOffset");
+    for (int i = 1; i <= 30; ++i) {
+        touch(QEvent::TouchUpdate, QEventPoint::Updated, {center + QPoint(i * 2, i)});
+        QTest::qWait(5);
+        const auto next = image->property("imagePreviewOffset");
+        previews += next != shown;
+        shown = next;
+    }
+    QVERIFY(previews > 0);
+    QVERIFY2(previews <= burst.elapsed() / 100 + 2, "Drag previews followed input faster than the throttle allows");
+    const auto beforeRelease = image->property("imageOffset").toPointF();
+    touch(QEvent::TouchEnd, QEventPoint::Released, {center + QPoint(75, 40)});
+    QVERIFY(image->property("imageOffset").toPointF() != beforeRelease);
+    QCOMPARE(image->property("imagePreviewOffset"), image->property("imageOffset"));
+    const auto finished = image->property("imagePreviewOffset");
+    QTest::qWait(120);
+    QCOMPARE(image->property("imagePreviewOffset"), finished);
+    QVERIFY(fixture.press("rrImageFit"));
+    touch(QEvent::TouchBegin, QEventPoint::Pressed, {center});
+    touch(QEvent::TouchEnd, QEventPoint::Released, {center});
+    touch(QEvent::TouchBegin, QEventPoint::Pressed, {center});
+    touch(QEvent::TouchEnd, QEventPoint::Released, {center});
+    QCOMPARE(image->property("imageZoom").toDouble(), 2.0);
+    QVERIFY(fixture.press("rrImageClose"));
+    // A cover hold must also work while annotation mode is enabled.
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrAnnotate"));
+    QVERIFY(fixture.press("rrAnnotate"));
+    QVERIFY(openImage());
+    QTRY_VERIFY(image->property("imageReady").toBool());
+    QTest::keyClick(fixture.widget("rrImageViewer"), Qt::Key_Escape);
+    QTRY_VERIFY(!fixture.visible("rrImageViewer"));
+    QVERIFY(openImage());
+    fixture.window.readerWindow()->sleepReader();
+    QVERIFY(!fixture.visible("rrImageViewer"));
+    QVERIFY(!image->property("imageReady").toBool());
+    fixture.window.readerWindow()->prepareWake();
+    fixture.window.readerWindow()->wakeReader();
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrNavChapters"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_VERIFY(fixture.visible("rrContents"));
+    QVERIFY(fixture.press("rrChapter1"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    const auto ornaments = QJsonDocument::fromJson(page->image.text("kobalt.image_regions").toUtf8()).array();
+    QVERIFY(!ornaments.isEmpty());
+    for (const auto &value : ornaments) {
+        const auto r = value.toArray();
+        const QRect bounds(r[0].toInt(), r[1].toInt(), r[2].toInt(), r[3].toInt());
+        QVERIFY(!pageImageAtPoint(page->image, bounds.center()));
+        const auto point = view->mapFromScene(page->mapTo(fixture.window.readerWindow(), bounds.center() + QPoint(0, page->topHeight())));
+        QTest::mousePress(view->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+        QTest::qWait(550);
+        QTest::mouseRelease(view->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+        QVERIFY(!fixture.visible("rrImageViewer"));
+    }
+    // A single-page image book still needs its floating action, even without page navigation.
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(fixture.window.idle());
+    const auto files = test::publisherPackage("en", "Single image", {
+        {"text.xhtml", test::publisherHtml("<p style='margin:0'><img src='art.svg' style='width:70%;height:auto'/></p>")},
+        {"art.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'><rect width='600' height='800' fill='#d32f2f'/></svg>"}},
+        "<itemref idref=\"text.xhtml\"/>");
+    QVERIFY(writeBook(fixture.directory.path(), "single-image.epub", files));
+    const int previousOpens = opened.count();
+    fixture.window.openBook(fixture.directory.path() + "/single-image.epub");
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), previousOpens + 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QCOMPARE(fixture.state().value("pages").toInt(), 1);
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrScrubberImage"));
+    QVERIFY(fixture.widget("rrScrubberImage")->isEnabled());
+    QVERIFY(fixture.press("rrScrubberImage"));
+    image = fixture.widget("rrImageCanvas");
+    QTRY_VERIFY(image->property("imageReady").toBool());
+    const auto colourImage = image->grab().toImage();
+    QCOMPARE(colourImage.pixelColor(colourImage.rect().center()), QColor("#d32f2f"));
+}
+
 class DesktopTests final : public QObject {
     Q_OBJECT
 private slots:
+    void imageViewer_data() { screenshotVariants(); }
+    void imageViewer() { QFETCH(int, preset); QFETCH(bool, dark); checkImageViewer(preset, dark, false); }
     void pageAnimationCompatibility_data() { screenshotVariants(); }
     void pageAnimationCompatibility() {
         QFETCH(int, preset);
@@ -7148,6 +7452,9 @@ private slots:
         QVERIFY(!check->isDown());
         QVERIFY(capture(library, name + "-library-option-feedback-released"));
     }
+
+    void imageViewer_data() { screenshotVariants(); }
+    void imageViewer() { QFETCH(int, preset); QFETCH(bool, dark); checkImageViewer(preset, dark, true); }
     void pageAnimationCompatibility_data() { screenshotVariants(); }
     void pageAnimationCompatibility() {
         QFETCH(int, preset);
@@ -8506,7 +8813,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3416;
+    int expectedScreenshots = lightGallery ? 182 : 3455;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

@@ -174,6 +174,7 @@ public:
     QString pageStart(int page) const;
     QString pageExcerpt(int page) const;
     WordSelection wordAt(QPoint point);
+    QImage imageAt(QPoint point);
     AnnotationPageEdges annotationPageEdges();
     AnnotationToken annotationTokenAt(QPoint point);
     AnnotationToken annotationDragTokenAt(QPoint point, const QString &boundary, bool start);

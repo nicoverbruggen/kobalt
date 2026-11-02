@@ -252,7 +252,8 @@ PageScrubber::PageScrubber(QWidget *parent) : QWidget(parent), position(new Sett
     actions->setObjectName("rrScrubberActions");
     linksRule = new Panel(actions);
     returnRule = new Panel(actions);
-    for (auto *rule : {linksRule, returnRule}) {
+    imageRule = new Panel(actions);
+    for (auto *rule : {linksRule, returnRule, imageRule}) {
         rule->setAttribute(Qt::WA_TransparentForMouseEvents);
         rule->setFill(QPalette::Base);
     }
@@ -265,12 +266,19 @@ PageScrubber::PageScrubber(QWidget *parent) : QWidget(parent), position(new Sett
     };
     linksAction = action("rrScrubberLinks", ControlIcon::Link);
     returnAction = action("rrScrubberReturn", ControlIcon::Undo);
+    imageAction = action("rrScrubberImage", ControlIcon::FitImage);
     stay = new NavigationButton<DismissButton>(actions);
     stay->setObjectName("rrScrubberStay");
     stay->setAccessibleName(strings::get("reader.stay_here"));
     stay->setContentsMargins(0, int(m::actionTop) + int(metrics::control::border), 0, metrics::control::border);
     readerStyle(stay, "QPushButton{border:none;padding:0;min-height:0;}");
     stay->hide();
+    dismissImage = new NavigationButton<DismissButton>(actions);
+    dismissImage->setObjectName("rrScrubberImageDismiss");
+    dismissImage->setAccessibleName(strings::get("image.dismiss_suggestion"));
+    dismissImage->setContentsMargins(stay->contentsMargins());
+    readerStyle(dismissImage, "QPushButton{border:none;padding:0;min-height:0;}");
+    dismissImage->hide();
     actions->hide();
     connect(linksAction, &QPushButton::clicked, this, [this] {
         if (linksRequested) {
@@ -286,6 +294,12 @@ PageScrubber::PageScrubber(QWidget *parent) : QWidget(parent), position(new Sett
         if (stayRequested) {
             stayRequested();
         }
+    });
+    connect(imageAction, &QPushButton::clicked, this, [this] {
+        if (imageRequested) imageRequested();
+    });
+    connect(dismissImage, &QPushButton::clicked, this, [this] {
+        if (imageDismissed) imageDismissed();
     });
     hide();
 }
@@ -462,6 +476,7 @@ void PageScrubber::setChapterJumps(bool enabled) {
     updateButtons();
 }
 void PageScrubber::updateButtons() {
+    position->setEnabled(totalPages > 1);
     const int page = selecting() ? candidate : current;
     previous->setEnabled(chapterJumps ? !chapters.isEmpty() && page > chapters.first().first : page > 0);
     next->setEnabled(chapterJumps ? !chapters.isEmpty() && page < chapters.last().first : page < totalPages - 1);
@@ -631,6 +646,10 @@ void PageScrubber::updateMask() {
         if (!linksAction->isHidden()) {
             hitArea += linksFrame;
         }
+        if (!imageAction->isHidden()) {
+            hitArea += imageFrame;
+            hitArea += QRect(actions->pos() + dismissImage->pos(), dismissImage->size());
+        }
         if (!returnAction->isHidden()) {
             hitArea += returnFrame;
             hitArea += QRect(actions->pos() + stay->pos(), stay->size());
@@ -661,7 +680,8 @@ void PageScrubber::resizeEvent(QResizeEvent *) {
     }
 }
 int PageScrubber::actionsHeight() const {
-    return linksAction->isHidden() && returnAction->isHidden() ? 0 : int(m::actionTop + m::actionHeight);
+    return linksAction->isHidden() && returnAction->isHidden() && imageAction->isHidden()
+               ? 0 : int(m::actionTop + m::actionHeight);
 }
 void PageScrubber::setLinksAction(const QString &label) {
     if (linksAction->text() == label) {
@@ -673,15 +693,22 @@ void PageScrubber::setLinksAction(const QString &label) {
     arrange();
 }
 void PageScrubber::setReturnAction(const QString &label, const QString &note) {
-    if (returnAction->text() == label && returnAction->caption() == note) {
+    if (returnAction->text() == label && returnAction->caption() == note)
         return;
-    }
     returnAction->setText(label);
     returnAction->setCaption(note);
     returnAction->setAccessibleName(label);
     returnAction->setAccessibleDescription(note);
     returnAction->setVisible(!label.isEmpty());
     stay->setVisible(!label.isEmpty());
+    arrange();
+}
+void PageScrubber::setImageAction(const QString &label) {
+    if (imageLabel == label)
+        return;
+    imageLabel = label;
+    imageAction->setText(label);
+    imageAction->setAccessibleName(label);
     arrange();
 }
 void PageScrubber::setBarVisible(bool visible) {
@@ -692,6 +719,21 @@ void PageScrubber::setBarVisible(bool visible) {
     arrange();
 }
 void PageScrubber::arrange() {
+    const int edge = metrics::control::border;
+    const bool hasLinks = !linksAction->isHidden(), hasReturn = !returnAction->isHidden();
+    const int idealLinks = hasLinks ? linksAction->sizeHint().width() + 2 * edge : 0;
+    const int idealReturn = hasReturn ? returnAction->sizeHint().width() + edge : 0;
+    const int closeWidth = hasReturn ? int(m::closeWidth) : 0;
+    const int gap = hasLinks && hasReturn ? int(m::gap) : 0;
+    const int idealImage = imageLabel.isEmpty() ? 0 : imageAction->sizeHint().width() + edge + int(m::closeWidth);
+    const int imageGap = hasLinks || hasReturn ? int(m::gap) : 0;
+    const int available = qMax(0, width() - 2 * int(m::gap));
+    const bool hasImage = idealImage && (!(hasLinks || hasReturn) ||
+                         idealImage + imageGap + idealLinks + gap + idealReturn + closeWidth <= available);
+    imageAction->setVisible(hasImage);
+    dismissImage->setVisible(hasImage);
+    const int imageWidth = hasImage ? qMin(idealImage, available) : 0;
+    const int imageSpace = hasImage ? imageWidth + imageGap : 0;
     const int button = metrics::chrome::cellWidth;
     const bool mapVisible = barVisible && overviewExpanded && zoomAvailable();
     const QRect bar = barBounds();
@@ -748,31 +790,34 @@ void PageScrubber::arrange() {
     }
     const int rowHeight = actionsHeight();
     actions->setVisible(rowHeight > 0);
-    const bool hasLinks = !linksAction->isHidden(), hasReturn = !returnAction->isHidden();
-    const int closeWidth = hasReturn ? int(m::closeWidth) : 0;
-    const int gap = hasLinks && hasReturn ? int(m::gap) : 0;
-    const int edge = metrics::control::border;
-    const int idealLinks = hasLinks ? linksAction->sizeHint().width() + 2 * edge : 0;
-    const int idealReturn = hasReturn ? returnAction->sizeHint().width() + edge : 0;
-    const int room = qMax(0, width() - 2 * int(m::gap) - closeWidth - gap);
+    const int room = qMax(0, available - imageSpace - closeWidth - gap);
     const int labels = idealLinks + idealReturn;
     const int linksWidth = labels ? qMin(idealLinks, room * idealLinks / labels) : 0;
     const int returnWidth = labels ? qMin(idealReturn, room - linksWidth) : 0;
-    const int groupWidth = linksWidth + gap + returnWidth + closeWidth;
+    const int groupWidth = imageSpace + linksWidth + gap + returnWidth + closeWidth;
     const int groupTop = panelBounds().top() - rowHeight - int(m::gap);
     actions->setGeometry((width() - groupWidth) / 2, groupTop, groupWidth, rowHeight);
     const int top = m::actionTop, body = m::actionHeight;
-    linksAction->setGeometry(edge, top + edge, qMax(0, linksWidth - 2 * edge), body - 2 * edge);
-    const int returnLeft = linksWidth + gap;
+    const int imageClose = hasImage ? qMin(imageWidth, int(m::closeWidth)) : 0;
+    const int imageButton = imageWidth - imageClose;
+    imageAction->setGeometry(edge, top + edge, qMax(0, imageButton - edge), body - 2 * edge);
+    imageAction->setRule({});
+    dismissImage->setGeometry(imageButton, 0, qMax(0, imageClose - edge), rowHeight);
+    linksAction->setGeometry(imageSpace + edge, top + edge, qMax(0, linksWidth - 2 * edge), body - 2 * edge);
+    const int returnLeft = imageSpace + linksWidth + gap;
     returnAction->setGeometry(returnLeft + edge, top + edge, qMax(0, returnWidth - edge), body - 2 * edge);
     returnAction->setRule({});
     stay->setGeometry(returnLeft + returnWidth, 0, qMax(0, closeWidth - edge), rowHeight);
-    linksFrame = QRect(actions->x(), groupTop + top, linksWidth, body);
+    imageFrame = QRect(actions->x(), groupTop + top, imageWidth, body);
+    linksFrame = QRect(actions->x() + imageSpace, groupTop + top, linksWidth, body);
     returnFrame = QRect(actions->x() + returnLeft, groupTop + top, returnWidth + closeWidth, body);
     const auto edges = Edges(Qt::TopEdge) | Qt::LeftEdge | Qt::RightEdge | Qt::BottomEdge;
+    imageRule->setEdges(edges);
+    imageRule->setGeometry(0, top, imageWidth, body);
+    imageRule->setVisible(hasImage);
     linksRule->setEdges(edges);
     returnRule->setEdges(edges);
-    linksRule->setGeometry(0, top, linksWidth, body);
+    linksRule->setGeometry(imageSpace, top, linksWidth, body);
     returnRule->setGeometry(returnLeft, top, returnWidth + closeWidth, body);
     linksRule->setVisible(hasLinks);
     returnRule->setVisible(hasReturn);

@@ -631,9 +631,9 @@ void Window::selectScreen(int index) {
     screenPreset = index;
     setTouchCursor(screenPreset && underMouse(), QApplication::mouseButtons() & Qt::LeftButton);
     rotateAction->setEnabled(screenPicker->isEnabled() && screenPreset != 0);
+    sizeCanvas();
     if (auto *reader = controller.window())
         reader->refreshHostPresentation();
-    sizeCanvas();
 }
 void Window::setPreviewControlsEnabled(bool enabled) {
     screenPicker->setEnabled(enabled);

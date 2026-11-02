@@ -6138,6 +6138,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.window.findChild<QWidget *>("desktopPreviewToolbar")->isVisible());
         toolbar->trigger();
         QTRY_VERIFY(fixture.window.findChild<QWidget *>("desktopPreviewToolbar")->isVisible());
+        auto *screen = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        for (int preset : {3, 1}) {
+            screen->setCurrentIndex(preset);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            auto *phoneCard = fixture.widget("rrHeaderFooterPreset_phone");
+            QVERIFY(phoneCard);
+            QCOMPARE(!phoneCard->isHidden(), preset == 3);
+            QCOMPARE(fixture.state().value("header_footer_preset").toString(),
+                     preset == 3 ? QString("phone") : QString("default"));
+            QCOMPARE(opened.count(), 1);
+        }
+        screen->setCurrentIndex(2);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
         const int page = fixture.state().value("page").toInt();
         auto *next = fixture.window.findChild<QPushButton *>("desktopDeviceNext");
         QVERIFY(next && next->isVisible());
@@ -7100,7 +7113,7 @@ private slots:
             return capture(fixture, name + '-' + suffix);
         };
         QVERIFY(scene("rrPage", "rrSettings", "menu"));
-        QCOMPARE(bool(fixture.widget("rrHeaderFooterPreset_phone")), phonePreset(preset));
+        QCOMPARE(!fixture.widget("rrHeaderFooterPreset_phone")->isHidden(), phonePreset(preset));
         if (phonePreset(preset)) {
             QCOMPARE(fixture.state().value("header_footer_preset").toString(), QString("phone"));
             QVERIFY(!page->chrome.header());

@@ -417,9 +417,9 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     cards->setContentsMargins(0, 0, 0, 0);
     cards->setSpacing(0);
     for (const auto preset : headerfooter::presets) {
-        if (preset == headerfooter::Preset::Phone && !inputs.phone) continue;
         auto *card = new PresetCard(preset, custom);
         card->setDivider(preset != headerfooter::Preset::Custom);
+        card->setVisible(preset != headerfooter::Preset::Phone || inputs.phone);
         cards->addWidget(card, 1);
         presetCards.append(card);
     }

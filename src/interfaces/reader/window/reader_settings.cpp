@@ -8,6 +8,7 @@
 #include "interfaces/reader/ui/style/private_text.h"
 #include "platform/api/kobo_refresh.h"
 #include "reading/appearance_settings.h"
+#include "reading/reading_density.h"
 #include "reading/page_navigation.h"
 #include "support/diagnostics.h"
 #include "interfaces/reader/ui/style/metrics.h"
@@ -211,6 +212,19 @@ void Reader::closeFieldChooser() {
 }
 
 void Reader::refreshHostPresentation() {
+    if (services.desktopUi) {
+        const bool phone = isPhoneScreen(size(), readingPpi.load());
+        if (services.phoneLayout != phone) {
+            services.phoneLayout = phone;
+            for (auto *card : presetCards)
+                if (card->preset() == headerfooter::Preset::Phone)
+                    card->setVisible(phone);
+            hideTabLabelsOption->setVisible(!phone);
+            loadChrome();
+            if (choices->isVisible() && choosingTypography)
+                showFontPicker();
+        }
+    }
     auto *settings = static_cast<reader::SettingsPanel *>(general);
     const bool devicePreview = services.devicePreview && services.devicePreview();
     settings->showDictionaries(services.downloadableDictionaries && !devicePreview);

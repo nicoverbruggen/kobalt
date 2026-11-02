@@ -394,7 +394,7 @@ Navigation::~Navigation() {
     toolbarRows->invalidate();
 }
 QRect Navigation::panelBounds(QSize size, int height) const {
-    return QRect(0, size.height() - BottomNavigation::barHeight() - height, size.width(), height);
+    return QRect(0, contentBottom(size) - height, size.width(), height);
 }
 void Navigation::stackPanel(QWidget *panel) const {
     // Keep the header rule in place when a bottom panel opens. Raising the
@@ -411,11 +411,27 @@ void Navigation::update(QSize size, const NavigationState &state) {
     rules->setGeometry(toolbar->rect());
     rules->show();
     rules->raise();
-    // The status line keeps its proportions as large text enlarges it.
-    const int statusTop = ui::textPx(10);
-    clock->setGeometry(c::inset, statusTop, ui::textPx(160), ui::metrics::panel::statusHeight);
-    int sessionInset = ui::textPx(196);
-    battery->move(size.width() - c::inset - battery->width(), statusTop);
+    const int syncActions = sync && !sync->isHidden() ? 1 : 0;
+    const int rightActions =
+        (formattingWarning && !formattingWarning->isHidden() ? 3 : 2) + (annotate ? 1 : 0) + (search ? 1 : 0) + syncActions;
+    // A large interface scale can leave too little room for the exit caption.
+    // The arrow then keeps a cell of its own, as each action does.
+    // When the caption nearly reaches the actions, the exit action meets them,
+    // so its divider and theirs draw as one line.
+    const int exitWidth = exitAction->sizeHint().width();
+    const int exitRoom = size.width() - rightActions * c::cellWidth;
+    const int exitCell = exitWidth > exitRoom ? int(c::cellWidth) : exitRoom - exitWidth < c::cellWidth / 2 ? exitRoom : exitWidth;
+    // The status line keeps its proportions as large text enlarges it. It
+    // sits at the bottom of a taller camera band, or inside the action row.
+    const int statusTop = inlineStatus
+        ? statusHeight() + (int(c::actionHeight) - int(ui::metrics::panel::statusHeight)) / 2
+        : statusHeight() - (statusVisible ? int(ui::metrics::chrome::statusHeight) : 0) + ui::textPx(10);
+    const int statusLeft = inlineStatus ? exitCell + int(c::inset) : int(c::inset);
+    const int statusRight = size.width() - (inlineStatus ? rightActions * int(c::cellWidth) : 0) - c::inset;
+    clock->setGeometry(statusLeft, statusTop, ui::textPx(160), ui::metrics::panel::statusHeight);
+    battery->move(statusRight - battery->width(), statusTop);
+    int sessionInset = inlineStatus ? qMax(statusLeft + ui::textPx(196) - int(c::inset), size.width() - battery->x() + int(c::inset))
+                                    : ui::textPx(196);
     const int statusGap = ui::metrics::panel::bluetoothGap;
     QWidget *previousStatus = nullptr;
     const auto placeStatus = [&](QWidget *indicator) {
@@ -447,7 +463,6 @@ void Navigation::update(QSize size, const NavigationState &state) {
         search->setGeometry(size.width() - (annotate ? 4 : 3) * c::cellWidth, statusHeight(), c::cellWidth,
                             c::actionHeight);
     }
-    const int syncActions = sync && !sync->isHidden() ? 1 : 0;
     if (sync) {
         sync->setGeometry(size.width() - ((annotate ? 4 : 3) + (search ? 1 : 0)) * c::cellWidth,
                           statusHeight(), c::cellWidth, c::actionHeight);
@@ -456,14 +471,7 @@ void Navigation::update(QSize size, const NavigationState &state) {
         formattingWarning->setGeometry(size.width() - ((annotate ? 4 : 3) + (search ? 1 : 0) + syncActions) * c::cellWidth,
                                        statusHeight(), c::cellWidth, c::actionHeight);
     }
-    const int rightActions =
-        (formattingWarning && !formattingWarning->isHidden() ? 3 : 2) + (annotate ? 1 : 0) + (search ? 1 : 0) + syncActions;
-    // A large interface scale can leave too little room for the exit caption.
-    // The arrow then keeps a cell of its own, as each action does.
-    const int exitWidth = exitAction->sizeHint().width();
-    exitAction->setGeometry(0, statusHeight(),
-                            exitWidth <= size.width() - rightActions * c::cellWidth ? exitWidth : int(c::cellWidth),
-                            c::actionHeight);
+    exitAction->setGeometry(0, statusHeight(), exitCell, c::actionHeight);
     if (rules->property("right_actions").toInt() != rightActions) {
         rules->setProperty("right_actions", rightActions);
         rules->update();
@@ -478,7 +486,7 @@ void Navigation::update(QSize size, const NavigationState &state) {
         !state.stats->isVisible() && !state.light->isVisible();
     bar->setReturnLabel(scrubber ? QString() : state.returnLabel, state.returnNote);
     const int height = bar->navigationHeight();
-    bar->setGeometry(0, size.height() - height, size.width(), height);
+    bar->setGeometry(0, size.height() - safeBottom - height, size.width(), height);
     bar->setVisible(state.visible && !state.settings->isVisible());
     if (scrubber) {
         scrubber->setBarVisible(state.scrubberVisible);
@@ -500,7 +508,7 @@ void Navigation::update(QSize size, const NavigationState &state) {
             panel->setGeometry(panelBounds(size, panel->height()));
     // Chapters covers the header's action row with its own bar; the status strip stays.
     if (state.chaptersOpen) {
-        state.chapters->setGeometry(0, statusHeight(), size.width(), size.height() - height - statusHeight());
+        state.chapters->setGeometry(0, statusHeight(), size.width(), bar->y() - statusHeight());
     }
     bar->select(state.active, state.enabled, state.lightAvailable);
     int top = toolbarHeight(), bottom = bar->y();

@@ -15,6 +15,7 @@
 #include "model/page_refresh_regions.h"
 #include <QVariant>
 #include "platform/api/kobo_refresh.h"
+#include "platform/api/safe_area.h"
 #include <QPainter>
 #include <QPointer>
 #include <QtMath>
@@ -216,6 +217,22 @@ QRect ReadingPage::footerTextRect() const {
     const int band = m::reading::textBandHeight(chrome.footerSize);
     const int bottom = height() - bottomHeight() + offset + m::reading::stripHeight(chrome.footerSize);
     return {0, bottom - band, width(), band};
+}
+
+void ReadingPage::setCornerRadii(int top, int bottom) {
+    if (cornerTop == top && cornerBottom == bottom)
+        return;
+    cornerTop = top;
+    cornerBottom = bottom;
+    update();
+}
+int ReadingPage::slotSide(bool footer) const {
+    const auto text = footer ? footerTextRect() : headerTextRect();
+    if (text.isEmpty())
+        return m::reading::headerSide;
+    const int distance = footer ? height() - text.bottom() - 1 : text.top();
+    const int corner = cornerInset(footer ? cornerBottom : cornerTop, distance);
+    return qMax<int>(m::reading::headerSide, corner ? corner + m::reading::batteryGap : 0);
 }
 
 void ReadingPage::cancelHold() {
@@ -1008,7 +1025,7 @@ void ReadingPage::paintSlots(QPainter &painter, const QRect &bounds, bool footer
     int widths[3];
     for (int slot = 0; slot < 3; ++slot)
         widths[slot] = contentWidth(font, chrome.slotFields[first + slot], slotContents[first + slot], sleeping);
-    const int side = m::reading::headerSide, gap = m::reading::headerTextGap;
+    const int side = slotSide(footer), gap = m::reading::headerTextGap;
     // The bookmark ribbon hangs left of the top-right slot; keep text off it.
     const int ribbon = footer ? 0 : qRound(width() * .036) + gap;
     int leftRoom = width() - 2 * side, rightRoom = leftRoom - ribbon;
@@ -1056,7 +1073,7 @@ void ReadingPage::paintFooter(QPainter &painter, bool sleeping) const {
         painter.setFont(font);
         const auto bounds = footerTextRect().translated(0, bottomHeight() - height());
         if (!notice.isEmpty()) {
-            const int room = width() - 2 * m::reading::headerSide;
+            const int room = width() - 2 * slotSide(true);
             ui::drawInterfaceText(painter, bounds, ui::elideInterfaceText(notice, font, room), Qt::AlignCenter,
                                   ui::headerFooterTextWeight());
         } else

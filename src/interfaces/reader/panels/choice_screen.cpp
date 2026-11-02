@@ -483,6 +483,10 @@ void ChoiceScreen::redrawFonts() {
         });
     }
     const int body = qMax(4, height() - header - sectionHeight - pager);
+    // A short, wide screen, such as a phone in landscape, shows the twelve
+    // fonts in two rows of six, so each cell keeps room for its name and caption.
+    const int columns = body / 4 < int(m::choices::pickerRow) * 3 / 4 && width() >= 6 * ui::px(200) ? 6 : 3;
+    const int rows = pageSize / columns;
     int used = header + sectionHeight;
     for (int row = 0; row < buttons.size(); ++row) {
         const int index = itemIndex(row);
@@ -508,11 +512,10 @@ void ChoiceScreen::redrawFonts() {
         button->setAccessibleDescription(item.detail);
         button->setCheckable(true);
         button->setChecked(selectedItem);
-        const int columns = 3;
-        const int col = row % 3, line = row / 3;
-        button->setGeometry(col * width() / columns, header + sectionHeight + line * body / 4,
+        const int col = row % columns, line = row / columns;
+        button->setGeometry(col * width() / columns, header + sectionHeight + line * body / rows,
                             (col + 1) * width() / columns - col * width() / columns,
-                            (line + 1) * body / 4 - line * body / 4);
+                            (line + 1) * body / rows - line * body / rows);
         readerStyle(
             button,
             QString(
@@ -547,6 +550,14 @@ void ChoiceScreen::redrawFonts() {
                                 .arg(caption.family())
                                 .arg(caption.pixelSize()));
         const int inset = ui::px(12), detailWidth = qMax(1, button->width() - 2 * inset);
+        // A short cell, as in two rows of six, keeps a line for the name. The
+        // caption drops its first lines, which give the least detail.
+        auto lines = item.detail.toUpper().split('\n');
+        while (!item.placeholder && lines.size() > 1 &&
+               button->height() - detail->heightForWidth(detailWidth) - ui::px(32) < labelFont.pixelSize()) {
+            lines.removeFirst();
+            detail->setText(lines.join('\n'));
+        }
         const int detailHeight = item.detail.isEmpty() ? 0 : detail->heightForWidth(detailWidth);
         const int titleLimit = item.detail.isEmpty() ? ui::px(96) : ui::px(64);
         const int titleHeight = item.placeholder

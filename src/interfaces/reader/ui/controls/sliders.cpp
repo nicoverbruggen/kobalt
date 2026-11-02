@@ -369,24 +369,26 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name, c
                          const QString &label, const char *lessName, const char *moreName, int minimum, int maximum,
                          int step, std::function<void(int)> apply, const QString &prefix, const QString &suffix,
                          const QStringList &markerLabels) {
-    auto *row = new QWidget(parent);
+    auto *row = new ControlRow(parent);
     row->setMinimumHeight(m::control::stepSize);
     rows->addWidget(row);
-    auto *line = horizontalRow();
-    row->setLayout(line);
+    auto *line = row->controls();
     parent = row;
-    auto *caption = new QWidget(parent);
-    caption->setFixedWidth(m::control::captionWidth);
-    line->addWidget(caption);
+    auto *caption = row->caption();
     auto *captionRows = new QVBoxLayout(caption);
     const int labelHeight = markerLabels.isEmpty() ? 0 : int(m::control::sliderLabelHeight);
     captionRows->setContentsMargins(0, labelHeight, m::control::captionRight, 0);
+    row->setMarkerBand(labelHeight);
     captionRows->setSpacing(px(2));
+    auto *heading = new QHBoxLayout;
+    heading->setContentsMargins(0, 0, 0, 0);
+    heading->setSpacing(px(6));
+    captionRows->addLayout(heading);
     auto *title = new ui::InterfaceLabel(label.section(':', 0, 0), caption);
     title->setObjectName(QString::fromLatin1(name) + "Caption");
     title->setWordWrap(true);
     readerStyle(title, styles::font(m::text::secondary));
-    captionRows->addWidget(title);
+    heading->addWidget(title, 1);
     auto *current = new QHBoxLayout;
     current->setContentsMargins(0, 0, 0, 0);
     current->setSpacing(px(6));
@@ -401,6 +403,26 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name, c
     current->addWidget(prefixLabel);
     current->addWidget(value);
     current->addStretch(1);
+    // A caption above the controls has the full width. Its value moves up
+    // beside the title, which keeps the row one line shorter.
+    row->stackedChanged = [captionRows, heading, current, prefixLabel, value](bool stacked) {
+        // Above the controls, the value ends at the plus button's edge.
+        auto margins = captionRows->contentsMargins();
+        margins.setRight(stacked ? 0 : int(m::control::captionRight));
+        captionRows->setContentsMargins(margins);
+        // Collapse "Currently:" rather than hide it: some rows hide it
+        // themselves, and that choice must survive the move. It takes no
+        // height either, so the emptied second line adds no gap.
+        prefixLabel->setMaximumSize(stacked ? QSize(0, 0) : QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX));
+        if (stacked) {
+            current->removeWidget(value);
+            heading->addWidget(value, 0, Qt::AlignRight | Qt::AlignVCenter);
+        } else {
+            heading->removeWidget(value);
+            current->insertWidget(1, value);
+        }
+    };
+    row->stackedChanged(row->property("caption_stacked").toBool());
     auto *less = new StepButton(ControlIcon::Minus, parent);
     less->setObjectName(lessName);
     less->setAccessibleName(strings::get("controls.decrease").arg(label.section(':', 0, 0).toLower()));

@@ -67,6 +67,7 @@ private:
     QTimer resizeTimer;
     QMetaObject::Connection screenChanged, logicalDpiChanged, physicalDpiChanged;
     bool closing = false, repairPending = false, failed = false;
+    bool phonePreview() const;
     QSize pixels() const;
     void sizeCanvas();
     void watchScreen(QScreen *screen);

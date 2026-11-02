@@ -1,4 +1,5 @@
 #include "reading/header_footer.h"
+#include "reading/reading_density.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "check.h"
@@ -12,6 +13,16 @@ using namespace kobalt::headerfooter;
 int main() {
     // Default keeps the chapter prominent and the footer free of a bar.
     const auto standard = presetLayout(Preset::Default);
+    require(isPhoneScreen({720, 1600}, 300) && isPhoneScreen({1600, 720}, 300), "Phone detection changed with rotation");
+    require(isPhoneScreen({1080, 2400}, 450), "Phone detection ignored density");
+    require(!isPhoneScreen({1072, 1448}, 300) && !isPhoneScreen({1448, 1072}, 300), "Six-inch reader detected as a phone");
+    require(isPhoneScreen({824, 1648}, 300), "BOOX Palma not detected as a phone");
+    require(!isPhoneScreen({758, 1024}, 212), "Six-inch 212 PPI reader detected as a phone");
+    const auto phone = select({}, true);
+    require(phone.preset == Preset::Phone && !phone.layout.header() && phone.layout.footer(), "Phone default did not remove the header");
+    require(select(qt::object({{presetKey, "default"}}), true).layout == standard, "Phone default replaced an explicit Kobalt preset");
+    require(select(qt::object({{"show_header", true}}), true).preset != Preset::Phone, "Phone default replaced legacy settings");
+
     require(standard.slotFields[0] == Field::Time && standard.slotFields[1] == Field::Chapter &&
                 standard.slotFields[2] == Field::Nothing && standard.slotFields[4] == Field::Nothing &&
                 standard.slotFields[3] == Field::ChapterPagesLeft && standard.slotFields[5] == Field::BookPercent,

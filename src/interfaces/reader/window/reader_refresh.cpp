@@ -1,3 +1,4 @@
+#include "interfaces/reader/ui/controls/rows.h"
 #include "interfaces/reader/ui/controls/text.h"
 #include "reader_p.h"
 #include "reading/appearance_settings.h"
@@ -304,7 +305,7 @@ void Reader::syncAppearanceControls(bool pickingFont) {
                 strings::get("reader.text_size_value").arg(QString::number(halfPoints / 2.0, 'f', halfPoints % 2)));
     }
     const auto optical = settings->opticalSizeAxis();
-    opticalSizeSlider->parentWidget()->setVisible(optical.available());
+    ui::controlRowOf(opticalSizeSlider)->setVisible(optical.available());
     if (optical.available() && !opticalSizeSlider->interacting()) {
         opticalSizeSlider->setRange(qCeil(optical.minimum), qFloor(optical.maximum));
         QVector<int> stops{opticalSizeSlider->minimum()};
@@ -332,7 +333,7 @@ void Reader::syncAppearanceControls(bool pickingFont) {
          {"rrFontWeight", "rrLighter", "rrHeavier", "rrVariableFontWeight", "rrVariableLighter", "rrVariableHeavier"})
         if (auto *widget = findChild<QWidget *>(name))
             widget->setEnabled(normalWeight);
-    variableWeightSlider->parentWidget()->setVisible(weightAxis.available());
+    ui::controlRowOf(variableWeightSlider)->setVisible(weightAxis.available());
     // Navigation places this panel above the bottom bar. Moving it below
     // the toolbar here would invalidate it before navigation moves it back.
     fitAppearance();

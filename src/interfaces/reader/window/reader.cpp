@@ -20,6 +20,7 @@
 #include "model/page_refresh_regions.h"
 #include "support/diagnostics.h"
 #include "interfaces/reader/ui/style/metrics.h"
+#include "reading/reading_density.h"
 #include "interfaces/reader/ui/panel_timing.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
@@ -764,15 +765,27 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
         type == QEvent::TouchBegin || type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick;
     if (begin) {
         dismissing = false;
-        if (isVisible() && lightPopup->isVisible()) {
-            QPointF point;
+        // Only a press on a widget of this window decides a dismissal. A reader
+        // shown in a canvas, as on the Mac and Android, also sees the canvas's
+        // own press. Its screen position does not match the embedded widgets'
+        // mapToGlobal(), so it would close a pop-up that was pressed. The
+        // position is mapped through the pressed widget for the same reason.
+        auto *target = qobject_cast<QWidget *>(watched);
+        const bool inWindow = target && (target == this || isAncestorOf(target));
+        const auto pressPoint = [&](QPointF &point) {
             if (touch) {
-                const auto points = kobalt::ui::touchPositions(static_cast<QTouchEvent *>(event), true);
+                const auto points = kobalt::ui::touchPositions(static_cast<QTouchEvent *>(event));
                 if (points.isEmpty())
-                    return QWidget::eventFilter(watched, event);
-                point = points.first();
+                    return false;
+                point = target->mapToGlobal(points.first().toPoint());
             } else
-                point = kobalt::ui::mousePosition(static_cast<QMouseEvent *>(event), true);
+                point = target->mapToGlobal(kobalt::ui::mousePosition(static_cast<QMouseEvent *>(event)).toPoint());
+            return true;
+        };
+        if (inWindow && isVisible() && lightPopup->isVisible()) {
+            QPointF point;
+            if (!pressPoint(point))
+                return QWidget::eventFilter(watched, event);
             const QRect panelRect(lightPopup->mapToGlobal(QPoint()), lightPopup->size());
             const QRect toolbarRect(topControls->mapToGlobal(QPoint()), topControls->size());
             if (!panelRect.contains(point.toPoint()) && !toolbarRect.contains(point.toPoint()) &&
@@ -782,15 +795,10 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
                 showControls();
             }
         }
-        if (isVisible() && choosingTypography && choices->isVisible() && !fontDefaultDialog) {
+        if (inWindow && isVisible() && choosingTypography && choices->isVisible() && !fontDefaultDialog) {
             QPointF point;
-            if (touch) {
-                const auto points = kobalt::ui::touchPositions(static_cast<QTouchEvent *>(event), true);
-                if (points.isEmpty())
-                    return QWidget::eventFilter(watched, event);
-                point = points.first();
-            } else
-                point = kobalt::ui::mousePosition(static_cast<QMouseEvent *>(event), true);
+            if (!pressPoint(point))
+                return QWidget::eventFilter(watched, event);
             const auto openingMenu = [&](const char *name) {
                 const auto *button = findChild<QPushButton *>(name);
                 return button->isVisible() && button->isEnabled() &&
@@ -815,7 +823,7 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
 }
 
 bool Reader::readyForPresentation() const {
-    const QSize viewport(width(), qMax(1, height() - page->topHeight() - page->bottomHeight()));
+    const QSize viewport = bodySize();
     return isVisible() && updatesEnabled() && !resizePending && !model->busy() && !page->image.isNull() &&
            page->image.size() == viewport &&
            (model->resourceStats().value("pending_images").toInt() == 0 || !model->error().isEmpty());
@@ -969,7 +977,25 @@ void Reader::hideEvent(QHideEvent *event) {
     QWidget::hideEvent(event);
 }
 
+kobalt::SafeArea Reader::safeArea() const {
+    return services.safeArea ? services.safeArea(size()) : kobalt::SafeArea{};
+}
+QSize Reader::bodySize() const {
+    const auto safe = safeArea();
+    return {width(), qMax(1, height() - safe.top - safe.bottom - page->topHeight() - page->bottomHeight())};
+}
 void Reader::resizeEvent(QResizeEvent *) {
+    // Paper fills the cutout bands; the page and the menu bars stay inside them.
+    const auto safe = safeArea();
+    layout()->setContentsMargins(0, safe.top, 0, safe.bottom);
+    layout()->activate();
+    page->setCornerRadii(safe.top ? 0 : safe.cornerRadius, safe.bottom ? 0 : safe.cornerRadius);
+    // Panels that place themselves, such as the dictionary, read the band.
+    setProperty("reader_safe_top", safe.top);
+    if (navigation) {
+        navigation->setSafeArea(safe.top, safe.bottom);
+        navigation->setInlineStatus(isShortHeight(height(), ui::density()));
+    }
     annotationFrame.clear();
     if (annotationPopover)
         annotationPopover->hide();
@@ -978,7 +1004,7 @@ void Reader::resizeEvent(QResizeEvent *) {
         // painting the current page until reflow finishes, or the new buffer
         // reaches the panel as black while the engine is busy.
         resizePending = true;
-        const auto viewport = QSize(width(), qMax(1, height() - page->topHeight() - page->bottomHeight()));
+        const auto viewport = bodySize();
         kobalt::diagnostic("reader-resize-begin",
                            {{"width", width()},
                             {"height", height()},
@@ -1000,11 +1026,15 @@ void Reader::resizeEvent(QResizeEvent *) {
     topControls->setGeometry(0, 0, width(), navigation ? navigation->toolbarHeight() : m::panel::toolbarHeight);
     bottomControls->setGeometry(m::panel::footer(size()));
     fitAppearance();
+    if (navigation)
+        chapterGraph->setAvailableHeight(navigation->contentBottom(size()) - navigation->toolbarHeight());
     chapterGraph->resize(width(), chapterGraph->height());
     choices->setGeometry(rect());
     fitSettings();
-    acknowledgments->setGeometry(rect());
-    searchPanel->setGeometry(rect());
+    // Full-screen views start below the camera band, as the menu does.
+    const auto safeRect = rect().adjusted(0, safe.top, 0, -safe.bottom);
+    acknowledgments->setGeometry(safeRect);
+    searchPanel->setGeometry(safeRect);
     const int bookmarkTop = navigation ? navigation->statusHeight() : 0;
     bookmarkList->setGeometry(0, bookmarkTop, width(),
                               (navigation ? navigation->contentBottom(size()) : height()) - bookmarkTop);
@@ -1152,7 +1182,8 @@ void Reader::openSearch(const QString &query) {
     }
     searchPanel->setExcerptFont(bookFace());
     searchPanel->setChapters(model->chapters());
-    searchPanel->setGeometry(rect());
+    const auto safe = safeArea();
+    searchPanel->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
     searchPanel->open(model->state().value("position").toString() != searchOriginal, searchOriginalPage, query);
     if (orientation)
         orientation->setBlocked(true);
@@ -1679,7 +1710,7 @@ void Reader::syncNavigation() {
              pageNavigation::menuView(preferences) == pageNavigation::MenuView::Seek    ? int(Nav::Seek)
              : pageNavigation::menuView(preferences) == pageNavigation::MenuView::Stats ? int(Nav::Stats)
                                                                                         : -1,
-             preferences.value("hide_tab_labels").toBool(false)});
+             (isNarrowWidth(width(), ui::density()) || preferences.value("hide_tab_labels").toBool(false))});
     };
     update();
     syncLinkDiscovery();
@@ -1694,8 +1725,12 @@ void Reader::syncNavigation() {
     }
     if (chromeSheet) {
         const int bottom = navigation->contentBottom(size());
-        // At most up to the toolbar, with the sheet's rule on the toolbar's.
-        const int room = qMax(1, bottom - navigation->toolbarHeight() + int(m::chrome::heavyRule));
+        // At most up to the toolbar, with the sheet's rule on the toolbar's. A
+        // short screen has no room for the slot map there, so the sheet covers
+        // the action row with its own bar, as Chapters does.
+        const int top = isShortHeight(height(), ui::density()) ? navigation->statusHeight()
+                                                              : navigation->toolbarHeight() - int(m::chrome::heavyRule);
+        const int room = qMax(1, bottom - top);
         int sheetHeight = qMin(headerFooterView->preferredHeight(width()), room);
         if (room - sheetHeight < m::headerFooter::toolbarSnap) {
             sheetHeight = room;
@@ -1869,8 +1904,10 @@ void Reader::openGraph() {
     topControls->show();
     bottomControls->hide();
     updateGraph();
-    if (navigation)
+    if (navigation) {
+        chapterGraph->setAvailableHeight(navigation->contentBottom(size()) - navigation->toolbarHeight());
         chapterGraph->setGeometry(navigation->panelBounds(size(), chapterGraph->height()));
+    }
     chapterGraph->open();
     if (navigation)
         navigation->stackPanel(chapterGraph);
@@ -1966,7 +2003,7 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, pageNav
 // The layout that bookmark pages belong to, including the page area size.
 QString Reader::layoutKey() const {
     return kobalt::bookmarkLayoutKey(model->pages(), model->state(),
-                                     QSize(width(), height() - page->topHeight() - page->bottomHeight()));
+                                     bodySize());
 }
 
 void Reader::syncBookmarks() {

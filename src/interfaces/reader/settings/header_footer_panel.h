@@ -72,7 +72,8 @@ private:
 // Header and footer is a sheet over the bottom of the page, like Font: a
 // heavy rule, a bold title and a close cell, then rows sized to their
 // content, so the page shows above. Its rows hold the presets, the slots and
-// the size and progress bar rows. Close returns to the Layout panel.
+// the size and progress bar rows. Short screens page between complete rows.
+// Close returns to the Layout panel.
 class HeaderFooterView final : public ui::Panel {
 public:
     explicit HeaderFooterView(QWidget *parent);
@@ -93,8 +94,13 @@ protected:
 private:
     ui::CellButton *close;
     QLabel *title;
-    QWidget *content;
+    QWidget *content, *clip;
     QVBoxLayout *contentRows;
+    ui::PagerBar *pager;
+    QVector<QPair<int, int>> pages;
+    int currentPage = 0;
+    void showPage(int page);
+    int headingHeight(int width) const;
 };
 
 // One slot's choices, from Nothing to Time left in book, each with what it
@@ -131,5 +137,6 @@ private:
     // The first row of each page.
     QVector<int> pageStarts() const;
     void arrange();
+    int barHeight() const;
 };
 }

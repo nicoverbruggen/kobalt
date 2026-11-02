@@ -24,6 +24,7 @@
 #include "interfaces/reader/ui/dialogs/action_menu.h"
 #include <QDynamicPropertyChangeEvent>
 #include "storage/bookmark_store.h"
+#include "reading/reading_density.h"
 
 namespace kobalt {
 namespace c = ui::metrics::chrome;
@@ -133,7 +134,16 @@ void BookmarkList::placePin() {
     if (auto *icons = pinPopup->findChild<QWidget *>("rrPinIconSection"))
         icons->setVisible(bounds.isEmpty());
     pinPopup->setCardArea(QRect(0, 0, pinPopup->width(), qMax(1, bottom)));
-    pinPopup->card()->fitToWidth(qMin<int>(ui::metrics::notice::cardWidth, width() - 2 * ui::metrics::notice::sideClearance));
+    const int cardWidth = qMin<int>(ui::metrics::notice::cardWidth, width() - 2 * ui::metrics::notice::sideClearance);
+    auto *title = pinPopup->card()->findChild<QLabel *>("rrModalTitle");
+    if (title) title->show();
+    pinPopup->card()->fitToWidth(cardWidth);
+    // On a short screen the keyboard leaves room for the name and the buttons
+    // only. The title returns when the keyboard closes.
+    if (title && !bounds.isEmpty() && pinPopup->card()->height() > bottom - 2 * int(ui::metrics::notice::sideClearance)) {
+        title->hide();
+        pinPopup->card()->fitToWidth(cardWidth);
+    }
     pinPopup->centerCard();
 }
 bool BookmarkList::eventFilter(QObject *object, QEvent *event) {
@@ -218,12 +228,16 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     grid->setContentsMargins(ui::metrics::notice::cardMargins.left(), 0,
                             ui::metrics::notice::cardMargins.right(), ui::metrics::notice::cardMargins.bottom());
     grid->setSpacing(ui::px(12));
-    for (int row = 0; row < 3; ++row)
+    // A short screen, such as a phone in landscape, has room for one row of
+    // icons between the name and the buttons. It shows six per page.
+    const bool shortScreen = isShortHeight(parentWidget()->height(), ui::density());
+    const int columns = shortScreen ? 6 : 4, iconRows = shortScreen ? 1 : 3;
+    for (int row = 0; row < iconRows; ++row)
         grid->setRowMinimumHeight(row, c::actionHeight);
     auto *group = new QButtonGroup(gridWidget);
     group->setExclusive(true);
     const auto icons = ui::bookmarkIconNames();
-    constexpr int pageSize = 12;
+    const int pageSize = columns * iconRows;
     const int pageCount = (icons.size() + pageSize - 1) / pageSize;
     auto page = std::make_shared<int>(qMax(0, int(icons.indexOf(*selected))) / pageSize);
     QVector<ui::CellButton *> iconButtons;
@@ -233,9 +247,9 @@ void BookmarkList::openPin(const BookmarkRow &row) {
         button->setCheckable(true);
         button->setFixedHeight(c::actionHeight);
         group->addButton(button);
-        grid->addWidget(button, i / 4, i % 4);
+        grid->addWidget(button, i / columns, i % columns);
         iconButtons.append(button);
-        connect(button, &QPushButton::clicked, this, [selected, page, icons, i] {
+        connect(button, &QPushButton::clicked, this, [selected, page, icons, i, pageSize] {
             const int index = *page * pageSize + i;
             if (index < icons.size()) *selected = icons[index];
         });
@@ -244,7 +258,7 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     auto *pager = new ui::PagerBar(iconSection, "rrPinIcons");
     sectionLayout->addWidget(pager);
     pager->setVisible(pageCount > 1);
-    const auto showPage = [this, page, icons, selected, iconButtons, group, pager, pageCount] {
+    const auto showPage = [this, page, icons, selected, iconButtons, group, pager, pageCount, pageSize] {
         group->setExclusive(false);
         for (int i = 0; i < iconButtons.size(); ++i) {
             auto *button = iconButtons[i];
@@ -456,9 +470,9 @@ void BookmarkList::paintEvent(QPaintEvent *event) {
 void BookmarkList::arrange() {
     const int first = pageStarts.value(page, 0), top = listTop(), available = qMax(1, height() - top);
     const auto font = excerptFont();
-    const int lineHeight = ui::px(44);
     const int textLineHeight = ui::needsPrivateText(QStringLiteral("Mg"), font)
         ? ui::measurePrivateTextLayout(QStringLiteral("Mg"), font).lineHeight : QFontMetrics(font).lineSpacing();
+    const int lineHeight = qMax(ui::px(44), qMax(textLineHeight, ui::interfaceLineHeight(ui::interfaceFont(c::captionText))));
     const int textWidth = qMax(1, width() - c::cellWidth - 2 * ui::metrics::list::inset);
     if (excerptCacheFont != font || excerptCacheWidth != textWidth || excerptCacheLineHeight != textLineHeight) {
         excerptLineCache.clear();

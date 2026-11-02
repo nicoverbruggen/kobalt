@@ -14,6 +14,7 @@
 #include <QApplication>
 #include <QEvent>
 #include <QPointer>
+#include <QRegion>
 #include <QScrollBar>
 
 namespace kobalt::reader {
@@ -57,28 +58,45 @@ private:
 };
 }
 
-StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : QWidget(parent) {
+StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRow(parent) {
     const QString name = footer ? "rrFooterTextSize" : "rrHeaderTextSize";
     const auto title = strings::get(footer ? "reader.footer" : "reader.header");
-    auto *line = ui::horizontalRow();
-    setLayout(line);
-    auto *caption = new QWidget(this);
-    caption->setFixedWidth(m::control::captionWidth);
+    auto *line = controls();
+    auto *caption = this->caption();
     auto *captionRows = new QVBoxLayout(caption);
     captionRows->setContentsMargins(0, 0, m::control::captionRight, 0);
     captionRows->setSpacing(0);
-    captionRows->addSpacing(m::control::sliderLabelHeight);
+    setMarkerBand(m::control::sliderLabelHeight);
     auto *labels = new QVBoxLayout;
     labels->setSpacing(ui::px(2));
+    auto *heading = new QHBoxLayout;
+    heading->setContentsMargins(0, 0, 0, 0);
+    heading->setSpacing(ui::px(6));
     auto *titleLabel = new ui::InterfaceLabel(title, caption);
     readerStyle(titleLabel, styles::font(m::text::secondary));
-    labels->addWidget(titleLabel);
+    heading->addWidget(titleLabel, 1);
+    labels->addLayout(heading);
     valueLabel = new ui::InterfaceLabel(caption);
     valueLabel->setObjectName(name + "Value");
     readerStyle(valueLabel, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
     labels->addWidget(valueLabel);
     captionRows->addLayout(labels);
     captionRows->setAlignment(labels, Qt::AlignVCenter);
+    // Above the controls, the size sits beside the title, as slider values do,
+    // so the caption takes one line.
+    stackedChanged = [captionRows, labels, heading, value = valueLabel](bool stacked) {
+        auto margins = captionRows->contentsMargins();
+        margins.setRight(stacked ? 0 : int(m::control::captionRight));
+        captionRows->setContentsMargins(margins);
+        if (stacked) {
+            labels->removeWidget(value);
+            heading->addWidget(value, 0, Qt::AlignRight | Qt::AlignVCenter);
+        } else {
+            heading->removeWidget(value);
+            labels->addWidget(value);
+        }
+    };
+    stackedChanged(property("caption_stacked").toBool());
     auto *less = new ui::StepButton(ControlIcon::Minus, this);
     auto *more = new ui::StepButton(ControlIcon::Plus, this);
     less->setObjectName(name + "Less");
@@ -93,7 +111,6 @@ StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : QWidget(paren
     slider->setMarkerLabels({strings::get("common.off"), strings::get("common.size_small_short"),
                              strings::get("common.size_medium_short"), strings::get("common.size_large_short"),
                              strings::get("common.size_extra_large_short")});
-    line->addWidget(caption);
     const auto step = [line](QWidget *button) {
         auto *column = new QVBoxLayout;
         column->setContentsMargins(0, 0, 0, 0);
@@ -134,17 +151,15 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
     rows->setContentsMargins(m::panel::margins);
     rows->setSpacing(m::panel::gap);
     rows->setSizeConstraint(QLayout::SetNoConstraint);
-    scroll = new QScrollArea(this);
-    scroll->setObjectName("rrAppearanceScroll");
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidgetResizable(false);
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    rows->addWidget(scroll, 1);
+    // Rows that do not fit are shown a page at a time inside the clip.
+    clip = new QWidget(this);
+    clip->setObjectName("rrAppearanceClip");
+    clip->hide();
+    rows->addWidget(clip, 1);
     pages = new QStackedWidget(this);
     pages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     // QStackedLayout otherwise keeps the largest hidden page's minimum size.
     pages->layout()->setSizeConstraint(QLayout::SetNoConstraint);
-    scroll->hide();
     rows->addWidget(pages, 1);
     for (int index = TypographyPage; index <= LayoutPage; ++index) {
         auto *page = new QWidget;
@@ -152,6 +167,12 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
         controls->setContentsMargins(m::panel::rowsMargins);
         pages->addWidget(page);
     }
+    pager = new ui::PagerBar(this, "rrAppearance");
+    pager->setFixedHeight(m::chrome::actionHeight);
+    pager->hide();
+    rows->addWidget(pager);
+    connect(pager->previous, &QPushButton::clicked, this, [this] { showRows(pager->turnTarget(-1)); });
+    connect(pager->next, &QPushButton::clicked, this, [this] { showRows(pager->turnTarget(1)); });
     message = new ui::InterfaceLabel(this);
     message->setObjectName("rrPreviewLabel");
     message->setAlignment(Qt::AlignCenter);
@@ -180,47 +201,69 @@ int AppearanceSheet::fitHeight(int width, int availableHeight) {
     const int messageHeight = message->isHidden() ? 0 : qMax(0, message->heightForWidth(innerWidth));
     const int extra =
         margins.top() + margins.bottom() + (message->isHidden() ? 0 : messageHeight + layout()->spacing());
-    int contentHeight = measure(innerWidth);
-    int contentWidth = innerWidth;
-    if (contentHeight + extra > availableHeight) {
-        contentWidth = qMax(1, innerWidth - scroll->verticalScrollBar()->sizeHint().width());
-        contentHeight = measure(contentWidth);
-    }
+    const int contentHeight = measure(innerWidth);
     const bool overflow = contentHeight + extra > availableHeight;
-    // Keep the ordinary preview hierarchy unchanged. A scroll viewport can
-    // repaint unrelated rows when a child updates its layout hint.
-    if (overflow != (scroll->widget() != nullptr)) {
+    // Keep the ordinary hierarchy when everything fits, so a row that
+    // updates its layout hint does not repaint rows on another page.
+    if (overflow != (pages->parentWidget() == clip)) {
+        QPointer<QWidget> focused = QApplication::focusWidget();
+        auto *sheetRows = static_cast<QVBoxLayout *>(layout());
         if (overflow) {
-            layout()->removeWidget(pages);
-            scroll->setWidget(pages);
-            scroll->show();
+            sheetRows->removeWidget(pages);
+            pages->setParent(clip);
         } else {
-            QPointer<QWidget> focused = QApplication::focusWidget();
-            const bool focusInScroll = focused && (focused == scroll || scroll->isAncestorOf(focused));
-            // Hiding can traverse focus through the scroll area. Keep its
-            // content attached until that traversal has finished.
-            scroll->hide();
-            scroll->takeWidget();
+            pages->clearMask();
             pages->setParent(this);
-            static_cast<QVBoxLayout *>(layout())->insertWidget(0, pages, 1);
-            pages->show();
-            if (focusInScroll) {
-                if (focused && pages->isAncestorOf(focused)) {
-                    focused->setFocus(Qt::OtherFocusReason);
-                } else {
-                    pages->setFocus(Qt::OtherFocusReason);
-                }
-            }
+            sheetRows->insertWidget(0, pages, 1);
         }
         pages->show();
+        clip->setVisible(overflow);
+        pager->setVisible(overflow);
+        if (focused && !focused->isVisible())
+            pages->setFocus(Qt::OtherFocusReason);
     }
+    if (pages->currentIndex() != pagedIndex) {
+        pagedIndex = pages->currentIndex();
+        rowPage = 0;
+    }
+    rowPages.clear();
     if (overflow) {
-        pages->resize(contentWidth, contentHeight);
+        // Lay out at the natural height, then split on complete row
+        // boundaries. Squeezing the rows would overlap their controls.
+        const int room = qMax(1, availableHeight - extra - int(m::chrome::actionHeight) - layout()->spacing());
+        pages->setGeometry(0, 0, innerWidth, contentHeight);
+        pages->currentWidget()->setGeometry(0, 0, innerWidth, contentHeight);
+        rows->setGeometry(QRect(0, 0, innerWidth, contentHeight));
+        int start = 0;
+        for (int index = 0; index < rows->count(); ++index) {
+            auto *item = rows->itemAt(index);
+            if (item->isEmpty() || !item->widget()) continue;
+            const auto bounds = item->geometry();
+            if (bounds.bottom() + 1 - start > room && bounds.top() > start) {
+                rowPages.append({start, bounds.top()});
+                start = bounds.top();
+            }
+        }
+        rowPages.append({start, contentHeight});
     }
-    const int height = qMin(contentHeight + extra, qMax(1, availableHeight));
+    const int height = overflow ? qMax(1, availableHeight) : contentHeight + extra;
     resize(width, height);
     layout()->activate();
+    if (overflow)
+        showRows(rowPage);
     return height;
+}
+
+void AppearanceSheet::showRows(int page) {
+    if (rowPages.isEmpty()) return;
+    rowPage = qBound(0, page, int(rowPages.size()) - 1);
+    const auto range = rowPages[rowPage];
+    // Only this page's rows show and take touches; the next page's first
+    // row must not peek out below them.
+    pages->move(0, -range.first);
+    pages->setMask(QRegion(0, range.first, pages->width(), range.second - range.first));
+    pager->setPage(rowPage, rowPages.size());
+    pager->setBlankArea({});
 }
 
 AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const AppearancePanelInputs &inputs) {
@@ -246,7 +289,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     opticalSizeSlider =
         ui::sliderRow(typography, typeRows, "rrOpticalSize", "rrOpticalSizeValue", strings::get("reader.optical_size"),
                       "rrOpticalSizeLess", "rrOpticalSizeMore", 6, 72, 1, {});
-    opticalSizeSlider->parentWidget()->hide();
+    ui::controlRowOf(opticalSizeSlider)->hide();
     weightSlider =
         kobalt::ui::sliderRow(typography, typeRows, "rrFontWeight", "rrFontWeightValue",
                               strings::get("reader.font_thickness"), "rrLighter", "rrHeavier", 0, 12, 1, {}, "+");
@@ -254,7 +297,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     variableWeightSlider =
         ui::sliderRow(typography, typeRows, "rrVariableFontWeight", "rrVariableFontWeightValue",
                       strings::get("reader.font_weight"), "rrVariableLighter", "rrVariableHeavier", 300, 650, 10, {});
-    variableWeightSlider->parentWidget()->hide();
+    ui::controlRowOf(variableWeightSlider)->hide();
     spacingSlider = kobalt::ui::sliderRow(typography, typeRows, "rrLineSpacing", "rrLineSpacingValue",
                                           strings::get("reader.line_spacing"), "rrTighter", "rrLooser", 100,
                                           maximumLineSpacing, 1, {}, {}, "%");
@@ -374,6 +417,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     cards->setContentsMargins(0, 0, 0, 0);
     cards->setSpacing(0);
     for (const auto preset : headerfooter::presets) {
+        if (preset == headerfooter::Preset::Phone && !inputs.phone) continue;
         auto *card = new PresetCard(preset, custom);
         card->setDivider(preset != headerfooter::Preset::Custom);
         cards->addWidget(card, 1);

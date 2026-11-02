@@ -51,8 +51,8 @@ inline constexpr bool footerSlot(int slot) {
     return slot >= 3;
 }
 
-enum class Preset { Default, AlternativeA, AlternativeB, Custom };
-inline constexpr Preset presets[] = {Preset::Default, Preset::AlternativeA, Preset::AlternativeB, Preset::Custom};
+enum class Preset { Default, AlternativeA, AlternativeB, Phone, Custom };
+inline constexpr Preset presets[] = {Preset::Default, Preset::AlternativeA, Preset::AlternativeB, Preset::Phone, Preset::Custom};
 
 // Both strips use the same sizes in 300 PPI pixels.
 inline constexpr int smallSize = 24, mediumSize = 26, largeSize = 28, maximumSize = 48;
@@ -101,7 +101,7 @@ struct Selection {
 // existed has no preset. Its old header, footer, clock and progress bar
 // settings select Default when they match the old defaults, and Custom otherwise. Custom is
 // then the saved custom layout, or those old settings when none is saved yet.
-Selection select(const QJsonObject &preferences);
+Selection select(const QJsonObject &preferences, bool phone = false);
 // The layout that the old header, footer, clock and progress bar settings describe.
 Layout legacyLayout(const QJsonObject &preferences);
 // The custom layout, or `fallback` when none is saved.

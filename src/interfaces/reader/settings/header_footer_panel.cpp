@@ -317,6 +317,7 @@ QSize PresetCard::minimumSizeHint() const {
 
 void PresetCard::paintEvent(QPaintEvent *) {
     QPainter painter(this);
+    const int namePadding = qMin(int(hf::namePadding), qMax(1, width() / 16));
     const auto ink = palette().color(QPalette::WindowText), paper = palette().color(QPalette::Window);
     // A held card already looks selected, so the press shows where the choice lands.
     const bool selected = isChecked() || isDown();
@@ -327,7 +328,7 @@ void PresetCard::paintEvent(QPaintEvent *) {
     // The six-inch sheet can shorten the cards to fit its controls. Keep the
     // name visible by shrinking the page in both dimensions.
     const int pageRoom = qMax(0, height() - hf::miniatureTop - hf::nameGap - hf::nameHeight);
-    const int pageWidth = qMax(0, qMin(qMin(int(hf::miniatureWidth), width() - 2 * hf::namePadding), pageRoom * 3 / 4));
+    const int pageWidth = qMax(0, qMin(qMin(int(hf::miniatureWidth), width() - 2 * namePadding), pageRoom * 3 / 4));
     const int pageHeight = pageWidth * 4 / 3;
     const QRect page((width() - pageWidth) / 2, hf::miniatureTop, pageWidth, pageHeight);
     const int edge = selected ? int(hf::selectedBorder) : int(m::control::border);
@@ -361,16 +362,16 @@ void PresetCard::paintEvent(QPaintEvent *) {
     painter.setFont(label);
     auto name = modified ? strings::get("header_footer.preset.modified").arg(headerfooter::presetLabel(value))
                          : headerfooter::presetLabel(value);
-    const int room = qMax(0, width() - 4 * hf::namePadding);
+    const int room = qMax(0, width() - 2 * namePadding);
     if (ui::interfaceTextWidth(name, label) > room)
         name = ui::elideInterfaceText(name, label, room);
     const int textWidth = ui::interfaceTextWidth(name, label);
-    const int nameWidth = textWidth + 2 * hf::namePadding;
+    const int nameWidth = textWidth + 2 * namePadding;
     const QRect block((width() - nameWidth) / 2, page.bottom() + 1 + hf::nameGap, nameWidth, hf::nameHeight);
     if (selected)
         painter.fillRect(block, ink);
     painter.setPen(selected ? paper : ink);
-    const QRect text(block.x() + hf::namePadding, block.y(), textWidth, block.height());
+    const QRect text(block.x() + namePadding, block.y(), textWidth, block.height());
     ui::drawInterfaceText(painter, text, name, Qt::AlignLeft | Qt::AlignVCenter);
 }
 
@@ -393,9 +394,9 @@ QLabel *barTitle(QWidget *parent, const char *name) {
     ui::readerStyle(title, ui::styles::brand(m::chrome::titleText) + "background:transparent;");
     return title;
 }
-void paintBarRule(QWidget *owner) {
+void paintBarRule(QWidget *owner, int height) {
     QPainter painter(owner);
-    painter.fillRect(0, m::chrome::actionHeight - m::chrome::heavyRule, owner->width(), m::chrome::heavyRule,
+    painter.fillRect(0, height - m::chrome::heavyRule, owner->width(), m::chrome::heavyRule,
                      owner->palette().color(QPalette::WindowText));
 }
 }
@@ -406,6 +407,7 @@ HeaderFooterView::HeaderFooterView(QWidget *parent) : ui::Panel(parent, Qt::TopE
     setEdgeWidth(m::chrome::heavyRule);
     title = new ui::InterfaceLabel(strings::get("header_footer.customize_title"), this);
     title->setObjectName("rrHeaderFooterTitle");
+    title->setWordWrap(true);
     ui::readerStyle(title, ui::styles::font(m::text::body, true) + "background:transparent;");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
     close->setObjectName("rrHeaderFooterClose");
@@ -415,7 +417,12 @@ HeaderFooterView::HeaderFooterView(QWidget *parent) : ui::Panel(parent, Qt::TopE
         if (closed)
             closed();
     });
-    content = new QWidget(this);
+    clip = new QWidget(this);
+    clip->setObjectName("rrHeaderFooterClip");
+    content = new QWidget(clip);
+    pager = new ui::PagerBar(this, "rrHeaderFooter");
+    connect(pager->previous, &QPushButton::clicked, this, [this] { showPage(pager->turnTarget(-1)); });
+    connect(pager->next, &QPushButton::clicked, this, [this] { showPage(pager->turnTarget(1)); });
     contentRows = new QVBoxLayout(content);
     // Room under the title's divider and below the last row.
     QMargins margins = m::panel::contentMargins;
@@ -424,31 +431,66 @@ HeaderFooterView::HeaderFooterView(QWidget *parent) : ui::Panel(parent, Qt::TopE
     hide();
 }
 
+int HeaderFooterView::headingHeight(int width) const {
+    const int cell = qMin(int(m::choices::pickerHeader), width / 4);
+    return qMax(int(m::choices::pickerHeader), title->heightForWidth(qMax(1, width - cell - m::chrome::inset)) + 2 * int(m::control::border));
+}
+
 int HeaderFooterView::preferredHeight(int width) const {
     const int rows = contentRows->hasHeightForWidth() ? contentRows->totalHeightForWidth(width)
                                                       : contentRows->totalSizeHint().height();
-    return m::choices::pickerHeader + rows;
+    return headingHeight(width) + rows;
 }
 
 void HeaderFooterView::paintEvent(QPaintEvent *event) {
     ui::Panel::paintEvent(event);
     // A divider separates the title row from the presets.
     QPainter painter(this);
-    painter.fillRect(0, m::choices::pickerHeader - m::control::border, width(), m::control::border,
+    painter.fillRect(0, headingHeight(width()) - m::control::border, width(), m::control::border,
                      ui::dividerColor(this));
 }
 
 void HeaderFooterView::resizeEvent(QResizeEvent *) {
-    const int header = m::choices::pickerHeader;
+    const int header = headingHeight(width());
     const int cell = qMin(int(m::choices::pickerHeader), width() / 4);
     title->setGeometry(m::chrome::inset, 1, qMax(0, width() - cell - m::chrome::inset), header - 2);
     // The cell stops above the divider, which runs the full width.
     close->setGeometry(width() - cell, m::chrome::heavyRule, cell,
                        header - m::chrome::heavyRule - int(m::control::border));
-    // The rows keep their own height; a sheet stretched to meet the toolbar
-    // leaves the extra room below the last row.
-    const int rows = preferredHeight(width()) - header;
-    content->setGeometry(0, header, width(), qMax(0, qMin(rows, height() - header)));
+    // Lay out at the natural height before splitting on complete row boundaries.
+    // Squeezing this layout makes the slot targets overlap in landscape.
+    const int natural = preferredHeight(width()) - header;
+    const bool overflow = natural > height() - header;
+    const int available = qMax(1, height() - header - (overflow ? int(m::chrome::actionHeight) : 0));
+    content->resize(width(), natural);
+    contentRows->setGeometry(content->rect());
+    pages.clear();
+    int start = 0;
+    for (int index = 0; overflow && index < contentRows->count(); ++index) {
+        auto *item = contentRows->itemAt(index);
+        if (item->isEmpty()) continue;
+        const auto bounds = item->geometry();
+        if (bounds.bottom() + 1 - start > available && bounds.top() > start) {
+            pages.append({start, bounds.top()});
+            start = bounds.top();
+        }
+    }
+    pages.append({start, natural});
+    pager->setGeometry(0, height() - m::chrome::actionHeight, width(), m::chrome::actionHeight);
+    clip->setGeometry(0, header, width(), available);
+    showPage(currentPage);
+}
+
+void HeaderFooterView::showPage(int page) {
+    if (pages.isEmpty()) return;
+    currentPage = qBound(0, page, int(pages.size()) - 1);
+    const auto range = pages[currentPage];
+    clip->setFixedHeight(qMax(1, qMin(height() - headingHeight(width()) -
+        (pages.size() > 1 ? int(m::chrome::actionHeight) : 0), range.second - range.first)));
+    content->move(0, -range.first);
+    pager->setPage(currentPage, pages.size());
+    pager->setBlankArea({m::chrome::inset, clip->geometry().bottom() + 1,
+        width() - 2 * m::chrome::inset, qMax(0, pager->y() - clip->geometry().bottom() - 1)});
 }
 
 FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent) {
@@ -548,7 +590,7 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
 QVector<int> FieldChooser::pageStarts() const {
     // Fill each page with the rows that fit, at their own heights. Leave room
     // for the pager only when the list needs more than one page.
-    const int listTop = m::chrome::actionHeight + m::list::headerHeight;
+    const int listTop = barHeight() + m::list::headerHeight;
     const auto starts = [this](int available) {
         QVector<int> result{0};
         int used = 0;
@@ -569,7 +611,7 @@ QVector<int> FieldChooser::pageStarts() const {
 void FieldChooser::arrange() {
     const auto starts = pageStarts();
     const int pages = starts.size();
-    if (openRow >= 0 && height() > m::chrome::actionHeight + m::list::headerHeight + hf::fieldRowHeight) {
+    if (openRow >= 0 && height() > barHeight() + m::list::headerHeight + hf::fieldRowHeight) {
         page = 0;
         while (page + 1 < pages && starts[page + 1] <= openRow)
             ++page;
@@ -577,7 +619,7 @@ void FieldChooser::arrange() {
     }
     page = qBound(0, page, pages - 1);
     pager->setPage(page, pages);
-    const int listTop = m::chrome::actionHeight + m::list::headerHeight;
+    const int listTop = barHeight() + m::list::headerHeight;
     const int first = starts[page];
     const int count = (page + 1 < pages ? starts[page + 1] : int(list->options().size())) - first;
     list->showRows(first, count);
@@ -588,18 +630,34 @@ void FieldChooser::arrange() {
 
 void FieldChooser::paintEvent(QPaintEvent *event) {
     ui::Panel::paintEvent(event);
-    paintBarRule(this);
+    paintBarRule(this, barHeight());
+}
+
+int FieldChooser::barHeight() const {
+    const int box = ui::interfaceTextWidth(uppercase->text(), ui::interfaceFont(m::chrome::labelText)) +
+        m::settings::toggleGap + m::chrome::checkSize + 2 * m::chrome::inset;
+    const bool stacked = ui::interfaceTextWidth(title->text(), title->font()) + box +
+        m::chrome::cellWidth + m::chrome::inset > width();
+    return int(m::chrome::actionHeight) * (stacked ? 2 : 1);
 }
 
 void FieldChooser::resizeEvent(QResizeEvent *) {
+    for (auto *row : list->options()) {
+        auto look = row->presentation();
+        look.valueBelowLabel = width() < qRound(ui::px(850) * ui::textScale());
+        row->setPresentation(look);
+    }
     // The checkbox takes what its label and box need; the title has the rest.
     const int barHeight = m::chrome::actionHeight - m::chrome::heavyRule;
     const int boxWidth = ui::interfaceTextWidth(uppercase->text(), ui::interfaceFont(m::chrome::labelText)) +
                          m::settings::toggleGap + m::chrome::checkSize + 2 * m::chrome::inset;
-    uppercase->setGeometry(width() - boxWidth, 0, boxWidth, barHeight);
+    const bool stacked = this->barHeight() > m::chrome::actionHeight;
+    uppercase->setGeometry(stacked ? m::chrome::cellWidth : width() - boxWidth,
+                           stacked ? int(m::chrome::actionHeight) : 0,
+                           stacked ? width() - m::chrome::cellWidth : boxWidth, barHeight);
     arrangeBar(this, finish, title, nullptr);
-    title->setGeometry(title->x(), 0, qMax(1, uppercase->x() - title->x()), barHeight);
-    heading->setGeometry(0, m::chrome::actionHeight, width(), m::list::headerHeight);
+    if (!stacked) title->setGeometry(title->x(), 0, qMax(1, uppercase->x() - title->x()), barHeight);
+    heading->setGeometry(0, this->barHeight(), width(), m::list::headerHeight);
     // The pager keeps the bottom, as in Chapters.
     pager->setGeometry(0, height() - m::chrome::actionHeight, width(), m::chrome::actionHeight);
     arrange();

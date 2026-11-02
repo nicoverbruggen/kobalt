@@ -77,7 +77,7 @@ void StartScreen::buildLibrary() {
     view->setDark(dark);
     view->show();
     if (hostScaled)
-        setLibraryScale(scale.pixels, scale.scale, scale.nativePixels, scale.rasterScale);
+        setLibraryScale(scale.pixels, scale.scale, scale.nativePixels, scale.rasterScale, scale.topInset);
     else
         fitLibrary();
 }
@@ -153,12 +153,12 @@ void StartScreen::fitLibrary() {
     if (canvas && !hostScaled)
         canvas->fitContent();
 }
-void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels, qreal rasterScale) {
+void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels, qreal rasterScale, int topInset) {
     hostScaled = true;
-    scale = {pixels, factor, rasterScale, nativePixels};
+    scale = {pixels, factor, rasterScale, nativePixels, topInset};
     if (!view)
         return;
-    view->resize(pixels);
+    view->setGeometry(0, topInset, pixels.width(), pixels.height() - topInset);
     canvas->setNativePixels(nativePixels);
     canvas->setRasterScale(rasterScale);
     canvas->setTransform(QTransform::fromScale(factor, factor));

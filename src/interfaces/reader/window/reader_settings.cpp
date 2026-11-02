@@ -81,7 +81,7 @@ bool Reader::chromeTicks() const {
 }
 
 void Reader::loadChrome() {
-    const auto chrome = kobalt::headerfooter::select(preferences);
+    const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
     const int top = page->topHeight(), bottom = page->bottomHeight();
     page->chrome = chrome.layout;
@@ -91,7 +91,7 @@ void Reader::loadChrome() {
         return;
     // The strips changed height, so the book gets a new viewport. With a
     // panel open the preview takes it, and closing the panel applies it.
-    const QSize viewport(width(), height() - page->topHeight() - page->bottomHeight());
+    const QSize viewport = bodySize();
     if (appearanceEdit.panelOpen())
         mutateAppearance([viewport](ReaderSession &preview) {
             preview.resize(viewport);
@@ -547,9 +547,9 @@ void Reader::applySettings() {
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
     if (restoringDefaults) {
         next[kobalt::headerfooter::presetKey] =
-            kobalt::headerfooter::presetValue(kobalt::headerfooter::Preset::Default);
+            kobalt::headerfooter::presetValue(services.phoneLayout ? kobalt::headerfooter::Preset::Phone : kobalt::headerfooter::Preset::Default);
         next[kobalt::headerfooter::textKey] = kobalt::headerfooter::textSettings(
-            kobalt::headerfooter::presetLayout(kobalt::headerfooter::Preset::Default));
+            kobalt::headerfooter::presetLayout(services.phoneLayout ? kobalt::headerfooter::Preset::Phone : kobalt::headerfooter::Preset::Default));
     }
     const auto rotation = orientation->settings();
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
@@ -568,7 +568,7 @@ void Reader::applySettings() {
     applyInterfaceFonts();
     dictionaryPanel->setDefinitionFont(settingsDictionaryFontFace, settingsDictionaryFontSize);
     navigation->setStatusVisible(!hideNativeStatus());
-    const auto chrome = kobalt::headerfooter::select(preferences);
+    const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
     page->chrome = chrome.layout;
     syncChromeControls();
@@ -598,7 +598,7 @@ void Reader::applySettings() {
         for (auto it = defaults.begin(); it != defaults.end(); ++it)
             settings[it.key()] = it.value();
     }
-    model->apply(settings, QSize(width(), height() - page->topHeight() - page->bottomHeight()));
+    model->apply(settings, bodySize());
     applyingText = model->busy();
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);
@@ -765,7 +765,7 @@ void Reader::registerPickerFonts(const QString &family) {
 void Reader::resizeText() {
     if (!isVisible() || closing)
         return;
-    const QSize viewport(width(), qMax(1, height() - page->topHeight() - page->bottomHeight()));
+    const QSize viewport = bodySize();
     kobalt::diagnostic("reader-resize-text",
                        {{"viewport_width", viewport.width()},
                         {"viewport_height", viewport.height()},
@@ -833,7 +833,7 @@ void Reader::openPanel(int index) {
         warmAttemptGeneration = 0;
     }
     appearanceEdit.setPanelOpen(true);
-    appearanceViewport = QSize(width(), height() - page->topHeight() - page->bottomHeight());
+    appearanceViewport = bodySize();
     appearanceEdit.cancelNavigation();
     general->hide();
     choices->hide();
@@ -869,7 +869,7 @@ void Reader::schedulePreviewWarm() {
             return;
         warmAttemptGeneration = panelGeneration;
         appearanceEdit.open(
-            *model, QSize(width(), height() - page->topHeight() - page->bottomHeight()),
+            *model, bodySize(),
             [this] {
                 refresh();
             },
@@ -888,9 +888,9 @@ void Reader::schedulePreviewWarm() {
 }
 
 void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation) {
-    appearanceViewport = QSize(width(), height() - page->topHeight() - page->bottomHeight());
+    appearanceViewport = bodySize();
     appearanceEdit.mutate(
-        *model, QSize(width(), height() - page->topHeight() - page->bottomHeight()),
+        *model, bodySize(),
         [this] {
             refresh();
         },
@@ -951,7 +951,7 @@ void Reader::finishPreview() {
     }
     preferences = next;
     appearanceEdit.clearError();
-    const QSize viewport(width(), height() - page->topHeight() - page->bottomHeight());
+    const QSize viewport = bodySize();
     if (appearanceEdit.ready())
         model->apply(appearanceEdit.preview()->requestedState(), viewport);
     else if (model->image().size() != viewport)

@@ -149,6 +149,9 @@ inline int headerHeight() {
     return statusHeight + actionHeight;
 }
 inline constexpr Px cellWidth{118}, inset{36};
+// A header with more actions than a narrow screen holds at the usual width
+// uses this cell width there. It stays above the 7.6 mm touch-target minimum.
+inline constexpr Px compactCellWidth{96};
 inline constexpr IconPx cellIcon{40}, backIcon{44};
 inline constexpr Px returnLabelGap{25}; // 6 points at 300 ppi.
 inline constexpr Px returnArrowOffset{2}, returnTitleOffset{1};
@@ -287,6 +290,8 @@ inline constexpr Px outline{2}, handleRadius{14}, handleHitRadius{32};
 }
 namespace lookup {
 inline constexpr int heightPercent = 46, holdMilliseconds = 500;
+// On a short screen the sheet can take up to this share, if the word stays clear.
+inline constexpr int shortHeightPercent = 62;
 inline constexpr Px moveTolerance{40};
 inline constexpr Px choiceHeight{72};
 }

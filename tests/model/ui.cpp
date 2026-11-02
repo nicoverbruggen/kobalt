@@ -1,3 +1,4 @@
+#include "reading/reading_density.h"
 #include "interfaces/reader/ui/controls/buttons.h"
 #include "interfaces/reader/ui/controls/icons.h"
 #include "interfaces/reader/ui/controls/text.h"
@@ -1944,7 +1945,9 @@ int main(int argc, char **argv) {
         for (const int ppi : {167, 212, 300}) {
             setDensity(ppi);
             QWidget host;
-            host.resize(600, metrics::control::stepSize);
+            // Wide enough for a side caption at every density; narrower rows
+            // stack their caption above the controls and grow taller.
+            host.resize(900, metrics::control::stepSize);
             auto *rows = new QVBoxLayout(&host);
             rows->setContentsMargins(0, 0, 0, 0);
             auto *slider =
@@ -3679,8 +3682,11 @@ int main(int argc, char **argv) {
                 "Dictionary picker changed definition geometry or pagination");
         auto *choices = dictionary.findChild<QWidget *>("rrDictionaryChoices");
         auto *count = dictionary.findChild<QLabel *>("rrDictionaryChoicesPages");
+        // A narrow sheet uses compact header cells.
+        const int closeWidth = kobalt::isNarrowWidth(dictionary.width(), kobalt::ui::density())
+            ? int(kobalt::ui::metrics::chrome::compactCellWidth) : int(kobalt::ui::metrics::chrome::cellWidth);
         require(dictionary.findChild<QPushButton *>("rrDictionaryClose")->size() ==
-                    QSize(kobalt::ui::metrics::chrome::cellWidth, kobalt::ui::metrics::chrome::actionHeight),
+                    QSize(closeWidth, kobalt::ui::metrics::chrome::actionHeight),
                 "Dictionary close is not a full header cell");
         require(dictionary.x() == 0 && dictionary.width() == reader.width(),
                 "Dictionary sheet does not span the screen");
@@ -4635,6 +4641,26 @@ int main(int argc, char **argv) {
         require(choice.card()->width() <= host.width() - 2 * int(metrics::notice::sideClearance),
                 "Modal ignored the screen side clearance");
         require(choice.rect().contains(choice.card()->geometry()), "Resized modal card escaped its screen");
+    }
+    {
+        // Export destinations include the full path, including long profile paths.
+        kobalt::ui::setDensity(kobalt::ui::designPpi);
+        kobalt::ui::setLargeText(1.5);
+        QWidget landscape;
+        landscape.resize(1448, 1072);
+        const QString description =
+            "Export all annotations from Trevelyan's Type Tester as a compressed HTML file? "
+            "Unarchive the ZIP to open the HTML file.\n\nSave to /" +
+            QString("a-long-worktree-directory/").repeated(12) + "annotations/book-html.zip.";
+        kobalt::ui::ChoiceModal confirmation(&landscape, {description, "Export annotations?", {}},
+                                              {"Cancel", "cancel"}, {"Export", "export"});
+        confirmation.card()->fitToWidth(760);
+        landscape.show();
+        confirmation.show();
+        app.processEvents();
+        require(landscape.rect().contains(confirmation.card()->geometry()),
+                "A long export destination pushed the large-text landscape dialog outside the screen");
+        kobalt::ui::setLargeText(1);
     }
     kobalt::ui::setDensity(kobalt::ui::designPpi);
     std::puts("PASS: shared navigation, release-only sliders, continuous picker borders, actions and dark styling");

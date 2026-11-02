@@ -4,7 +4,8 @@
 #include "interfaces/reader/ui/controls/sliders.h"
 #include "header_footer_panel.h"
 #include "interfaces/reader/ui/controls/options.h"
-#include <QScrollArea>
+#include "interfaces/reader/ui/controls/rows.h"
+#include "interfaces/reader/ui/controls/paging.h"
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -17,11 +18,13 @@ struct AppearanceLayout {
     QVBoxLayout *typeRows = nullptr, *pageRows = nullptr, *headerFooterRows = nullptr;
 };
 struct AppearancePanelInputs {
+    bool phone = false;
     bool sideButtons = false, reverseLandscapeButtons = false;
     bool automaticRotationAvailable = false;
     bool systemRotation = false;
 };
-// Measure only the selected page. Overflow scrolls inside the available reader area.
+// Measure only the selected page. When it does not fit the available reader
+// area, it pages between complete rows, as the Header and footer sheet does.
 class AppearanceSheet final : public ui::Panel {
 public:
     explicit AppearanceSheet(QWidget *parent);
@@ -31,9 +34,14 @@ public:
     QLabel *message;
 
 private:
-    QScrollArea *scroll;
+    QWidget *clip;
+    ui::PagerBar *pager;
+    // The top and bottom of each page of rows, in the selected page's coordinates.
+    QVector<QPair<int, int>> rowPages;
+    int rowPage = 0, pagedIndex = -1;
+    void showRows(int page);
 };
-class StripSizeControl final : public QWidget {
+class StripSizeControl final : public ui::ControlRow {
 public:
     StripSizeControl(QWidget *parent, bool footer);
     void setSize(int pixels, bool shown);

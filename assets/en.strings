@@ -435,6 +435,7 @@
 "header_footer.preset.default" = "Kobalt";
 "header_footer.preset.alternative_a" = "Bookish";
 "header_footer.preset.alternative_b" = "Ember";
+"header_footer.preset.phone" = "Phone";
 "header_footer.preset.custom" = "Custom";
 /* Arguments: %1, %2 */
 "header_footer.page_of" = "%1 of %2";
@@ -1167,14 +1168,18 @@
 "settings.vertical_spacing_off" = "Normal";
 "settings.vertical_spacing_off_description" = "Keep the usual line spacing and top alignment.";
 "settings.vertical_spacing_expand" = "Expand line spacing";
+"settings.vertical_spacing_expand_short" = "Expand";
 "settings.vertical_spacing_expand_description" = "Spread spare height between lines. Keep the first line in place.";
 "settings.vertical_spacing_center" = "Center nearly full pages";
+"settings.vertical_spacing_center_short" = "Center";
 "settings.vertical_spacing_center_description" = "Center prose that occupies at least 90% of the reading height. Keep line spacing unchanged.";
 "settings.vertical_spacing_scope" = "Pages to adjust";
 "settings.vertical_spacing_scope_description" = "Choose which page gaps to adjust.";
 "settings.vertical_spacing_scope_all" = "All suitable pages";
+"settings.vertical_spacing_scope_all_short" = "All pages";
 "settings.vertical_spacing_scope_all_description" = "Also adjust ordinary pagination gaps on nearly full prose pages.";
 "settings.vertical_spacing_scope_protection" = "Only widow/orphan gaps";
+"settings.vertical_spacing_scope_protection_short" = "Widows only";
 "settings.vertical_spacing_scope_protection_description" = "Adjust only when widow/orphan protection moves lines that would otherwise fit.";
 
 "kosync.last_synced" = "Last synced: %1";

@@ -4,6 +4,7 @@
 #include "interfaces/reader/ui/style/theme.h"
 #include "interfaces/reader/ui/style/scale.h"
 #include "platform/api/kobo_refresh.h"
+#include "reading/reading_density.h"
 #include "support/strings.h"
 #include "ui/hold_timer.h"
 #include "ui/input.h"
@@ -239,7 +240,13 @@ public:
         if (!panel || !panel->parentWidget())
             return;
         const auto bounds = panel->parentWidget()->rect();
-        const int height = qMin(bounds.height() / 2, qMax(220, bounds.height() / 3));
+        // A third of the screen, but at least four rows of keys as tall as
+        // their 48-pixel labels with padding and border, about 80 pixels, and
+        // the gaps between them. Shorter keys clip their labels and grow back
+        // when restyled; this matters on a short screen.
+        const auto margins = panel->layout()->contentsMargins();
+        const int keyRows = 4 * px(80) + 3 * panel->layout()->spacing() + margins.top() + margins.bottom();
+        const int height = qMin(bounds.height() / 2, qMax(qMax(220, bounds.height() / 3), keyRows));
         const bool resized = panel->size() != QSize(bounds.width(), height);
         if (resized) closeAccents();
         panel->setGeometry(0, bounds.height() - height, bounds.width(), height);
@@ -405,8 +412,13 @@ private:
         shift->setVisible(!symbolPage);
         const int spacing = lastRow->spacing();
         const auto margins = panel->layout()->contentsMargins();
-        const int columns = symbolPage ? 14 : 10;
-        const int width = qMax(1, (panel->width() - margins.left() - margins.right() - (columns - 1) * spacing) / columns);
+        const auto widthFor = [&](int columns) {
+            return qMax(1, (panel->width() - margins.left() - margins.right() - (columns - 1) * spacing) / columns);
+        };
+        const int width = widthFor(symbolPage ? 14 : 10);
+        // A narrow screen gives the symbol rows of ten the width of letter
+        // keys. Only the longer punctuation row keeps the narrow keys.
+        const bool narrow = isNarrowWidth(panel->width(), density());
         const int rowCount = symbolPage ? 5 : 4;
         const int height = qMax(1, (panel->height() - margins.top() - margins.bottom() -
                                    (rowCount - 1) * panel->layout()->spacing()) / rowCount);
@@ -426,7 +438,7 @@ private:
                 key->setText(shown == "&" ? QStringLiteral("&&") : shown);
                 characterFont(key);
                 key->setVisible(!shown.isEmpty());
-                key->setFixedSize(width, height);
+                key->setFixedSize(narrow && rows[row].size() <= 10 ? widthFor(10) : width, height);
             }
             rowWidgets[row]->setVisible(!rows[row].isEmpty());
         }

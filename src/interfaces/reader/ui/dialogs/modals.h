@@ -6,9 +6,11 @@
 #include <QPixmap>
 #include <QRegion>
 #include <QPushButton>
+#include <QPointer>
 #include <functional>
 
 namespace kobalt::ui {
+class PagerBar;
 // All centered notices share this card, including nonblocking feedback.
 class PopupCard : public Panel {
 public:
@@ -22,9 +24,18 @@ public:
     void image(const QImage &image);
     void adaptiveActions(const QVector<QPushButton *> &buttons);
     void fitToWidth(int width);
+    // A card taller than `height`, as on a phone in landscape, keeps its first
+    // row and its actions and pages the rows between them. Call after
+    // fitToWidth(); a card that fits shows every row again.
+    void fitToHeight(int height);
 
 private:
     QVBoxLayout *contentRows;
+    PagerBar *rowPager = nullptr;
+    QVector<QVector<QWidget *>> rowPages;
+    QVector<QPointer<QWidget>> pagedRows;
+    int rowPage = 0;
+    void showRowPage(int page);
     QBoxLayout *actionRows = nullptr;
     QVector<QPushButton *> actionButtons;
     QLabel *artwork = nullptr;

@@ -4,12 +4,13 @@
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/metrics.h"
 #include "reading/header_footer.h"
+#include "reading/reading_density.h"
 
 namespace kobalt {
 namespace {
 QSize readingViewport(QSize screen, const QJsonObject &preferences) {
     namespace m = ui::metrics::reading;
-    const auto chrome = headerfooter::select(preferences).layout;
+    const auto chrome = headerfooter::select(preferences, isPhoneScreen(screen, ui::density())).layout;
     screen.rheight() -= (chrome.header() ? m::stripHeight(chrome.headerSize) : 0) +
                         (chrome.footer() ? m::stripHeight(chrome.footerSize) : 0) +
                         (chrome.progressBar ? m::progressHeight : 0);

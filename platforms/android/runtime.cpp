@@ -13,12 +13,12 @@ QPointer<QObject> owner;
 std::function<void(QString)> openExternal;
 std::function<void(int)> volumeButton;
 std::function<void(QString, QString)> chosenFolder;
-std::function<void(QSize, QMargins)> resizedSurface;
+std::function<void(QSize, QMargins, int)> resizedSurface;
 std::atomic<bool> pageButtonsAvailable{false};
 }
 namespace kobalt::android {
 void setCallbacks(QObject *receiver, std::function<void(QString)> openBook, std::function<void(int)> turnPage,
-                  std::function<void(QString, QString)> folderChosen, std::function<void(QSize, QMargins)> surfaceResized) {
+                  std::function<void(QString, QString)> folderChosen, std::function<void(QSize, QMargins, int)> surfaceResized) {
     pageButtonsAvailable.store(false);
     owner = receiver;
     openExternal = std::move(openBook);
@@ -111,14 +111,15 @@ extern "C" JNIEXPORT void JNICALL Java_org_kobalt_android_KobaltActivity_openBoo
 extern "C" JNIEXPORT void JNICALL Java_org_kobalt_android_KobaltActivity_surfaceResized(JNIEnv *, jobject,
                                                                                       jint width, jint height,
                                                                                       jint left, jint top,
-                                                                                      jint right, jint bottom) {
+                                                                                      jint right, jint bottom,
+                                                                                      jint corner) {
     const QSize pixels(width, height);
     if (pixels.isEmpty())
         return;
     const QMargins safe(left, top, right, bottom);
-    QMetaObject::invokeMethod(qApp, [pixels, safe] {
+    QMetaObject::invokeMethod(qApp, [pixels, safe, corner] {
         if (owner && resizedSurface)
-            resizedSurface(pixels, safe);
+            resizedSurface(pixels, safe, corner);
     });
 }
 extern "C" JNIEXPORT jboolean JNICALL Java_org_kobalt_android_KobaltActivity_turnPage(JNIEnv *, jobject,

@@ -10,7 +10,7 @@ namespace kobalt::android {
 // Install on Qt's GUI thread. Delivery stops when owner is destroyed.
 void setCallbacks(QObject *owner, std::function<void(QString)> openBook, std::function<void(int)> turnPage,
                   std::function<void(QString, QString)> folderChosen = {},
-                  std::function<void(QSize, QMargins)> surfaceResized = {});
+                  std::function<void(QSize, QMargins, int corner)> surfaceResized = {});
 void setPageButtonsAvailable(bool available);
 void activity(const char *method);
 bool readingGeometryReady();

@@ -8,8 +8,10 @@
 #include "support/strings.h"
 #include <QPainter>
 #include <QResizeEvent>
+#include <QGridLayout>
 #include "text.h"
 #include <QVariant>
+#include <utility>
 
 namespace kobalt::ui {
 namespace m = metrics;
@@ -436,35 +438,117 @@ QHBoxLayout *horizontalRow() {
     line->setSpacing(m::control::itemGap);
     return line;
 }
-QHBoxLayout *labeledRow(QWidget *parent, QVBoxLayout *rows, const QString &label) {
-    auto *line = horizontalRow();
-    rows->addLayout(line);
-    auto *caption = new ui::InterfaceLabel(label, parent);
-    caption->setFixedWidth(m::control::captionWidth);
+namespace {
+// QWidgetItem measures a widget through its layout when one is installed.
+// Keep that path consistent with ControlRow's width-dependent height.
+class ControlGrid final : public QGridLayout {
+public:
+    explicit ControlGrid(ControlRow *row) : QGridLayout(row), row(row) {}
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int width) const override { return row->heightForWidth(width); }
+    void setGeometry(const QRect &bounds) override {
+        row->fitWidth(bounds.width());
+        QGridLayout::setGeometry(bounds);
+    }
+private:
+    ControlRow *row;
+};
+}
+ControlRow::ControlRow(QWidget *parent) : QWidget(parent) {
+    auto *grid = new ControlGrid(this);
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setSpacing(m::control::itemGap);
+    captionArea = new QWidget(this);
+    controlArea = new QWidget(this);
+    controlLayout = horizontalRow();
+    controlArea->setLayout(controlLayout);
+    auto policy = sizePolicy();
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
+    arrange(width());
+}
+void ControlRow::setMarkerBand(int height) {
+    markerBand = height;
+    arrange(width());
+}
+int ControlRow::heightForWidth(int width) const {
+    const bool compact = stackedAt(width);
+    const int captionWidth = compact ? width : int(m::control::captionWidth);
+    const auto measure = [](QLayout *layout, int width) {
+        return !layout ? 0 : layout->hasHeightForWidth() ? layout->totalHeightForWidth(qMax(1, width)) : layout->sizeHint().height();
+    };
+    const auto *captionLayout = captionArea->layout();
+    const int captionHeight = measure(captionArea->layout(), captionWidth) -
+        (captionLayout ? captionLayout->contentsMargins().top() : 0) + (compact ? 0 : markerBand);
+    const int controlsHeight = measure(controlLayout, compact ? width : width - captionWidth - m::control::itemGap);
+    return compact ? captionHeight + m::control::itemGap + controlsHeight : qMax(captionHeight, controlsHeight);
+}
+QSize ControlRow::sizeHint() const {
+    const int width = m::control::captionWidth + px(480) + m::control::itemGap;
+    return {width, heightForWidth(width)};
+}
+QSize ControlRow::minimumSizeHint() const {
+    return {0, heightForWidth(width())};
+}
+bool ControlRow::stackedAt(int width) {
+    return width < m::control::captionWidth + px(480) + m::control::itemGap;
+}
+void ControlRow::fitWidth(int width) {
+    if (stackedAt(width) != stacked)
+        arrange(width);
+}
+void ControlRow::resizeEvent(QResizeEvent *) { arrange(width()); }
+void ControlRow::arrange(int width) {
+    const bool wasStacked = std::exchange(stacked, stackedAt(width));
+    setProperty("caption_stacked", stacked);
+    if (stacked != wasStacked && stackedChanged)
+        stackedChanged(stacked);
+    captionArea->setMinimumWidth(stacked ? 0 : int(m::control::captionWidth));
+    captionArea->setMaximumWidth(stacked ? QWIDGETSIZE_MAX : int(m::control::captionWidth));
+    if (auto *rows = captionArea->layout()) {
+        auto margins = rows->contentsMargins();
+        margins.setTop(stacked ? 0 : markerBand);
+        rows->setContentsMargins(margins);
+    }
+    auto *grid = static_cast<QGridLayout *>(layout());
+    grid->removeWidget(captionArea);
+    grid->removeWidget(controlArea);
+    grid->addWidget(captionArea, 0, 0, 1, stacked ? 2 : 1);
+    grid->addWidget(controlArea, stacked ? 1 : 0, stacked ? 0 : 1, 1, stacked ? 2 : 1);
+    grid->setColumnStretch(0, stacked ? 1 : 0);
+    grid->setColumnStretch(1, stacked ? 0 : 1);
+    updateGeometry();
+}
+ControlRow *controlRowOf(QWidget *control) {
+    for (auto *widget = control; widget; widget = widget->parentWidget())
+        if (auto *row = dynamic_cast<ControlRow *>(widget))
+            return row;
+    Q_ASSERT(false);
+    return nullptr;
+}
+QHBoxLayout *labeledRow(QWidget *parent, QVBoxLayout *rows, const QString &label, const QString &detail, const QString &detailName) {
+    auto *row = new ControlRow(parent);
+    rows->addWidget(row);
+    auto *labels = new QVBoxLayout(row->caption());
+    labels->setContentsMargins(0, 0, m::control::captionRight, 0);
+    labels->setSpacing(px(2));
+    auto *caption = new ui::InterfaceLabel(label, row->caption());
     caption->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    // Large text can need a second line, as slider captions do.
     caption->setWordWrap(true);
     readerStyle(caption, styles::font(m::text::secondary));
-    line->addWidget(caption);
-    return line;
+    labels->addWidget(caption);
+    if (!detail.isEmpty()) {
+        auto *value = new InterfaceLabel(detail, row->caption());
+        value->setObjectName(detailName);
+        value->setWordWrap(true);
+        readerStyle(value, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
+        labels->addWidget(value);
+    }
+    return row->controls();
 }
 SegmentedRow::SegmentedRow(QWidget *parent, QVBoxLayout *rows, const char *name, const QString &label,
                            const QString &detail) {
-    auto *line = labeledRow(parent, rows, label);
-    if (!detail.isEmpty()) {
-        auto *caption = line->takeAt(0);
-        auto *labels = new QVBoxLayout;
-        labels->setSpacing(px(2));
-        labels->addWidget(caption->widget());
-        delete caption;
-        auto *value = new InterfaceLabel(detail, parent);
-        value->setObjectName(QString(name) + "Detail");
-        value->setFixedWidth(m::control::captionWidth);
-        readerStyle(value, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
-        labels->addWidget(value);
-        line->addLayout(labels);
-        line->setAlignment(labels, Qt::AlignVCenter);
-    }
+    auto *line = labeledRow(parent, rows, label, detail, QString(name) + "Detail");
     frame = new QFrame(parent);
     frame->setObjectName(name);
     line->addWidget(frame, 1);

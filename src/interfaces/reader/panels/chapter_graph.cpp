@@ -25,6 +25,8 @@ public:
     QVector<ChapterLink> chapters;
     ChapterSelection selection;
     int first = 0, count = 0, gap = m::gapWide;
+    // The tallest bar; a shorter chart shortens it by the same amount.
+    int barsHeight = m::barsHeight;
 
 protected:
     void paintEvent(QPaintEvent *) override {
@@ -47,7 +49,7 @@ protected:
         std::sort(counts.begin(), counts.end());
         const double cap = counts.isEmpty() ? double(maximum) : double(counts[counts.size() / 2]) * m::scaleCap;
         const double scale = qMax(1.0, qMin(double(maximum), cap));
-        const int chart = m::barsHeight;
+        const int chart = barsHeight;
         const int barWidth = qBound(1, (width() - (visible - 1) * gap) / visible, int(m::maximumBarWidth));
         const int used = visible * barWidth + (visible - 1) * gap;
         const int offset = (width() - used) / 2;
@@ -167,10 +169,16 @@ private:
         const int figureWidth = qMin(inner, ui::interfaceTextWidth(figure->text(), figureMetrics) + 2);
         figure->setGeometry(c::inset, m::figureBaseline - ui::interfaceLineAscent(figureMetrics), figureWidth, ui::interfaceLineHeight(figureMetrics));
         const int unitLeft = c::inset + figureWidth + m::unitGap;
-        // A large figure keeps every digit; its unit shortens instead.
+        // A large figure keeps every digit. A unit that does not fit beside it
+        // takes two lines, the last on the figure's baseline, as in a narrow
+        // cell on a phone; only then does it shorten.
         const int unitWidth = qMax(1, width() - c::inset - unitLeft);
-        unit->setGeometry(unitLeft, m::figureBaseline - ui::interfaceLineAscent(unitMetrics), unitWidth, ui::interfaceLineHeight(unitMetrics));
-        unit->setText(ui::elideInterfaceText(unitValue, unitMetrics, unitWidth));
+        const auto unitText = twoLines(unitMetrics, unitValue, unitWidth);
+        const int unitLines = unitText.count('\n') + 1;
+        const int lineHeight = ui::interfaceLineHeight(unitMetrics);
+        unit->setGeometry(unitLeft, m::figureBaseline - ui::interfaceLineAscent(unitMetrics) - (unitLines - 1) * lineHeight,
+                          unitWidth, unitLines * lineHeight);
+        unit->setText(unitText);
         detail->setGeometry(c::inset, m::detailTop, inner,
                             ui::interfaceLineHeight(unitMetrics) + (m::detailLines - 1) * ui::interfaceLineHeight(unitMetrics));
         const bool shorten = !shortValue.isEmpty() && ui::interfaceTextWidth(detailValue, unitMetrics) > inner &&
@@ -385,19 +393,28 @@ void ChapterGraph::resizeEvent(QResizeEvent *event) {
 int ChapterGraph::chartTop() const {
     return topPadding + m::rowHeight;
 }
+int ChapterGraph::chartHeight() const {
+    if (availableHeight <= 0)
+        return m::chartHeight;
+    const int room = availableHeight - topPadding - m::rowHeight - m::cellHeight - (paged() ? int(c::actionHeight) : 0);
+    // Keep bars at least a third of their design height.
+    const int least = m::chartHeight - m::barsHeight * 2 / 3;
+    return qBound(least, room, int(m::chartHeight));
+}
 void ChapterGraph::paintEvent(QPaintEvent *event) {
     Panel::paintEvent(event);
     QPainter painter(this);
     const int border = ui::metrics::control::border;
     painter.fillRect(0, chartTop() - border, width(), border, ui::dividerColor(this));
-    const int cells = chartTop() + m::chartHeight + (paged() ? c::actionHeight : 0);
+    const int cells = chartTop() + chartHeight() + (paged() ? c::actionHeight : 0);
     painter.fillRect(0, cells - border, width(), border, ui::dividerColor(this));
     for (int column = 1; column < 3; ++column)
         painter.fillRect(width() * column / 3, cells, border, height() - cells, palette().color(QPalette::Mid));
 }
 void ChapterGraph::arrange() {
     const int inner = qMax(1, width() - 2 * c::inset);
-    const int requiredHeight = topPadding + m::graphHeight + (paged() ? c::actionHeight : 0);
+    const int chart = chartHeight();
+    const int requiredHeight = topPadding + m::rowHeight + chart + m::cellHeight + (paged() ? c::actionHeight : 0);
     if (height() != requiredHeight)
         resize(width(), requiredHeight);
     const QFont captionMetrics(ui::captionFont()), titleMetrics(ui::interfaceFont(c::labelText));
@@ -407,11 +424,12 @@ void ChapterGraph::arrange() {
     // The title uses the whole row and elides only when it is longer than that.
     chapterTitle->setGeometry(c::inset, topPadding + m::titleTop, inner, ui::interfaceLineHeight(titleMetrics));
     chapterTitle->setText(ui::elideInterfaceText(title, chapterTitle->font(), inner));
-    const int chart = chartTop();
-    bars->setGeometry(c::inset, chart + m::barsTop, inner, m::chartHeight - m::barsTop - ui::metrics::control::border);
-    message->setGeometry(c::inset, chart, inner, m::chartHeight);
-    pager->setGeometry(0, chart + m::chartHeight - ui::metrics::control::border, width(), c::actionHeight);
-    const int cells = chart + m::chartHeight + (paged() ? c::actionHeight : 0);
+    const int top = chartTop();
+    bars->barsHeight = m::barsHeight - (m::chartHeight - chart);
+    bars->setGeometry(c::inset, top + m::barsTop, inner, chart - m::barsTop - ui::metrics::control::border);
+    message->setGeometry(c::inset, top, inner, chart);
+    pager->setGeometry(0, top + chart - ui::metrics::control::border, width(), c::actionHeight);
+    const int cells = top + chart + (paged() ? c::actionHeight : 0);
     for (int column = 0; column < 3; ++column) {
         auto *cell = QVector<StatsCell *>{chapterCell, bookCell, sessionCell}[column];
         const int left = width() * column / 3 + (column ? ui::metrics::control::border : 0);

@@ -708,18 +708,23 @@ void Reader::syncPinnedBookmarks() {
     const int top = topControls->geometry().bottom() + 1;
     const int bottom = bottomControls->isVisible() ? bottomControls->y() : height();
     const int room = qMax(1, bottom - top);
-    const int cell = qMax(1, qMin<int>(m::chrome::actionHeight,
-        (room - 2 * padding) / BookmarkStore::maxPins));
+    // A short screen, such as a phone in landscape, cannot stack every
+    // shortcut at a usable size. The tray fills a second column there.
+    const int columns = (room - 2 * padding) / BookmarkStore::maxPins < m::chrome::actionHeight * 3 / 4 ? 2 : 1;
+    const int columnRows = (BookmarkStore::maxPins + columns - 1) / columns;
+    const int cell = qMax(1, qMin<int>(m::chrome::actionHeight, (room - 2 * padding) / columnRows));
     const int side = qMax(1, cell - 2 * padding);
-    const int trayHeight = cell * pins.size() + 2 * padding;
-    pinnedBookmarks->setGeometry(width() - cell - edgeGap, top + (room - trayHeight) / 2,
-                                 cell, trayHeight);
+    const int rows = qMin<int>(pins.size(), columnRows);
+    const int used = (pins.size() + columnRows - 1) / columnRows;
+    const int trayHeight = cell * rows + 2 * padding;
+    pinnedBookmarks->setGeometry(width() - cell * used - edgeGap, top + (room - trayHeight) / 2,
+                                 cell * used, trayHeight);
     for (int i = 0; i < pinnedButtons.size(); ++i) {
         auto *button = pinnedButtons[i];
         button->setVisible(i < pins.size());
         if (i >= pins.size()) continue;
         const auto &pin = pins[i];
-        button->setGeometry(padding, padding + i * cell + (cell - side) / 2, side, side);
+        button->setGeometry(padding + i / columnRows * cell, padding + i % columnRows * cell + (cell - side) / 2, side, side);
         button->setGlyph(ui::bookmarkIcon(pin.icon));
         const auto name = pin.name.isEmpty() ? pin.chapter : pin.name;
         button->setAccessibleName(name);
@@ -984,6 +989,7 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix, c
     const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName(name + "Choices");
+    choices->setUniformRows(false);
     choices->setMinimumRowHeight(c::listActionHeight);
     choices->setTopDivider(true);
     for (const auto &option : options)
@@ -996,6 +1002,35 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix, c
     card->rows()->addWidget(choices);
     choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
     card->fitToWidth(cardWidth);
+    const int available = height() - 2 * m::notice::sideClearance;
+    if (card->height() > available) {
+        auto *pager = new ui::PagerBar(card, name);
+        card->rows()->addWidget(pager);
+        const int fixed = card->height() - choices->height();
+        const int room = qMax(1, available - fixed - int(c::actionHeight));
+        QVector<int> starts{0};
+        int used = 0;
+        for (int row = 0; row < choices->options().size(); ++row) {
+            const int rowHeight = choices->rowHeight(row, cardWidth - 4);
+            if (used && used + rowHeight > room) { starts.append(row); used = 0; }
+            used += rowHeight;
+        }
+        auto page = std::make_shared<int>(0);
+        for (int index = 0; index < starts.size(); ++index)
+            if (starts[index] <= current) *page = index;
+        const auto showPage = [this, choices, pager, card, cardWidth, starts, room, page] {
+            const int first = starts[*page];
+            const int last = *page + 1 < starts.size() ? starts[*page + 1] : int(choices->options().size());
+            choices->showRows(first, last - first);
+            choices->setFixedHeight(room);
+            pager->setPage(*page, starts.size());
+            card->fitToWidth(cardWidth);
+            sleepPopup->centerCard();
+        };
+        connect(pager->previous, &QPushButton::clicked, this, [page, pager, showPage] { *page = pager->turnTarget(-1); showPage(); });
+        connect(pager->next, &QPushButton::clicked, this, [page, pager, showPage] { *page = pager->turnTarget(1); showPage(); });
+        showPage();
+    }
     sleepPopup->centerCard();
     for (auto *widget : sleepPopup->findChildren<QWidget *>()) {
         textRefresh(widget);

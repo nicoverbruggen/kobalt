@@ -52,6 +52,11 @@ public:
     QRect headerTextRect() const;
     // The footer's text line, in page coordinates. Empty without a footer.
     QRect footerTextRect() const;
+    // Rounded screen corners that touch the page's top or bottom edge.
+    void setCornerRadii(int top, int bottom);
+    // The space beside a strip's slot text. It grows to keep the text clear of
+    // a rounded screen corner.
+    int slotSide(bool footer) const;
     // The ribbon that marks a bookmarked page, and the corner that toggles it.
     bool bookmarked = false;
     QRect ribbonRect() const;
@@ -128,6 +133,7 @@ private:
     std::array<headerfooter::Field, 3> stripFields(bool footer) const;
     void paintSlots(QPainter &painter, const QRect &bounds, bool footer, bool sleeping = false) const;
     bool panelBelowHeader = false;
+    int cornerTop = 0, cornerBottom = 0;
     HeaderState headerState;
     FooterState footerState;
     QImage renderedBody, headerPixels, footerPixels;

@@ -28,6 +28,12 @@ public:
         topPadding = padding;
         arrange();
     }
+    // The height the panel may take. A short screen, such as a phone in
+    // landscape, shortens the chart; the chapter row and the figures keep theirs.
+    void setAvailableHeight(int height) {
+        availableHeight = height;
+        arrange();
+    }
     int graphPage() const;
     int graphPages() const;
     std::function<void()> changed;
@@ -40,7 +46,9 @@ private:
     QVector<ChapterLink> chapters;
     ChapterSelection selection;
     int first = 0;
-    int topPadding = 0;
+    int topPadding = 0, availableHeight = 0;
+    // The chart's height: the design height, or less on a short screen.
+    int chartHeight() const;
     bool ready = false, dense = true;
     qint64 words = -1, chapterTime = -1, bookTime = -1;
     int minutes = 0;

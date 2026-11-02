@@ -17,9 +17,11 @@ for (const shot of manifest.images) {
         assert.equal(shot.book.sha256, manifest.book_sha256);
         assert.equal(shot.book.fixture, undefined);
     }
-    const expected = shot.device === 'six-inch' ? [1072, 1448] : [1264, 1680];
-    assert.ok(['six-inch', 'seven-inch'].includes(shot.device));
-    assert.deepEqual([shot.width, shot.height].sort((a, b) => a - b), expected);
+    const expected = { 'six-inch': [1072, 1448], 'seven-inch': [1264, 1680], phone: [720, 1600], 'six-inch-landscape': [1072, 1448], 'phone-landscape': [720, 1480] }[shot.device];
+    assert.ok(expected);
+    // Scenes that turn the phone capture it letterboxed, as the phone landscape profile does.
+    const turnedPhone = shot.device === 'phone' && shot.width === 1480 && shot.height === 720;
+    assert.deepEqual([shot.width, shot.height].sort((a, b) => a - b), turnedPhone ? [720, 1480] : expected);
     const variants = scenes.get(shot.screen) || new Map();
     const key = `${shot.device}/${shot.theme}`;
     const pages = variants.get(key) || new Set();
@@ -43,13 +45,13 @@ for (const shot of manifest.images) {
     assert.deepEqual(density, [11811, 11811]);
 }
 for (const variants of scenes.values()) {
-    assert.deepEqual([...variants.keys()].sort(), ['seven-inch/dark', 'seven-inch/large', 'seven-inch/light',
-        'six-inch/dark', 'six-inch/large', 'six-inch/light']);
-    for (const device of ['six-inch', 'seven-inch']) {
+    assert.deepEqual([...variants.keys()].sort(), ['six-inch', 'seven-inch', 'phone', 'six-inch-landscape', 'phone-landscape'].flatMap(device => (device.startsWith('phone') ? ['dark', 'light'] : ['dark', 'large', 'light']).map(theme => `${device}/${theme}`)).sort());
+    for (const device of ['six-inch', 'seven-inch', 'phone', 'six-inch-landscape', 'phone-landscape']) {
         const pages = [...variants.get(device + '/light')].sort((a, b) => a - b);
         assert.deepEqual([...variants.get(device + '/dark')].sort((a, b) => a - b), pages);
         assert.deepEqual(pages, Array.from({ length: pages.length }, (_, index) => index + 1));
         // Larger text can add pages; they must still be complete.
+        if (device.startsWith('phone')) continue;
         const large = [...variants.get(device + '/large')].sort((a, b) => a - b);
         assert.deepEqual(large, Array.from({ length: large.length }, (_, index) => index + 1));
     }
@@ -85,7 +87,7 @@ try {
         near(layout.body.y + layout.body.height / 2, layout.stage.y + layout.stage.height / 2);
         assert.ok(layout.body.x >= 0 && layout.body.x + layout.body.width <= layout.width);
         assert.ok(layout.body.y >= layout.stage.y && layout.body.y + layout.body.height <= layout.stage.y + layout.stage.height + 1);
-        let model = layout.device === 'six-inch' ? { w: 1323, h: 1890, x: 126, y: 150, sw: 1072, sh: 1448 }
+        let model = layout.device === 'phone' ? { w: 800, h: 1680, x: 40, y: 40, sw: 720, sh: 1600 } : layout.device !== 'seven-inch' ? { w: 1323, h: 1890, x: 126, y: 150, sw: 1072, sh: 1448 }
                                                  : { w: 1708, h: 1902, x: 90, y: 111, sw: 1264, sh: 1680 };
         if (layout.landscape) model = { w: model.h, h: model.w, x: model.h - model.y - model.sh, y: model.x, sw: model.sh, sh: model.sw };
         if (!layout.framed) model = { w: model.sw, h: model.sh, x: 0, y: 0, sw: model.sw, sh: model.sh };
@@ -105,8 +107,9 @@ try {
     await page.locator('#group').selectOption('International books');
     const literary = manifest.images.filter(image => image.group === 'International books');
     assert.equal(new Set(literary.map(image => image.book.language)).size, 16);
-    assert.equal(literary.length, 240);
-    assert.equal(await page.locator('figure:not([hidden])').count(), 60);
+    const literaryScreens = new Set(literary.map(image => image.screen));
+    assert.equal(literary.length, literaryScreens.size * 11);
+    assert.equal(await page.locator('figure:not([hidden])').count(), literaryScreens.size);
     await page.locator('#query').fill('Japanese vertical reading');
     assert.equal(await page.locator('figure:not([hidden])').count(), 1);
     const card = page.locator('figure:not([hidden])');
@@ -131,6 +134,13 @@ try {
     assert.equal(await page.locator('#viewer-model').textContent(), 'Kobo Libra · 7-inch');
     assert.equal(await page.locator('#frame-buttons').isVisible(), true);
     await checkLayout();
+    for (const [device, dimensions] of [['phone', [720, 1600]], ['six-inch-landscape', [1448, 1072]], ['phone-landscape', [1480, 720]]]) {
+        await page.locator('#viewer-device').selectOption(device);
+        await page.locator('#image').evaluate(image => image.decode());
+        assert.deepEqual(await page.locator('#image').evaluate(image => [image.naturalWidth, image.naturalHeight]), dimensions);
+        assert.equal(await page.locator('#text-size').isDisabled(), device.startsWith('phone'));
+        await checkLayout();
+    }
     await page.locator('#viewer-device-bottom').selectOption('six-inch');
     assert.equal(await page.locator('#viewer-device').inputValue(), 'six-inch');
     await checkLayout();

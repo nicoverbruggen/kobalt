@@ -98,8 +98,20 @@ public:
     void setTextFace(const QString &face) {
         bar->setTextFace(face);
     }
+    // A camera band at the top holds the status line when it is tall enough.
+    // Otherwise the status line and the actions start below the band.
+    void setSafeArea(int top, int bottom) {
+        safeTop = top;
+        safeBottom = bottom;
+    }
+    // A short screen keeps one bar: the status line moves into the action
+    // row, between the exit action and the actions on the right.
+    void setInlineStatus(bool value) {
+        inlineStatus = value;
+    }
     int statusHeight() const {
-        return statusVisible ? int(ui::metrics::chrome::statusHeight) : 0;
+        const int status = statusVisible && !inlineStatus ? int(ui::metrics::chrome::statusHeight) : 0;
+        return safeTop >= status ? safeTop : safeTop + status;
     }
     int toolbarHeight() const {
         return statusHeight() + ui::metrics::chrome::actionHeight;
@@ -117,13 +129,15 @@ public:
         return bar->y();
     }
     int contentBottom(QSize size) const {
-        return size.height() - BottomNavigation::barHeight();
+        return size.height() - safeBottom - BottomNavigation::barHeight();
     }
     bool contains(QPoint global) const;
 
 private:
     ui::PageScrubber *scrubber = nullptr;
     bool statusVisible = true;
+    bool inlineStatus = false;
+    int safeTop = 0, safeBottom = 0;
     BottomNavigation *bar;
     ui::Panel *toolbar;
     QLayout *toolbarRows;

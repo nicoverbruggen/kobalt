@@ -43,6 +43,13 @@ public:
                      std::move(fonts), std::move(placeholder), [this] {
                          auto services = android::readerServices();
                          services.nativeDialogParent = [this] { return this; };
+                         // The cutout and system-bar bands above and below the
+                         // reader, while it shows. The sides stay window margins.
+                         services.safeArea = [this](QSize) {
+                             if (!readingInsets)
+                                 return SafeArea{};
+                             return SafeArea{surfaceInsets.top(), surfaceInsets.bottom(), surfaceCorner};
+                         };
                          return services;
                      },
                      [](Qt::ScreenOrientation) { /* Android owns display rotation. */ }),
@@ -166,8 +173,11 @@ public:
             [this](const QString &uri, const QString &label) {
                 store.addFolder({uri, label});
             },
-            [this](QSize pixels, QMargins safe) {
-                android::fitWindowToSurface(*this, pixels, safe);
+            [this](QSize pixels, QMargins safe, int corner) {
+                surfacePixels = pixels;
+                surfaceInsets = safe;
+                surfaceCorner = corner;
+                fitInsets();
             });
         canvas->cancelGesture = [this] {
             if (auto *reader = controller.window())
@@ -212,6 +222,7 @@ public:
             layout->setStackingMode(QStackedLayout::StackOne);
             setPalette(start->palette());
             android::activity("showStartup");
+            setReadingInsets(false);
             start->showLibraryError(error);
             layout->setCurrentWidget(start);
             syncPageButtons();
@@ -228,6 +239,7 @@ public:
             layout->setStackingMode(QStackedLayout::StackOne);
             setPalette(start->palette());
             android::activity("showStartup");
+            setReadingInsets(false);
             recordProgress();
             start->setDark(controller.preferences().value("dark_mode").toBool(false));
             if (!failedOpening)
@@ -258,6 +270,26 @@ private:
     android::CanvasRefresh *libraryRefresh = nullptr;
     QTimer libraryHandoff;
     QSize libraryPreparedSize;
+    // The activity's bounds and its system-bar, cutout and corner insets.
+    // While reading, the reader draws paper under the top and bottom bands and
+    // keeps its text clear of them; the window keeps only the side insets,
+    // equal on both sides so the page stays centred. The Library shows the
+    // system bars, so it keeps every inset.
+    QSize surfacePixels;
+    QMargins surfaceInsets;
+    int surfaceCorner = 0;
+    bool readingInsets = false;
+    void setReadingInsets(bool reading) {
+        if (readingInsets == reading)
+            return;
+        readingInsets = reading;
+        fitInsets();
+    }
+    void fitInsets() {
+        const int side = qMax(surfaceInsets.left(), surfaceInsets.right());
+        android::fitWindowToSurface(*this, surfacePixels,
+                                    readingInsets ? QMargins(side, 0, side, 0) : surfaceInsets);
+    }
     static bool submitRefresh(const android::RefreshFrame &frame) {
         return android::prepareRefreshRegions(frame.screenPixels - frame.textPixels, frame.textPixels, frame.clean);
     }
@@ -356,6 +388,7 @@ private:
         // Keep the canvas laid out behind the opaque loader as insets change.
         layout->setStackingMode(QStackedLayout::StackAll);
         android::activity("showReading");
+        setReadingInsets(true);
         layout->activate();
         controller.open(path, pixels(), openedKey, restart);
     }

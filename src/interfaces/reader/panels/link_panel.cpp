@@ -210,8 +210,12 @@ void WebsiteDialog::arrange() {
     const auto margins = card()->rows()->contentsMargins();
     const int textWidth = qMax(1, width - margins.left() - margins.right());
     address->ensurePolished();
-    scroll->setFixedHeight(
-        qMin(qMax<int>(c::actionHeight, height() / 3), qMax<int>(ui::px(60), address->heightForWidth(textWidth))));
+    // Qt shows the scroll bar even for a short address that fits. Show it
+    // only for an address taller than the box.
+    const int needed = qMax<int>(ui::px(60), address->heightForWidth(textWidth));
+    const int most = qMax<int>(c::actionHeight, height() / 3);
+    scroll->setVerticalScrollBarPolicy(needed > most ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    scroll->setFixedHeight(qMin(most, needed));
     card()->fitToWidth(width);
     centerCard();
 }

@@ -8,6 +8,7 @@
 #include <QResizeEvent>
 #include "../controls/buttons.h"
 #include "../controls/rows.h"
+#include "../controls/paging.h"
 #include "../controls/text.h"
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -193,6 +194,78 @@ void PopupCard::fitToWidth(int width) {
     resize(width, height);
 }
 
+void PopupCard::fitToHeight(int height) {
+    for (const auto &row : std::as_const(pagedRows))
+        if (row) row->show();
+    pagedRows.clear();
+    rowPages.clear();
+    if (rowPager) rowPager->hide();
+    const auto measure = [this] {
+        return contentRows->hasHeightForWidth() ? contentRows->totalHeightForWidth(width())
+                                                : contentRows->totalSizeHint().height();
+    };
+    const int natural = measure();
+    if (natural <= height) {
+        resize(width(), natural);
+        return;
+    }
+    if (!rowPager) {
+        const auto owner = parentWidget() ? parentWidget()->objectName() : QString();
+        rowPager = new PagerBar(this, owner.isEmpty() ? QStringLiteral("rrCard") : owner);
+        rowPager->setFixedHeight(m::chrome::actionHeight);
+        const auto turn = [this](int direction) {
+            showRowPage(rowPager->turnTarget(direction));
+            if (auto *overlay = dynamic_cast<ModalOverlay *>(parentWidget()))
+                overlay->centerCard();
+        };
+        connect(rowPager->previous, &QPushButton::clicked, this, [turn] { turn(-1); });
+        connect(rowPager->next, &QPushButton::clicked, this, [turn] { turn(1); });
+    }
+    // The pager sits above the actions, or last when the card has none.
+    contentRows->removeWidget(rowPager);
+    const int actionsAt = actionRows ? contentRows->indexOf(actionRows) : -1;
+    contentRows->insertWidget(actionsAt < 0 ? contentRows->count() : actionsAt, rowPager);
+    const int textWidth = width() - contentRows->contentsMargins().left() - contentRows->contentsMargins().right();
+    const auto rowHeight = [textWidth](QWidget *row) {
+        return row->hasHeightForWidth() ? row->heightForWidth(textWidth) : row->sizeHint().height();
+    };
+    QVector<QWidget *> rows;
+    int pagedHeight = 0;
+    for (int index = 1; index < contentRows->count(); ++index) {
+        auto *row = contentRows->itemAt(index)->widget();
+        if (!row || row == rowPager || row->isHidden()) continue;
+        rows.append(row);
+        pagedHeight += rowHeight(row) + contentRows->spacing();
+    }
+    const int room = qMax(1, height - (natural - pagedHeight) - int(m::chrome::actionHeight) - contentRows->spacing());
+    int used = 0;
+    for (auto *row : rows) {
+        const int needed = rowHeight(row) + contentRows->spacing();
+        if (rowPages.isEmpty() || (used && used + needed > room)) {
+            rowPages.append(QVector<QWidget *>());
+            used = 0;
+        }
+        rowPages.last().append(row);
+        used += needed;
+        pagedRows.append(row);
+    }
+    rowPager->show();
+    showRowPage(rowPage);
+}
+void PopupCard::showRowPage(int page) {
+    if (rowPages.isEmpty()) return;
+    rowPage = qBound(0, page, int(rowPages.size()) - 1);
+    for (int index = 0; index < rowPages.size(); ++index)
+        for (auto *row : std::as_const(rowPages[index]))
+            row->setVisible(index == rowPage);
+    rowPager->setPage(rowPage, rowPages.size());
+    const int height = contentRows->hasHeightForWidth() ? contentRows->totalHeightForWidth(width())
+                                                       : contentRows->totalSizeHint().height();
+    resize(width(), height);
+    // Place the page's rows now, so they take touches where they are drawn.
+    contentRows->activate();
+}
+
 namespace {
 class AnchorPointer final : public QWidget {
 public:
@@ -298,6 +371,19 @@ void ModalOverlay::updateInputRegion() {
 }
 void ModalOverlay::centerCard() {
     if (anchor.isEmpty()) {
+        // A card taller than the screen pages its rows instead. Cards placed
+        // above a keyboard keep their own fitting, and their input stays shown.
+        const int room = height() - 2 * int(m::notice::sideClearance);
+        // Long wrapped descriptions can exceed one page. Use spare landscape
+        // width before paging rows, since a single row cannot be split.
+        const int availableWidth = width() - 2 * int(m::notice::sideClearance);
+        if (cardArea.isEmpty() && room > 0 && content->height() > room &&
+            width() > height() && content->width() < availableWidth)
+            content->fitToWidth(availableWidth);
+        if (cardArea.isEmpty() && room > 0 && (content->height() > room || content->property("card_paged").toBool())) {
+            content->setProperty("card_paged", true);
+            content->fitToHeight(room);
+        }
         pointer->hide();
         content->move((cardArea.isEmpty() ? rect() : cardArea).center() - content->rect().center());
         updateInputRegion();

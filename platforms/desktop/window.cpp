@@ -3,6 +3,7 @@
 #include "services.h"
 #include "platforms/android/canvas.h"
 #include "platforms/android/start_screen.h"
+#include "platform/api/safe_area.h"
 #include "interfaces/reader/views/reading_page.h"
 #include "reading/reading_density.h"
 #include "interfaces/reader/ui/style/scale.h"
@@ -33,6 +34,7 @@
 #include <QToolBar>
 #include <QToolTip>
 #include <QPainter>
+#include <QPainterPath>
 #include <QTime>
 #include <QScreen>
 #include <QWindow>
@@ -95,12 +97,58 @@ protected:
         painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
     }
 };
+// The phone preview has a camera in a band at the top of its portrait screen
+// and rounded screen corners. In landscape the camera side stays outside the
+// app, as Android letterboxes it; both sides keep that band so the page stays
+// centred. Sizes are device pixels at 300 PPI.
+constexpr int phoneCameraBand = 60, phoneCameraSize = 34, phoneCornerRadius = 80;
+// The rounded screen corners and the camera, drawn over the screen. They do
+// not take input, so taps reach the reader below them, as on a phone.
+class PhoneScreenMask final : public QWidget {
+public:
+    explicit PhoneScreenMask(QWidget *parent) : QWidget(parent) {
+        setObjectName("desktopPhoneScreenMask");
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_NoSystemBackground);
+        hide();
+    }
+    void place(QRect screen, qreal scale, bool landscape) {
+        this->scale = scale;
+        this->landscape = landscape;
+        setGeometry(screen);
+        show();
+        raise();
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        QPainterPath corners;
+        corners.addRect(rect());
+        QPainterPath screen;
+        const qreal radius = phoneCornerRadius * scale;
+        screen.addRoundedRect(QRectF(rect()), radius, radius);
+        painter.fillPath(corners.subtracted(screen), Qt::black);
+        const qreal camera = phoneCameraSize * scale, band = phoneCameraBand * scale;
+        const QPointF centre = landscape ? QPointF(band / 2, height() / 2.0) : QPointF(width() / 2.0, band / 2);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::black);
+        painter.drawEllipse(centre, camera / 2, camera / 2);
+    }
+
+private:
+    qreal scale = 1;
+    bool landscape = false;
+};
 // Dimensions are in device pixels at 300 PPI. The asymmetric grip belongs
 // outside the Libra screen, so its buttons never reduce the reading viewport.
 class DeviceFrame final : public QWidget {
 public:
     explicit DeviceFrame(QWidget *parent) : QWidget(parent) {
         setObjectName("desktopDeviceFrame");
+        mask = new PhoneScreenMask(parent);
         previous = new DeviceButton(this);
         next = new DeviceButton(this);
         previous->setObjectName("desktopDevicePrevious");
@@ -112,10 +160,14 @@ public:
         for (auto *button : {previous, next})
             button->setFocusPolicy(Qt::NoFocus);
     }
+    // Returns the reader's part of the screen. Only the phone in landscape
+    // keeps part of its screen outside the reader.
     QRect layoutScreen(int preset, bool landscape, QRect bounds) {
         libra = preset == 2;
-        QSize body = libra ? QSize(1708, 1902) : QSize(1323, 1890);
-        QRect screen = libra ? QRect(90, 111, 1264, 1680) : QRect(126, 150, 1072, 1448);
+        phone = preset == 3 || preset == 5;
+        QSize body = libra ? QSize(1708, 1902) : phone ? QSize(800, 1680) : QSize(1323, 1890);
+        QRect screen = libra ? QRect(90, 111, 1264, 1680) : phone ? QRect(40, 40, 720, 1600) : QRect(126, 150, 1072, 1448);
+        landscape = landscape != (preset == 4 || preset == 5);
         // Long, narrow buttons like the Libra's, centred in the grip.
         QRect previousBounds(1473, 640, 64, 300), nextBounds(1473, 980, 64, 300);
         if (landscape) {
@@ -142,9 +194,25 @@ public:
             button->setVisible(libra);
         show();
         update();
-        return screenBounds;
+        if (!phone) {
+            mask->hide();
+            return screenBounds;
+        }
+        mask->place(screenBounds.translated(pos()), scale, landscape);
+        const int band = landscape ? qRound(phoneCameraBand * scale) : 0;
+        return screenBounds.adjusted(band, 0, -band, 0);
+    }
+    void hideScreen() {
+        hide();
+        mask->hide();
+    }
+    // Keeps the corners and the camera above the reader after it moves.
+    void raiseMask() {
+        if (mask->isVisible())
+            mask->raise();
     }
     QPushButton *previous, *next;
+    PhoneScreenMask *mask;
 
 protected:
     void paintEvent(QPaintEvent *) override {
@@ -152,15 +220,15 @@ protected:
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(QPen(Qt::black, 1.5));
         painter.setBrush(QColor("#242424"));
-        const qreal radius = qMax(5.0, qMin(width(), height()) * 0.025);
+        const qreal radius = qMax(5.0, qMin(width(), height()) * (phone ? 0.11 : 0.025));
         painter.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), radius, radius);
-        painter.setBrush(Qt::NoBrush);
+        painter.setBrush(phone ? QBrush(Qt::black) : QBrush(Qt::NoBrush));
         painter.setPen(QPen(Qt::black, 2));
         painter.drawRect(QRectF(screenBounds).adjusted(-1, -1, 1, 1));
     }
 
 private:
-    bool libra = false;
+    bool libra = false, phone = false;
     QRect screenBounds;
 };
 Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder, std::function<QString()> clock,
@@ -184,6 +252,12 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
               };
               services.textScale = [this] {
                   return textSize / 100.0;
+              };
+              // Only the portrait phone has a camera band inside the reader.
+              services.safeArea = [this](QSize size) {
+                  if (!phonePreview() || size.width() > size.height())
+                      return SafeArea{};
+                  return SafeArea{phoneCameraBand, 0, phoneCornerRadius};
               };
               if (configureServices)
                   configureServices(services);
@@ -221,7 +295,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     screenPicker = new QComboBox(toolbar);
     screenPicker->setObjectName("desktopScreenPicker");
     screenPicker->setAccessibleName(tr("Reader screen"));
-    screenPicker->addItems({tr("Fill window"), tr("6-inch e-reader"), tr("7-inch e-reader with buttons")});
+    screenPicker->addItems({tr("Fill window"), tr("6-inch e-reader"), tr("7-inch e-reader with buttons"), tr("Phone"), tr("6-inch landscape"), tr("Phone landscape")});
     screenPicker->setCurrentIndex(screenPreset);
     screenPicker->setMinimumWidth(100);
     screenPicker->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -484,6 +558,8 @@ QString Window::saveScreenshot(const QString &directory, QString *error) {
             // Keep antialiased frame corners transparent and the reader's own white pixels opaque.
             deviceFrame->render(&painter, deviceFrame->pos(), {}, QWidget::DrawChildren);
             stack->render(&painter, stack->pos());
+            if (deviceFrame->mask->isVisible())
+                deviceFrame->mask->render(&painter, deviceFrame->mask->pos());
         } else {
             stage->render(&painter);
         }
@@ -501,11 +577,17 @@ QString Window::saveScreenshot(const QString &directory, QString *error) {
     file.setAutoRemove(false);
     return file.fileName();
 }
+bool Window::phonePreview() const {
+    return screenPreset == 3 || screenPreset == 5;
+}
 QSize Window::pixels() const {
     if (screenPreset) {
-        QSize size = screenPreset == 1 ? QSize(1072, 1448) : QSize(1264, 1680);
-        if (rotateAction->isChecked())
+        QSize size = screenPreset == 2 ? QSize(1264, 1680) : phonePreview() ? QSize(720, 1600) : QSize(1072, 1448);
+        if (rotateAction->isChecked() != (screenPreset == 4 || screenPreset == 5)) {
             size.transpose();
+            if (phonePreview())
+                size.rwidth() -= 2 * phoneCameraBand;
+        }
         return size;
     }
     return {qRound(stack->width() * readerPixelsPerPoint), qRound(stack->height() * readerPixelsPerPoint)};
@@ -517,8 +599,9 @@ void Window::sizeCanvas() {
         const auto screen = deviceFrame->layoutScreen(screenPreset, rotateAction->isChecked(), bounds);
         deviceFrame->lower();
         stack->setGeometry(screen.translated(deviceFrame->pos()));
+        deviceFrame->raiseMask();
     } else {
-        deviceFrame->hide();
+        deviceFrame->hideScreen();
         stack->setGeometry(bounds);
     }
     const bool paging = (controller.window() && controller.window()->isEnabled()) ||
@@ -535,7 +618,11 @@ void Window::sizeCanvas() {
     canvas->setTransform(QTransform::fromScale(scale, scale));
     canvas->setSceneRect(QRectF(QPointF(), pixels()));
     // The library uses the reader's controls, so it gets the reader's size and scale.
-    start->setLibraryScale(pixels(), scale, renderingDpi != 0, renderingDpi ? renderingDpi / 300.0 : 1.0);
+    // Android shows its status bar over the Library, so the phone's camera
+    // band stays outside it.
+    const bool cameraBand = phonePreview() && pixels().height() > pixels().width();
+    start->setLibraryScale(pixels(), scale, renderingDpi != 0, renderingDpi ? renderingDpi / 300.0 : 1.0,
+                           cameraBand ? phoneCameraBand : 0);
 }
 void Window::selectScreen(int index) {
     if (closing || screenPreset == index)

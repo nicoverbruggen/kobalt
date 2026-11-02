@@ -129,7 +129,7 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
     if (preferences.contains(sessionTimeout::preferenceKey) &&
         !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))
         preferences.remove(sessionTimeout::preferenceKey);
-    choice("header_footer", {"default", "alternative_a", "alternative_b", "custom"});
+    choice("header_footer", {"default", "alternative_a", "alternative_b", "phone", "custom"});
     choice("default_menu_view", {"none", "seek", "stats"});
     choice("navigation_bar_buttons", {"chapters", "pages"});
     choice("page_navigation", {"taps_and_swipes", "taps_only", "swipes_only", "buttons_only"});

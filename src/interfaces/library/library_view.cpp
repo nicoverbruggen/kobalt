@@ -10,6 +10,7 @@
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/styles.h"
 #include "library/arrangement.h"
+#include "reading/reading_density.h"
 #include "support/strings.h"
 #include "ui/hold_timer.h"
 #include <QPointer>
@@ -522,18 +523,25 @@ protected:
     }
 };
 
-// Sort and filter choices, dropped over the top of the books.
+// Sort and filter choices, dropped over the top of the books. A short screen
+// puts each group in its own column, side by side.
 class SortSheet final : public ui::Panel {
 public:
     explicit SortSheet(QWidget *parent) : ui::Panel(parent) {
         setObjectName("librarySortSheet");
-        auto *rows = new QVBoxLayout(this);
+        auto *rows = new QHBoxLayout(this);
         rows->setContentsMargins(0, 0, 0, c::heavyRule);
         rows->setSpacing(0);
+        for (int index = 0; index < 3; ++index) {
+            columns[index] = new ui::Panel(this, index ? ui::Edges(Qt::LeftEdge) : ui::Edges());
+            columnRows[index] = new QVBoxLayout(columns[index]);
+            columnRows[index]->setContentsMargins(index ? int(ui::metrics::control::border) : 0, 0, 0, 0);
+            columnRows[index]->setSpacing(0);
+            rows->addWidget(columns[index], 1);
+        }
         auto *sortHeading = new ui::ListHeader(this);
         sortHeading->setShaded(true);
         sortHeading->setCaptions(strings::get("library.sort_heading"));
-        rows->addWidget(sortHeading);
         sorts = new ui::RadioList(this);
         sorts->setObjectName("librarySortChoices");
         sorts->add("librarySortOpened", strings::get("library.sort_opened"));
@@ -541,29 +549,45 @@ public:
         sorts->add("librarySortTitle", strings::get("library.sort_title"));
         sorts->add("librarySortAuthor", strings::get("library.sort_author"));
         sorts->add("librarySortSeries", strings::get("library.sort_series"));
-        rows->addWidget(sorts);
         auto *showHeading = new ui::ListHeader(this);
         showHeading->setShaded(true);
         showHeading->setCaptions(strings::get("library.show_heading"));
-        rows->addWidget(showHeading);
         filters = new ui::RadioList(this);
         filters->setObjectName("libraryFilterChoices");
         filters->add("libraryShowAll", strings::get("library.show_all"));
         filters->add("libraryHideFinished", strings::get("library.hide_finished"));
-        rows->addWidget(filters);
         coverHeading = new ui::ListHeader(this);
         coverHeading->setShaded(true);
         coverHeading->setCaptions(strings::get("library.cover_heading"));
-        rows->addWidget(coverHeading);
         covers = new ui::RadioList(this);
         covers->setObjectName("libraryCoverChoices");
         covers->add("libraryCoverSmall", strings::get("library.cover_small"));
         covers->add("libraryCoverMedium", strings::get("library.cover_medium"));
         covers->add("libraryCoverLarge", strings::get("library.cover_large"));
-        rows->addWidget(covers);
+        groups = {sortHeading, sorts, showHeading, filters, coverHeading, covers};
+        arrange(false, true);
+    }
+    // Cover size applies only to the cover grid.
+    void arrange(bool sideBySide, bool grid) {
+        coverHeading->setVisible(grid);
+        covers->setVisible(grid);
+        for (int index = 0; index < groups.size(); ++index) {
+            const int column = sideBySide ? index / 2 : 0;
+            for (auto *layout : columnRows)
+                layout->removeWidget(groups[index]);
+            columnRows[column]->addWidget(groups[index]);
+        }
+        // A shorter column keeps its rows at the top.
+        for (auto *layout : columnRows) {
+            for (int index = layout->count() - 1; index >= 0; --index)
+                if (layout->itemAt(index)->spacerItem())
+                    delete layout->takeAt(index);
+            layout->addStretch(1);
+        }
+        columns[1]->setVisible(sideBySide);
+        columns[2]->setVisible(sideBySide && grid);
     }
     ui::RadioList *sorts, *filters, *covers;
-    ui::ListHeader *coverHeading;
 
 protected:
     void paintEvent(QPaintEvent *event) override {
@@ -571,6 +595,12 @@ protected:
         QPainter painter(this);
         painter.fillRect(0, height() - c::heavyRule, width(), c::heavyRule, palette().color(QPalette::WindowText));
     }
+
+private:
+    ui::Panel *columns[3];
+    QVBoxLayout *columnRows[3];
+    ui::ListHeader *coverHeading;
+    QVector<QWidget *> groups;
 };
 
 // The folders the library scans, with the controls to add, remove and rescan.
@@ -821,11 +851,8 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
         sortSheet->sorts->setCurrent(int(this->index.settings.sort));
         sortSheet->filters->setCurrent(this->index.settings.hideFinished ? 1 : 0);
         sortSheet->covers->setCurrent(int(this->index.settings.coverSize));
-        // Cover size only applies to the cover grid.
-        const bool grid = this->index.settings.view == View::Grid;
-        sortSheet->coverHeading->setVisible(grid);
-        sortSheet->covers->setVisible(grid);
         const int top = c::actionHeight + lm::toolbarHeight;
+        sortSheet->arrange(isShortHeight(height(), ui::density()), this->index.settings.view == View::Grid);
         sortSheet->setGeometry(0, top, width(), sortSheet->sizeHint().height());
         sortSheet->show();
         sortSheet->raise();

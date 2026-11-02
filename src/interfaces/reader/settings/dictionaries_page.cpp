@@ -25,9 +25,27 @@ QString bytes(qint64 value) {
     const double amount = value / (gb ? 1000000000.0 : 1000000.0);
     return QString::number(amount, 'f', amount < 10 ? 1 : 0) + (gb ? " GB" : " MB");
 }
+class DictionaryTextRow final : public ui::ListRow {
+public:
+    using ui::ListRow::ListRow;
+    bool compact = false;
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        if (!compact)
+            ui::ListRow::paintEvent(event);
+    }
+};
 class DictionaryLine : public QWidget {
 public:
-    using QWidget::QWidget;
+    explicit DictionaryLine(QWidget *parent) : QWidget(parent) {
+        name = new ui::InterfaceLabel(this);
+        name->setWordWrap(true);
+        ui::readerStyle(name, ui::styles::font(c::labelText) + "background:transparent;");
+        metadata = new ui::InterfaceLabel(this);
+        ui::captionLabel(metadata);
+    }
+    ui::InterfaceLabel *name, *metadata;
 
 protected:
     void paintEvent(QPaintEvent *) override {
@@ -254,6 +272,13 @@ void DictionariesPage::redraw() {
             groups.last().entries.append(entry);
         }
     }
+    const bool compact = list->width() < ui::px(850);
+    const auto labelFont = ui::interfaceFont(c::labelText);
+    const int actionWidth = compact ? qMax(ui::px(132), ui::interfaceTextWidth(strings::get("dictionaries.remove"), labelFont) + ui::px(48)) : ui::px(220);
+    const int nameWidth = qMax(1, list->width() - actionWidth - 3 * c::inset);
+    const auto headerHeight = [&](const QString &text) {
+        return compact ? qMax(int(m::list::headerHeight), ui::wrappedInterfaceTextHeight(text, ui::interfaceFont(c::captionText), list->width() - 2 * c::inset) + ui::px(16)) : int(m::list::headerHeight);
+    };
     QVector<QVector<Item>> pages(1);
     int used = 0;
     QString previousSection;
@@ -261,23 +286,23 @@ void DictionariesPage::redraw() {
     for (const auto &group : groups) {
         bool first = true;
         for (const auto &entry : group.entries) {
-            const int rowHeight = entry.id == failedId ? int(m::list::twoLines) : int(m::list::oneLine);
+            const int rowHeight = compact ? qMax(int(m::list::twoLines), ui::wrappedInterfaceTextHeight(entry.name, labelFont, nameWidth) + ui::interfaceLineHeight(ui::interfaceFont(c::captionText)) + ui::px(36)) : entry.id == failedId ? int(m::list::twoLines) : int(m::list::oneLine);
             bool sectionHeader = first && previousSection != group.section;
             bool languageHeader = first && !group.language.isEmpty();
-            int headers = int(sectionHeader) + int(languageHeader);
-            if (used && used + headers * m::list::headerHeight + rowHeight > available) {
+            int headers = (sectionHeader ? headerHeight(group.section) : 0) + (languageHeader ? headerHeight(group.language) : 0);
+            if (used && used + headers + rowHeight > available) {
                 pages.append(QVector<Item>{});
                 used = 0;
                 sectionHeader = true;
                 languageHeader = !group.language.isEmpty();
-                headers = 1 + int(languageHeader);
+                headers = headerHeight(group.section) + (languageHeader ? headerHeight(group.language) : 0);
             }
             if (sectionHeader)
-                pages.last().append({group.section, false, {}, m::list::headerHeight});
+                pages.last().append({group.section, false, {}, headerHeight(group.section)});
             if (languageHeader)
-                pages.last().append({group.language, true, {}, m::list::headerHeight});
+                pages.last().append({group.language, true, {}, headerHeight(group.language)});
             pages.last().append({{}, false, entry, rowHeight});
-            used += headers * m::list::headerHeight + rowHeight;
+            used += headers + rowHeight;
             first = false;
             previousSection = group.section;
         }
@@ -299,6 +324,7 @@ void DictionariesPage::redraw() {
             retained.insert(header);
             if (header->leftLabel()->text() != item.caption)
                 header->setCaptions(item.caption);
+            header->leftLabel()->setWordWrap(compact);
             header->setGeometry(0, y, list->width(), item.height);
             header->show();
             y += item.height;
@@ -318,22 +344,33 @@ void DictionariesPage::redraw() {
         line->setProperty("dictionary_id", entry.id);
         line->setGeometry(0, y, list->width(), item.height);
         auto *layout = static_cast<QHBoxLayout *>(line->layout());
-        auto *row = created ? nullptr : static_cast<ui::ListRow *>(layout->itemAt(0)->widget());
+        auto *row = created ? nullptr : static_cast<DictionaryTextRow *>(layout->itemAt(0)->widget());
         if (created) {
             layout = new QHBoxLayout(line);
             layout->setContentsMargins(0, 0, c::inset, 0);
             layout->setSpacing(0);
-            row = new ui::ListRow(line);
+            row = new DictionaryTextRow(line);
             row->setFocusPolicy(Qt::NoFocus);
             layout->addWidget(row, 1);
         }
-        row->setTitle(entry.name);
+        row->compact = compact;
+        row->setTitle(compact ? QString() : entry.name);
         const bool active = entry.id == transferId, installed = installedIds.contains(entry.id);
-        row->setCaption(entry.id == failedId ? strings::get("dictionaries.download_failed") : QString());
+        row->setCaption(!compact && entry.id == failedId ? strings::get("dictionaries.download_failed") : QString());
         const int percent = totalBytes > 0 ? qBound(0, int(100.0 * receivedBytes / totalBytes), 100) : 0;
         row->setAccessory(ui::ListRow::Caption{active ? QString::number(percent) + "%"
                                                       : bytes(installed ? installedSizes.value(entry.id) : entry.size),
                                                ui::px(180)});
+        if (compact) row->setAccessory(ui::ListRow::None{});
+        line->name->setVisible(compact);
+        line->metadata->setVisible(compact);
+        line->name->setText(entry.name);
+        line->name->setObjectName(QString("rrDictionaryName%1").arg(index));
+        line->metadata->setText(entry.id == failedId ? strings::get("dictionaries.download_failed") : active ? QString::number(percent) + "%" : bytes(installed ? installedSizes.value(entry.id) : entry.size));
+        line->name->setGeometry(c::inset, ui::px(12), nameWidth, item.height - ui::px(24) - ui::interfaceLineHeight(line->metadata->font()));
+        line->metadata->setGeometry(c::inset, line->name->geometry().bottom() + 1, nameWidth, ui::interfaceLineHeight(line->metadata->font()));
+        line->name->raise();
+        line->metadata->raise();
         row->trailingLabel()->setObjectName(QString("rrDictionarySize%1").arg(index));
         auto *action = created ? nullptr : static_cast<ui::Button *>(layout->itemAt(1)->widget());
         if (created)
@@ -342,16 +379,6 @@ void DictionariesPage::redraw() {
                         installed ? strings::get("dictionaries.remove") : strings::get("dictionaries.get"));
         action->setObjectName(QString("rrDictionaryAction%1").arg(index));
         if (created) {
-            action->setFixedSize(ui::px(220), ui::px(66));
-            ui::readerStyle(
-                action,
-                ui::styles::outlined() +
-                    QString(
-                        "QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;min-width:%3px;max-width:%3px;padding:0;border:%4px solid palette(window-text);}")
-                        .arg(int(c::labelText))
-                        .arg(ui::px(66))
-                        .arg(ui::px(220))
-                        .arg(int(m::control::border)));
             layout->addWidget(action, 0, Qt::AlignVCenter);
             connect(action, &QPushButton::clicked, this, [this, id = entry.id] {
                 const bool active = id == transferId, installed = installedIds.contains(id);
@@ -374,6 +401,16 @@ void DictionariesPage::redraw() {
                 }
                 redraw();
             });
+        }
+        // The style's width excludes the border, so a polished button keeps the
+        // same outer width as one that is not polished yet. Restyle only when
+        // the width changes; restyling polishes the button again.
+        if (action->property("action_width").toInt() != actionWidth) {
+            ui::readerStyle(action, ui::styles::outlined() +
+                QString("QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;min-width:%3px;max-width:%3px;padding:0;border:%4px solid palette(window-text);}")
+                    .arg(int(c::labelText)).arg(ui::px(66)).arg(actionWidth - 2 * int(m::control::border)).arg(int(m::control::border)));
+            action->setFixedSize(actionWidth, ui::px(66));
+            action->setProperty("action_width", actionWidth);
         }
         const bool download = !installed && !active;
         if (action->property("dictionary_download").toBool() != download) {

@@ -78,6 +78,9 @@ public:
     QSize stylingTextPageSize(QSize readingPage, int horizontalMargin) const;
     QPointer<ui::ModalOverlay> fontDialog;
     ui::CellButton *closeButton = nullptr;
+    // Asks the reader to fit the panel again, for changes that do not switch
+    // the page, such as returning to the section list.
+    std::function<void()> refitRequested;
     void showDictionaries(bool visible);
     int fitContent(QSize availableSize);
     ui::DescribedOption *hideTabLabelsOption = nullptr;
@@ -114,7 +117,16 @@ protected:
 private:
     void showStylingChoices(AdvancedText feature, int current, std::function<void(int)> chosen,
                             const QString &alignment, int indent, std::function<void(int, int)> paragraphChosen);
-    QWidget *tabRail = nullptr;
+    QWidget *tabRail = nullptr, *optionsColumn = nullptr;
+    QLabel *settingsTitle = nullptr;
+    ui::CellButton *backButton = nullptr;
+    // A narrow screen shows the sections as a list. Choosing one opens its
+    // page at full width, with a back cell in place of the close cell.
+    bool listMode = false, sectionOpen = false;
+    // A short screen keeps the rail but puts each icon beside its label, so
+    // eight sections fit its height.
+    bool shortRail = false;
+    void styleTabs(bool list);
     QWidget *optionsViewport = nullptr, *optionsClip = nullptr;
     ui::PagerBar *optionsPager = nullptr;
     QVector<QPair<int, int>> optionPages;
@@ -130,5 +142,6 @@ private:
     AdvancedText stylingFeature = AdvancedText::WordSpacing;
     int stylingChoice = 0;
     void showStylingPreview();
+    void fitStylingCard();
 };
 }

@@ -2,6 +2,7 @@
 #include "interfaces/reader/ui/controls/sliders.h"
 #include "interfaces/reader/ui/controls/panels.h"
 #include "interfaces/reader/ui/controls/options.h"
+#include "interfaces/reader/ui/controls/rows.h"
 #include "support/strings.h"
 #include "light_panel.h"
 #include "platform/api/light_controls.h"
@@ -83,7 +84,7 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     warmthSlider->setMarkers({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}, ui::SettingSlider::MarkerMode::Stops);
     brightnessValue = findChild<QLabel *>("rrBrightnessValue");
     warmthValue = findChild<QLabel *>("rrWarmthValue");
-    warmthRow = warmthSlider->parentWidget();
+    warmthRow = ui::controlRowOf(warmthSlider);
     automaticRows = new QWidget(controls);
     auto *automaticSection = new QVBoxLayout(automaticRows);
     automaticSection->setContentsMargins(0, m::control::rowGap, 0, 0);

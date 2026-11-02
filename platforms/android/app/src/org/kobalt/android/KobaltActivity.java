@@ -46,12 +46,12 @@ public class KobaltActivity extends QtActivity {
     private volatile boolean libraryGeometryReady = false;
     private volatile long libraryContentSize;
     private int surfaceWidth, surfaceHeight;
-    private int surfaceLeft, surfaceTop, surfaceRight, surfaceBottom;
+    private int surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, surfaceCorner;
     private String pendingPath;
     private native void openBook(String path);
     private native boolean turnPage(int direction);
     private native void folderChosen(String uri, String label);
-    private native void surfaceResized(int width, int height, int left, int top, int right, int bottom);
+    private native void surfaceResized(int width, int height, int left, int top, int right, int bottom, int corner);
     private final HashSet<Integer> pageKeys = new HashSet<>();
 
     @Override public void setRequestedOrientation(int orientation) {
@@ -112,8 +112,17 @@ public class KobaltActivity extends QtActivity {
             if (booxRefresh != null) booxRefresh.publish(decor, resumed && hasWindowFocus());
             WindowInsets insets = decor.getRootWindowInsets();
             boolean hidden = false;
-            int left = 0, top = 0, right = 0, bottom = 0;
+            int left = 0, top = 0, right = 0, bottom = 0, corner = 0;
             if (insets != null) {
+                // Android 12 reports rounded screen corners; footer text keeps clear of them.
+                if (Build.VERSION.SDK_INT >= 31) {
+                    for (int position : new int[] {android.view.RoundedCorner.POSITION_TOP_LEFT,
+                            android.view.RoundedCorner.POSITION_TOP_RIGHT, android.view.RoundedCorner.POSITION_BOTTOM_LEFT,
+                            android.view.RoundedCorner.POSITION_BOTTOM_RIGHT}) {
+                        android.view.RoundedCorner rounded = insets.getRoundedCorner(position);
+                        if (rounded != null) corner = Math.max(corner, rounded.getRadius());
+                    }
+                }
                 // systemBars also includes a caption bar, absent on handhelds.
                 // Its invisibility must not keep the Library handoff waiting.
                 if (Build.VERSION.SDK_INT >= 30) hidden = !insets.isVisible(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
@@ -138,10 +147,11 @@ public class KobaltActivity extends QtActivity {
                 }
             }
             if (ready && width > 0 && height > 0 && (width != surfaceWidth || height != surfaceHeight
-                    || left != surfaceLeft || top != surfaceTop || right != surfaceRight || bottom != surfaceBottom)) {
+                    || left != surfaceLeft || top != surfaceTop || right != surfaceRight || bottom != surfaceBottom
+                    || corner != surfaceCorner)) {
                 surfaceWidth = width; surfaceHeight = height;
-                surfaceLeft = left; surfaceTop = top; surfaceRight = right; surfaceBottom = bottom;
-                surfaceResized(width, height, left, top, right, bottom);
+                surfaceLeft = left; surfaceTop = top; surfaceRight = right; surfaceBottom = bottom; surfaceCorner = corner;
+                surfaceResized(width, height, left, top, right, bottom, corner);
             }
             readingGeometryReady = reading && hidden && barAnimations.isEmpty();
             libraryGeometryReady = !reading && insets != null && !hidden && barAnimations.isEmpty();

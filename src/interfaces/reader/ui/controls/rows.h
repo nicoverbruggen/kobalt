@@ -4,6 +4,7 @@
 #include <QButtonGroup>
 #include <QFrame>
 #include <QPointer>
+#include <functional>
 
 namespace kobalt::ui {
 // Plain-text lists share line spacing, dividers and accessory geometry.
@@ -134,9 +135,41 @@ private:
     int trailingInset = 0;
     bool shaded = false;
 };
+// Caption and controls share a row when both have room. Narrow screens put
+// the caption above the controls, preserving the control's usable width.
+class ControlRow : public QWidget {
+public:
+    explicit ControlRow(QWidget *parent);
+    QWidget *caption() const { return captionArea; }
+    QHBoxLayout *controls() const { return controlLayout; }
+    void setMarkerBand(int height);
+    // Called when the caption moves above the controls or back beside them.
+    std::function<void(bool stacked)> stackedChanged;
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int width) const override;
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+    // Arranges the caption for this width if it is not arranged for it yet.
+    // The row's layout calls this before it places the caption and controls,
+    // so a row resized while hidden is still arranged for its width.
+    void fitWidth(int width);
+protected:
+    void resizeEvent(QResizeEvent *) override;
+private:
+    QWidget *captionArea, *controlArea;
+    QHBoxLayout *controlLayout;
+    int markerBand = 0;
+    bool stacked = false;
+    static bool stackedAt(int width);
+    void arrange(int width);
+};
+// The row that holds a control, such as a slider from sliderRow(). Hide this
+// row, not the control's parent: the parent is only the row's control area,
+// so hiding it leaves the caption behind.
+ControlRow *controlRowOf(QWidget *control);
 // Rows own spacing and caption geometry; panels supply actions and values.
 QHBoxLayout *horizontalRow();
-QHBoxLayout *labeledRow(QWidget *parent, QVBoxLayout *rows, const QString &label);
+QHBoxLayout *labeledRow(QWidget *parent, QVBoxLayout *rows, const QString &label, const QString &detail = {}, const QString &detailName = {});
 class SegmentedRow {
 public:
     SegmentedRow(QWidget *parent, QVBoxLayout *rows, const char *name, const QString &label,

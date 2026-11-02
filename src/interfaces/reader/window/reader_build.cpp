@@ -479,7 +479,7 @@ void Reader::buildReadingPage() {
             finishAnnotationDrag(false);
     };
     header = new ChapterHeader(page);
-    const auto chrome = kobalt::headerfooter::select(preferences);
+    const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
     page->chrome = chrome.layout;
 }
@@ -911,6 +911,7 @@ void Reader::buildOverlays() {
 void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     auto *typeRows = layout.typeRows, *pageRows = layout.pageRows;
     kobalt::reader::AppearancePanelInputs appearanceInputs;
+    appearanceInputs.phone = services.phoneLayout;
     appearanceInputs.sideButtons = services.pageButtons();
     appearanceInputs.reverseLandscapeButtons = services.reverseLandscapeButtons();
     appearanceInputs.automaticRotationAvailable = orientation->automaticAvailable();
@@ -1189,6 +1190,10 @@ void Reader::buildSettings() {
     general = settings;
     kosyncPage = settings->kosync;
     buildKosync();
+    settings->refitRequested = [this] {
+        fitSettings();
+        refresh();
+    };
     connect(settings->closeButton, &QPushButton::clicked, this, [this] {
         if (appearanceEdit.applying())
             return;
@@ -1260,6 +1265,7 @@ void Reader::buildSettings() {
     minimalAnnotationOption = settings->minimalAnnotationOption;
     automaticOpeningOption = settings->automaticOpeningOption;
     hideTabLabelsOption = settings->hideTabLabelsOption;
+    hideTabLabelsOption->setVisible(!services.phoneLayout);
     linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
     connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {

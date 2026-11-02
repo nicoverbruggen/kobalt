@@ -441,6 +441,10 @@ private:
     void lookupWord(QPoint point);
     void lookupSelection();
     void resizeText();
+    // The host's cutout and corner bands for the current size.
+    kobalt::SafeArea safeArea() const;
+    // The book's text area: the window without the safe area, header and footer.
+    QSize bodySize() const;
     void applyTheme(bool dark);
     void registerPickerFonts(const QString &family = {});
     QString bookFace();

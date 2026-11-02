@@ -258,7 +258,8 @@ int main(int argc, char **argv) {
     tab->click();
     panel.fitContent(window.size());
     QApplication::processEvents();
-    require(panel.settingsPages->currentIndex() == reader::KosyncSettings && tab->isChecked(),
+    // A narrow panel lists its sections without a selection; the rail checks the open one.
+    require(panel.settingsPages->currentIndex() == reader::KosyncSettings && (tab->isChecked() || !tab->isCheckable()),
             "Sync tab selects its page and check state");
     auto *about = panel.findChild<QPushButton *>("rrSettingsAbout");
     require(about && tab->mapTo(&panel, QPoint()).y() < about->mapTo(&panel, QPoint()).y(),
@@ -476,7 +477,9 @@ int main(int argc, char **argv) {
     panel.fitContent(window.size());
     QApplication::processEvents();
     auto *disclaimer = page->findChild<QLabel *>("rrKosyncDescription");
-    require(tab->isVisible() && disclaimer && disclaimer->isVisible() &&
+    // A narrow panel shows an open section without its list, so the tab is
+    // not on screen; it must still exist rather than be hidden.
+    require(!tab->isHidden() && disclaimer && disclaimer->isVisible() &&
             disclaimer->text().contains("Kobo’s built-in sync system") &&
             page->findChild<QLabel *>("rrKosyncSideloadGuidance")->text().contains("DRM-free copy"), "Kobo-managed books retain a Sync tab with a sideloading disclaimer");
     for (const auto *control : {server, page->findChild<QPushButton *>("rrKosyncUsername"), password, login,

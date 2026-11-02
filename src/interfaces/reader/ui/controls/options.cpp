@@ -268,7 +268,7 @@ void DescribedOption::paintEvent(QPaintEvent *) {
             drawOpticalPrivateText(painter, QRect(textRight - room, valueLine.y(), room, valueLine.height()),
                                    elideInterfaceText(value, valueFont, room), Qt::AlignRight, valueStyle.sampleWeight);
         else if (valueStyle.halfSpaces && halfSpaced <= room)
-            drawHalfSpaced(painter, textRight - halfSpaced, labelLine, value, valueStyle.sampleWeight);
+            drawHalfSpaced(painter, textRight - halfSpaced, valueLine, value, valueStyle.sampleWeight);
         else {
             const auto shown = qt::textWidth(painter.fontMetrics(), value) > room
                                    ? painter.fontMetrics().elidedText(value, Qt::ElideRight, room)

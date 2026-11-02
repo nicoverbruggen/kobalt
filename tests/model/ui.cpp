@@ -2065,6 +2065,30 @@ int main(int argc, char **argv) {
                 "Setting description does not fit its requested height");
     }
     {
+        kobalt::ui::DescribedOption sample("Pages", "", &optionsHost);
+        auto look = sample.presentation();
+        look.valueBelowLabel = true;
+        look.leadingIndicator = true;
+        sample.setPresentation(look);
+        sample.resize(720, sample.heightForWidth(720));
+        sample.show();
+        const auto firstValueInk = [&](bool halfSpaces) {
+            kobalt::ui::DescribedOption::ValueStyle style;
+            style.halfSpaces = halfSpaces;
+            sample.setValue("123 456", style);
+            sample.resize(720, sample.heightForWidth(720));
+            app.processEvents();
+            const auto image = sample.grab().toImage();
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = image.width() / 2; x < image.width() - 4; ++x)
+                    if (qGray(image.pixel(x, y)) < 128) return y;
+            return -1;
+        };
+        const int normal = firstValueInk(false), spaced = firstValueInk(true);
+        require(normal > 0 && qAbs(normal - spaced) <= 1,
+                "Half-spaced page values must stay below their label");
+    }
+    {
         // Standard text keeps the description at its design offset below the
         // title; only large text makes the title line taller.
         namespace m = kobalt::ui::metrics;

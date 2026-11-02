@@ -443,8 +443,7 @@ function fail(error) {
     for (const round of rounds)
         $('round').add(new Option(`${round.number} · ${new Date(round.created).toLocaleDateString()}`, round.number));
     const hash = new URLSearchParams(location.hash.slice(1));
-    const wanted = Number(hash.get('round'));
-    const number = rounds.some(round => round.number === wanted) ? wanted : rounds.at(-1).number;
+    const number = rounds.at(-1).number;
     $('round').value = number;
     await loadRound(number, hash.get('screen'));
 })().catch(fail);

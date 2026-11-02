@@ -72,7 +72,7 @@ Click either the phone image or the Kobo reference image to pin a note at that p
 
 Filter the screens by gallery group, orientation and status. The status filter shows unseen screens, seen screens, screens that need changes, screens changed since the last round or screens with notes. Seen and Needs changes are separate flags: an annotated screen is also seen. Moving with either arrow or choosing another screen records the current screen as seen. The current screen stays visible when its status changes. The next arrow press moves to the next screen that matches. The Screens button shows the list of filtered screens with their verdicts.
 
-The page saves each change at once. Typing saves after a short pause. The address keeps the round and the screen, so a reload opens the same screen.
+The page saves each change at once. Typing saves after a short pause. Opening or reloading the page always selects the latest round, even when the address names an older round. It keeps the screen from the address when that screen exists in the latest round. Use the Round selector to inspect earlier rounds during the session.
 
 ## Files
 

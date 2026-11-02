@@ -2,6 +2,7 @@
 #include <QPainterPath>
 #include "interfaces/reader/ui/style/metrics.h"
 #include "reading/header_footer.h"
+#include "reading/page_turn_animation.h"
 #include "reading/highlight_geometry.h"
 #include "ui/brightness_gesture.h"
 #include <QWidget>
@@ -9,6 +10,7 @@
 #include "ui/hold_timer.h"
 #include <QRegion>
 #include <QElapsedTimer>
+#include <QTimeLine>
 #include <QHash>
 #include <array>
 #include <functional>
@@ -22,6 +24,7 @@ class ReadingPage : public QWidget {
 public:
     QImage image;
     int animationDirection = 0;
+    void setPageAnimationStyle(pageTurn::Style style);
     // What the header and footer show. `notice`, such as an error, replaces
     // the footer's slots while it is set. It never adds a footer, because
     // that would change the page height.
@@ -125,6 +128,11 @@ protected:
 
 private:
     std::function<void()> cancelAnimation;
+    void stopPageAnimation();
+    pageTurn::Style pageAnimationStyle = pageTurn::Style::Off;
+    QTimeLine pageTurnAnimation;
+    QImage animationFrame, animationFrom, animationTo;
+    int animationTurnDirection = 0, animationStep = -1;
     // Text weight and family changes draw the strips again.
     using Slots = std::array<headerfooter::Content, 3>;
     using HeaderState =

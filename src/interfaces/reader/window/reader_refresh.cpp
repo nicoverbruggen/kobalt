@@ -227,6 +227,7 @@ void Reader::showChapterText() {
 }
 
 void Reader::showPageImage(const QImage &nextImage) {
+    page->setPageAnimationStyle(services.softwarePageAnimations ? pageTurn::selected(preferences) : pageTurn::Style::Off);
     auto displayedImage = nextImage;
     if (appearanceEdit.edited() && appearanceEdit.ready() && appearanceEdit.preview()) {
         const auto *preview = appearanceEdit.preview();
@@ -243,7 +244,9 @@ void Reader::showPageImage(const QImage &nextImage) {
         page->animationDirection =
             isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() && !general->isVisible() &&
                     !linkReturn->isVisible() && !syncDialog && !kosyncDialog && !finishDialog && !services.suspended() &&
-                    preferences.value("page_animations").toBool(false) && pageAnimationsAvailable(services.animationSupport())
+                    (services.softwarePageAnimations ? pageTurn::selected(preferences) != pageTurn::Style::Off
+                                                     : preferences.value("page_animations").toBool(false)) &&
+                    pageAnimationsAvailable(services.animationSupport())
                 ? model->turnDirection()
                 : 0;
     }

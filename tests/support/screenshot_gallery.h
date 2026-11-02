@@ -21,7 +21,7 @@ inline QString screenshotGroup(const QString &scene) {
     if (scene.startsWith("search")) return "Search";
     if (scene.startsWith("kosync-")) return "Settings and About";
     if (scene.startsWith("beautifier-")) return "Typography";
-    if (scene.startsWith("settings") || scene == "about" || scene == "acknowledgments" || scene.startsWith("license")) return "Settings and About";
+    if (scene.startsWith("page-turn-") || scene.startsWith("settings") || scene == "about" || scene == "acknowledgments" || scene.startsWith("license")) return "Settings and About";
     if (scene.startsWith("annotation") || scene == "annotating" || scene.startsWith("bookmark") || scene.startsWith("pinned-bookmark")) return "Bookmarks and annotations";
     if (scene.startsWith("vertical-") || scene == "layout" || scene.startsWith("header-footer")) return "Layout";
     if (scene.startsWith("fonts") || scene.startsWith("text") || scene.startsWith("bionic") || scene.startsWith("embedded-")) return "Typography";
@@ -50,6 +50,8 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"library-option-feedback", "Library checkbox: idle"},
         {"library-option-feedback-pressed", "Library checkbox: pressed"},
         {"library-option-feedback-released", "Library checkbox: released"},
+        {"page-turn-animation", "Android page turn animation setting"},
+        {"page-turn-sweep", "Android banded sweep: mid-turn"},
         {"settings-light-feedback", "Frontlight gesture feedback"},
         {"settings-light-feedback-hidden", "Frontlight gesture feedback disabled"},
         {"light-feedback-hidden", "Frontlight adjustment without feedback"},

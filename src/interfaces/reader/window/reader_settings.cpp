@@ -309,7 +309,8 @@ void Reader::openSettings() {
     settingsTracking = model->state().value("justification_tracking").toInt(0);
     settingsWidowsOrphans = model->state().value("widows_orphans").toString("publisher");
     showAdvancedText();
-    animationOption->setChecked(preferences.value("page_animations").toBool(false));
+    animationOption->setChecked(services.softwarePageAnimations ? pageTurn::selected(preferences) == pageTurn::Style::Sweep
+                                                             : preferences.value("page_animations").toBool(false));
     bionicOption->setChecked(model->state().value("bold_reading").toString("off") == "bold");
     linkIndicatorOption->setChecked(preferences.value("show_link_indicator").toBool(false));
     edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
@@ -555,7 +556,8 @@ void Reader::applySettings() {
     next.remove("avoid_wasteful_styling");
     next["justification_tracking"] = settingsTracking;
     next["widows_orphans"] = settingsWidowsOrphans;
-    next["page_animations"] = animationOption->isChecked();
+    if (services.softwarePageAnimations) next[pageTurn::preferenceKey] = pageTurn::value(animationOption->isChecked() ? pageTurn::Style::Sweep : pageTurn::Style::Off);
+    else next["page_animations"] = animationOption->isChecked();
     next["show_link_indicator"] = linkIndicatorOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
     next["show_light_gesture_feedback"] = lightGestureFeedbackOption->isChecked();

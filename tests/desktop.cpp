@@ -6484,6 +6484,56 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_optical_size"), selected.value("font_optical_size"));
         QCOMPARE(fixture.state().value("font_face"), selected.value("font_face"));
     }
+    void androidPageAnimations_data() { bookmarks_data(); }
+    void androidPageAnimations() {
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.softwarePageAnimations = true;
+            services.animationSupport = [] { return PageAnimationSupport::Supported; };
+        });
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["page_animations"] = true; // The e-paper preference remains independent.
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(3);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        const auto settings = [&] {
+            if (!fixture.visible("rrSettings")) if (!fixture.press("rrPage")) return false;
+            if (!fixture.press("rrSettings")) return false;
+            if (fixture.visible("rrSettingsDisplay") && !fixture.press("rrSettingsDisplay")) return false;
+            return revealSettingsOption(fixture, "rrPageAnimations");
+        };
+        QVERIFY(settings());
+        auto *row = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrPageAnimations"));
+        QVERIFY(row);
+        QVERIFY(!row->isChecked());
+        for (auto style : {pageTurn::Style::Sweep, pageTurn::Style::Off}) {
+            QVERIFY(fixture.press("rrPageAnimations"));
+            QCOMPARE(row->isChecked(), style == pageTurn::Style::Sweep);
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value(pageTurn::preferenceKey).toString(), pageTurn::value(style));
+            QVERIFY(storage::readJson(fixture.paths.preferences()).value("page_animations").toBool());
+            if (fixture.visible("rrControlsTop")) QVERIFY(fixture.press("rrPage"));
+            auto *reader = fixture.window.readerWindow();
+            auto *animation = reader->findChild<QTimeLine *>("rrPageTurn");
+            QVERIFY(animation);
+            const int before = fixture.state().value("page").toInt();
+            QVERIFY(fixture.turnPage(1));
+            QVERIFY(fixture.state().value("page").toInt() > before);
+            if (style == pageTurn::Style::Off) QCOMPARE(animation->state(), QTimeLine::NotRunning);
+            else {
+                QTRY_COMPARE(animation->state(), QTimeLine::Running);
+                QTRY_COMPARE(animation->state(), QTimeLine::NotRunning);
+            }
+            QVERIFY(settings());
+            QCOMPARE(row->isChecked(), style == pageTurn::Style::Sweep);
+        }
+    }
     void desktopControls() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -7397,6 +7447,41 @@ void checkPageAnimationCompatibility(int preset, bool dark) {
 class ScreenshotTests final : public QObject {
     Q_OBJECT
 private slots:
+    void androidPageAnimations_data() { screenshotVariants(); }
+    void androidPageAnimations() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.softwarePageAnimations = true;
+            services.animationSupport = [] { return PageAnimationSupport::Supported; };
+        });
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsDisplay"));
+        QVERIFY(revealSettingsOption(fixture, "rrPageAnimations"));
+        const auto name = screenshotVariant(preset, dark);
+        captureBook = {{"title", "Type Tester with Android software animation support"}, {"fixture", "ordinary Android display capability"}};
+        QVERIFY(fixture.press("rrPageAnimations"));
+        QVERIFY(capture(fixture, name + "-page-turn-animation"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        if (fixture.visible("rrControlsTop")) QVERIFY(fixture.press("rrPage"));
+        auto *animation = fixture.window.readerWindow()->findChild<QTimeLine *>("rrPageTurn");
+        QVERIFY(animation);
+        QVERIFY(fixture.turnPage(1));
+        QTRY_COMPARE(animation->state(), QTimeLine::Running);
+        animation->setPaused(true);
+        animation->setCurrentTime(animation->duration() / 2);
+        QVERIFY(capture(fixture, name + "-page-turn-sweep"));
+        animation->stop();
+    }
     void pressFeedback_data() { screenshotVariants(); }
     void pressFeedback() {
         QFETCH(int, preset);
@@ -8839,7 +8924,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3455;
+    int expectedScreenshots = lightGallery ? 182 : 3481;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

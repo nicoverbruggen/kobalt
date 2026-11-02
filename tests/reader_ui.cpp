@@ -1,5 +1,6 @@
 #include "interfaces/reader/panels/choice_screen.h"
 #include "ui/hold_timer.h"
+#include "ui/page_turn_paint.h"
 #include "reading/page_navigation.h"
 #include "support/paint_regions.h"
 #include "interfaces/reader/ui/controls/keyboard.h"
@@ -124,6 +125,124 @@ void variants() {
 class ReaderUiTests final : public QObject {
     Q_OBJECT
 private slots:
+    void pageTurnFrames_data() { variants(); }
+    void pageTurnFrames() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        const auto colors = ui::themeColors(dark);
+        const auto sheet = [&](QSize size, const QString &title) {
+            QImage image(size, QImage::Format_RGB32);
+            image.fill(colors.paper);
+            QPainter painter(&image);
+            painter.setPen(colors.ink);
+            painter.setFont(ui::brandFont(ui::px(42)));
+            ui::drawInterfaceText(painter, image.rect().adjusted(ui::px(36), ui::px(40), -ui::px(36), 0), title,
+                                  Qt::AlignLeft | Qt::AlignTop);
+            painter.setFont(ui::interfaceFont(ui::px(26)));
+            for (int y = ui::px(140); y < image.height() - ui::px(60); y += ui::px(50))
+                ui::drawInterfaceText(painter, QRect(ui::px(36), y, image.width() - ui::px(72), ui::px(44)),
+                                      "The next page waits beneath the turning paper.", Qt::AlignLeft | Qt::AlignTop);
+            ui::drawInterfaceText(painter, QRect(ui::px(36), image.height() - ui::px(58), image.width() - ui::px(72), ui::px(44)),
+                                  title, Qt::AlignRight | Qt::AlignVCenter);
+            return image;
+        };
+        const auto capture = qEnvironmentVariable("KOBALT_TEST_CAPTURE_DIR");
+        for (const auto size : {QSize(ui::px(720), ui::px(1440)), QSize(ui::px(1440), ui::px(720))}) {
+            const auto oldPage = sheet(size, "Chapter one"), nextPage = sheet(size, "Chapter two");
+            for (auto style : {pageTurn::Style::Sweep}) {
+                const auto frame = [&](qreal progress, int direction) {
+                    QImage image(size, QImage::Format_RGB32);
+                    image.fill(Qt::magenta);
+                    QPainter painter(&image);
+                    ui::paintPageTurn(painter, oldPage, nextPage, progress, direction, style);
+                    painter.end();
+                    return image;
+                };
+                for (int direction : {-1, 1}) {
+                    QCOMPARE(frame(0, direction), oldPage);
+                    QCOMPARE(frame(1, direction), nextPage);
+                    const auto middle = frame(.45, direction);
+                    QVERIFY2(middle != oldPage && middle != nextPage, qPrintable(pageTurn::value(style)));
+                    QVERIFY(middle.pixelColor(size.width() / 2, size.height() / 2) != QColor(Qt::magenta));
+                    if (!capture.isEmpty())
+                        QVERIFY(middle.save(capture + QString("/turn-%1-%2-%3-%4-%5.png").arg(ppi).arg(dark ? "dark" : "light")
+                            .arg(size.width() > size.height() ? "landscape" : "portrait").arg(direction).arg(pageTurn::value(style))));
+                }
+            }
+        }
+        {
+            QImage oldPage(101, 82, QImage::Format_RGB32), nextPage(oldPage.size(), QImage::Format_RGB32);
+            for (int y = 0; y < oldPage.height(); ++y)
+                for (int x = 0; x < oldPage.width(); ++x) {
+                    oldPage.setPixelColor(x, y, QColor(200, x, y));
+                    nextPage.setPixelColor(x, y, QColor(5, x + 20, y + 50));
+                }
+            for (int direction : {-1, 1}) {
+                const auto frame = [&](qreal progress) {
+                    QImage image(oldPage.size(), QImage::Format_RGB32);
+                    QPainter painter(&image);
+                    ui::paintPageTurn(painter, oldPage, nextPage, progress, direction, pageTurn::Style::Sweep);
+                    return image;
+                };
+                const auto banded = frame(.21);
+                QCOMPARE(frame(.24), banded); // Both values reveal the same three of ten bands.
+                for (int y = 0; y < oldPage.height(); ++y)
+                    for (int x = 0; x < oldPage.width(); ++x)
+                        QCOMPARE(banded.pixel(x, y), (direction > 0 ? x >= 70 : x < 30)
+                            ? nextPage.pixel(x, y) : oldPage.pixel(x, y));
+            }
+        }
+        QCOMPARE(pageTurn::selected({}), pageTurn::Style::Off);
+        QCOMPARE(pageTurn::parse("invalid"), pageTurn::Style::Off);
+        QCOMPARE(pageTurn::parse("curl"), pageTurn::Style::Sweep);
+        QCOMPARE(pageTurn::parse("fade"), pageTurn::Style::Sweep);
+        QCOMPARE(pageTurn::parse("sweep"), pageTurn::Style::Sweep);
+        QCOMPARE(pageTurn::parse("off"), pageTurn::Style::Off);
+        QWidget host;
+        host.setProperty("reader_dark", dark);
+        host.setPalette(ui::readerPalette(host.palette(), dark));
+        host.resize(ui::px(720), ui::px(1600));
+        ReadingPage page(&host, [] {});
+        page.setPalette(host.palette());
+        page.resize(host.size());
+        page.chrome = headerfooter::presetLayout(headerfooter::Preset::Phone);
+        page.image = sheet(QSize(page.width(), page.height() - page.topHeight() - page.bottomHeight()), "Chapter one");
+        host.show();
+        page.show();
+        page.refreshContent();
+        page.setPageAnimationStyle(pageTurn::Style::Sweep);
+        const auto destination = sheet(page.image.size(), "Chapter two");
+        page.image = destination;
+        page.animationDirection = 1;
+        page.refreshContent(true);
+        auto *animation = page.findChild<QTimeLine *>("rrPageTurn");
+        QVERIFY(animation);
+        QCOMPARE(animation->duration(), 180);
+        QCOMPARE(animation->easingCurve().type(), QEasingCurve::InOutSine);
+        QVERIFY(animation->updateInterval() > 0 && animation->updateInterval() <= 17);
+        QCOMPARE(animation->state(), QTimeLine::Running);
+        QCOMPARE(host.property("reader_animation_direction").toInt(), 0);
+        animation->setCurrentTime(animation->duration() / 2);
+        QVERIFY(page.grab().toImage().convertToFormat(QImage::Format_RGB32) != page.snapshot());
+        // Sleep snapshots must contain the destination, not a partial sweep.
+        QCOMPARE(page.snapshot().copy(0, page.topHeight(), page.width(), destination.height()), destination);
+        page.cancelHold();
+        QCOMPARE(animation->state(), QTimeLine::NotRunning);
+        QCOMPARE(page.grab().toImage().convertToFormat(QImage::Format_RGB32), page.snapshot());
+        page.image = sheet(destination.size(), "Chapter three");
+        page.animationDirection = -1;
+        page.refreshContent(true);
+        QCOMPARE(animation->state(), QTimeLine::Running);
+        page.hide();
+        QCOMPARE(animation->state(), QTimeLine::NotRunning);
+        page.show();
+        page.setPageAnimationStyle(pageTurn::Style::Off);
+        page.image = destination;
+        page.animationDirection = 1;
+        page.refreshContent(true);
+        QCOMPARE(animation->state(), QTimeLine::NotRunning);
+    }
     void pagedListSwipes_data() { variants(); }
     void pagedListSwipes() {
         QFETCH(bool, dark);

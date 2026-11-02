@@ -120,8 +120,12 @@ ReaderHostServices readerServices() {
                 .callObjectMethod("getConfiguration", "()Landroid/content/res/Configuration;");
         return configuration.isValid() ? qreal(configuration.getField<jfloat>("fontScale")) : qreal(1);
     };
-    result.animationSupport = [] {
-        return PageAnimationSupport::Unavailable;
+    const auto manufacturer = QJniObject::getStaticObjectField("android/os/Build", "MANUFACTURER", "Ljava/lang/String;").toString();
+    const auto brand = QJniObject::getStaticObjectField("android/os/Build", "BRAND", "Ljava/lang/String;").toString();
+    result.softwarePageAnimations = manufacturer.compare("ONYX", Qt::CaseInsensitive) != 0 &&
+                                brand.compare("ONYX", Qt::CaseInsensitive) != 0;
+    result.animationSupport = [curl = result.softwarePageAnimations] {
+        return curl ? PageAnimationSupport::Supported : PageAnimationSupport::Unavailable;
     };
     result.cancelAnimation = [] {};
     result.light = [](QWidget *) {

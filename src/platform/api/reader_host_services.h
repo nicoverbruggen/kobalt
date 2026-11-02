@@ -87,6 +87,8 @@ struct ReaderHostServices {
     std::function<QFont()> uiFont;
     std::function<bool()> suspended, lightAvailable;
     std::function<PageAnimationSupport()> animationSupport;
+    // Software page transitions on ordinary Android screens, separate from e-paper sweeps.
+    bool softwarePageAnimations = false;
     // Optional: the platform's text size setting, where 1 is standard. On
     // Android and desktop, the reader applies it when a book opens and the
     // Library when it is shown. Kobo applies Nickel's Large Print scale in its

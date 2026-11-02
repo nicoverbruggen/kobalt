@@ -6,6 +6,7 @@
 #include "reading_page.h"
 #include "engine/crengine/reader_model.h"
 #include "ui/bookmark_paint.h"
+#include "ui/page_turn_paint.h"
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/private_text.h"
 #include "interfaces/reader/ui/controls/panels.h"
@@ -16,6 +17,9 @@
 #include <QVariant>
 #include "platform/api/kobo_refresh.h"
 #include "platform/api/safe_area.h"
+#include <QScreen>
+#include <QGuiApplication>
+#include <QWindow>
 #include <QPainter>
 #include <QPointer>
 #include <QtMath>
@@ -236,6 +240,7 @@ int ReadingPage::slotSide(bool footer) const {
 }
 
 void ReadingPage::cancelHold() {
+    stopPageAnimation();
     clearRevealedPress();
     cancelAnimation();
     window()->setProperty("reader_animation_direction", 0);
@@ -522,6 +527,8 @@ void ReadingPage::damageAnnotations(const QRegion &dirty) {
     if (installingAnnotationFrame) {
         annotationFrameDamage += dirty;
     } else if (!dirty.isEmpty()) {
+        stopPageAnimation();
+        animationFrame = {};
         // MTK refreshes each damage rectangle separately, even after one Qt paint.
         update(dirty.boundingRect().translated(0, topHeight()));
     }
@@ -555,6 +562,22 @@ void ReadingPage::mark(const QVector<QRect> &rectangles) {
 ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     : QWidget(parent), cancelAnimation(std::move(cancelAnimation)) {
     Q_ASSERT(this->cancelAnimation);
+    pageTurnAnimation.setObjectName("rrPageTurn");
+    pageTurnAnimation.setParent(this);
+    pageTurnAnimation.setDuration(180);
+    pageTurnAnimation.setEasingCurve(QEasingCurve::InOutSine);
+    connect(&pageTurnAnimation, &QTimeLine::valueChanged, this, [this](qreal value) {
+        if (pageAnimationStyle == pageTurn::Style::Sweep) {
+            const int step = ui::pageSweepStep(value, animationTo.size());
+            if (step == animationStep) return;
+            animationStep = step;
+        }
+        update(QRect(0, topHeight(), width(), renderedBody.height()));
+    });
+    connect(&pageTurnAnimation, &QTimeLine::finished, this, [this] {
+        animationFrom = animationTo = {};
+        update();
+    });
     setObjectName("rrPage");
     setAttribute(Qt::WA_AcceptTouchEvents);
     setAttribute(Qt::WA_OpaquePaintEvent);
@@ -593,10 +616,34 @@ void ReadingPage::setPanelBelowHeader(bool visible) {
     refreshContent();
 }
 
+void ReadingPage::stopPageAnimation() {
+    if (pageTurnAnimation.state() != QTimeLine::NotRunning) {
+        pageTurnAnimation.stop();
+        update();
+    }
+    animationFrom = animationTo = {};
+    animationStep = -1;
+}
+
+void ReadingPage::setPageAnimationStyle(pageTurn::Style style) {
+    if (pageAnimationStyle == style) return;
+    pageAnimationStyle = style;
+    stopPageAnimation();
+    animationFrame = style != pageTurn::Style::Off && !renderedBody.isNull()
+        ? snapshot().copy(0, topHeight(), width(), renderedBody.height()) : QImage();
+}
+
 void ReadingPage::refreshContent(bool reading, bool now) {
     const auto colors = palette();
     const bool geometryChanged =
         renderedSize != size() || renderedTop != topHeight() || renderedBottom != bottomHeight();
+    const bool softwareAnimation = pageAnimationStyle != pageTurn::Style::Off;
+    const bool animatedTurn = softwareAnimation && reading && animationDirection && !geometryChanged &&
+                              renderedPalette == colors.cacheKey() && !animationFrame.isNull();
+    const auto outgoing = animatedTurn ? animationFrame : QImage();
+    if (geometryChanged || renderedPalette != colors.cacheKey() ||
+        (!animatedTurn && (renderedBody.cacheKey() != image.cacheKey() || !annotationFrameDamage.isEmpty())))
+        stopPageAnimation();
     const int weight = kobalt::ui::interfaceWeight() + kobalt::ui::headerFooterAddedWeight();
     const HeaderState nextHeader{stripSlots(false),  stripFields(false), showHeader(), panelBelowHeader, width(),
                                  headerTextPixels(), colors.cacheKey(),  weight,       font().family()};
@@ -660,7 +707,23 @@ void ReadingPage::refreshContent(bool reading, bool now) {
         dirty = dirty.boundingRect();
     const int turn = std::exchange(animationDirection, 0);
     window()->setProperty("reader_page_turn", reading && !geometryChanged);
-    window()->setProperty("reader_animation_direction", reading && !geometryChanged ? turn : 0);
+    window()->setProperty("reader_animation_direction", reading && !geometryChanged && !softwareAnimation ? turn : 0);
+    if (softwareAnimation) {
+        animationFrame = snapshot().copy(0, topHeight(), width(), renderedBody.height());
+        if (animatedTurn && outgoing.size() == animationFrame.size()) {
+            stopPageAnimation();
+            animationFrom = outgoing;
+            animationTo = animationFrame;
+            animationTurnDirection = turn;
+            // Pace updates to the active display. Recheck on each turn because
+            // Android can change refresh rate or move the window to a display.
+            const auto *handle = window()->windowHandle();
+            const auto *display = handle ? handle->screen() : QGuiApplication::primaryScreen();
+            const qreal rate = display ? display->refreshRate() : 60;
+            pageTurnAnimation.setUpdateInterval(qMax(1, qRound(1000 / (qIsFinite(rate) && rate > 0 ? rate : 60))));
+            pageTurnAnimation.start();
+        }
+    }
     // `now` paints and flushes before returning, without a trip through the event loop.
     if (geometryChanged) {
         if (now)
@@ -677,7 +740,17 @@ void ReadingPage::refreshContent(bool reading, bool now) {
 
 void ReadingPage::paintEvent(QPaintEvent *) {
     QPainter painter(this);
+    if (pageTurnAnimation.state() == QTimeLine::NotRunning) {
+        paintContents(painter);
+        return;
+    }
+    const QRect body(0, topHeight(), width(), renderedBody.height());
+    painter.save();
+    painter.setClipRegion(QRegion(rect()) - QRegion(body), Qt::IntersectClip);
     paintContents(painter);
+    painter.restore();
+    painter.translate(0, topHeight());
+    ui::paintPageTurn(painter, animationFrom, animationTo, pageTurnAnimation.currentValue(), animationTurnDirection, pageAnimationStyle);
 }
 
 QImage ReadingPage::stripSnapshot(bool footer) const {

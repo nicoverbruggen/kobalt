@@ -747,7 +747,7 @@ void Reader::requestAnnotationDrag() {
                         return;
                     if (!hits.isEmpty()) {
                         guard->annotationDragging = guard->annotationDragPending = false;
-                        guard->showSavedAnnotation(ids[hits.first()], token.rectangles.value(0).translated(0, guard->page->topHeight()));
+                        guard->showSavedAnnotation(ids[hits.first()], token.rectangles.value(0).translated(guard->page->mapTo(guard, QPoint(0, guard->page->topHeight()))));
                         return;
                     }
                     guard->annotationStartWord = guard->annotationEndWord = token;
@@ -843,7 +843,7 @@ void Reader::resolveAnnotationTokens(AnnotationToken start, AnnotationToken end,
                         guard->draftHighlightRects = geometry.rectangles;
                         guard->draftHighlightGeometry = geometry;
                         if (!geometry.rectangles.isEmpty())
-                            guard->annotationActionAnchor = geometry.rectangles.last().translated(0, guard->page->topHeight());
+                            guard->annotationActionAnchor = geometry.rectangles.last().translated(guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
                         guard->paintAnnotationDraft();
                         if (after)
                             after();
@@ -907,7 +907,7 @@ void Reader::showAnnotationActions() {
         bounds = bounds.united(rect);
     if (!bounds.isEmpty())
         bounds.adjust(-ui::px(24), -ui::px(24), ui::px(24), ui::px(24));
-    bounds.translate(0, page->topHeight());
+    bounds.translate(page->mapTo(this, QPoint(0, page->topHeight())));
     if (bounds.isEmpty())
         bounds = topControls->geometry();
     if (!annotationMode) {
@@ -1355,7 +1355,7 @@ void Reader::showSavedAnnotation(const QString &id, QRect anchor, bool navigate)
             for (const auto &rect : geometry.rectangles)
                 bounds = bounds.united(rect);
             if (!bounds.isEmpty())
-                bounds.translate(0, guard->page->topHeight());
+                bounds.translate(guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
             guard->showSavedAnnotationAt(id, bounds.isEmpty() ? anchor : bounds, navigate);
         });
         return;

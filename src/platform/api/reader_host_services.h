@@ -51,7 +51,7 @@ struct ReaderHostServices {
     // Narrow phone form factor, resolved from native bounds and reader density.
     bool phoneLayout = false;
     // Optional: the cutout, system-bar and corner bands of a reader of this
-    // size. The reader asks again whenever its size changes.
+    // size. The reader asks again on resize or refreshHostPresentation().
     std::function<SafeArea(QSize)> safeArea;
     // Kobo supplies its default export folder. Other hosts open a save-location picker.
     std::function<QString()> annotationExportDirectory;

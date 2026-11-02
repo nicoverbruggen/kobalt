@@ -5121,6 +5121,32 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_face"), originalFace);
     }
     void settings_data() { bookmarks_data(); }
+    void dictionarySafeArea() {
+        SafeArea safe;
+        Fixture fixture(false, false, false, true, false, false, [&](ReaderHostServices &services) {
+            services.safeArea = [&safe](QSize) { return safe; };
+        });
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *reader = fixture.window.readerWindow();
+        const auto size = reader->size();
+        safe = {480, 0, 0};
+        reader->refreshHostPresentation();
+        QTRY_VERIFY(reader->readyForPresentation());
+        QCOMPARE(reader->size(), size);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QCOMPARE(page->y(), safe.top);
+        const auto point = fixture.wordPoint();
+        QVERIFY(point.y() < reader->height() / 2);
+        QVERIFY(page->mapTo(reader, point).y() > reader->height() / 2);
+        QVERIFY(fixture.selectWord(page, point));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        QCOMPARE(fixture.widget("rrDictionary")->y(), safe.top);
+    }
     void dictionaryAppearance_data() { bookmarks_data(); }
     void dictionaryAppearance() {
         QFETCH(bool, dark);

@@ -174,10 +174,14 @@ public:
                 store.addFolder({uri, label});
             },
             [this](QSize pixels, QMargins safe, int corner) {
+                const bool safeAreaChanged = surfaceInsets != safe || surfaceCorner != corner;
                 surfacePixels = pixels;
                 surfaceInsets = safe;
                 surfaceCorner = corner;
                 fitInsets();
+                if (safeAreaChanged)
+                    if (auto *reader = controller.window())
+                        reader->refreshHostPresentation();
             });
         canvas->cancelGesture = [this] {
             if (auto *reader = controller.window())

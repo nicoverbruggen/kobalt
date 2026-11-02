@@ -1291,8 +1291,8 @@ bool Reader::openLink(QPoint point, bool direct) {
                 textRefresh(dialog);
             } else {
                 reader->linkPanel->open(
-                    details, bounds.translated(0, reader->page->topHeight()),
-                    reader->rect().adjusted(0, reader->page->topHeight(), 0, -reader->page->bottomHeight()));
+                    details, bounds.translated(reader->page->mapTo(reader, QPoint(0, reader->page->topHeight()))),
+                    reader->page->geometry().adjusted(0, reader->page->topHeight(), 0, -reader->page->bottomHeight()));
                 timing.finish(reader->linkPanel);
                 textRefresh(reader->linkPanel);
             }
@@ -1384,7 +1384,7 @@ void Reader::lookupSelection() {
         for (const auto &rect : guard->draftHighlightRects)
             bounds = bounds.united(rect);
         guard->lookupText = query;
-        guard->lookupBounds = bounds.translated(0, guard->page->topHeight());
+        guard->lookupBounds = bounds.translated(guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
         const auto result = guard->dictionary->lookup(guard->book->identity(), query);
         if (!guard || guard->lookupEpoch != epoch || guard->lifecycleHidden)
             return;

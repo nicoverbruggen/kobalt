@@ -470,6 +470,7 @@ if(BUILD_TESTING)
             annotationModeNotice
             continuationHintClears
             listPressFeedback
+            optionAndSwatchPressFeedback
             marksSortingAndAnnotationRows
             annotationDetailsOnlyLoadVisiblePage
             hidingSelectionMenuKeepsDamageCompact

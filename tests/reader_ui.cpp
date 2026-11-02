@@ -8,6 +8,8 @@
 #include "assets/bundled_fonts.h"
 #include "interfaces/library/library_view.h"
 #include "interfaces/reader/ui/controls/buttons.h"
+#include "interfaces/reader/ui/controls/highlight_palette.h"
+#include "interfaces/reader/ui/controls/options.h"
 #include "interfaces/reader/ui/controls/loading.h"
 #include "interfaces/reader/ui/controls/sliders.h"
 #include "interfaces/reader/ui/controls/rows.h"
@@ -1987,6 +1989,41 @@ private slots:
         toolbar.resize(ui::px(112), ui::px(112));
         toolbar.setDown(true);
         QCOMPARE(background(&toolbar), ui::themeColors(dark).ink);
+    }
+    void optionAndSwatchPressFeedback_data() { variants(); }
+    void optionAndSwatchPressFeedback() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        QWidget host;
+        host.setProperty("reader_dark", dark);
+        host.setPalette(ui::readerPalette(host.palette(), dark));
+        host.resize(ui::px(800), ui::px(500));
+        ui::DescribedOption option("Check at start", "Scan configured folders", &host);
+        auto look = option.presentation();
+        look.indicator = ui::DescribedOption::Indicator::Square;
+        option.setPresentation(look);
+        option.resize(ui::px(700), ui::px(160));
+        ui::HighlightSwatch swatch("yellow", "Yellow", &host);
+        swatch.move(0, ui::px(200));
+        swatch.resize(ui::px(160), swatch.height());
+        host.show();
+        for (auto *control : {static_cast<QAbstractButton *>(&option), static_cast<QAbstractButton *>(&swatch)}) {
+            for (bool checked : {false, true}) {
+                control->setChecked(checked);
+                const auto normal = control->grab().toImage();
+                QTest::mousePress(control, Qt::LeftButton);
+                QVERIFY(control->isDown());
+                QCOMPARE(control->grab().toImage().pixelColor(ui::px(4), ui::px(4)), ui::themeColors(dark).pressedPaper);
+                QCOMPARE(control->isChecked(), checked);
+                QTest::mouseRelease(control, Qt::LeftButton, Qt::NoModifier, QPoint(-1, -1));
+                QVERIFY(!control->isDown());
+                QCOMPARE(control->grab().toImage(), normal);
+            }
+            control->setEnabled(false);
+            control->setDown(true);
+            QCOMPARE(control->grab().toImage().pixelColor(ui::px(4), ui::px(4)), ui::themeColors(dark).paper);
+        }
     }
     void marksSortingAndAnnotationRows_data() { variants(); }
     void marksSortingAndAnnotationRows() {

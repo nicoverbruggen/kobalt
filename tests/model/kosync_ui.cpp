@@ -40,6 +40,7 @@ void checkKeyboardInputStaysInEditor() {
         for (bool dark : {false, true}) {
             ui::setDensity(ppi);
             QWidget host;
+            host.setProperty("reader_dark", dark);
             host.resize(ui::px(800), ui::px(1136));
             host.setFont(ui::interfaceFont());
             ui::applyReaderPalette(&host, ui::readerPalette(host.palette(), dark));
@@ -49,6 +50,27 @@ void checkKeyboardInputStaysInEditor() {
             host.show();
             page.show();
             QApplication::processEvents();
+            for (const char *name : {"rrKosyncLogin", "rrKosyncNow", "rrKosyncLogout", "rrKosyncLearnMore"}) {
+                page.setNativeCloudSync(QString(name) == "rrKosyncLearnMore");
+                page.setAccount("https://sync.example", "reader", QString(name) != "rrKosyncLogin", true);
+                auto *action = page.findChild<QPushButton *>(name);
+                require(action && action->isVisible() && action->isEnabled(), "Sync action is available for contrast check");
+                const auto normal = action->grab().toImage();
+                QTest::mousePress(action, Qt::LeftButton);
+                require(action->isDown(), "Sync contrast check delivered a press");
+                const auto held = action->grab().toImage();
+                const auto colors = ui::themeColors(dark);
+                require(held.pixelColor(ui::px(4), ui::px(4)) == colors.pressedPaper, "Sync action uses the list pressed fill");
+                int ink = 0;
+                for (int y = ui::px(4); y < held.height() - ui::px(4); ++y)
+                    for (int x = ui::px(24); x < held.width() - ui::px(24); ++x)
+                        ink += held.pixelColor(x, y) == colors.ink;
+                require(ink > 10, "Sync action retains contrasting label ink while pressed");
+                QTest::mouseRelease(action, Qt::LeftButton, Qt::NoModifier, QPoint(-1, -1));
+                require(action->grab().toImage() == normal, "Cancelled Sync action restores its appearance");
+            }
+            page.setNativeCloudSync(false);
+            page.setAccount({}, {}, false, true);
             for (const auto *field : {"rrKosyncServer", "rrKosyncUsername", "rrKosyncPassword"}) {
                 page.findChild<QPushButton *>(field)->click();
                 QApplication::processEvents();

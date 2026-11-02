@@ -21,7 +21,7 @@ public:
         int labelPixels, descriptionPixels;
         QSize indicatorSize;
         // A held row turns the list's pressed gray and fills its radio.
-        bool pressedFill = false;
+        bool pressedFill = true;
         // The indicator sits before the label instead of after it.
         bool leadingIndicator = false;
         // Align a font-name preview by its visible ink, like the font panel.

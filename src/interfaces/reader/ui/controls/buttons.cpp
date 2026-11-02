@@ -69,7 +69,9 @@ void Button::paintEvent(QPaintEvent *) {
             QPainter painter(this);
             style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
             const bool primary = property("reader_primary_action").toBool();
-            const bool active = isEnabled() && (primary ? !isDown() : isChecked() || isDown());
+            // Ordinary actions use a gray pressed fill and keep their ink.
+            // Checkable controls and primary actions use inverted content.
+            const bool active = isEnabled() && (primary ? !isDown() : isCheckable() && (isChecked() || isDown()));
             const auto colors = primary ? readerPalette(palette(), darkTheme(this)) : palette();
             painter.setPen(colors.color(!isEnabled() ? QPalette::Mid
                                            : active     ? QPalette::Window

@@ -32,6 +32,7 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
+        p.fillRect(rect(), isEnabled() && isDown() ? themeColors(this).pressedPaper : palette().color(QPalette::Window));
         p.setRenderHint(QPainter::Antialiasing);
         const auto ink = palette().color(QPalette::WindowText);
         const int pen = px(2), ring = px(5);

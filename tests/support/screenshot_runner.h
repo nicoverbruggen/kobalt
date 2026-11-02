@@ -47,6 +47,27 @@ inline bool screenshotJobs(const QString &executable, const QString &root, const
         qCritical() << "Invalid screenshot case inventory";
         return false;
     }
+    const auto selectedCases = qEnvironmentVariable("KOBALT_GALLERY_CASE").split(',', Qt::SkipEmptyParts);
+    if (!selectedCases.isEmpty()) {
+        if (light || !selection.isEmpty()) {
+            qCritical() << "KOBALT_GALLERY_CASE cannot be combined with light or scene selection";
+            return false;
+        }
+        QStringList filtered;
+        for (const auto &name : selectedCases) {
+            bool found = false;
+            for (const auto &item : cases)
+                if (item.section(':', 0, 0) == name) {
+                    if (!filtered.contains(item)) filtered.append(item);
+                    found = true;
+                }
+            if (!found) {
+                qCritical() << "Unknown screenshot case:" << name;
+                return false;
+            }
+        }
+        cases = filtered;
+    }
     QList<QStringList> batches;
     if (!selection.isEmpty()) {
         for (auto it = selection.cbegin(); it != selection.cend(); ++it) {

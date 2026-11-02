@@ -7067,6 +7067,87 @@ void checkPageAnimationCompatibility(int preset, bool dark) {
 class ScreenshotTests final : public QObject {
     Q_OBJECT
 private slots:
+    void pressFeedback_data() { screenshotVariants(); }
+    void pressFeedback() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        const auto name = screenshotVariant(preset, dark);
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            // The color palette is available on color readers, independently of theme.
+            services.colorDisplay = [] { return true; };
+        });
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        const auto states = [&](const char *target, const QString &scene) {
+            auto *button = qobject_cast<QAbstractButton *>(fixture.widget(target));
+            QVERIFY(button && button->isVisible() && button->isEnabled());
+            QVERIFY(capture(fixture, name + '-' + scene));
+            // Use the existing reader canvas so input follows the production path.
+            auto *canvas = fixture.window.findChild<QGraphicsView *>();
+            QVERIFY(canvas);
+            auto *reader = fixture.window.readerWindow();
+            const auto point = canvas->mapFromScene(button->mapTo(reader, button->rect().center()));
+            const bool checked = button->isChecked();
+            // Keep action side effects out of a visual state comparison.
+            const QSignalBlocker block(button);
+            QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+            QTRY_VERIFY(button->isDown());
+            QVERIFY(capture(fixture, name + '-' + scene + "-pressed"));
+            QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+            button->setChecked(checked);
+            QVERIFY(!button->isDown());
+            QCOMPARE(button->isChecked(), checked);
+            QVERIFY(capture(fixture, name + '-' + scene + "-released"));
+        };
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsKosync"));
+        QVERIFY(revealSettingsOption(fixture, "rrKosyncLogin"));
+        states("rrKosyncLogin", "kosync-login-feedback");
+        QVERIFY(fixture.press("rrSettingsClose"));
+        if (!fixture.visible("rrAnnotate")) QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrAnnotate"));
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        const auto word = fixture.wordPoint();
+        QVERIFY(word.x() >= 0);
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+        QVERIFY(fixture.click(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationColor_yellow"));
+        states("rrAnnotationColor_yellow", "annotation-color-feedback");
+        // The Library owns a separate native canvas and the same checkbox control.
+        Fixture library(dark, false, true);
+        QVERIFY(library.prepared);
+        library.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        auto *start = library.window.findChild<android::StartScreen *>();
+        QVERIFY(start);
+        start->showLibrary();
+        auto *view = start->library();
+        QTRY_COMPARE(view->width(), screenshotSize(preset).width());
+        auto *more = view->findChild<QAbstractButton *>("libraryMore");
+        QVERIFY(more);
+        more->click();
+        view->findChild<QAbstractButton *>("libraryMoreFolders")->click();
+        auto *check = view->findChild<QAbstractButton *>("libraryCheckAtStart");
+        QTRY_VERIFY(check && check->isVisible());
+        QVERIFY(capture(library, name + "-library-option-feedback"));
+        auto *canvas = start->libraryCanvas();
+        const auto point = canvas->mapFromScene(check->mapTo(view, check->rect().center()));
+        const bool checked = check->isChecked();
+        const QSignalBlocker block(check);
+        QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+        QTRY_VERIFY(check->isDown());
+        QVERIFY(capture(library, name + "-library-option-feedback-pressed"));
+        QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+        check->setChecked(checked);
+        QVERIFY(!check->isDown());
+        QVERIFY(capture(library, name + "-library-option-feedback-released"));
+    }
     void pageAnimationCompatibility_data() { screenshotVariants(); }
     void pageAnimationCompatibility() {
         QFETCH(int, preset);
@@ -8421,10 +8502,11 @@ int main(int argc, char **argv) {
     std::unique_ptr<QTemporaryDir> staging;
     // KOBALT_GALLERY_SCENE names gallery cards, separated by commas. The last
     // full gallery's manifest tells which cases capture them.
+    const bool caseGallery = !qEnvironmentVariableIsEmpty("KOBALT_GALLERY_CASE");
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3299;
+    int expectedScreenshots = lightGallery ? 182 : 3416;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";
@@ -8463,6 +8545,7 @@ int main(int argc, char **argv) {
             }
             output += "-scenes";
         }
+        if (caseGallery) output += "-cases";
         if (QFileInfo::exists(output)) {
             QFile previous(output + "/manifest.json");
             if (!previous.open(QIODevice::ReadOnly) ||
@@ -8523,7 +8606,7 @@ int main(int argc, char **argv) {
             qCritical() << "Scene capture lost a selected screen or viewport variant";
             return 2;
         }
-    } else if (captures.size() != expectedScreenshots) {
+    } else if (!caseGallery && captures.size() != expectedScreenshots) {
         qCritical() << "Expected" << expectedScreenshots << "screenshots, captured" << captures.size();
         return 2;
     }
@@ -8532,7 +8615,7 @@ int main(int argc, char **argv) {
                                {"commit", kobaltCommit}, {"modified", bool(KOBALT_COMMIT_MODIFIED)},
                                {"book", "Trevelyan's Type Tester v1.2 with chapter-heading CSS fix"}, {"book_file", QFileInfo(book).fileName()},
                                {"book_sha256", QString::fromLatin1(QCryptographicHash::hash(fixture.readAll(), QCryptographicHash::Sha256).toHex())},
-                               {"suite", !selection.isEmpty() ? "scenes" : lightGallery ? "light" : "full"}, {"images", captures}};
+                               {"suite", caseGallery ? "cases" : !selection.isEmpty() ? "scenes" : lightGallery ? "light" : "full"}, {"images", captures}};
     QSaveFile record(captureDirectory + "/manifest.json");
     const auto json = QJsonDocument(manifest).toJson();
     if (!record.open(QIODevice::WriteOnly) || record.write(json) != json.size() || !record.commit()) {

@@ -41,6 +41,15 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
     }
     static const QMap<QString, QString> titles{
         {"about", "About Kobalt"},
+        {"kosync-login-feedback", "Sync sign in: idle"},
+        {"kosync-login-feedback-pressed", "Sync sign in: pressed"},
+        {"kosync-login-feedback-released", "Sync sign in: released"},
+        {"annotation-color-feedback", "Annotation color: idle"},
+        {"annotation-color-feedback-pressed", "Annotation color: pressed"},
+        {"annotation-color-feedback-released", "Annotation color: released"},
+        {"library-option-feedback", "Library checkbox: idle"},
+        {"library-option-feedback-pressed", "Library checkbox: pressed"},
+        {"library-option-feedback-released", "Library checkbox: released"},
         {"settings-light-feedback", "Frontlight gesture feedback"},
         {"settings-light-feedback-hidden", "Frontlight gesture feedback disabled"},
         {"light-feedback-hidden", "Frontlight adjustment without feedback"},
@@ -327,7 +336,7 @@ inline QByteArray screenshotGallery(const QString &directory, const QJsonArray &
             if (url.startsWith("https://")) credits += "<p><a href=\"" + escape(url) + "\">" + escape(item["title"].toString()) + "</a></p>";
         }
     }
-    const QMap<QString, QString> values{{"SUITE", manifest["suite"] == "light" ? "Light" : manifest["suite"] == "scenes" ? "Selected scenes" : "Full"}, {"GROUPS", groups}, {"OPTIONS", options}, {"IMAGES", images},
+    const QMap<QString, QString> values{{"SUITE", manifest["suite"] == "light" ? "Light" : manifest["suite"] == "scenes" ? "Selected scenes" : manifest["suite"] == "cases" ? "Selected cases" : "Full"}, {"GROUPS", groups}, {"OPTIONS", options}, {"IMAGES", images},
         {"COUNT", QString::number(scenes.size())}, {"CAPTURES", QString::number(captures.size())}, {"BOOKS", credits},
         {"BUILD", escape("Source " + manifest["commit"].toString() + (manifest["modified"].toBool() ? " (modified)" : "") +
                          " · Qt " + manifest["qt"].toString() + " · " + manifest["version"].toString())}};

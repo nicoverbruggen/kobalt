@@ -1,3 +1,4 @@
+#include "reading/remaining_time.h"
 #include "interfaces/reader/ui/controls/buttons.h"
 #include "interfaces/reader/ui/controls/icons.h"
 #include "interfaces/reader/ui/style/theme.h"
@@ -54,6 +55,7 @@ kobalt::headerfooter::Values Reader::chromeValues() {
     values.chapterMilliseconds = estimates.chapterMilliseconds;
     values.bookMilliseconds = estimates.bookMilliseconds;
     values.learningPace = estimates.learningPace;
+    values.approximateTime = remainingTime::approximate(preferences);
     return values;
 }
 
@@ -270,6 +272,7 @@ void Reader::openSettings() {
     settingsDictionaryFontFace = preferences.value("dictionary_font_face").toString();
     settingsDictionaryFontSize = preferences.value("dictionary_font_size").toInt(100);
     settingsHeaderFooterWeight = ui::headerFooterAddedWeight();
+    settingsTimeRemainingFormat = remainingTime::approximate(preferences) ? "approximate" : "detailed";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     for (auto *face : {&settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace, &settingsDictionaryFontFace})
         if (!model->fontFaces().contains(*face))
@@ -532,6 +535,7 @@ void Reader::applySettings() {
     next["dictionary_font_size"] = settingsDictionaryFontSize;
     next["header_footer_added_weight"] = settingsHeaderFooterWeight;
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
+    next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
     for (const auto *key : appearance::fallbackFontKeys)
         next[key] = settingsFontFaces.value(key).toString();
     next["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
@@ -1023,6 +1027,7 @@ void Reader::applyInterfaceFonts() {
 
 void Reader::showSettingsFonts() {
     auto *panel = static_cast<SettingsPanel *>(general);
+    panel->timeRemainingFormatButton->setCaption(SettingsPanel::timeRemainingFormatLabel(settingsTimeRemainingFormat).toUpper());
     panel->headerFooterWeightButton->setCaption(
         (settingsHeaderFooterWeight
              ? strings::get("settings.header_footer_weight_heavier").arg(settingsHeaderFooterWeight)

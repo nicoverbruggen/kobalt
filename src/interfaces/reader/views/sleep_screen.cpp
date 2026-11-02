@@ -1,4 +1,5 @@
 #include "sleep_screen.h"
+#include "reading/remaining_time.h"
 
 #include "interfaces/reader/ui/controls/panels.h"
 #include "interfaces/reader/ui/style/fonts.h"
@@ -266,7 +267,11 @@ QString sleepStatusText(SleepStatus status) {
     }
     return {};
 }
-QString sleepTimeLeft(qint64 milliseconds) {
+QString sleepTimeLeft(qint64 milliseconds, bool approximate) {
+    if (approximate) {
+        const auto duration = remainingTime::approximateDuration(milliseconds);
+        return duration.isEmpty() ? QString() : strings::get("sleep.time_left").arg(duration);
+    }
     if (milliseconds < 0) {
         return {};
     }

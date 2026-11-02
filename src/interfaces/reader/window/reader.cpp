@@ -1,3 +1,4 @@
+#include "reading/remaining_time.h"
 #include "interfaces/reader/ui/controls/buttons.h"
 #include "interfaces/reader/ui/controls/icons.h"
 #include "interfaces/reader/ui/controls/paging.h"
@@ -331,7 +332,7 @@ sleep::Snapshot Reader::captureSleepScreen() {
         return {};
     const int percent = pageProgressPercent(model->page(), model->pages());
     sleep::Snapshot snapshot{std::move(frame), kobalt::shownOrientation(QGuiApplication::primaryScreen()),
-            strings::get("sleep.percent_read").arg(percent), sleepTimeLeft(book->estimates().bookMilliseconds),
+            strings::get("sleep.percent_read").arg(percent), sleepTimeLeft(book->estimates().bookMilliseconds, remainingTime::approximate(preferences)),
             darkTheme, mode, !useCover, percent, sleep::tile(preferences)};
     if (useCover && sleepCoverSource.isFile()) {
         snapshot.coverPath = sleepCoverSource.absoluteFilePath();

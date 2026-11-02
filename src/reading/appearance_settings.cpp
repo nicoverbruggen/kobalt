@@ -126,6 +126,7 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
     choice("marks_sort", {"position", "newest", "oldest"});
     choice("sleep_screen", {"stock", "cover", "page"});
     choice("sleep_tile", {"card", "band", "bookmark"});
+    choice("time_remaining_format", {"detailed", "approximate"});
     if (preferences.contains(sessionTimeout::preferenceKey) &&
         !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))
         preferences.remove(sessionTimeout::preferenceKey);

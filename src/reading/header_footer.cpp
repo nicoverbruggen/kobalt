@@ -1,4 +1,5 @@
 #include "header_footer.h"
+#include "remaining_time.h"
 #include "reading_progress.h"
 #include "support/strings.h"
 
@@ -33,9 +34,13 @@ QString pageFraction(int page, int pages) {
     return pages > 0 ? strings::get("common.page_fraction").arg(page).arg(pages) : QString();
 }
 // A standalone estimate remains approximate while reading history accumulates.
-QString timeLeft(qint64 milliseconds, bool learningPace) {
+QString timeLeft(qint64 milliseconds, bool learningPace, bool approximate) {
     if (milliseconds < 0)
         return learningPace ? strings::get("header_footer.learning_pace") : QString();
+    if (approximate) {
+        const auto duration = remainingTime::approximateDuration(milliseconds);
+        return duration.isEmpty() ? QString() : strings::get("header_footer.time_left").arg(duration);
+    }
     const qint64 minutes = qMax<qint64>(1, (milliseconds + 30000) / 60000);
     const auto time = minutes < 60 ? strings::get("stats.duration_minutes").arg(minutes)
                                    : strings::get("stats.duration_hours").arg(minutes / 60).arg(minutes % 60);
@@ -343,10 +348,10 @@ Content content(Field field, const Values &values, bool uppercase) {
         result.text = values.time;
         break;
     case Field::ChapterTimeLeft:
-        result.text = timeLeft(values.chapterMilliseconds, values.learningPace);
+        result.text = timeLeft(values.chapterMilliseconds, values.learningPace, values.approximateTime);
         break;
     case Field::BookTimeLeft:
-        result.text = timeLeft(values.bookMilliseconds, values.learningPace);
+        result.text = timeLeft(values.bookMilliseconds, values.learningPace, values.approximateTime);
         break;
     case Field::ChapterPercent:
         result.text = percentDone(values.chapterPage, values.chapterPages);

@@ -174,6 +174,7 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"styling-word-spacing", "Word spacing preview"},
         {"settings-system", "System settings"},
         {"session-timeout", "New session after sleep"},
+        {"settings-time-remaining-format", "Time remaining format"},
         {"stats", "Reading statistics"},
         {"stats-dense-graph", "Dense chapter graph"},
         {"stats-dense-reading", "Moby Dick"},

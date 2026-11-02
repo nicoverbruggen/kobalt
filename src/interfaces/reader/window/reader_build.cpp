@@ -1354,6 +1354,12 @@ void Reader::buildSettings() {
     connect(settings->headerFooterFontButton, &QPushButton::clicked, this, [this] {
         openSettingsFont("header_footer_font_face");
     });
+    connect(settings->timeRemainingFormatButton, &QPushButton::clicked, this, [this, settings] {
+        settings->showTimeRemainingFormats(settingsTimeRemainingFormat, [this](const QString &format) {
+            settingsTimeRemainingFormat = format;
+            showSettingsFonts();
+        });
+    });
     connect(settings->headerFooterWeightButton, &QPushButton::clicked, this, [this, settings] {
         auto sampleFont = ui::headerFooterFont(page->headerTextPixels());
         if (!settingsHeaderFooterFontFace.isEmpty())
@@ -1422,6 +1428,7 @@ void Reader::buildSettings() {
         settingsDictionaryFontFace.clear();
         settingsDictionaryFontSize = 100;
         settingsHeaderFooterWeight = 2;
+        settingsTimeRemainingFormat = "detailed";
         hideTabLabelsOption->setChecked(false);
         for (const auto *key : appearance::fallbackFontKeys)
             settingsFontFaces[key] = QString();

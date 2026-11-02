@@ -1,5 +1,7 @@
 #include "reading/header_footer.h"
 #include "reading/reading_density.h"
+#include "reading/remaining_time.h"
+#include <limits>
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "check.h"
@@ -263,6 +265,36 @@ int main() {
     values.learningPace = true;
     require(content(Field::BookTimeLeft, values, false).text.startsWith(QStringLiteral("≈ ")),
             "A rough estimate was shown as a learned pace");
+    values.approximateTime = true;
+    struct Estimate { qint64 milliseconds; const char *duration; };
+    for (const auto &estimate : {Estimate{1, "about 15 minutes"}, {15 * 60000, "about 15 minutes"},
+                                {15 * 60000 + 1, "about 30 minutes"}, {30 * 60000, "about 30 minutes"},
+                                {30 * 60000 + 1, "about 45 minutes"}, {45 * 60000, "about 45 minutes"},
+                                {45 * 60000 + 1, "about an hour"}, {60 * 60000, "about an hour"},
+                                {60 * 60000 + 1, "about 2 hours"}, {120 * 60000, "about 2 hours"},
+                                {120 * 60000 + 1, "about 3 hours"}}) {
+        values.chapterMilliseconds = values.bookMilliseconds = estimate.milliseconds;
+        const auto duration = QString::fromLatin1(estimate.duration);
+        require(remainingTime::approximateDuration(estimate.milliseconds) == duration,
+                "Approximate duration crossed a rounding boundary incorrectly");
+        for (const auto field : {Field::ChapterTimeLeft, Field::BookTimeLeft}) {
+            const auto expected = strings::get("header_footer.time_left").arg(duration);
+            require(content(field, values, false).text == expected,
+                    "Approximate time was not applied to both chapter and book estimates");
+            require(content(field, values, true).text == expected.toUpper(),
+                    "Approximate time ignored uppercase or added a second learning marker");
+        }
+    }
+    require(!remainingTime::approximateDuration(std::numeric_limits<qint64>::max()).isEmpty(),
+            "A large estimate overflowed approximate formatting");
+    values.chapterMilliseconds = values.bookMilliseconds = -1;
+    require(content(Field::BookTimeLeft, values, false).text == strings::get("header_footer.learning_pace"),
+            "Approximate mode lost the unknown-pace message");
+    values.learningPace = false;
+    require(content(Field::BookTimeLeft, values, false).empty(), "Unknown approximate time became a numeric estimate");
+    values.chapterMilliseconds = values.bookMilliseconds = 0;
+    require(content(Field::ChapterTimeLeft, values, false).empty(), "A zero approximate estimate displayed time left");
+    values.approximateTime = false;
     values.deviceStatus = false;
     require(content(Field::Battery, values, false).empty(), "The battery showed on a host without device status");
     require(content(Field::Time, values, false).text == values.time, "The time hid with device status");

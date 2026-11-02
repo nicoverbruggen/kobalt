@@ -545,6 +545,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                                    : strings::get("settings.unsupported_description"));
     automaticOpeningOption->setEnabled(inputs.automaticBookOpeningSupported);
     systemRows->addWidget(automaticOpeningOption);
+    timeRemainingFormatButton = ui::makeCaptionButton(systemPage, nullptr, "rrTimeRemainingFormat",
+                                                      strings::get("settings.time_remaining_format"), [] {});
+    systemRows->addWidget(timeRemainingFormatButton);
     section(systemPage, systemRows, "rrSystemSleepSection", strings::get("settings.section_sleep"));
     sleepScreenButton =
         ui::makeCaptionButton(systemPage, nullptr, "rrSleepScreen", strings::get("settings.sleep_screen"), [] {});
@@ -734,7 +737,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
          {resetDefaults, refreshButton, columnSpacingButton, sleepScreenButton, sleepTileButton, sessionTimeoutButton, pageNavigationButton,
           tapZonesButton, tappableLinksButton, navigationBarButton,
           menuViewButton, uiFontButton, uiMonoFontButton, headerFooterFontButton, headerFooterWeightButton,
-          dictionaryFontButton, dictionaryFontSizeButton,
+          dictionaryFontButton, dictionaryFontSizeButton, timeRemainingFormatButton,
           defaultFontButton, serifFontButton, sansFontButton, monoFontButton, beautifierButton, wordSpacingButton, paragraphSpacingButton, trackingButton, widowsOrphansButton, verticalSpacingButton, verticalSpacingScopeButton}) {
         button->setRule(Qt::BottomEdge);
         // The refresh row's caption shows its current choice, set when Settings opens.
@@ -1251,6 +1254,49 @@ void SettingsPanel::showBeautifier(const QJsonObject &current, std::function<voi
     const int width = qMin<int>(ui::px(1064), parentWidget()->width() - 2 * m::notice::sideClearance);
     for (auto *option : options) option->setFixedHeight(option->heightForWidth(width - 2 * m::control::border));
     card->fitToWidth(width);
+    fontDialog->centerCard();
+    fontDialog->show();
+    fontDialog->raise();
+    fontDialog->setFocus();
+}
+
+QString SettingsPanel::timeRemainingFormatLabel(const QString &format) {
+    return strings::get(format == "approximate" ? "settings.time_remaining_approximate" : "settings.time_remaining_detailed");
+}
+void SettingsPanel::showTimeRemainingFormats(const QString &current, std::function<void(const QString &)> chosen) {
+    if (fontDialog)
+        return;
+    fontDialog = new ui::ModalOverlay(parentWidget());
+    fontDialog->setObjectName("rrTimeRemainingFormatPopup");
+    fontDialog->setDimmed(true);
+    fontDialog->setGeometry(parentWidget()->rect());
+    fontDialog->dismissed = [this] { dismissFontChoices(); };
+    auto *card = fontDialog->card();
+    auto *rows = card->rows();
+    rows->setContentsMargins(m::control::border, m::notice::cardMargins.top(), m::control::border, m::control::border);
+    rows->setSpacing(0);
+    auto *heading = card->title(strings::get("settings.time_remaining_format"));
+    heading->setContentsMargins(c::inset, 0, c::inset, m::notice::cardMargins.bottom());
+    auto *hint = card->message(strings::get("settings.time_remaining_format_description"));
+    hint->setContentsMargins(c::inset, 0, c::inset, m::notice::cardMargins.bottom());
+    readerStyle(hint, styles::font(c::descriptionText));
+    auto *choices = new ui::RadioList(card);
+    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setTopDivider(true);
+    for (const auto *format : {"detailed", "approximate"}) {
+        choices->add(QString("rrTimeRemainingFormat_%1").arg(format), timeRemainingFormatLabel(format),
+                     strings::get(QString("settings.time_remaining_%1_description").arg(format).toLatin1().constData()));
+        if (format == current)
+            choices->setCurrent(choices->options().size() - 1);
+    }
+    choices->chosen = [this, chosen](int index) {
+        dismissFontChoices();
+        chosen(index == 1 ? QStringLiteral("approximate") : QStringLiteral("detailed"));
+    };
+    rows->addWidget(choices);
+    const int cardWidth = qMin<int>(m::notice::cardWidth, parentWidget()->width() - 2 * m::notice::sideClearance);
+    choices->setFixedHeight(choices->heightForWidth(cardWidth - 2 * m::control::border));
+    card->fitToWidth(cardWidth);
     fontDialog->centerCard();
     fontDialog->show();
     fontDialog->raise();

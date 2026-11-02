@@ -50,6 +50,8 @@ public:
     void showHeaderFooterWeights(int current, const QFont &sampleFont, std::function<void(int)> chosen);
     void showDictionaryFontSizes(int current, const QString &family, bool customFont, std::function<void(int)> chosen);
     static QString dictionaryFontSizeLabel(int percent);
+    void showTimeRemainingFormats(const QString &current, std::function<void(const QString &)> chosen);
+    static QString timeRemainingFormatLabel(const QString &format);
     void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
     static QString columnSpacingLabel(int percent);
     enum class AdvancedText { WordSpacing, Tracking, Pagination, VerticalSpacing, VerticalSpacingScope, ParagraphSpacing };
@@ -95,7 +97,7 @@ public:
     ui::CaptionButton *serifFontButton = nullptr, *sansFontButton = nullptr, *monoFontButton = nullptr;
     ui::CaptionButton *dictionaryFontButton = nullptr, *dictionaryFontSizeButton = nullptr;
     ui::DescribedOption *landscapeColumnsOption = nullptr;
-    ui::CaptionButton *columnSpacingButton = nullptr;
+    ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr, *verticalSpacingScopeButton = nullptr;
     ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr, *widowsOrphansButton = nullptr;
     ui::CaptionButton *paragraphSpacingButton = nullptr, *beautifierButton = nullptr;

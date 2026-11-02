@@ -9,9 +9,10 @@
 namespace kobalt::reader {
 enum class SleepStatus { Sleeping, Charging, Charged, PoweredOff };
 QString sleepStatusText(SleepStatus status);
-// Rounds up to whole minutes. Estimates above 120 minutes use hours and minutes.
-// A negative estimate is unavailable and has no label.
-QString sleepTimeLeft(qint64 milliseconds);
+// Detailed rounds up to minutes, using hours and minutes above 120 minutes.
+// Approximate rounds up to quarter-hours below an hour, then whole hours.
+// Negative estimates have no label; Approximate also omits zero.
+QString sleepTimeLeft(qint64 milliseconds, bool approximate = false);
 // Fits the cover without cropping. Unused space is always black.
 QImage sleepCoverBackground(const QImage &cover, QSize size);
 // The area a tile covers. It does not depend on the status, so a battery

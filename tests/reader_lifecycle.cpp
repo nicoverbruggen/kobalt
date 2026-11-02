@@ -3054,6 +3054,59 @@ private slots:
         QCOMPARE(page.snapshot(true), blank);
     }
 
+    void timeRemainingFormatShared_data() {
+        QTest::addColumn<bool>("approximate");
+        QTest::newRow("detailed") << false;
+        QTest::newRow("approximate") << true;
+    }
+    void timeRemainingFormatShared() {
+        QFETCH(bool, approximate);
+        const auto paths = testPaths();
+        auto layout = headerfooter::presetLayout(headerfooter::Preset::Default);
+        layout.slotFields[0] = headerfooter::Field::ChapterTimeLeft;
+        layout.slotFields[5] = headerfooter::Field::BookTimeLeft;
+        for (auto &uppercase : layout.uppercase) uppercase = false;
+        QVERIFY(storage::writeJson(paths.preferences(), {{"time_remaining_format", approximate ? "approximate" : "detailed"},
+            {sleep::preferenceKey, "page"}, {headerfooter::presetKey, "custom"},
+            {headerfooter::customKey, headerfooter::toJson(layout)}}));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = {QUrl::fromLocalFile(QFileInfo(coverBook).absoluteFilePath()).toString(),
+                                  "OEBPS/c1.xhtml", 100, 1, true};
+        host.positions = nickel::positionCodec();
+        host.progress->hasEstimates = true;
+        host.progress->remaining = {18 * 60000, 83 * 60000};
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) { return std::make_unique<test::HostPresentation>(state); };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(coverBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        QTRY_COMPARE(page->slotContents[0].text, approximate ? QString("about 30 minutes left") : QString("18 min left"));
+        QTRY_COMPARE(page->slotContents[5].text, approximate ? QString("about 2 hours left") : QString("1 h 23 min left"));
+        const auto snapshot = host.window()->powerScreenSnapshot();
+        QVERIFY(!snapshot.image.isNull());
+        QCOMPARE(snapshot.remaining, approximate ? QString("about 2 hours to go") : QString("83 min to go"));
+    }
+    void sleepTimeLeftApproximate() {
+        QCOMPARE(reader::sleepTimeLeft(-1, true), QString());
+        QCOMPARE(reader::sleepTimeLeft(0, true), QString());
+        QCOMPARE(reader::sleepTimeLeft(1, true), QString("about 15 minutes to go"));
+        QCOMPARE(reader::sleepTimeLeft(15 * 60000, true), QString("about 15 minutes to go"));
+        QCOMPARE(reader::sleepTimeLeft(15 * 60000 + 1, true), QString("about 30 minutes to go"));
+        QCOMPARE(reader::sleepTimeLeft(30 * 60000 + 1, true), QString("about 45 minutes to go"));
+        QCOMPARE(reader::sleepTimeLeft(45 * 60000 + 1, true), QString("about an hour to go"));
+        QCOMPARE(reader::sleepTimeLeft(60 * 60000, true), QString("about an hour to go"));
+        QCOMPARE(reader::sleepTimeLeft(60 * 60000 + 1, true), QString("about 2 hours to go"));
+        QCOMPARE(reader::sleepTimeLeft(120 * 60000, true), QString("about 2 hours to go"));
+        QCOMPARE(reader::sleepTimeLeft(120 * 60000 + 1, true), QString("about 3 hours to go"));
+    }
     void sleepTimeLeftUsesHoursAboveTwoHours() {
         QCOMPARE(reader::sleepTimeLeft(-1), QString());
         QCOMPARE(reader::sleepTimeLeft(0), QString("0 min to go"));

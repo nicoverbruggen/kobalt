@@ -1,5 +1,6 @@
 #include "reading/appearance_settings.h"
 #include "reading/session_timeout.h"
+#include "reading/remaining_time.h"
 #include "support/qt_compat.h"
 #include "check.h"
 #include <QJsonArray>
@@ -9,6 +10,20 @@
 using namespace kobalt;
 
 int main() {
+    require(!remainingTime::approximate({}), "Older preferences did not retain detailed estimates");
+    for (const auto *format : {"detailed", "approximate"}) {
+        const auto preferences = appearance::cleanPreferences({{remainingTime::preferenceKey, format}, {"future_option", 42}});
+        require(preferences.value(remainingTime::preferenceKey).toString() == format &&
+                    preferences.value("future_option").toInt() == 42, "Time format cleanup lost saved preferences");
+        require(remainingTime::approximate(preferences) == (QString(format) == "approximate"), "Time format loaded incorrectly");
+        require(appearance::same({}, preferences), "Time format invalidated the book layout");
+    }
+    for (const auto &invalid : {QJsonValue("unknown"), QJsonValue(true), QJsonValue(1), QJsonValue()}) {
+        const auto preferences = appearance::cleanPreferences({{remainingTime::preferenceKey, invalid}});
+        require(!preferences.contains(remainingTime::preferenceKey) && !remainingTime::approximate(preferences),
+                "Invalid time format did not fall back to detailed estimates");
+    }
+
     require(sessionTimeout::minutes({}) == 15, "Older preferences lost the default session timeout");
     for (const auto minutes : sessionTimeout::choices) {
         const auto preferences = appearance::cleanPreferences({{sessionTimeout::preferenceKey, minutes}, {"optional", "keep"}});

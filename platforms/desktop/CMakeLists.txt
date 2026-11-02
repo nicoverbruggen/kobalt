@@ -352,7 +352,7 @@ if(BUILD_TESTING)
             homeSleepScreenRequiresUnambiguousLastBook nativeOpeningStatus
             sleepScreenUpdatesWhilePluggedIn sleepScreenDimsOnlyItsOwnedPage sleepTilesRepaintOnlyTheirArea
             sleepSnapshotMatchesTheDisplayedPage
-            sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours
+            sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
             sleepScreenModesKeepTheStockDefaultAndMigrateTheOptIn sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus remoteKeyActivityRequiresActiveReading
             finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncManualToolbar kosyncManualConnection kosyncPasswordSleep kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave

@@ -1308,6 +1308,12 @@ void tour(Fixture &fixture, const QString &name, bool screenshots) {
             capturePages(fixture, name + "-settings-" + QString(tab).toLower(), "rrSettingsOptions");
         }
         QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
+        QVERIFY(fixture.press("rrTimeRemainingFormat"));
+        QTRY_VERIFY(fixture.visible("rrTimeRemainingFormatPopup"));
+        QVERIFY(scene("settings-time-remaining-format"));
+        QVERIFY(fixture.press("rrTimeRemainingFormat_detailed"));
+        QTRY_VERIFY(!fixture.visible("rrTimeRemainingFormatPopup"));
         QVERIFY(revealSettingsOption(fixture, "rrSessionTimeout"));
         QVERIFY(fixture.press("rrSessionTimeout"));
         QTRY_VERIFY(fixture.visible("rrSessionTimeoutPopup"));
@@ -5526,8 +5532,27 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(storage::readJson(fixture.paths.preferences()).value("session_timeout_minutes").toInt(-1), minutes);
             QCOMPARE(timeout->caption(), strings::get(qPrintable(QString("settings.session_timeout_%1").arg(minutes))).toUpper());
         }
+        QVERIFY(fixture.press("rrSettingsDisplay"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
+        auto *timeFormat = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrTimeRemainingFormat"));
+        QVERIFY(timeFormat);
+        QCOMPARE(timeFormat->height(), fixture.widget("rrHeaderFooterWeight")->height());
+        QCOMPARE(timeFormat->font(), fixture.widget("rrHeaderFooterWeight")->font());
+        QCOMPARE(timeFormat->caption(), strings::get("settings.time_remaining_detailed").toUpper());
+        const auto timeCapture = qEnvironmentVariable("KOBALT_TIME_FORMAT_CAPTURE");
+        if (!timeCapture.isEmpty())
+            QVERIFY(fixture.window.readerWindow()->grab().save(timeCapture + (dark ? "-row-dark.png" : "-row-light.png")));
+        QVERIFY(fixture.press("rrTimeRemainingFormat"));
+        QTRY_VERIFY(fixture.visible("rrTimeRemainingFormatPopup"));
+        if (!timeCapture.isEmpty())
+            QVERIFY(fixture.window.readerWindow()->grab().save(timeCapture + (dark ? "-picker-dark.png" : "-picker-light.png")));
+        QVERIFY(fixture.press("rrTimeRemainingFormat_approximate"));
+        QTRY_VERIFY(!fixture.visible("rrTimeRemainingFormatPopup"));
+        QCOMPARE(timeFormat->caption(), strings::get("settings.time_remaining_approximate").toUpper());
+        QVERIFY(!storage::readJson(fixture.paths.preferences()).contains("time_remaining_format"));
         struct Option { const char *tab, *name, *key; };
-        QJsonObject expected;
+        QJsonObject expected{{"time_remaining_format", "approximate"}};
         for (const auto &option : {Option{"rrSettingsControls", "rrShowLinkIndicator", "show_link_indicator"},
                                    Option{"rrSettingsDefaults", "rrInheritTextLayout", "inherit_text_layout"}}) {
             QVERIFY(fixture.press(option.tab));
@@ -5547,6 +5572,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value(it.key()), it.value());
         const auto saved = storage::readJson(fixture.paths.preferences());
         QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
+        QCOMPARE(timeFormat->caption(), strings::get("settings.time_remaining_approximate").toUpper());
         QVERIFY(fixture.press("rrSettingsControls"));
         QTRY_VERIFY(fixture.visible("rrShowLinkIndicator"));
         QCOMPARE(fixture.window.readerWindow()->findChild<QCheckBox *>("rrShowLinkIndicator")->isChecked(),
@@ -8396,7 +8424,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3286;
+    int expectedScreenshots = lightGallery ? 182 : 3299;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

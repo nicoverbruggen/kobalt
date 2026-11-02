@@ -120,6 +120,7 @@ struct Values {
     bool deviceStatus = true;
     qint64 chapterMilliseconds = -1, bookMilliseconds = -1;
     bool learningPace = false;
+    bool approximateTime = false;
 };
 // One slot's text, and a battery icon drawn after it when `batteryIcon` is set.
 struct Content {

@@ -1240,3 +1240,15 @@
 "settings.normalization_margins_description" = "Use the margins set in Layout.";
 "settings.normalization_chapters" = "Reduce chapter-start spacing";
 "settings.normalization_chapters_description" = "Keep space above chapter-opening illustrations.";
+
+"settings.time_remaining_format" = "Time remaining format";
+"settings.time_remaining_format_description" = "Applies to reading-time estimates in the header, footer and sleep screen.";
+"settings.time_remaining_detailed" = "Detailed";
+"settings.time_remaining_approximate" = "Approximate";
+"settings.time_remaining_detailed_description" = "Use detailed estimates, such as \"83 min to go\".";
+"settings.time_remaining_approximate_description" = "Use approximate estimates, such as \"~2 hours to go\".";
+/* Arguments: %1 */
+"time_remaining.about_minutes" = "about %1 minutes";
+"time_remaining.about_hour" = "about an hour";
+/* Arguments: %1 */
+"time_remaining.about_hours" = "about %1 hours";

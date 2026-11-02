@@ -899,6 +899,13 @@ int SettingsPanel::fitContent(QSize availableSize) {
         }
     }
     optionPages.append({start, overflow ? qMax(start + 1, contentHeight) : pageHeight});
+    // Keep the About description off the logo/build page on short screens.
+    // Tall screens retain the existing centered layout.
+    if (overflow && settingsPages->currentIndex() == AboutSettings) {
+        const int split = aboutDescription->mapTo(settingsPages, QPoint()).y() - int(m::about::sectionGap);
+        if (split > 0 && split <= pageHeight && contentHeight - split <= pageHeight)
+            optionPages = {{0, split}, {split, contentHeight}};
+    }
     showOptionsPage(optionPage);
     return panelHeight + headingHeight;
 }

@@ -631,6 +631,11 @@ void FieldChooser::arrange() {
 void FieldChooser::paintEvent(QPaintEvent *event) {
     ui::Panel::paintEvent(event);
     paintBarRule(this, barHeight());
+    if (barHeight() > m::chrome::actionHeight) {
+        QPainter painter(this);
+        painter.fillRect(0, int(m::chrome::actionHeight) - int(m::control::border), width(),
+                         m::control::border, ui::dividerColor(this));
+    }
 }
 
 int FieldChooser::barHeight() const {
@@ -652,9 +657,8 @@ void FieldChooser::resizeEvent(QResizeEvent *) {
     const int boxWidth = ui::interfaceTextWidth(uppercase->text(), ui::interfaceFont(m::chrome::labelText)) +
                          m::settings::toggleGap + m::chrome::checkSize + 2 * m::chrome::inset;
     const bool stacked = this->barHeight() > m::chrome::actionHeight;
-    uppercase->setGeometry(stacked ? m::chrome::cellWidth : width() - boxWidth,
-                           stacked ? int(m::chrome::actionHeight) : 0,
-                           stacked ? width() - m::chrome::cellWidth : boxWidth, barHeight);
+    uppercase->setGeometry(width() - boxWidth,
+                           stacked ? int(m::chrome::actionHeight) : 0, boxWidth, barHeight);
     arrangeBar(this, finish, title, nullptr);
     if (!stacked) title->setGeometry(title->x(), 0, qMax(1, uppercase->x() - title->x()), barHeight);
     heading->setGeometry(0, this->barHeight(), width(), m::list::headerHeight);

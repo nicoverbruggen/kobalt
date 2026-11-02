@@ -21,6 +21,7 @@
 #include <QProgressBar>
 #include <QPainter>
 #include <QScreen>
+#include "reading/reading_density.h"
 
 namespace kobalt {
 namespace {
@@ -208,8 +209,8 @@ protected:
             widget->setGeometry(qRound(offset.x() + rect.x() * factor), qRound(offset.y() + rect.y() * factor),
                                 qRound(rect.width() * factor), qRound(rect.height() * factor));
         };
-        const auto textStyle = [this](QLabel *widget, qreal pixels, bool italic) {
-            const auto font = ui::brandFont(qMax(1, qRound(pixels * scale())), italic);
+        const auto textStyle = [this](QLabel *widget, qreal pixels, bool italic, int minimum = 1) {
+            const auto font = ui::brandFont(qMax(minimum, qRound(pixels * scale())), italic);
             widget->setFont(font);
             ui::readerStyle(
                 widget,
@@ -220,18 +221,29 @@ protected:
                     .arg(italic ? "italic" : "normal"));
         };
         textStyle(brand, m::brandText, false);
+        const bool phone = isPhoneScreen(size(), ui::density());
         textStyle(label,
                   !fallback   ? m::labelText
                   : automatic ? m::handoffText
                               : m::failureText,
-                  !fallback || automatic);
+                  !fallback || automatic, phone && !fallback ? int(ui::px(32)) : 1);
         // A caption in capitals, like the reader's other captions.
-        ui::captionLabel(hint, qMax(1, qRound(m::hintText * scale())));
+        ui::captionLabel(hint, qMax(phone ? int(ui::px(22)) : 1, qRound(m::hintText * scale())));
         place(hint, m::hint);
         progress->setFixedHeight(qMax(1, qRound(m::progress.height() * scale())));
         place(brand, fallback && !automatic ? m::failureBrand : m::brand);
         place(label, !fallback ? m::label : automatic ? m::handoffLabel : m::failureLabel);
         place(progress, m::progress);
+        if (phone) {
+            for (auto *text : {label, hint}) {
+                auto bounds = text->geometry();
+                const int height = qMax(bounds.height(), ui::interfaceLineHeight(text->font()));
+                bounds.setTop(bounds.center().y() - height / 2);
+                bounds.setHeight(height);
+                text->setGeometry(bounds);
+            }
+        }
+
         if (fallback) {
             const int pixels = qMax(1, qRound(m::detailText * scale()));
             detail->setFont(ui::interfaceFont(pixels));

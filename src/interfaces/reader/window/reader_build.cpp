@@ -26,6 +26,7 @@
 #include <QApplication>
 #include <QGridLayout>
 #include <QPainter>
+#include <QMap>
 #include <QHBoxLayout>
 #include <QSlider>
 #include <QScreen>
@@ -54,23 +55,26 @@ protected:
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        const qreal inset = int(m::control::border) / 2.0;
-        const auto bounds = QRectF(rect()).adjusted(inset, inset, -inset, -inset);
-        const qreal radius = bounds.width() / 2;
-        painter.setPen(QPen(palette().color(QPalette::WindowText), m::control::border));
-        painter.setBrush(palette().color(QPalette::Window));
-        painter.drawRoundedRect(bounds, radius, radius);
-        painter.setPen(QPen(ui::dividerColor(this), m::control::border));
-        const int dividerInset = width() / 4;
-        QPushButton *previous = nullptr;
-        for (auto *button : findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly)) {
-            if (button->isHidden())
-                continue;
-            if (previous) {
-                const qreal y = (previous->geometry().bottom() + 1 + button->y()) / 2.0;
-                painter.drawLine(QPointF(dividerInset, y), QPointF(width() - dividerInset, y));
+        const int padding = ui::px(12);
+        QMap<int, QVector<QRect>> columns;
+        for (auto *button : findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly))
+            if (!button->isHidden()) columns[button->x()].append(button->geometry());
+        for (const auto &buttons : columns) {
+            QRect content;
+            for (const auto &button : buttons) content |= button;
+            const qreal inset = int(m::control::border) / 2.0;
+            const auto bounds = QRectF(content.adjusted(-padding, -2 * padding, padding, 2 * padding))
+                .adjusted(inset, inset, -inset, -inset);
+            painter.setPen(QPen(palette().color(QPalette::WindowText), m::control::border));
+            painter.setBrush(palette().color(QPalette::Window));
+            painter.drawRoundedRect(bounds, bounds.width() / 2, bounds.width() / 2);
+            painter.setPen(QPen(ui::dividerColor(this), m::control::border));
+            const qreal dividerInset = bounds.width() / 4;
+            for (int row = 1; row < buttons.size(); ++row) {
+                const qreal y = (buttons[row - 1].bottom() + 1 + buttons[row].top()) / 2.0;
+                painter.drawLine(QPointF(bounds.left() + dividerInset, y),
+                                 QPointF(bounds.right() - dividerInset, y));
             }
-            previous = button;
         }
     }
 };
@@ -1728,7 +1732,7 @@ void Reader::showFontPicker() {
     Choice slot{QStringLiteral("Aa"), defaultFace, "rrFontDefaultSlot", strings::get("reader.recommended_fonts")};
     slot.detail = strings::get("reader.set_default_font");
     slot.placeholder = true;
-    items.insert(qMin(2, items.size()), slot);
+    if (!services.phoneLayout) items.insert(qMin(2, items.size()), slot);
     choices->defaultRequested = [this](const QString &face, bool instructions) {
         showFontDefaultDialog(face, instructions);
     };

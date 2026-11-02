@@ -366,9 +366,14 @@ void DictionariesPage::redraw() {
         line->metadata->setVisible(compact);
         line->name->setText(entry.name);
         line->name->setObjectName(QString("rrDictionaryName%1").arg(index));
+        line->metadata->setObjectName(QString("rrDictionaryMetadata%1").arg(index));
         line->metadata->setText(entry.id == failedId ? strings::get("dictionaries.download_failed") : active ? QString::number(percent) + "%" : bytes(installed ? installedSizes.value(entry.id) : entry.size));
-        line->name->setGeometry(c::inset, ui::px(12), nameWidth, item.height - ui::px(24) - ui::interfaceLineHeight(line->metadata->font()));
-        line->metadata->setGeometry(c::inset, line->name->geometry().bottom() + 1, nameWidth, ui::interfaceLineHeight(line->metadata->font()));
+        const int nameHeight = ui::wrappedInterfaceTextHeight(entry.name, line->name->font(), nameWidth);
+        line->name->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        const int metadataHeight = ui::interfaceLineHeight(line->metadata->font());
+        const int textTop = qMax(0, (item.height - nameHeight - ui::px(6) - metadataHeight) / 2);
+        line->name->setGeometry(c::inset, textTop, nameWidth, nameHeight);
+        line->metadata->setGeometry(c::inset, line->name->geometry().bottom() + 1 + ui::px(6), nameWidth, metadataHeight);
         line->name->raise();
         line->metadata->raise();
         row->trailingLabel()->setObjectName(QString("rrDictionarySize%1").arg(index));

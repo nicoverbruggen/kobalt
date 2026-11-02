@@ -1363,7 +1363,8 @@ void tour(Fixture &fixture, const QString &name, bool screenshots) {
     }
     QVERIFY(fixture.press("rrSettingsAbout"));
     QTRY_VERIFY(fixture.visible("rrAboutVersion"));
-    QVERIFY(scene("about"));
+    if (screenshots) capturePages(fixture, name + "-about", "rrSettingsOptions");
+    else QVERIFY(scene("about"));
     if (screenshots) {
         QVERIFY(fixture.press("rrOpenAcknowledgments"));
         QTRY_VERIFY(fixture.visible("rrAcknowledgments"));
@@ -1709,7 +1710,28 @@ void checkPinnedBookmarks(int preset, bool dark) {
         }
         QCOMPARE(first->y(), bar->height() - lowest);
         const int cell = first->width() + 2 * ui::px(12);
-        QVERIFY(last->x() >= first->x() && (last->x() - first->x()) % cell == 0 && last->x() + cell <= bar->width() + first->x());
+        const int columnStep = cell + ui::px(16);
+        QVERIFY(last->x() >= first->x() && (last->x() - first->x()) % columnStep == 0 && last->x() + cell <= bar->width() + first->x());
+        if (last->x() > first->x()) {
+            int firstRows = 0, lastRows = 0;
+            for (int pin = 0; pin <= i; ++pin) {
+                const auto *button = fixture.widget(QString("rrPinnedBookmark%1").arg(pin).toLatin1().constData());
+                firstRows += button->x() == first->x();
+                lastRows += button->x() == last->x();
+                QVERIFY(bar->rect().contains(button->geometry()));
+            }
+            QVERIFY(qAbs(firstRows - lastRows) <= 1);
+            QWidget backdrop(fixture.window.readerWindow());
+            backdrop.setGeometry(bar->geometry());
+            backdrop.setStyleSheet("background:#515151;");
+            backdrop.show();
+            bar->raise();
+            QCoreApplication::processEvents();
+            const auto frame = fixture.window.readerWindow()->grab().toImage();
+            const QPoint between(first->x() - ui::px(12) + cell + ui::px(8), bar->height() / 2);
+            QCOMPARE(frame.pixelColor(bar->pos() + between), QColor("#515151"));
+            backdrop.hide();
+        }
         QCOMPARE(bar->geometry().right(), fixture.window.readerWindow()->width() - 1 - ui::px(20));
         if (i == 0) {
             QCOMPARE(first->accessibleName(), QString("Map"));
@@ -1731,6 +1753,8 @@ void checkPinnedBookmarks(int preset, bool dark) {
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
         }
+        const int navigationTop = fixture.widget("rrNavText")->mapTo(fixture.window.readerWindow(), QPoint()).y();
+        QVERIFY2(bar->geometry().bottom() < navigationTop, "Bookmark shortcuts overlap the navigation tabs");
         if (i == 3) QVERIFY(capture(fixture, name + "-pinned-bookmark-four"));
         if (i == 7) QVERIFY(capture(fixture, name + "-pinned-bookmark-eight"));
         QVERIFY(fixture.press("rrPage"));
@@ -6964,6 +6988,11 @@ private slots:
         QVERIFY(fixture.press("rrNavText"));
         QVERIFY(fixture.press("rrFont"));
         QTRY_VERIFY(fixture.visible("rrFontChoice0"));
+        if (phonePreset(preset)) {
+            auto *cell = fixture.widget("rrFontChoice0");
+            QVERIFY(cell->width() >= ui::px(300));
+            QVERIFY(!fixture.visible("rrFontDefaultSlot"));
+        }
         QVERIFY(capture(fixture, name + "-publisher-font-default"));
         QVERIFY(fixture.press("rrFontClose"));
         QVERIFY(fixture.press("rrSettings"));
@@ -7268,6 +7297,14 @@ private slots:
             if (!label->isVisible()) continue;
             QVERIFY2(label->height() >= ui::wrappedInterfaceTextHeight(label->text(), label->font(), label->width()), qPrintable(label->text()));
             QVERIFY(label->parentWidget()->rect().contains(label->geometry()));
+            auto metadataName = label->objectName();
+            metadataName.replace("Name", "Metadata");
+            auto *metadata = label->parentWidget()->findChild<QLabel *>(metadataName);
+            QVERIFY(metadata);
+            QVERIFY(metadata->y() > label->geometry().bottom());
+            QVERIFY(metadata->y() - label->geometry().bottom() <= ui::px(8));
+            const int groupHeight = metadata->geometry().bottom() + 1 - label->y();
+            QCOMPARE(label->y(), (label->parentWidget()->height() - groupHeight) / 2);
             auto *action = label->parentWidget()->findChildren<QPushButton *>(QRegularExpression("^rrDictionaryAction[0-9]+$")).value(0);
             QVERIFY(action);
             QVERIFY2(label->geometry().right() < action->geometry().left(), qPrintable(QString("%1: label right %2, action left %3, row width %4").arg(label->text()).arg(label->geometry().right()).arg(action->geometry().left()).arg(label->parentWidget()->width())));
@@ -7304,9 +7341,15 @@ private slots:
         QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
         auto *progress = view->findChild<QProgressBar *>("rrOpeningProgress");
         progress->setValue(45);
+        if (phonePreset(preset)) {
+            auto *label = view->findChild<QLabel *>("rrOpeningLabel");
+            QVERIFY(label->font().pixelSize() >= int(ui::px(32)));
+            QVERIFY(label->height() >= ui::interfaceLineHeight(label->font()));
+        }
         QVERIFY(capture(fixture, name + "-loading-cover", view));
         auto *hint = view->findChild<QLabel *>("rrOpeningHint");
         QTRY_VERIFY_WITH_TIMEOUT(hint->isVisible(), 5000);
+        if (phonePreset(preset)) QVERIFY(hint->font().pixelSize() >= int(ui::px(22)));
         QVERIFY(capture(fixture, name + "-loading-cover-slow", view));
         view->hide();
         auto baseline = createEmbeddedOpening(reader, desktop::readerServices().presentation);
@@ -8265,7 +8308,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    int expectedScreenshots = lightGallery ? 182 : 3280;
+    int expectedScreenshots = lightGallery ? 182 : 3286;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

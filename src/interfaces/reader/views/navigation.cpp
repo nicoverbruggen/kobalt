@@ -421,6 +421,12 @@ void Navigation::update(QSize size, const NavigationState &state) {
     const int exitWidth = exitAction->sizeHint().width();
     const int exitRoom = size.width() - rightActions * c::cellWidth;
     const int exitCell = exitWidth > exitRoom ? int(c::cellWidth) : exitRoom - exitWidth < c::cellWidth / 2 ? exitRoom : exitWidth;
+    // A narrow gap should not look like an empty toolbar cell.
+    const bool returnDivider = exitRoom - exitCell >= int(c::cellWidth);
+    if (exitAction->property("reader_return_divider").toBool() != returnDivider) {
+        exitAction->setProperty("reader_return_divider", returnDivider);
+        exitAction->update();
+    }
     // The status line keeps its proportions as large text enlarges it. It
     // sits at the bottom of a taller camera band, or inside the action row.
     const int statusTop = inlineStatus

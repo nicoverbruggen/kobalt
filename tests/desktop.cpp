@@ -6540,6 +6540,32 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::qWait(210);
         QTest::mouseClick(previous, Qt::LeftButton);
         QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() == page);
+        // The return divider depends on the gap, including the exact cell-width boundary.
+        screen->setCurrentIndex(0);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        if (!fixture.visible("rrControlsTop")) QVERIFY(fixture.press("rrPage"));
+        auto *reader = fixture.window.readerWindow();
+        auto *back = reader->findChild<QPushButton *>("rrReturn");
+        QVERIFY(back && back->isVisible());
+        QList<QPushButton *> actions;
+        int actionWidth = 0;
+        for (auto *button : back->parentWidget()->findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly))
+            if (button != back && button->isVisible() && button->y() == back->y()) {
+                actions.append(button);
+                actionWidth += button->width();
+            }
+        QVERIFY(!actions.isEmpty());
+        const int cell = actions.first()->width();
+        for (int gap : {cell + 1, cell - 1, cell}) {
+            reader->resize(back->sizeHint().width() + actionWidth + gap, reader->height());
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            int first = reader->width();
+            for (auto *button : actions) first = qMin(first, button->x());
+            QCOMPARE(first - back->geometry().right() - 1, gap);
+            const auto image = back->grab().toImage();
+            QCOMPARE(image.pixelColor(image.width() - 1, 5),
+                     back->palette().color(gap >= cell ? QPalette::Mid : QPalette::Window));
+        }
     }
     void sameProcessReadersDoNotRecoverEachOther() {
         QTemporaryDir directory;

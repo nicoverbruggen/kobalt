@@ -6,6 +6,8 @@
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/ui/style/styles.h"
 #include "interfaces/reader/ui/style/theme.h"
+#include "interfaces/reader/ui/style/private_text.h"
+#include <QLabel>
 #include "interfaces/reader/ui/controls/keyboard.h"
 #include <QApplication>
 #include <QLineEdit>
@@ -149,6 +151,88 @@ void checkKeyboardInputStaysInEditor() {
     ui::setDensity(savedDensity);
 }
 }
+namespace {
+void checkPhoneSettings() {
+    const int savedDensity = ui::density();
+    for (int ppi : {212, 300}) {
+        ui::setDensity(ppi);
+        for (bool dark : {false, true}) {
+            QWidget host;
+            host.setProperty("reader_dark", dark);
+            host.setPalette(ui::readerPalette(host.palette(), dark));
+            ui::readerStyle(&host, ui::styles::reader());
+            host.resize(ui::px(720), ui::px(1600));
+            reader::SettingsPanel panel(&host, {});
+            panel.refitRequested = [&] { panel.fitContent(host.size()); };
+            panel.resize(host.size());
+            panel.fitContent(host.size());
+            host.show();
+            panel.show();
+            QApplication::processEvents();
+            auto *title = panel.findChild<QLabel *>("rrSettingsTitle");
+            require(title, "Settings has a title");
+            const auto inkBounds = [](const QImage &image, QColor paper) {
+                QRect bounds;
+                for (int y = 0; y < image.height(); ++y)
+                    for (int x = 0; x < image.width(); ++x)
+                        if (image.pixelColor(x, y).alpha() && image.pixelColor(x, y) != paper) bounds |= QRect(x, y, 1, 1);
+                return bounds;
+            };
+            const auto baseline = [&] {
+                const auto shape = ui::renderPrivateText(title->text(), title->font());
+                QRect ink;
+                for (int y = 0; y < shape.image.height(); ++y)
+                    for (int x = 0; x < shape.image.width(); ++x)
+                        if (qAlpha(shape.image.pixel(x, y))) ink |= QRect(x, y, 1, 1);
+                const auto shown = inkBounds(title->grab().toImage(), ui::themeColors(dark).paper);
+                return shown.top() - ink.top() - shape.origin.y();
+            };
+            const int reference = baseline();
+            const auto position = title->mapTo(&panel, title->contentsRect().topLeft());
+            for (const char *name : {"rrSettingsDisplay", "rrSettingsControls", "rrSettingsDefaults", "rrSettingsStyling",
+                                     "rrSettingsDictionaries", "rrSettingsSystem", "rrSettingsAbout", "rrSettingsKosync"}) {
+                auto *row = panel.findChild<QPushButton *>(name);
+                require(row && row->isVisible(), "Phone Settings section row is visible");
+                const auto idle = row->grab().toImage();
+                row->setDown(true);
+                const auto held = row->grab().toImage();
+                require(held.pixelColor(5, 5) == ui::themeColors(dark).pressedPaper,
+                        "Phone Settings section rows use the shared pressed gray");
+                const auto countInk = [&](QRect area) {
+                    int count = 0;
+                    for (int y = area.top(); y <= area.bottom(); ++y)
+                        for (int x = area.left(); x <= area.right(); ++x)
+                            count += qAbs(qGray(held.pixel(x, y)) - qGray(ui::themeColors(dark).ink.rgb())) < 64;
+                    return count;
+                };
+                require(countInk(QRect(0, 4, held.width() / 2, held.height() - 8)) > 30,
+                        "Pressed settings rows keep visible label and icon ink");
+                auto *chevron = row->findChild<QWidget *>("rrSettingsSectionChevron");
+                require(chevron && countInk(chevron->geometry()) > 5,
+                        "Pressed settings rows keep a visible chevron");
+                require(held.pixelColor(chevron->x(), chevron->y()) == ui::themeColors(dark).pressedPaper,
+                        "Settings chevrons do not cover the pressed gray with a paper rectangle");
+                const auto directory = qEnvironmentVariable("KOBALT_TEST_CAPTURE_DIR");
+                const auto out = directory.isEmpty() ? QString() : directory + "/" + QString::number(ppi) + "-" + name;
+                if (!out.isEmpty()) require(panel.grab().save(out + (dark ? "-held-dark.png" : "-held-light.png")), "save held Settings row");
+                row->setDown(false);
+                require(row->grab().toImage() == idle, "Releasing the settings row restores its original appearance");
+                row->click();
+                panel.fitContent(host.size());
+                QApplication::processEvents();
+                require(title->mapTo(&panel, title->contentsRect().topLeft()) == position,
+                        "Settings submenu titles keep the same text origin");
+                require(baseline() == reference, "Settings submenu titles keep the Settings baseline");
+                if (!out.isEmpty()) require(panel.grab().save(out + (dark ? "-dark.png" : "-light.png")), "save Settings submenu");
+                panel.findChild<QPushButton *>("rrSettingsBack")->click();
+                panel.fitContent(host.size());
+                QApplication::processEvents();
+            }
+        }
+    }
+    ui::setDensity(savedDensity);
+}
+}
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
@@ -156,6 +240,7 @@ int main(int argc, char **argv) {
     app.setPalette(ui::readerPalette(app.palette(), false));
     ui::setInterfaceWeight(ui::heavierTextSteps);
     require(ui::initializeInterfaceFonts(test::readerAssets()), "load the production interface fonts");
+    checkPhoneSettings();
     checkKeyboardInputStaysInEditor();
     {
         QWidget host;

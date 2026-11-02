@@ -42,12 +42,36 @@ using ReaderOption = ui::DescribedOption;
 namespace {
 QPushButton *segmentButton(QWidget *parent, QHBoxLayout *layout, QButtonGroup *group, const QString &name,
                            const QString &text);
+// Keep section titles on the Settings baseline. The private text bitmap
+// includes each word's descenders, so centering that bitmap moves the baseline.
+class SettingsTitle final : public ui::InterfaceLabel {
+public:
+    using ui::InterfaceLabel::InterfaceLabel;
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        if (!ui::needsPrivateText(text(), font())) {
+            ui::InterfaceLabel::paintEvent(event);
+            return;
+        }
+        const auto reference = ui::renderPrivateText(strings::get("settings.title"), font());
+        const auto shown = ui::renderPrivateText(text(), font());
+        const auto area = contentsRect();
+        const int baseline = area.top() + (area.height() - reference.image.height()) / 2 - reference.origin.y();
+        QPainter painter(this);
+        painter.setFont(font());
+        painter.setPen(palette().color(QPalette::WindowText));
+        ui::drawInterfaceText(painter, QRect(area.left(), baseline + shown.origin.y(), area.width(), shown.image.height()),
+                              text(), Qt::AlignLeft | Qt::AlignTop);
+    }
+};
 // The chevron of a section row in the narrow Settings list, as other rows
 // that open a page show it. It follows its row's size and pressed state.
 class SectionChevron final : public QWidget {
 public:
     explicit SectionChevron(QPushButton *row) : QWidget(row), row(row) {
         setObjectName("rrSettingsSectionChevron");
+        ui::readerStyle(this, "background:transparent;");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         row->installEventFilter(this);
         place();
@@ -61,8 +85,7 @@ protected:
     }
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
-        const auto role = row->isDown() ? QPalette::Window : QPalette::WindowText;
-        ui::controlIcon(ui::ControlIcon::Next, row->palette().color(role)).paint(&painter, rect());
+        ui::controlIcon(ui::ControlIcon::Next, row->palette().color(QPalette::WindowText)).paint(&painter, rect());
     }
 
 private:
@@ -252,7 +275,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         if (refitRequested)
             refitRequested();
     });
-    settingsTitle = new ui::InterfaceLabel(strings::get("settings.title"), heading);
+    settingsTitle = new SettingsTitle(strings::get("settings.title"), heading);
     settingsTitle->setObjectName("rrSettingsTitle");
     settingsTitle->setContentsMargins(c::inset, 0, c::inset, 0);
     readerStyle(settingsTitle, styles::brand(c::titleText) + "background:transparent;");
@@ -792,11 +815,13 @@ void SettingsPanel::styleTabs(bool list) {
             chevron = new SectionChevron(button);
         if (chevron)
             chevron->setVisible(list);
-        const QString selected = list ? "QPushButton:pressed" : "QPushButton:checked,QPushButton:pressed";
+        const QString selected = list
+            ? "QPushButton:pressed{background:palette(midlight);color:palette(window-text);}"
+            : "QPushButton:checked,QPushButton:pressed{background:palette(window-text);color:palette(window);}";
         ui::readerStyle(
             button,
             QString(
-                "QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;border:0;border-bottom:%5px solid %3;%6border-radius:0;text-align:left;padding:0 %4px;background:palette(window);color:palette(window-text);} %7{background:palette(window-text);color:palette(window);}")
+                "QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;border:0;border-bottom:%5px solid %3;%6border-radius:0;text-align:left;padding:0 %4px;background:palette(window);color:palette(window-text);} %7")
                 .arg(list ? int(c::labelText) : int(c::tabText))
                 .arg(height)
                 .arg("palette(light)")

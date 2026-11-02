@@ -131,7 +131,8 @@ protected:
         const auto ink = palette().color(QPalette::WindowText);
         painter.fillRect(rect(), pressed ? ink : paper);
         const QRect iconCell(0, 0, m::chrome::cellWidth, height());
-        ui::paintEdges(painter, rect(), Qt::RightEdge, palette().color(QPalette::Mid));
+        if (property("reader_return_divider").toBool())
+            ui::paintEdges(painter, rect(), Qt::RightEdge, palette().color(QPalette::Mid));
         if (!isEnabled()) painter.setOpacity(.45);
         const auto *title = findChild<QLabel *>("rrReturnTitle");
         qreal letterOffset = 0;

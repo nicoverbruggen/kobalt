@@ -807,7 +807,8 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     if (captureDirectory.isEmpty()) return true;
     const auto parts = QRegularExpression("^(fill|six-inch|seven-inch|phone|six-inch-landscape|phone-landscape)-(light|dark|large)-(.*)$").match(name);
     if (!parts.hasMatch()) return false;
-    if (!captureOnly.isEmpty() && !captureOnly.contains(parts.captured(3))) return true;
+    if (!captureOnly.isEmpty() && !captureOnly.contains(parts.captured(3)) &&
+        !captureOnly.contains("@" + test::screenshotIdentity(parts.captured(3)).first)) return true;
     // Model state and visibility can settle before queued layouts and proxy
     // cache updates. Deliver those updates before rendering the visible frame.
     QCoreApplication::processEvents();
@@ -884,7 +885,7 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
         {"sha256", QString::fromLatin1(QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex())},
         // The case lets a scene-filtered run find this scene without running the whole tour.
         {"case", QString::fromLatin1(QTest::currentTestFunction()) + ':' + QString::fromLatin1(QTest::currentDataTag())}});
-    if (!captureOnly.isEmpty() && captures.size() == captureOnly.size()) {
+    if (!captureOnly.isEmpty() && !captureOnly.first().startsWith('@') && captures.size() == captureOnly.size()) {
         // Every selected scene of this case is saved. The rest of the case
         // only leads to scenes that were not selected, so the worker ends here.
         std::fflush(nullptr);
@@ -8308,6 +8309,7 @@ int main(int argc, char **argv) {
     // full gallery's manifest tells which cases capture them.
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
+    QSet<QString> selectedVariants;
     int expectedScreenshots = lightGallery ? 182 : 3286;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
@@ -8332,7 +8334,10 @@ int main(int argc, char **argv) {
                     qCritical().noquote() << "The full gallery in" << output << "has no case index. Run it once without KOBALT_GALLERY_SCENE.";
                     return 2;
                 }
-                selection[image["case"].toString()].append(image["scene"].toString());
+                auto &screens = selection[image["case"].toString()];
+                const auto screen = "@" + image["screen"].toString();
+                if (!screens.contains(screen)) screens.append(screen);
+                selectedVariants.insert(image["device"].toString() + "/" + image["theme"].toString() + "/" + image["screen"].toString());
                 found.insert(image["screen"].toString());
                 ++expectedScreenshots;
             }
@@ -8392,11 +8397,23 @@ int main(int argc, char **argv) {
         return app.exec();
     }
     QFile fixture(book);
-    if (captures.size() != expectedScreenshots)
+    if (!selection.isEmpty()) {
+        QSet<QString> capturedVariants;
+        for (const auto &value : captures) {
+            const auto image = value.toObject();
+            if (!selectedScenes.contains(image["screen"].toString())) return 2;
+            if (image["capture_page"].toInt() == 1)
+                capturedVariants.insert(image["device"].toString() + "/" + image["theme"].toString() + "/" + image["screen"].toString());
+        }
+        if (capturedVariants != selectedVariants) {
+            qCritical() << "Scene capture lost a selected screen or viewport variant";
+            return 2;
+        }
+    } else if (captures.size() != expectedScreenshots) {
         qCritical() << "Expected" << expectedScreenshots << "screenshots, captured" << captures.size();
-    if (!fixture.open(QIODevice::ReadOnly) || captures.size() != expectedScreenshots) {
         return 2;
     }
+    if (!fixture.open(QIODevice::ReadOnly)) return 2;
     const QJsonObject manifest{{"schema", 1}, {"generator", "kobalt-desktop"}, {"qt", qVersion()}, {"version", KOBALT_VERSION},
                                {"commit", kobaltCommit}, {"modified", bool(KOBALT_COMMIT_MODIFIED)},
                                {"book", "Trevelyan's Type Tester v1.2 with chapter-heading CSS fix"}, {"book_file", QFileInfo(book).fileName()},

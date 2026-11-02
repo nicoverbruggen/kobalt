@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kobalt screen review</title>
+<link rel="stylesheet" href="review.css">
+</head>
+<body>
+<header class="bar">
+    <h1>Screen review</h1>
+    <label>Round <select id="round"></select></label>
+    <label>Group <select id="group"><option value="">All groups</option></select></label>
+    <label>Orientation
+        <select id="orientation">
+            <option value="">Both</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+        </select>
+    </label>
+    <label>Status
+        <select id="status">
+            <option value="">All screens</option>
+            <option value="open">Unseen</option>
+            <option value="needs-changes">Needs changes</option>
+            <option value="seen">Seen</option>
+            <option value="changed">Changed since last round</option>
+            <option value="noted">With notes</option>
+        </select>
+    </label>
+    <button id="toggle-list" type="button" aria-expanded="false">Screens</button>
+    <p class="tally" id="tally"></p>
+</header>
+<div class="layout">
+    <nav id="list" class="list" hidden></nav>
+    <main id="main" tabindex="-1">
+        <p id="empty" class="empty" hidden></p>
+        <section id="screen" hidden>
+            <div class="heading">
+                <p class="label" id="where"></p>
+                <h2 id="title"></h2>
+                <p class="label" id="state"></p>
+            </div>
+            <div class="stage" id="stage">
+                <figure class="shot">
+                    <figcaption>
+                        <span class="label" id="reference-label"></span>
+                        <span class="switch" id="switch" hidden>
+                            <button type="button" id="show-reference" aria-pressed="true">Reference</button>
+                            <button type="button" id="show-previous" aria-pressed="false">Previous round</button>
+                        </span>
+                    </figcaption>
+                    <div class="frame" id="reference-frame"><img id="reference" alt=""></div>
+                </figure>
+                <figure class="shot">
+                    <figcaption><span class="label" id="subject-label"></span><span class="hint">Click to pin a note</span></figcaption>
+                    <div class="frame pinnable" id="subject-frame"><img id="subject" alt=""></div>
+                </figure>
+            </div>
+            <div class="controls">
+                <button type="button" id="previous" title="Previous screen (Left arrow)">&#8592;</button>
+                <button type="button" class="add-note" id="add-note" title="Add a note (R)">Add note</button>
+                <button type="button" id="next" title="Next screen (Right arrow)">&#8594;</button>
+            </div>
+            <p class="saved label" id="saved" aria-live="polite"></p>
+            <div class="notes">
+                <label id="note-box" hidden><span class="label">Requested changes</span><textarea id="note" rows="4"></textarea></label>
+                <ol class="pins" id="pins"></ol>
+                <div class="earlier" id="earlier" hidden></div>
+            </div>
+            <p class="keys label">Left and right arrows: previous and next · Space: seen and next · R: add a note · P: previous round · Esc: leave a note</p>
+        </section>
+    </main>
+</div>
+<script type="module" src="review.js"></script>
+</body>
+</html>

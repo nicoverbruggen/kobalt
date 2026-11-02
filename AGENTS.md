@@ -54,6 +54,8 @@ Before declaring the UI complete, compare it directly with the closest existing 
 
 When reviewers are requested, give them these specific comparisons. Require findings or explicit verification for both the surrounding screen and the new control.
 
+Review visible UI changes with the user through [Screen review](doc/screen-review.md). After such a change, capture the affected screens, create a round, start the review server and send the user the link. Read the feedback with the `notes` command, fix the screens that need changes and the pinned notes, then create the next round. Use an annotation-first review: moving on records the screen as seen, seen screens without annotations need no changes, and notes or pins mean Needs changes. Allow pins on either screenshot and arrow navigation outside text boxes. Repeat until the requested fixes are reviewed. Only the user supplies review notes; the tool records seen status from the user’s navigation. Respect questions, accepted behavior and explicitly deferred ideas in the feedback. Keep review data in the worktree's `build/review/`. Stop the server when the review ends.
+
 ## Execution and cleanup
 
 For repeated development deployments, it is imperative to assess only the changes since the last validated build and reuse applicable validation results. Do not automatically rerun the full test suite or a smoke test for every minor change. Small UI spacing or styling adjustments may need only a build and visual inspection. Use focused checks when the change warrants them, and do not delay an explicitly requested deployment with redundant validation. Keep full release validation separate. State which checks were run, reused or skipped.

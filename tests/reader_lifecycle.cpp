@@ -18,6 +18,7 @@
 #include "interfaces/reader/ui/style/metrics.h"
 #include "interfaces/reader/ui/style/scale.h"
 #include "interfaces/reader/views/reading_page.h"
+#include "interfaces/reader/views/kosync_notice.h"
 #include "interfaces/reader/views/sleep_screen.h"
 #include "platforms/android/canvas.h"
 #include "platforms/desktop/services.h"
@@ -3573,12 +3574,13 @@ private slots:
         if (account != "logout") QCOMPARE(accountBytes(), original);
     }
     void kosyncOpening_data() {
-        QTest::addColumn<bool>("skip");
-        QTest::newRow("cancel-sync") << true;
-        QTest::newRow("offline-deadline") << false;
+        QTest::addColumn<QString>("outcome");
+        QTest::newRow("cancel-sync") << QString("cancel");
+        QTest::newRow("offline-deadline") << QString("deadline");
+        QTest::newRow("completed") << QString("completed");
     }
     void kosyncOpening() {
-        QFETCH(bool, skip);
+        QFETCH(QString, outcome);
         QTcpServer stalled;
         QVERIFY(stalled.listen(QHostAddress::LocalHost));
         QSignalSpy attempts(&stalled, &QTcpServer::newConnection);
@@ -3630,12 +3632,27 @@ private slots:
         QVERIFY(!button->font().bold());
         QVERIFY(popup->findChild<QLabel *>("rrModalDescription")->text().contains("Kobalt is syncing your progress"));
         if (!capture.isEmpty()) QVERIFY(host.window()->grab().save(capture));
-        if (skip) {
+        auto *paper = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(paper);
+        QCoreApplication::processEvents();
+        PaintRegions paints;
+        paper->installEventFilter(&paints);
+        host.window()->setProperty("reader_full_flash", false);
+        if (outcome == "cancel") {
             QVERIFY(click(canvas, button));
             QTRY_VERIFY(!popup || !popup->isVisible());
+        } else if (outcome == "completed") {
+            // Finish the production notice without requiring an HTTPS server.
+            // Its timer invokes the reader's normal dismissal callback.
+            auto *notice = dynamic_cast<reader::KosyncNotice *>(popup.data());
+            QVERIFY(notice);
+            notice->complete();
+            QTRY_VERIFY_WITH_TIMEOUT(!popup || !popup->isVisible(), 2500);
         } else {
             QTRY_VERIFY_WITH_TIMEOUT(!popup || !popup->isVisible(), 12000);
         }
+        QVERIFY(host.window()->property("reader_full_flash").toBool());
+        QTRY_COMPARE(paints.painted, QRegion(paper->rect()));
         QCOMPARE(host.session()->state().value("position").toString(), before);
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() > page);
@@ -5530,7 +5547,9 @@ private:
             QVERIFY(click(canvas, popup->findChild<QPushButton *>("rrKosyncCancel")));
         } else if (scenario == "sleep") {
             const auto position = host.session()->state().value("position").toString();
+            host.window()->setProperty("reader_full_flash", false);
             host.window()->sleepReader();
+            QVERIFY(!host.window()->property("reader_full_flash").toBool());
             QTRY_COMPARE(network->cancellations, 1);
             QTRY_VERIFY(!host.window()->pendingNetworkSync());
             QCOMPARE(network->requests, 1);

@@ -258,9 +258,16 @@ void Reader::hideKosyncOpening() {
     if (!kosyncOpening) return;
     kosyncOpening = false;
     if (kosyncDialog) {
+        const bool refreshPage = kosyncDialog->isVisible() && isVisible() && !lifecycleHidden && !closing &&
+                                 !exportRunning && !exitPending && !services.suspended();
         kosyncDialog->hide();
         kosyncDialog->deleteLater();
         kosyncDialog = nullptr;
+        if (refreshPage) {
+            // The unchanged book image does not include the notice's damage.
+            requestFlash("kosync-dismiss");
+            page->update();
+        }
     }
 }
 void Reader::showKosyncOpening() {

@@ -20,6 +20,7 @@
 #include <memory>
 #include <functional>
 #include <utility>
+#include <tuple>
 
 namespace kobalt {
 class ColumnView;
@@ -350,6 +351,7 @@ private:
     int domVersion_ = 0;
     QString hyphenation_ = "off";
     bool darkMode_ = false;
+    QMap<std::tuple<quintptr, int, int>, bool> imageInversion_;
     bool hideNonlinearFragments_ = false;
     bool normalizePageMargins_ = true, reduceChapterSpacing_ = true;
     QString verticalSpacing_ = "off", verticalSpacingScope_ = "all";

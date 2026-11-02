@@ -59,7 +59,7 @@ bool equationImage(const LVImageSourceRef &image) {
     }
     return false;
 }
-// Transform equation ink before alpha compositing, so transparent pixels keep
+// Transform neutral ink before alpha compositing, so transparent pixels keep
 // the actual page background. Delegate vector sizing to avoid an extra raster scale.
 class EquationImage : public LVImageSource, private LVImageDecoderCallback {
 public:
@@ -118,10 +118,46 @@ private:
     LVImageDecoderCallback *callback = nullptr;
     std::vector<lUInt32> row;
 };
+// A white border and mostly white paper distinguish illustrations from dark artwork.
+// Check every visible source pixel so even a small colour accent prevents inversion.
+class IllustrationProbe : public LVImageDecoderCallback {
+public:
+    IllustrationProbe(int width, int height) : width(width), height(height) {}
+    bool eligible(LVImageSourceRef source) {
+        return source->Decode(this) && !failed && lines == height && neutral && total &&
+               white * 2 >= total && border && whiteBorder * 10 >= border * 8;
+    }
+private:
+    bool GetTargetSize(int &w, int &h) const override { w = width; h = height; return true; }
+    void OnStartDecode(LVImageSource *) override {}
+    bool OnLineDecoded(LVImageSource *, int y, lUInt32 *pixels) override {
+        ++lines;
+        for (int x = 0; x < width; ++x) {
+            const auto pixel = pixels[x];
+            // CREngine uses an inverted alpha channel. Invisible RGB is irrelevant.
+            const int transparency = pixel >> 24;
+            if (transparency != 255 && (qRed(pixel) != qGreen(pixel) || qRed(pixel) != qBlue(pixel)))
+                neutral = false;
+            const bool paper = transparency == 255 ||
+                (qRed(pixel) >= 245 && qGreen(pixel) >= 245 && qBlue(pixel) >= 245);
+            ++total;
+            white += paper;
+            if (x == 0 || y == 0 || x == width - 1 || y == height - 1) {
+                ++border;
+                whiteBorder += paper;
+            }
+        }
+        return true;
+    }
+    void OnEndDecode(LVImageSource *, bool errors) override { failed = errors; }
+    int width, height, lines = 0;
+    quint64 total = 0, white = 0, border = 0, whiteBorder = 0;
+    bool neutral = true, failed = false;
+};
 class PageDrawBuffer : public LVColorDrawBuf {
 public:
-    PageDrawBuffer(QImage &image, bool dark, bool smooth)
-        : LVColorDrawBuf(image.width(), image.height(), image.bits(), 32), pageSize(image.size()), dark(dark) {
+    PageDrawBuffer(QImage &image, bool dark, bool smooth, QMap<std::tuple<quintptr, int, int>, bool> *inversion = nullptr)
+        : LVColorDrawBuf(image.width(), image.height(), image.bits(), 32), pageSize(image.size()), dark(dark), inversion(inversion) {
         setInvertColors(dark);
         setSmoothScalingImages(smooth);
     }
@@ -163,7 +199,23 @@ public:
                 imageRegionsFull = true;
             }
         }
-        if (dark && equationImage(image))
+        bool invertIllustration = false;
+        if (dark && inversion && !equationImage(image)) {
+            const auto node = reinterpret_cast<quintptr>(image->GetSourceNode());
+            // Vector details can appear at a larger size. Do not reuse a smaller raster verdict.
+            const auto key = std::make_tuple(node, image->IsScalable() ? width : 0, image->IsScalable() ? height : 0);
+            auto found = inversion->constFind(key);
+            if (node && found != inversion->constEnd()) {
+                invertIllustration = found.value();
+            } else {
+                IllustrationProbe probe(image->IsScalable() ? width : image->GetWidth(),
+                                        image->IsScalable() ? height : image->GetHeight());
+                invertIllustration = probe.eligible(image);
+                if (inversion->size() >= 1024) inversion->clear();
+                if (node) inversion->insert(key, invertIllustration);
+            }
+        }
+        if (dark && (equationImage(image) || invertIllustration))
             image = LVImageSourceRef(new EquationImage(image));
         // Composite images in the final page colors. CREngine's invert-images
         // option instead blends transparency against a white background.
@@ -178,6 +230,7 @@ private:
     QSize pageSize;
     bool imageRegionsFull = false;
     bool dark;
+    QMap<std::tuple<quintptr, int, int>, bool> *inversion;
 };
 QString regionMetadata(const QVector<QRect> &regions) {
     QJsonArray array;
@@ -423,6 +476,7 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     damage_.clear();
     size_ = size;
     darkMode_ = saved.value("dark_mode").toBool(false);
+    imageInversion_.clear();
     hideNonlinearFragments_ = saved.value("hide_nonlinear_fragments").toBool(false);
     const auto normalization = appearance::normalizationSettings(saved);
     normalizePageMargins_ = normalization.value("normalize_page_margins").toBool();
@@ -1091,6 +1145,7 @@ void ReaderModel::releaseImages() {
     if (source_ && source_->resources) {
         source_->resources->releaseBytes();
         imageRevision_ = source_->resources->imageRevision();
+        imageInversion_.clear();
     }
 }
 bool ReaderModel::refreshImages() {
@@ -1099,6 +1154,7 @@ bool ReaderModel::refreshImages() {
     // Appearance previews share resources but keep their own rendered pages.
     // A load in either model must invalidate placeholders in the other one.
     imageRevision_ = source_->resources->imageRevision();
+    imageInversion_.clear();
     cache_.clear();
     spareImage_ = {};
     damage_.clear();
@@ -1120,7 +1176,7 @@ QImage ReaderModel::image(int pageNumber) {
         result = QImage(size_, QImage::Format_RGB32);
     if (result.isNull())
         return {};
-    PageDrawBuffer buffer(result, darkMode_, true);
+    PageDrawBuffer buffer(result, darkMode_, true, &imageInversion_);
     if (columns_ == 1) {
         engine_->drawColumn(buffer, pageNumber, 0);
     } else {
@@ -1130,7 +1186,7 @@ QImage ReaderModel::image(int pageNumber) {
             return {};
         QPainter painter(&result);
         for (int i = 0; i < columns_; ++i) {
-            PageDrawBuffer part(column, darkMode_, true);
+            PageDrawBuffer part(column, darkMode_, true, &imageInversion_);
             engine_->drawColumn(part, pageNumber, i);
             buffer.hasImages |= part.hasImages;
             buffer.hasText |= part.hasText;

@@ -5,6 +5,8 @@
 #include <QBuffer>
 #include <QDir>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QTemporaryDir>
 #include <cstdio>
 
@@ -129,6 +131,89 @@ int main(int argc, char **argv) {
                 }
             }
         }
+    }
+    // Smart inversion changes image pixels only, including transparent ink and SVGs.
+    kobalt::readingPpi.store(96);
+    for (const auto *kind : {"gray", "color", "accent", "dark", "transparent", "svg", "color-svg"}) {
+        const QByteArray type(kind);
+        auto data = base;
+        QImage illustration(100, 100, QImage::Format_ARGB32);
+        illustration.fill(type == "transparent" ? qRgba(255, 0, 255, 0) : type == "dark" ? qRgb(0, 0, 0) : qRgb(255, 255, 255));
+        for (int y = 30; y < 70; ++y)
+            for (int x = 30; x < 70; ++x)
+                illustration.setPixel(x, y, type == "color" ? qRgb(255, 0, 0) : qRgb(60, 60, 60));
+        if (type == "accent") illustration.setPixel(50, 50, qRgb(255, 0, 0));
+        QByteArray bytes;
+        QBuffer encoded(&bytes);
+        require(encoded.open(QIODevice::WriteOnly) && illustration.save(&encoded, "PNG"), "Cannot encode invert fixture");
+        data["art.png"] = bytes;
+        data["art.svg"] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320" viewBox="0 0 640 320">
+<rect width="640" height="320" fill="white"/>
+<g stroke="#3c3c3c" stroke-width="4" fill="none">
+<rect x="36" y="94" width="148" height="112" rx="8"/>
+<rect x="246" y="94" width="148" height="112" rx="8"/>
+<rect x="456" y="94" width="148" height="112" rx="8"/>
+<path d="M184 150H234M221 138L234 150L221 162M394 150H444M431 138L444 150L431 162"/>
+</g>
+<g fill="#3c3c3c" font-family="sans-serif" text-anchor="middle">
+<text x="320" y="48" font-size="28">How a book reaches you</text>
+<text x="110" y="160" font-size="24">Author</text>
+<text x="320" y="160" font-size="24">Publisher</text>
+<text x="530" y="160" font-size="24">Reader</text>
+<text x="320" y="270" font-size="19">An illustration printed on white paper</text>
+</g></svg>)svg";
+        if (type == "color-svg") data["art.svg"].replace("#3c3c3c", "#ff0000");
+        data["c.xhtml"] = QByteArray("<html xmlns='http://www.w3.org/1999/xhtml'><body><img src='art.") +
+            (type.endsWith("svg") ? "svg" : "png") + "'/><p>Caption</p></body></html>";
+        QMap<QString, qint64> lengths;
+        for (auto it = data.cbegin(); it != data.cend(); ++it) lengths[it.key()] = it.value().size();
+        auto resources = std::make_shared<kobalt::ResourceCache>(data.keys(),
+            [data](const QString &name, const kobalt::ResourceCache::Sink &sink, QString *) {
+                const auto bytes = data.value(name);
+                return sink(bytes.constData(), bytes.size());
+            }, std::make_shared<std::atomic_bool>(false));
+        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        QString error;
+        require(model.openResources(resources, lengths, {800, 1000}, {}, &error), qPrintable(error));
+        const auto day = model.image(0);
+        const auto position = model.position();
+        const int pages = model.pages();
+        const auto regions = QJsonDocument::fromJson(day.text("kobalt.image_regions").toUtf8()).array();
+        require(!regions.isEmpty(), "Missing illustration region");
+        const auto first = regions.first().toArray();
+        const QRect region(first[0].toInt(), first[1].toInt(), first[2].toInt(), first[3].toInt());
+        const auto original = day.copy(region);
+        model.setDarkMode(true);
+        require(model.cachedPages() == 0, "Dark mode kept stale page pixels");
+        const auto night = model.image(0);
+        const auto inverted = night.copy(region);
+        const bool eligible = type == "gray" || type == "transparent" || type == "svg";
+        require((inverted != original) == eligible, kind);
+        int ink = 0, invertedInk = 0;
+        for (int y = 0; y < inverted.height(); ++y)
+            for (int x = 0; x < inverted.width(); ++x) {
+                const auto before = original.pixel(x, y), after = inverted.pixel(x, y);
+                if (qRed(before) == 60 && qGreen(before) == 60 && qBlue(before) == 60) {
+                    ++ink;
+                    invertedInk += after == qRgb(195, 195, 195);
+                }
+            }
+        require(ink > 100 || type.endsWith("svg") || type == "color", "Missing illustration ink");
+        require(!eligible || type == "svg" || invertedInk > 100, "Illustration ink was not inverted");
+        if (!captureDirectory.isEmpty()) {
+            require(original.save(captureDirectory + "/smart-" + kind + "-light.png") &&
+                    inverted.save(captureDirectory + "/smart-" + kind + "-dark.png"), "Cannot capture smart inversion");
+        }
+        require(model.image(0) == night, "Repeated rendering changed inversion");
+        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        require(preview.openPreview(model, {800, 1000}, &error), qPrintable(error));
+        require(preview.image(0) == night, "Preview lost automatic smart inversion");
+        require(model.pages() == pages && model.position() == position, "Smart inversion changed reading position");
+        model.setDarkMode(false);
+        require(model.image(0) == day, "Returning to light mode changed the source illustration");
+        model.setDarkMode(true);
+        require(model.image(0) == night, "Returning to dark mode lost automatic inversion");
+
     }
     kobalt::readingPpi.store(originalPpi);
     require(failures == 0, "Constrained images lost their proportions or compatibility sizes");

@@ -530,6 +530,60 @@ private slots:
         QCOMPARE(host.progress->writes, writes);
         QVERIFY(!storage::readBookState(testPaths(), identity).object.value("position").toString().isEmpty());
     }
+    void clockUpdatesOnlyReadingStrips_data() {
+        QTest::addColumn<bool>("custom");
+        QTest::addColumn<bool>("header");
+        QTest::newRow("default") << false << true;
+        QTest::newRow("custom-right") << true << true;
+        QTest::newRow("header-off") << false << false;
+    }
+    void clockUpdatesOnlyReadingStrips() {
+        QFETCH(bool, custom);
+        QFETCH(bool, header);
+        QJsonObject preferences{{"header_footer", custom ? "custom" : "default"}};
+        if (custom)
+            preferences["header_footer_custom"] = QJsonObject{{"top_left", "nothing"}, {"top_right", "time"}};
+        if (!header)
+            preferences["header_footer_text"] = QJsonObject{{"header_size", "off"}};
+        QVERIFY(storage::writePreferences(testPaths().preferences(), preferences));
+        QString time = "09:00";
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.clock = [&] { return time; };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        auto *clock = host.window()->findChild<QTimer *>("rrClockTimer");
+        QVERIFY(page && clock);
+        QTRY_VERIFY(!page->image.isNull());
+        QVERIFY(page->image.text("kobalt.animation_text_only") != "true");
+        QCoreApplication::processEvents();
+        test::PaintRegions paints;
+        page->installEventFilter(&paints);
+        const auto body = page->image.cacheKey();
+        const auto position = host.session()->state().value("position");
+        time = "09:01";
+        QVERIFY(QMetaObject::invokeMethod(clock, "timeout", Qt::DirectConnection));
+        QVERIFY(!host.window()->property("reader_page_turn").toBool());
+        QVERIFY(page->headerText().contains(time));
+        if (header)
+            QTRY_VERIFY(!paints.painted.isEmpty());
+        else
+            QCoreApplication::processEvents();
+        QVERIFY(!paints.painted.intersects(
+            QRect(0, page->topHeight(), page->width(), page->height() - page->topHeight() - page->bottomHeight())));
+        QCOMPARE(page->image.cacheKey(), body);
+        QCOMPARE(host.session()->state().value("position"), position);
+        paints.painted = {};
+        QVERIFY(QMetaObject::invokeMethod(clock, "timeout", Qt::DirectConnection));
+        QCoreApplication::processEvents();
+        QVERIFY(paints.painted.isEmpty());
+    }
     void clockStopsWhileReaderIsHidden_data() {
         QTest::addColumn<bool>("browser");
         QTest::newRow("ordinary-hide") << false;

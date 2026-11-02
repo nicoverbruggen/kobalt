@@ -504,7 +504,7 @@ void Reader::startClockTimer() {
         const auto before = page->slotContents;
         showChapterText();
         if (page->slotContents != before) {
-            page->refreshContent(true);
+            page->refreshContent();
         }
     });
     // The clock and menu status change once a minute. Wake just after each
@@ -527,7 +527,9 @@ void Reader::startClockTimer() {
         showChapterText();
         if (page->slotContents == before)
             return;
-        page->refreshContent(true);
+        // A clock tick changes the strips, not the book page. Keep its damage
+        // out of the page-turn image and colour refresh policy.
+        page->refreshContent();
     });
     startClock();
 }

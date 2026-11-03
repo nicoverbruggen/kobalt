@@ -19,9 +19,12 @@ if [[ $1 == android ]]; then
         bash platforms/android/test-signing.sh "build/android-$arch/android-build/build/outputs/apk/release/android-build-release-unsigned.apk"
     cp "$package" "$package.signing.txt" build/release/
 else
-    KOBALT_VERBOSE_DIAGNOSTICS=OFF bash platforms/kobo/build.sh "$1"
-    package="build/kobo-$1/Kobalt-$1.zip"
-    cp "$package" build/release/
+    verbose=$(bash platforms/ci/diagnostics.sh "$version")
+    KOBALT_VERBOSE_DIAGNOSTICS=$verbose bash platforms/kobo/build.sh "$1"
+    suffix=
+    [[ $verbose != ON ]] || suffix=-diagnostic
+    package="build/kobo-$1/Kobalt-$1$suffix.zip"
+    cp "$package" "build/release/Kobalt-$1.zip"
 fi
 jq -n --arg version "$version" --arg target "$1" --arg commit "$(git rev-parse HEAD)" \
     --arg sdk "$image" --arg sha "$(shasum -a 256 "$package" | awk '{print $1}')" \

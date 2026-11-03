@@ -22,6 +22,40 @@ done
 for version in '../bad' '1.0' 'v1.0;bad' 'v1.0/evil'; do
     if KOBALT_RELEASE_VERSION=$version cmake -P "$scratch/version.cmake" > "$scratch/error" 2>&1; then echo 'Accepted invalid version' >&2; exit 1; fi
 done
+# Build provenance selects logging, even when branch versions contain beta.
+for ref in refs/heads/main refs/heads/develop refs/heads/nightly; do
+    [[ $(GITHUB_REF=$ref bash platforms/ci/diagnostics.sh v1.0-beta.6) == ON ]]
+done
+for version in v1.0 v1.0-beta.6 v1.0-RC.1; do
+    [[ $(GITHUB_REF=refs/tags/$version bash platforms/ci/diagnostics.sh "$version") == OFF ]]
+done
+for version in v1.0-nightly v1.0-nightly.12 v1.0-interim.3; do
+    [[ $(GITHUB_REF=refs/tags/$version bash platforms/ci/diagnostics.sh "$version") == ON ]]
+done
+# Exercise the real CI wrapper with fixture SDK/package builders.
+mkdir -p "$scratch/ci/platforms/ci" "$scratch/ci/platforms/kobo" "$scratch/ci-bin"
+cp platforms/ci/{build,diagnostics}.sh "$scratch/ci/platforms/ci/"
+printf '#!/bin/bash\nprintf "%%s\\n" "$KOBALT_RELEASE_VERSION"\n' > "$scratch/ci/platforms/ci/version.sh"
+printf '#!/bin/bash\necho fixture-sdk\n' > "$scratch/ci/platforms/sdk-image.sh"
+printf '#!/bin/bash\nexit 0\n' > "$scratch/ci-bin/docker"
+chmod +x "$scratch/ci-bin/docker"
+cat > "$scratch/ci/platforms/kobo/build.sh" <<'SH'
+#!/bin/bash
+set -eu
+mkdir -p "build/kobo-$1"
+suffix=
+[[ $KOBALT_VERBOSE_DIAGNOSTICS != ON ]] || suffix=-diagnostic
+printf '%s' "$KOBALT_VERBOSE_DIAGNOSTICS" > "build/kobo-$1/Kobalt-$1$suffix.zip"
+SH
+for target in qt5 qt6; do
+    for channel in release interim; do
+        if [[ $channel == release ]]; then ref=refs/tags/v1.0-beta.6; expected=OFF
+        else ref=refs/heads/develop; expected=ON; fi
+        GITHUB_REF=$ref KOBALT_RELEASE_VERSION=v1.0-beta.6 PATH="$scratch/ci-bin:$PATH" \
+            bash "$scratch/ci/platforms/ci/build.sh" "$target"
+        [[ $(cat "$scratch/ci/build/release/Kobalt-$target.zip") == "$expected" ]]
+    done
+done
 # Source manifests must have disjoint names and complete checksums.
 jq -es '([.[0]|keys[]] + [.[1]|keys[]]) as $keys | ($keys|length)==($keys|unique|length) and (all(.[]|to_entries[]; (.key|test("^[a-z0-9-]+$")) and (.value.url|startswith("https://")) and (.value.sha256|test("^[a-f0-9]{64}$"))))' dependencies/manifest.json dependencies/release-sources.json > /dev/null
 # Fail closed before consulting tools or producing an APK when secrets are absent.

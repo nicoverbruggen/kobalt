@@ -106,6 +106,37 @@ try {
         assert.equal(await page.locator('#viewer-theme').getAttribute('aria-pressed'), await page.locator('#viewer-theme-bottom').getAttribute('aria-pressed'));
         assert.equal(await page.locator('#viewer-frame').isChecked(), await page.locator('#viewer-frame-bottom').isChecked());
     };
+    // The sidebar follows the filters, jumps to a card and repeats in the viewer.
+    assert.equal(await page.locator('#list').isVisible(), false);
+    await page.locator('#toggle-list').click();
+    assert.equal(await page.locator('#toggle-list').getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.locator('#list > a').count(), scenes.size);
+    await page.locator('#group').selectOption('Library');
+    const libraryScreens = new Set(manifest.images.filter(image => image.group === 'Library').map(image => image.screen));
+    assert.equal(await page.locator('#list > a').count(), libraryScreens.size);
+    const entry = page.locator('#list > a').last();
+    const target = await entry.textContent();
+    await entry.click();
+    assert.equal(await page.locator('#list > a[aria-current]').textContent(), target);
+    assert.equal(await page.evaluate(() => document.activeElement.closest('figure')?.dataset.title), target);
+    // A group heading marks the first screen of its group.
+    await page.locator('#list h3 a').first().click();
+    assert.equal(await page.locator('#list > a[aria-current]').textContent(), await page.locator('#list > a').first().textContent());
+    await page.locator('figure:not([hidden]) .capture').first().click();
+    assert.equal(await page.locator('#viewer-screens').isVisible(), true);
+    assert.equal(await page.locator('#viewer-list').getAttribute('aria-expanded'), 'true');
+    await checkLayout();
+    const second = await page.locator('#viewer-screens > a').nth(1).textContent();
+    await page.locator('#viewer-screens > a').nth(1).click();
+    assert.equal(await page.locator('#viewer-title').textContent(), second);
+    assert.equal(await page.locator('#viewer-screens > a[aria-current]').textContent(), second);
+    await page.locator('#viewer-list').click();
+    assert.equal(await page.locator('#viewer-screens').isVisible(), false);
+    assert.equal(await page.locator('#toggle-list').getAttribute('aria-expanded'), 'false');
+    await checkLayout();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#list').isVisible(), false);
+    await page.locator('#reset').click();
     const labels = await page.locator('figcaption').allTextContents();
     assert.ok(labels.includes('Font picker'));
     assert.ok(labels.every(label => !label.includes('.png') && !label.includes('six-inch-')));
@@ -255,7 +286,7 @@ try {
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y >= 0 && bounds.y + bounds.height <= 844);
     assert.deepEqual(requests, []);
     assert.deepEqual(errors, []);
-    console.log(`PASS: ${scenes.size} cards, ${manifest.images.length} frameless 300 PPI PNGs, four variants per screen, page selection, labels, filters, viewport controls, default Clara/Libra frames, native Space activation, raw downloads, checksums and responsive centering`);
+    console.log(`PASS: ${scenes.size} cards, ${manifest.images.length} frameless 300 PPI PNGs, four variants per screen, page selection, labels, filters, sidebar, viewport controls, default Clara/Libra frames, native Space activation, raw downloads, checksums and responsive centering`);
 } finally {
     clearTimeout(deadline);
     await browser.close();

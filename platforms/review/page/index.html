@@ -3,44 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kobalt screen review</title>
+<title>Kobalt · Screen review</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%23536ca4%27/%3E%3Crect x=%279%27 y=%277%27 width=%2714%27 height=%2718%27 rx=%272%27 fill=%27%23fff%27/%3E%3Cpath d=%27M12.5 12h7M12.5 16h7M12.5 20h4%27 stroke=%27%23536ca4%27 stroke-width=%272%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="review.css">
 </head>
 <body>
-<header class="bar">
-    <h1>Screen review</h1>
-    <label>Round <select id="round"></select></label>
-    <label>Group <select id="group"><option value="">All groups</option></select></label>
-    <label>Orientation
-        <select id="orientation">
-            <option value="">Both</option>
+<header class="top" id="bar">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#536ca4"/><rect x="9" y="7" width="14" height="18" rx="2" fill="#fff"/><path d="M12.5 12h7M12.5 16h7M12.5 20h4" stroke="#536ca4" stroke-width="2" stroke-linecap="round"/></svg><span>Kobalt</span><span class="crumb" aria-hidden="true">/</span><h1>Screen review</h1></div>
+    <select id="round" aria-label="Round"></select>
+    <select id="group" aria-label="Group"><option value="">All groups</option></select>
+    <select id="orientation" aria-label="Orientation">
+            <option value="">Both orientations</option>
             <option value="portrait">Portrait</option>
             <option value="landscape">Landscape</option>
-        </select>
-    </label>
-    <label>Status
-        <select id="status">
+    </select>
+    <select id="status" aria-label="Status">
             <option value="">All screens</option>
             <option value="open">Unseen</option>
             <option value="needs-changes">Needs changes</option>
             <option value="seen">Seen</option>
             <option value="changed">Changed since last round</option>
             <option value="noted">With notes</option>
-        </select>
-    </label>
-    <button id="toggle-list" type="button" aria-expanded="false">Screens</button>
-    <p class="tally" id="tally"></p>
+    </select>
 </header>
 <div class="layout">
-    <nav id="list" class="list" hidden></nav>
+    <aside class="sidebar"><nav id="list" class="list" aria-label="Screens" hidden></nav><div class="sidebar-foot"><button id="toggle-list" class="icon-button" type="button" aria-expanded="false" aria-controls="list" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button></div></aside>
     <main id="main" tabindex="-1">
         <p id="empty" class="empty" hidden></p>
         <section id="screen" hidden>
-            <div class="heading">
-                <p class="label" id="where"></p>
-                <h2 id="title"></h2>
-                <p class="label" id="state"></p>
+            <div class="screen-bar">
+                <div class="screen-nav">
+                    <h2 id="title"></h2>
+                    <span class="position" id="position"></span>
+                    <span class="stepper">
+                        <button type="button" class="icon-button" id="previous" aria-label="Previous screen" title="Previous screen (Left arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+                        <button type="button" class="icon-button" id="next" aria-label="Next screen" title="Next screen (Right arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+                    </span>
+                </div>
+                <p class="tally"><span id="tally"></span><span class="saved" id="saved" aria-live="polite"></span></p>
             </div>
+            <div class="meta"><p class="label" id="where"></p><p class="label" id="state"></p></div>
             <div class="stage" id="stage">
                 <figure class="shot">
                     <figcaption>
@@ -58,17 +60,14 @@
                 </figure>
             </div>
             <div class="controls">
-                <button type="button" id="previous" title="Previous screen (Left arrow)">&#8592;</button>
                 <button type="button" class="add-note" id="add-note" title="Add a note (R)">Add note</button>
-                <button type="button" id="next" title="Next screen (Right arrow)">&#8594;</button>
             </div>
-            <p class="saved label" id="saved" aria-live="polite"></p>
             <div class="notes">
                 <label id="note-box" hidden><span class="label">Requested changes</span><textarea id="note" rows="4"></textarea></label>
                 <ol class="pins" id="pins"></ol>
                 <div class="earlier" id="earlier" hidden></div>
             </div>
-            <p class="keys label">Left and right arrows: previous and next · Space: seen and next · R: add a note · P: previous round · Esc: leave a note</p>
+            <p class="keys"><span><kbd>←</kbd><kbd>→</kbd> Previous and next</span><span><kbd>Space</kbd> Seen and next</span><span><kbd>R</kbd> Add a note</span><span><kbd>P</kbd> Previous round</span><span><kbd>Esc</kbd> Leave a note</span></p>
         </section>
     </main>
 </div>

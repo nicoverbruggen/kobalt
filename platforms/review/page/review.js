@@ -264,14 +264,18 @@ function renderList(items) {
     if (list.hidden) return;
     const children = [];
     let group = null;
+    let count;
     for (const item of items) {
         if (item.group !== group) {
             group = item.group;
             const heading = document.createElement('h3');
             heading.className = 'label';
-            heading.textContent = group;
+            count = document.createElement('span');
+            count.textContent = '0';
+            heading.append(group, count);
             children.push(heading);
         }
+        count.textContent = String(Number(count.textContent) + 1);
         const link = document.createElement('a');
         link.href = `#round=${state.round.number}&screen=${encodeURIComponent(item.id)}`;
         if (item.id === state.current) link.setAttribute('aria-current', 'true');
@@ -294,8 +298,10 @@ function renderTally(items) {
     const all = state.round.items.map(item => entry(item.id).verdict);
     const count = verdict => all.filter(v => v === verdict).length;
     const position = items.findIndex(item => item.id === state.current) + 1;
-    $('tally').textContent = `${position ? `${position} of ${items.length}` : `${items.length} shown`} · ` +
-        `${state.round.items.filter(item => entry(item.id).seen).length} seen · ${count('needs-changes')} need changes · ${state.round.items.filter(item => !entry(item.id).seen).length} unseen`;
+    $('position').textContent = position ? `${position} of ${items.length}` : '';
+    $('previous').disabled = position <= 1;
+    $('next').disabled = !position || position === items.length;
+    $('tally').textContent = `${state.round.items.filter(item => entry(item.id).seen).length} seen · ${count('needs-changes')} need changes · ${state.round.items.filter(item => !entry(item.id).seen).length} unseen`;
 }
 
 // Changes apply to the page at once. Typing saves after a pause; verdicts
@@ -433,6 +439,9 @@ function fail(error) {
     $('empty').textContent = `Could not load the review: ${error.message}`;
 }
 
+// The screen list sticks below the header, whose height depends on wrapping.
+new ResizeObserver(() => document.documentElement.style.setProperty('--bar', `${$('bar').offsetHeight}px`)).observe($('bar'));
+
 (async () => {
     if (recall('list')) {
         $('list').hidden = false;
@@ -441,7 +450,7 @@ function fail(error) {
     const rounds = await api('api/rounds');
     if (!rounds.length) throw new Error('there are no rounds yet. Run the round command first.');
     for (const round of rounds)
-        $('round').add(new Option(`${round.number} · ${new Date(round.created).toLocaleDateString()}`, round.number));
+        $('round').add(new Option(`Round ${round.number} · ${new Date(round.created).toLocaleDateString()}`, round.number));
     const hash = new URLSearchParams(location.hash.slice(1));
     const number = rounds.at(-1).number;
     $('round').value = number;

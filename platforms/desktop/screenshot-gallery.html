@@ -1,60 +1,71 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kobalt · @@SUITE@@ screenshot gallery</title><style>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kobalt · @@SUITE@@ screenshots</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%23536ca4%27/%3E%3Crect x=%279%27 y=%277%27 width=%2714%27 height=%2718%27 rx=%272%27 fill=%27%23fff%27/%3E%3Cpath d=%27M12.5 12h7M12.5 16h7M12.5 20h4%27 stroke=%27%23536ca4%27 stroke-width=%272%27 stroke-linecap=%27round%27/%3E%3C/svg%3E"><style>
 
-:root{color-scheme:light;--paper:#f7f6f2;--ink:#161616;--muted:#62605b;--line:#d9d7d0;--accent:#536ca4}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 system-ui,sans-serif}button,input,select{font:inherit;color:inherit}button,select,input{border:1px solid var(--line);border-radius:7px;background:white}button,select{cursor:pointer}button{padding:9px 15px}button:hover{border-color:var(--ink)}:focus-visible{outline:2px solid var(--accent);outline-offset:4px}a{color:var(--accent)}[hidden]{display:none!important}
-.shell{max-width:1240px;margin:auto;padding:0 28px}.intro{text-align:center;padding:54px 0 30px}h1{font:normal 48px/1.1 Georgia,serif;margin:8px 0 18px}.eyebrow,.label,.tag,figcaption small{font:11px/1.5 ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}.eyebrow{color:var(--accent);margin-bottom:12px}
-.filters{display:flex;align-items:end;gap:14px;flex-wrap:wrap;padding:22px 0;border-block:1px solid var(--line)}.filters label,.filters .theme-control{display:grid;gap:7px;min-width:150px}.filters .search{flex:1;min-width:200px}.label{color:var(--muted)}select,input{width:100%;padding:10px 12px;height:44px}.filters button{height:44px}.results{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:20px 0;color:var(--muted);font-size:13px}.results p{margin:0}.hint{font-style:italic}.group{padding:18px 0 38px;border-bottom:1px solid var(--line)}.group-title{display:flex;gap:16px;align-items:baseline;justify-content:space-between;margin-bottom:22px}.group h2{font:normal 30px/1.15 Georgia,serif;margin:0}.group-title p{margin:0;color:var(--muted);font-size:13px}.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:28px 22px}figure{margin:0;min-width:0}.capture{display:block;width:100%;padding:0;overflow:hidden;border:1px solid #cbc9c2;border-radius:8px;box-shadow:0 3px 12px #1616160b;background:white}.capture:hover{box-shadow:0 5px 20px #16161618}.capture img{display:block;width:100%;height:auto}.caption{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-top:12px}figcaption{font-size:14px;overflow-wrap:anywhere}figcaption small{display:block;color:var(--muted);margin-top:4px;font-size:10px}.tag{border:1px solid var(--line);border-radius:20px;padding:3px 8px;font-size:10px;white-space:nowrap;color:var(--muted)}.tag.dark{background:var(--ink);color:white;border-color:var(--ink)}.empty{padding:70px 20px;text-align:center;color:var(--muted)}.empty h2{font:normal 32px Georgia,serif;color:var(--ink)}
-details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}summary{cursor:pointer;color:var(--ink)}details p,details ul{max-width:800px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 monospace;max-height:280px;overflow:auto}footer{padding:30px 0 45px;color:var(--muted);font-size:13px}.notice{padding:16px;border:1px solid var(--line);border-left:3px solid var(--accent);background:white;margin-bottom:16px}
-@media(max-width:650px){.shell{padding:0 18px}.intro{padding-top:28px}h1{font-size:40px}.filters label,.filters .theme-control{flex:1;min-width:120px}.filters .search{flex-basis:100%}.filters button{width:100%}.screens{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 12px}.group-title{display:block}.group-title p{margin-top:8px}.hint{display:none}.caption{display:block}.tag{display:inline-block;margin-top:7px}figcaption{font-size:12px}}
-#viewer{position:fixed;inset:0;margin:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;padding:0;border:0;border-radius:0;background:#373736;color:var(--ink);overflow:hidden}
+/* Same palette, type, header and controls as the screen review page in platforms/review/page/. */
+:root{color-scheme:light;--paper:#f6f5f1;--surface:#ffffff;--hover:#f1f0eb;--ink:#1b1b1a;--muted:#6b6963;--line:#e2e0d9;--edge:#cfccc4;--accent:#536ca4;--accent-soft:#536ca41a;--accent-line:#536ca466}
+*{box-sizing:border-box}[hidden]{display:none!important}html{scroll-padding-top:var(--bar,57px)}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}a{color:var(--accent)}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button,input,select{font:inherit;font-size:13px;color:inherit;height:32px;background:var(--surface);border:1px solid var(--edge);border-radius:8px;box-shadow:0 1px 1px #1b1b1a0a}button,select{cursor:pointer}button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;white-space:nowrap}button:hover{background:var(--hover)}button:disabled{cursor:default;opacity:.5}button:disabled:hover{background:var(--surface)}button[aria-pressed="true"],button[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}select{appearance:none;padding:0 30px 0 10px;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%236b6963' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3.5 5.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center}input{padding:0 10px}input[type="search"]{padding-left:30px;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%236b6963' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='m9.5 9.5 3.5 3.5'/%3E%3C/svg%3E") no-repeat 10px center}input:focus-visible,select:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.icon-button{width:32px;padding:0}.icon-button svg{width:16px;height:16px}
+.label,.tag,figcaption small{font-size:11px;font-weight:600;line-height:1.4;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.top{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--line);box-shadow:0 1px 3px #1b1b1a08}.brand{display:flex;align-items:center;gap:8px;margin:0 8px 0 4px;font-size:15px;font-weight:600;white-space:nowrap}.brand svg{width:22px;height:22px;flex:none}.brand .crumb{color:var(--edge);font-weight:normal}.brand h1{font:inherit;margin:0}.pill{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:20px;padding:2px 8px}.toolbar{display:contents}.field{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}.search{margin-left:auto}.search input{width:240px}
+.layout{display:flex;align-items:flex-start}.sidebar{flex:none;width:260px;position:sticky;top:var(--bar,57px);height:calc(100vh - var(--bar,57px));display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--paper)}.sidebar:has(.list[hidden]){width:53px}.list{flex:1;min-height:0;overflow-y:auto;padding:10px 8px 16px}.list h3{margin:14px 0 2px}.list h3:first-child{margin-top:2px}.list a{display:block;padding:4px 10px;border-radius:6px;color:inherit;text-decoration:none;font-size:13px;line-height:1.4}.list h3 a{display:flex;justify-content:space-between;font:inherit;color:inherit;letter-spacing:inherit}.list h3 span{font-weight:normal;letter-spacing:0}.list a:hover{background:var(--hover)}.list a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}.sidebar-foot{flex:none;padding:10px;border-top:1px solid var(--line)}.sidebar:has(.list[hidden]) .sidebar-foot{margin-top:auto;border-top:0}
+main{flex:1;min-width:0;padding:16px 24px 40px}.results{display:flex;align-items:center;gap:12px;min-height:32px;margin-bottom:8px;color:var(--muted);font-size:13px}.results p{margin:0}.results button{height:26px;padding:0 10px;font-size:12px}.group{padding:14px 0 32px;border-bottom:1px solid var(--line)}.group:last-of-type{border-bottom:0}.group-title{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}.group h2{font-size:18px;font-weight:600;line-height:1.3;margin:0}.group-title .count{color:var(--muted);font-size:13px}.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:28px 24px}figure{margin:0;min-width:0;scroll-margin-top:calc(var(--bar,57px) + 16px)}.capture{display:block;width:100%;height:auto;padding:0;overflow:hidden;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 2px #1b1b1a0d,0 4px 14px #1b1b1a0a;background:var(--surface);transition:box-shadow .15s,transform .15s}.capture:hover{background:var(--surface);box-shadow:0 2px 4px #1b1b1a12,0 10px 28px #1b1b1a17;transform:translateY(-2px)}.capture img{display:block;width:100%;height:auto}.caption{margin-top:10px}figcaption{font-size:14px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}figcaption small{display:block;margin-top:3px;font-weight:normal}.tag{display:block;margin-top:3px;font-weight:normal;letter-spacing:0;text-transform:none;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tag.dark::before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:var(--ink);vertical-align:0}.empty{padding:80px 20px;text-align:center;color:var(--muted)}.empty h2{font-size:18px;font-weight:600;color:var(--ink);margin:0 0 4px}
+details{margin-top:8px;padding:16px 0;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}summary{cursor:pointer;color:var(--ink);font-weight:500}details p,details ul{max-width:800px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.6 monospace;max-height:280px;overflow:auto}footer{padding:24px 0 40px;color:var(--muted);font-size:13px}.notice{padding:16px;border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--surface);margin-bottom:16px}
+@media(max-width:700px){.top{position:static;padding:10px 16px}.brand{flex:1}.toolbar select{flex:1 1 140px;min-width:0}.search{flex-basis:100%;margin-left:0}.search input{flex:1;width:auto;min-width:0}.layout{display:block}.sidebar,.sidebar:has(.list[hidden]){position:static;width:auto;height:auto;border-right:0;border-bottom:1px solid var(--line)}.list{max-height:40vh}.sidebar:has(.list[hidden]) .sidebar-foot{padding:6px 10px}main{padding:12px 16px 40px}.screens{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 12px}figcaption{font-size:13px}}
+#viewer{position:fixed;inset:0;margin:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;padding:0;border:0;border-radius:0;background:#2d2d2c;color:var(--ink);overflow:hidden}
 #viewer[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
-#viewer::backdrop{background:#161616d9}
-.viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:var(--paper);margin:0}
+#viewer::backdrop{background:#1b1b1ad9}
+.viewer-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;background:var(--surface);margin:0}
 #viewer-top{border-bottom:1px solid var(--line)}
-.viewer-bar strong,.viewer-model{flex:1;min-width:0;font-size:14px;font-weight:normal;line-height:1.3}
+.viewer-heading{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.viewer-bar strong{flex:0 1 auto;min-width:0;font-size:14px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.viewer-position{color:var(--muted);font-size:13px;white-space:nowrap}.stepper{display:flex;gap:4px;margin-left:4px}.viewer-image:focus-visible{outline:none}
+.viewer-model{flex:1;min-width:0;font-size:14px;font-weight:normal;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.viewer-bar strong{font-weight:600}.viewer-model{color:var(--muted)}
 .viewer-controls{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
-.viewer-controls button{padding:7px 12px;white-space:nowrap}
-.viewer-controls select{width:auto;height:36px;padding:4px 8px}
-.frame-control{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap}
-.frame-control input{width:auto;height:auto}
-.viewer-stage{display:grid;place-items:center;min-width:0;min-height:0;overflow:hidden;padding:16px}
+.frame-control{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;cursor:pointer}
+.frame-control input{width:auto;height:auto;box-shadow:none;accent-color:var(--accent)}
+.viewer-main{display:flex;min-width:0;min-height:0}
+.viewer-main .sidebar{position:static;height:auto;align-self:stretch;color:var(--ink)}
+.viewer-stage{flex:1;display:grid;place-items:center;min-width:0;min-height:0;overflow:hidden;padding:16px}
 .viewer-body{position:relative;flex:none;line-height:0;filter:drop-shadow(0 6px 10px #0006)}
 .device-art{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .viewer-body:not(.framed) .device-art{display:none}
 .viewer-image{position:absolute;display:block;max-width:none;max-height:none;object-fit:contain}
-.viewer-bottom{padding:0;background:var(--paper);border-top:1px solid var(--line)}
-.viewer-meta{padding:7px 16px;background:var(--paper);font-size:12px;margin:0;border-bottom:1px solid var(--line)}
+.viewer-bottom{padding:0;background:var(--surface);border-top:1px solid var(--line)}
+.viewer-meta{padding:8px 16px;background:var(--surface);font-size:12px;margin:0;border:0;border-bottom:1px solid var(--line)}
+.viewer-meta summary{font-weight:normal;color:var(--muted)}
 .viewer-meta p{margin:6px 0;overflow-wrap:anywhere}
 .viewer-meta[open]{max-height:22vh;overflow:auto}
-@media(max-width:650px){.viewer-bar{padding:8px 12px;flex-wrap:wrap}.viewer-bar strong,.viewer-model{flex-basis:100%}.viewer-controls{justify-content:flex-start;gap:6px}.viewer-controls button{padding:6px 9px;font-size:13px}.viewer-controls select{height:32px;font-size:13px}.viewer-stage{padding:12px}}
+@media(max-width:700px){.viewer-bar{padding:8px 12px;flex-wrap:wrap}.viewer-heading,.viewer-model{flex-basis:100%}.viewer-controls{justify-content:flex-start;gap:6px}.viewer-stage{padding:12px}#viewer-controls-bottom{display:none}.viewer-main{flex-direction:column}.viewer-main .sidebar,.viewer-main .sidebar:has(.list[hidden]){width:auto;border-right:0;border-bottom:1px solid var(--line)}.viewer-main .list{max-height:30vh}}
 </style></head>
-<body><div class="shell">
-<header class="intro"><div class="eyebrow">Kobalt</div><h1>@@SUITE@@ Screenshot Gallery</h1></header>
-<form class="filters" id="filters" role="search">
-<label><span class="label">Screen size</span><select id="device"><option value="six-inch">6-inch · 300 PPI</option><option value="seven-inch">7-inch · 300 PPI</option><option value="phone">Phone · 720 × 1600</option><option value="six-inch-landscape">6-inch landscape</option><option value="phone-landscape">Phone landscape</option></select></label>
-<label><span class="label">UI group</span><select id="group"><option value="">All groups</option>@@OPTIONS@@</select></label>
-<div class="theme-control"><span class="label">Reader theme</span><button type="button" id="theme" aria-pressed="false">Show dark screenshots</button></div>
-<div class="theme-control"><span class="label">Interface text</span><button type="button" id="text-size" aria-pressed="false">Show 150% text</button></div>
-<label class="search"><span class="label">Find a screen</span><input id="query" type="search" placeholder="Try dictionary, font or equation" autocomplete="off"></label>
-<button type="button" id="reset">Reset filters</button></form>
-<div class="results"><p id="count" role="status" aria-live="polite">@@COUNT@@ screens · @@CAPTURES@@ captures</p><p class="hint">Select a screen to inspect its variants.</p></div>
-<main id="gallery">@@GROUPS@@</main>
+<body>
+<header class="top" id="bar">
+<div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#536ca4"/><rect x="9" y="7" width="14" height="18" rx="2" fill="#fff"/><path d="M12.5 12h7M12.5 16h7M12.5 20h4" stroke="#536ca4" stroke-width="2" stroke-linecap="round"/></svg><span>Kobalt</span><span class="crumb" aria-hidden="true">/</span><h1>Screenshots</h1><span class="pill">@@SUITE@@</span></div>
+<form class="toolbar" id="filters" role="search">
+<select id="device" aria-label="Screen size"><option value="six-inch">6-inch · 300 PPI</option><option value="seven-inch">7-inch · 300 PPI</option><option value="phone">Phone · 720 × 1600</option><option value="six-inch-landscape">6-inch landscape</option><option value="phone-landscape">Phone landscape</option></select>
+<select id="group" aria-label="Group"><option value="">All groups</option>@@OPTIONS@@</select>
+<button type="button" id="theme" aria-pressed="false">Dark theme</button>
+<button type="button" id="text-size" aria-pressed="false">150% text</button>
+<label class="field search"><input id="query" type="search" placeholder="Find a screen" aria-label="Find a screen" autocomplete="off"></label>
+</form></header>
+<div class="layout">
+<aside class="sidebar"><nav class="list" id="list" aria-label="Screens" hidden></nav><div class="sidebar-foot"><button type="button" class="icon-button" id="toggle-list" aria-expanded="false" aria-controls="list" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button></div></aside>
+<main id="gallery"><div class="results"><p id="count" role="status" aria-live="polite">@@COUNT@@ screens · @@CAPTURES@@ captures</p><button type="button" id="reset" hidden>Reset filters</button></div>@@GROUPS@@
 <template id="captures">@@IMAGES@@</template>
 <noscript>This gallery needs JavaScript to select screenshot variants. The raw PNGs and manifest remain available beside this file.</noscript>
 <div class="empty" id="empty" hidden><h2>No matching screenshots</h2><p>Try another group or search term.</p></div>
 <details><summary>About these captures</summary><p>Captured headlessly through the current desktop application and CREngine, with a fixed 09:00 clock. Every screen has light and dark captures. E-reader profiles also have a light capture with 150% interface text; 150% text is unsupported on the phone profiles because the UI is too dense. Captures use six-inch and seven-inch portrait, phone (720 × 1600), six-inch landscape (1448 × 1072) and phone landscape (1480 × 720) resolutions, at 300 PPI. The phone is a representative 20:9 screen at the reader’s design density, not a named handset. In portrait it has a 60-pixel camera band at the top, which the reader fills with paper, and rounded corners. In landscape the camera side is letterboxed, so the reader is 120 pixels narrower than the screen. These host captures do not validate Android system bars, keyboards or physical touch input. PNGs contain only the screen. The viewer defaults to a representative Kobo Clara frame. Its Clara and Libra frames use the desktop preview proportions and are presentation only. Raw PNGs remain frameless. International fixtures preserve pinned public-domain chapters and Wikisource attribution. CJK vertical variants apply writing-mode styling to the original text. Dictionary replies and service failures use controlled fixtures. Dictionary management uses standalone mode at the same screen sizes. Native operating-system dialogs, hardware light, Bluetooth and firmware sync screens are outside this desktop tour.</p><p>@@BUILD@@</p><p>This file embeds its images and works offline. The adjacent <a href="manifest.json">manifest</a> records filenames, dimensions, checksums and provenance for comparisons.</p>@@BOOKS@@</details>
-<footer>Kobalt · Generated by the CMake screenshot target.</footer></div>
+<footer>Kobalt · Generated by the CMake screenshot target.</footer></main></div>
 <template id="viewer-controls-template">
 <select data-control="device" aria-label="Viewer device"><option value="six-inch">Clara · 6-inch</option><option value="seven-inch">Libra · 7-inch</option><option value="phone">Phone</option><option value="six-inch-landscape">Clara · landscape</option><option value="phone-landscape">Phone · landscape</option></select>
 <select data-control="page" aria-label="Capture page" hidden></select>
-<button data-control="theme" type="button" aria-pressed="false">Show dark</button>
-<button data-control="text" type="button" aria-pressed="false">Show 150% text</button>
+<button data-control="theme" type="button" aria-pressed="false">Dark theme</button>
+<button data-control="text" type="button" aria-pressed="false">150% text</button>
 <label class="frame-control"><input data-control="frame" type="checkbox" checked>Device frame</label>
 <button data-control="close" type="button">Close</button>
 </template>
 <dialog id="viewer" aria-labelledby="viewer-title">
-<header class="viewer-bar" id="viewer-top"><strong id="viewer-title"></strong><div class="viewer-controls" id="viewer-controls-top" role="group" aria-label="Top screenshot controls"></div></header>
+<header class="viewer-bar" id="viewer-top"><div class="viewer-heading"><strong id="viewer-title"></strong><span class="viewer-position" id="viewer-position"></span><span class="stepper"><button type="button" class="icon-button" id="viewer-previous" aria-label="Previous screen" title="Previous screen (Left arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><button type="button" class="icon-button" id="viewer-next" aria-label="Next screen" title="Next screen (Right arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button></span></div><div class="viewer-controls" id="viewer-controls-top" role="group" aria-label="Top screenshot controls"></div></header>
+<div class="viewer-main"><aside class="sidebar"><nav class="list" id="viewer-screens" aria-label="Screens" hidden></nav><div class="sidebar-foot"><button type="button" class="icon-button" id="viewer-list" aria-expanded="false" aria-controls="viewer-screens" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button></div></aside>
 <div class="viewer-stage" id="viewer-stage">
 <div class="viewer-body framed" data-device="six-inch">
 <svg class="device-art" id="device-art" viewBox="0 0 1323 1890" aria-hidden="true">
@@ -64,7 +75,7 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
 <g id="frame-buttons" fill="#323233" stroke="#111" stroke-width="5" style="display:none"><rect x="1473" y="640" width="64" height="300" rx="18"/><rect x="1473" y="980" width="64" height="300" rx="18"/></g></g>
 </svg>
 <img class="viewer-image" id="image" alt="" tabindex="0">
-</div></div>
+</div></div></div>
 <footer class="viewer-bottom">
 <details class="viewer-meta"><summary>Capture details</summary><p><a id="raw-image">Download raw PNG</a></p><p id="capture-file"></p><p id="capture-size"></p><p id="capture-checksum"></p></details>
 <nav class="viewer-bar" id="viewer-bottom"><span class="viewer-model" id="viewer-model">Kobo Clara · 6-inch</span><div class="viewer-controls" id="viewer-controls-bottom" role="group" aria-label="Bottom screenshot controls"></div></nav>
@@ -77,6 +88,12 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
   const theme = document.getElementById('theme');
   const textSize = document.getElementById('text-size');
   const query = document.getElementById('query');
+  const reset = document.getElementById('reset');
+  for (const title of document.querySelectorAll('.group-title')) {
+    const count = document.createElement('span');
+    count.className = 'count';
+    title.append(count);
+  }
   const cards = [...document.querySelectorAll('figure')];
   const captures = [...document.getElementById('captures').content.querySelectorAll('img')];
   const variants = new Map();
@@ -118,6 +135,95 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
   let currentPage = 1;
   let currentSource;
   let frameEnabled = true;
+  // The Screens list works like the one on the review page. The grid and the
+  // viewer each show a copy that follows the filters and the current screen.
+  const bar = document.getElementById('bar');
+  new ResizeObserver(() => document.documentElement.style.setProperty('--bar', bar.offsetHeight + 'px')).observe(bar);
+  const lists = [document.getElementById('list'), document.getElementById('viewer-screens')];
+  const listToggles = [document.getElementById('toggle-list'), document.getElementById('viewer-list')];
+  let listOpen = false;
+  try { listOpen = localStorage.getItem('kobalt-gallery-list') === 'open'; } catch {}
+  // The card last opened or chosen in the list, marked while the viewer is closed.
+  let markedCard;
+  for (const card of cards) card.id = 'screen-' + card.dataset.scene;
+  for (const section of document.querySelectorAll('.group')) {
+    section.id = 'group-' + section.querySelector('figure').dataset.scene;
+    section.dataset.group = section.querySelector('figure').dataset.group;
+  }
+  // Scrolling caused by choosing a card must not move the mark to another card.
+  let ignoreScroll = 0;
+  function renderLists() {
+    for (const button of listToggles) button.setAttribute('aria-expanded', String(listOpen));
+    for (const list of lists) {
+      list.hidden = !listOpen;
+      if (!listOpen) { list.replaceChildren(); continue; }
+      const children = [];
+      let heading, count;
+      for (const card of cards) {
+        if (card.hidden) continue;
+        if (card.dataset.group !== heading) {
+          heading = card.dataset.group;
+          const title = document.createElement('h3');
+          title.className = 'label';
+          const jump = document.createElement('a');
+          jump.href = '#' + card.closest('.group').id;
+          count = document.createElement('span');
+          count.textContent = '0';
+          jump.append(heading, count);
+          title.append(jump);
+          children.push(title);
+        }
+        count.textContent = String(Number(count.textContent) + 1);
+        const link = document.createElement('a');
+        link.href = '#' + card.id;
+        link.textContent = card.dataset.title;
+        children.push(link);
+      }
+      list.replaceChildren(...children);
+    }
+    markCurrent();
+  }
+  function markCurrent() {
+    const current = currentCard || markedCard;
+    for (const list of lists) {
+      list.querySelector('a[aria-current]')?.removeAttribute('aria-current');
+      const link = current && list.querySelector('a[href="#' + CSS.escape(current.id) + '"]');
+      if (!link) continue;
+      link.setAttribute('aria-current', 'true');
+      // Scroll only the list; scrollIntoView could also move the page.
+      const box = list.getBoundingClientRect();
+      const item = link.getBoundingClientRect();
+      if (item.top < box.top) list.scrollTop -= box.top - item.top + 8;
+      else if (item.bottom > box.bottom) list.scrollTop += item.bottom - box.bottom + 8;
+    }
+  }
+  function followScroll() {
+    if (viewer.open || !listOpen || performance.now() < ignoreScroll) return;
+    const top = bar.offsetHeight + 24;
+    const card = cards.find(other => !other.hidden && other.getBoundingClientRect().bottom > top);
+    if (card && card !== markedCard) { markedCard = card; markCurrent(); }
+  }
+  function chooseGroup(section) {
+    const first = section.querySelector('figure:not([hidden])');
+    if (viewer.open) { showCard(first); return; }
+    markedCard = first;
+    markCurrent();
+    ignoreScroll = performance.now() + 400;
+    section.scrollIntoView({ block: 'start' });
+  }
+  function chooseCard(card) {
+    if (viewer.open) { showCard(card); return; }
+    markedCard = card;
+    markCurrent();
+    ignoreScroll = performance.now() + 400;
+    card.scrollIntoView({ block: 'start' });
+    card.querySelector('.capture').focus({ preventScroll: true });
+  }
+  function toggleList() {
+    listOpen = !listOpen;
+    try { localStorage.setItem('kobalt-gallery-list', listOpen ? 'open' : ''); } catch {}
+    renderLists();
+  }
   function selected(card, page = 1) {
     return variants.get(card.dataset.scene + '/' + device.value + '/' + variant() + '/' + page);
   }
@@ -158,12 +264,10 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
   }
   function updateCards() {
     theme.setAttribute('aria-pressed', String(currentTheme === 'dark'));
-    theme.textContent = currentTheme === 'light' ? 'Show dark screenshots' : 'Show light screenshots';
     theme.disabled = largeText;
     textSize.disabled = device.value.startsWith('phone');
     textSize.title = device.value.startsWith('phone') ? '150% interface text is unsupported on phones' : '';
     textSize.setAttribute('aria-pressed', String(largeText));
-    textSize.textContent = largeText ? 'Show 100% text' : 'Show 150% text';
     for (const card of cards) {
       const source = selected(card);
       if (!source) throw new Error('Missing capture variant: ' + card.dataset.scene);
@@ -176,6 +280,11 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
       tag.textContent = sizeLabel() + ' · ' + (largeText ? 'Light · 150%' : currentTheme === 'light' ? 'Light' : 'Dark');
       tag.classList.toggle('dark', !largeText && currentTheme === 'dark');
     }
+    updateReset();
+  }
+  // Reset appears only when a filter or variant differs from the defaults.
+  function updateReset() {
+    reset.hidden = !(group.value || query.value.trim() || device.value !== 'six-inch' || currentTheme !== 'light' || largeText);
   }
   function filter() {
     const words = query.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -184,9 +293,17 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
       card.hidden = Boolean((group.value && card.dataset.group !== group.value) || words.some(word => !card.dataset.search.includes(word)));
       if (!card.hidden) visible++;
     }
-    document.querySelectorAll('.group').forEach(section => { section.hidden = !section.querySelector('figure:not([hidden])'); });
-    document.getElementById('count').textContent = visible + ' of ' + cards.length + ' screens · ' + captures.length + ' captures';
+    for (const section of document.querySelectorAll('.group')) {
+      const shown = section.querySelectorAll('figure:not([hidden])').length;
+      section.hidden = shown === 0;
+      section.querySelector('.count').textContent = String(shown);
+    }
+    document.getElementById('count').textContent = visible === cards.length
+      ? cards.length + ' screens · ' + captures.length + ' captures'
+      : visible + ' of ' + cards.length + ' screens';
+    updateReset();
     document.getElementById('empty').hidden = visible !== 0;
+    renderLists();
   }
   function showCard(card, page = 1) {
     currentCard = card;
@@ -205,18 +322,21 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
     image.src = currentSource.src;
     image.alt = card.querySelector('img').alt + (pages.length > 1 ? ' · Page ' + currentPage : '');
     document.getElementById('viewer-title').textContent = card.dataset.title;
+    const visible = cards.filter(other => !other.hidden);
+    const index = visible.indexOf(card);
+    document.getElementById('viewer-position').textContent = index < 0 ? '' : (index + 1) + ' of ' + visible.length;
+    document.getElementById('viewer-previous').disabled = index <= 0;
+    document.getElementById('viewer-next').disabled = index < 0 || index === visible.length - 1;
     document.getElementById('viewer-model').textContent = models[device.value].name;
     for (const select of controls('device')) select.value = device.value;
     for (const button of controls('theme')) {
       button.setAttribute('aria-pressed', String(currentTheme === 'dark'));
-      button.textContent = currentTheme === 'light' ? 'Show dark' : 'Show light';
       button.disabled = largeText;
     }
     for (const button of controls('text')) {
       button.disabled = device.value.startsWith('phone');
       button.title = device.value.startsWith('phone') ? '150% interface text is unsupported on phones' : '';
       button.setAttribute('aria-pressed', String(largeText));
-      button.textContent = largeText ? 'Show 100% text' : 'Show 150% text';
     }
     for (const checkbox of controls('frame')) checkbox.checked = frameEnabled;
     const raw = document.getElementById('raw-image');
@@ -226,6 +346,7 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
     document.getElementById('capture-size').textContent = currentSource.getAttribute('width') + ' × ' + currentSource.getAttribute('height') + ' pixels · 300 PPI';
     document.getElementById('capture-checksum').textContent = 'SHA-256: ' + currentSource.dataset.sha256;
     fitFrame();
+    markCurrent();
   }
   function changeVariant(keepPage = false) {
     if (device.value.startsWith('phone')) largeText = false;
@@ -253,7 +374,7 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
   form.addEventListener('submit', event => event.preventDefault());
   query.addEventListener('input', filter);
   group.addEventListener('change', filter);
-  document.getElementById('reset').addEventListener('click', () => {
+  reset.addEventListener('click', () => {
     group.value = ''; device.value = 'six-inch'; currentTheme = 'light'; largeText = false; query.value = ''; updateCards(); filter();
   });
   document.getElementById('gallery').addEventListener('click', event => {
@@ -263,6 +384,16 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
     viewer.showModal();
     fitFrame();
     image.focus();
+  });
+  for (const button of listToggles) button.addEventListener('click', toggleList);
+  document.getElementById('viewer-previous').addEventListener('click', () => moveViewer(-1));
+  document.getElementById('viewer-next').addEventListener('click', () => moveViewer(1));
+  for (const list of lists) list.addEventListener('click', event => {
+    const link = event.target.closest('a');
+    if (!link) return;
+    event.preventDefault();
+    const target = document.getElementById(link.hash.slice(1));
+    if (target.matches('.group')) chooseGroup(target); else chooseCard(target);
   });
   for (const button of controls('theme')) button.addEventListener('click', toggleTheme);
   for (const button of controls('text')) button.addEventListener('click', toggleTextSize);
@@ -286,10 +417,13 @@ details{padding:20px 0;border-bottom:1px solid var(--line);font-size:14px;color:
   stage.addEventListener('click', event => { if (event.target === stage) viewer.close(); });
   viewer.addEventListener('close', () => {
     const trigger = currentCard && currentCard.querySelector('.capture');
+    markedCard = currentCard;
     image.removeAttribute('src'); currentCard = undefined; currentSource = undefined;
+    markCurrent();
     if (trigger) trigger.focus();
   });
   new ResizeObserver(fitFrame).observe(stage);
+  addEventListener('scroll', () => requestAnimationFrame(followScroll), { passive: true });
   updateCards();
   filter();
 })();

@@ -236,6 +236,8 @@ void Reader::showProgressChoice() {
         comparingProgress = false;
         if (result.status == Status::Stale)
             return;
+        if (progressBlocked())
+            progressCheckDeferred = true;
         if (!book->pendingProgress() || !(book->candidate() == shown) || progressBlocked() ||
             model->state().value("position").toString() != anchor)
             return;

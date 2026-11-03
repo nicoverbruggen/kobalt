@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QVariantMap>
+#include <functional>
 
 namespace kobalt {
 struct ReadingEstimates;
@@ -29,6 +30,9 @@ public:
         changed = false;
         return value;
     }
+    // Called on the GUI thread, inside Nickel's sync or USB signal, once
+    // takeChange() has a change to report.
+    std::function<void()> changeAvailable;
 #ifndef KOBALT_READER_HARDWARE
     static void testCommand();
     static QJsonObject testAction(const QJsonObject &command);
@@ -42,17 +46,22 @@ private slots:
     }
     void endTransition() {
         transitioning = processing = false;
-        changed = true;
+        noteChange();
     }
     void finishUnplug() {
         if (!processing)
             endTransition();
     }
     void markChanged() {
-        changed = true;
+        noteChange();
     }
 
 private:
+    void noteChange() {
+        changed = true;
+        if (changeAvailable)
+            changeAvailable();
+    }
     static QPointer<NativeProgress> active;
 #ifndef KOBALT_READER_HARDWARE
     static bool failNextWrite;

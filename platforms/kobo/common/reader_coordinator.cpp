@@ -168,9 +168,11 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         timer.start();
         if (run.reader || run.model) {
             const bool allowed = authorization->checkNow();
-            if (allowed && run.reader && !BrowserHandoff::activeFor(run.reader))
+            if (allowed && run.reader && !BrowserHandoff::activeFor(run.reader)) {
                 run.reader->wakeReader();
-            else if (!allowed && (run.reader || run.model) && !lifecycle->draining) {
+                // A sync can finish while the device sleeps. Check after the wake paint.
+                checkProgressSoon();
+            } else if (!allowed && (run.reader || run.model) && !lifecycle->draining) {
                 // A deferred or unavailable check must not leave an invisible
                 // reader holding Nickel's backing store indefinitely.
                 kobalt::diagnostic("resume-authorization-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
@@ -229,7 +231,12 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     connect(&timer, &QTimer::timeout, this, [this] {
         poll();
     });
-    timer.setInterval(250);
+    // Nickel's sleep, wake, USB and sync signals drive the reader. This check
+    // reads Nickel's saved position once a minute, and it repeats the
+    // visibility checks in case a transition left the reader in the wrong state.
+    // A precise timer never fires early, so each check reaches the minute.
+    timer.setTimerType(Qt::PreciseTimer);
+    timer.setInterval(60000);
     if (!lifecycle->blocked())
         timer.start();
     // Read and check the interface faces on a worker thread before any tap,
@@ -749,6 +756,16 @@ void ReaderCoordinator::poll() {
 #endif
 }
 
+void ReaderCoordinator::checkProgressSoon() {
+    // Leave Nickel's signal, or the opening and wake work, before reading
+    // Nickel's saved position.
+    QPointer<ReaderWindow> reader(run.reader);
+    kobalt::qt::later(0, this, [this, reader] {
+        if (reader && reader == run.reader && !busy && !lifecycle->blocked() && !lifecycle->draining)
+            reader->progressTick();
+    });
+}
+
 void ReaderCoordinator::watch() {
     if (!lifecycle->blocked() && !timer.isActive())
         timer.start();
@@ -855,6 +872,9 @@ void ReaderCoordinator::showReader() {
         scenarioOpening = run.opening->copy();
 #endif
     run.opening.reset();
+    run.nativeProgress->changeAvailable = [this] {
+        checkProgressSoon();
+    };
     auto book = std::make_unique<kobalt::ReadingBook>(
         std::move(run.model), run.statePath, environment_.paths, run.identity, run.expectedHash,
         kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress)), run.baseline, run.diskBaseline);
@@ -970,6 +990,8 @@ void ReaderCoordinator::showReader() {
         guard->hideLoading();
         guard->run.openingTimings["total_ms"] = guard->run.openingTimer.elapsed();
         guard->status("reading");
+        // A sync can finish while the book opens.
+        guard->checkProgressSoon();
 #ifdef KOBALT_SCENARIO_PLAYER
         guard->startScenarios();
 #endif

@@ -76,6 +76,10 @@ void Reader::refresh() {
     const bool passageFrame = !model->busy() && (!pendingPassage.position.isEmpty() || returningFromLink);
     syncFrameState();
     finishAppearanceApply();
+    // A synced position waits while a panel or dialog is open. Check again
+    // once the reader is free, including after an apply above closes Settings.
+    if (progressCheckDeferred && !progressBlocked())
+        progressTick();
     const bool pickingFont = syncFontPicker();
     showChapterText();
     // Publish only the final viewport. A cancelled intermediate layout must

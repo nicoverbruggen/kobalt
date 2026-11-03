@@ -279,6 +279,8 @@ private:
     QPointer<kobalt::ui::ModalOverlay> syncDialog, finishDialog;
     bool finishChoiceResolved = false;
     bool importingProgress = false, comparingProgress = false;
+    // A progress check found the reader busy. refresh() repeats it once free.
+    bool progressCheckDeferred = false;
     bool exitPending = false, exportRunning = false;
     bool lifecycleHidden = false;
     QImage sleepImage, sleepCover;

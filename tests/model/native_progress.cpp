@@ -36,6 +36,19 @@ PlugManager *PlugManager::sharedInstance() {
     return &manager;
 }
 
+class N3SyncManager : public QObject {
+    Q_OBJECT
+public:
+    static N3SyncManager *sharedInstance();
+signals:
+    void finished();
+    void userProfileUpdated();
+};
+N3SyncManager *N3SyncManager::sharedInstance() {
+    static N3SyncManager manager;
+    return &manager;
+}
+
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QVariantMap bookmark{{"position", "chapter.xhtml#p:7"}, {"currentPosition", "2"},
@@ -66,6 +79,19 @@ int main(int argc, char **argv) {
     kobalt::NativeProgress progress(QStringLiteral("cancel-unplug-fixture"));
     require(!progress.deviceTransition(), "reading starts outside a USB transition");
     progress.takeChange();
+    int notifications = 0;
+    progress.changeAvailable = [&] {
+        require(!progress.deviceTransition(), "progress notifications wait for the transition to finish");
+        require(progress.takeChange(), "a notification exposes the pending progress change");
+        ++notifications;
+    };
+    emit N3SyncManager::sharedInstance()->finished();
+    emit N3SyncManager::sharedInstance()->userProfileUpdated();
+    require(notifications == 2, "sync and account signals notify the reader without polling");
+    progress.changeAvailable = [&] {
+        require(!progress.deviceTransition(), "USB notifications wait for the transition to finish");
+        ++notifications;
+    };
 
     for (int attempt = 0; attempt != 2; ++attempt) {
         // Cancel keeps the book open. Removing the charge-only cable then
@@ -78,6 +104,7 @@ int main(int argc, char **argv) {
         QCoreApplication::processEvents();
         require(!progress.deviceTransition(), "Cancel then unplug restores page navigation without a PLT hook");
         require(progress.takeChange(), "unplug makes native progress eligible for rechecking");
+        require(notifications == 4 + attempt * 2, "charge-only disconnect and unplug notify the reader");
     }
 
     emit usb->aboutToConnect();
@@ -87,8 +114,10 @@ int main(int argc, char **argv) {
     QCoreApplication::processEvents();
     kobalt::NativeProgress::disconnected();
     require(progress.deviceTransition(), "unplug cannot release progress during storage processing");
+    require(notifications == 6, "storage processing does not notify before it finishes");
     emit usb->doneProcessing();
     require(!progress.deviceTransition(), "processing completion releases progress");
+    require(notifications == 7 && progress.takeChange(), "processing completion notifies with a pending change");
 }
 
 #include "native_progress.moc"

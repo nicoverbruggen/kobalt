@@ -4877,6 +4877,46 @@ private slots:
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
     }
 
+    void progressChoiceWaitsForSettings() {
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        const auto identity = QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = {identity, "OEBPS/c1.xhtml", 100, 1, true};
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        canvas.setUpdatesEnabled(true);
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        host.window()->progressTick();
+        auto *page = host.window()->findChild<QWidget *>("rrPage");
+        QVERIFY(page);
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+        auto *close = host.window()->findChild<QPushButton *>("rrSettingsClose");
+        QTRY_VERIFY(close && close->isVisible());
+        // The platform reports a newer position while Settings is open.
+        host.progress->publish({identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true});
+        host.window()->progressTick();
+        QTest::qWait(200);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+        // Closing Settings asks without another progress check.
+        QVERIFY(click(canvas, close));
+        QWidget *card = nullptr;
+        QTRY_VERIFY_WITH_TIMEOUT((card = host.window()->findChild<QWidget *>("rrSyncedPosition")) && card->isVisible(),
+                                 10000);
+        auto *keep = card->findChild<QPushButton *>("rrKeepPosition");
+        QVERIFY(keep);
+        QVERIFY(click(canvas, keep));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+    }
+
     void finishedSyncWithoutPositionKeepsLocalReading() {
         QTemporaryDir root;
         QVERIFY(root.isValid());

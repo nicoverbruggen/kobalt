@@ -120,6 +120,7 @@ private:
               bool publicationRejected = false);
     bool sameBook() const;
     void poll();
+    void checkProgressSoon();
     void watch();
     void prepareOpening(kobalt::ReaderBookRoute candidate);
     void missingAssets(bool assetsReady);

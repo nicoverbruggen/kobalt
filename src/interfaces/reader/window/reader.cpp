@@ -530,8 +530,10 @@ void Reader::progressTick() {
     if (progressBlocked()) {
         if (syncDialog)
             syncDialog->hide();
+        progressCheckDeferred = true;
         return;
     }
+    progressCheckDeferred = false;
     book->pollProgress();
     showProgressChoice();
 }

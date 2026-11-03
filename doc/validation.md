@@ -119,6 +119,10 @@ Close performance checks distinguish the visible return to the library from comp
 
 `lifecycle.nativeOpeningSaveRetries` blocks the host progress bridge or fails its opening write. It checks that clearing the failure saves native progress without a page turn, sleep or refresh, that retries wait while the reader is hidden, suspended, asleep or awaiting a progress choice, and that successful persistence stops further attempts. This uses the production reader with controlled progress services; it does not reproduce Nickel database contention on firmware.
 
+`lifecycle.progressChoiceWaitsForSettings` reports a newer saved position while Settings is open. It checks that the reader does not ask while Settings covers the page, and that closing Settings shows the synced-position choice without another progress check from the platform. On Kobo, Nickel's sync and USB signals start that check; a one-minute timer reads Nickel's saved position in all other cases.
+
+`platform.native-progress` checks that sync and account signals notify the reader with a pending progress change. Charge-only unplug and USB processing completion also notify it. USB processing must finish before the notification runs.
+
 The `lifecycle.clockStopsWhileReaderIsHidden` check hides and restores the reader directly and through the production browser handoff with synthetic dialog widgets. It checks that hiding cancels a pending clock callback, showing restarts the clock, and appearance, position and page pixels stay unchanged. A stopped reading counter uses the next wall-clock minute. Resuming reading while the window stays visible schedules the next reading minute again. This check does not navigate a real browser.
 
 `lifecycle.clockUpdatesOnlyReadingStrips` advances the clock on an unchanged image page with the Default layout, a custom right-hand clock and a disabled header. It checks that the clock callback does not mark a page turn, leaves the reading body and position unchanged, and repaints only changed strips. An unchanged clock tick does not repaint. This host check does not establish physical e-ink behavior.

@@ -174,3 +174,14 @@ add_custom_target(package DEPENDS "${package_file}")
 add_custom_target(check-package
     COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/check-package.sh" "${package_file}" "qt${KOBALT_QT_MAJOR}"
     DEPENDS package VERBATIM)
+
+option(KOBALT_BUILD_DISPLAY_TESTS "Build focused Kobo display adapter checks" OFF)
+if(KOBALT_BUILD_DISPLAY_TESTS AND KOBALT_QT_MAJOR EQUAL 5)
+    add_executable(kobalt-qt5-refresh-tests "${KOBALT_ROOT}/tests/model/qt5_refresh.cpp"
+        qt5/refresh.cpp display/page_animation.cpp)
+    target_include_directories(kobalt-qt5-refresh-tests PRIVATE "${KOBALT_ROOT}" "${source}"
+        "${KOBALT_ROOT}/tests/support")
+    target_compile_definitions(kobalt-qt5-refresh-tests PRIVATE KOBALT_PAGE_ANIMATIONS)
+    target_compile_options(kobalt-qt5-refresh-tests PRIVATE -Wall -Wextra -Werror)
+    target_link_libraries(kobalt-qt5-refresh-tests PRIVATE Qt5::Widgets ${CMAKE_DL_LIBS} pthread)
+endif()

@@ -276,7 +276,8 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
                                 });
     auto completedFlush = [&](const QRegion &damage, const FlushFlags &chosen) {
         cancelPageAnimation();
-        if (wide && direction && compatible && chosen.size() == 1 && chosen[0].second == ordinaryPolicy(dark, wide)) {
+        // Policy width selects the Qt ABI, not whether the display can sweep.
+        if (direction && compatible && chosen.size() == 1 && chosen[0].second == ordinaryPolicy(dark, wide)) {
             if (submitPageTransition(store, readerWindow, direction, dark, ordinaryPolicy(dark, wide),
                                      repairPolicy(dark, wide), [&](const QRegion &parts, quint64 policy) {
                                          FlushFlags selected;

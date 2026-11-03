@@ -712,9 +712,20 @@ static void checkVerticalJustification() {
         require(model.openedFromCache() == cached, "vertical fill cache was not reused");
         const auto pages = model.pages();
         require(pages > 5, "vertical fill fixture is too short");
+        const auto headings = model.searchPage("Chapter", 0).hits;
+        require(headings.size() == 1, "missing chapter heading");
+        require(model.go(0), "open chapter heading page");
+        const auto headingRects = model.rangeRects(headings.first().start, headings.first().end);
+        require(!headingRects.isEmpty(), "missing chapter heading geometry");
         const auto opening = model.image(0);
         require(model.applyAppearance({{"vertical_justification", true}}), "enable vertical fill");
-        require(model.image(0) == opening, "chapter heading page was stretched");
+        const auto expandedOpening = model.image(0);
+        require(model.rangeRects(headings.first().start, headings.first().end) == headingRects,
+                "vertical fill moved the chapter heading");
+        for (const auto &rect : headingRects)
+            require(expandedOpening.copy(rect) == opening.copy(rect), "vertical fill changed chapter heading pixels");
+        // Headings keep their spacing while the prose below them can expand.
+        require(expandedOpening != opening, "chapter heading disabled prose expansion");
         require(model.applyAppearance({{"vertical_justification", false}}), "disable vertical fill");
         require(model.go(1), "open prose page");
         const auto before = model.image(1);

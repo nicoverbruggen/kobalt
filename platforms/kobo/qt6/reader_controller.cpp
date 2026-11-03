@@ -1,5 +1,6 @@
 #include "support/qt_compat.h"
 #include "hooks.h"
+#include "platforms/kobo/common/standby_diagnostics.h"
 #include "platforms/kobo/common/startup_recovery.h"
 #include "platforms/kobo/common/book_menu.h"
 #include "storage/reader_storage.h"
@@ -375,6 +376,7 @@ int initialize() {
 #endif
     kobalt::initializeDiagnostics(QString::fromLatin1(configDir) + "/diagnostics",
                                   kobalt::diagnosticsRequested(QString::fromLatin1(configDir)));
+    kobalt::initializeStandbyDiagnostics();
     kobalt::diagnostic("startup-hooks",
                        kobalt::qt::object({{"finish_hook_available", bool(nativeFinishInitialization)},
                                            {"finish_next_is_stock",

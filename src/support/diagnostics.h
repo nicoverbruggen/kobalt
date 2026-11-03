@@ -41,6 +41,9 @@ void diagnosticInput();
 // Once the base is known, it also has `kobalt_rss_kib` and `kobalt_peak_kib`:
 // resident and peak memory above that base.
 void sampleDiagnosticMemory(std::function<void(QJsonObject)> done);
+// Bounded diagnostic sampling on the logging worker, in request order.
+// Returns false when the queue is full. The callback must not wait for input.
+bool sampleDiagnostics(std::function<void()> sample);
 // Records the process's resident memory as the base for Kobalt's own share,
 // once per process. Call it just before the first book opens. On Kobo the
 // base is Nickel with Kobalt loaded but not yet reading, so the share leaves

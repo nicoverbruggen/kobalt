@@ -1,3 +1,4 @@
+#include "build_info.h"
 #include "qt_compat.h"
 #include "diagnostics.h"
 #include "main_thread.h"
@@ -61,6 +62,7 @@ struct Entry {
     bool keepContext = false;
     int history = 1;
     std::function<void(QJsonObject)> memorySample = {};
+    std::function<void()> sample = {};
 };
 // The worker lives until process exit. The fatal handler never accesses it.
 std::deque<Entry> &queue = *new std::deque<Entry>;
@@ -141,7 +143,10 @@ void startWriter() {
                 wake.wait(&mutex);
             const auto now = monotonicMilliseconds();
             const auto delay = std::min(firstPending + maximumDelay, std::max(firstPending, lastInput) + quietMilliseconds) - now;
-            if (!forceFlush && !queue.front().memorySample && delay > 0) {
+            const bool sampling = std::any_of(queue.begin(), queue.end(), [](const Entry &entry) {
+                return bool(entry.memorySample) || bool(entry.sample);
+            });
+            if (!forceFlush && !sampling && delay > 0) {
                 wake.wait(&mutex, static_cast<unsigned long>(delay));
                 continue;
             }
@@ -159,6 +164,10 @@ void startWriter() {
             int history = 1;
             bool sampled = false;
             for (const auto &entry : batch) {
+                if (entry.sample) {
+                    entry.sample();
+                    continue;
+                }
                 if (entry.memorySample) {
                     QJsonObject fields;
                     addMemory(fields);
@@ -180,13 +189,24 @@ void startWriter() {
                     lastMemory = now;
                 }
                 // Keep build and power capabilities independently of event rotation.
-                // This runs only on the writer, twice per verbose startup.
-                if (entry.keepContext && (entry.event == "startup" || entry.event == "power-observer")) {
+                // Driver inventory also survives rotation. All context writes run here.
+                if (entry.keepContext && (entry.event == "startup" || entry.event == "power-observer" ||
+                                          entry.event == "standby-input-device" || entry.event == "standby-diagnostic-capabilities" ||
+                                          entry.event == "standby-kernel-capabilities")) {
                     if (contextPath != entry.path || entry.event == "startup") {
                         contextPath = entry.path;
                         context = {};
                     }
-                    context[entry.event == "startup" ? "startup" : "power_observer"] = fields;
+                    if (entry.event == "standby-input-device") {
+                        auto devices = context.value("input_devices").toObject();
+                        devices[fields.value("event_device").toString()] = fields;
+                        context["input_devices"] = devices;
+                    } else {
+                        const auto key = entry.event == "startup" ? "startup" :
+                            entry.event == "standby-kernel-capabilities" ? "standby_kernel" :
+                            entry.event == "power-observer" ? "power_observer" : "standby_diagnostics";
+                        context[key] = fields;
+                    }
                     QSaveFile snapshot(QFileInfo(entry.path).dir().filePath("session-context.json"));
                     const auto data = QJsonDocument(context).toJson();
                     if (snapshot.open(QIODevice::WriteOnly) && snapshot.write(data) == data.size())
@@ -369,6 +389,8 @@ void initializeDiagnostics(const QString &directory, bool verbose) {
         }
     }
 #endif
+    fields["source_commit"] = QString::fromLatin1(kobaltCommit);
+    fields["source_modified"] = bool(KOBALT_COMMIT_MODIFIED);
     fields["verbose"] = verbose;
     fields["log_limit_bytes"] = double(verbose ? verboseLimit : normalLimit);
     fields["log_history_files"] = verbose ? verboseHistory : 1;
@@ -385,6 +407,14 @@ void sampleDiagnosticMemory(std::function<void(QJsonObject)> done) {
     queue.push_front({{}, {}, {}, DiagnosticSeverity::Activity, 0, 0, -1, 0, false, normalLimit, false, 1, std::move(done)});
     startWriter();
     wake.wakeAll();
+}
+bool sampleDiagnostics(std::function<void()> sample) {
+    QMutexLocker lock(&mutex);
+    if (!sample || paused || (!detailed && !observer) || logPath.isEmpty() || queue.size() >= queueLimit) return false;
+    enqueue({{}, {}, {}, DiagnosticSeverity::Activity, 0, 0, -1, 0, false, normalLimit, false, 1, {}, std::move(sample)});
+    startWriter();
+    wake.wakeAll();
+    return true;
 }
 void markMemoryBase() {
     static std::atomic_bool marked{false};

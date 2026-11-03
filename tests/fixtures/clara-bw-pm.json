@@ -1,0 +1,18 @@
+[
+  "<6>[  417.062187] .(0)[343:nickel]PM: late suspend of devices complete after 1.189 msecs",
+  "<6>[  417.063235] .(0)[343:nickel]PM: noirq suspend of devices complete after 1.032 msecs",
+  "<6>[  417.064456] .(0)[343:nickel]PM: noirq resume of devices complete after 1.027 msecs",
+  "<6>[  417.066212] .(0)[343:nickel]PM: early resume of devices complete after 1.206 msecs",
+  "<6>[  417.158849] .(0)[343:nickel]PM: resume of devices complete after 92.621 msecs",
+  "<7>[  417.159662] .(0)[343:nickel]PM: Finishing wakeup.",
+  "<6>[  417.159671] .(0)[227:mdpd]Restarting tasks ... ",
+  "<6>[  417.167478] .(0)[343:nickel]PM: suspend exit 2026-11-03 10:17:27.392249335 UTC",
+  "<6>[  421.216621] .(0)[343:nickel]PM: late suspend of devices complete after 2.254 msecs",
+  "<6>[  421.217950] .(0)[343:nickel]PM: noirq suspend of devices complete after 1.312 msecs",
+  "<6>[  421.219480] .(0)[343:nickel]PM: noirq resume of devices complete after 1.287 msecs",
+  "<6>[  421.221716] .(0)[343:nickel]PM: early resume of devices complete after 1.472 msecs",
+  "<6>[  421.309024] .(0)[343:nickel]PM: resume of devices complete after 87.287 msecs",
+  "<7>[  421.310764] .(0)[343:nickel]PM: Finishing wakeup.",
+  "<6>[  421.310780] .(0)[227:mdpd]Restarting tasks ... ",
+  "<6>[  421.313524] .(0)[343:nickel]PM: suspend exit 2026-11-03 10:18:28.133249464 UTC"
+]

@@ -6,6 +6,7 @@
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/standby_input.h"
+#include "platforms/kobo/common/standby_diagnostics.h"
 #include "platforms/kobo/common/native_authorization.h"
 #include "platforms/kobo/common/native_light.h"
 #include "platforms/kobo/common/native_dictionary.h"
@@ -27,6 +28,18 @@ bool firmwareSupported() {
 
 using namespace kobalt::nickel4;
 static nh_hook readerHooks[] = {
+    {.sym = "read",
+     .sym_new = "kobalt_touch_read",
+     .lib = "/usr/local/Kobo/generic/libkevdevtouch.so",
+     .out = nh_symoutptr(kobalt::nativeTouchRead),
+     .desc = "Track touch acquisition and cancel reader standby on late input",
+     .optional = true},
+    {.sym = "write",
+     .sym_new = "kobalt_power_write",
+     .lib = "libQt5Core.so.5",
+     .out = nh_symoutptr(kobalt::nativePowerWrite),
+     .desc = "Observe native power writes when diagnostics are enabled",
+     .optional = true},
     {.sym = "_ZN17HomePageKeyFilter6filterEP7QObjectP9QKeyEvent",
      .sym_new = "kobalt_home_key_filter",
      .lib = "libnickel.so.1.0.0",

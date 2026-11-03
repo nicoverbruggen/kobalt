@@ -2,6 +2,8 @@
 #include "platforms/kobo/common/book_menu.h"
 #include "refresh.h"
 #include "platforms/kobo/common/native_lifecycle.h"
+#include "platforms/kobo/common/standby_diagnostics.h"
+#include "platforms/kobo/common/standby_input.h"
 #include "platforms/kobo/common/native_authorization.h"
 #include "platforms/kobo/common/native_dictionary.h"
 #include "platforms/kobo/common/native_light.h"
@@ -27,6 +29,24 @@ bool firmwareSupported() {
 }
 using namespace kobalt::nickel5;
 static nh_hook readerHooks[] = {
+    {.sym = "read",
+     .sym_new = "kobalt_touch_read",
+     .lib = "/usr/lib/plugins/generic/libqevdevtouchplugin.so",
+     .out = nh_symoutptr(kobalt::nativeTouchRead),
+     .desc = "Observe touch acquisition independently of coordinate mapping",
+     .optional = true},
+    {.sym = "write",
+     .sym_new = "kobalt_power_write",
+     .lib = "libQt6Core.so.6",
+     .out = nh_symoutptr(kobalt::nativePowerWrite),
+     .desc = "Observe native power writes when diagnostics are enabled",
+     .optional = true},
+    {.sym = "_ZN6IOUtil12stringToFileERK7QStringS2_",
+     .sym_new = "kobalt_observe_power_string_to_file",
+     .lib = "libnickel.so.1.0.0",
+     .out = nh_symoutptr(kobalt::nativeDiagnosticPowerStringToFile),
+     .desc = "Observe native power helpers without an input guard",
+     .optional = true},
     {.sym =
          "_ZN16ActionProxyMixin17setupBookListMenuEP28AbstractNickelMenuControllerRK6VolumeP15NickelTouchMenuRK7QStringS9_bRK3Tab",
      .sym_new = "kobalt_book_menu",

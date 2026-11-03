@@ -31,6 +31,7 @@
 #include <QHideEvent>
 #include <QResizeEvent>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QKeyEvent>
 #include <QScreen>
 #include <QWindow>
@@ -1009,6 +1010,21 @@ QSize Reader::bodySize() const {
     const auto safe = safeArea();
     return {width(), qMax(1, height() - safe.top - safe.bottom - page->topHeight() - page->bottomHeight())};
 }
+void Reader::paintEvent(QPaintEvent *event) {
+    ReaderWindow::paintEvent(event);
+    if (!page || page->y() <= 0)
+        return;
+    QPainter painter(this);
+    painter.fillRect(QRect(0, 0, width(), page->y()), palette().color(QPalette::Window));
+    if (!page->bookmarked || lifecycleHidden || (topControls && topControls->isVisible()) ||
+        (general && general->isVisible()) || (imageViewer && imageViewer->isVisible()))
+        return;
+    // The page stays below the camera band. Only the bookmark continues
+    // through it, so its notch and the reading layout keep their positions.
+    const auto ribbon = page->ribbonRect().translated(page->pos());
+    painter.fillRect(QRect(ribbon.x(), 0, ribbon.width(), page->y()), palette().color(QPalette::WindowText));
+}
+
 void Reader::resizeEvent(QResizeEvent *) {
     // Paper fills the cutout bands; the page and the menu bars stay inside them.
     const auto safe = safeArea();

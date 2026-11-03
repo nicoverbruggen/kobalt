@@ -1608,14 +1608,20 @@ private slots:
         auto *canvas = start->libraryCanvas();
         auto *view = start->library();
         for (const auto pixels : {QSize(1264, 1680), QSize(1680, 1264), QSize(1264, 1680), QSize(600, 400)}) {
-            const QMargins safePixels(0, 84, 0, 78);
+            const int side = pixels.width() > pixels.height() ? 84 : 0;
+            const bool rightCutout = side && pixels.width() == 600;
+            const QMargins safePixels(rightCutout ? 0 : side, 84, rightCutout ? side : 0, 78);
             android::fitWindowToSurface(window, pixels, safePixels);
             const auto ratio = window.devicePixelRatioF();
             QCOMPARE(window.size(), QSize(qRound(pixels.width() / ratio), qRound(pixels.height() / ratio)));
-            QCOMPARE(window.contentsMargins(), QMargins(0, qCeil(84 / ratio), 0, qCeil(78 / ratio)));
+            QCOMPARE(window.contentsMargins(), QMargins(qCeil(side / ratio), qCeil(84 / ratio), qCeil(side / ratio), qCeil(78 / ratio)));
             QVERIFY(!window.testAttribute(Qt::WA_ContentsMarginsRespectsSafeArea));
-            QVERIFY(android::contentFitsSurface(window, pixels - QSize(0, 84 + 78)));
+            QVERIFY(android::contentFitsSurface(window, pixels - QSize(2 * side, 84 + 78)));
             QVERIFY(!android::contentFitsSurface(window, pixels));
+            QWidget readerWindow;
+            android::fitWindowToSurface(readerWindow, pixels, QMargins(side, 0, side, 0));
+            QCOMPARE(window.contentsRect().left(), readerWindow.contentsRect().left());
+            QCOMPARE(window.contentsRect().right(), readerWindow.contentsRect().right());
             QCoreApplication::processEvents();
             QCOMPARE(start->geometry(), window.contentsRect());
             QTRY_COMPARE(view->size(), canvas->pixelSize());

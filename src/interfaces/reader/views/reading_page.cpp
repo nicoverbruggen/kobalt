@@ -738,6 +738,8 @@ void ReadingPage::refreshContent(bool reading, bool now) {
         dirty += ribbon;
         dirty += renderedRibbon;
         renderedRibbon = ribbon;
+        if (parentWidget() && y() > 0)
+            parentWidget()->update(QRect(0, 0, parentWidget()->width(), y()));
     }
     renderedSize = size();
     renderedTop = topHeight();

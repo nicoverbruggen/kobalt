@@ -453,3 +453,9 @@ The `dictionarySettings` gallery case includes an active download in every viewp
 These checks do not establish physical touch-driver behavior, pan refresh quality or memory use on Kobo and Android. SVG images are rendered at their source dimensions in this prototype.
 
 The `desktop.lightDarkModeShortcut` check covers the optional Light shortcut, settings drafts, persistence after reopening, hosts without Light, state shared with Settings, a busy profile writer and save-failure recovery. `model.appearance-settings` checks missing and invalid values, preserved optional fields and unchanged layout identity. The `lightDarkModeShortcut` gallery case captures the shortcut and its Display setting across the reader sizes and interface variants. Dark-mode saves from either entry run on the profile writer thread. These headless checks do not establish physical touch delivery, e-ink refresh quality or device storage latency.
+
+`desktop.bookmarkRibbonSafeArea` checks that the phone bookmark ribbon reaches the top edge through the camera band and clears when removed, in both themes.
+
+Android emulator checks cover portrait and landscape with and without a camera cutout. Rotate with Settings and a choice dialog open, then return to portrait. The reader must still fill its canvas in physical pixels after Qt delivers its screen-size events. Compare Library and reader side insets after closing a book. These checks do not establish physical-device behavior.
+
+`ui.libraryCanvasFollowsViewport` simulates portrait and landscape surfaces, with cutouts on either side. It checks matching Library and reader horizontal bounds, reserved Library system bars, the native handoff content size and Library canvas fit.

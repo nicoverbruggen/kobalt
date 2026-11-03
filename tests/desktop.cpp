@@ -6955,6 +6955,33 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             }
         }
     }
+    void bookmarkRibbonSafeArea_data() { bookmarks_data(); }
+    void bookmarkRibbonSafeArea() {
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(3);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        auto *reader = fixture.window.readerWindow();
+        QVERIFY(page && reader);
+        QVERIFY(page->y() > 0);
+        for (bool marked : {true, false}) {
+            page->bookmarked = marked;
+            page->refreshContent();
+            QCoreApplication::processEvents();
+            const auto image = reader->grab().toImage();
+            const auto ribbon = page->ribbonRect().translated(page->pos());
+            const auto paper = page->palette().color(QPalette::Window);
+            const auto ink = page->palette().color(QPalette::WindowText);
+            QCOMPARE(image.pixelColor(ribbon.center().x(), 0), marked ? ink : paper);
+            QCOMPARE(image.pixelColor(ribbon.center().x(), page->y() - 1), marked ? ink : paper);
+            QCOMPARE(image.pixelColor(ribbon.left() - 2, 0), paper);
+        }
+    }
     void desktopControls() {
         Fixture fixture;
         QVERIFY(fixture.prepared);

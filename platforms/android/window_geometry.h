@@ -25,8 +25,10 @@ inline void fitWindowToSurface(QWidget &window, QSize pixels, QMargins safePixel
         return;
     const auto ratio = window.devicePixelRatioF();
     window.setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
-    window.setContentsMargins(qCeil(safePixels.left() / ratio), qCeil(safePixels.top() / ratio),
-                              qCeil(safePixels.right() / ratio), qCeil(safePixels.bottom() / ratio));
+    // Library and reader share the same centered horizontal bounds even
+    // when a cutout or navigation bar occupies just one side.
+    const int side = qCeil(qMax(safePixels.left(), safePixels.right()) / ratio);
+    window.setContentsMargins(side, qCeil(safePixels.top() / ratio), side, qCeil(safePixels.bottom() / ratio));
     fitWindowToSurface(window, pixels);
 }
 inline bool contentFitsSurface(const QWidget &window, QSize pixels) {

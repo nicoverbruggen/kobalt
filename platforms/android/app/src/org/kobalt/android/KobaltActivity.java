@@ -156,7 +156,7 @@ public class KobaltActivity extends QtActivity {
             readingGeometryReady = reading && hidden && barAnimations.isEmpty();
             libraryGeometryReady = !reading && insets != null && !hidden && barAnimations.isEmpty();
             if (libraryGeometryReady) {
-                libraryContentSize = ((long)Math.max(0, width - left - right) << 32)
+                libraryContentSize = ((long)Math.max(0, width - 2 * Math.max(left, right)) << 32)
                     | (Math.max(0, height - top - bottom) & 0xffffffffL);
             } else libraryContentSize = 0;
             return true;

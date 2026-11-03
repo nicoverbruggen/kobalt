@@ -423,6 +423,11 @@ private:
                     auto *reader = controller.window();
                     if (!reader)
                         return;
+                    // Qt can deliver a logical screen resize to the embedded
+                    // reader after the canvas has fitted its physical pixels.
+                    // Reapply the canvas bounds after that queued resize.
+                    if (canvas->isVisible() && canvas->content == reader && reader->size() != canvas->pixelSize())
+                        sizeCanvas();
                     // Proxy resize can leave newly created children with an
                     // inherited disabled-update flag. Preserve explicit disables.
                     for (auto *child : reader->findChildren<QWidget *>())

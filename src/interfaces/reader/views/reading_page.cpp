@@ -23,6 +23,7 @@
 #include <QPainter>
 #include <QPointer>
 #include <QtMath>
+#include <QtCore/qnumeric.h>
 #include <QTransform>
 #include <QTouchEvent>
 #include <QMouseEvent>

@@ -36,7 +36,7 @@ QImage ReaderModel::imageAt(QPoint point) {
         auto *pixels = reinterpret_cast<quint32 *>(image.scanLine(y));
         for (int x = 0; x < image.width(); ++x)
             pixels[x] |= 0xff000000U;
-        identity.addData(reinterpret_cast<const char *>(pixels), image.width() * 4);
+        identity.addData(QByteArray::fromRawData(reinterpret_cast<const char *>(pixels), image.width() * 4));
     }
     image.setText("kobalt.image_id", QString::fromLatin1(identity.result().toHex()));
     return image;

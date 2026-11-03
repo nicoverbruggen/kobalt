@@ -65,6 +65,7 @@
 #include <csignal>
 #include <cerrno>
 #include <QAction>
+#include <QMenu>
 #include <QCheckBox>
 #include <QBuffer>
 #include <QComboBox>
@@ -725,6 +726,15 @@ void variants() {
     }
 }
 
+// Gallery profiles include landscape captures of the same devices.
+void selectPreview(Fixture &fixture, int preset) {
+    auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+    auto *rotate = fixture.window.findChild<QAction *>("desktopRotateDevice");
+    picker->setCurrentIndex(preset == 4 ? 1 : preset == 5 ? 3 : preset);
+    if (rotate->isChecked() != (preset == 4 || preset == 5))
+        rotate->trigger();
+}
+
 // The phone in portrait and in landscape.
 bool phonePreset(int preset) {
     return preset == 3 || preset == 5;
@@ -822,7 +832,11 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     QWidget *surface = nativeScreen ? nativeScreen : fixture.window.readerWindow();
     auto *start = fixture.window.findChild<android::StartScreen *>();
     if (!nativeScreen && start && start->libraryShown()) surface = start->library();
-    const int preset = fixture.window.findChild<QComboBox *>("desktopScreenPicker")->currentIndex();
+    int preset = fixture.window.findChild<QComboBox *>("desktopScreenPicker")->currentIndex();
+    if (fixture.window.findChild<QAction *>("desktopRotateDevice")->isChecked()) {
+        if (preset == 1) preset = 4;
+        else if (preset == 3) preset = 5;
+    }
     const QSize expected = screenshotSize(preset);
     // A turned phone letterboxes its camera side, as the phone landscape profile does.
     const QSize turned = preset == 3 ? screenshotSize(5) : expected.transposed();
@@ -1479,7 +1493,7 @@ void checkHeaderFooterSizes(int preset, bool dark) {
         preferences[headerfooter::presetKey] = "default";
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
     }
-    fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+    selectPreview(fixture, preset);
     QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
     fixture.window.openBook(book);
     QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
@@ -1619,7 +1633,7 @@ void checkHeaderFooterSizes(int preset, bool dark) {
 void checkPinnedBookmarks(int preset, bool dark) {
     Fixture fixture(dark);
     QVERIFY(fixture.prepared);
-    fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+    selectPreview(fixture, preset);
     const auto name = screenshotVariant(preset, dark);
     QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
     fixture.window.openBook(book);
@@ -1970,7 +1984,7 @@ void checkPageAnimationCompatibility(int preset, bool dark);
 void checkImageViewer(int preset, bool dark, bool screenshots) {
     Fixture fixture(dark);
     QVERIFY(fixture.prepared);
-    fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+    selectPreview(fixture, preset);
     QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
     fixture.window.openBook(book);
     QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
@@ -2699,7 +2713,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     void startup() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
-        QCOMPARE(fixture.window.findChild<QComboBox *>("desktopScreenPicker")->currentIndex(), 1);
+        auto *screens = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        QCOMPARE(screens->count(), 4);
+        QCOMPARE(screens->currentIndex(), 1);
+        auto *devices = fixture.window.findChild<QMenu *>("desktopDeviceMenu");
+        QVERIFY(devices);
+        QCOMPARE(devices->actions().size(), screens->count());
         QCOMPARE(fixture.window.findChild<QComboBox *>("desktopResolutionPicker")->currentData().toInt(), 300);
         QCOMPARE(fixture.window.findChild<QComboBox *>("desktopTextSizePicker")->currentData().toInt(), 100);
         QVERIFY(!fixture.window.readerWindow());
@@ -2986,7 +3005,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
@@ -3533,7 +3552,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE(opened.count(), 1);
@@ -7761,7 +7780,7 @@ void checkPageAnimationCompatibility(int preset, bool dark) {
             services.animationSupport = [support] { return support; };
         });
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
@@ -7846,7 +7865,7 @@ private slots:
             services.animationSupport = [] { return PageAnimationSupport::Supported; };
         });
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE(opened.count(), 1);
@@ -7882,7 +7901,7 @@ private slots:
             services.colorDisplay = [] { return true; };
         });
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE(opened.count(), 1);
@@ -7928,7 +7947,7 @@ private slots:
         // The Library owns a separate native canvas and the same checkbox control.
         Fixture library(dark, false, true);
         QVERIFY(library.prepared);
-        library.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(library, preset);
         auto *start = library.window.findChild<android::StartScreen *>();
         QVERIFY(start);
         start->showLibrary();
@@ -7981,7 +8000,7 @@ private slots:
         preferences["default_font_face"] = "";
         preferences[appearance::inheritTextLayoutKey] = false;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8075,7 +8094,7 @@ private slots:
         QVERIFY(storage::writeJson(fixture.paths.syncAccount(), {
             {"schema", 1}, {"server", "https://sync.example"}, {"username", "reader"},
             {"key", QString(32, 'a')}, {"device_id", "gallery-device"}, {"automatic", false}}));
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8111,7 +8130,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark, false, true);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         auto *start = fixture.window.findChild<android::StartScreen *>();
         QTRY_VERIFY(start && start->libraryShown());
@@ -8195,7 +8214,7 @@ private slots:
         QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
         Fixture fixture(dark, false, true);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         auto *start = fixture.window.findChild<android::StartScreen *>();
         auto *view = start->library();
         QTRY_VERIFY(view->isVisible() && view->width() > 600);
@@ -8344,7 +8363,7 @@ private slots:
             services.light = [light](QWidget *) { return std::make_unique<GestureLight>(light); };
         });
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8389,7 +8408,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark, false, false, true, false, true);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8446,7 +8465,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8489,7 +8508,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8541,7 +8560,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
         const auto files = test::publisherPackage("en", "Finish confirmation", {
             {"text.xhtml", test::publisherHtml("<h1>The end</h1><p>A short book for the finish confirmation.</p>")}},
@@ -8579,7 +8598,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) +
             ('-' + screenshotTheme(dark)) + "-dictionary";
         captureBook = {{"title", "Type Tester with controlled dictionary replies"}, {"fixture", "simulated dictionary result and service failures"}};
@@ -8669,7 +8688,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto files = test::literaryBook(QStringLiteral(KOBALT_TEST_CORPUS), entry, vertical, captureBook);
         QVERIFY2(!files.isEmpty(), qPrintable("Literary fixture checksum or metadata failed: " + entry["language"].toString()));
         const auto resetBook = qScopeGuard([] { captureBook = {}; });
@@ -8741,7 +8760,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8889,7 +8908,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
         QFile font(QStringLiteral(KOBALT_TEST_VARIABLE_FONT));
         QVERIFY(font.open(QIODevice::ReadOnly));
@@ -8948,7 +8967,7 @@ private slots:
         const auto resetBook = qScopeGuard([] { captureBook = {}; });
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto path = QStringLiteral(KOBALT_SCREENSHOT_BOOKS) + '/' + captureBook["filename"].toString();
         QFile input(path);
         QVERIFY(input.open(QIODevice::ReadOnly));
@@ -9016,7 +9035,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
         verticalJustificationTour(fixture, name, true);
     }
@@ -9027,7 +9046,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
         captureBook = {{"title", "Links and footnotes"}, {"fixture", "offline EPUB with internal, external and footnote links"}};
         const auto resetBook = qScopeGuard([] { captureBook = {}; });
@@ -9115,7 +9134,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark, false, false, true, true);
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto device = screenshotDevice(preset);
         const auto name = device + ('-' + screenshotTheme(dark));
         // Onboarding is part of the Library and follows both themes.
@@ -9166,7 +9185,7 @@ private slots:
         {
             Fixture fixture(dark);
             QVERIFY(fixture.prepared);
-            fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+            selectPreview(fixture, preset);
             auto *start = fixture.window.findChild<android::StartScreen *>();
             auto *view = start->library();
             auto *canvas = start->libraryCanvas();
@@ -9181,7 +9200,7 @@ private slots:
         for (const bool reading : {true, false}) {
             Fixture fixture(dark, false, true, reading);
             QVERIFY(fixture.prepared);
-            fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+            selectPreview(fixture, preset);
             auto *start = fixture.window.findChild<android::StartScreen *>();
             QVERIFY(start);
             start->showLibrary();

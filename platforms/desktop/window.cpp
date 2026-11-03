@@ -164,10 +164,9 @@ public:
     // keeps part of its screen outside the reader.
     QRect layoutScreen(int preset, bool landscape, QRect bounds) {
         libra = preset == 2;
-        phone = preset == 3 || preset == 5;
+        phone = preset == 3;
         QSize body = libra ? QSize(1708, 1902) : phone ? QSize(800, 1680) : QSize(1323, 1890);
         QRect screen = libra ? QRect(90, 111, 1264, 1680) : phone ? QRect(40, 40, 720, 1600) : QRect(126, 150, 1072, 1448);
-        landscape = landscape != (preset == 4 || preset == 5);
         // Long, narrow buttons like the Libra's, centred in the grip.
         QRect previousBounds(1473, 640, 64, 300), nextBounds(1473, 980, 64, 300);
         if (landscape) {
@@ -295,7 +294,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     screenPicker = new QComboBox(toolbar);
     screenPicker->setObjectName("desktopScreenPicker");
     screenPicker->setAccessibleName(tr("Reader screen"));
-    screenPicker->addItems({tr("Fill window"), tr("6-inch e-reader"), tr("7-inch e-reader with buttons"), tr("Phone"), tr("6-inch landscape"), tr("Phone landscape")});
+    screenPicker->addItems({tr("Fill window"), tr("6-inch e-reader"), tr("7-inch e-reader with buttons"), tr("5.8-inch smartphone")});
     screenPicker->setCurrentIndex(screenPreset);
     screenPicker->setMinimumWidth(100);
     screenPicker->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -579,12 +578,12 @@ QString Window::saveScreenshot(const QString &directory, QString *error) {
     return file.fileName();
 }
 bool Window::phonePreview() const {
-    return screenPreset == 3 || screenPreset == 5;
+    return screenPreset == 3;
 }
 QSize Window::pixels() const {
     if (screenPreset) {
         QSize size = screenPreset == 2 ? QSize(1264, 1680) : phonePreview() ? QSize(720, 1600) : QSize(1072, 1448);
-        if (rotateAction->isChecked() != (screenPreset == 4 || screenPreset == 5)) {
+        if (rotateAction->isChecked()) {
             size.transpose();
             if (phonePreview())
                 size.rwidth() -= 2 * phoneCameraBand;

@@ -158,11 +158,15 @@ bool BookmarkList::eventFilter(QObject *object, QEvent *event) {
 void BookmarkList::openRowActions(const BookmarkRow &row) {
     closeSort();
     closePin();
-    auto *menu = new ui::ActionMenu(parentWidget(), {}, {
+    QVector<ui::ActionMenuItem> actions{
         ui::actionItem(strings::get(row.pinIcon.isEmpty() ? "bookmarks.pin" : "bookmarks.modify"),
-            "rrBookmarkPin", ui::ControlIcon::Pin, [this, row] { openPin(row); }),
-        ui::actionItem(strings::get("bookmarks.remove_this"), "rrBookmarkDelete", ui::ControlIcon::Trash,
-            [this, row] { if (removeRequested) removeRequested(row.position); })});
+            "rrBookmarkPin", ui::ControlIcon::Pin, [this, row] { openPin(row); })};
+    if (!row.pinIcon.isEmpty())
+        actions.append(ui::actionItem(strings::get("bookmarks.unpin"), "rrBookmarkUnpin", ui::ControlIcon::PinOff,
+            [this, row] { if (pinRequested) pinRequested(row.position, {}, {}); }));
+    actions.append(ui::actionItem(strings::get("bookmarks.remove_this"), "rrBookmarkDelete", ui::ControlIcon::Trash,
+        [this, row] { if (removeRequested) removeRequested(row.position); }));
+    auto *menu = new ui::ActionMenu(parentWidget(), {}, actions);
     pinPopup = menu;
     menu->setObjectName("rrBookmarkRowActions");
     menu->dismissed = [this] { closePin(); };

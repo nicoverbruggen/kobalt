@@ -93,6 +93,7 @@ enum class ControlIcon {
     Star,
     Map,
     Pin,
+    PinOff,
     Flag,
     Heart,
     Note,

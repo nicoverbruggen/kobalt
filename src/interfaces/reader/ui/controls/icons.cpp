@@ -108,12 +108,13 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::Flag)]), path);
-    } else if (icon == ControlIcon::Pin) {
+    } else if (icon == ControlIcon::Pin || icon == ControlIcon::PinOff) {
         result.canvas = 24;
         result.stroke = 1.5;
         path.moveTo(8, 3); path.lineTo(16, 3); path.lineTo(15, 10);
         path.lineTo(19, 14); path.lineTo(5, 14); path.lineTo(9, 10); path.closeSubpath();
         line(12, 14, 12, 22);
+        if (icon == ControlIcon::PinOff) line(3, 3, 21, 21);
     } else if (icon == ControlIcon::Star) {
         result.canvas = 24;
         result.stroke = 1.5;

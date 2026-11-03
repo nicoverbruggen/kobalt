@@ -5,11 +5,12 @@
 "common.save" = "Save";
 "bookmarks.pin" = "Pin bookmark";
 "bookmarks.modify" = "Modify pinned bookmark";
+"bookmarks.unpin" = "Unpin bookmark";
 "bookmarks.actions" = "Bookmark actions";
 "bookmarks.remove_this" = "Remove this bookmark";
 "bookmarks.edit_pin" = "Edit pinned bookmark";
 "bookmarks.pin_name" = "Bookmark name";
-"bookmarks.pin_limit" = "You can pin up to eight bookmarks in this book. Remove a pinned bookmark to add another.";
+"bookmarks.pin_limit" = "You can pin up to eight bookmarks in this book. Unpin or remove a pinned bookmark to add another.";
 "bookmarks.icon_map" = "Map";
 "bookmarks.icon_star" = "Star";
 "bookmarks.icon_bookmark" = "Bookmark";

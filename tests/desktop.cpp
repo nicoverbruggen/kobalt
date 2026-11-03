@@ -1890,6 +1890,43 @@ void checkPinnedBookmarks(int preset, bool dark) {
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
     QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(), QString("diamond"));
 
+    const auto beforeUnpin = fixture.stored("bookmarks.json", "bookmarks");
+    auto afterUnpin = beforeUnpin;
+    for (int i = 0; i < afterUnpin.size(); ++i) {
+        auto entry = afterUnpin[i].toObject();
+        if (entry["position"].toString() != firstPosition) continue;
+        entry.remove("name");
+        entry.remove("icon");
+        afterUnpin[i] = entry;
+    }
+    QVERIFY(fixture.bookmarkAction("rrBookmarkUnpin"));
+    QTRY_VERIFY(!fixture.visible("rrBookmarkRowActions"));
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks"), afterUnpin);
+    QVERIFY(fixture.press("rrBookmarkListClose"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmark6"));
+    QVERIFY(!fixture.visible("rrPinnedBookmark7"));
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(fixture.window.idle());
+    fixture.window.openBook(book);
+    QTRY_COMPARE(opened.count(), 4);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks"), afterUnpin);
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmark6"));
+    QTRY_VERIFY(fixture.widget("rrPinnedBookmark6")->isEnabled());
+    QVERIFY(!fixture.visible("rrPinnedBookmark7"));
+    QVERIFY(fixture.press("rrBookmarks"));
+    QVERIFY(fixture.press("rrBookmarkMore0"));
+    QTRY_VERIFY(fixture.visible("rrBookmarkPin"));
+    QCOMPARE(qobject_cast<QPushButton *>(fixture.widget("rrBookmarkPin"))->text(), strings::get("bookmarks.pin"));
+    QVERIFY(!fixture.widget("rrBookmarkUnpin"));
+    QVERIFY(fixture.press("rrBookmarkPin"));
+    QTRY_VERIFY(fixture.visible("rrPinName"));
+    qobject_cast<QLineEdit *>(fixture.widget("rrPinName"))->setText("Map");
+    QVERIFY(fixture.press("rrPinSave"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QTRY_VERIFY(!fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString().isEmpty());
+
     QVERIFY(fixture.press("rrBookmarkListClose"));
     QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
     QVERIFY(fixture.press("rrPinnedBookmark0"));

@@ -18,6 +18,7 @@
 #include "interfaces/reader/settings/settings_panel.h"
 #include "interfaces/reader/settings/style_illustrations.h"
 #include "assets/bundled_fonts.h"
+#include <QCoreApplication>
 #include <QFontDatabase>
 
 namespace kobalt::reader {

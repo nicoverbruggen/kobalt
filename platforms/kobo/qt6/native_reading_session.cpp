@@ -2,9 +2,11 @@
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/native_reading_session.h"
+#include "platforms/kobo/common/native_session_volume.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QMetaType>
 #include <QSettings>
 #include <QSqlDatabase>
@@ -34,6 +36,12 @@ struct Volume {
         symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this);
     }
 };
+struct Location {
+    void *words[2];
+    Location(const Location &) = delete;
+    ~Location() { symbol<void (*)(void *)>("_ZN15ContentLocationD1Ev")(this); }
+};
+static_assert(sizeof(Location) == 8);
 // In 5.18.270971, the two session wrappers read only PluginState's double
 // at offset 80. Nickel formats it for Kobo Plus; no native reader is created.
 struct SessionPosition {
@@ -43,6 +51,14 @@ struct SessionPosition {
 static_assert(sizeof(Volume) == 12 && offsetof(SessionPosition, percent) == 80);
 struct Api {
     Volume (*get)(const QString &, const QString &) = symbol<decltype(get)>("_ZN13VolumeManager7getByIdERK7QStringS2_");
+    void (*percent)(void *, const QVariant &) =
+        symbol<decltype(percent)>("_ZN7Content14setPercentReadERK8QVariant");
+    Location (*location)(QString, QString) = symbol<decltype(location)>("_ZN15ContentLocation6createE7QStringS0_");
+    bool (*validLocation)(const Location *) = symbol<decltype(validLocation)>("_ZNK15ContentLocation7isValidEv");
+    QString (*teng)(const Location *) = symbol<decltype(teng)>("_ZNK15ContentLocation12toTENGStringEv");
+    QString (*serialized)(const Location *) = symbol<decltype(serialized)>("_ZNK15ContentLocation8toStringEv");
+    void (*bookmark)(void *, const QString &, int, const QDateTime &, int) =
+        symbol<decltype(bookmark)>("_ZN13VolumeManager14updateBookmarkER6VolumeRK7QStringiRK9QDateTimei");
     QVariantMap (*values)(const void *) = symbol<decltype(values)>("_ZNK6Volume11getDbValuesEv");
     void *(*device)() = symbol<decltype(device)>("_ZN6Device16getCurrentDeviceEv");
     const QString &(*dbName)(const void *) = symbol<decltype(dbName)>("_ZNK6Device9getDbNameEv");
@@ -71,9 +87,11 @@ struct Api {
     bool ready() const {
         const auto type = QMetaType(symbol<const QtPrivate::QMetaTypeInterface *>(
             "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE"));
-        return type.sizeOf() == sizeof(Volume) && get && values && device && dbName && tolino && connection &&
-               engine && start && end && fire && saveEvents && flushEvents && time && setTime && begin &&
-               commit && update && refresh && symbol<void *>("_ZN6VolumeD1Ev");
+        return type.sizeOf() == sizeof(Volume) && get && percent && bookmark && location && validLocation && teng &&
+               serialized && values && device && dbName && tolino && connection && engine && start && end && fire &&
+               saveEvents && flushEvents && time && setTime && begin && commit && update && refresh &&
+               symbol<void *>("_ZN6VolumeD1Ev") &&
+               symbol<void *>("_ZN15ContentLocationD1Ev");
     }
     bool open() const {
         const auto db = connection(dbName(device()), false);
@@ -83,6 +101,17 @@ struct Api {
 const Api &api() {
     static const Api value;
     return value;
+}
+void prepareVolume(Volume &volume, const ReadingActivity &activity) {
+    const auto original = api().values(&volume);
+    nickel::prepareSessionVolume(volume, activity,
+        [&original](Volume &value, const QString &position) {
+            const auto location = api().location(position, QString());
+            if (api().validLocation(&location) && api().teng(&location) == position)
+                api().bookmark(&value, api().serialized(&location), original.value("adobe_location").toInt(),
+                               QDateTime::currentDateTimeUtc(), 0);
+        },
+        [](Volume &value, double percent) { api().percent(&value, QVariant(percent)); });
 }
 bool workerReady() {
     auto *engine = api().engine();
@@ -270,6 +299,7 @@ void NativeReadingSession::start(const ReadingActivity &activity) {
         return;
     percent = qBound(0.0, activity.percent, 100.0);
     activity_.start(activity);
+    prepareVolume(volume, activity);
     SessionPosition state;
     state.percent = percent;
     QElapsedTimer timer;
@@ -348,6 +378,7 @@ void NativeReadingSession::stop() {
     }
     QElapsedTimer timer;
     timer.start();
+    prepareVolume(volume, activity_.current());
     SessionPosition state;
     state.percent = percent;
     const int seconds = api().end(api().engine(), volume, state, {});

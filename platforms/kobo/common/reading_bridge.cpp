@@ -42,6 +42,11 @@ public:
     bool estimates(const ReadingActivity &activity, ReadingEstimates *result) override {
         return reading_.estimates(activity, result);
     }
+    void stopReading(const ReadingActivity &activity) override {
+        if (!activity.position.isEmpty() && activity.pages > 0 && activity.page >= 0)
+            reading_.page(activity);
+        reading_.stop();
+    }
     void stopReading() override {
         reading_.stop();
     }

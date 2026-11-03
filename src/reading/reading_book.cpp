@@ -198,6 +198,8 @@ void ReadingBook::observeReading(bool learnPace) {
         bridge->observeReading(readingActivity());
 }
 ReadingActivity ReadingBook::readingActivity() const {
+    QString error;
+    const auto nativePosition = model->savedNativePosition(&error);
     return {model->state().value("position").toString(),
             100.0 * model->page() / qMax(1, model->pages()),
             model->page(),
@@ -205,7 +207,8 @@ ReadingActivity ReadingBook::readingActivity() const {
             model->turnDirection(),
             model->totalWords(),
             model->chapterGraph(),
-            model->graphSelection()};
+            model->graphSelection(),
+            error.isEmpty() ? nativePosition : QString()};
 }
 ReadingEstimates ReadingBook::estimates() const {
     if (speed) {
@@ -246,7 +249,7 @@ void ReadingBook::stopReading(bool background, bool nativeAllowed) {
     // End Nickel's interval before local storage work, so its clock does not
     // include that I/O and its asynchronous flush can run alongside our save.
     if (bridge && nativeAllowed)
-        bridge->stopReading();
+        bridge->stopReading(readingActivity());
     if (!background) checkpointReadingHistory();
     if (speed) {
         speed->pause();

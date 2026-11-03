@@ -3,10 +3,13 @@
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "platforms/kobo/common/native_reading_session.h"
+#include "platforms/kobo/common/native_session_volume.h"
+#include "native_location.h"
 #include "session_calls.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QMetaType>
 #include <QSettings>
 #include <QSqlDatabase>
@@ -45,6 +48,10 @@ struct SessionPosition {
 static_assert(sizeof(Volume) == 8 && offsetof(SessionPosition, percent) == 40);
 struct Api {
     Volume (*get)(const QString &, const QString &) = symbol<decltype(get)>("_ZN13VolumeManager7getByIdERK7QStringS2_");
+    void (*percent)(void *, const QVariant &) =
+        symbol<decltype(percent)>("_ZN7Content14setPercentReadERK8QVariant");
+    void (*bookmark)(void *, const QString &, int, const QDateTime &) =
+        symbol<decltype(bookmark)>("_ZN13VolumeManager14updateBookmarkER6VolumeRK7QStringiRK9QDateTime");
     QVariantMap (*values)(const void *) = symbol<decltype(values)>("_ZNK6Volume11getDbValuesEv");
     void *(*device)() = symbol<decltype(device)>("_ZN6Device16getCurrentDeviceEv");
     const QString &(*dbName)(const void *) = symbol<decltype(dbName)>("_ZNK6Device9getDbNameEv");
@@ -73,7 +80,7 @@ struct Api {
     // inspected PluginState offset on a different firmware build.
     bool archiveAvailable = native::publicationSource().available();
     bool ready() const {
-        return archiveAvailable && QMetaType::sizeOf(QMetaType::type("Volume")) == int(sizeof(Volume)) && get &&
+        return archiveAvailable && QMetaType::sizeOf(QMetaType::type("Volume")) == int(sizeof(Volume)) && get && percent && bookmark &&
                values && device && dbName && tolino && connection && engine && sessions.ready() && fire && saveEvents &&
                flushEvents && time && setTime && begin && commit && update && refresh &&
                symbol<void *>("_ZN6VolumeD1Ev");
@@ -86,6 +93,16 @@ struct Api {
 const Api &api() {
     static const Api value;
     return value;
+}
+void prepareVolume(Volume &volume, const ReadingActivity &activity) {
+    const auto original = api().values(&volume);
+    nickel::prepareSessionVolume(volume, activity,
+        [&original](Volume &value, const QString &position) {
+            const auto location = nickel4::stored(position);
+            if (!location.isEmpty())
+                api().bookmark(&value, location, original.value("adobe_location").toInt(), QDateTime::currentDateTimeUtc());
+        },
+        [](Volume &value, double percent) { api().percent(&value, QVariant(percent)); });
 }
 bool workerReady() {
     auto *engine = api().engine();
@@ -273,6 +290,7 @@ void NativeReadingSession::start(const ReadingActivity &activity) {
         return;
     percent = qBound(0.0, activity.percent, 100.0);
     activity_.start(activity);
+    prepareVolume(volume, activity);
     SessionPosition state;
     state.percent = percent;
     QElapsedTimer timer;
@@ -351,6 +369,7 @@ void NativeReadingSession::stop() {
     }
     QElapsedTimer timer;
     timer.start();
+    prepareVolume(volume, activity_.current());
     SessionPosition state;
     state.percent = percent;
     const int seconds = api().sessions.end(api().engine(), volume, state, {});

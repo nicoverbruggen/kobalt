@@ -13,6 +13,8 @@ struct ReadingActivity {
     qint64 totalWords = -1;
     QVector<ChapterLink> chapters;
     ChapterSelection chapter;
+    // Native mapping captured with the displayed frame; empty when unsupported.
+    QString nativePosition = {};
 };
 struct ReadingEstimates {
     qint64 chapterMilliseconds = -1, bookMilliseconds = -1;
@@ -38,6 +40,8 @@ public:
         return false;
     }
     virtual void stopReading() = 0;
+    // A lifecycle boundary can precede the last frame-observation callback.
+    virtual void stopReading(const ReadingActivity &) { stopReading(); }
     // Keep the bridge alive until completion before returning native storage.
     virtual void finishReading(std::function<void(bool)> done) {
         stopReading();

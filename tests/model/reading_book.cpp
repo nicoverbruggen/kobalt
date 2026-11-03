@@ -71,7 +71,7 @@ struct Calls {
     QString location;
     ReadingProgress current{"store-id", "chapter.xhtml#one", 1, 1, true};
     ReadingEstimates estimate;
-    ReadingActivity writtenActivity;
+    ReadingActivity writtenActivity, observedActivity, stoppedActivity;
     bool providesEstimates = false;
 };
 class Bridge final : public ReadingBridge {
@@ -110,12 +110,17 @@ public:
         *verified = calls.current;
         return true;
     }
-    void observeReading(const ReadingActivity &) override {
+    void observeReading(const ReadingActivity &activity) override {
+        calls.observedActivity = activity;
         ++calls.observed;
     }
     bool estimates(const ReadingActivity &, ReadingEstimates *result) override {
         *result = calls.estimate;
         return calls.providesEstimates;
+    }
+    void stopReading(const ReadingActivity &activity) override {
+        calls.stoppedActivity = activity;
+        stopReading();
     }
     void stopReading() override {
         ++calls.stopped;
@@ -193,6 +198,32 @@ int main(int argc, char **argv) {
         });
         return session;
     };
+    {
+        Calls calls;
+        const PositionCodec positions{
+            [](const ReaderModel &, const QString &location, QString *) { return location; },
+            [](const ReaderModel &model, QString *) { return model.position(); },
+            [](const QString &location) { return location; }};
+        auto session = open(QSize(758, 900), {}, "session-event", positions);
+        const auto hash = session->sourceHash();
+        ReadingBook book(std::move(session), paths.bookState("session-event"), paths, "session-event", hash,
+                         std::make_unique<Bridge>(calls), calls.current, calls.current);
+        book.observeReading();
+        const auto opening = calls.observedActivity;
+        require(!opening.nativePosition.isEmpty(), "Session activity lost the displayed frame's native mapping");
+        require(book.session()->turn(1), "Cannot turn before stopping the native interval");
+        waitUntil([&] { return !book.session()->busy(); });
+        // Sleep/close can stop before observeReading sees this completed frame.
+        book.stopReading();
+        QString mappingError;
+        const auto finalPosition = book.session()->savedNativePosition(&mappingError);
+        require(mappingError.isEmpty() && calls.stoppedActivity.page != opening.page &&
+                calls.stoppedActivity.nativePosition != opening.nativePosition &&
+                calls.stoppedActivity.nativePosition == finalPosition &&
+                calls.stoppedActivity.percent == 100.0 * book.session()->page() / book.session()->pages(),
+                "The closing native interval received the preceding page's progress or mapping");
+        require(calls.writes == 0, "Stopping the native interval persisted book progress");
+    }
     // Optional book state must survive both supported backends without
     // changing reading data or whether a book is finished.
     for (const auto *backend : {"0", "1"}) {

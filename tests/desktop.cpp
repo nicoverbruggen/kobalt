@@ -6916,6 +6916,45 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(row->isChecked(), style == pageTurn::Style::Sweep);
         }
     }
+    void phoneFrame() {
+        Fixture fixture(false, false, true);
+        QVERIFY(fixture.prepared);
+        auto *mask = fixture.window.findChild<QWidget *>("desktopPhoneScreenMask");
+        QVERIFY(mask);
+        const auto output = qEnvironmentVariable("KOBALT_TEST_CAPTURE_DIR");
+        if (!output.isEmpty()) QVERIFY(QDir().mkpath(output));
+        for (const bool landscape : {false, true}) {
+            selectPreview(fixture, landscape ? 5 : 3);
+            QTRY_VERIFY(mask->isVisible());
+            QCoreApplication::processEvents();
+            const QRect screen = mask->geometry();
+            const QImage displayed = fixture.window.centralWidget()->grab().toImage();
+            const QImage exported(fixture.window.saveScreenshot(fixture.directory.path()));
+            QVERIFY(!displayed.isNull() && !exported.isNull());
+            if (!output.isEmpty()) {
+                const auto name = landscape ? "phone-frame-landscape" : "phone-frame-portrait";
+                const auto frame = fixture.window.findChild<QWidget *>("desktopDeviceFrame")->geometry();
+                const auto scale = displayed.devicePixelRatio();
+                const QRect crop(qRound(frame.x() * scale), qRound(frame.y() * scale),
+                                 qRound(frame.width() * scale), qRound(frame.height() * scale));
+                QVERIFY(displayed.copy(crop).save(output + '/' + name + ".png"));
+            }
+            for (const auto &image : {displayed, exported}) {
+                const qreal scale = qreal(image.width()) / fixture.window.centralWidget()->width();
+                const auto pixel = [&](QPoint point) {
+                    return image.pixelColor(qFloor((point.x() + 0.5) * scale),
+                                            qFloor((point.y() + 0.5) * scale));
+                };
+                // Both the covered screen corners and their border belong to the bezel.
+                for (int inset : {-1, 3}) {
+                    QCOMPARE(pixel(screen.topLeft() + QPoint(inset, inset)), QColor("#242424"));
+                    QCOMPARE(pixel(screen.topRight() + QPoint(-inset, inset)), QColor("#242424"));
+                    QCOMPARE(pixel(screen.bottomLeft() + QPoint(inset, -inset)), QColor("#242424"));
+                    QCOMPARE(pixel(screen.bottomRight() + QPoint(-inset, -inset)), QColor("#242424"));
+                }
+            }
+        }
+    }
     void desktopControls() {
         Fixture fixture;
         QVERIFY(fixture.prepared);

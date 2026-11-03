@@ -130,7 +130,7 @@ protected:
         QPainterPath screen;
         const qreal radius = phoneCornerRadius * scale;
         screen.addRoundedRect(QRectF(rect()), radius, radius);
-        painter.fillPath(corners.subtracted(screen), Qt::black);
+        painter.fillPath(corners.subtracted(screen), QColor("#242424"));
         const qreal camera = phoneCameraSize * scale, band = phoneCameraBand * scale;
         const QPointF centre = landscape ? QPointF(band / 2, height() / 2.0) : QPointF(width() / 2.0, band / 2);
         painter.setPen(Qt::NoPen);
@@ -187,6 +187,7 @@ public:
                          qRound(rect.height() * scale));
         };
         screenBounds = scaled(screen);
+        screenCornerRadius = phone ? phoneCornerRadius * scale : 0;
         previous->setGeometry(scaled(previousBounds));
         next->setGeometry(scaled(nextBounds));
         for (auto *button : {previous, next})
@@ -223,12 +224,17 @@ protected:
         painter.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), radius, radius);
         painter.setBrush(phone ? QBrush(Qt::black) : QBrush(Qt::NoBrush));
         painter.setPen(QPen(Qt::black, 2));
-        painter.drawRect(QRectF(screenBounds).adjusted(-1, -1, 1, 1));
+        const auto border = QRectF(screenBounds).adjusted(-1, -1, 1, 1);
+        if (phone)
+            painter.drawRoundedRect(border, screenCornerRadius + 1, screenCornerRadius + 1);
+        else
+            painter.drawRect(border);
     }
 
 private:
     bool libra = false, phone = false;
     QRect screenBounds;
+    qreal screenCornerRadius = 0;
 };
 Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder, std::function<QString()> clock,
                std::function<void(ReaderHostServices &)> configureServices)

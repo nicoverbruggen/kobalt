@@ -38,6 +38,7 @@
 #include "build_info.h"
 #include "support/book_fixtures.h"
 #include "support/engine_fixtures.h"
+#include "support/font_fixtures.h"
 #include "support/literary_book.h"
 #include "support/screenshot_gallery.h"
 #include "support/screenshot_runner.h"
@@ -302,8 +303,8 @@ struct Fixture {
     // `library` fills the profile with a synthetic library; `reading` marks one book in progress.
     explicit Fixture(bool dark = false, bool variableFont = false, bool library = false, bool reading = true,
                      bool annotationExports = false, bool standaloneSettings = false,
-                     std::function<void(ReaderHostServices &)> configure = {})
-        : fontInputs(fixtureFonts(variableFont ? directory.path() + "/fonts" : QString())),
+                     std::function<void(ReaderHostServices &)> configure = {}, QString fontDirectory = {})
+        : fontInputs(fixtureFonts(variableFont ? directory.path() + "/fonts" : std::move(fontDirectory))),
           window(prepare(dark, variableFont, library, reading), fontInputs, fixturePlaceholder(),
                  [this] {
                      ++clockReads;
@@ -5370,6 +5371,57 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("position"), origin);
     }
     void publisherFontDefault_data() { bookmarks_data(); }
+    void kfFontVariants() {
+        QTemporaryDir fonts;
+        QVERIFY(fonts.isValid());
+        QVERIFY(test::renamedFontFixture(assets->file("fonts/ebook-core/NV_Bitter-Regular.ttf"),
+                                        fonts.filePath("KF_Bitter.ttf"), "NV Bitter", "KF Bitter"));
+        Fixture fixture(false, false, false, true, false, false, {}, fonts.path());
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["default_font_face"] = "KF Bitter";
+        preferences[appearance::inheritTextLayoutKey] = false;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        const auto position = fixture.state().value("position");
+        QCOMPARE(fixture.state().value("font_face"), QJsonValue("KF Bitter"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        QVERIFY(fixture.press("rrFont"));
+        QTRY_VERIFY(fixture.visible("rrChoices"));
+        auto *picker = fixture.widget("rrChoices");
+        bool selected = false;
+        for (auto *button : picker->findChildren<QAbstractButton *>())
+            selected |= button->isVisible() && button->isChecked() && button->accessibleName() == "KF Bitter";
+        QVERIFY(selected);
+        QVERIFY(fixture.press("rrFontClose"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QVERIFY(revealSettingsOption(fixture, "rrDefaultFont"));
+        QVERIFY(fixture.press("rrDefaultFont"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontChoices"));
+        QAbstractButton *selectedOption = nullptr;
+        for (auto *button : fixture.widget("rrSettingsFontChoices")->findChildren<QAbstractButton *>())
+            if (button->property("reader_font_family").toString() == "KF Bitter") selectedOption = button;
+        QVERIFY(selectedOption && selectedOption->isChecked());
+        QVERIFY(fixture.click(selectedOption));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings") && !fixture.state().value("busy").toBool());
+        QCOMPARE(storage::readJson(fixture.paths.preferences()).value("default_font_face"), QJsonValue("KF Bitter"));
+        QCOMPARE(fixture.state().value("font_face"), QJsonValue("KF Bitter"));
+        QCOMPARE(fixture.state().value("position"), position);
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(fixture.window.idle());
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 2);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(fixture.state().value("font_face"), QJsonValue("KF Bitter"));
+        QCOMPARE(fixture.state().value("position"), position);
+    }
     void publisherFontDefault() {
         QFETCH(bool, dark);
         Fixture fixture(dark);
@@ -7653,6 +7705,66 @@ private slots:
         QTRY_VERIFY(fixture.visible("rrSettingsFontChoice0"));
         QVERIFY(capture(fixture, name + "-default-font-choices"));
     }
+    void kfFontVariants_data() { screenshotVariants(); }
+    void kfFontVariants() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        QTemporaryDir fonts;
+        QVERIFY(fonts.isValid());
+        const auto source = assets->file("fonts/ebook-core/NV_Bitter-Regular.ttf");
+        QVERIFY(test::renamedFontFixture(source, fonts.filePath("KF_Bitter.ttf"), "NV Bitter", "KF Bitter"));
+        QVERIFY(test::renamedFontFixture(source, fonts.filePath("KF_Unique.ttf"), "NV Bitter", "KF Unique"));
+        QVERIFY(test::renamedFontFixture(assets->file("fonts/ebook-core/NV_Jost-Regular.ttf"),
+                                        fonts.filePath("KF_Jost.ttf"), "NV Jost", "KF Jost"));
+        Fixture fixture(dark, false, false, true, false, false, {}, fonts.path());
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["default_font_face"] = "NV Bitter";
+        preferences[appearance::inheritTextLayoutKey] = false;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        const auto name = screenshotVariant(preset, dark);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        QVERIFY(fixture.press("rrFont"));
+        QTRY_VERIFY(fixture.visible("rrChoices"));
+        auto *picker = dynamic_cast<ChoiceScreen *>(fixture.widget("rrChoices"));
+        QVERIFY(picker);
+        QStringList offeredReading;
+        auto *counter = qobject_cast<QLabel *>(fixture.widget("rrFontPagerPage"));
+        QVERIFY(counter);
+        QSet<QString> seen;
+        for (int page = 1; page <= 20; ++page) {
+            const auto label = counter->text();
+            if (seen.contains(label)) break;
+            seen.insert(label);
+            offeredReading.append(picker->fontSamples().keys());
+            QVERIFY(!picker->fontSamples().contains("KF Bitter"));
+            QVERIFY(capture(fixture, name + "-fonts-kf-variants" + (page == 1 ? QString() : '-' + QString::number(page))));
+            QVERIFY(fixture.press("rrFontPagerNext"));
+            QTRY_VERIFY(counter->text() != label);
+        }
+        QVERIFY(seen.contains(counter->text()));
+        QVERIFY(offeredReading.contains("Bitter") && offeredReading.contains("KF Unique"));
+        QVERIFY(!offeredReading.contains("KF Bitter") && !offeredReading.contains("KF Jost"));
+        QVERIFY(fixture.press("rrFontClose"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QVERIFY(revealSettingsOption(fixture, "rrDefaultFont"));
+        QVERIFY(fixture.press("rrDefaultFont"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontChoices"));
+        QStringList offered;
+        for (auto *button : fixture.widget("rrSettingsFontChoices")->findChildren<QAbstractButton *>())
+            offered.append(button->property("reader_font_family").toString());
+        QVERIFY(offered.contains("NV Bitter") && offered.contains("KF Unique"));
+        QVERIFY(!offered.contains("KF Bitter") && !offered.contains("KF Jost"));
+        QVERIFY(capture(fixture, name + "-fonts-kf-default"));
+    }
     void kosyncManual_data() { screenshotVariants(); }
     void kosyncManual() {
         QFETCH(int, preset);
@@ -8973,7 +9085,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3494;
+    int expectedScreenshots = lightGallery ? 182 : 3537;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

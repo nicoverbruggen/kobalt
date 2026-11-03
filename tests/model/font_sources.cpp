@@ -3,6 +3,7 @@
 #include "assets/system_fonts.h"
 #include "engine/crengine/reader_model.h"
 #include "reader_inputs.h"
+#include "font_fixtures.h"
 #include "support/qt_compat.h"
 
 #include <QCoreApplication>
@@ -28,6 +29,32 @@ int main(int argc, char **argv) {
     for (int index = 0; index < ordered.size(); ++index)
         expect(ordered[index].family == expectedOrder[index],
                "font pickers share source groups and Libron-first ordering");
+    const QVector<ReadingFont> variants{
+        {"NV Bitter", {}, FontOrigin::Recommended, {}, {}},
+        {"KF Bitter", {}, FontOrigin::Sideloaded, {}, {}},
+        {"Sourcerer", {}, FontOrigin::Recommended, {}, {}},
+        {"KF Sourcerer", {}, FontOrigin::Sideloaded, {}, {}},
+        {"KF Unique", {}, FontOrigin::Sideloaded, {}, {}},
+        {"Other KF Bitter", {}, FontOrigin::Sideloaded, {}, {}},
+        {"KF Unrelated", {}, FontOrigin::Sideloaded, {}, {}},
+        {"Unrelated", {}, FontOrigin::Sideloaded, {}, {}}};
+    const auto families = [](const QVector<ReadingFont> &fonts) {
+        QStringList result;
+        for (const auto &font : fonts) result.append(font.family);
+        return result;
+    };
+    const auto filtered = families(orderedReadingFonts(variants));
+    expect(!filtered.contains("KF Bitter") && !filtered.contains("KF Sourcerer"),
+           "equivalent NV and unprefixed collection counterparts hide KF rows");
+    expect(filtered.contains("KF Unique") && filtered.contains("Other KF Bitter") &&
+               filtered.contains("KF Unrelated") && filtered.contains("Unrelated"),
+           "KF-only and unrelated names remain available");
+    expect(families(orderedReadingFonts(variants, {"KF Bitter"})).contains("KF Bitter"),
+           "selected KF family remains an exact selectable row");
+    expect(families(orderedReadingFonts(variants, {"KF Bitter", "KF Sourcerer"})).contains("KF Sourcerer"),
+           "reading and default selections can both remain visible");
+    expect(variants.size() == 8 && fontFamilyKey("KF Bitter") != fontFamilyKey("NV Bitter"),
+           "picker filtering neither mutates the catalog nor aliases saved font identity");
     QTemporaryDir temporary;
     expect(temporary.isValid(), "temporary directory");
     const auto root = temporary.path();
@@ -66,6 +93,12 @@ int main(int argc, char **argv) {
     const auto systemFamily = system.first().family;
     auto inputs = test::readerFonts();
     inputs.sources.systemFiles = sources.systemFiles;
+    const auto kfDirectory = root + "/kf-fonts";
+    expect(QDir().mkpath(kfDirectory), "create KF font fixture directory");
+    expect(test::renamedFontFixture(test::readerAssets().file("fonts/ebook-core/NV_Bitter-Regular.ttf"),
+                                   kfDirectory + "/KF_Bitter.ttf", "NV Bitter", "KF Bitter"),
+           "create name-only KF catalog fixture");
+    inputs.sources.sideloadDirectory = kfDirectory;
     ReaderModel model(inputs);
     bool registered = false;
     for (const auto &font : model.fontCatalog()) {
@@ -87,6 +120,14 @@ int main(int argc, char **argv) {
            qPrintable(error));
     expect(model.fontFace() == systemFamily && !model.image(model.page()).isNull(),
            "prepared firmware font can be selected and render a book page");
+    expect(families(model.fontCatalog()).contains("KF Bitter") &&
+               !families(orderedReadingFonts(model.fontCatalog())).contains("KF Bitter"),
+           "hidden KF family remains registered in the rendering catalog");
+    book.seek(0);
+    expect(model.open(book.readAll(), QSize(800, 1000), qt::object({{"font_face", "KF Bitter"}}), &error),
+           qPrintable(error));
+    expect(model.fontFace() == "KF Bitter" && model.state().value("font_face").toString() == "KF Bitter" &&
+               !model.image(model.page()).isNull(), "saved KF choice retains its identity and renders");
     auto changed = sources;
     changed.systemFiles.clear();
     expect(!(changed == sources), "prepared font paths participate in source identity");

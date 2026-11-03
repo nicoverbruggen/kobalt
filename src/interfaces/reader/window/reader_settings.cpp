@@ -1092,12 +1092,19 @@ void Reader::openSettingsFont(const QString &key) {
     auto *panel = static_cast<SettingsPanel *>(general);
     const QStringList titles{strings::get("settings.serif_font"), strings::get("settings.sans_font"),
                              strings::get("settings.mono_font")};
-    auto fonts = orderedReadingFonts(model->fontCatalog());
+    const auto selected = isDefault        ? settingsDefaultFontFace
+                          : isUi           ? settingsUiFontFace
+                          : isMono         ? settingsUiMonoFontFace
+                          : isHeaderFooter ? settingsHeaderFooterFontFace
+                          : isDictionary   ? settingsDictionaryFontFace
+                                           : settingsFontFaces.value(key).toString();
+    auto fonts = model->fontCatalog();
     const auto nativeFamilies = services.fontFamilies();
     for (int row = fonts.size() - 1; row >= 0; --row)
         if (fonts[row].origin == FontOrigin::BuiltIn &&
             !nativeFamilies.contains(fonts[row].family, Qt::CaseInsensitive))
             fonts.removeAt(row);
+    fonts = orderedReadingFonts(std::move(fonts), {selected});
     fonts.prepend({QString(), {}, FontOrigin::Recommended, {}, {}});
     panel->showFontChoices(
         isDefault        ? strings::get("reader.default_font")
@@ -1107,12 +1114,7 @@ void Reader::openSettingsFont(const QString &key) {
         : isDictionary   ? strings::get("settings.dictionary_font")
                          : titles[index],
         fonts,
-        isDefault        ? settingsDefaultFontFace
-        : isUi           ? settingsUiFontFace
-        : isMono         ? settingsUiMonoFontFace
-        : isHeaderFooter ? settingsHeaderFooterFontFace
-        : isDictionary   ? settingsDictionaryFontFace
-                         : settingsFontFaces.value(key).toString(),
+        selected,
         isDefault ? strings::get("reader.publisher_fonts")
                   : strings::get("settings.font_default_value").arg(fontDisplayName(
                         isUi ? QString("IBM Plex Sans")

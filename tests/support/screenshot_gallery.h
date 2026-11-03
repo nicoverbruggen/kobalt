@@ -112,6 +112,8 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"embedded-reading", "Reading with a publisher font"},
         {"finish-book", "Finish reading confirmation"},
         {"fonts", "Font picker"},
+        {"fonts-kf-variants", "Font picker with KF variants"},
+        {"fonts-kf-default", "Default font with KF variants"},
         {"publisher-font-default", "Publisher Fonts as the default"},
         {"default-font-choices", "Default global font"},
         {"footnotes-long-preview", "Long footnote"},

@@ -1794,24 +1794,27 @@ void Reader::showFontPicker() {
     const auto state = settings->state();
     const auto supplemental = supplementalFontFamily(state.value("language").toString());
     const auto requestedDefault = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
-    for (const auto &font : orderedReadingFonts(settings->fontCatalog())) {
+    auto fonts = settings->fontCatalog();
+    for (int row = fonts.size() - 1; row >= 0; --row) {
+        const auto &font = fonts[row];
+        if ((font.origin == FontOrigin::BuiltIn && !pickerNativeFamilies.contains(font.family, Qt::CaseInsensitive)) ||
+            (font.origin == FontOrigin::Interface && font.family != supplemental && font.family != requestedDefault &&
+             font.family != state.value("font_face").toString()))
+            fonts.removeAt(row);
+    }
+    for (const auto &font : orderedReadingFonts(std::move(fonts), {settings->fontFace(), requestedDefault})) {
         QString section;
         switch (font.origin) {
         case kobalt::FontOrigin::Recommended:
             section = strings::get("reader.recommended_fonts");
             break;
         case kobalt::FontOrigin::BuiltIn:
-            if (!pickerNativeFamilies.contains(font.family, Qt::CaseInsensitive))
-                continue;
             section = strings::get("reader.built_in_fonts");
             break;
         case kobalt::FontOrigin::Sideloaded:
             section = strings::get("reader.sideloaded_fonts");
             break;
         case kobalt::FontOrigin::Interface:
-            if (font.family != supplemental && font.family != requestedDefault &&
-                font.family != state.value("font_face").toString())
-                continue;
             section = strings::get("reader.supplemental_fonts");
             break;
         }

@@ -8,7 +8,21 @@
 #include FT_MULTIPLE_MASTERS_H
 
 namespace kobalt {
-QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts) {
+QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts, const QStringList &selected) {
+    const auto available = fonts;
+    fonts.erase(std::remove_if(fonts.begin(), fonts.end(), [&](const ReadingFont &font) {
+        if (!font.family.startsWith("KF ") || selected.contains(font.family, Qt::CaseInsensitive))
+            return false;
+        // ebook-fonts' Kobo preset replaces NV with KF. Its unprefixed
+        // families also gain KF. Match complete family names, not display
+        // labels or filenames, and require an available counterpart.
+        const auto base = font.family.mid(3);
+        const bool unprefixed = base == "Libron" || base == "Sourcerer" || base == "Cartisse" || base == "Readerly";
+        return std::any_of(available.cbegin(), available.cend(), [&](const ReadingFont &other) {
+            return other.family.compare("NV " + base, Qt::CaseInsensitive) == 0 ||
+                   (unprefixed && other.family.compare(base, Qt::CaseInsensitive) == 0);
+        });
+    }), fonts.end());
     std::stable_sort(fonts.begin(), fonts.end(), [](const auto &a, const auto &b) {
         if (a.origin != b.origin)
             return a.origin < b.origin;

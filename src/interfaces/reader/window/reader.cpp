@@ -26,6 +26,7 @@
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include <QApplication>
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QFontInfo>
 #include <QHideEvent>
@@ -357,7 +358,7 @@ void Reader::sleepReader() {
         pageScrubber->cancel();
     if (lifecycleHidden)
         return;
-    ++closeRequest;
+    const auto sleepRequest = ++closeRequest;
     exportRunning = false;
     hideSaving();
     setEnabled(true);
@@ -378,7 +379,50 @@ void Reader::sleepReader() {
     page->animationDirection = 0;
     setProperty("reader_animation_direction", 0);
     appearanceEdit.clearContinuation();
+    lifecycleHidden = true;
+    clockTimer->stop();
+    // The session worker writes to the same database as the bookmark. Let it
+    // finish before attempting the nonblocking bookmark transaction. Keep the
+    // sleep interval intact so a short sleep can resume the same local session.
+    QPointer<Reader> guard(this);
+    mainthread::blocking("native sleep save");
+    QElapsedTimer saveDeadline;
+    saveDeadline.start();
+    {
+        QEventLoop loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+        connect(this, &QObject::destroyed, &loop, &QEventLoop::quit);
+        auto completed = std::make_shared<bool>(false);
+        book->drainReadingSave([completed, waiting = QPointer<QEventLoop>(&loop)](bool) {
+            *completed = true;
+            if (waiting)
+                waiting->quit();
+        });
+        if (!*completed) {
+            timeout.start(2500);
+            loop.exec(QEventLoop::ExcludeUserInputEvents);
+        }
+    }
+    if (!guard || closeRequest != sleepRequest || !lifecycleHidden)
+        return;
     saveNativeProgress();
+    // This error means the transaction never began. Another Nickel writer can
+    // outlast the session queue's retries. Retry only that failure, within the
+    // same sleep budget; other failures and progress conflicts keep their policy.
+    while (book->nativeSaveResult() == ReadingBook::NativeSave::Failed &&
+           book->nativeSaveError() == strings::get("error.nickel_database_is_busy_local_position_was_retained") &&
+           saveDeadline.elapsed() < 2500) {
+        QEventLoop retry;
+        QTimer::singleShot(int(qBound(qint64(1), qint64(2500) - saveDeadline.elapsed(), qint64(100))),
+                           &retry, &QEventLoop::quit);
+        connect(this, &QObject::destroyed, &retry, &QEventLoop::quit);
+        retry.exec(QEventLoop::ExcludeUserInputEvents);
+        if (!guard || closeRequest != sleepRequest || !lifecycleHidden)
+            return;
+        saveNativeProgress();
+    }
     checkpoint();
     // Fold waiting saves into the main profile file before a long sleep.
     bookmarks->flush();
@@ -387,7 +431,6 @@ void Reader::sleepReader() {
     flushDiagnostics(1000);
     closeSearch();
     dismissLookup();
-    lifecycleHidden = true;
     hideKosyncOpening();
     kosyncPage->dismissEditor();
     kosyncPage->setStatus(kosyncMessage, false);
@@ -397,7 +440,6 @@ void Reader::sleepReader() {
         kosyncDialog->deleteLater();
         kosyncDialog = nullptr;
     }
-    clockTimer->stop();
     refreshRenderNotice();
     if (syncDialog)
         syncDialog->hide();

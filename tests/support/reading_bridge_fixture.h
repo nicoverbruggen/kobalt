@@ -12,6 +12,7 @@ struct HostProgress {
     bool hasEstimates = false;
     std::function<void()> notifyEstimates;
     bool changed = false, failWrite = false, writeBlocked = false;
+    QString writeError = "The database is busy.";
     int writes = 0, writeAttempts = 0, openingAttempts = 0;
     bool holdFinish = false, failFinish = false, finishPending = false;
     bool rejectWriteWhileFinishing = false;
@@ -68,7 +69,7 @@ public:
         ++progress->writeAttempts;
         if (progress->failWrite || (progress->rejectWriteWhileFinishing && progress->finishPending)) {
             if (error) {
-                *error = "The database is busy.";
+                *error = progress->writeError;
             }
             return false;
         }

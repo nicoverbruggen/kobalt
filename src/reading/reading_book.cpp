@@ -129,6 +129,9 @@ void ReadingBook::releaseNative(bool save) {
 void ReadingBook::finishReading(std::function<void(bool)> done) {
     sleepingReading = false;
     stopReading(true);
+    drainReadingSave(std::move(done));
+}
+void ReadingBook::drainReadingSave(std::function<void(bool)> done) {
     if (!bridge) {
         done(true);
         return;

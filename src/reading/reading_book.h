@@ -56,6 +56,8 @@ public:
     void stopReading(bool background = false, bool nativeAllowed = true);
     void sleepReading(const QJsonObject &preferences);
     void finishReading(std::function<void(bool)> done);
+    // Drain native writes without completing the local session retained by sleep.
+    void drainReadingSave(std::function<void(bool)> done);
     bool readingSavePending() const;
     void retryFailedReadingSave();
     bool checkpointReadingHistory(bool background = false);

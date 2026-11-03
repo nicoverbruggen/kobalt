@@ -4358,6 +4358,82 @@ private slots:
         QCOMPARE(host.progress->finishAttempts, 1);
     }
 
+    void sleepWaitsForNativeTimeBeforePosition_data() {
+        QTest::addColumn<int>("delay");
+        QTest::addColumn<bool>("saved");
+        QTest::addColumn<int>("contention");
+        QTest::newRow("immediate") << 0 << true << 0;
+        QTest::newRow("delayed") << 100 << true << 0;
+        QTest::newRow("failed") << 100 << false << 0;
+        QTest::newRow("timeout") << 2800 << true << 0;
+        QTest::newRow("busy-after-drain") << 0 << false << 150;
+        QTest::newRow("persistent-busy") << 0 << false << 2800;
+    }
+    void sleepWaitsForNativeTimeBeforePosition() {
+        QFETCH(int, delay);
+        QFETCH(bool, saved);
+        QFETCH(int, contention);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        const auto identity = QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = {identity, "OEBPS/c1.xhtml", 100, 1, true};
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->go(1));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto position = host.session()->state().value("position").toString();
+        host.progress->holdFinish = delay != 0;
+        host.progress->failFinish = !saved;
+        host.progress->rejectWriteWhileFinishing = true;
+        if (contention) {
+            host.progress->failWrite = true;
+            host.progress->writeError = strings::get("error.nickel_database_is_busy_local_position_was_retained");
+            QTimer::singleShot(contention, host.window(), [progress = host.progress] { progress->failWrite = false; });
+        }
+        const auto overlap = std::make_shared<bool>(false);
+        const auto progress = host.progress;
+        if (delay) {
+            QTimer::singleShot(delay, host.window(), [progress, overlap, saved] {
+                *overlap = progress->writeAttempts != 0;
+                progress->holdFinish = false;
+                progress->completeFinish(saved);
+            });
+        }
+        QElapsedTimer elapsed;
+        elapsed.start();
+        host.window()->sleepReader();
+        QCOMPARE(storage::readBookState(testPaths(), identity).object.value("position").toString(), position);
+        QCOMPARE(host.progress->finishAttempts, 1);
+        if (contention) {
+            QVERIFY(host.progress->writeAttempts > 1);
+            QCOMPARE(host.progress->writes, contention < 2500 ? 1 : 0);
+            QVERIFY(elapsed.elapsed() >= qMin(contention, 2500) - 100);
+            QVERIFY(elapsed.elapsed() < 2800);
+            QTRY_VERIFY(!host.progress->failWrite);
+            return;
+        }
+        QCOMPARE(host.progress->writeAttempts, 1);
+        if (delay > 2500) {
+            QVERIFY(elapsed.elapsed() < delay);
+            QCOMPARE(host.progress->writes, 0);
+            QVERIFY(host.progress->finishPending);
+            QTRY_VERIFY(!host.progress->finishPending);
+            QVERIFY(*overlap);
+        } else {
+            QVERIFY(!*overlap);
+            QCOMPARE(host.progress->writes, 1);
+            QVERIFY(!host.progress->finishPending);
+        }
+    }
+
     void nativeOpeningStatus_data() {
         QTest::addColumn<bool>("fails");
         QTest::newRow("saved") << false;

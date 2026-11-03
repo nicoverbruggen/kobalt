@@ -787,6 +787,9 @@ int main(int argc, char **argv) {
         book.observeReading(); tick();
         const QJsonObject preferences{{sessionTimeout::preferenceKey, minutes}};
         book.sleepReading(preferences);
+        bool drained = false;
+        book.drainReadingSave([&](bool saved) { require(saved, "Sleep native drain"); drained = true; });
+        waitUntil([&] { return drained; });
         const auto first = book.sessionReadingMilliseconds();
         require(first > 0, "Session timer fixture");
         utc -= 60000;
@@ -800,6 +803,9 @@ int main(int argc, char **argv) {
         book.checkpointReadingHistory();
         require(count() == 1, "Short sleep or Never split session history");
         book.sleepReading(preferences);
+        drained = false;
+        book.drainReadingSave([&](bool saved) { require(saved, "Expired sleep native drain"); drained = true; });
+        waitUntil([&] { return drained; });
         const auto total = book.readingMilliseconds();
         utc += minutes ? qint64(minutes) * 60000 : qint64(30) * 86400000;
         book.observeReading();

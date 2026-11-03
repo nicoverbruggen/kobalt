@@ -16,8 +16,11 @@ public:
     ~LightPanel() override;
     bool open();
     void setEdgeGesturesEnabled(bool enabled);
+    void setDarkModeShortcut(bool visible, bool checked, bool enabled);
+    std::function<void(bool)> darkModeChanged;
     std::function<void()> changed;
     std::function<QRect(int)> placement;
+    std::function<int()> availableHeight;
 
 protected:
     void hideEvent(QHideEvent *event) override;
@@ -27,7 +30,7 @@ private:
     ui::SettingSlider *brightnessSlider, *warmthSlider;
     QLabel *brightnessValue, *warmthValue, *swipeTip;
     QWidget *warmthRow, *swipeRow, *automaticRows;
-    ui::DescribedOption *automaticBrightness, *automaticWarmth;
+    ui::DescribedOption *automaticBrightness, *automaticWarmth, *darkMode;
     QTimer poll;
     bool updating = false, warmthAutomatic = false, edgeGesturesEnabled = true;
     int warmthOriginal = -1;

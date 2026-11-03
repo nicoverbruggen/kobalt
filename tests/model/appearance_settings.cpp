@@ -24,6 +24,18 @@ int main() {
                 "Invalid time format did not fall back to detailed estimates");
     }
 
+    for (bool shown : {false, true}) {
+        const auto preferences = appearance::cleanPreferences({{"light_dark_mode_shortcut", shown}, {"optional", "keep"}});
+        require(preferences.value("light_dark_mode_shortcut").toBool() == shown && preferences.value("optional") == "keep",
+                "Light shortcut cleanup lost a saved choice or optional field");
+        require(appearance::same({}, preferences), "Light shortcut visibility invalidated the book layout");
+    }
+    for (const auto &invalid : {QJsonValue("true"), QJsonValue(1), QJsonValue()})
+        require(!appearance::cleanPreferences({{"light_dark_mode_shortcut", invalid}}).value("light_dark_mode_shortcut").toBool(false),
+                "Invalid Light shortcut preference did not default to hidden");
+    require(!appearance::cleanPreferences({}).value("light_dark_mode_shortcut").toBool(false),
+            "Older preferences enabled the Light shortcut");
+
     require(sessionTimeout::minutes({}) == 15, "Older preferences lost the default session timeout");
     for (const auto minutes : sessionTimeout::choices) {
         const auto preferences = appearance::cleanPreferences({{sessionTimeout::preferenceKey, minutes}, {"optional", "keep"}});

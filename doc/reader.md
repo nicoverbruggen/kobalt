@@ -200,6 +200,8 @@ Dragging the main scrubber right moves forward through its visible page range. T
 
 On Kobo, the System tab sits above About. Open books automatically in Kobalt uses the same preference as Kobo's Reading settings. A change in either place appears when the other settings page opens. Turning it off keeps the current book open and uses Kobo's reader for future library openings. A failed save keeps the previous selection.
 
+Settings > Display > Show dark mode in Light adds a Dark mode checkbox to the Light panel. The shortcut is off by default. It changes the same dark-mode setting as Settings > Display > Dark mode. Hosts without Light keep the Settings entry. A failed save keeps the previous mode. On short screens, Light omits its swipe hint so the controls fit.
+
 Closing Light through its tab or a tap on the visible page restores the default menu view. Switching to another panel keeps that panel open. Dismissing the reading menu keeps all its panels closed until the menu opens again.
 
 Text and Layout panels measure their visible controls and messages, including optional font controls. They keep their bottom edge above the navigation bar. When the controls exceed the space below the top toolbar, the panel reaches the toolbar and pages between complete rows, with Previous and Next below them, as the Header and footer sheet does. About measures its content and leaves room for the settings tabs beside it.

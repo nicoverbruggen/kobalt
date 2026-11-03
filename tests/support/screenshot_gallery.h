@@ -52,6 +52,8 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"library-option-feedback-released", "Library checkbox: released"},
         {"page-turn-animation", "Android page turn animation setting"},
         {"page-turn-sweep", "Android banded sweep: mid-turn"},
+        {"settings-light-dark-mode", "Dark-mode shortcut setting"},
+        {"light-dark-mode", "Dark-mode shortcut in Light"},
         {"settings-light-feedback", "Frontlight gesture feedback"},
         {"settings-light-feedback-hidden", "Frontlight gesture feedback disabled"},
         {"light-feedback-hidden", "Frontlight adjustment without feedback"},

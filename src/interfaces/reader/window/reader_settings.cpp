@@ -292,6 +292,8 @@ void Reader::openSettings() {
     settingsError->clear();
     settingsError->hide();
     darkOption->setChecked(model->state().value("dark_mode").toBool(false));
+    static_cast<SettingsPanel *>(general)->lightDarkModeOption->setChecked(
+        preferences.value("light_dark_mode_shortcut").toBool(false));
     inheritTextLayoutOption->setChecked(preferences.value(appearance::inheritTextLayoutKey).toBool(true));
     hideNonlinearOption->setChecked(model->state().value("hide_nonlinear_fragments").toBool(false));
     auto *displaySettings = static_cast<SettingsPanel *>(general);
@@ -497,6 +499,8 @@ void Reader::fitAppearance() {
 }
 
 bool Reader::writePreferences(const QJsonObject &next) {
+    // Do not replace a pending asynchronous dark-mode save.
+    if (savingDarkMode >= 0) return false;
     // Known exception: a settings change waits for its write, so each caller
     // can undo the change when the write fails.
     mainthread::AllowBlocking allow("settings write");
@@ -517,7 +521,7 @@ bool Reader::writePreferences(const QJsonObject &next) {
 }
 
 void Reader::applySettings() {
-    if (model->temporaryTypography())
+    if (savingDarkMode >= 0 || model->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
@@ -541,6 +545,7 @@ void Reader::applySettings() {
         next[key] = settingsFontFaces.value(key).toString();
     next["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     next["dark_mode"] = darkOption->isChecked();
+    next["light_dark_mode_shortcut"] = static_cast<SettingsPanel *>(general)->lightDarkModeOption->isChecked();
     next[appearance::inheritTextLayoutKey] = inheritTextLayoutOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     next["vertical_justification"] = settingsVerticalSpacing;
@@ -631,23 +636,40 @@ void Reader::applySettings() {
 }
 
 void Reader::applyDarkMode(bool enabled) {
-    if (model->temporaryTypography())
-        return;
-    auto next = preferences;
-    next["dark_mode"] = enabled;
-    if (!writePreferences(next)) {
-        darkOption->setChecked(preferences.value("dark_mode").toBool(false));
-        settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
-        settingsError->show();
+    if (savingDarkMode >= 0 || pendingDarkMode >= 0 || model->busy() || model->temporaryTypography()) {
+        refresh();
         return;
     }
-    preferences = next;
-    settingsError->clear();
-    settingsError->hide();
-    pendingDarkMode = enabled;
-    model->setDarkMode(enabled);
-    if (appearanceEdit.preview())
-        appearanceEdit.preview()->setDarkMode(enabled);
+    auto next = appearance::globalPreferences(preferences);
+    appearance::rememberTextLayout(next, model->state());
+    appearance::rememberPageMargins(next, model->state());
+    next["dark_mode"] = enabled;
+    savingDarkMode = enabled;
+    if (!preferencesWriter)
+        preferencesWriter = std::make_unique<storage::RecordWriter>();
+    QPointer<Reader> guard(this);
+    preferencesWriter->post([path = book->paths().preferences(), next] {
+        return kobalt::storage::writePreferences(path, next);
+    }, [guard, enabled](bool saved) {
+        qt::invoke(QCoreApplication::instance(), [guard, enabled, saved] {
+            if (!guard) return;
+            auto *reader = guard.data();
+            reader->savingDarkMode = -1;
+            if (!saved) {
+                reader->showSettingsWriteError();
+                reader->refresh();
+                return;
+            }
+            reader->preferences["dark_mode"] = enabled;
+            reader->settingsError->clear();
+            reader->settingsError->hide();
+            reader->pendingDarkMode = enabled;
+            reader->model->setDarkMode(enabled);
+            if (reader->appearanceEdit.preview())
+                reader->appearanceEdit.preview()->setDarkMode(enabled);
+            reader->refresh();
+        }, Qt::QueuedConnection);
+    });
     refresh();
 }
 

@@ -386,6 +386,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     };
     darkOption =
         check(displayPage, "rrDarkMode", strings::get("reader.dark_mode"), strings::get("settings.dark_description"));
+    lightDarkModeOption = check(displayPage, "rrLightDarkModeShortcut", strings::get("settings.light_dark_mode"),
+                                strings::get("settings.light_dark_mode_description"));
+    lightDarkModeOption->setVisible(inputs.lightSupported);
     const bool animationsSupported = pageAnimationsAvailable(inputs.animationSupport);
     const auto animationDescription = strings::get(inputs.animationSupport == PageAnimationSupport::Uncertain
         ? "settings.animations_uncertain_description" : animationsSupported
@@ -401,7 +404,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     generalOptions->addWidget(refreshButton);
     generalOptions->addWidget(animationOption);
     section(displayPage, generalOptions, "rrDisplayAppearanceSection", strings::get("settings.section_appearance"));
-    for (auto *option : {darkOption, bionicOption})
+    for (auto *option : {darkOption, lightDarkModeOption, bionicOption})
         generalOptions->addWidget(option);
     section(displayPage, generalOptions, "rrDisplayColumnsSection", strings::get("reader.columns"));
     landscapeColumnsOption = check(displayPage, "rrLandscapeColumns", strings::get("settings.landscape_columns"),
@@ -728,6 +731,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     QVector<ui::DescribedOption *> options = {hideNonlinearOption,
                                               linkIndicatorOption,
                                               darkOption,
+                                              lightDarkModeOption,
                                               bionicOption,
                                               landscapeColumnsOption,
                                               animationOption,

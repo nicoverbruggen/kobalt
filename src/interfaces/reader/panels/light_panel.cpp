@@ -57,7 +57,13 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     automaticWarmth = new ui::DescribedOption(strings::get("light_panel.automatic_warmth"),
                                               strings::get("light_panel.automatic_warmth_description"), this);
     automaticWarmth->setObjectName("rrAutomaticWarmth");
-    for (auto *option : {automaticBrightness, automaticWarmth}) {
+    darkMode = new ui::DescribedOption(strings::get("reader.dark_mode"), strings::get("settings.dark_description"), this);
+    darkMode->setObjectName("rrLightDarkMode");
+    darkMode->hide();
+    connect(darkMode, &QCheckBox::clicked, this, [this](bool enabled) {
+        if (darkModeChanged) darkModeChanged(enabled);
+    });
+    for (auto *option : {automaticBrightness, automaticWarmth, darkMode}) {
         auto presentation = option->presentation();
         presentation.indicator = ui::DescribedOption::Indicator::Square;
         presentation.labelPixels = m::chrome::labelText;
@@ -98,6 +104,7 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     automaticLayout->addWidget(automaticBrightness);
     automaticLayout->addWidget(automaticWarmth);
     rows->addWidget(automaticRows);
+    rows->addWidget(darkMode);
     swipeTip = new ui::InterfaceLabel(this);
     swipeTip->setObjectName("rrLightSwipeTip");
     swipeTip->setWordWrap(true);
@@ -163,6 +170,7 @@ bool LightPanel::open() {
     refreshValues();
     layoutPanel();
     show();
+    layoutPanel();
     raise();
     poll.start();
     if (changed)
@@ -174,13 +182,52 @@ void LightPanel::setEdgeGesturesEnabled(bool enabled) {
         return;
     }
     edgeGesturesEnabled = enabled;
-    swipeRow->setVisible(enabled);
     layoutPanel();
 }
+void LightPanel::setDarkModeShortcut(bool visible, bool checked, bool enabled) {
+    const bool visibilityChanged = darkMode->isHidden() == visible;
+    darkMode->setVisible(visible);
+    darkMode->setChecked(checked);
+    darkMode->setEnabled(enabled);
+    if (visibilityChanged && isVisible()) layoutPanel();
+}
 void LightPanel::layoutPanel() {
-    layout()->activate();
+    ensurePolished();
+    for (auto *widget : findChildren<QWidget *>()) widget->ensurePolished();
     const int width = parentWidget()->width();
-    const int height = layout()->hasHeightForWidth() ? layout()->totalHeightForWidth(width) : sizeHint().height();
+    // Hidden options can retain a minimum height measured at their initial
+    // narrow width. Fit them to the actual row before measuring the panel.
+    const int rowWidth = qMax(1, width - m::panel::contentMargins.left() - m::panel::contentMargins.right());
+    for (auto *option : {automaticBrightness, automaticWarmth, darkMode})
+        option->setMinimumHeight(option->heightForWidth(rowWidth));
+    int automaticHeight = 2 * int(m::control::rowGap);
+    for (auto *option : {automaticBrightness, automaticWarmth})
+        if (!option->isHidden()) automaticHeight += option->heightForWidth(rowWidth);
+    automaticRows->setMinimumHeight(automaticHeight);
+    const auto widgets = findChildren<QWidget *>();
+    for (int index = int(widgets.size()) - 1; index >= 0; --index) {
+        auto *widget = widgets.at(index);
+        if (widget->layout()) widget->layout()->invalidate();
+        widget->updateGeometry();
+    }
+    layout()->invalidate();
+    layout()->activate();
+    const auto measuredHeight = [this, width] {
+        return qMax(layout()->minimumSize().height(),
+                    layout()->hasHeightForWidth() ? layout()->totalHeightForWidth(width) : sizeHint().height());
+    };
+    int height = measuredHeight();
+    const int hintHeight = swipeRow->layout()->hasHeightForWidth()
+        ? swipeRow->layout()->totalHeightForWidth(width) : swipeRow->sizeHint().height();
+    const int controlsHeight = height - (swipeRow->isHidden() ? 0 : hintHeight);
+    const bool hintVisible = edgeGesturesEnabled && (!availableHeight || controlsHeight + hintHeight <= availableHeight());
+    if (hintVisible == swipeRow->isHidden()) {
+        // Keep the controls in a short viewport. The optional gesture hint
+        // returns when there is room, without changing the gesture setting.
+        swipeRow->setVisible(hintVisible);
+        layout()->invalidate();
+        height = measuredHeight();
+    }
     const QRect bounds = placement ? placement(height) : QRect(0, m::panel::toolbarHeight, width, height);
     const bool moved = geometry() != bounds;
     setGeometry(bounds);

@@ -50,6 +50,13 @@ void Reader::refreshRenderNotice() {
 void Reader::refresh() {
     if (lifecycleHidden)
         return;
+    const bool darkReady = publishPendingDarkMode();
+    const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode) : pendingDarkMode >= 0 ? bool(pendingDarkMode)
+        : model->state().value("dark_mode").toBool(false);
+    const bool darkEnabled = savingDarkMode < 0 && pendingDarkMode < 0 && !model->busy() && !model->temporaryTypography();
+    if (!restoringDefaults) darkOption->setChecked(dark);
+    darkOption->setEnabled(darkEnabled);
+    lightPopup->setDarkModeShortcut(preferences.value("light_dark_mode_shortcut").toBool(false), dark, darkEnabled);
     if (recordedOpening && !kosyncStarted)
         synchronizeKosync();
     showKosyncChoice();
@@ -61,7 +68,7 @@ void Reader::refresh() {
     if (!turnFrame || book->usesLocalPace())
         observeReading();
     if (!turnFrame) turnPainted = false;
-    if (!publishPendingDarkMode())
+    if (!darkReady)
         return;
     // syncFrameState consumes the completed jump and its return history.
     // Refresh the destination's text, strips and bookmark ribbon together.

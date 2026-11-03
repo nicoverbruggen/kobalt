@@ -12,6 +12,8 @@ The retired `native_hide_status_bar` preference is removed when settings are nor
 
 `show_light_gesture_feedback` is an optional global Boolean. Missing or invalid values use true, preserving the existing brightness and warmth popup. False hides only the gesture popup and its cleanup refresh. `edge_light_gestures` still controls whether the gestures are enabled. Both choices persist independently for all books. Settings schema 1 and reading-data formats stay unchanged.
 
+`light_dark_mode_shortcut` is an optional global Boolean. Missing or invalid values use false, preserving the existing Light panel until the shortcut is enabled in Display settings. It controls only shortcut visibility. Dark mode remains available in Settings on every host. Settings schema 1 stays unchanged.
+
 `time_remaining_format` is an optional global string with values `detailed` and `approximate`. Missing or invalid values use Detailed. The choice controls the display of remaining-time estimates in the header, footer and Kobalt sleep screens. It does not change stored reading pace, book state or cache identity. Settings schema 1 stays unchanged.
 
 `dictionary_font_face` and `dictionary_font_size` are optional global preferences. An empty or missing face follows the current book’s resolved body font, including its normal reading-font fallback. A missing size uses 100 percent. Supported sizes are 80, 100, 120 and 140 percent. Invalid values use these defaults. These settings affect dictionary definition text, not book layout or saved annotations. They keep preference schema 1.

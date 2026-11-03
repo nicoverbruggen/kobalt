@@ -665,6 +665,7 @@ void Reader::buildToolbar() {
     applyEdgeLight();
     lightPopup = new kobalt::LightPanel(*light, this);
     lightPopup->setEdgeGesturesEnabled(page->brightnessEdge);
+    lightPopup->darkModeChanged = [this](bool enabled) { applyDarkMode(enabled); };
     lightPopup->changed = [lightButton, this] {
         lightButton->setChecked(lightPopup->isVisible());
         if (navigation && lightPopup->isVisible())
@@ -673,6 +674,10 @@ void Reader::buildToolbar() {
     };
     lightPopup->placement = [this](int h) {
         return panelBounds(h);
+    };
+    lightPopup->availableHeight = [this] {
+        return navigation ? navigation->contentBottom(size()) - navigation->toolbarHeight()
+                          : height() - 2 * int(m::panel::toolbarHeight);
     };
     auto *typeButton = iconButton(topControls, top, "rrTypography", strings::get("reader.typography"),
                                   ControlIcon::Typography, [this] {
@@ -1491,6 +1496,7 @@ void Reader::buildSettings() {
             settingsFontFaces[key] = QString();
         showSettingsFonts();
         darkOption->setChecked(false);
+        static_cast<SettingsPanel *>(general)->lightDarkModeOption->setChecked(false);
         animationOption->setChecked(false);
         bionicOption->setChecked(false);
         settingsVerticalSpacing = "off";

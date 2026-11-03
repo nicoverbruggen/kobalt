@@ -1227,6 +1227,10 @@ private slots:
             const bool before = option->isChecked();
             QVERIFY(click(canvas, option));
             QCOMPARE(option->isChecked(), !before);
+            // Dark mode saves asynchronously. Wait before asking Settings to close.
+            QTRY_VERIFY_WITH_TIMEOUT(option->isEnabled() && !host.session()->busy() &&
+                                         host.session()->state().value(key).toBool() == !before,
+                                     30000);
             QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
             QTRY_VERIFY_WITH_TIMEOUT(!host.window()->findChild<QWidget *>("rrGeneralSettings")->isVisible() &&
                                          !host.session()->busy() &&

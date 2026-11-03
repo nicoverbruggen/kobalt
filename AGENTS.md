@@ -32,6 +32,8 @@ When adding a UI screen that needs screenshot coverage, include its scenes in th
 
 The root `./start.sh` builds and opens the Qt developer launcher on Linux and Mac. Keep launcher sources and presets under `platforms/launcher/`. Startup checks must explain missing dependencies in the terminal, keep Docker optional for desktop work, and never install tools or pull SDK images automatically. Its actions delegate to the existing platform presets, Kobo build script and autonomous scenario player. Keep visible scenarios separate from the full headless assertion suite. Preserve run-owned process, container and scratch cleanup when changing launcher actions.
 
+For an optional check against both prepared Kobo SDKs, use `cmake --build --preset mac-kobo-checks`. Ordinary Mac builds stay independent of Docker and Kobo checks. Run both SDK checks before integration. See [Kobo compatibility checks](doc/building.md#kobo-compatibility-checks).
+
 ## The page turn is sacred
 
 While the user can turn a page or otherwise interact with the reader, the main thread must not write storage or wait for another thread. This includes Nickel's database, profile and preference saves, the diagnostic log, sleep snapshots and synchronous calls to the profile writer thread. Queue such work on a worker thread and report the result back to the main thread. A slow SD card or a busy Nickel database must never delay the next tap.

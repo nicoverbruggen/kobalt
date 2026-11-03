@@ -33,6 +33,12 @@ The app is `build/desktop-mac/Kobalt.app`. Open it manually for an interactive s
 
 A build from a linked Git worktree is a variant named after the worktree's folder. For example, the worktree `worktrees/library` builds Kobalt (library). A variant has its own bundle identifier and its own profile under `~/Library/Application Support/Kobalt/Kobalt-<variant>/`, so it runs beside the regular app and other variants without sharing settings, reading positions or the library. A variant does not register as an EPUB viewer, so Finder's Open With lists only the regular app. Open books in a variant from its library, with Command-O or by dropping a file onto the window. The configure step prints the app name and bundle identifier. Pass `-DKOBALT_MAC_VARIANT=name` to choose another name, or `-DKOBALT_MAC_VARIANT=` to build the regular app from a worktree. The main checkout builds the regular app.
 
+### Kobo compatibility checks
+
+Run `cmake --build --preset mac-kobo-checks` from `platforms/desktop/` to check both Kobo SDKs. This optional target uses the prepared Qt5 and Qt6 images, compiles changed production objects and links the mod library. It skips installation ZIP creation and package checks. Ordinary Mac app and test builds do not run it. Workers can use it when their change needs Kobo checks. Run both targets before integration; the ordinary edit/build/test loop does not require them.
+
+From the repository root, use `bash platforms/kobo/build.sh qt5 --check` or `qt6 --check` for one SDK. Set `KOBALT_CHECK_SOURCE_ROOT` only when using a newer check runner against another explicitly selected checkout. Checks reuse the selected checkout's incremental Kobo build directories. A first build still needs the application dependencies and objects; later checks rebuild only stale inputs. The checks use the real SDKs and catch compile and link errors, including code hidden behind platform conditionals. They do not replace package or runtime validation. Missing Docker access or a prepared image fails the check without downloading or building an SDK.
+
 ### Headless tests and screenshots
 
 Schedule a full native suite separately from other full suites and heavy builds on the same Mac, including work in other checkouts. Keep the preset's parallelism within that run. Test deadlines measure wall time, so competing runs can exhaust a test's budget without an assertion failure.

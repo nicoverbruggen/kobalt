@@ -209,6 +209,14 @@ if(APPLE)
     add_dependencies(Kobalt kobalt-runtime-assets)
 endif()
 
+# Explicit compatibility checks do not run during ordinary desktop builds.
+add_custom_target(kobo-checks
+    COMMAND "${CMAKE_COMMAND}" -E env "CMAKE_COMMAND=${CMAKE_COMMAND}" "KOBALT_CHECK_SOURCE_ROOT=${KOBALT_ROOT}"
+        bash "${KOBALT_ROOT}/platforms/kobo/build.sh" qt5 --check
+    COMMAND "${CMAKE_COMMAND}" -E env "CMAKE_COMMAND=${CMAKE_COMMAND}" "KOBALT_CHECK_SOURCE_ROOT=${KOBALT_ROOT}"
+        bash "${KOBALT_ROOT}/platforms/kobo/build.sh" qt6 --check
+    WORKING_DIRECTORY "${KOBALT_ROOT}" USES_TERMINAL VERBATIM)
+
 # Compares two release-evaluation runs; see doc/release-evaluation.md.
 add_executable(kobalt-eval-compare EXCLUDE_FROM_ALL "${KOBALT_ROOT}/platforms/eval/compare.cpp")
 target_link_libraries(kobalt-eval-compare PRIVATE Qt6::Gui)

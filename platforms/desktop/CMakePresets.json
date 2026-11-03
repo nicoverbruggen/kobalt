@@ -46,6 +46,7 @@
   ],
   "buildPresets": [
     { "name": "mac", "configurePreset": "mac", "targets": ["Kobalt"], "jobs": 2 },
+    { "name": "mac-kobo-checks", "configurePreset": "mac", "targets": ["kobo-checks"], "jobs": 2 },
     { "name": "mac-tests", "configurePreset": "mac", "targets": ["kobalt-tests"], "jobs": 2 },
     { "name": "mac-fast-tests", "configurePreset": "mac", "targets": ["kobalt-fast-tests"], "jobs": 2 },
     { "name": "mac-light-tests", "configurePreset": "mac", "targets": ["kobalt-desktop-tests"], "jobs": 2 },

@@ -162,6 +162,8 @@ public:
         done->setAccessibleName(strings::get("keyboard.done"));
         space->setObjectName("widgetKeyboardSpace");
         erase->setObjectName("widgetKeyboardDelete");
+        // Keyboard keys invert their background and icon while pressed.
+        erase->setProperty("reader_invert_pressed", true);
         done->setObjectName("widgetKeyboardDone");
         done->setProperty("reader_primary_action", true);
         for (auto *key : std::array<QPushButton *, 5>{shift, symbols, space, erase, done.data()}) {

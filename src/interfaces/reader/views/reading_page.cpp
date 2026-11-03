@@ -27,9 +27,11 @@
 #include <QTransform>
 #include <QTouchEvent>
 #include <QMouseEvent>
+#include <QTextBoundaryFinder>
 #include <QHideEvent>
 #include <utility>
 #include <algorithm>
+#include <cmath>
 
 namespace kobalt {
 namespace m = ui::metrics;
@@ -563,6 +565,13 @@ void ReadingPage::mark(const QVector<QRect> &rectangles) {
 ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     : QWidget(parent), cancelAnimation(std::move(cancelAnimation)) {
     Q_ASSERT(this->cancelAnimation);
+    viewportNoticeTimer.setSingleShot(true);
+    viewportNoticeTimer.setInterval(1000);
+    viewportNoticeTimer.setTimerType(Qt::PreciseTimer);
+    connect(&viewportNoticeTimer, &QTimer::timeout, this, [this] {
+        viewportNoticeVisible = changingViewport;
+        update();
+    });
     pageTurnAnimation.setObjectName("rrPageTurn");
     pageTurnAnimation.setParent(this);
     pageTurnAnimation.setDuration(180);
@@ -626,6 +635,38 @@ void ReadingPage::stopPageAnimation() {
     animationStep = -1;
 }
 
+void ReadingPage::setReflowText(const QString &text) {
+    wordLengths.clear();
+    QTextBoundaryFinder words(QTextBoundaryFinder::Word, text);
+    int start = -1;
+    do {
+        const auto reasons = words.boundaryReasons();
+        if ((reasons & QTextBoundaryFinder::EndOfItem) && start >= 0) {
+            const auto word = text.mid(start, words.position() - start);
+            wordLengths.append(qMax(1, int(word.toUcs4().size())));
+            start = -1;
+        }
+        if (reasons & QTextBoundaryFinder::StartOfItem)
+            start = words.position();
+    } while (words.toNextBoundary() >= 0 && wordLengths.size() < 64);
+}
+
+void ReadingPage::setViewportTransition(bool active) {
+    if (changingViewport == active)
+        return;
+    changingViewport = active;
+    if (active) {
+        cancelHold();
+        multipleTouch = annotationTouch = rightPressed = rightMoved = false;
+        touchOrigins.clear();
+        viewportNoticeTimer.start();
+    } else {
+        viewportNoticeTimer.stop();
+        viewportNoticeVisible = false;
+    }
+    update();
+}
+
 void ReadingPage::setPageAnimationStyle(pageTurn::Style style) {
     if (pageAnimationStyle == style) return;
     pageAnimationStyle = style;
@@ -639,7 +680,7 @@ void ReadingPage::refreshContent(bool reading, bool now) {
     const bool geometryChanged =
         renderedSize != size() || renderedTop != topHeight() || renderedBottom != bottomHeight();
     const bool softwareAnimation = pageAnimationStyle != pageTurn::Style::Off;
-    const bool animatedTurn = softwareAnimation && reading && animationDirection && !geometryChanged &&
+    const bool animatedTurn = !changingViewport && softwareAnimation && reading && animationDirection && !geometryChanged &&
                               renderedPalette == colors.cacheKey() && !animationFrame.isNull();
     const auto outgoing = animatedTurn ? animationFrame : QImage();
     if (geometryChanged || renderedPalette != colors.cacheKey() ||
@@ -721,7 +762,7 @@ void ReadingPage::refreshContent(bool reading, bool now) {
             const auto *handle = window()->windowHandle();
             const auto *display = handle ? handle->screen() : QGuiApplication::primaryScreen();
             const qreal rate = display ? display->refreshRate() : 60;
-            pageTurnAnimation.setUpdateInterval(qMax(1, qRound(1000 / (qIsFinite(rate) && rate > 0 ? rate : 60))));
+            pageTurnAnimation.setUpdateInterval(qMax(1, qRound(1000 / (std::isfinite(rate) && rate > 0 ? rate : 60))));
             pageTurnAnimation.start();
         }
     }
@@ -774,8 +815,52 @@ QImage ReadingPage::snapshot(bool sleeping) const {
     return frame;
 }
 
-void ReadingPage::paintContents(QPainter &painter, bool sleeping) const {
-    painter.fillRect(rect(), palette().color(QPalette::Window));
+void ReadingPage::paintBody(QPainter &painter) const {
+    if (changingViewport) {
+        const QRect body(0, topHeight(), width(), qMax(0, height() - topHeight() - bottomHeight()));
+        const auto text = body.marginsRemoved(reflowLayout.margins);
+        const int columns = qBound(1, reflowLayout.columns, 2);
+        const int gap = qMax(0, reflowLayout.columnSpacing);
+        const int columnWidth = (text.width() - (columns - 1) * gap) / columns;
+        const int fontPixels = qMax(1, reflowLayout.fontPixels);
+        const int lineHeight = qMax(1, qRound(fontPixels * qMax(100, reflowLayout.lineSpacing) / 100.0));
+        const int barHeight = qMax(1, fontPixels / 2);
+        painter.save();
+        painter.setClipRect(body);
+        // Repeat a small sample of the current page's word lengths. The new
+        // page may contain different words; this is only a transition texture.
+        // Publisher fonts and line breaks remain unknown until reflow.
+        const auto ink = ui::themeColors(this).divider;
+        if (columnWidth > 0) {
+            int word = 0;
+            const int space = qMax(1, qRound(fontPixels * .33));
+            for (int column = 0; column < columns; ++column) {
+                const int left = text.left() + column * (columnWidth + gap);
+                int row = 0;
+                for (int y = text.top(); y + lineHeight <= text.bottom() + 1; y += lineHeight, ++row) {
+                    const int barTop = y + (lineHeight - barHeight) / 2;
+                    if (wordLengths.isEmpty()) {
+                        const int indent = row % 6 == 0 ? qMin(fontPixels, columnWidth / 4) : 0;
+                        const int length = row % 6 == 5 ? columnWidth * 3 / 4 : columnWidth - indent;
+                        painter.fillRect(QRect(left + indent, barTop, length, barHeight), ink);
+                        continue;
+                    }
+                    int x = 0;
+                    while (x < columnWidth) {
+                        const int length = qBound(1, qRound(wordLengths[word] * fontPixels * .45), columnWidth);
+                        if (x && x + length > columnWidth)
+                            break;
+                        painter.fillRect(QRect(left + x, barTop, length, barHeight), ink);
+                        x += length + space;
+                        word = (word + 1) % wordLengths.size();
+                    }
+                }
+            }
+        }
+        painter.restore();
+        // Marks and hit targets belong to the old page coordinates.
+        return;
+    }
     painter.drawImage(0, topHeight(), renderedBody);
     if (!savedAnnotations.isEmpty()) {
         auto tints = annotationTints;
@@ -859,6 +944,11 @@ void ReadingPage::paintContents(QPainter &painter, bool sleeping) const {
     for (const auto &r : selection)
         painter.fillRect(r.translated(0, topHeight()), Qt::white);
     painter.restore();
+}
+
+void ReadingPage::paintContents(QPainter &painter, bool sleeping) const {
+    painter.fillRect(rect(), palette().color(QPalette::Window));
+    paintBody(painter);
     if (sleeping) {
         painter.save();
         painter.setFont(font());
@@ -871,7 +961,23 @@ void ReadingPage::paintContents(QPainter &painter, bool sleeping) const {
         painter.drawImage(0, 0, headerPixels);
         painter.drawImage(0, height() - bottomHeight(), footerPixels);
     }
-    ui::paintBookmarkRibbon(painter, renderedRibbon, palette().color(QPalette::WindowText));
+    if (!changingViewport)
+        ui::paintBookmarkRibbon(painter, renderedRibbon, palette().color(QPalette::WindowText));
+    if (viewportNoticeVisible && !sleeping) {
+        painter.save();
+        painter.setFont(ui::interfaceFont(m::chrome::captionText));
+        const auto text = strings::get("reader.updating_page_layout");
+        const int padding = ui::px(16);
+        const int h = ui::interfaceLineHeight(painter.font()) + 2 * padding;
+        const int w = qMin(width() - 2 * padding, ui::interfaceTextWidth(text, painter.font()) + 2 * padding);
+        const QRect card((width() - w) / 2, height() - bottomHeight() - h - padding, w, h);
+        painter.fillRect(card, palette().color(QPalette::Window));
+        ui::paintEdges(painter, card, ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge,
+                       palette().color(QPalette::WindowText), m::control::border);
+        painter.setPen(palette().color(QPalette::WindowText));
+        ui::drawInterfaceText(painter, card.adjusted(padding, 0, -padding, 0), text, Qt::AlignCenter);
+        painter.restore();
+    }
 }
 
 bool ReadingPage::annotationCenter(QPointF point) const {
@@ -936,6 +1042,22 @@ bool ReadingPage::annotationTouchEvent(QTouchEvent *event) {
 }
 
 bool ReadingPage::event(QEvent *event) {
+    if (changingViewport) {
+        switch (event->type()) {
+        case QEvent::TouchBegin:
+        case QEvent::TouchUpdate:
+        case QEvent::TouchEnd:
+        case QEvent::TouchCancel:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseMove:
+        case QEvent::MouseButtonRelease:
+        case QEvent::MouseButtonDblClick:
+            event->accept();
+            return true;
+        default:
+            break;
+        }
+    }
     if (event->type() == QEvent::TouchBegin || event->type() == QEvent::TouchUpdate ||
         event->type() == QEvent::TouchEnd) {
         if (annotationTouchEvent(static_cast<QTouchEvent *>(event))) {
@@ -1074,6 +1196,7 @@ void ReadingPage::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void ReadingPage::hideEvent(QHideEvent *event) {
+    setViewportTransition(false);
     multipleTouch = annotationTouch = rightPressed = false;
     touchOrigins.clear();
     cancelHold();

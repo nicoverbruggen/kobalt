@@ -1,5 +1,6 @@
 #include "interfaces/reader/ui/controls/rows.h"
 #include "interfaces/reader/ui/controls/text.h"
+#include "interfaces/reader/ui/panel_timing.h"
 #include "reader_p.h"
 #include "reading/appearance_settings.h"
 #include "reading/page_navigation.h"
@@ -18,7 +19,7 @@ void Reader::refreshRenderNotice() {
         return;
     renderNoticeTimer.stop();
     const auto progress = model->renderProgress();
-    const bool active = progress.active && !closing && !lifecycleHidden;
+    const bool active = progress.active && !resizePending && !closing && !lifecycleHidden;
     const bool showNotice = active && progress.elapsedMilliseconds >= 1000;
     const char *message = strings::key("reader.applying_appearance_changes");
     switch (progress.reason) {
@@ -77,6 +78,11 @@ void Reader::refresh() {
     finishAppearanceApply();
     const bool pickingFont = syncFontPicker();
     showChapterText();
+    // Publish only the final viewport. A cancelled intermediate layout must
+    // not replace the placeholder while the window is still being resized.
+    if (resizePending && !resizeTimer.isActive() && !model->busy() &&
+        (!appearanceEdit.preview() || !appearanceEdit.preview()->busy()))
+        page->setViewportTransition(false);
     const auto nextImage = model->image();
     const auto previousPageImage = page->image.cacheKey();
     showPageImage(nextImage);
@@ -86,7 +92,7 @@ void Reader::refresh() {
     // The panel needs far longer to draw a page than this function needs
     // for the rest of its work. On a plain page turn, paint now and let the
     // controls, the chapter graph and the saved position follow.
-    const bool readingTurn = isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() &&
+    const bool readingTurn = !resizePending && isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() &&
                              !general->isVisible() && !choices->isVisible() && !syncDialog && !kosyncDialog && !finishDialog &&
                              !services.suspended() && !applyingText && !model->busy() && model->turnDirection() != 0 &&
                              nextImage.cacheKey() != previousPageImage;
@@ -236,13 +242,16 @@ void Reader::showChapterText() {
 void Reader::showPageImage(const QImage &nextImage) {
     page->setPageAnimationStyle(services.softwarePageAnimations ? pageTurn::selected(preferences) : pageTurn::Style::Off);
     auto displayedImage = nextImage;
+    QPointer<ReaderSession> displayedSource = model;
     if (appearanceEdit.edited() && appearanceEdit.ready() && appearanceEdit.preview()) {
         const auto *preview = appearanceEdit.preview();
         // Opening a panel keeps the current book frame. Use the isolated
         // preview only after appearance or viewport dimensions change.
         if (model->busy() || !appearance::same(preview->state(), model->state()) ||
-            preview->image().size() != nextImage.size())
+            preview->image().size() != nextImage.size()) {
             displayedImage = preview->image();
+            displayedSource = appearanceEdit.preview();
+        }
     }
     if (displayedImage.cacheKey() != page->image.cacheKey()) {
         // Temporary search and link marks belong to the old page geometry.
@@ -257,7 +266,27 @@ void Reader::showPageImage(const QImage &nextImage) {
                 ? model->turnDirection()
                 : 0;
     }
-    page->image = std::move(displayedImage);
+    if (!page->viewportTransition()) {
+        const bool changed = displayedImage.cacheKey() != page->image.cacheKey();
+        page->image = std::move(displayedImage);
+        if (changed) {
+            page->setReflowText({});
+            const auto key = page->image.cacheKey();
+            const auto source = displayedSource;
+            // Prepare the sample only after the page is visible. Engine access
+            // stays on the worker thread and never delays this frame's paint.
+            ui::afterNextPaint(page, [this, source, key] {
+                if (!source || source->busy() || page->image.cacheKey() != key ||
+                    page->viewportTransition() || lifecycleHidden || closing)
+                    return;
+                const QPointer<Reader> guard(this);
+                source->pageSummary(source->page(), [guard, key](QString, QString text) {
+                    if (guard && guard->page->image.cacheKey() == key && !guard->page->viewportTransition())
+                        guard->page->setReflowText(text);
+                });
+            });
+        }
+    }
     // Only a turn forward counts towards the session's pace; jumps and reflows do not.
     if (!model->busy())
         book->pace().observe(model->page(), model->turnDirection() > 0);
@@ -452,7 +481,7 @@ void Reader::publishResize() {
                             {"updates_enabled", updatesEnabled()}},
                            false);
     }
-    if (resizePending && !model->busy() && (!appearanceEdit.edited() || !appearanceEdit.preview()->busy())) {
+    if (resizePending && !resizeTimer.isActive() && !model->busy() && (!appearanceEdit.edited() || !appearanceEdit.preview()->busy())) {
         // refreshContent already queued the reflowed page. Do not repaint it
         // again after that flush, which would add a second refresh.
         resizePending = false;

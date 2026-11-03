@@ -993,6 +993,8 @@ void Reader::hideEvent(QHideEvent *event) {
         orientation->stop(property("reader_sleep_handoff").toBool());
     }
     presentation->resumeBackground();
+    resizeTimer.stop();
+    page->setViewportTransition(false);
     resizePending = false;
     setUpdatesEnabled(true);
     QWidget::hideEvent(event);
@@ -1076,7 +1078,23 @@ void Reader::resizeEvent(QResizeEvent *) {
         savingView->setGeometry(rect());
     if (closeSaveError)
         closeSaveError->setGeometry(rect());
-    resizeText();
+    if (isVisible() && !page->image.isNull() && bodySize() != page->image.size()) {
+        resizePending = true;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const int columns = preferences.value("two_columns_landscape").toBool(false) &&
+                            bodySize().width() > bodySize().height() ? 2 : 1;
+        const int gap = qRound(settings->fontSize() *
+                               preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent) / 100.0);
+        page->reflowLayout = {settings->fontSize(), settings->spacing(),
+                             QMargins(settings->margin(), settings->topMargin(), settings->margin(), settings->bottomMargin()),
+                             columns, gap};
+        page->setViewportTransition(true);
+        resizeTimer.start();
+        page->refreshContent();
+    } else {
+        resizeTimer.stop();
+        resizeText();
+    }
     syncNavigation();
 }
 
@@ -1984,6 +2002,7 @@ void Reader::scriptedPageButton(int direction) {
 }
 
 void Reader::pageButton(int direction, quint32 sourceTime, bool userInput) {
+    if (resizePending) return;
     if (imageViewer && imageViewer->isVisible()) return;
     if ((direction != -1 && direction != 1) || !isEnabled() || !isVisible() || lifecycleHidden ||
         services.suspended() || closing || appearanceEdit.applying())
@@ -2503,7 +2522,7 @@ void Reader::save(bool snapshot, bool background, bool persist) {
 
 #endif
     state["resource_cache"] = model->resourceStats();
-    state["busy"] = model->busy();
+    state["busy"] = resizeTimer.isActive() || model->busy();
     state["page_text_only"] = model->image().text("kobalt.animation_text_only") == "true";
     state["page_quality_mono"] = !kobalt::pageRefreshRegions(model->image(), false).isEmpty();
     state["page_quality_colour"] = !kobalt::pageRefreshRegions(model->image(), true).isEmpty();

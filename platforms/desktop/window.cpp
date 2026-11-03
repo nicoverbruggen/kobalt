@@ -477,6 +477,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         resizeTimer.start();
     });
     canvas->viewportResized = [this] {
+        sizeCanvas();
         resizeTimer.start();
     };
     connect(&resizeTimer, &QTimer::timeout, this, [this] {
@@ -732,6 +733,7 @@ void Window::showEvent(QShowEvent *event) {
 }
 void Window::resizeEvent(QResizeEvent *event) {
     QMainWindow::resizeEvent(event);
+    if (isVisible()) sizeCanvas();
     resizeTimer.start();
 }
 Window::~Window() {

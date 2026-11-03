@@ -96,7 +96,7 @@ public:
     void pageButton(int direction) override;
     void scriptedPageButton(int direction) override;
     bool busy() const override {
-        return model->busy() || model->preparingNeighbours() || stylingSamplesPending > 0;
+        return resizeTimer.isActive() || model->busy() || model->preparingNeighbours() || stylingSamplesPending > 0;
     }
     // Automatic syncs follow the account setting, unless a performance run
     // has paused them for the whole process.
@@ -317,7 +317,7 @@ private:
     QJsonObject preferences;
     QLabel *settingsError;
     kobalt::ui::ModalOverlay *busyNotice = nullptr;
-    QTimer renderNoticeTimer;
+    QTimer renderNoticeTimer, resizeTimer;
     kobalt::ui::LightSwipeNotice *brightnessNotice = nullptr;
     kobalt::ui::AnnotationModeNotice *annotationModeNotice = nullptr;
     QTimer annotationModeHide;

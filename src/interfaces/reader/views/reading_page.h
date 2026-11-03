@@ -11,6 +11,7 @@
 #include <QRegion>
 #include <QElapsedTimer>
 #include <QTimeLine>
+#include <QTimer>
 #include <QHash>
 #include <array>
 #include <functional>
@@ -25,6 +26,19 @@ public:
     QImage image;
     int animationDirection = 0;
     void setPageAnimationStyle(pageTurn::Style style);
+    struct ReflowLayout {
+        int fontPixels = 40, lineSpacing = 150;
+        QMargins margins;
+        int columns = 1, columnSpacing = 0;
+    };
+    ReflowLayout reflowLayout;
+    // A short sample from the displayed page, prepared after its first paint.
+    // Lengths are in Unicode characters; transition widths remain estimates.
+    void setReflowText(const QString &text);
+    const QVector<int> &reflowWordLengths() const { return wordLengths; }
+    // Show estimated text lines while the replacement page is laid out.
+    void setViewportTransition(bool active);
+    bool viewportTransition() const { return changingViewport; }
     // What the header and footer show. `notice`, such as an error, replaces
     // the footer's slots while it is set. It never adds a footer, because
     // that would change the page height.
@@ -155,6 +169,10 @@ private:
     void paintHeader(QPainter &painter, bool sleeping = false) const;
     void paintFooter(QPainter &painter, bool sleeping = false) const;
     void paintContents(QPainter &painter, bool sleeping = false) const;
+    void paintBody(QPainter &painter) const;
+    bool changingViewport = false, viewportNoticeVisible = false;
+    QVector<int> wordLengths;
+    QTimer viewportNoticeTimer;
     int headerRightWidth() const;
     ui::HoldTimer holdTimer;
     QVector<QRect> selection, revealedLinks, draftAnnotations, savedAnnotations, candidateAnnotations;

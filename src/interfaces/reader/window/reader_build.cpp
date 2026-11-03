@@ -1536,6 +1536,12 @@ void Reader::buildNotices() {
     busyNotice->card()->message(strings::get("reader.applying_appearance_changes"), "rrUpdatingText");
     // Create the bar before the initial refresh attributes are assigned.
     busyNotice->setDelayedProgress(false, 0, 0);
+    resizeTimer.setSingleShot(true);
+    resizeTimer.setInterval(100);
+    connect(&resizeTimer, &QTimer::timeout, this, [this] {
+        if (!lifecycleHidden && !services.suspended() && !exitPending)
+            resizeText();
+    });
     renderNoticeTimer.setSingleShot(true);
     renderNoticeTimer.setTimerType(Qt::PreciseTimer);
     connect(&renderNoticeTimer, &QTimer::timeout, this, [this] {

@@ -2270,6 +2270,152 @@ void checkImageViewer(int preset, bool dark, bool screenshots) {
 class DesktopTests final : public QObject {
     Q_OBJECT
 private slots:
+    void viewportTransition() {
+        ReadingPage page(nullptr, [] {});
+        page.chrome = headerfooter::presetLayout(headerfooter::Preset::Phone);
+        page.resize(800, 600);
+        page.setPalette(ui::readerPalette(page.palette(), false));
+        page.image = QImage(200, 400, QImage::Format_RGB32);
+        page.image.fill(Qt::black);
+        page.refreshContent();
+        const auto original = page.image.cacheKey();
+        page.setViewportTransition(true);
+        const auto preview = page.snapshot();
+        const QRect body(0, page.topHeight(), page.width(), page.height() - page.topHeight() - page.bottomHeight());
+        const auto ink = ui::themeColors(&page).divider;
+        QCOMPARE(preview.pixelColor(100, body.top() + 30), ink);
+        QCOMPARE(preview.pixelColor(100, body.top() + 90), ink);
+        QCOMPARE(preview.pixelColor(100, body.top() + 60), QColor(Qt::white));
+        QCOMPARE(preview.pixelColor(100, body.top() + 24), ink);
+        QCOMPARE(preview.pixelColor(100, body.top() + 18), QColor(Qt::white));
+        // A larger font and wider spacing move the rows; margins and the
+        // gutter remain paper in a two-column placeholder.
+        page.reflowLayout = {60, 200, QMargins(40, 20, 40, 20), 2, 80};
+        const auto columns = page.snapshot();
+        QCOMPARE(columns.pixelColor(150, body.top() + 80), ink);
+        QCOMPARE(columns.pixelColor(150, body.top() + 200), ink);
+        QCOMPARE(columns.pixelColor(150, body.top() + 140), QColor(Qt::white));
+        QCOMPARE(columns.pixelColor(10, body.top() + 80), QColor(Qt::white));
+        QCOMPARE(columns.pixelColor(400, body.top() + 80), QColor(Qt::white));
+        page.reflowLayout = {};
+        page.setReflowText("I read books.");
+        QCOMPARE(page.reflowWordLengths(), QVector<int>({1, 4, 5}));
+        const auto words = page.snapshot();
+        QCOMPARE(words.pixelColor(10, body.top() + 30), ink);
+        QCOMPARE(words.pixelColor(22, body.top() + 30), QColor(Qt::white));
+        QCOMPARE(words.pixelColor(32, body.top() + 30), ink);
+        page.setReflowText("Longer words.");
+        QCOMPARE(page.snapshot().pixelColor(22, body.top() + 30), ink);
+        page.setReflowText({});
+        QTest::qWait(800);
+        QCOMPARE(page.snapshot(), preview); // Short transitions show no notice.
+        QTest::qWait(300);
+        QVERIFY(page.snapshot() != preview); // The delayed static notice appears.
+        QCOMPARE(page.image.cacheKey(), original);
+        int taps = 0;
+        page.tapped = [&](QPoint) { ++taps; };
+        QTest::mouseClick(&page, Qt::LeftButton, Qt::NoModifier, page.rect().center());
+        QCOMPARE(taps, 0);
+        page.setViewportTransition(false);
+        QVERIFY(!page.viewportTransition());
+        QCOMPARE(page.snapshot().pixelColor(1, body.center().y()), QColor(Qt::black));
+    }
+    void viewportChanges() {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *reader = fixture.window.readerWindow();
+        auto *page = dynamic_cast<ReadingPage *>(fixture.widget("rrPage"));
+        auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        auto *rotate = fixture.window.findChild<QAction *>("desktopRotateDevice");
+        QVERIFY(reader && page && picker && rotate);
+        QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
+        const auto sampledWords = page->reflowWordLengths();
+        const auto position = fixture.state().value("position");
+        // Optional real-time capture of the production desktop surface. No
+        // worker delay is injected into these rotation, preset or resize steps.
+        const auto output = qEnvironmentVariable("KOBALT_VIEWPORT_VIDEO");
+        QFile timeline(output + "/frames.tsv");
+        QTimer captureTimer;
+        QElapsedTimer clock;
+        int frame = 0;
+        bool saved = true;
+        QString phase = "Rotation";
+        if (!output.isEmpty()) {
+            QVERIFY(QDir().mkpath(output));
+            QVERIFY(timeline.open(QIODevice::WriteOnly));
+            fixture.window.resize(1000, 900);
+            clock.start();
+            connect(&captureTimer, &QTimer::timeout, &captureTimer, [&] {
+                const auto ms = clock.elapsed();
+                auto image = fixture.window.grab().toImage();
+                QImage canvas(1200, 1000, QImage::Format_RGB32);
+                canvas.fill(QColor("#202124"));
+                QPainter painter(&canvas);
+                painter.setPen(Qt::white);
+                painter.setFont(QFont("Helvetica", 20));
+                painter.drawText(QRect(24, 8, 1152, 42), Qt::AlignCenter, phase);
+                painter.drawImage(QPoint((1200 - image.width()) / 2, 60), image);
+                painter.end();
+                const auto name = QString("frame-%1.png").arg(frame++, 5, 10, QLatin1Char('0'));
+                saved = saved && canvas.save(output + '/' + name);
+                timeline.write((QString::number(ms) + '\t' + name + '\n').toUtf8());
+            });
+            captureTimer.start(40);
+            QTest::qWait(600);
+        }
+        rotate->trigger();
+        QVERIFY(page->viewportTransition());
+        QCOMPARE(page->reflowWordLengths(), sampledWords);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(!page->viewportTransition());
+        QCOMPARE(page->image.size(), QSize(page->width(), page->height() - page->topHeight() - page->bottomHeight()));
+        QCOMPARE(fixture.state().value("position"), position);
+        if (!output.isEmpty()) QTest::qWait(800);
+        phase = "Preset change";
+        picker->setCurrentIndex(2);
+        QVERIFY(page->viewportTransition());
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(!page->viewportTransition());
+        if (!output.isEmpty()) QTest::qWait(800);
+        phase = "Continuous window resizing";
+        picker->setCurrentIndex(0);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        for (int step = 0; step <= 16; ++step) {
+            fixture.window.resize(1000 - step * 18, 900 - step * 12);
+            QTest::qWait(35);
+        }
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(!page->viewportTransition());
+        QCOMPARE(page->image.size(), QSize(page->width(), page->height() - page->topHeight() - page->bottomHeight()));
+        if (!output.isEmpty()) QTest::qWait(1000);
+        captureTimer.stop();
+        QVERIFY(saved);
+        // A superseded resize must not publish its frame. Hold the engine
+        // while the reader receives several sizes, including the original.
+        const auto release = std::make_shared<QSemaphore>();
+        qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
+        const auto unblock = qScopeGuard([release] { release->release(); });
+        const auto old = page->image.cacheKey();
+        fixture.window.resize(900, 700);
+        QTest::qWait(150);
+        fixture.window.resize(850, 750);
+        QTest::qWait(300);
+        QVERIFY(page->viewportTransition());
+        QCOMPARE(page->image.cacheKey(), old);
+        reader->pageButton(1);
+        QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, page->rect().center());
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        release->release();
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(!page->viewportTransition());
+        QCOMPARE(page->image.size(), QSize(page->width(), page->height() - page->topHeight() - page->bottomHeight()));
+        QCOMPARE(fixture.state().value("position"), position);
+    }
     void imageViewer_data() { screenshotVariants(); }
     void imageViewer() { QFETCH(int, preset); QFETCH(bool, dark); checkImageViewer(preset, dark, false); }
     void pageAnimationCompatibility_data() { screenshotVariants(); }
@@ -7664,6 +7810,33 @@ void checkPageAnimationCompatibility(int preset, bool dark) {
 class ScreenshotTests final : public QObject {
     Q_OBJECT
 private slots:
+    void viewportTransition_data() { screenshotVariants(); }
+    void viewportTransition() {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        picker->setCurrentIndex(preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *rotate = fixture.window.findChild<QAction *>("desktopRotateDevice");
+        rotate->trigger();
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = dynamic_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
+        const auto release = std::make_shared<QSemaphore>();
+        qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
+        const auto unblock = qScopeGuard([release] { release->release(); });
+        rotate->trigger();
+        QTest::qWait(1100);
+        QVERIFY(page->viewportTransition());
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-viewport-transition"));
+    }
     void androidPageAnimations_data() { screenshotVariants(); }
     void androidPageAnimations() {
         QFETCH(int, preset);
@@ -9260,7 +9433,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3563;
+    int expectedScreenshots = lightGallery ? 182 : 3576;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

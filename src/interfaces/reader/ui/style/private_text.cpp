@@ -1203,7 +1203,7 @@ QString elideInterfaceText(const QString &text, const QFont &font, int width) {
 }
 namespace {
 void drawPrivateText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment, int weight,
-                     const QVector<QPair<int, int>> &boldRanges, bool optical) {
+                     const QVector<QPair<int, int>> &boldRanges, bool optical, bool shareBaseline = false) {
     auto rendered = renderPrivateText(text, painter.font(), weight, boldRanges);
     if (rendered.image.isNull()) {
         return;
@@ -1232,8 +1232,17 @@ void drawPrivateText(QPainter &painter, const QRect &area, const QString &text, 
                     break;
                 }
         }
-        if (first >= 0)
+        if (first >= 0) {
+            // Labels side by side share a baseline, so a descender must not
+            // lift one of them. The image starts at origin.y() above the
+            // baseline. Round letters overshoot it slightly; only a descender,
+            // a tenth of the height above the baseline or more, is left out.
+            const int baseline = -rendered.origin.y();
+            const int overshoot = qMax(1, (baseline - first) / 10);
+            if (shareBaseline && baseline > first && last >= baseline + overshoot)
+                last = baseline - 1;
             y = qRound(area.top() + area.height() / 2.0 - (first + last + 1) / 2.0);
+        }
     }
     painter.save();
     painter.setClipRect(area, Qt::IntersectClip);
@@ -1252,6 +1261,9 @@ void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text
 void drawOpticalPrivateText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment,
                             int weight, const QVector<QPair<int, int>> &boldRanges) {
     drawPrivateText(painter, area, text, alignment, weight, boldRanges, true);
+}
+void drawSegmentPrivateText(QPainter &painter, const QRect &area, const QString &text, Qt::Alignment alignment) {
+    drawPrivateText(painter, area, text, alignment, -1, {}, true, true);
 }
 int PrivateTextLabel::textWidth(const QString &value) const {
     return interfaceTextWidth(value, font());

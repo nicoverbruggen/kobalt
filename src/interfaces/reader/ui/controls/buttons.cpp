@@ -116,7 +116,10 @@ void Button::paintEvent(QPaintEvent *) {
             const auto colors = primary || segment ? readerPalette(palette(), darkTheme(this)) : palette();
             painter.setPen(colors.color(!isEnabled() ? QPalette::Mid
                                         : inverted ? QPalette::Window : QPalette::WindowText));
-            drawOpticalText(painter, rect(), text(), true);
+            if (segment)
+                drawSegmentPrivateText(painter, rect(), elidePrivateText(text(), font(), width()));
+            else
+                drawOpticalText(painter, rect(), text(), true);
         } else {
             style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
         }

@@ -109,6 +109,10 @@ void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text
 void drawOpticalPrivateText(QPainter &painter, const QRect &area, const QString &text,
                             Qt::Alignment alignment = Qt::AlignLeft, int weight = -1,
                             const QVector<QPair<int, int>> &boldRanges = {});
+// The same for one label of a row, such as a segment: a descender does not
+// lift it above the baseline that its neighbours share.
+void drawSegmentPrivateText(QPainter &painter, const QRect &area, const QString &text,
+                            Qt::Alignment alignment = Qt::AlignHCenter);
 class PrivateTextLabel : public QLabel {
 public:
     using QLabel::QLabel;

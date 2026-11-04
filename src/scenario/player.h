@@ -60,6 +60,14 @@ struct Host {
     // Whether the radio is up. Optional; without it a `wifi` step does not
     // wait for the radio to go down.
     std::function<bool()> wifiUp;
+    // Real time in milliseconds, including time the device spent suspended.
+    // Optional; without it `wait_ms` counts the process's elapsed time, which
+    // stops while a Kobo is in standby.
+    std::function<qint64()> realMilliseconds;
+    // Keeps the device awake (true) or lets it suspend again (false). The
+    // player keeps it awake for the whole run, except for a scenario that sets
+    // `"standby": true`. Optional.
+    std::function<void(bool)> keepAwake;
 };
 struct Options {
     // Runs only scenarios whose id starts with this, or that this starts with.

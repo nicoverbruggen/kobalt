@@ -163,6 +163,33 @@ int main(int argc, char **argv) {
             results[0].value("reason").toString().contains("no WirelessManager::off()"),
             "a host that fails to turn Wi-Fi off fails the sample");
 
+    // wait_ms counts real time when the host has a clock that includes
+    // standby, and the run keeps the device awake except for a scenario that
+    // sets "standby".
+    {
+        qint64 real = 0;
+        QVector<bool> awake;
+        kobalt::scenario::Host clocked;
+        clocked.realMilliseconds = [&] { return real; };
+        clocked.keepAwake = [&](bool on) { awake.append(on); };
+        // A suspend: real time jumps ahead while the process waits.
+        QTimer::singleShot(20, [&] { real += 60000; });
+        const QJsonObject waiting{{"id", "clock.wait"}, {"opt_in", true}, {"repeat", 1},
+            {"steps", QJsonArray{QJsonObject{{"mark", true}}, QJsonObject{{"wait_ms", 31000}}}},
+            {"sample", QJsonObject{{"timer", true}}}};
+        const QJsonObject asleep{{"id", "clock.standby"}, {"opt_in", true}, {"repeat", 1}, {"standby", true},
+            {"steps", QJsonArray{QJsonObject{{"mark", true}}}}, {"sample", QJsonObject{{"timer", true}}}};
+        options.filter = "clock";
+        QElapsedTimer elapsed;
+        elapsed.start();
+        results = kobalt::scenario::run(QJsonObject{{"scenarios", QJsonArray{waiting, asleep}}}, clocked, options);
+        require(results.size() == 2 && results[0].value("status") == "completed" &&
+                results[1].value("status") == "completed", "the clock scenarios complete");
+        require(elapsed.elapsed() < 10000, "wait_ms ends once real time has passed, also across a suspend");
+        require(awake == QVector<bool>({true, false, true, false}),
+                "the run keeps the device awake, lets a standby scenario suspend, and releases it at the end");
+    }
+
     // A native sync scenario: the step waits for an earlier sync, starts one
     // and does not wait for it. Events that a step passed over stay available
     // to an `earlier` event step, `as` keeps several events of one kind, and

@@ -273,9 +273,21 @@ public:
         // Lets time pass, for example a sync interval, with events running.
         // One timer, so the device sleeps in between.
         if (step.contains("wait_ms")) {
-            QEventLoop loop;
-            QTimer::singleShot(qMax(0, step.value("wait_ms").toInt()), &loop, &QEventLoop::quit);
-            loop.exec();
+            const int wait = qMax(0, step.value("wait_ms").toInt());
+            if (!host.realMilliseconds) {
+                QEventLoop loop;
+                QTimer::singleShot(wait, &loop, &QEventLoop::quit);
+                loop.exec();
+                return {};
+            }
+            // Count real time. A Kobo in standby stops the process's timers,
+            // so check again at least every second of awake time.
+            const auto end = host.realMilliseconds() + wait;
+            for (qint64 left = wait; left > 0; left = end - host.realMilliseconds()) {
+                QEventLoop loop;
+                QTimer::singleShot(int(qMin<qint64>(left, 1000)), &loop, &QEventLoop::quit);
+                loop.exec();
+            }
             return {};
         }
         // A KOSync account that exists for this scenario only, in memory.
@@ -497,13 +509,20 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
     // syncs for its whole session, so keep a pause that was already there.
     const bool syncPaused = kosync::automaticPaused();
     kosync::pauseAutomatic(true);
+    // Keep the device awake for the run, so standby does not stretch waits
+    // and samples. A scenario that sets "standby" lets it suspend.
+    if (host.keepAwake)
+        host.keepAwake(true);
     struct Restore {
         bool syncPaused;
+        const Host &host;
         ~Restore() {
             kosync::overrideAccount({});
             kosync::pauseAutomatic(syncPaused);
+            if (host.keepAwake)
+                host.keepAwake(false);
         }
-    } restore{syncPaused};
+    } restore{syncPaused, host};
     Events events;
     Runner runner(host, events, options.openBook);
     for (const auto &value : file.value("scenarios").toArray()) {
@@ -515,6 +534,18 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             continue;
         if (options.started)
             options.started(id);
+        // A scenario that measures with standby lets the device suspend until
+        // it ends, however it ends.
+        struct Standby {
+            const Host &host;
+            bool allowed;
+            ~Standby() {
+                if (allowed && host.keepAwake)
+                    host.keepAwake(true);
+            }
+        } standby{host, scenario.value("standby").toBool()};
+        if (standby.allowed && host.keepAwake)
+            host.keepAwake(false);
         auto result = qt::object({{"id", id},
                                   {"kind", scenario.value("kind")},
                                   {"paths", scenario.value("paths")},

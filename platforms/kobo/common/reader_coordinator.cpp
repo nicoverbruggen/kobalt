@@ -9,6 +9,7 @@
 #include "browser_handoff.h"
 #include "interfaces/reader_window.h"
 #include "reading/reading_book.h"
+#include "reading/reading_timer.h"
 #include "storage/profile_database.h"
 #include "storage/annotation_database.h"
 #include "storage/reader_storage.h"
@@ -44,6 +45,8 @@
 #include <NickelHook.h>
 #include <QApplication>
 #include <QFile>
+#include <QPointer>
+#include <QTimer>
 #include <QKeyEvent>
 #include <QScreen>
 #ifdef KOBALT_SCENARIO_PLAYER
@@ -1130,6 +1133,35 @@ void ReaderCoordinator::runScenarios(const QString &path) {
         static const NativeRadio radio;
         auto *manager = radio.manager();
         return manager && radio.up(manager);
+    };
+    host.realMilliseconds = ReadingTimer::platformClock();
+    // A timed kernel wake lock, renewed while the run lasts, keeps Nickel's
+    // standby from suspending the device. A run that stops early cannot keep
+    // the device awake for longer than one lock.
+    host.keepAwake = [this](bool awake) {
+        static QPointer<QTimer> renew;
+        const auto write = [](const char *file, const QByteArray &value) {
+            QFile control(QString::fromLatin1(file));
+            const bool ok = control.open(QIODevice::WriteOnly) && control.write(value) == value.size();
+            if (!ok)
+                kobalt::diagnostic("scenario-wake-lock-failed", kobalt::qt::object({{"file", QString::fromLatin1(file)}}),
+                                   kobalt::DiagnosticSeverity::Warning);
+            return ok;
+        };
+        // 60 seconds, in nanoseconds.
+        const auto lock = [write] { write("/sys/power/wake_lock", QByteArrayLiteral("kobalt-eval 60000000000")); };
+        if (awake) {
+            lock();
+            if (!renew) {
+                renew = new QTimer(this);
+                connect(renew, &QTimer::timeout, this, lock);
+            }
+            renew->start(30000);
+        } else {
+            if (renew)
+                renew->stop();
+            write("/sys/power/wake_unlock", QByteArrayLiteral("kobalt-eval"));
+        }
     };
     host.sleepPersistence = [this](const QJsonObject &request) {
         auto &options = scenario::sleepPersistenceOptions();

@@ -1,6 +1,6 @@
 # Kobalt user guide
 
-This guide explains how Kobalt works, what it does with your reading data, how it treats Wi-Fi and battery, and what it cannot do. For help with a specific screen or setting, open the manual inside Kobalt. For the technical details, see [Sync data](sync-data.md) and [Power mechanisms](power-mechanisms.md).
+This guide explains how Kobalt works, what it does with your reading data, how it treats Wi-Fi and battery, and what it cannot do. For the technical details, see [Sync data](sync-data.md) and [Power mechanisms](power-mechanisms.md).
 
 ## How Kobalt works on a Kobo
 

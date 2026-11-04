@@ -9,7 +9,7 @@ Firmware 4.x runs the Qt 5 package (`platforms/kobo/qt5/`). Firmware 5.x and 6.x
 - **Signals before polls.** Kobalt reacts to Nickel's signals for sleep, wake, USB, sync, battery, Wi-Fi and Bluetooth. It does not poll them.
 - **No regular work while idle.** While a book is open and the user does nothing, only a few timers run, each at most about once a minute.
 - **Timers stop with the reader.** Timers do not fire while the kernel is suspended. Most of Kobalt's timers also stop when the reader hides or sleeps.
-- **The page turn is sacred.** Kobalt never waits for storage or another thread on the main thread while the user can turn a page. Turning Wi-Fi off is the one radio action that waits, and it happens before the reader takes input. See [the main-thread guard](validation.md#main-thread-guard).
+- **The page turn is sacred.** Kobalt never waits for storage or another thread on the main thread while the user can turn a page. Turning Wi-Fi off is the one radio action that waits. It happens before the reader takes input, except after a sync while reading that turned Wi-Fi on; see [When Kobalt turns Wi-Fi off](#when-kobalt-turns-wi-fi-off). See [the main-thread guard](validation.md#main-thread-guard).
 
 ## Timers that repeat while reading
 
@@ -131,8 +131,8 @@ While the reader sits idle, Kobalt writes nothing to its database or settings fi
 | Moment | Writes |
 | --- | --- |
 | Opening | `active-session.json`; Nickel's reading status; a book-state checkpoint; on a cache miss, `cache/reopen-layout.json` |
-| Sleep | A durable checkpoint of book state, speed, history and layout (`synchronous=FULL`), the reading history, Nickel's progress (skipped when the position is unchanged) and reading time, the diagnostic log with a sync, and a passive WAL checkpoint |
-| Close, USB and power-off | The same as sleep, plus the sleep-screen image (`cache/sleep-screen.png`), the CREngine document cache (`.cache/*.cr3`) when it is missing or stale, and closing `kobalt.sqlite` with `wal_checkpoint(TRUNCATE)` and `journal_mode=DELETE` |
+| Sleep | A durable checkpoint of book state, speed, history and layout (`synchronous=FULL`), the reading history, Nickel's progress (skipped when the position is unchanged; on firmware 4 it includes the current KEPUB chapter's row) and reading time, the diagnostic log with a sync, and a passive WAL checkpoint |
+| Close, USB and power-off | The same as sleep, plus the sleep-screen image (`cache/sleep-screen.png`), the CREngine document cache (`.cache/*.cr3`) when it is missing or stale, and closing `kobalt.sqlite` with `wal_checkpoint(TRUNCATE)` and `journal_mode=DELETE`. Close also writes the book's recent-book row in Nickel's `Activity` table; see [Sync data](sync-data.md) |
 | At 5% battery or less, before standby | A durable batch and a passive checkpoint |
 
 ### SQLite settings

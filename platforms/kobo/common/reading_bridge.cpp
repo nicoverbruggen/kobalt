@@ -27,6 +27,9 @@ public:
     bool takeChange() override {
         return progress_->takeChange();
     }
+    bool signalsChanges() const override {
+        return progress_->signalsChanges();
+    }
     bool write(const ReadingProgress &expected, const QString &location, double percent, bool finished,
                const ReadingActivity &activity, ReadingProgress *verified, QString *error) override {
         ReadingEstimates estimates;

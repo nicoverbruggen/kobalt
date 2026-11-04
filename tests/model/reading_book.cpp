@@ -66,7 +66,7 @@ void tick(int milliseconds = 10) {
 }
 struct Calls {
     int reads = 0, writes = 0, observed = 0, stopped = 0, destroyed = 0;
-    bool writable = true, transition = false, changed = true, failWrite = false;
+    bool writable = true, transition = false, changed = true, failWrite = false, signalled = false;
     bool finished = false;
     QString location;
     ReadingProgress current{"store-id", "chapter.xhtml#one", 1, 1, true};
@@ -92,6 +92,9 @@ public:
     }
     bool takeChange() override {
         return std::exchange(calls.changed, false);
+    }
+    bool signalsChanges() const override {
+        return calls.signalled;
     }
     bool write(const ReadingProgress &expected, const QString &location, double, bool finished,
                const ReadingActivity &activity, ReadingProgress *verified, QString *error) override {
@@ -1081,6 +1084,44 @@ int main(int argc, char **argv) {
         waitUntil([&] { return !book.savesPending(); });
         require(storage::readBookState(paths, "save-order").object.value("position").toString() == newest,
                 "An older activity snapshot replaced a newer explicit choice");
+    }
+    {
+        // With the platform's change signals, the reader reads saved progress
+        // only after a signal, never on the minute fallback.
+        Calls calls;
+        calls.signalled = true;
+        auto session = open();
+        const auto hash = session->sourceHash();
+        ReadingBook book(std::move(session), paths.bookState("signalled-id"), paths, "signalled-id", hash,
+                         std::make_unique<Bridge>(calls), calls.current, calls.current);
+        book.pollProgress();
+        const int reads = calls.reads;
+        require(reads > 0 && !book.pendingProgress(), "The first progress check did not read saved progress");
+        ++calls.current.modified;
+        calls.current.location = "chapter.xhtml#remote";
+        // Waking invalidates the minute check; without a signal it still must not read.
+        book.invalidateProgress();
+        book.pollProgress();
+        require(calls.reads == reads && !book.pendingProgress(), "A signalled bridge was read without a change");
+        // A read that fails right after the signal is repeated at the next check.
+        const auto remote = calls.current;
+        calls.current.valid = false;
+        calls.changed = true;
+        book.pollProgress();
+        require(calls.reads == reads + 1 && !book.pendingProgress(), "A failed signalled read was not attempted");
+        calls.current = remote;
+        book.pollProgress();
+        require(calls.reads == reads + 2 && book.pendingProgress(), "A failed signalled read was not repeated");
+        book.pollProgress();
+        require(calls.reads == reads + 2, "A successful read kept repeating");
+        // A position that never reads stops after three retries per signal.
+        book.acknowledge(book.candidate(), false);
+        calls.current.valid = false;
+        calls.changed = true;
+        for (int poll = 0; poll < 6; ++poll)
+            book.pollProgress();
+        require(calls.reads == reads + 6, "An unreadable position was not retried three times after a signal");
+        book.releaseNative(false);
     }
     {
         Calls calls;

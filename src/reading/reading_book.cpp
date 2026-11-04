@@ -497,12 +497,25 @@ void ReadingBook::observeProgress() {
 void ReadingBook::pollProgress() {
     if (!bridge)
         return;
-    // Nickel's saved position changes after sync, account updates, USB and
-    // wake. Check then, and otherwise once a minute. The minute tick can come a
-    // little early, so accept it after 55 seconds.
-    if (!bridge->takeChange() && progressPoll.isValid() && progressPoll.elapsed() < 55000)
+    // Nickel's saved position changes after sync, account updates and USB, and
+    // its signals report each one. Read only then. A bridge without those
+    // signals is also read once a minute. The minute tick can come a little
+    // early, so accept it after 55 seconds.
+    bool changed = bridge->takeChange();
+    if (changed)
+        progressRetries = 3;
+    else
+        changed = std::exchange(progressRetry, false);
+    if (!changed && (bridge->signalsChanges() || (progressPoll.isValid() && progressPoll.elapsed() < 55000)))
         return;
-    observeProgress();
+    const auto progress = bridge->read();
+    reconciliation.observe(progress);
+    // Nickel can still hold its database right after a sync. A failed read
+    // tries again on the next checks, up to three times, so the synced
+    // position is not lost and a position that never decodes stops costing reads.
+    progressRetry = !progress.valid && bridge->signalsChanges() && progressRetries > 0;
+    if (progressRetry)
+        --progressRetries;
     progressPoll.restart();
     if (!reconciliation.pending() && reconciliation.baseline().valid)
         baseline = reconciliation.baseline();

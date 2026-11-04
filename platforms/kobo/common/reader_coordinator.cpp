@@ -232,8 +232,9 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         poll();
     });
     // Nickel's sleep, wake, USB and sync signals drive the reader. This check
-    // reads Nickel's saved position once a minute, and it repeats the
-    // visibility checks in case a transition left the reader in the wrong state.
+    // repeats the visibility checks in case a transition left the reader in the
+    // wrong state. It reads Nickel's saved position only after a signal or a
+    // failed read, or once a minute when Nickel's signals are unavailable.
     // A visible reader runs it on its clock tick (minuteTicked); this timer is
     // the fallback for a hidden or sleeping reader, and slightly longer than a
     // minute so a ticking clock always comes first.
@@ -877,6 +878,8 @@ void ReaderCoordinator::showReader() {
     run.nativeProgress->changeAvailable = [this] {
         checkProgressSoon();
     };
+    if (!run.nativeProgress->signalsChanges())
+        kobalt::diagnostic("native-progress-signals-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
     auto book = std::make_unique<kobalt::ReadingBook>(
         std::move(run.model), run.statePath, environment_.paths, run.identity, run.expectedHash,
         kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress)), run.baseline, run.diskBaseline);

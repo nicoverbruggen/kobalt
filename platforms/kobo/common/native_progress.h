@@ -23,6 +23,11 @@ public:
     bool deviceTransition() const {
         return transitioning;
     }
+    // True when Nickel's sync and USB signals are connected, so takeChange()
+    // reports every change.
+    bool signalsChanges() const {
+        return signalled;
+    }
     // True once after Nickel may have changed the saved progress: after sync,
     // an account update or USB.
     bool takeChange() {
@@ -68,7 +73,7 @@ private:
 #endif
     QString book;
     quint64 connectionId;
-    bool transitioning = false, processing = false, changed = true;
+    bool transitioning = false, processing = false, changed = true, signalled = false;
     QVariantMap persisted(QString *error) const;
 };
 }

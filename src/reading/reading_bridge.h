@@ -30,6 +30,10 @@ public:
     virtual bool writable() const = 0;
     virtual ReadingProgress read(QString *error = nullptr) const = 0;
     virtual bool takeChange() = 0;
+    // True when takeChange() reports every change, from the platform's own
+    // signals. Without them, the reader also reads the saved progress once a
+    // minute.
+    virtual bool signalsChanges() const { return false; }
     virtual bool write(const ReadingProgress &expected, const QString &location, double percent, bool finished,
                        const ReadingActivity &activity, ReadingProgress *verified, QString *error) = 0;
     // Called once under the loading view, without position or estimate writes.

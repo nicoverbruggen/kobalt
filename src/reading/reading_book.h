@@ -100,6 +100,8 @@ public:
     void markFinished();
     void suppressFinishPrompt() { finishPromptSuppressed = true; }
     void pollProgress();
+    // Makes the next check read, for a bridge without change signals. A
+    // signalled bridge reads only after a signal or a failed read.
     void invalidateProgress() {
         progressPoll.invalidate();
     }
@@ -180,6 +182,8 @@ private:
     ReadingProgress baseline;
     ProgressReconciler reconciliation;
     QElapsedTimer progressPoll;
+    bool progressRetry = false;
+    int progressRetries = 0;
     ReadingTimer activeReading;
     bool sleepingReading = false;
     ReadingHistory::UtcClock utc;

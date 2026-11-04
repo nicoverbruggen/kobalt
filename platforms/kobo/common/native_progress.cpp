@@ -18,13 +18,14 @@ NativeProgress::NativeProgress(QString identity) : book(std::move(identity)), co
 #ifndef KOBALT_READER_HARDWARE
     failNextWrite = false;
 #endif
+    bool usbSignalled = false, syncSignalled = false;
     const auto manager = symbol<QObject *(*)()>("_ZN19PlugWorkflowManager14sharedInstanceEv");
     if (manager) {
         auto *usb = manager();
         connect(usb, SIGNAL(aboutToConnect()), this, SLOT(beginTransition()));
         connect(usb, SIGNAL(aboutToUnplug()), this, SLOT(beginTransition()));
         connect(usb, SIGNAL(startedProcessing()), this, SLOT(beginProcessing()));
-        connect(usb, SIGNAL(doneProcessing()), this, SLOT(endTransition()));
+        usbSignalled = bool(connect(usb, SIGNAL(doneProcessing()), this, SLOT(endTransition())));
     }
     if (const auto plug = symbol<QObject *(*)()>("_ZN11PlugManager14sharedInstanceEv")) {
         // Nickel can call its unplug slot without passing through the PLT
@@ -33,9 +34,13 @@ NativeProgress::NativeProgress(QString identity) : book(std::move(identity)), co
         connect(plug(), SIGNAL(unplugged()), this, SLOT(finishUnplug()), Qt::QueuedConnection);
     }
     if (const auto sync = symbol<QObject *(*)()>("_ZN13N3SyncManager14sharedInstanceEv")) {
-        connect(sync(), SIGNAL(finished()), this, SLOT(markChanged()));
-        connect(sync(), SIGNAL(userProfileUpdated()), this, SLOT(markChanged()));
+        const bool finished = bool(connect(sync(), SIGNAL(finished()), this, SLOT(markChanged())));
+        const bool profile = bool(connect(sync(), SIGNAL(userProfileUpdated()), this, SLOT(markChanged())));
+        syncSignalled = finished && profile;
     }
+    // Without these signals the reader falls back to reading Nickel's saved
+    // position once a minute.
+    signalled = usbSignalled && syncSignalled;
 }
 NativeProgress::~NativeProgress() {
     if (active == this)

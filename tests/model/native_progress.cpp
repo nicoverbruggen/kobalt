@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
     QObject::connect(plug, &PlugManager::unplugged, usb, &PlugWorkflowManager::unplugged);
     kobalt::NativeProgress progress(QStringLiteral("cancel-unplug-fixture"));
     require(!progress.deviceTransition(), "reading starts outside a USB transition");
+    require(progress.signalsChanges(), "connected sync and USB signals replace the minute progress read");
     progress.takeChange();
     int notifications = 0;
     progress.changeAvailable = [&] {

@@ -1889,6 +1889,9 @@ void Reader::showFontPicker() {
     Choice slot{QStringLiteral("Aa"), defaultFace, "rrFontDefaultSlot", strings::get("reader.recommended_fonts")};
     slot.detail = strings::get("reader.set_default_font");
     slot.placeholder = true;
+    // The Publisher fonts row samples Libron to fit its two-line caption.
+    // Without this registration the sample can measure a fallback face.
+    registerPickerFonts(QString::fromLatin1(kobalt::defaultFontFace));
     if (!services.phoneLayout) {
         // Registration reads only metadata. The slot's Aa loads its face when drawn.
         registerPickerFonts(defaultFace);

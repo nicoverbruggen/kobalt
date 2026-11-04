@@ -197,7 +197,8 @@ set(resources "${KOBALT_ROOT}/assets")
 file(GLOB notices CONFIGURE_DEPENDS "${resources}/notices/*")
 qt_add_resources(kobalt-desktop desktop_artwork PREFIX "/desktop" BASE "${resources}" FILES "${resources}/kobalt-android.svg")
 qt_add_resources(kobalt-desktop notices PREFIX "/kobalt" BASE "${resources}" FILES "${resources}/acknowledgments.json" ${notices}
-    "${resources}/samples/words-and-letters.html" "${resources}/samples/layout.html")
+    "${resources}/samples/words-and-letters.html" "${resources}/samples/layout.html"
+    "${resources}/samples/hanging-punctuation.html")
 if(APPLE)
     set(bundle_assets "${CMAKE_CURRENT_BINARY_DIR}/Kobalt.app/Contents/Resources/assets")
     add_custom_command(OUTPUT "${bundle_assets}/manifest.json"

@@ -71,8 +71,29 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         path.moveTo(x1, y1);
         path.lineTo(x2, y2);
     };
-    // Keyboard symbols use the same 24-unit grid and stroke as our other drawings.
-    if (icon == ControlIcon::FitImage) {
+    if (icon == ControlIcon::WidowsOrphans) {
+        line(11, 18, 34, 18);
+        line(11, 32, 37, 32);
+        line(11, 46, 29, 46);
+        path.moveTo(44, 14);
+        path.lineTo(51, 14);
+        path.lineTo(51, 50);
+        path.lineTo(44, 50);
+    } else if (icon == ControlIcon::HangingPunctuation) {
+        line(11, 20, 36, 20);
+        line(11, 35, 40, 35);
+        line(11, 49, 30, 49);
+        path.moveTo(51.8, 21);
+        path.cubicTo(51.8, 26, 49.6, 29, 47, 30);
+        QPainterPathStroker stroke;
+        stroke.setWidth(result.stroke);
+        stroke.setCapStyle(result.cap);
+        stroke.setJoinStyle(result.join);
+        QPainterPath dot;
+        dot.addEllipse(QPointF(49, 20), 3.5, 3.5);
+        path = stroke.createStroke(path).united(dot);
+        result.filled = true;
+    } else if (icon == ControlIcon::FitImage) {
         line(22, 9, 9, 9); line(9, 9, 9, 22);
         line(42, 9, 55, 9); line(55, 9, 55, 22);
         line(9, 42, 9, 55); line(9, 55, 22, 55);
@@ -192,6 +213,7 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         const char *names[] = {"arrows-horizontal", "paragraph", "arrows-vertical", "magic-wand", "eye-slash"};
         result.canvas = 256;
         result.filled = true;
+        static_assert(sizeof(names) / sizeof(*names) == size_t(int(ControlIcon::Hidden) - int(ControlIcon::SpreadHorizontal) + 1));
         phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::SpreadHorizontal)]), path);
     } else if (icon == ControlIcon::OneColumn || icon == ControlIcon::TwoColumns || icon == ControlIcon::Sort) {
         result.canvas = 256;

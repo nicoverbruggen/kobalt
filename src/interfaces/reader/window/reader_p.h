@@ -608,6 +608,7 @@ private:
     int settingsParagraphIndent = -1;
     QJsonObject settingsBeautifier;
     int settingsTracking = 0;
+    bool settingsHangingPunctuation = false;
     QString settingsWidowsOrphans = "publisher";
     QString settingsVerticalSpacing = "off", settingsVerticalSpacingScope = "all";
     // `changed` is the styling setting that just changed, as a
@@ -618,7 +619,7 @@ private:
     // The selected option of a SettingsPanel::AdvancedText setting, in sheet order.
     int stylingChoice(int feature) const;
     // The latest sample render of each setting. Setting one stops its render.
-    std::array<std::shared_ptr<std::atomic_bool>, 6> stylingSampleRenders;
+    std::array<std::shared_ptr<std::atomic_bool>, 7> stylingSampleRenders;
     // Includes queued renders until their results reach the GUI thread.
     int stylingSamplesPending = 0;
     void cancelStylingSamples();

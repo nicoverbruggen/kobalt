@@ -498,6 +498,8 @@ Android emulator checks cover portrait and landscape with and without a camera c
 
 `ui.libraryCanvasFollowsViewport` simulates portrait and landscape surfaces, with cutouts on either side. It checks matching Library and reader horizontal bounds, reserved Library system bars, the native handoff content size and Library canvas fit.
 
+`engine.advanced-text` checks soft and automatic hyphens and punctuation in one and two columns, outer-margin and gutter ink, alignment behavior, exact restoration after disabling, previews and cached reopening. `model.appearance-settings` checks global precedence, the Off default, invalid values and appearance identity. `desktop.advancedText` checks the Styling row, distinct Off and On previews, delayed application and persistence across reopening. The full gallery includes both hanging-punctuation choices.
+
 ## Font memory and crash context
 
 Font pickers render each visible font-name preview when its label first paints. The renderer opens a regular face from its file, renders the label, then closes the face. It uses a separate FreeType library and does not register preview fonts with Qt or retain their bytes in the private text renderer. Characters the face lacks use the bundled fallback faces, which are also opened from their files. A page therefore shows all its samples in the same screen update. The Publisher Fonts row uses a Libron sample. A font that cannot render its name keeps the interface-font label. Nothing generates the whole catalog at startup.

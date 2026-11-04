@@ -170,16 +170,16 @@ int main(int argc, char **argv) {
         require(model.applyAppearance({{"columns", count == 2 ? 1 : 2}}), "Cannot change column count");
         require(model.viewport() == QSize(1000, 800), "Column change lost screen size");
     }
-    for (bool rtl : {false, true}) for (bool dark : {false, true}) for (int count : {2}) {
+    for (bool rtl : {false, true}) for (bool dark : {false, true}) for (bool hanging : {false, true}) for (int count : {2}) {
         const QByteArray paragraph = "<p>" + QByteArray("Amber birch cedar dogwood elm fir. ").repeated(100) + "</p>";
         kobalt::ReaderModel model(kobalt::test::readerFonts());
-        open(model, paragraph, {}, {{"columns", count}, {"margin_pixels", 40}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {1000, 800}, rtl);
+        open(model, paragraph, {}, {{"columns", count}, {"hanging_punctuation", hanging}, {"margin_pixels", 40}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {1000, 800}, rtl);
         for (int gap : {0, 20, 90}) {
             require(model.applyAppearance({{"column_spacing", gap}}), "Cannot change column spacing");
             require(model.state().value("column_spacing").toInt() == gap, "Column spacing was not retained");
             const int width = (1000 - 80 - gap * (count - 1)) / count;
             kobalt::ReaderModel narrow(kobalt::test::readerFonts());
-            open(narrow, paragraph, {}, {{"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {width, 800}, rtl);
+            open(narrow, paragraph, {}, {{"hanging_punctuation", hanging}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {width, 800}, rtl);
             const auto image = model.image(0);
             for (int i = 0; i < count; ++i) {
                 const int left = 40 + (rtl ? count - 1 - i : i) * (width + gap);
@@ -189,8 +189,10 @@ int main(int argc, char **argv) {
                 for (int y = 28; y < 75 && word.text.isEmpty(); y += 3)
                     for (int x = left + 2; x < left + width && word.text.isEmpty(); x += 4)
                         word = model.wordAt({x, y});
-                require(!word.text.isEmpty() && word.rectangles.first().left() >= left &&
-                            word.rectangles.first().right() < left + width,
+                // Hanging can include the glyph's side bearing as well as punctuation.
+                const int allowance = hanging ? qMax(1, qMin(40, gap / 2)) : 0;
+                require(!word.text.isEmpty() && word.rectangles.first().left() >= left - allowance &&
+                            word.rectangles.first().right() < left + width + allowance,
                         "Outside margins displaced column selection geometry");
             }
             for (int x : {10, 990}) {
@@ -209,7 +211,7 @@ int main(int argc, char **argv) {
         require(model.applyAppearance({{"margin_pixels", 60}}), "Cannot change outer margins");
         require(model.applyAppearance({{"columns", 1}}), "Cannot restore one column with outer margins");
         kobalt::ReaderModel single(kobalt::test::readerFonts());
-        open(single, paragraph, {}, {{"margin_pixels", 60}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {1000, 800}, rtl);
+        open(single, paragraph, {}, {{"hanging_punctuation", hanging}, {"margin_pixels", 60}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {1000, 800}, rtl);
         require(model.image(0) == single.image(0), "Column settings changed single-column margins");
         require(!model.applyAppearance({{"column_spacing", -1}}) &&
                     !model.applyAppearance({{"column_spacing", kobalt::maximumMarginPixels() + 1}}),

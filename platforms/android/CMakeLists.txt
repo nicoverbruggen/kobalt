@@ -96,7 +96,8 @@ qt_add_resources(kobalt_android android_manifest PREFIX "/android-assets" FILES 
 set(resources "${KOBALT_ROOT}/assets")
 file(GLOB notices CONFIGURE_DEPENDS "${resources}/notices/*")
 qt_add_resources(kobalt_android notices PREFIX "/kobalt" BASE "${resources}" FILES "${resources}/acknowledgments.json" ${notices}
-    "${resources}/samples/words-and-letters.html" "${resources}/samples/layout.html")
+    "${resources}/samples/words-and-letters.html" "${resources}/samples/layout.html"
+    "${resources}/samples/hanging-punctuation.html")
 
 if(KOBALT_ANDROID_RELEASE)
     set(KOBALT_ANDROID_PACKAGE com.nicoverbruggen.kobalt)

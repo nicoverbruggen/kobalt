@@ -91,7 +91,7 @@ int main() {
     require(appearance::same({}, dictionary), "Dictionary UI preferences invalidated the book layout");
     // Appearance settings decide the layout. The list must stay complete, because a
     // missing key would let a retained layout survive a changed setting.
-    require(appearance::keys.size() == 35, "The appearance keys changed without this check");
+    require(appearance::keys.size() == 36, "The appearance keys changed without this check");
     require(appearance::bookDefaults({}).value("paragraph_indent").toInt() == -1,
             "Paragraph indentation no longer defaults to Publisher");
     for (int percent : {-1, 0, 100, 300}) {
@@ -231,17 +231,17 @@ int main() {
         appearance::copy(copied, changed);
         require(copied.value(key) == changed.value(key), "Preview lost a normalization rule");
     }
-    const auto advanced = qt::object({{"word_spacing", 80}, {"justification_tracking", 5}, {"widows_orphans", "avoid"}});
+    const auto advanced = qt::object({{"word_spacing", 80}, {"justification_tracking", 5}, {"hanging_punctuation", true}, {"widows_orphans", "avoid"}});
     auto advancedBook = qt::object({{"font_pixels", 40}, {"word_spacing", 120}, {"justification_tracking", 15}, {"widows_orphans", "allow"}});
     appearance::applyBookDefaults(advancedBook, appearance::bookDefaults(advanced));
     require(advancedBook.value("word_spacing").toInt() == 80 && advancedBook.value("justification_tracking").toInt() == 5 &&
-                advancedBook.value("widows_orphans").toString() == "avoid",
+                advancedBook.value("widows_orphans").toString() == "avoid" && advancedBook.value("hanging_punctuation").toBool(),
             "An existing book replaced global advanced text settings");
     appearance::applyBookDefaults(advancedBook, appearance::bookDefaults({}));
     require(advancedBook.value("word_spacing").toInt() == 100 && advancedBook.value("justification_tracking").toInt() == 0 &&
-                advancedBook.value("widows_orphans").toString() == "publisher",
+                advancedBook.value("widows_orphans").toString() == "publisher" && !advancedBook.value("hanging_punctuation").toBool(),
             "Missing global settings retained stale advanced text choices");
-    for (const auto *key : {"word_spacing", "justification_tracking", "widows_orphans"}) {
+    for (const auto *key : {"word_spacing", "justification_tracking", "hanging_punctuation", "widows_orphans"}) {
         auto changedAdvanced = from;
         changedAdvanced[key] = advanced.value(key);
         require(!appearance::same(changedAdvanced, from), "Advanced text reused a retained layout");
@@ -249,6 +249,9 @@ int main() {
         appearance::copy(copy, changedAdvanced);
         require(copy.value(key) == advanced.value(key), "Preview copy lost advanced text");
     }
+    for (const auto &invalid : {QJsonValue("true"), QJsonValue(1), QJsonValue()})
+        require(!appearance::cleanPreferences({{"hanging_punctuation", invalid}}).value("hanging_punctuation").toBool(),
+                "Invalid hanging punctuation preference did not default to Off");
     for (const auto *key : {"top_margin_pixels", "bottom_margin_pixels"}) {
         auto vertical = from;
         vertical[key] = 36;

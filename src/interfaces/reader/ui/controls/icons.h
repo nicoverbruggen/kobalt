@@ -90,6 +90,8 @@ enum class ControlIcon {
     SpreadVertical,
     MagicWand,
     Hidden,
+    WidowsOrphans,
+    HangingPunctuation,
     Star,
     Map,
     Pin,

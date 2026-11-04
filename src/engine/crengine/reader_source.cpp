@@ -465,6 +465,12 @@ bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, c
         engine_->getDocument()->forceReinitStyles();
     }
     applyStyleSheet();
+    if (openedFromCache_ && columns_ > 1) {
+        // Cached paragraph geometry may have been saved with different overhang
+        // space. CREngine's render hash does not include these side allowances.
+        engine_->getDocument()->forceReinitStyles();
+        engine_->requestRender();
+    }
     engine_->Render();
     openingTimes_["model_paginate_ms"] = double(phase.restart());
     if (!resourceError().isEmpty()) {

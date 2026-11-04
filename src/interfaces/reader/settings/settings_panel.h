@@ -55,7 +55,7 @@ public:
     static QString timeRemainingFormatLabel(const QString &format);
     void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
     static QString columnSpacingLabel(int percent);
-    enum class AdvancedText { WordSpacing, Tracking, Pagination, VerticalSpacing, VerticalSpacingScope, ParagraphSpacing };
+    enum class AdvancedText { WordSpacing, Tracking, HangingPunctuation, Pagination, VerticalSpacing, VerticalSpacingScope, ParagraphSpacing };
     static QString paragraphSpacingLabel(int percent);
     void showBeautifier(const QJsonObject &current, std::function<void(QJsonObject)> chosen);
     void showParagraphAdjustments(int spacing, int indent, std::function<void(int, int)> chosen);
@@ -104,7 +104,7 @@ public:
     ui::DescribedOption *landscapeColumnsOption = nullptr;
     ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr, *verticalSpacingScopeButton = nullptr;
-    ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr, *widowsOrphansButton = nullptr;
+    ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr, *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;
     ui::CaptionButton *paragraphSpacingButton = nullptr, *beautifierButton = nullptr;
     ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr, *sleepTileButton = nullptr, *menuViewButton = nullptr;
     ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr, *navigationBarButton = nullptr,

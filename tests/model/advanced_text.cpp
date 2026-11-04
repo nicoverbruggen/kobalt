@@ -24,7 +24,7 @@ void open(kobalt::ReaderModel &model, const QByteArray &body, const QByteArray &
         }, std::make_shared<std::atomic_bool>(false));
     settings["font_pixels"] = 40;
     settings["line_spacing"] = 100;
-    settings["margin_pixels"] = 0;
+    if (!settings.contains("margin_pixels")) settings["margin_pixels"] = 0;
     settings["top_margin_pixels"] = 0;
     settings["bottom_margin_pixels"] = 0;
     QString error;
@@ -168,6 +168,74 @@ int main(int argc, char **argv) {
         require(paragraphPages(inherited) == avoided, "Publisher mode lost inherited avoidance");
     }
     require(orphan && widow, "Fixture did not exercise both page-boundary cases");
+    // Hanging punctuation needs real paper beside both one- and two-column text.
+    // Exercise the public appearance path, including reflow, previews and cached reopening.
+    for (int columns : {1, 2}) for (const auto *alignment : {"justify", "right", "left", "center"})
+        for (const auto *kind : {"soft-hyphens", "automatic-hyphens", "punctuation"}) {
+        const QByteArray text = QString(kind) == "soft-hyphens"
+            ? "extra&#173;or&#173;di&#173;na&#173;ry re&#173;mark&#173;a&#173;ble ty&#173;pog&#173;ra&#173;phy "
+            : QString(kind) == "automatic-hyphens" ? "extraordinary remarkable typography "
+            : "&quot;Reading,&quot; she said, &quot;is a pleasure!&quot; (Really?) Yes; indeed. ";
+        const QByteArray body = "<p lang='en'>" + text.repeated(35) + "</p>";
+        QJsonObject settings{{"columns", columns}, {"column_spacing", 80}, {"margin_pixels", 40},
+                             {"text_alignment", alignment}, {"hyphenation", "on"}};
+        ReaderModel hanging(kobalt::test::readerFonts());
+        open(hanging, body, {}, settings, {800, 600});
+        const auto before = hanging.image(0);
+        const auto anchor = hanging.position();
+        const auto rightInk = [](const QImage &image, int start, int end) {
+            int ink = 0;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = start; x < end; ++x)
+                    ink += qGray(image.pixel(x, y)) < 128;
+            return ink;
+        };
+        require(!hanging.state().value("hanging_punctuation").toBool(), "Hanging punctuation default changed");
+        require(hanging.applyAppearance({{"hanging_punctuation", true}}), "Cannot enable hanging punctuation");
+        const auto enabled = hanging.image(0);
+        if (QString(alignment) == "justify" || QString(alignment) == "right") {
+            require(enabled != before && rightInk(enabled, 760, 800) > rightInk(before, 760, 800),
+                    "Hyphens did not extend into the outer margin");
+            if (columns == 2)
+                require(rightInk(enabled, 360, 400) > rightInk(before, 360, 400),
+                        "Hyphens did not extend into the column gutter");
+        } else if (QString(kind) != "punctuation" || QString(alignment) == "center") {
+            require(enabled == before, "Hanging hyphens changed left-aligned or centered text");
+        }
+        require(rightInk(enabled, 799, 800) == 0, "Hanging punctuation reached the screen edge");
+        ReaderModel preview(kobalt::test::readerFonts());
+        QString error;
+        require(preview.openPreview(hanging, {800, 600}, &error), qPrintable(error));
+        require(preview.image(0) == enabled, "Preview lost hanging punctuation or column geometry");
+        ReaderModel reopened(kobalt::test::readerFonts());
+        open(reopened, body, {}, hanging.state(), {800, 600});
+        require(reopened.image(0) == enabled, "Reopening lost hanging punctuation");
+        require(hanging.applyAppearance({{"hanging_punctuation", false}}) && hanging.image(0) == before &&
+                    hanging.position() == anchor, "Disabling hanging punctuation did not restore pixels and position");
+        if (QString(alignment) == "justify") {
+            QTemporaryDir directory;
+            require(directory.isValid(), "Cannot create hanging punctuation cache");
+            {
+                ReaderModel cached(kobalt::test::readerFonts());
+                cached.setDocumentCache(directory.path(), "hanging", "hanging-test", 4096);
+                open(cached, body, {}, settings, {800, 600});
+                require(cached.saveDocumentCache(), "Cannot save hanging punctuation cache");
+            }
+            ReaderModel restored(kobalt::test::readerFonts());
+            restored.setDocumentCache(directory.path(), "hanging", "hanging-test", 4096);
+            settings["hanging_punctuation"] = true;
+            open(restored, body, {}, settings, {800, 600});
+            require(restored.openedFromCache() && restored.image(0) == enabled,
+                    "Cached reopening retained disabled hanging punctuation");
+            require(restored.saveDocumentCache(), "Cannot cache enabled hanging punctuation");
+            ReaderModel disabled(kobalt::test::readerFonts());
+            disabled.setDocumentCache(directory.path(), "hanging", "hanging-test", 4096);
+            settings["hanging_punctuation"] = false;
+            open(disabled, body, {}, settings, {800, 600});
+            require(disabled.openedFromCache() && disabled.image(0) == before,
+                    "Cached reopening retained enabled hanging punctuation");
+        }
+    }
     QTemporaryDir cache;
     require(cache.isValid(), "Cannot create advanced text cache");
     {

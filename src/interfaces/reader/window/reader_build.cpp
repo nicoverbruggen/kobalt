@@ -1395,6 +1395,13 @@ void Reader::buildSettings() {
             showAdvancedText(int(SettingsPanel::AdvancedText::Tracking));
         }, model->alignment());
     });
+    connect(settings->hangingPunctuationButton, &QPushButton::clicked, this, [this, settings] {
+        settings->showAdvancedTextChoices(SettingsPanel::AdvancedText::HangingPunctuation,
+            settingsHangingPunctuation ? 1 : 0, [this](int index) {
+                settingsHangingPunctuation = index != 0;
+                showAdvancedText(int(SettingsPanel::AdvancedText::HangingPunctuation));
+            });
+    });
     connect(settings->widowsOrphansButton, &QPushButton::clicked, this, [this, settings] {
         settings->showAdvancedTextChoices(SettingsPanel::AdvancedText::Pagination,
             stylingChoice(int(SettingsPanel::AdvancedText::Pagination)), [this](int index) {

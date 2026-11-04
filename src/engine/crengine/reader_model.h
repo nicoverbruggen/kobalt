@@ -357,6 +357,7 @@ private:
     QString verticalSpacing_ = "off", verticalSpacingScope_ = "all";
     int wordSpacing_ = 100;
     int justificationTracking_ = 0;
+    bool hangingPunctuation_ = false;
     QString widowsOrphans_ = "publisher";
     QSize alternateViewport_;
     int alternateColumns_ = 1, alternateColumnSpacing_ = 0, layoutPpi_ = 0;

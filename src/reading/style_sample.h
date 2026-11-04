@@ -31,6 +31,7 @@ struct StyleSampleRequest {
     // after the last whole line. Empty when the setting changes page breaks.
     QSize crop;
     QPoint cropOrigin;
+    bool marginGuides = false;
     // Page spacing only: the reading area within the page, and the size of a
     // full-resolution view of its bottom edge on the page that changes.
     QRect readingArea;
@@ -48,6 +49,8 @@ struct StyleSample {
     QVector<QVector<QImage>> spreads;
     // One crop per option when the request asked for crops.
     QVector<QImage> crops;
+    // Text edges in crop pixels, or an empty rectangle when no guides are needed.
+    QRect cropReadingArea;
     // Extra paragraph gaps within each crop, excluding ordinary line leading.
     QVector<QVector<QRect>> cropGaps;
     // The reading area on a scaled page of the spread.

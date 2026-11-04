@@ -1347,12 +1347,18 @@ void tour(Fixture &fixture, const QString &name, bool screenshots) {
              previous && previous->isVisible() && previous->isEnabled();)
             QVERIFY(fixture.press("rrSettingsOptionsPrevious"));
         for (const auto &[row, popup, suffix] : {std::tuple{"rrWordSpacing", "rrWordSpacingPopup", "styling-word-spacing"},
+                                                std::tuple{"rrHangingPunctuation", "rrHangingPunctuationPopup", "styling-hanging-punctuation"},
                                                 std::tuple{"rrWidowsOrphans", "rrWidowsOrphansPopup", "styling-widows"}}) {
             QVERIFY(revealSettingsOption(fixture, row));
             QVERIFY(fixture.press(row));
             QTRY_VERIFY(fixture.visible(popup));
             QTRY_VERIFY_WITH_TIMEOUT(fixture.widget("rrStylingPreview")->property("sample_ready").toBool(), 10000);
             QVERIFY(scene(suffix));
+            if (QString(row) == "rrHangingPunctuation") {
+                QVERIFY(fixture.press("rrHangingPunctuation_on"));
+                QVERIFY(scene("styling-hanging-punctuation-on"));
+                QVERIFY(fixture.press("rrHangingPunctuation_off"));
+            }
             if (QString(row) == "rrWidowsOrphans") {
                 QVERIFY(fixture.press("rrWidowsOrphans_avoid"));
                 QVERIFY(scene("styling-widows-avoid"));
@@ -6522,6 +6528,31 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrTrackingClose"));
         QTRY_VERIFY(!fixture.visible("rrTrackingPopup"));
         QCOMPARE(tracking->caption(), strings::get("settings.justification_tracking_more").toUpper());
+        QVERIFY(reveal("rrHangingPunctuation"));
+        auto *hanging = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrHangingPunctuation"));
+        QVERIFY(hanging);
+        QCOMPARE(hanging->caption(), strings::get("common.off").toUpper());
+        QVERIFY(fixture.press("rrHangingPunctuation"));
+        QTRY_VERIFY(fixture.visible("rrHangingPunctuation_on"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.widget("rrStylingPreview")->property("sample_ready").toBool(), 10000);
+        // The paper must keep its logical size on Retina too. Measure the painted
+        // sample rather than accepting a correctly sized but mostly empty widget.
+        const auto sampleImage = preview();
+        const auto background = sampleImage.pixel(0, 0);
+        int sampleLeft = sampleImage.width(), sampleRight = -1;
+        for (int y = 0; y < sampleImage.height(); ++y)
+            for (int x = 0; x < sampleImage.width(); ++x)
+                if (sampleImage.pixel(x, y) != background) {
+                    sampleLeft = qMin(sampleLeft, x);
+                    sampleRight = qMax(sampleRight, x);
+                }
+        const qreal paintedWidth = (sampleRight - sampleLeft + 1) / sampleImage.devicePixelRatio();
+        QVERIFY(paintedWidth >= qMin(ui::px(600), fixture.widget("rrStylingPreview")->width() - 2 * ui::px(48)));
+        compareOptions("rrHangingPunctuationPopup", {"rrHangingPunctuation_off", "rrHangingPunctuation_on"});
+        QVERIFY(fixture.press("rrHangingPunctuationClose"));
+        QTRY_VERIFY(!fixture.visible("rrHangingPunctuationPopup"));
+        QCOMPARE(hanging->caption(), strings::get("common.on").toUpper());
+        QVERIFY(!storage::readJson(fixture.paths.preferences()).contains("hanging_punctuation"));
         QVERIFY(reveal("rrWidowsOrphans"));
         QVERIFY(fixture.press("rrWidowsOrphans"));
         QTRY_VERIFY(fixture.visible("rrWidowsOrphans_avoid"));
@@ -6551,9 +6582,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::qWait(ui::metrics::contents::exitGuardMilliseconds + 10);
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("word_spacing").toInt(), 120);
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("justification_tracking").toInt(), 15);
+        QVERIFY(storage::readJson(fixture.paths.preferences()).value("hanging_punctuation").toBool());
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("widows_orphans").toString(), "avoid");
         QTRY_COMPARE(fixture.state().value("word_spacing").toInt(), 120);
         QTRY_COMPARE(fixture.state().value("justification_tracking").toInt(), 15);
+        QTRY_VERIFY(fixture.state().value("hanging_punctuation").toBool());
         QTRY_COMPARE(fixture.state().value("widows_orphans").toString(), "avoid");
         if (!fixture.visible("rrReturn"))
             QVERIFY(fixture.press("rrPage"));
@@ -6566,6 +6599,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("word_spacing").toInt(), 120);
         QTRY_COMPARE(fixture.state().value("justification_tracking").toInt(), 15);
+        QTRY_VERIFY(fixture.state().value("hanging_punctuation").toBool());
         QTRY_COMPARE(fixture.state().value("widows_orphans").toString(), "avoid");
     }
     void fullWidthPanels_data() { bookmarks_data(); }
@@ -6611,7 +6645,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrGeneralSettings"));
         checkBounds(fixture.widget("rrGeneralSettings"));
         QVERIFY(fixture.press("rrSettingsStyling"));
-        for (const auto *row : {"rrParagraphSpacing", "rrWordSpacing", "rrJustificationTracking", "rrWidowsOrphans", "rrVerticalSpacing"}) {
+        for (const auto *row : {"rrParagraphSpacing", "rrWordSpacing", "rrJustificationTracking", "rrHangingPunctuation", "rrWidowsOrphans", "rrVerticalSpacing"}) {
             QVERIFY(revealSettingsOption(fixture, row));
             QVERIFY(fixture.press(row));
             const QString prefix = QString(row) == "rrJustificationTracking" ? "rrTracking" : row;
@@ -9638,7 +9672,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3642;
+    int expectedScreenshots = lightGallery ? 182 : 3675;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

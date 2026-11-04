@@ -15,7 +15,7 @@
 
 namespace kobalt {
 namespace {
-// The two XHTML files are the editable source for all Styling previews.
+// The XHTML files are the editable source for Styling previews.
 // Keep their top-level paragraphs and headings as blocks so page-break
 // previews can try another starting paragraph when the first break is unchanged.
 struct SampleBlock {
@@ -27,8 +27,8 @@ struct SampleDocument {
     QByteArray prefix;
     QVector<SampleBlock> blocks;
 };
-SampleDocument sampleDocument(bool words) {
-    QFile file(words ? ":/kobalt/samples/words-and-letters.html" : ":/kobalt/samples/layout.html");
+SampleDocument sampleDocument(bool words, bool hanging) {
+    QFile file(hanging ? ":/kobalt/samples/hanging-punctuation.html" : words ? ":/kobalt/samples/words-and-letters.html" : ":/kobalt/samples/layout.html");
     if (!file.open(QIODevice::ReadOnly)) return {};
     const auto html = file.readAll();
     const int body = html.indexOf("<body>");
@@ -230,7 +230,7 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
     StyleSample result;
     if (request.values.isEmpty() || request.page.isEmpty())
         return result;
-    const auto document = sampleDocument(request.key == "word_spacing" || request.key == "justification_tracking");
+    const auto document = sampleDocument(request.key == "word_spacing" || request.key == "justification_tracking", request.key == "hanging_punctuation");
     if (document.blocks.isEmpty()) return result;
     QStringList paragraphTexts;
     for (const auto &block : document.blocks)
@@ -284,6 +284,11 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
     QVector<QRect> paragraphBaseline;
     const bool paragraphs = request.key == "paragraph_spacing";
     const QRect cropArea(request.cropOrigin, request.crop);
+    if (request.marginGuides) {
+        const int margin = settings.value("margin_pixels").toInt();
+        result.cropReadingArea = QRect(margin, 0, request.page.width() - 2 * margin, request.page.height())
+                                     .translated(-request.cropOrigin);
+    }
     const int paragraphMargin = settings.value("margin_pixels").toInt();
     const QRect paragraphArea(paragraphMargin, 0, request.page.width() - 2 * paragraphMargin, request.page.height());
     if (paragraphs) {

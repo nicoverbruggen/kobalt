@@ -195,6 +195,8 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"styling-widows-avoid", "Widows and orphans: avoid both"},
         {"styling-widows-allow", "Widows and orphans: allow both"},
         {"styling-word-spacing", "Word spacing preview"},
+        {"styling-hanging-punctuation", "Hanging punctuation: off"},
+        {"styling-hanging-punctuation-on", "Hanging punctuation: on"},
         {"settings-system", "System settings"},
         {"session-timeout", "New session after sleep"},
         {"settings-time-remaining-format", "Time remaining format"},

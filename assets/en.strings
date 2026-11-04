@@ -1292,3 +1292,11 @@
 "time_remaining.about_hour" = "about an hour";
 /* Arguments: %1 */
 "time_remaining.about_hours" = "about %1 hours";
+
+"settings.hanging_punctuation" = "Hanging punctuation";
+"settings.hanging_punctuation_summary" = "Let punctuation and hyphens extend into the margins.";
+"settings.hanging_punctuation_off" = "Off";
+"settings.hanging_punctuation_on" = "On";
+"settings.hanging_punctuation_off_description" = "Keep punctuation within the text edges.";
+"settings.hanging_punctuation_on_description" = "Let punctuation and line-ending hyphens extend beyond the text edges.";
+"settings.hanging_punctuation_description" = "The dashed lines mark the text edges. The sample uses justified text. This preference affects all books.";

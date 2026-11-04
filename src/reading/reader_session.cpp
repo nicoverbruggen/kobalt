@@ -505,6 +505,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 const auto paragraphSpacing = saved.value("paragraph_spacing");
                 const auto paragraphIndent = saved.value("paragraph_indent");
                 const auto tracking = saved.value("justification_tracking");
+                const auto hanging = saved.value("hanging_punctuation");
                 const auto widowsOrphans = saved.value("widows_orphans");
                 if (!savedMatches)
                     saved = {};
@@ -518,6 +519,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 saved["paragraph_spacing"] = paragraphSpacing;
                 saved["paragraph_indent"] = paragraphIndent;
                 saved["justification_tracking"] = tracking;
+                saved["hanging_punctuation"] = hanging;
                 saved["widows_orphans"] = widowsOrphans;
                 appearance::migrateLineSpacing(saved);
                 if (!appearanceDefaults.isEmpty()) {

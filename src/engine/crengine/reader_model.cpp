@@ -549,7 +549,9 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
         columnSpacingPercent_ = 0;
     if (columnSpacingPercent_)
         columnSpacing_ = qRound(pixels_ * columnSpacingPercent_ / 100.0);
+    hangingPunctuation_ = saved.value("hanging_punctuation").toBool(false);
     engine_ = std::make_unique<ColumnView>();
+    engine_->setHangingPunctuation(hangingPunctuation_);
     engine_->setColumns(columns_);
     engine_->setColumnSpacing(columnSpacing_);
     // CREngine defaults to a 72-pixel cap. Use the same physical limits as the controls.
@@ -561,7 +563,7 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     properties->setInt(PROP_FORMAT_MIN_SPACE_CONDENSING_PERCENT, 100);
     properties->setInt(PROP_FORMAT_SPACE_WIDTH_SCALE_PERCENT, wordSpacing_);
     properties->setInt(PROP_FORMAT_MAX_ADDED_LETTER_SPACING_PERCENT, justificationTracking_);
-    properties->setInt(PROP_FLOATING_PUNCTUATION, 0);
+    properties->setInt(PROP_FLOATING_PUNCTUATION, hangingPunctuation_);
     properties->setInt(PROP_RENDER_BLOCK_RENDERING_FLAGS,
                        reduceChapterSpacing_
                            ? DEF_RENDER_BLOCK_RENDERING_FLAGS
@@ -799,6 +801,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     const bool verticalChanged = verticalSpacing != verticalSpacing_ || verticalScope != verticalSpacingScope_;
     const int wordSpacing = settings.value("word_spacing").toInt(wordSpacing_);
     const int tracking = settings.value("justification_tracking").toInt(justificationTracking_);
+    const bool hanging = settings.value("hanging_punctuation").toBool(hangingPunctuation_);
     if (size.width() < 320 || size.height() < 240)
         size = size_;
     const bool landscapeColumns = settings.value("two_columns_landscape").toBool(twoColumnsLandscape_);
@@ -824,7 +827,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     const bool thicknessChanged = weight != weight_;
     const bool styled = beautifierInitials != beautifierInitials_ || beautifierSpacing != beautifierSpacing_ ||
         beautifierIndent != beautifierIndent_ || fallbackFaces != fallbackFaces_ || normalizePageMargins != normalizePageMargins_ || reduceChapterSpacing != reduceChapterSpacing_ ||
-                        wordSpacing != wordSpacing_ || tracking != justificationTracking_ || widowsOrphans != widowsOrphans_ ||
+                        wordSpacing != wordSpacing_ || tracking != justificationTracking_ || hanging != hangingPunctuation_ || widowsOrphans != widowsOrphans_ ||
                         bionicChanged || axisChanged || opticalChanged || pixels != pixels_ || spacing != spacing_ ||
                         paragraphSpacing != paragraphSpacing_ ||
                         paragraphIndent != paragraphIndent_ ||
@@ -892,6 +895,8 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     engine_->setVerticalSpacing(verticalSpacing_ == "center" ? 2 : verticalSpacing_ == "expand" ? 1 : 0, verticalSpacingScope_ == "protection");
     wordSpacing_ = wordSpacing;
     justificationTracking_ = tracking;
+    hangingPunctuation_ = hanging;
+    engine_->setHangingPunctuation(hangingPunctuation_);
     widowsOrphans_ = widowsOrphans;
     if (styled) {
         setExtraFontWeight(0);
@@ -899,6 +904,7 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
         properties->setInt(PROP_FONT_BASE_WEIGHT, LVRendGetBaseFontWeight());
         properties->setInt(PROP_FORMAT_SPACE_WIDTH_SCALE_PERCENT, wordSpacing_);
         properties->setInt(PROP_FORMAT_MAX_ADDED_LETTER_SPACING_PERCENT, justificationTracking_);
+        properties->setInt(PROP_FLOATING_PUNCTUATION, hangingPunctuation_);
         properties->setInt(PROP_RENDER_BLOCK_RENDERING_FLAGS,
                            reduceChapterSpacing_
                                ? DEF_RENDER_BLOCK_RENDERING_FLAGS
@@ -1510,6 +1516,7 @@ QJsonObject ReaderModel::state() const {
                                {"column_spacing", columnSpacing_},
                                {"word_spacing", wordSpacing_},
                                {"justification_tracking", justificationTracking_},
+                               {"hanging_punctuation", hangingPunctuation_},
                                {"widows_orphans", widowsOrphans_},
                                {"dom_version", domVersion_},
                                {"page_progression_rtl", engine_ && engine_->getDocument()->getProps()->getStringDef(

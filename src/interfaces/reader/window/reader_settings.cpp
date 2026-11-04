@@ -314,6 +314,7 @@ void Reader::openSettings() {
     settingsBeautifier = appearance::normalizationSettings(preferences);
     settingsBeautifier[appearance::normalizationPresetKey] = appearance::normalizationPreset(preferences);
     settingsTracking = model->state().value("justification_tracking").toInt(0);
+    settingsHangingPunctuation = model->state().value("hanging_punctuation").toBool(false);
     settingsWidowsOrphans = model->state().value("widows_orphans").toString("publisher");
     showAdvancedText();
     animationOption->setChecked(services.softwarePageAnimations ? pageTurn::selected(preferences) == pageTurn::Style::Sweep
@@ -352,6 +353,7 @@ void Reader::showAdvancedText(int changed) {
              SettingsPanel::paragraphSpacingLabel(settingsParagraphIndent)).toUpper());
     const QString tracking = settingsTracking == 15 ? "more" : settingsTracking == 5 ? "subtle" : "off";
     panel->trackingButton->setCaption(strings::get(("settings.justification_tracking_" + tracking).toUtf8().constData()).toUpper());
+    panel->hangingPunctuationButton->setCaption(strings::get(settingsHangingPunctuation ? "common.on" : "common.off").toUpper());
     panel->widowsOrphansButton->setCaption(strings::get(("settings.widows_orphans_" + settingsWidowsOrphans).toUtf8().constData()).toUpper());
     panel->verticalSpacingButton->setCaption(strings::get(("settings.vertical_spacing_" + settingsVerticalSpacing).toUtf8().constData()).toUpper());
     panel->verticalSpacingScopeButton->setCaption(strings::get(("settings.vertical_spacing_scope_" + settingsVerticalSpacingScope).toUtf8().constData()).toUpper());
@@ -376,6 +378,8 @@ int Reader::stylingChoice(int feature) const {
         return settingsWordSpacing == 80 ? 0 : settingsWordSpacing == 120 ? 2 : 1;
     case Feature::Tracking:
         return settingsTracking == 15 ? 2 : settingsTracking == 5 ? 1 : 0;
+    case Feature::HangingPunctuation:
+        return settingsHangingPunctuation ? 1 : 0;
     case Feature::Pagination:
         return settingsWidowsOrphans == "allow" ? 2 : settingsWidowsOrphans == "avoid" ? 1 : 0;
     case Feature::VerticalSpacing:
@@ -400,6 +404,7 @@ void Reader::renderStylingSamples(int requested) {
     settings["paragraph_indent"] = settingsParagraphIndent;
     for (const auto *key : appearance::normalizationKeys) settings[key] = settingsBeautifier.value(key);
     settings["justification_tracking"] = settingsTracking;
+    settings["hanging_punctuation"] = settingsHangingPunctuation;
     settings["widows_orphans"] = settingsWidowsOrphans;
     settings["vertical_justification"] = settingsVerticalSpacing;
     settings["vertical_spacing_scope"] = settingsVerticalSpacingScope;
@@ -422,6 +427,7 @@ void Reader::renderStylingSamples(int requested) {
         {Feature::WordSpacing, "word_spacing", {80, 100, 120}},
         {Feature::ParagraphSpacing, "paragraph_spacing", {settingsParagraphSpacing}},
         {Feature::Tracking, "justification_tracking", {0, 5, 15}},
+        {Feature::HangingPunctuation, "hanging_punctuation", {false, true}},
         {Feature::Pagination, "widows_orphans", {QStringLiteral("publisher"), QStringLiteral("avoid"), QStringLiteral("allow")}},
         {Feature::VerticalSpacing, "vertical_justification", {QStringLiteral("off"), QStringLiteral("center"), QStringLiteral("expand")}},
         {Feature::VerticalSpacingScope, "vertical_spacing_scope", {QStringLiteral("all"), QStringLiteral("protection")}},
@@ -435,7 +441,7 @@ void Reader::renderStylingSamples(int requested) {
         // row is unavailable.
         if (entry.feature == Feature::VerticalSpacingScope && settingsVerticalSpacing == "off")
             continue;
-        const bool spacing = entry.feature == Feature::WordSpacing || entry.feature == Feature::Tracking;
+        const bool spacing = entry.feature == Feature::WordSpacing || entry.feature == Feature::Tracking || entry.feature == Feature::HangingPunctuation;
         StyleSampleRequest request;
         request.key = entry.key;
         request.values = entry.values;
@@ -461,12 +467,30 @@ void Reader::renderStylingSamples(int requested) {
             request.cropOrigin = {margin - paper, styleSampleReadingArea().top()};
             request.crop = {request.page.width() - 2 * margin + 2 * paper, readingPixels(640)};
         }
+        if (entry.feature == Feature::HangingPunctuation) {
+            // A fixed sample includes hyphens and closing quotes at the text edge.
+            // Keep both guides and enough paper to show the overhang.
+            const qreal ratio = qMax<qreal>(1, panel->devicePixelRatio());
+            const auto samplePixels = [ratio](int pixels) { return qRound(readingPixels(pixels) * ratio); };
+            request.settings["text_alignment"] = QStringLiteral("justify");
+            request.settings["hyphenation"] = QStringLiteral("on");
+            request.settings["font_face"] = QString(defaultFontFace);
+            request.settings["font_pixels"] = samplePixels(40);
+            request.settings["line_spacing"] = 130;
+            request.settings["line_spacing_version"] = 1;
+            request.settings["margin_pixels"] = samplePixels(48);
+            request.settings["top_margin_pixels"] = 0;
+            request.page = {samplePixels(650), samplePixels(1000)};
+            request.cropOrigin = {0, 0};
+            request.crop = {request.page.width(), samplePixels(300)};
+            request.marginGuides = true;
+        }
         request.thumbnail = panel->stylingPageSize(request.page, vertical);
         if (vertical) {
             request.readingArea = styleSampleReadingArea();
             request.detail = panel->stylingEdgeSize(request.page);
         }
-        if (spacing) {
+        if (spacing && entry.feature != Feature::HangingPunctuation) {
             request.crop = crop;
             request.cropOrigin = cropOrigin;
         }
@@ -567,6 +591,7 @@ void Reader::applySettings() {
     next[appearance::normalizationPresetKey] = appearance::normalizationPreset(settingsBeautifier);
     next.remove("avoid_wasteful_styling");
     next["justification_tracking"] = settingsTracking;
+    next["hanging_punctuation"] = settingsHangingPunctuation;
     next["widows_orphans"] = settingsWidowsOrphans;
     if (services.softwarePageAnimations) next[pageTurn::preferenceKey] = pageTurn::value(animationOption->isChecked() ? pageTurn::Style::Sweep : pageTurn::Style::Off);
     else next["page_animations"] = animationOption->isChecked();
@@ -623,6 +648,7 @@ void Reader::applySettings() {
     settings["paragraph_indent"] = settingsParagraphIndent;
     for (const auto *key : appearance::normalizationKeys) settings[key] = settingsBeautifier.value(key);
     settings["justification_tracking"] = settingsTracking;
+    settings["hanging_punctuation"] = settingsHangingPunctuation;
     settings["widows_orphans"] = settingsWidowsOrphans;
     settings["bold_reading"] = bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     if (restoringDefaults) {

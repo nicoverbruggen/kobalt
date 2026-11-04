@@ -109,6 +109,7 @@ public:
         pages = sample.spreads.value(choice);
         lines = sample.crops.value(choice);
         gaps = sample.cropGaps.value(choice);
+        cropReadingArea = sample.cropReadingArea;
         setProperty("paragraph_gap_count", gaps.size());
         readingArea = sample.readingArea;
         edge = sample.details.value(choice);
@@ -172,6 +173,15 @@ protected:
             painter.setClipRect(target);
             for (const auto &gap : gaps)
                 hatch(QRectF(QPointF(target.topLeft()) + QPointF(gap.topLeft()) * scale, QSizeF(gap.size()) * scale));
+            if (!cropReadingArea.isEmpty()) {
+                QPen guide(ink, 1, Qt::DashLine);
+                guide.setCosmetic(true);
+                painter.setPen(guide);
+                for (int x : {cropReadingArea.left(), cropReadingArea.right() + 1}) {
+                    const qreal edge = target.left() + x * scale;
+                    painter.drawLine(QPointF(edge, target.top()), QPointF(edge, target.bottom()));
+                }
+            }
             painter.restore();
             frame(sheet);
             return;
@@ -228,6 +238,7 @@ protected:
 private:
     QVector<QImage> pages;
     QImage lines, edge;
+    QRect cropReadingArea;
     QRectF readingArea;
     QRect edgeArea;
     QVector<QRect> spare;
@@ -512,20 +523,22 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *stylingRows = new QVBoxLayout(stylingPage);
     stylingRows->setContentsMargins(0, 0, 0, 0);
     stylingRows->setSpacing(0);
-    // Settings are grouped by what they change: spacing within lines, then
-    // where pages break and what happens to the space a break leaves.
+    // Group line styling, paragraph layout and page spacing separately.
     section(stylingPage, stylingRows, "rrAdvancedTextSection", strings::get("settings.section_words_letters"));
     wordSpacingButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrWordSpacing",
                                               strings::get("settings.word_spacing"), [] {});
     trackingButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrJustificationTracking",
                                            strings::get("settings.justification_tracking"), [] {});
+    hangingPunctuationButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrHangingPunctuation",
+        strings::get("settings.hanging_punctuation"), [] {});
+    hangingPunctuationButton->setDescription(strings::get("settings.hanging_punctuation_summary"));
     section(stylingPage, stylingRows, "rrParagraphSpacingSection", strings::get("settings.section_paragraphs"));
     paragraphSpacingButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrParagraphSpacing",
         strings::get("settings.paragraph_spacing"), [] {});
     paragraphSpacingButton->setDescription(strings::get("settings.paragraph_spacing_summary"));
-    section(stylingPage, stylingRows, "rrVerticalSpacingSection", strings::get("settings.section_page_breaks"));
     widowsOrphansButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrWidowsOrphans",
                                                strings::get("settings.widows_orphans"), [] {});
+    section(stylingPage, stylingRows, "rrVerticalSpacingSection", strings::get("settings.section_page_breaks"));
     verticalSpacingButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrVerticalSpacing",
         strings::get("settings.vertical_spacing_mode"), [] {});
     verticalSpacingButton->setDescription(strings::get("settings.vertical_spacing_description"));
@@ -546,7 +559,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
           std::pair{wordSpacingButton, ui::ControlIcon::SpreadHorizontal},
           std::pair{paragraphSpacingButton, ui::ControlIcon::Paragraph},
           std::pair{trackingButton, ui::ControlIcon::AlignJustify},
-          std::pair{widowsOrphansButton, ui::ControlIcon::Paragraph},
+          std::pair{hangingPunctuationButton, ui::ControlIcon::HangingPunctuation},
+          std::pair{widowsOrphansButton, ui::ControlIcon::WidowsOrphans},
           std::pair{verticalSpacingButton, ui::ControlIcon::SpreadVertical},
           std::pair{verticalSpacingScopeButton, ui::ControlIcon::Dictionary}}) {
         button->setIconVisible(true);
@@ -773,7 +787,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
           tapZonesButton, tappableLinksButton, navigationBarButton,
           menuViewButton, uiFontButton, uiMonoFontButton, headerFooterFontButton, headerFooterWeightButton,
           dictionaryFontButton, dictionaryFontSizeButton, timeRemainingFormatButton,
-          defaultFontButton, serifFontButton, sansFontButton, monoFontButton, beautifierButton, wordSpacingButton, paragraphSpacingButton, trackingButton, widowsOrphansButton, verticalSpacingButton, verticalSpacingScopeButton}) {
+          defaultFontButton, serifFontButton, sansFontButton, monoFontButton, beautifierButton, wordSpacingButton, paragraphSpacingButton, trackingButton, hangingPunctuationButton, widowsOrphansButton, verticalSpacingButton, verticalSpacingScopeButton}) {
         button->setRule(Qt::BottomEdge);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults)
@@ -785,7 +799,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                 .arg(int(c::labelText))
                 .arg(int(c::listActionHeight))
                 .arg(int(c::inset)));
-        if (button == beautifierButton || button == wordSpacingButton || button == paragraphSpacingButton || button == trackingButton || button == widowsOrphansButton || button == verticalSpacingButton || button == verticalSpacingScopeButton) {
+        if (button == beautifierButton || button == wordSpacingButton || button == paragraphSpacingButton || button == trackingButton || button == hangingPunctuationButton || button == widowsOrphansButton || button == verticalSpacingButton || button == verticalSpacingScopeButton) {
             button->setMaximumHeight(QWIDGETSIZE_MAX);
             readerStyle(button, QString("QPushButton{font-size:%1px;border:0;border-radius:0;text-align:left;padding:0;background:palette(window);color:palette(window-text);}").arg(int(c::labelText)));
             button->setMinimumHeight(c::listActionHeight);
@@ -1442,7 +1456,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
     fontDialog = new ui::ModalOverlay(parentWidget());
     const bool tracking = feature == AdvancedText::Tracking;
     const bool paragraph = feature == AdvancedText::ParagraphSpacing;
-    const bool spacing = feature == AdvancedText::WordSpacing || tracking;
+    const bool spacing = feature == AdvancedText::WordSpacing || tracking || feature == AdvancedText::HangingPunctuation;
     const bool vertical = feature == AdvancedText::VerticalSpacing || feature == AdvancedText::VerticalSpacingScope;
     QString key, prefix;
     QStringList values;
@@ -1453,6 +1467,8 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
         key = "settings.word_spacing"; prefix = "rrWordSpacing"; values = {"narrow", "normal", "wide"}; break;
     case AdvancedText::Tracking:
         key = "settings.justification_tracking"; prefix = "rrTracking"; values = {"off", "subtle", "more"}; break;
+    case AdvancedText::HangingPunctuation:
+        key = "settings.hanging_punctuation"; prefix = "rrHangingPunctuation"; values = {"off", "on"}; break;
     case AdvancedText::Pagination:
         key = "settings.widows_orphans"; prefix = "rrWidowsOrphans"; values = {"publisher", "avoid", "allow"}; break;
     case AdvancedText::VerticalSpacing:

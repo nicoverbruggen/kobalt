@@ -10,9 +10,10 @@ public:
     ColumnView() : LVDocView(32, true) {}
     void setColumns(int count) { columns = count; }
     int columnCount() const { return columns; }
-    int columnWidth() const { return width; }
+    int columnWidth() const { return width + 2 * overflow; }
+    void setHangingPunctuation(bool enabled) { hangingPunctuation = enabled; }
     int columnOffset(int column) {
-        return (columns > 1 ? sideMargin : 0) +
+        return (columns > 1 ? sideMargin - overflow : 0) +
                (rightToLeft() ? columns - 1 - column : column) * (width + gutter);
     }
     void setColumnSpacing(int pixels) { spacing = pixels; }
@@ -23,8 +24,9 @@ public:
     void Resize(int w, int h) {
         viewportWidth = w;
         viewportHeight = h;
-        // Side margins belong to the screen. Each narrow engine page has only
-        // the shared top and bottom margins; spacing separates its text columns.
+        // Side margins belong to the screen; spacing separates the text columns.
+        // Hanging punctuation also needs paper inside each engine viewport.
+        // Share the gutter evenly and keep the text width and origins unchanged.
         // CREngine clamps its viewport to 80 pixels. Reduce whitespace first
         // on small screens so its text geometry still matches our columns.
         const int minimumWidth = 80;
@@ -32,8 +34,16 @@ public:
         const int available = qMax(minimumWidth * columns, w - 2 * sideMargin);
         gutter = columns > 1 ? qMin(spacing, (available - minimumWidth * columns) / (columns - 1)) : 0;
         width = columns > 1 ? qMax(1, (available - gutter * (columns - 1)) / columns) : w;
-        LVDocView::setPageMargins(columns > 1 ? lvRect(0, margins.top, 0, margins.bottom) : margins);
-        LVDocView::Resize(width, h);
+        const int previousOverflow = overflow;
+        overflow = hangingPunctuation && columns > 1 ? qMin(sideMargin, gutter / 2) : 0;
+        LVDocView::setPageMargins(columns > 1 ? lvRect(overflow, margins.top, overflow, margins.bottom) : margins);
+        LVDocView::Resize(columnWidth(), h);
+        if (overflow != previousOverflow && getDocument()) {
+            // CREngine retains each paragraph's usable overflow in its layout.
+            // Its render hash tracks text width, which has deliberately stayed the same.
+            getDocument()->forceReinitStyles();
+            requestRender();
+        }
     }
     int getPageCount() { return (LVDocView::getPageCount() + columns - 1) / columns; }
     int getCurPage(bool internal = false) {
@@ -66,14 +76,15 @@ public:
     ldomXPointer getNodeByPoint(lvPoint point, bool strict = false, bool selection = false) {
         if (columns == 1) return LVDocView::getNodeByPoint(point, strict, selection);
         point.x -= sideMargin;
-        const int physical = point.x / (width + gutter);
-        if (point.x < 0 || physical >= columns || point.x % (width + gutter) >= width)
+        const int physical = qBound(0, (point.x + gutter / 2) / (width + gutter), columns - 1);
+        const int local = point.x - physical * (width + gutter);
+        if (local < -overflow || local >= width + overflow)
             return {};
         const int column = rightToLeft() ? columns - 1 - physical : physical;
         const int target = getCurPage() * columns + column;
         if (target >= LVDocView::getPageCount()) return {};
         Position restore(*this, target);
-        point.x -= physical * (width + gutter);
+        point.x = local + overflow;
         return LVDocView::getNodeByPoint(point, strict, selection);
     }
     bool docToWindowPoint(lvPoint &point, bool bottom = false, bool fit = false) {
@@ -101,7 +112,8 @@ private:
     bool rightToLeft() {
         return getDocument() && getDocument()->getProps()->getStringDef("doc.page-progression-direction") == U"rtl";
     }
-    int columns = 1, width = 1, gutter = 0, spacing = 0;
+    int columns = 1, width = 1, gutter = 0, spacing = 0, overflow = 0;
+    bool hangingPunctuation = false;
     int viewportWidth = 1, viewportHeight = 1, sideMargin = 0;
     lvRect margins;
     struct Position {

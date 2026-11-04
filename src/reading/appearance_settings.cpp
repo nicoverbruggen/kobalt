@@ -108,7 +108,7 @@ QJsonObject cleanPreferences(QJsonObject preferences) {
         preferences.remove(key);
     for (const auto *key : {"dark_mode", "light_dark_mode_shortcut", "hide_tab_labels", "inherit_text_layout", "two_columns_landscape",
                             "page_animations", "show_link_indicator", "edge_light_gestures", "show_light_gesture_feedback", "dense_stats_chart",
-                            "hide_nonlinear_fragments", "normalize_page_margins", "reduce_chapter_spacing",
+                            "hanging_punctuation", "hide_nonlinear_fragments", "normalize_page_margins", "reduce_chapter_spacing",
                             "minimal_annotation_mode", "show_header", "show_footer", "show_clock", "auto_rotate",
                             "turn_off_wifi_on_open"})
         if (preferences.contains(key) && !preferences.value(key).isBool()) preferences.remove(key);
@@ -195,6 +195,7 @@ QJsonObject bookDefaults(const QJsonObject &preferences) {
     defaults["paragraph_spacing"] = paragraphSpacing(preferences.value("paragraph_spacing"));
     defaults["paragraph_indent"] = paragraphIndent(preferences.value("paragraph_indent"));
     defaults["justification_tracking"] = preferences.value("justification_tracking").toInt(0);
+    defaults["hanging_punctuation"] = preferences.value("hanging_punctuation").toBool(false);
     defaults["widows_orphans"] = preferences.value("widows_orphans").toString("publisher");
     if (!preferences.value(inheritTextLayoutKey).toBool(true)) {
         return defaults;
@@ -242,6 +243,7 @@ void applyBookDefaults(QJsonObject &saved, const QJsonObject &defaults) {
     saved["paragraph_spacing"] = paragraphSpacing(defaults.value("paragraph_spacing"));
     saved["paragraph_indent"] = paragraphIndent(defaults.value("paragraph_indent"));
     saved["justification_tracking"] = defaults.value("justification_tracking").toInt(0);
+    saved["hanging_punctuation"] = defaults.value("hanging_punctuation").toBool(false);
     saved["widows_orphans"] = defaults.value("widows_orphans").toString("publisher");
 }
 void rememberTextLayout(QJsonObject &preferences, const QJsonObject &state) {

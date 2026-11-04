@@ -66,13 +66,13 @@ inline constexpr std::array<const char *, 5> normalizationKeys{
 QJsonObject normalizationSettings(const QJsonObject &settings);
 QString normalizationPreset(const QJsonObject &settings);
 QJsonObject normalizationPresetSettings(const QString &preset);
-inline constexpr std::array<const char *, 35> keys{
+inline constexpr std::array<const char *, 36> keys{
     "line_spacing_version",   "font_pixels",     "line_spacing", "paragraph_spacing", "paragraph_indent", "font_face",
     "default_font_face",      "margin_pixels",   "top_margin_pixels", "bottom_margin_pixels",
     "text_alignment",         "bold_reading",    "weight_steps",      "font_weight",
     "font_optical_size",      "hyphenation",     "dark_mode",         "hide_nonlinear_fragments",
     "beautifier_initials", "beautifier_spacing", "beautifier_indent", "normalize_page_margins", "reduce_chapter_spacing", "serif_font_face", "sans_font_face",    "monospace_font_face",
-    "vertical_justification", "vertical_spacing_scope", "column_spacing", "columns", "two_columns_landscape", "column_spacing_percent", "word_spacing", "justification_tracking", "widows_orphans"};
+    "vertical_justification", "vertical_spacing_scope", "column_spacing", "columns", "two_columns_landscape", "column_spacing_percent", "word_spacing", "justification_tracking", "hanging_punctuation", "widows_orphans"};
 // Preserve the Boolean used by early development builds of page filling.
 inline QString verticalSpacingMode(const QJsonValue &value) {
     if (value.isBool()) return value.toBool() ? QStringLiteral("expand") : QStringLiteral("off");

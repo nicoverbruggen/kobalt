@@ -1,6 +1,7 @@
 #include "support/qt_compat.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/native_database_wait.h"
+#include "platforms/kobo/common/native_event_save.h"
 #include "platforms/kobo/common/native_reading_session.h"
 #include "platforms/kobo/common/native_session_volume.h"
 #include "support/diagnostics.h"
@@ -118,26 +119,31 @@ bool workerReady() {
     auto *thread = engine ? engine->thread() : nullptr;
     return thread && thread != QThread::currentThread() && thread->isRunning();
 }
+// Run only on the event worker. The default database is also the one used
+// by savePendingEvents() and EventManager's transient cache.
+bool saveEvents(QObject *engine) {
+    mainthread::BlockingOperation operation("nickel-events-save");
+    const QString db;
+    NativeDatabaseWait wait(api().connection(db, true), 2000);
+    return wait.ready() && nickel::saveNativeEvents(
+        [&] { return api().begin(db); },
+        [&] { api().saveEvents(engine); return api().flushEvents(db); },
+        [&](bool commit) { return api().commit(db, commit); });
+}
 // Saves the events of a session that just started, on the EventEngine
 // thread. The GUI thread does not wait: the next page turn may come first.
 // Queued calls run in order, so the start slots still precede this flush and
 // a later stop's flushLater(). `done` runs on the GUI thread.
 void flushStart(std::function<void()> done) {
     auto *engine = api().engine();
-    const bool nonblocking = NativeLifecycle::usbSaveAllowed();
     auto completion = std::make_shared<std::function<void()>>(std::move(done));
-    if (!kobalt::qt::invoke(engine, [engine, nonblocking, completion] {
+    if (!kobalt::qt::invoke(engine, [engine, completion] {
             DiagnosticOperation operation("nickel-session-start-flush");
             QElapsedTimer timer;
             timer.start();
             bool saved = false;
             if (NativeLifecycle::nativeSessionSaveAllowed() && api().open()) {
-                NativeDatabaseWait wait(api().connection(api().dbName(api().device()), true), nonblocking);
-                if (wait.ready()) {
-                    api().saveEvents(engine);
-                    // EventManager's transient cache accepts only the default database.
-                    saved = api().flushEvents(QString());
-                }
+                saved = saveEvents(engine);
             }
             QSettings settings("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf", QSettings::IniFormat);
             const bool sideload = settings.value("ApplicationPreferences/SideloadedMode", false).toBool();
@@ -233,11 +239,7 @@ void flushLater(const std::weak_ptr<NativeReadingSession *> &guard, std::functio
             if (!guard.expired() && NativeLifecycle::nativeSessionSaveAllowed() && api().open()) {
                 QElapsedTimer timer;
                 timer.start();
-                NativeDatabaseWait wait(api().connection(api().dbName(api().device()), true), true);
-                if (wait.ready()) {
-                    api().saveEvents(engine);
-                    saved = api().flushEvents(QString());
-                }
+                saved = saveEvents(engine);
                 diagnostic("reading-session-flush", kobalt::qt::object({{"saved", saved}, {"milliseconds", timer.elapsed()}}),
                            saved ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
             }
@@ -381,8 +383,9 @@ void NativeReadingSession::stop() {
     prepareVolume(volume, activity_.current());
     SessionPosition state;
     state.percent = percent;
-    const int seconds = api().end(api().engine(), volume, state, {});
+    // Qt6's ReadingView reports readerHidden before ending its session.
     api().fire(api().engine(), "readerHidden", volume, {});
+    const int seconds = api().end(api().engine(), volume, state, {});
     ending = false;
     diagnostic("reading-session-stop", kobalt::qt::object({{"seconds", seconds}, {"milliseconds", timer.elapsed()}}));
     const auto identity = book;

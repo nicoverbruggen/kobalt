@@ -2,6 +2,7 @@
 #include "reading/reading_bridge.h"
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace kobalt::wordEstimates {
 struct ReadingChapter {
@@ -35,26 +36,41 @@ inline ReadingChapter readingChapter(const ReadingActivity &activity) {
     return {words, qBound(1, activity.page + 1, pages), pages};
 }
 
-// The part of the current chapter before this page, from 0 to 1, or -1 when
-// the layout is unknown. Nickel's reader stores the same value as
-// CurrentChapterProgress, and its sync uploads it as the chapter percentage.
-// Unlike readingChapter, it does not need word counts.
-inline double chapterProgress(const ReadingActivity &activity) {
+// The current page within its chapter, from 1, and the chapter's pages. The
+// page is 0 when the layout is unknown. Unlike readingChapter, it does not
+// need word counts.
+inline std::pair<int, int> chapterPage(const ReadingActivity &activity) {
     const auto &selection = activity.chapter;
     if (activity.pages <= 0 || activity.page < 0 || activity.page >= activity.pages)
-        return -1;
+        return {0, 0};
     if (selection.current < -1 || selection.current >= activity.chapters.size() || selection.next < -1 ||
         selection.next >= activity.chapters.size())
-        return -1;
+        return {0, 0};
     if (selection.current >= 0) {
         if (selection.pages <= 0 || selection.page < 1 || selection.page > selection.pages)
-            return -1;
-        return double(selection.page - 1) / selection.pages;
+            return {0, 0};
+        return {selection.page, selection.pages};
     }
     const int pages = selection.next >= 0 && selection.next < activity.chapters.size()
                           ? qMax(1, activity.chapters[selection.next].page)
                           : activity.pages;
-    return double(qBound(1, activity.page + 1, pages) - 1) / pages;
+    return {qBound(1, activity.page + 1, pages), pages};
+}
+
+// The part of the current chapter before this page, from 0 to 1, or -1 when
+// the layout is unknown. Nickel's reader stores the same value as
+// CurrentChapterProgress, and its sync uploads it as the chapter percentage.
+inline double chapterProgress(const ReadingActivity &activity) {
+    const auto [page, pages] = chapterPage(activity);
+    return page < 1 ? -1 : double(page - 1) / pages;
+}
+
+// The part of the current chapter up to the end of this page, from 0 to 1, or
+// -1 when the layout is unknown. Nickel's firmware 4 reader stores this, as a
+// whole percentage, on the KEPUB chapter's own row: page 5 of 9 is 55.
+inline double chapterReadThroughPage(const ReadingActivity &activity) {
+    const auto [page, pages] = chapterPage(activity);
+    return page < 1 ? -1 : double(page) / pages;
 }
 
 inline int pageWords(const ReadingActivity &activity) {

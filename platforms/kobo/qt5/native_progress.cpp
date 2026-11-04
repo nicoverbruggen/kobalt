@@ -307,7 +307,7 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     // Nickel's reader also writes the current KEPUB chapter's percentage on its
     // own row, in this transaction, while the book is not finished.
     if (!timeOnly && !finished && activity && native.chapterPercent) {
-        const double chapter = wordEstimates::chapterProgress(*activity);
+        const double chapter = wordEstimates::chapterReadThroughPage(*activity);
         const auto row = chapter < 0 ? QString()
             : chapterRow(native.connection(db, false).databaseName(), book, location.section(QLatin1Char('#'), 0, 0));
         if (!row.isEmpty())

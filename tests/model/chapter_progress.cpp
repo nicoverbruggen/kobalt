@@ -31,6 +31,17 @@ int main() {
             "Page 9 of 9 uploads as 88 percent, as Nickel's reader does");
     require(same(wordEstimates::chapterProgress(activity(4, 30, {0, 1, 1, 8}, chapters)), 0.0),
             "The first page of a chapter is its start");
+    // Nickel's firmware 4 chapter row counts the current page as read: page 5
+    // of 9 is 55, page 7 of 9 is 77, as observed in Nickel's own reader.
+    require(uploaded(wordEstimates::chapterReadThroughPage(activity(15, 30, {0, 1, 5, 9}, chapters))) == 55,
+            "Page 5 of 9 stores 55 percent on the chapter row");
+    require(uploaded(wordEstimates::chapterReadThroughPage(activity(17, 30, {0, 1, 7, 9}, chapters))) == 77,
+            "Page 7 of 9 stores 77 percent on the chapter row");
+    // The last page follows from the same formula; it was not observed in Nickel.
+    require(same(wordEstimates::chapterReadThroughPage(activity(28, 30, {2, -1, 9, 9}, chapters)), 1.0),
+            "The last page of a chapter reads it through");
+    require(wordEstimates::chapterReadThroughPage(activity(30, 30, {0, 1, 5, 9}, chapters)) < 0,
+            "An unknown layout has no chapter row value");
     // Text before the first table-of-contents entry counts as its own chapter.
     require(same(wordEstimates::chapterProgress(activity(0, 30, {-1, 0, 0, 0}, chapters)), 0.0),
             "The first page of the front matter is its start");

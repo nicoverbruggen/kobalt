@@ -95,9 +95,9 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     }
     if (location_.isEmpty()) {
         // Read the native volume snapshot, without opening or changing its DB.
-        const auto saved = native.values(volume).value("ChapterIDBookmarked").toString();
-        if (!saved.isEmpty()) {
-            const auto location = native.location(publicationLocation(identity_, saved), QString());
+        const auto saved = publicationLocation(identity_, native.values(volume).value("ChapterIDBookmarked").toString());
+        if (!unsetNativeLocation(saved)) {
+            const auto location = native.location(saved, QString());
             if (!native.locationValid(&location))
                 return fail(strings::get("error.native_saved_position_is_unsupported"));
             location_ = native.locationString(&location);

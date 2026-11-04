@@ -82,6 +82,18 @@ int main(int argc, char **argv) {
             "Another book's bookmark was accepted");
     require(publicationLocation("", "!chapter.xhtml") == "!chapter.xhtml",
             "Missing book identity decoded a legacy bookmark");
+    // A downloaded book without a position yet has "#" in Nickel's database.
+    for (const auto &raw : {QString(), QStringLiteral("#"), QStringLiteral("book!#")}) {
+        require(unsetNativeLocation(publicationLocation("book", raw)) &&
+                    unsetNativeLocation(nickel4::chapter("book", raw)),
+                "A saved position without chapter or anchor was not read as the start");
+    }
+    for (const auto &raw : {QStringLiteral("OEBPS/chapter.xhtml#kobo.1.1"), QStringLiteral("chapter.xhtml"),
+                            QStringLiteral("#kobo.1.1"), QStringLiteral("book!OEBPS!chapter.xhtml#")}) {
+        require(!unsetNativeLocation(publicationLocation("book", raw)) &&
+                    !unsetNativeLocation(nickel4::chapter("book", raw)),
+                "A real saved position was read as the start");
+    }
     ReadingProgress first{"synthetic", "chapter.xhtml#p:4", 1000, 1, true};
     auto second = first;
     second.location = "chapter.xhtml#p:12";

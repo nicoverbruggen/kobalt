@@ -3,6 +3,7 @@
 #include "platforms/kobo/common/publication_source.h"
 #include "publication/native_resources.h"
 #include "native_location.h"
+#include "platforms/kobo/common/native_location.h"
 #include "support/strings.h"
 #include "support/diagnostics.h"
 #include <QDir>
@@ -91,8 +92,8 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     if (bookmark && !native.bookmarkPath(bookmark).isEmpty())
         return fail("explicit_native_bookmark_is_unsupported",
                     strings::get("error.explicit_native_bookmark_is_unsupported"));
-    location_ =
-        nickel4::shared(nickel4::chapter(identity_, native.values(volume).value("ChapterIDBookmarked").toString()));
+    const auto saved = nickel4::chapter(identity_, native.values(volume).value("ChapterIDBookmarked").toString());
+    location_ = unsetNativeLocation(saved) ? QString() : nickel4::shared(saved);
     source_ = native::publicationSource().open(volume, keys, path_, identity_, error);
     if (!source_)
         return fail("cannot_start_the_native_publication_service",

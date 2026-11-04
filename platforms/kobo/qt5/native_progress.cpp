@@ -4,6 +4,7 @@
 #include "reading/word_estimates.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "native_location.h"
+#include "platforms/kobo/common/native_location.h"
 #include "platforms/kobo/common/native_progress.h"
 #include "support/strings.h"
 #include "support/main_thread.h"
@@ -139,7 +140,8 @@ ReadingProgress snapshot(const QVariantMap &values) {
     // Nickel stores some library actions without a zone and reads them as
     // local time. Preserve that interpretation when comparing its cache.
     result.modified = date.isValid() ? date.toMSecsSinceEpoch() : 0;
-    result.location = nickel4::shared(nickel4::chapter(result.book, values.value("ChapterIDBookmarked").toString()));
+    const auto saved = nickel4::chapter(result.book, values.value("ChapterIDBookmarked").toString());
+    result.location = unsetNativeLocation(saved) ? QString() : nickel4::shared(saved);
     result.valid = !result.book.isEmpty();
     return result;
 }

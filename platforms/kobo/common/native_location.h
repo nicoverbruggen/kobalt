@@ -12,4 +12,10 @@ inline QString publicationLocation(const QString &book, const QString &location)
     path.replace('!', '/');
     return path + (fragment < 0 ? QString() : location.mid(fragment));
 }
+// Nickel stores "#", an empty chapter and anchor, for a downloaded book that
+// has no position yet, such as a store book whose server sent none. It means
+// the start of the book, like an empty value. Pass the decoded location.
+inline bool unsetNativeLocation(const QString &location) {
+    return location.isEmpty() || location == QLatin1String("#");
+}
 }

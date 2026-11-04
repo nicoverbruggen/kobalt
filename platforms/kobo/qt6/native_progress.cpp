@@ -126,9 +126,9 @@ ReadingProgress snapshot(const QVariantMap &values) {
     // Nickel stores some library actions without a zone and reads them as
     // local time. Preserve that interpretation when comparing its cache.
     result.modified = date.isValid() ? date.toMSecsSinceEpoch() : 0;
-    const auto raw = values.value("ChapterIDBookmarked").toString();
-    if (!raw.isEmpty()) {
-        const auto location = api().location(publicationLocation(result.book, raw), QString());
+    const auto raw = publicationLocation(result.book, values.value("ChapterIDBookmarked").toString());
+    if (!unsetNativeLocation(raw)) {
+        const auto location = api().location(raw, QString());
         if (!api().validLocation(&location))
             return result;
         result.location = api().teng(&location);

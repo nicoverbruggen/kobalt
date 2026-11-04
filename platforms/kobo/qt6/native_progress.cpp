@@ -4,7 +4,6 @@
 #include "reading/word_estimates.h"
 #include "support/strings.h"
 #include "support/main_thread.h"
-#include "support/diagnostics.h"
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/native_progress.h"

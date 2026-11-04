@@ -4144,6 +4144,12 @@ private slots:
         const auto requests = network->requests;
         QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
         QCOMPARE(network->requests, requests);
+        // The periodic timer does not run while the device sleeps.
+        QVERIFY(timer->isActive());
+        host.window()->sleepReader();
+        QVERIFY(!timer->isActive());
+        host.window()->wakeReader();
+        QVERIFY(timer->isActive());
     }
     void kosyncFinal_data() {
         QTest::addColumn<QString>("transition");

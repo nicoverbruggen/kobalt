@@ -349,6 +349,7 @@ sleep::Snapshot Reader::captureSleepScreen() {
 void Reader::sleepReader() {
     // The device is going to sleep; no tap can turn the page until it wakes.
     mainthread::AllowBlocking allow("sleep");
+    kosyncTimer.stop();
     if (imageViewer && imageViewer->isVisible()) imageViewer->closeImage();
     book->retryFailedReadingSave();
     if (orientation) {
@@ -513,6 +514,7 @@ void Reader::wakeReader() {
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
     lifecycleHidden = false;
+    updateKosyncTimer();
     QTimer::singleShot(0, this, [this] { synchronizeKosync(); });
     if (finishDialog)
         finishDialog->show();

@@ -51,6 +51,9 @@ void Reader::refreshRenderNotice() {
 void Reader::refresh() {
     if (lifecycleHidden)
         return;
+    // A KOSync result that waited while the reader was hidden continues now.
+    if (kosyncReaderReady && !kosyncReaderRetry.isActive() && isVisible() && !services.suspended())
+        continueKosyncWhenReady(std::move(kosyncReaderReady));
     const bool darkReady = publishPendingDarkMode();
     const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode) : pendingDarkMode >= 0 ? bool(pendingDarkMode)
         : model->state().value("dark_mode").toBool(false);

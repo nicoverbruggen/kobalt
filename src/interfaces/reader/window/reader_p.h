@@ -237,6 +237,7 @@ private:
     void continueKosyncWhenReady(std::function<void()> ready);
     void prepareKosyncNetwork(bool interactive, std::function<void()> ready);
     void updateKosyncFeatures();
+    void updateKosyncTimer();
     void flushKosync(std::function<void()> finished, bool enabled = true);
     void finishKosync(const QString &message);
     void cancelKosync();

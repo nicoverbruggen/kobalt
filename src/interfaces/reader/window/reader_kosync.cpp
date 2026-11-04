@@ -37,12 +37,7 @@ void Reader::buildKosync() {
         kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(), kosyncClient->signedIn(),
                                kosyncClient->automatic());
         kosyncPage->setSchedule(kosyncClient->schedule());
-        kosyncTimer.setInterval(kosync::scheduleIntervalMilliseconds(kosyncClient->schedule()));
-        if (kosyncClient->signedIn() && kosyncAutomatic() && !book->usesNativeCloudSync() &&
-            kosync::syncsWhileReading(kosyncClient->schedule()))
-            kosyncTimer.start();
-        else
-            kosyncTimer.stop();
+        updateKosyncTimer();
         updateKosyncToolbar();
     };
     account();
@@ -148,6 +143,15 @@ void Reader::buildKosync() {
     connect(&kosyncReaderRetry, &QTimer::timeout, this, [this] {
         if (kosyncReaderReady) continueKosyncWhenReady(std::move(kosyncReaderReady));
     });
+}
+// Runs only while the reader is awake; sleep stops it and wake restarts it.
+void Reader::updateKosyncTimer() {
+    kosyncTimer.setInterval(kosync::scheduleIntervalMilliseconds(kosyncClient->schedule()));
+    if (kosyncClient->signedIn() && kosyncAutomatic() && !book->usesNativeCloudSync() &&
+        kosync::syncsWhileReading(kosyncClient->schedule()) && !lifecycleHidden)
+        kosyncTimer.start();
+    else
+        kosyncTimer.stop();
 }
 void Reader::updateKosyncFeatures() {
     // A desktop e-reader preview shows what a Kobo offers. A desktop window
@@ -442,12 +446,18 @@ void Reader::continueKosyncWhenReady(std::function<void()> ready) {
         services.suspended() || model->busy() || model->temporaryTypography() || exportRunning ||
         (!isVisible() && !kosyncOpening)) {
         kosyncReaderReady = std::move(ready);
+        // A hidden or sleeping reader does not check every 100 ms: refresh()
+        // resumes the wait once the reader is shown, and wake starts over.
+        const bool hidden = lifecycleHidden || services.suspended() || (!isVisible() && !kosyncOpening);
+        if (hidden)
+            kosyncReaderRetry.stop();
         if (!kosyncReaderRetry.isActive()) {
             diagnostic("kosync-reader-wait", qt::object({{"model_busy", model->busy()},
                 {"hidden", !isVisible()}, {"suspended", services.suspended()},
                 {"pending_progress", book->pendingProgress()}, {"device_transition", book->deviceTransition()},
                 {"exporting", exportRunning}}));
-            kosyncReaderRetry.start();
+            if (!hidden)
+                kosyncReaderRetry.start();
             kosyncStatus(strings::get("kosync.syncing"));
         }
         return;

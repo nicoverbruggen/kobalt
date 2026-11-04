@@ -125,4 +125,101 @@ int main(int argc, char **argv) {
     require(clearedBeforeNext, "a failure clears the account and pauses sync before the next scenario");
     require(kobalt::kosync::account.isEmpty() && kobalt::kosync::paused == pausedBefore,
             "the run restores the pause");
+
+    // A wifi step turns Wi-Fi off and waits until the radio is down, so a
+    // sample starts from a known state. Wi-Fi that is already off is left alone.
+    const QJsonObject wifiScenario{{"id", "wifi.test"}, {"opt_in", true}, {"repeat", 2},
+        {"steps", QJsonArray{QJsonObject{{"wifi", "off"}}, QJsonObject{{"mark", true}}}},
+        {"sample", QJsonObject{{"timer", true}}}};
+    const auto wifiFile = [&] { return QJsonObject{{"scenarios", QJsonArray{wifiScenario}}}; };
+    options.filter = "wifi";
+    kobalt::scenario::Host radio;
+    results = kobalt::scenario::run(wifiFile(), radio, options);
+    require(results.size() == 1 && results[0].value("status") == "skipped" &&
+            results[0].value("reason").toString().contains("cannot turn Wi-Fi off"),
+            "a host that cannot turn Wi-Fi off skips the scenario");
+    bool up = true;
+    int offCalls = 0;
+    radio.wifiUp = [&] { return up; };
+    radio.wifiOff = [&] {
+        ++offCalls;
+        QTimer::singleShot(30, [&] { up = false; });
+        return QString();
+    };
+    results = kobalt::scenario::run(wifiFile(), radio, options);
+    require(results[0].value("status") == "completed" && results[0].value("samples").toArray().size() == 2,
+            "the wifi step completes once the radio is down");
+    require(offCalls == 1, "the step turns Wi-Fi off only while it is up");
+    up = true;
+    radio.wifiOff = [] { return QString(); };
+    auto stuck = wifiScenario;
+    stuck["steps"] = QJsonArray{QJsonObject{{"wifi", "off"}, {"timeout", 50}}, QJsonObject{{"mark", true}}};
+    results = kobalt::scenario::run(QJsonObject{{"scenarios", QJsonArray{stuck}}}, radio, options);
+    require(results[0].value("status") == "failed" && results[0].value("reason").toString().contains("Wi-Fi stayed on"),
+            "a radio that stays up fails the sample");
+    radio.wifiOff = [] { return QStringLiteral("this firmware has no WirelessManager::off()"); };
+    results = kobalt::scenario::run(wifiFile(), radio, options);
+    require(results[0].value("status") == "failed" &&
+            results[0].value("reason").toString().contains("no WirelessManager::off()"),
+            "a host that fails to turn Wi-Fi off fails the sample");
+
+    // A native sync scenario: the step waits for an earlier sync, starts one
+    // and does not wait for it. Events that a step passed over stay available
+    // to an `earlier` event step, `as` keeps several events of one kind, and
+    // `mark_end` ends the timer before the steps that only collect events.
+    const auto save = [](double elapsed) {
+        return QJsonObject{{"event", "operation-end"}, {"operation", "nickel-events-save"}, {"elapsed_ms", elapsed}};
+    };
+    const QJsonObject saveStep{{"event", "operation-end"}, {"where", QJsonObject{{"operation", "nickel-events-save"}}},
+                               {"earlier", true}};
+    auto first = saveStep, second = saveStep;
+    first["as"] = "first-save";
+    second["as"] = "second-save";
+    QJsonObject syncScenario{{"id", "native-sync.test"}, {"opt_in", true}, {"repeat", 1},
+        {"needs", QJsonArray{"native-sync"}},
+        {"steps", QJsonArray{QJsonObject{{"native-sync", true}}, QJsonObject{{"mark", true}},
+                             QJsonObject{{"event", "page-turn-painted"}, {"as", "turn"}},
+                             QJsonObject{{"mark_end", true}}, QJsonObject{{"wait_ms", 300}}, first, second,
+                             QJsonObject{{"event", "native-sync-end"}, {"earlier", true}, {"as", "sync"}}}},
+        {"sample", QJsonObject{{"timer", true}, {"stages", QJsonObject{
+            {"turn_ms", QJsonObject{{"event", "turn"}, {"field", "elapsed_ms"}}},
+            {"first_ms", QJsonObject{{"event", "first-save"}, {"field", "elapsed_ms"}}},
+            {"second_ms", QJsonObject{{"event", "second-save"}, {"field", "elapsed_ms"}}},
+            {"sync_ms", QJsonObject{{"event", "sync"}, {"field", "elapsed_ms"}}}}}}}};
+    const auto syncFile = [&] { return QJsonObject{{"scenarios", QJsonArray{syncScenario}}}; };
+    options.filter = "native-sync";
+    kobalt::scenario::Host store;
+    results = kobalt::scenario::run(syncFile(), store, options);
+    require(results.size() == 1 && results[0].value("status") == "skipped" &&
+            results[0].value("reason") == "the host cannot start its own sync",
+            "a host without its own sync skips the scenario");
+    bool syncing = true, startedWhileSyncing = false;
+    int starts = 0;
+    store.nativeSyncing = [&] { return syncing; };
+    store.nativeSync = [&] {
+        startedWhileSyncing = syncing;
+        ++starts;
+        // The first save ends before the page turn and is passed over; the
+        // second ends after the step that waits for the turn.
+        kobalt::observer(save(11));
+        QTimer::singleShot(20, [] { kobalt::observer(QJsonObject{{"event", "page-turn-painted"}, {"elapsed_ms", 5}}); });
+        QTimer::singleShot(150, [&] { kobalt::observer(save(22)); });
+        QTimer::singleShot(200, [] { kobalt::observer(QJsonObject{{"event", "native-sync-end"}, {"elapsed_ms", 33}}); });
+        return QString();
+    };
+    QTimer::singleShot(30, [&] { syncing = false; });
+    results = kobalt::scenario::run(syncFile(), store, options);
+    require(results[0].value("status") == "completed", "the native sync scenario completes");
+    require(starts == 1 && !startedWhileSyncing, "the step waits for the earlier sync to end");
+    const auto samples = results[0].value("samples").toArray();
+    require(samples.size() == 1 && samples[0].toDouble() < 250, "mark_end ends the timer");
+    const auto stages = results[0].value("stages").toObject();
+    require(stages.value("turn_ms").toArray() == QJsonArray{5} && stages.value("first_ms").toArray() == QJsonArray{11} &&
+            stages.value("second_ms").toArray() == QJsonArray{22} && stages.value("sync_ms").toArray() == QJsonArray{33},
+            "earlier event steps find passed and later events, each once and in order");
+    store.nativeSync = [] { return QStringLiteral("Nickel did not start a sync"); };
+    results = kobalt::scenario::run(syncFile(), store, options);
+    require(results[0].value("status") == "failed" &&
+            results[0].value("reason").toString().endsWith("Nickel did not start a sync"),
+            "a sync that does not start fails the sample");
 }

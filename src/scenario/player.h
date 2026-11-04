@@ -46,6 +46,20 @@ struct Host {
     // Whether KOSync can turn Wi-Fi on and off on this host. Optional;
     // scenarios that need it are skipped without it.
     std::function<bool()> wifiControl;
+    // Starts the host's own sync with its store, as the host's sync button
+    // does, and returns without waiting for the sync to end. Returns an empty
+    // string or why the sync did not start. Optional; scenarios that need it
+    // are skipped without it.
+    std::function<QString()> nativeSync;
+    // Whether that sync is still running. Optional.
+    std::function<bool()> nativeSyncing;
+    // Turns Wi-Fi off and returns an empty string, or why it could not. It
+    // may return before the radio is down. Optional; a `wifi` step without it
+    // skips the scenario.
+    std::function<QString()> wifiOff;
+    // Whether the radio is up. Optional; without it a `wifi` step does not
+    // wait for the radio to go down.
+    std::function<bool()> wifiUp;
 };
 struct Options {
     // Runs only scenarios whose id starts with this, or that this starts with.

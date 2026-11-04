@@ -51,27 +51,53 @@ public:
         });
     }
     ~Events() { setDiagnosticObserver({}); }
+    // Passes over the events that arrived so far. A step that acts calls it,
+    // so the next event step matches only what that action caused.
     void skip() {
         QMutexLocker lock(&mutex);
+        passed.insert(passed.end(), queue.begin(), queue.end());
+        queue.clear();
+    }
+    // Forgets the events that earlier steps passed over or left queued.
+    // Called as each sample starts, so `earlier` sees this sample's only.
+    void begin() {
+        QMutexLocker lock(&mutex);
+        passed.clear();
         queue.clear();
     }
     // Consumes events until one matches, and returns it. `where` lists
-    // further fields the event must have, such as an operation name.
-    QJsonObject next(const QString &name, const QString &panel, const QJsonObject &where, int timeout) {
+    // further fields the event must have, such as an operation name. With
+    // `earlier`, the events that this sample's steps skipped or passed over
+    // are searched first, for work that can end before or after the step.
+    QJsonObject next(const QString &name, const QString &panel, const QJsonObject &where, bool earlier, int timeout) {
+        const auto matches = [&](const QJsonObject &event) {
+            bool match = event.value("event").toString() == name &&
+                         (panel.isEmpty() || event.value("panel").toString() == panel);
+            for (auto it = where.begin(); match && it != where.end(); ++it)
+                match = event.value(it.key()) == it.value();
+            return match;
+        };
         QJsonObject found;
+        if (earlier) {
+            QMutexLocker lock(&mutex);
+            for (auto it = passed.begin(); it != passed.end(); ++it) {
+                if (matches(*it)) {
+                    found = *it;
+                    passed.erase(it);
+                    return found;
+                }
+            }
+        }
         waitUntil([&] {
             QMutexLocker lock(&mutex);
             while (!queue.empty()) {
                 const auto event = queue.front();
                 queue.pop_front();
-                bool match = event.value("event").toString() == name &&
-                             (panel.isEmpty() || event.value("panel").toString() == panel);
-                for (auto it = where.begin(); match && it != where.end(); ++it)
-                    match = event.value(it.key()) == it.value();
-                if (match) {
+                if (matches(event)) {
                     found = event;
                     return true;
                 }
+                passed.push_back(event);
             }
             return false;
         }, timeout);
@@ -81,6 +107,8 @@ public:
 private:
     QMutex mutex;
     std::deque<QJsonObject> queue;
+    // Events that left the queue without a match since the sample started.
+    std::deque<QJsonObject> passed;
 };
 
 // A closed sheet keeps its names until its deferred deletion. Qt 5 runs that
@@ -213,9 +241,15 @@ public:
         }
         if (step.contains("event")) {
             const auto name = step.value("event").toString(), panel = step.value("panel").toString();
-            const auto event = events.next(name, panel, step.value("where").toObject(), step.value("timeout").toInt(10000));
+            const auto event = events.next(name, panel, step.value("where").toObject(), step.value("earlier").toBool(),
+                                           step.value("timeout").toInt(10000));
             if (event.isEmpty())
                 return "no " + name + " event";
+            // `as` names the match, so a sample can keep several events of one kind.
+            if (step.contains("as")) {
+                matched[step.value("as").toString()] = event;
+                return {};
+            }
             matched[name] = event;
             if (!panel.isEmpty())
                 matched[name + '/' + panel] = event;
@@ -226,6 +260,14 @@ public:
                                                                                                 : "the reader stayed busy";
         if (step.contains("mark")) {
             mark.start();
+            markEnd = -1;
+            return {};
+        }
+        // Ends the time since `mark`, so later steps can wait for more events.
+        if (step.contains("mark_end")) {
+            if (!mark.isValid())
+                return "no mark";
+            markEnd = mark.nsecsElapsed();
             return {};
         }
         // Lets time pass, for example a sync interval, with events running.
@@ -251,6 +293,36 @@ public:
             const auto account = step.value("kosync").toObject();
             kosync::overrideAccount(account);
             kosync::pauseAutomatic(account.isEmpty());
+            return {};
+        }
+        // Starts the host's own store sync and does not wait for it. A sync
+        // that is still running from an earlier sample ends first, so each
+        // sample starts its own.
+        if (step.contains("native-sync")) {
+            if (!host.nativeSync) {
+                unsupported = true;
+                return "the host cannot start its own sync";
+            }
+            if (host.nativeSyncing &&
+                !waitUntil([&] { return !host.nativeSyncing(); }, step.value("timeout").toInt(300000)))
+                return "the earlier sync did not end";
+            return host.nativeSync();
+        }
+        // Turns Wi-Fi off and waits until the radio is down, so a scenario
+        // starts from a known state whatever an earlier sample or the user left.
+        if (step.contains("wifi")) {
+            if (step.value("wifi").toString() != "off")
+                return "a wifi step can only turn Wi-Fi off";
+            if (!host.wifiOff) {
+                unsupported = true;
+                return "the host cannot turn Wi-Fi off";
+            }
+            if (host.wifiUp && !host.wifiUp())
+                return {};
+            if (const auto error = host.wifiOff(); !error.isEmpty())
+                return error;
+            if (host.wifiUp && !waitUntil([&] { return !host.wifiUp(); }, step.value("timeout").toInt(15000)))
+                return "Wi-Fi stayed on";
             return {};
         }
         return "unknown step";
@@ -361,7 +433,7 @@ public:
         if (spec.contains("timer")) {
             if (!mark.isValid())
                 return false;
-            value = mark.nsecsElapsed() / 1e6;
+            value = (markEnd >= 0 ? markEnd : mark.nsecsElapsed()) / 1e6;
             const auto parts = spec.value("stages").toObject();
             for (auto it = parts.begin(); it != parts.end(); ++it) {
                 const auto source = it.value().toObject();
@@ -387,6 +459,8 @@ public:
     void reset() {
         matched.clear();
         mark.invalidate();
+        markEnd = -1;
+        events.begin();
     }
     QJsonObject details() const { return matched.value("sleep-persistence"); }
     // Set when a step needed a book the host cannot open.
@@ -397,6 +471,8 @@ private:
     Events &events;
     QMap<QString, QJsonObject> matched;
     QElapsedTimer mark;
+    // Nanoseconds from `mark` to `mark_end`, or -1.
+    qint64 markEnd = -1;
     // The key of the open book, if the player knows it.
     QString current;
 };
@@ -461,6 +537,14 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             bool enabled;
             ~SleepCleanup() { if (enabled) host.sleepPersistence({}); }
         } sleepCleanup{host, needs(scenario, "sleep-persistence") && bool(host.sleepPersistence)};
+        if (needs(scenario, "native-sync") && !host.nativeSync) {
+            result["status"] = QStringLiteral("skipped");
+            result["reason"] = QStringLiteral("the host cannot start its own sync");
+            result["samples"] = samples;
+            result["stages"] = stages;
+            results.append(result);
+            continue;
+        }
         if (needs(scenario, "wifi-control") && !(host.wifiControl && host.wifiControl())) {
             result["status"] = QStringLiteral("skipped");
             result["reason"] = QStringLiteral("the host cannot turn Wi-Fi on and off");

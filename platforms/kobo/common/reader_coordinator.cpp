@@ -30,6 +30,7 @@
 #include "platform/api/reader_orientation.h"
 #include "orientation.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include "reader_environment.h"
 #include "reader_host_services.h"
 #include "interfaces/reader/ui/style/fonts.h"
@@ -56,6 +57,7 @@
 #include <QMouseEvent>
 #include <QSaveFile>
 #include <QWindow>
+#include <dlfcn.h>
 #endif
 #include <QThread>
 #include <utility>
@@ -73,6 +75,26 @@ QString usbPath(QString path) {
 QPointer<ReaderCoordinator> activeCoordinator;
 #ifdef KOBALT_SCENARIO_PLAYER
 bool benchmarkTypographyEnabled = false;
+// Nickel's own store sync, for the evaluation player. On firmware 4.46.23836
+// and 6.0.279225 the status-bar sync button calls N3SyncManager::sync(). The
+// call returns once the sync has started, and Nickel's workers do the rest.
+struct NativeSync {
+    QObject *(*instance)() = reinterpret_cast<decltype(instance)>(
+        dlsym(RTLD_DEFAULT, "_ZN13N3SyncManager14sharedInstanceEv"));
+    void (*sync)(QObject *) = reinterpret_cast<decltype(sync)>(dlsym(RTLD_DEFAULT, "_ZN13N3SyncManager4syncEv"));
+    bool (*syncing)(const QObject *) = reinterpret_cast<decltype(syncing)>(
+        dlsym(RTLD_DEFAULT, "_ZNK15SyncManagerBase9isSyncingEv"));
+    QObject *manager() const { return instance && sync && syncing ? instance() : nullptr; }
+};
+// The radio calls a scenario uses to start from Wi-Fi off. off() is the call
+// that KOSync's release makes after a sync it connected for.
+struct NativeRadio {
+    QObject *(*instance)() = reinterpret_cast<decltype(instance)>(
+        dlsym(RTLD_DEFAULT, "_ZN15WirelessManager14sharedInstanceEv"));
+    void (*off)(QObject *) = reinterpret_cast<decltype(off)>(dlsym(RTLD_DEFAULT, "_ZN15WirelessManager3offEv"));
+    bool (*up)(QObject *) = reinterpret_cast<decltype(up)>(dlsym(RTLD_DEFAULT, "_ZNK15WirelessManager2upEv"));
+    QObject *manager() const { return instance && off && up ? instance() : nullptr; }
+};
 #endif
 }
 
@@ -1056,6 +1078,59 @@ void ReaderCoordinator::runScenarios(const QString &path) {
                                              run.reader->property("eval_sleep_cover_pending").toBool()); };
     host.idle = [this] { return idleForBenchmark(); };
     host.wifiControl = [] { return NativeSyncNetwork::canTurnOff(); };
+    host.nativeSync = [this]() -> QString {
+        static const NativeSync native;
+        auto *manager = native.manager();
+        if (!manager)
+            return QStringLiteral("this firmware has no N3SyncManager::sync()");
+        QElapsedTimer call;
+        call.start();
+        native.sync(manager);
+        const double callMs = call.nsecsElapsed() / 1e6;
+        const bool started = native.syncing(manager);
+        kobalt::diagnostic("native-sync-start", kobalt::qt::object({{"call_ms", callMs}, {"syncing", started}}), false);
+        if (!started)
+            return QStringLiteral("Nickel did not start a sync");
+        // Log the end, so samples can be matched to the sync they overlap.
+        // The Wi-Fi power saver reads isSyncing() on this thread too.
+        auto *poll = new QTimer(this);
+        auto elapsed = std::make_shared<QElapsedTimer>();
+        elapsed->start();
+        connect(poll, &QTimer::timeout, this, [poll, elapsed] {
+            auto *current = native.manager();
+            const bool running = current && native.syncing(current);
+            if (running && elapsed->elapsed() < 600000)
+                return;
+            poll->stop();
+            poll->deleteLater();
+            kobalt::diagnostic("native-sync-end", kobalt::qt::object({{"elapsed_ms", elapsed->nsecsElapsed() / 1e6},
+                                                                       {"ended", !running}}), false);
+        });
+        poll->start(100);
+        return {};
+    };
+    host.nativeSyncing = [] {
+        static const NativeSync native;
+        auto *manager = native.manager();
+        return manager && native.syncing(manager);
+    };
+    host.wifiOff = []() -> QString {
+        static const NativeRadio radio;
+        auto *manager = radio.manager();
+        if (!manager)
+            return QStringLiteral("this firmware has no WirelessManager::off()");
+        // Its own name, so this harness call neither uses up the one-time
+        // main-thread report for KOSync's wifi-off nor looks like it in the log.
+        mainthread::AllowBlocking allow("scenario wifi step");
+        mainthread::BlockingOperation wait("scenario-wifi-off");
+        radio.off(manager);
+        return {};
+    };
+    host.wifiUp = [] {
+        static const NativeRadio radio;
+        auto *manager = radio.manager();
+        return manager && radio.up(manager);
+    };
     host.sleepPersistence = [this](const QJsonObject &request) {
         auto &options = scenario::sleepPersistenceOptions();
         const auto action = request.value("action").toString();

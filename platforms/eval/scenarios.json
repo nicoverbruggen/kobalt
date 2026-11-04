@@ -572,6 +572,7 @@
         {"settle":true}
       ],
       "steps": [
+        {"wifi":"off"},
         {"wait_ms":31000},
         {"key":"PageDown"},
         {"event":"kosync-network-finished","where":{"ready":true,"owned":true},"timeout":25000},
@@ -582,6 +583,57 @@
         {"kosync":{}},
         {"open":"benchmark"}
       ]
+    },
+    {
+      "id": "native-sync.page-turn",
+      "kind": "e2e",
+      "opt_in": true,
+      "paths": ["platforms/kobo/qt5/native_reading_session.cpp","platforms/kobo/qt6/native_reading_session.cpp","platforms/kobo/common/native_event_save.h"],
+      "book": "benchmark",
+      "needs": ["native-sync"],
+      "repeat": 5,
+      "setup": [
+        {"press":"rrPage","unless":"rrNavChapters"},
+        {"visible":"rrNavChapters"},
+        {"press":"rrNavChapters"},
+        {"visible":"rrChapter1"},
+        {"press":"rrChapter1"},
+        {"settle":true}
+      ],
+      "steps": [
+        {"native-sync":true},
+        {"open":"benchmark"},
+        {"mark":true},
+        {"key":"PageDown"},
+        {"event":"page-turn-painted","as":"turn1"},
+        {"key":"PageDown"},
+        {"event":"page-turn-painted","as":"turn2"},
+        {"key":"PageDown"},
+        {"event":"page-turn-painted","as":"turn3"},
+        {"key":"PageDown"},
+        {"event":"page-turn-painted","as":"turn4"},
+        {"key":"PageDown"},
+        {"event":"page-turn-painted","as":"turn5"},
+        {"mark_end":true},
+        {"event":"operation-end","where":{"operation":"nickel-session-stop-flush"},"earlier":true,"as":"stop-save","timeout":30000},
+        {"event":"operation-end","where":{"operation":"nickel-session-start-flush"},"earlier":true,"as":"start-save","timeout":30000},
+        {"event":"native-sync-end","earlier":true,"as":"sync","timeout":600000}
+      ],
+      "after": [
+        {"settle":true},
+        {"key":"PageUp"},
+        {"event":"page-turn-painted"},
+        {"key":"PageUp"},
+        {"event":"page-turn-painted"},
+        {"key":"PageUp"},
+        {"event":"page-turn-painted"},
+        {"key":"PageUp"},
+        {"event":"page-turn-painted"},
+        {"key":"PageUp"},
+        {"event":"page-turn-painted"},
+        {"settle":true}
+      ],
+      "sample": {"timer":true,"stages":{"turn1_ms":{"event":"turn1","field":"elapsed_ms"},"turn2_ms":{"event":"turn2","field":"elapsed_ms"},"turn3_ms":{"event":"turn3","field":"elapsed_ms"},"turn4_ms":{"event":"turn4","field":"elapsed_ms"},"turn5_ms":{"event":"turn5","field":"elapsed_ms"},"stop_save_ms":{"event":"stop-save","field":"elapsed_ms"},"start_save_ms":{"event":"start-save","field":"elapsed_ms"},"sync_ms":{"event":"sync","field":"elapsed_ms"}}}
     }
   ]
 }

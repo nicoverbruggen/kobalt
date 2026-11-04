@@ -27,6 +27,8 @@ public:
         return startFlushes > 0 || (saves.pending() && !saves.failed());
     }
     std::function<void()> estimatesChanged;
+    // The reader's minute tick refreshes Nickel's reading pace.
+    void minuteTick() { pace_.tick(); }
 #ifndef KOBALT_READER_HARDWARE
     static void testCommand();
 #endif
@@ -40,7 +42,8 @@ private:
     int startFlushes = 0;
     std::shared_ptr<NativeReadingSession *> alive = std::make_shared<NativeReadingSession *>(this);
     nickel::PageReadingActivity activity_;
-    nickel::ReadingPaceCache pace_;
+    nickel::ReadingPaceCache pace_{nickel::ReadingPaceCache::refreshInterval,
+                                   nickel::ReadingPaceCache::Schedule::Ticked};
     nickel::NativeReadingSave saves;
 };
 }

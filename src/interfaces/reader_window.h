@@ -53,6 +53,9 @@ public:
     virtual void sleepViewReady() = 0;
     virtual void wakeReader() = 0;
     virtual void progressTick() = 0;
+    // Called on the reader's minute tick, while it is visible and awake, so a
+    // host's periodic checks share the clock's wakeup instead of their own timer.
+    std::function<void()> minuteTicked;
     virtual void refreshHostPresentation() = 0;
     // Logical forward/backward input, independent of touch swipe direction.
     virtual void pageButton(int direction) = 0;

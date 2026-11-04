@@ -39,6 +39,9 @@ public:
     virtual bool estimates(const ReadingActivity &, ReadingEstimates *) {
         return false;
     }
+    // Called once a minute while the reader is visible and awake, with the
+    // clock update, so periodic platform work shares one wakeup.
+    virtual void minuteTick() {}
     virtual void stopReading() = 0;
     // A lifecycle boundary can precede the last frame-observation callback.
     virtual void stopReading(const ReadingActivity &) { stopReading(); }

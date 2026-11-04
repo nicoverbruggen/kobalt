@@ -498,8 +498,9 @@ void ReadingBook::pollProgress() {
     if (!bridge)
         return;
     // Nickel's saved position changes after sync, account updates, USB and
-    // wake. Check then, and otherwise once a minute.
-    if (!bridge->takeChange() && progressPoll.isValid() && progressPoll.elapsed() < 60000)
+    // wake. Check then, and otherwise once a minute. The minute tick can come a
+    // little early, so accept it after 55 seconds.
+    if (!bridge->takeChange() && progressPoll.isValid() && progressPoll.elapsed() < 55000)
         return;
     observeProgress();
     progressPoll.restart();

@@ -558,10 +558,17 @@ void Reader::startClockTimer() {
     clockTimer = new QTimer(this);
     clockTimer->setObjectName("rrClockTimer");
     clockTimer->setSingleShot(true);
+    // Qt rounds a long coarse timer to whole seconds and can fire it up to half
+    // a second early, before the minute changes; that costs a second wakeup.
+    clockTimer->setTimerType(Qt::PreciseTimer);
     connect(clockTimer, &QTimer::timeout, this, [this] {
         if (!isVisible() || services.suspended())
             return;
         startClock();
+        // The minute work runs whether or not a clock is shown.
+        book->minuteTick();
+        if (minuteTicked)
+            minuteTicked();
         if (topControls->isVisible()) {
             updateMenuStatus();
             return;

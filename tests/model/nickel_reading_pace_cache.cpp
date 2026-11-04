@@ -255,6 +255,33 @@ int main(int argc, char **argv) {
         runFor(30);
         require(notifications == 0, "A destroyed cache published a result");
     }
+    {
+        // A ticked cache has no timer: it queries at start, then only on a tick
+        // that comes at least eleven twelfths of the interval later.
+        int calls = 0;
+        ReadingPaceCache cache(200, ReadingPaceCache::Schedule::Ticked);
+        cache.start(worker, [&] {
+            ++calls;
+            return .25;
+        });
+        waitFor([&] {
+            return cache.value() == .25;
+        });
+        runFor(400);
+        require(calls == 1, "A ticked cache refreshed on its own timer");
+        cache.tick();
+        waitFor([&] {
+            return calls == 2;
+        });
+        cache.tick();
+        runFor(30);
+        require(calls == 2, "A tick before the interval refreshed the pace");
+        cache.stop();
+        runFor(250);
+        cache.tick();
+        runFor(30);
+        require(calls == 2, "A stopped cache refreshed on a tick");
+    }
     thread.quit();
     thread.wait();
     std::puts(

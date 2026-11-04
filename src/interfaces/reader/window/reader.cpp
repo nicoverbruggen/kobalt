@@ -1505,13 +1505,13 @@ void Reader::lookupSelection() {
     });
 }
 
-// Wake at the next wall-clock minute or the next reading minute of the
-// menu status, whichever comes first.
+// Wake once a minute, just after the wall-clock minute changes. The session
+// minutes appear only in the reading menu, which pauses the reading clock and
+// refreshes its status when it opens, so no other minute needs a wakeup. The
+// reader's other periodic work runs on the same tick.
 void Reader::startClock() {
     const auto clock = 60000 - QTime::currentTime().msecsSinceStartOfDay() % 60000;
-    // A stopped reading clock never reaches its next minute.
-    const auto reading = book->readingActive() ? 60000 - book->sessionReadingMilliseconds() % 60000 : 60000;
-    clockTimer->start(int(qMin<qint64>(clock, reading)) + 50);
+    clockTimer->start(int(clock) + 50);
 }
 
 void Reader::configureNavigation() {

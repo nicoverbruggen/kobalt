@@ -53,6 +53,11 @@ public:
     // Revocation abandons native work but keeps local data available to save.
     void releaseNative(bool save = true);
     void observeReading(bool learnPace = true);
+    // Once a minute while the reader is visible and awake.
+    void minuteTick() {
+        if (bridge && !released)
+            bridge->minuteTick();
+    }
     void stopReading(bool background = false, bool nativeAllowed = true);
     void sleepReading(const QJsonObject &preferences);
     void finishReading(std::function<void(bool)> done);

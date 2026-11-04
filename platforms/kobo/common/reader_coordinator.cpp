@@ -234,9 +234,11 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     // Nickel's sleep, wake, USB and sync signals drive the reader. This check
     // reads Nickel's saved position once a minute, and it repeats the
     // visibility checks in case a transition left the reader in the wrong state.
-    // A precise timer never fires early, so each check reaches the minute.
+    // A visible reader runs it on its clock tick (minuteTicked); this timer is
+    // the fallback for a hidden or sleeping reader, and slightly longer than a
+    // minute so a ticking clock always comes first.
     timer.setTimerType(Qt::PreciseTimer);
-    timer.setInterval(60000);
+    timer.setInterval(65000);
     if (!lifecycle->blocked())
         timer.start();
     // Read and check the interface faces on a worker thread before any tap,
@@ -908,6 +910,14 @@ void ReaderCoordinator::showReader() {
         ignoreNativeFontScale(run.reader);
     }
     const double created = creating.nsecsElapsed() / 1e6;
+    // While the reader is visible and awake, its clock tick runs this check, so
+    // the device wakes once a minute. The timer then only covers a reader that
+    // is hidden or asleep, and the tick keeps pushing it back.
+    run.reader->minuteTicked = [this] {
+        if (!lifecycle->blocked())
+            timer.start();
+        kobalt::qt::later(0, this, [this] { poll(); });
+    };
     run.reader->finished = [this](std::unique_ptr<kobalt::ReaderSession> retained) {
         auto closing = run.reader ? run.reader->closingTiming() : kobalt::ActionTiming{};
         // closeEvent has accepted this close. Do not let the visibility

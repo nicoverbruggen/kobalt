@@ -42,6 +42,7 @@ public:
     bool estimates(const ReadingActivity &activity, ReadingEstimates *result) override {
         return reading_.estimates(activity, result);
     }
+    void minuteTick() override { reading_.minuteTick(); }
     void stopReading(const ReadingActivity &activity) override {
         if (!activity.position.isEmpty() && activity.pages > 0 && activity.page >= 0)
             reading_.page(activity);

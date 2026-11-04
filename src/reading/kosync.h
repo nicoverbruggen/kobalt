@@ -27,6 +27,10 @@ bool automaticPaused();
 // instead of the saved one and never write it. An empty object restores the
 // saved account. Call on the GUI thread.
 void overrideAccount(const QJsonObject &account);
+// The time between two automatic syncs while reading. A scenario account can
+// shorten it with `interval_ms`, so a check does not wait 30 seconds for each
+// sync; a saved account always uses its schedule.
+int readingIntervalMilliseconds(const Schedule &schedule);
 struct Progress {
     QString position, device, deviceId;
     double percentage = 0;

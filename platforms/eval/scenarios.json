@@ -567,13 +567,13 @@
       "needs": ["kosync","wifi-control"],
       "repeat": 5,
       "setup": [
-        {"kosync":{"schema":1,"server":"https://127.0.0.1:9","username":"kobalt-eval","key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","device_id":"kobalt-eval","automatic":true,"sync_interval_minutes":0,"wake_wifi":true,"sync_on_open":false,"sync_on_sleep_wake":false,"sync_on_close":false}},
+        {"kosync":{"schema":1,"server":"https://127.0.0.1:9","username":"kobalt-eval","key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","device_id":"kobalt-eval","automatic":true,"sync_interval_minutes":0,"interval_ms":1000,"wake_wifi":true,"sync_on_open":false,"sync_on_sleep_wake":false,"sync_on_close":false}},
         {"open":"benchmark"},
         {"settle":true}
       ],
       "steps": [
         {"wifi":"off"},
-        {"wait_ms":31000},
+        {"wait_ms":1500},
         {"key":"PageDown"},
         {"event":"kosync-network-finished","where":{"ready":true,"owned":true},"timeout":25000},
         {"event":"main-thread-wait","where":{"operation":"wifi-off"},"timeout":30000}

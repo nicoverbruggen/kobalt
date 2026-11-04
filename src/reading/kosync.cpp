@@ -40,6 +40,10 @@ QJsonObject &accountOverride() {
 void overrideAccount(const QJsonObject &account) {
     accountOverride() = account;
 }
+int readingIntervalMilliseconds(const Schedule &schedule) {
+    const int interval = accountOverride().value("interval_ms").toInt();
+    return interval > 0 ? interval : scheduleIntervalMilliseconds(schedule);
+}
 namespace {
 QString message(const char *key) { return strings::get(key); }
 // Every client writes the account through this one writer, so a client that

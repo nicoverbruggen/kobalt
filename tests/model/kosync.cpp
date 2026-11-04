@@ -477,7 +477,17 @@ int main(int argc, char **argv) {
         require(scenario.signedIn() && scenario.username() == "eval" && scenario.schedule().minutes == 0 &&
                     scenario.schedule().wakeWifi, "a scenario account is used instead of the saved one");
         require(!scenario.setAutomatic(false), "a scenario account is never saved");
+        require(kosync::readingIntervalMilliseconds(scenario.schedule()) == 30000,
+                "a scenario account without interval_ms keeps the 30-second check for every page");
+        kosync::overrideAccount(QJsonObject{{"schema", 1}, {"server", "https://127.0.0.1:9"}, {"username", "eval"},
+                                            {"key", QString(32, 'a')}, {"device_id", "eval-device"}, {"automatic", true},
+                                            {"sync_interval_minutes", 15}, {"interval_ms", 1000}});
+        kosync::Client shortened(path, nullptr, &network);
+        require(kosync::readingIntervalMilliseconds(shortened.schedule()) == 1000,
+                "a scenario account's interval_ms replaces the schedule's interval");
         kosync::overrideAccount({});
+        require(kosync::readingIntervalMilliseconds(shortened.schedule()) == 15 * 60000,
+                "without a scenario account the schedule decides the interval");
         QFile unchanged(path);
         require(unchanged.open(QIODevice::ReadOnly) && unchanged.readAll() == accountBytes,
                 "the saved account is unchanged by a scenario account");

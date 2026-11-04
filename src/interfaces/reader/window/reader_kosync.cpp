@@ -153,7 +153,7 @@ void Reader::syncKosyncWhileReading() {
     kosyncSeenPosition = position;
     const auto schedule = kosyncClient->schedule();
     if (!kosync::syncsWhileReading(schedule) ||
-        kosyncClock() - kosyncSubmitted < kosync::scheduleIntervalMilliseconds(schedule))
+        kosyncClock() - kosyncSubmitted < kosync::readingIntervalMilliseconds(schedule))
         return;
     synchronizeKosync();
 }

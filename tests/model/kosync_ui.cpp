@@ -1,4 +1,5 @@
 #include "interfaces/reader/settings/settings_panel.h"
+#include "interfaces/reader/settings/kosync_schedule_sheet.h"
 #include "interfaces/reader/views/kosync_notice.h"
 #include "check.h"
 #include "support/strings.h"
@@ -376,7 +377,7 @@ int main(int argc, char **argv) {
     auto *server = page->findChild<QPushButton *>("rrKosyncServer");
     auto *password = page->findChild<QPushButton *>("rrKosyncPassword");
     auto *login = page->findChild<QPushButton *>("rrKosyncLogin");
-    auto *automatic = page->findChild<QCheckBox *>("rrKosyncAutomatic");
+    auto *automatic = static_cast<ui::CaptionButton *>(page->findChild<QPushButton *>("rrKosyncAutomatic"));
     auto *sync = page->findChild<QPushButton *>("rrKosyncNow");
     auto *logout = page->findChild<QPushButton *>("rrKosyncLogout");
     require(server && password && login && automatic && sync && logout, "all sync controls exist");
@@ -504,7 +505,7 @@ int main(int argc, char **argv) {
     login->click();
     require(submitted == "private-test-password" && page->takePassword().isEmpty(), "login consumes and clears password");
     page->setAccount("https://sync.example/prefix", "reader", true, true);
-    require(automatic->isEnabled() && automatic->isChecked() && sync->isEnabled() && logout->isEnabled(),
+    require(automatic->isEnabled() && sync->isEnabled() && logout->isEnabled(),
             "signed-in account enables sync controls");
     auto *lastSync = page->findChild<QLabel *>("rrKosyncLastSync");
     require(lastSync && lastSync->isVisible() && lastSync->text() == "Last synced: Never",
@@ -617,12 +618,109 @@ int main(int argc, char **argv) {
     page->setAccount("https://sync.example/prefix", "reader", true, true);
     require(server->isVisible() && sync->isVisible() && automatic->isVisible(), "sideloaded books retain normal KOsync controls");
     bool autoChanged = false;
+    kosync::Schedule chosenSchedule;
+    int scheduleChanges = 0;
     page->automaticChanged = [&](bool value) { autoChanged = !value; };
+    page->scheduleChanged = [&](const kosync::Schedule &schedule) {
+        chosenSchedule = schedule;
+        ++scheduleChanges;
+    };
+    page->setScheduleFeatures(true, true);
+    page->setSchedule({});
+    require(automatic->caption() == strings::get("kosync.automatic_caption_wait").arg(strings::get("kosync.interval_15")),
+            "the automatic row names the interval and the Wi-Fi choice");
     automatic->click();
-    require(autoChanged, "automatic sync toggle reaches the owner");
+    QApplication::processEvents();
+    auto *sheet = window.findChild<QWidget *>("rrKosyncAutomaticPopup");
+    require(sheet && sheet->isVisible(), "the automatic row opens the Automatic sync sheet");
+    auto *details = sheet->findChild<QWidget *>("rrKosyncWhenReading");
+    auto *on = sheet->findChild<QPushButton *>("rrKosyncAutomaticOn");
+    auto *off = sheet->findChild<QPushButton *>("rrKosyncAutomaticOff");
+    auto *interval = sheet->findChild<QPushButton *>("rrKosyncInterval");
+    auto *wait = sheet->findChild<QPushButton *>("rrKosyncWifiWait");
+    auto *wake = sheet->findChild<QPushButton *>("rrKosyncWifiWake");
+    require(details && on && off && interval && wait && wake, "the sheet has its mode, interval and Wi-Fi controls");
+    require(on->isChecked() && details->isEnabled() && wait->isChecked() && !wake->isChecked() &&
+            interval->text() == strings::get("kosync.interval_15"), "the sheet shows the saved choices");
+    const char *moments[] = {"rrKosyncWhenReading", "rrKosyncOnOpenRow", "rrKosyncOnSleepWakeRow", "rrKosyncOnCloseRow"};
+    for (int index = 0; index < 4; ++index) {
+        require(sheet->findChild<QWidget *>(moments[index]), "the sheet lists each moment Kobalt syncs");
+        // A short window pages the card, so compare the rows' layout order.
+        const auto order = [sheet](const char *name) {
+            auto *row = sheet->findChild<QWidget *>(name);
+            return row->parentWidget()->layout()->indexOf(row);
+        };
+        if (index)
+            require(order(moments[index - 1]) < order(moments[index]), "While you read comes first and closing the book last");
+    }
+    for (auto *name : {"rrKosyncOnOpen", "rrKosyncOnSleepWake", "rrKosyncOnClose"})
+        require(sheet->findChild<QAbstractButton *>(name)->isChecked(), "each moment is on by default");
+    auto *onClose = sheet->findChild<QAbstractButton *>("rrKosyncOnClose");
+    QTest::mouseClick(sheet->findChild<QWidget *>("rrKosyncOnCloseRow"), Qt::LeftButton, {}, QPoint(ui::px(80), ui::px(30)));
+    require(!onClose->isChecked() && scheduleChanges == 1 && !chosenSchedule.onClose && chosenSchedule.onOpen &&
+            chosenSchedule.onSleepWake, "tapping a moment row toggles its switch");
+    onClose->click();
+    require(onClose->isChecked() && scheduleChanges == 2 && chosenSchedule.onClose, "the switch turns the moment on again");
+    scheduleChanges = 0;
+    interval->click();
+    QApplication::processEvents();
+    auto *intervals = window.findChild<QWidget *>("rrKosyncIntervalPopup");
+    require(intervals && intervals->isVisible(), "the interval opens the usual radio list");
+    for (const int minutes : kosync::scheduleMinutes())
+        require(intervals->findChild<QWidget *>("rrKosyncInterval_" + reader::KosyncScheduleSheet::intervalKey(minutes)),
+                "each interval is listed");
+    require(intervals->findChild<QWidget *>("rrKosyncInterval_never"), "the list offers Never");
+    auto *thirty = intervals->findChild<QAbstractButton *>("rrKosyncInterval_30");
+    thirty->click();
+    QApplication::processEvents();
+    require(scheduleChanges == 1 && chosenSchedule.minutes == 30 && !chosenSchedule.wakeWifi,
+            "choosing an interval reaches the owner");
+    require(!window.findChild<QWidget *>("rrKosyncIntervalPopup") ||
+            !window.findChild<QWidget *>("rrKosyncIntervalPopup")->isVisible(), "choosing closes the list");
+    require(interval->text() == strings::get("kosync.interval_30"), "the drop-down shows the new interval");
+    wake->click();
+    require(scheduleChanges == 2 && chosenSchedule.minutes == 30 && chosenSchedule.wakeWifi && wake->isChecked() &&
+            !wait->isChecked(), "the Wi-Fi tiles choose whether background syncs turn on Wi-Fi");
+    interval->click();
+    QApplication::processEvents();
+    window.findChild<QWidget *>("rrKosyncIntervalPopup")->findChild<QAbstractButton *>("rrKosyncInterval_never")->click();
+    QApplication::processEvents();
+    require(scheduleChanges == 3 && chosenSchedule.minutes == kosync::neverWhileReading &&
+            !sheet->findChild<QWidget *>("rrKosyncWifiRow")->isEnabled() && interval->text() == strings::get("kosync.interval_never"),
+            "Never turns off periodic syncs and grays the Wi-Fi choice");
+    page->setSchedule(chosenSchedule);
+    require(automatic->caption() == strings::get("kosync.automatic_caption_never"), "the automatic row names Never");
+    chosenSchedule.minutes = 30;
+    page->setSchedule(chosenSchedule);
+    off->click();
+    require(autoChanged && !details->isEnabled() && off->isChecked(), "Off reaches the owner and grays the details");
+    page->setSchedule(chosenSchedule);
     page->setAccount("https://sync.example/prefix", "reader", true, false);
-    require(automatic->accessibleDescription() == strings::get("kosync.manual_description"),
-            "manual mode shows its toolbar guidance");
+    require(automatic->caption() == strings::get("kosync.automatic_off_caption"),
+            "manual mode names the toolbar button in the automatic row");
+    auto *close = sheet->findChild<QPushButton *>("rrKosyncAutomaticClose");
+    require(close, "the sheet has a close cell");
+    close->click();
+    QApplication::processEvents();
+    require(!window.findChild<QWidget *>("rrKosyncAutomaticPopup") ||
+            !window.findChild<QWidget *>("rrKosyncAutomaticPopup")->isVisible(), "Close dismisses the sheet");
+    page->setAccount("https://sync.example/prefix", "reader", true, true);
+    require(automatic->caption() == strings::get("kosync.automatic_caption_wake").arg(strings::get("kosync.interval_30")),
+            "the automatic row follows the saved schedule");
+    // Desktop and Android have no device sleep and cannot turn on Wi-Fi.
+    page->setScheduleFeatures(false, false);
+    require(automatic->caption() == strings::get("kosync.interval_30"), "without Wi-Fi control the row names only the interval");
+    automatic->click();
+    QApplication::processEvents();
+    QWidget *plain = nullptr;
+    for (auto *candidate : window.findChildren<QWidget *>("rrKosyncAutomaticPopup"))
+        if (candidate->isVisible()) plain = candidate;
+    require(plain && plain->isVisible() && plain->findChild<QWidget *>("rrKosyncOnOpenRow") &&
+            plain->findChild<QWidget *>("rrKosyncOnCloseRow") && !plain->findChild<QWidget *>("rrKosyncOnSleepWakeRow") &&
+            !plain->findChild<QWidget *>("rrKosyncWifiRow"), "a host without sleep or Wi-Fi control leaves those choices out");
+    plain->findChild<QPushButton *>("rrKosyncAutomaticClose")->click();
+    QApplication::processEvents();
+    page->setAccount("https://sync.example/prefix", "reader", true, false);
     page->setStatus({}, true);
     require(!automatic->isEnabled() && !sync->isEnabled(), "busy sync blocks manual controls");
     page->setNativeCloudSync(true);

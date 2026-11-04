@@ -132,7 +132,7 @@ using test::PaintRegions;
 namespace {
 struct SyncNetworkState {
     bool connected = false, interactive = false;
-    int requests = 0, cancellations = 0;
+    int requests = 0, cancellations = 0, releases = 0;
     std::function<void(bool)> completed;
 };
 class TestSyncNetwork final : public SyncNetwork {
@@ -148,6 +148,7 @@ public:
         if (state->completed) ++state->cancellations;
         state->completed = {};
     }
+    void release() override { ++state->releases; }
 private:
     std::shared_ptr<SyncNetworkState> state;
 };
@@ -3654,14 +3655,30 @@ private slots:
         QCOMPARE(!manual->isHidden(), account == "automatic-off");
         if (account == "logout") {
             QVERIFY(timer->isActive());
-            auto *automatic = host.window()->findChild<QCheckBox *>("rrKosyncAutomatic");
-            QVERIFY(automatic && automatic->isChecked() && automatic->isEnabled());
+            auto *automatic = host.window()->findChild<QPushButton *>("rrKosyncAutomatic");
+            QVERIFY(automatic && automatic->isEnabled());
+            QCOMPARE(timer->interval(), 15 * 60000);
             automatic->click();
+            auto *sheet = host.window()->findChild<QWidget *>("rrKosyncAutomaticPopup");
+            QVERIFY(sheet);
+            auto *off = sheet->findChild<QPushButton *>("rrKosyncAutomaticOff");
+            auto *on = sheet->findChild<QPushButton *>("rrKosyncAutomaticOn");
+            QVERIFY(off && on && on->isChecked());
+            off->click();
             QVERIFY(!timer->isActive());
             QVERIFY(!manual->isHidden());
-            automatic->click();
+            on->click();
             QVERIFY(timer->isActive());
             QVERIFY(manual->isHidden());
+            // The interval list applies the new period to the running timer.
+            sheet->findChild<QPushButton *>("rrKosyncInterval")->click();
+            auto *intervals = host.window()->findChild<QWidget *>("rrKosyncIntervalPopup");
+            QVERIFY(intervals);
+            intervals->findChild<QAbstractButton *>("rrKosyncInterval_30")->click();
+            QVERIFY(timer->isActive());
+            QCOMPARE(timer->interval(), 30 * 60000);
+            QCOMPARE(kosync::Client(paths.syncAccount()).schedule().minutes, 30);
+            sheet->findChild<QPushButton *>("rrKosyncAutomaticClose")->click();
             auto *logout = host.window()->findChild<QPushButton *>("rrKosyncLogout");
             QVERIFY(logout && logout->isEnabled());
             logout->click();
@@ -3932,6 +3949,131 @@ private slots:
     void kosyncNetwork() {
         QFETCH(QString, scenario);
         verifyKosyncNetwork(scenario);
+    }
+    // Each moment has its own switch. With opening, sleep and wake and
+    // periodic syncs turned off, only Sync now contacts the network.
+    void kosyncMoments() {
+        QTcpServer stalled;
+        QVERIFY(stalled.listen(QHostAddress::LocalHost));
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(), {
+            {"schema", 1}, {"server", QString("https://127.0.0.1:%1").arg(stalled.serverPort())},
+            {"username", "test-reader"}, {"key", QString(32, 'a')},
+            {"device_id", "test-device"}, {"automatic", true}, {"sync_interval_minutes", kosync::neverWhileReading},
+            {"sync_on_open", false}, {"sync_on_sleep_wake", false}, {"sync_on_close", false}}));
+        auto network = std::make_shared<SyncNetworkState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [network](ReaderHostServices &services) {
+            services.syncNetwork = [network] { return std::make_unique<TestSyncNetwork>(network); };
+            services.kosyncSleepWake = services.kosyncWifiControl = true;
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool presented = false;
+        host.window()->preparePresentation([&](bool ready) { presented = ready; });
+        QVERIFY(presented);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QCoreApplication::processEvents();
+        QVERIFY(!host.window()->findChild<QWidget *>("rrKosyncOpening"));
+        QCOMPARE(network->requests, 0);
+        auto *timer = host.window()->findChild<QTimer *>("rrKosyncTimer");
+        QVERIFY(timer && !timer->isActive());
+        host.window()->sleepReader();
+        host.window()->wakeReader();
+        QCoreApplication::processEvents();
+        QCOMPARE(network->requests, 0);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrKosyncOpening"));
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        QCOMPARE(network->requests, 1);
+        QVERIFY(network->interactive);
+    }
+    // A periodic sync may turn on Wi-Fi only when the schedule allows it. Three
+    // failed background connections stop further tries until Sync now, and a
+    // sync that turned on Wi-Fi releases it when it ends.
+    void kosyncBackgroundWifi() {
+        QTcpServer stalled;
+        QVERIFY(stalled.listen(QHostAddress::LocalHost));
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(), {
+            {"schema", 1}, {"server", QString("https://127.0.0.1:%1").arg(stalled.serverPort())},
+            {"username", "test-reader"}, {"key", QString(32, 'a')},
+            {"device_id", "test-device"}, {"automatic", true},
+            {"sync_interval_minutes", 5}, {"wake_wifi", true}}));
+        auto network = std::make_shared<SyncNetworkState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [network](ReaderHostServices &services) {
+            services.syncNetwork = [network] { return std::make_unique<TestSyncNetwork>(network); };
+            services.kosyncSleepWake = services.kosyncWifiControl = true;
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool prepared = false;
+        host.window()->preparePresentation([&](bool ready) { prepared = ready; });
+        QTRY_VERIFY_WITH_TIMEOUT(prepared, 1500);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QPointer<QWidget> popup;
+        QTRY_VERIFY((popup = host.window()->findChild<QWidget *>("rrKosyncOpening")) && popup->isVisible());
+        QVERIFY(click(canvas, popup->findChild<QPushButton *>("rrKosyncCancel")));
+        QCOMPARE(network->requests, 1);
+        auto *timer = host.window()->findChild<QTimer *>("rrKosyncTimer");
+        QVERIFY(timer && timer->isActive());
+        QCOMPARE(timer->interval(), 5 * 60000);
+        const auto fail = [&] {
+            QVERIFY(bool(network->completed));
+            auto completed = std::move(network->completed);
+            network->completed = {};
+            completed(false);
+        };
+        // A connection that never answers ends at the sync deadline and
+        // counts as a failure, like one that reports failure.
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(network->requests, 2);
+        QVERIFY(!network->interactive);
+        QTRY_VERIFY_WITH_TIMEOUT(!network->completed, 12000);
+        for (int attempt = 2; attempt <= kosync::backgroundConnectionLimit; ++attempt) {
+            QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+            QCOMPARE(network->requests, 1 + attempt);
+            QVERIFY(!network->interactive);
+            fail();
+        }
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(network->requests, 1 + kosync::backgroundConnectionLimit);
+        QCOMPARE(network->releases, 0);
+        // Sync now resets the count and the next periodic sync tries again.
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        QCOMPARE(network->requests, 2 + kosync::backgroundConnectionLimit);
+        QVERIFY(network->interactive);
+        fail();
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(network->requests, 3 + kosync::backgroundConnectionLimit);
+        QVERIFY(!network->interactive);
+        network->connected = true;
+        auto completed = std::move(network->completed);
+        network->completed = {};
+        completed(true);
+        // The stalled server ends the exchange at its deadline.
+        QTRY_COMPARE_WITH_TIMEOUT(network->releases, 1, 12000);
+        network->connected = false;
+        // Without permission to turn on Wi-Fi, a periodic sync stays local.
+        host.window()->findChild<QPushButton *>("rrKosyncAutomatic")->click();
+        auto *sheet = host.window()->findChild<QWidget *>("rrKosyncAutomaticPopup");
+        QVERIFY(sheet);
+        sheet->findChild<QPushButton *>("rrKosyncWifiWait")->click();
+        sheet->findChild<QPushButton *>("rrKosyncAutomaticClose")->click();
+        QCOMPARE(kosync::Client(paths.syncAccount()).schedule().wakeWifi, false);
+        const auto requests = network->requests;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(network->requests, requests);
     }
     void kosyncFinal_data() {
         QTest::addColumn<QString>("transition");

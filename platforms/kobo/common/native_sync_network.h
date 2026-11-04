@@ -14,6 +14,8 @@ struct NativeSyncNetworkBindings {
     std::function<bool()> inputPending;
     std::function<void(bool)> request;
     std::function<void()> cancel;
+    // Optional. Without it, Nickel's own idle timeout turns Wi-Fi off.
+    std::function<void()> turnOff;
     bool valid() const { return workflow && ready && disabled && connecting && request && cancel; }
 };
 class NativeSyncNetwork final : public QObject, public SyncNetwork {
@@ -25,6 +27,7 @@ public:
     bool connected() const override;
     void prepare(bool interactive, std::function<void(bool)> finished) override;
     void cancel() override;
+    void release() override;
 
 private slots:
     void check();
@@ -40,5 +43,7 @@ private:
     std::function<void(bool)> finished;
     bool requested = false;
     bool interactive = false;
+    // A silent connection this controller started and Nickel completed.
+    bool ownsConnection = false;
 };
 }

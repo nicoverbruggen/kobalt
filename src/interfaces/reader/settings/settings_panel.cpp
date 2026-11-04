@@ -741,8 +741,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                               denseGraphOption,
                                               hideTabLabelsOption,
                                               automaticOpeningOption,
-                                              minimalAnnotationOption,
-                                              kosync->automaticOption()};
+                                              minimalAnnotationOption};
     for (auto *option : options) {
         auto presentation = option->presentation();
         presentation.indicator = ui::DescribedOption::Indicator::Square;

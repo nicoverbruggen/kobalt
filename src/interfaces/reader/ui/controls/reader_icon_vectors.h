@@ -792,6 +792,40 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path.closeSubpath();
         return true;
     }
+    if (name == QStringLiteral("door-open")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(232, 216);
+        path.lineTo(208, 216);
+        path.lineTo(208, 40);
+        path.cubicTo(208, 31.163444003, 200.836555997, 24, 192, 24);
+        path.lineTo(64, 24);
+        path.cubicTo(55.163444003, 24, 48, 31.163444003, 48, 40);
+        path.lineTo(48, 216);
+        path.lineTo(24, 216);
+        path.cubicTo(19.581722001, 216, 16, 219.581722001, 16, 224);
+        path.cubicTo(16, 228.418277999, 19.581722001, 232, 24, 232);
+        path.lineTo(232, 232);
+        path.cubicTo(236.418277999, 232, 240, 228.418277999, 240, 224);
+        path.cubicTo(240, 219.581722001, 236.418277999, 216, 232, 216);
+        path.closeSubpath();
+        path.moveTo(192, 216);
+        path.lineTo(176, 216);
+        path.lineTo(176, 40);
+        path.lineTo(192, 40);
+        path.closeSubpath();
+        path.moveTo(64, 40);
+        path.lineTo(160, 40);
+        path.lineTo(160, 216);
+        path.lineTo(64, 216);
+        path.closeSubpath();
+        path.moveTo(144, 132);
+        path.cubicTo(144, 138.627416998, 138.627416998, 144, 132, 144);
+        path.cubicTo(125.372583002, 144, 120, 138.627416998, 120, 132);
+        path.cubicTo(120, 125.372583002, 125.372583002, 120, 132, 120);
+        path.cubicTo(138.627416998, 120, 144, 125.372583002, 144, 132);
+        path.closeSubpath();
+        return true;
+    }
     if (name == QStringLiteral("dots-three")) {
         path.setFillRule(Qt::WindingFill);
         path.moveTo(140, 128);

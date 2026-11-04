@@ -486,6 +486,34 @@ int main(int argc, char **argv) {
             "manual sync acknowledgment survives restart without changing sync mode or account");
     require(explained.setDeviceName("Manual reader") && explained.setAutomatic(true), "other account edits succeed");
     require(!kosync::Client(path).manualExplanation(), "account edits preserve the manual sync preference");
+    {
+        // The schedule is optional. Accounts without one sync every 15
+        // minutes and never turn on Wi-Fi for it; invalid values use the
+        // same defaults and do not block writes.
+        const auto schedule = kosync::Client(path).schedule();
+        require(schedule.minutes == 15 && !schedule.wakeWifi, "accounts without a schedule use every 15 minutes");
+        require(!explained.setSchedule({7, true}) && explained.schedule() == schedule,
+                "an unsupported interval is refused");
+        require(explained.setSchedule({0, true}), "a schedule can be saved");
+        const auto saved = kosync::Client(path).schedule();
+        require(saved.minutes == 0 && saved.wakeWifi, "the schedule survives restart");
+        require(explained.setDeviceName("Manual reader") && kosync::Client(path).schedule() == saved,
+                "account edits preserve the schedule");
+        QFile stored(path);
+        require(stored.open(QIODevice::ReadOnly), "fixture reads the account");
+        auto object = QJsonDocument::fromJson(stored.readAll()).object();
+        stored.close();
+        object["sync_interval_minutes"] = 7;
+        object["wake_wifi"] = "yes";
+        require(stored.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+                    stored.write(QJsonDocument(object).toJson()) > 0, "fixture writes invalid schedule values");
+        stored.close();
+        kosync::Client invalid(path);
+        require(invalid.schedule() == kosync::Schedule{} && invalid.storageError().isEmpty() && invalid.setAutomatic(true),
+                "invalid schedule values use the defaults and keep the account writable");
+        require(invalid.setSchedule({15, false}) && kosync::Client(path).schedule() == kosync::Schedule{},
+                "the default schedule can be saved again");
+    }
     require(!client.lastSync().isValid(), "login alone does not count as a progress sync");
     require(client.recordSyncSuccess(), "successful progress exchange records a timestamp");
     const auto synced = client.lastSync();

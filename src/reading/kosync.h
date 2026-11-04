@@ -1,5 +1,6 @@
 #pragma once
 #include "kosync_lookup.h"
+#include "kosync_schedule.h"
 #include <QJsonObject>
 #include <QDateTime>
 #include <QElapsedTimer>
@@ -70,6 +71,8 @@ public:
     using Done = std::function<void(QString error)>;
     void login(const QString &server, const QString &username, const QString &password, Done done);
     bool setAutomatic(bool enabled);
+    Schedule schedule() const { return schedule_; }
+    bool setSchedule(const Schedule &schedule);
     bool manualExplanation() const { return manualExplanation_; }
     bool setManualExplanation(bool enabled);
     bool logout();
@@ -96,7 +99,8 @@ private:
     QTimer retryTimer_;
     QElapsedTimer requestElapsed_;
     bool save(const QUrl &server, const QString &username, const QByteArray &key, bool automatic,
-              const QDateTime &lastSync, const QString &deviceName, bool filenameMatching, bool manualExplanation);
+              const QDateTime &lastSync, const QString &deviceName, bool filenameMatching, bool manualExplanation,
+              const Schedule &schedule);
     QString accountPath_, username_, deviceId_, storageError_;
     QString deviceName_, defaultDeviceName_ = QStringLiteral("Kobalt");
     QUrl server_;
@@ -106,6 +110,7 @@ private:
     bool automatic_ = true, writable_ = true;
     bool filenameMatching_ = false;
     bool manualExplanation_ = true;
+    Schedule schedule_;
     QNetworkAccessManager ownedNetwork_;
     QNetworkAccessManager *network_;
     QPointer<QNetworkReply> reply_;

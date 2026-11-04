@@ -168,6 +168,15 @@ Client::Client(QString accountPath, QObject *parent, QNetworkAccessManager *netw
     lastSync_ = QDateTime::fromString(object.value("last_sync").toString(), Qt::ISODate);
     deviceName_ = object.value("device_name").toString().trimmed();
     filenameMatching_ = object.value("match_method").toString() == "filename";
+    // The schedule fields are optional. Invalid values use the defaults and
+    // do not block writes, because they only tune background syncs.
+    const auto minutes = object.value("sync_interval_minutes");
+    if (minutes.isDouble() && minutes.toDouble() == double(minutes.toInt()) && validScheduleMinutes(minutes.toInt()))
+        schedule_.minutes = minutes.toInt();
+    schedule_.wakeWifi = object.value("wake_wifi").toBool(false);
+    schedule_.onOpen = object.value("sync_on_open").toBool(true);
+    schedule_.onSleepWake = object.value("sync_on_sleep_wake").toBool(true);
+    schedule_.onClose = object.value("sync_on_close").toBool(true);
 }
 void Client::observeNetworkState() {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0) && !defined(QT_NO_BEARERMANAGEMENT)
@@ -207,6 +216,7 @@ struct Account {
     QByteArray key;
     bool automatic, filenameMatching, manualExplanation;
     QDateTime lastSync;
+    Schedule schedule;
 };
 // Runs on the writer thread. Fields the client does not know are kept.
 bool writeAccount(const QString &path, const Account &account) {
@@ -225,6 +235,11 @@ bool writeAccount(const QString &path, const Account &account) {
     object["match_method"] = account.filenameMatching ? QStringLiteral("filename") : QStringLiteral("binary");
     if (account.deviceName.isEmpty()) object.remove("device_name");
     else object["device_name"] = account.deviceName;
+    object["sync_interval_minutes"] = account.schedule.minutes;
+    object["wake_wifi"] = account.schedule.wakeWifi;
+    object["sync_on_open"] = account.schedule.onOpen;
+    object["sync_on_sleep_wake"] = account.schedule.onSleepWake;
+    object["sync_on_close"] = account.schedule.onClose;
     if (account.lastSync.isValid()) object["last_sync"] = account.lastSync.toUTC().toString(Qt::ISODate);
     else object.remove("last_sync");
     QSaveFile file(path);
@@ -237,12 +252,14 @@ bool writeAccount(const QString &path, const Account &account) {
 }
 }
 bool Client::save(const QUrl &server, const QString &username, const QByteArray &key, bool automatic,
-                  const QDateTime &lastSync, const QString &deviceName, bool filenameMatching, bool manualExplanation) {
+                  const QDateTime &lastSync, const QString &deviceName, bool filenameMatching, bool manualExplanation,
+                  const Schedule &schedule) {
     if (!writable_) return false;
     // Known exception: sign-in and account settings wait for their write, so
     // the page can show a storage error and keep the previous values.
     mainthread::AllowBlocking allow("kosync account settings");
-    const Account account{server, username, deviceId_, deviceName, key, automatic, filenameMatching, manualExplanation, lastSync};
+    const Account account{server, username, deviceId_, deviceName, key, automatic, filenameMatching, manualExplanation, lastSync,
+                          schedule};
     if (!accountWriter().writeNow([path = accountPath_, account] { return writeAccount(path, account); })) {
         storageError_ = message("kosync.storage_error");
         return false;
@@ -256,6 +273,7 @@ bool Client::save(const QUrl &server, const QString &username, const QByteArray 
     syncTimeDirty_ = false;
     deviceName_ = deviceName;
     filenameMatching_ = filenameMatching;
+    schedule_ = schedule;
     storageError_.clear();
     return true;
 }
@@ -264,20 +282,24 @@ void Client::setDefaultDeviceName(const QString &name) {
 }
 bool Client::setDeviceName(const QString &name) {
     if (!validDeviceName(name)) return false;
-    return save(server_, username_, key_, automatic_, lastSync_, name.trimmed(), filenameMatching_, manualExplanation_);
+    return save(server_, username_, key_, automatic_, lastSync_, name.trimmed(), filenameMatching_, manualExplanation_, schedule_);
 }
 bool Client::setFilenameMatching(bool enabled) {
     if (busy()) return false;
     if (enabled == filenameMatching_) return true;
-    return save(server_, username_, key_, automatic_, {}, deviceName_, enabled, manualExplanation_);
+    return save(server_, username_, key_, automatic_, {}, deviceName_, enabled, manualExplanation_, schedule_);
 }
-bool Client::setAutomatic(bool enabled) { return save(server_, username_, key_, enabled, lastSync_, deviceName_, filenameMatching_, manualExplanation_); }
+bool Client::setAutomatic(bool enabled) { return save(server_, username_, key_, enabled, lastSync_, deviceName_, filenameMatching_, manualExplanation_, schedule_); }
+bool Client::setSchedule(const Schedule &schedule) {
+    if (!validScheduleMinutes(schedule.minutes)) return false;
+    return save(server_, username_, key_, automatic_, lastSync_, deviceName_, filenameMatching_, manualExplanation_, schedule);
+}
 bool Client::setManualExplanation(bool enabled) {
-    return save(server_, username_, key_, automatic_, lastSync_, deviceName_, filenameMatching_, enabled);
+    return save(server_, username_, key_, automatic_, lastSync_, deviceName_, filenameMatching_, enabled, schedule_);
 }
 bool Client::logout() {
     cancel();
-    return save(server_, username_, {}, false, lastSync_, deviceName_, filenameMatching_, manualExplanation_);
+    return save(server_, username_, {}, false, lastSync_, deviceName_, filenameMatching_, manualExplanation_, schedule_);
 }
 bool Client::recordSyncSuccess() {
     if (!signedIn() || !writable_) return false;
@@ -453,7 +475,7 @@ void Client::login(const QString &server, const QString &username, const QString
             [this, url, username, key, done](int status, QJsonObject object, QString error) {
                 if (error.isEmpty() && (status != 200 || object.value("authorized").toString() != "OK"))
                     error = message("kosync.auth_error");
-                if (error.isEmpty() && !save(url, username, key, true, url == server_ && username == username_ ? lastSync_ : QDateTime{}, deviceName_, filenameMatching_, manualExplanation_)) error = message("kosync.storage_error");
+                if (error.isEmpty() && !save(url, username, key, true, url == server_ && username == username_ ? lastSync_ : QDateTime{}, deviceName_, filenameMatching_, manualExplanation_, schedule_)) error = message("kosync.storage_error");
                 done(error);
             });
 }

@@ -115,6 +115,10 @@
       "sha256": "7f9ebf5bb51a955c248da77b9b8a50226a7ecd81706b59e78233d7ad2a9d9d45"
     },
     {
+      "file": "door-open.svg",
+      "sha256": "d5868e10dbf1c1ae216c4ccbf489cdc98fb91a7886da470e3e7126c1c9a7d6b5"
+    },
+    {
       "file": "dots-three.svg",
       "sha256": "ca4e748007101155641ec3041cd129bb03a8030d0eed16e313b9dd75e6beac77"
     },

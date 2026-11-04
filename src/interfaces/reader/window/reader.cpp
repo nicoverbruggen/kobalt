@@ -445,7 +445,7 @@ void Reader::sleepReader() {
         syncDialog->hide();
     if (finishDialog)
         finishDialog->hide();
-    flushKosync([] {});
+    flushKosync([] {}, kosyncClient->schedule().onSleepWake);
     // Keep the page on screen until Nickel's sleep view replaces it, as in
     // Nickel's own reader. sleepViewReady() submits that view.
 }
@@ -507,6 +507,8 @@ void Reader::sleepViewReady() {
 void Reader::wakeReader() {
     cancelKosync();
     kosyncStarted = false;
+    kosyncWaking = true;
+    kosyncBackgroundFailures = 0;
     sleepImage = {};
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
@@ -2298,7 +2300,7 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
                 return;
             }
             save(true, true, false);
-            flushKosync([this, request] { finishExitSaved(request); });
+            flushKosync([this, request] { finishExitSaved(request); }, kosyncClient->schedule().onClose);
         });
     });
 }

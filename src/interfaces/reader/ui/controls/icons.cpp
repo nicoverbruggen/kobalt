@@ -78,6 +78,10 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
         line(9, 42, 9, 55); line(9, 55, 22, 55);
         line(42, 55, 55, 55); line(55, 55, 55, 42);
         path.addRect(20, 23, 24, 18);
+    } else if (icon == ControlIcon::Door) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("door-open"), path);
     } else if (icon == ControlIcon::BookmarkAdd || icon == ControlIcon::BookmarkRemove || icon == ControlIcon::ExportAction) {
         result.canvas = 256;
         result.filled = true;
@@ -524,7 +528,7 @@ void paintWifiStatusIcon(QPainter &painter, ControlIcon icon, const QRectF &boun
 }
 QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons) {
     if (int(icon) < 0 ||
-        (int(icon) > int(ControlIcon::System) && icon != ControlIcon::BookmarkAdd && icon != ControlIcon::BookmarkRemove && icon != ControlIcon::ExportAction && icon != ControlIcon::FitImage &&
+        (int(icon) > int(ControlIcon::System) && icon != ControlIcon::BookmarkAdd && icon != ControlIcon::BookmarkRemove && icon != ControlIcon::ExportAction && icon != ControlIcon::FitImage && icon != ControlIcon::Door &&
          icon != ControlIcon::PreviousChapter &&
          icon != ControlIcon::NextChapter && icon != ControlIcon::Sync && icon != ControlIcon::Sort &&
          icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight &&

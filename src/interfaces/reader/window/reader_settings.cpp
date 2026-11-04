@@ -231,6 +231,7 @@ void Reader::refreshHostPresentation() {
     auto *settings = static_cast<reader::SettingsPanel *>(general);
     const bool devicePreview = services.devicePreview && services.devicePreview();
     settings->showDictionaries(services.downloadableDictionaries && !devicePreview);
+    updateKosyncFeatures();
     updateMenuStatus();
     resizeEvent(nullptr);
     refresh();

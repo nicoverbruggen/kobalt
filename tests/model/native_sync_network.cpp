@@ -232,6 +232,46 @@ int main(int argc, char **argv) {
         pending.prepare(false, done);
     }
     require(cancelled == 2 && replies == 5, "destruction releases an owned wait and suppresses its callback");
+    {
+        // Only a silent connection this controller started is turned off again.
+        const int savedReplies = replies, savedRequests = requests;
+        int turnedOff = 0;
+        auto releasing = bindings;
+        releasing.turnOff = [&] { ++turnedOff; ready = false; };
+        kobalt::NativeSyncNetwork owned(releasing);
+        ready = true;
+        owned.prepare(false, done);
+        owned.release();
+        require(turnedOff == 0, "a connection that was already up stays on");
+        ready = false;
+        owned.prepare(false, done);
+        ready = true;
+        connecting = false;
+        emit workflow.internetIsAccessible();
+        require(result, "a silent background connection completes");
+        owned.release();
+        require(turnedOff == 1 && !ready, "release turns off the Wi-Fi this controller turned on");
+        owned.release();
+        require(turnedOff == 1, "release turns Wi-Fi off once");
+        owned.prepare(true, done);
+        ready = true;
+        connecting = false;
+        emit workflow.internetIsAccessible();
+        owned.release();
+        require(turnedOff == 1, "a connection the user asked for stays on");
+        ready = false;
+        kobalt::NativeSyncNetwork without(bindings);
+        without.prepare(false, done);
+        ready = true;
+        connecting = false;
+        emit workflow.internetIsAccessible();
+        without.release();
+        require(result, "without the native turn-off call, release leaves Wi-Fi to Nickel");
+        ready = false;
+        connecting = false;
+        replies = savedReplies;
+        requests = savedRequests;
+    }
     kobalt::NativeSyncNetwork unavailable(kobalt::NativeSyncNetworkBindings{});
     unavailable.prepare(true, done);
     require(replies == 6 && !result, "unsupported native APIs fail without a connection attempt");

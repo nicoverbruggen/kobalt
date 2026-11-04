@@ -163,6 +163,7 @@ ReaderHostServices readerHostServices() {
     };
     result.keyboard = ui::makeWidgetKeyboard;
     result.syncNetwork = [] { return std::make_unique<NativeSyncNetwork>(); };
+    result.kosyncSleepWake = result.kosyncWifiControl = true;
     result.presentation = [](QWidget *reader) {
         return makeWindowPresentation(reader, nativeReaderSleepScreenAvailable());
     };

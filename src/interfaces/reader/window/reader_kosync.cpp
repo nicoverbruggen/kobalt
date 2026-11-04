@@ -36,7 +36,10 @@ void Reader::buildKosync() {
         kosyncPage->setDeviceName(kosyncClient->customDeviceName(), kosyncClient->defaultDeviceName());
         kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(), kosyncClient->signedIn(),
                                kosyncClient->automatic());
-        if (kosyncClient->signedIn() && kosyncAutomatic() && !book->usesNativeCloudSync())
+        kosyncPage->setSchedule(kosyncClient->schedule());
+        kosyncTimer.setInterval(kosync::scheduleIntervalMilliseconds(kosyncClient->schedule()));
+        if (kosyncClient->signedIn() && kosyncAutomatic() && !book->usesNativeCloudSync() &&
+            kosync::syncsWhileReading(kosyncClient->schedule()))
             kosyncTimer.start();
         else
             kosyncTimer.stop();
@@ -107,7 +110,14 @@ void Reader::buildKosync() {
         if (enabled) kosyncStarted = false;
         kosyncStatus(kosyncMessage);
     };
+    kosyncPage->scheduleChanged = [this, account](const kosync::Schedule &schedule) {
+        if (!kosyncClient->setSchedule(schedule)) kosyncStatus(strings::get("kosync.storage_error"));
+        kosyncBackgroundFailures = 0;
+        account();
+        kosyncStatus(kosyncMessage);
+    };
     kosyncPage->syncRequested = [this] { synchronizeKosync(true); };
+    updateKosyncFeatures();
     const auto status = book->usesNativeCloudSync() ? strings::get("kosync.native_sync")
         : strings::get(kosyncClient->signedIn() ? "kosync.signed_in" : "kosync.signed_out");
     kosyncStatus(kosyncClient->storageError().isEmpty() ? status : kosyncClient->storageError());
@@ -119,6 +129,10 @@ void Reader::buildKosync() {
             {"reader_waiting", bool(kosyncReaderReady)}}));
         ++kosyncEpoch;
         if (kosyncNetwork) kosyncNetwork->cancel();
+        // Only background connections run under this deadline; interactive
+        // ones start it after they connect. A connection that never answers
+        // counts as a failed background attempt.
+        if (kosyncConnecting) ++kosyncBackgroundFailures;
         kosyncConnecting = false;
         const bool authenticating = std::exchange(kosyncAuthenticating, false);
         kosyncClient->cancel();
@@ -134,6 +148,13 @@ void Reader::buildKosync() {
     connect(&kosyncReaderRetry, &QTimer::timeout, this, [this] {
         if (kosyncReaderReady) continueKosyncWhenReady(std::move(kosyncReaderReady));
     });
+}
+void Reader::updateKosyncFeatures() {
+    // A desktop e-reader preview shows what a Kobo offers. A desktop window
+    // or a phone layout offers only what its host supports.
+    const bool ereaderPreview = services.devicePreview && services.devicePreview() && !services.phoneLayout;
+    kosyncPage->setScheduleFeatures(services.kosyncSleepWake || ereaderPreview,
+                                    services.kosyncWifiControl || ereaderPreview);
 }
 void Reader::updateKosyncToolbar() {
     if (!toolbarComposition.sync || !kosyncClient) return;
@@ -179,6 +200,7 @@ void Reader::requestManualKosync() {
 }
 void Reader::prepareKosyncPresentation(std::function<void(bool)> finished) {
     if (kosyncStarted || book->usesNativeCloudSync() || !kosyncClient->signedIn() || !kosyncAutomatic() ||
+        !kosyncClient->schedule().onOpen ||
         book->pendingProgress() || book->deviceTransition() || model->pages() <= 0 || model->temporaryTypography()) {
         finished(true);
         return;
@@ -219,8 +241,16 @@ void Reader::synchronizeKosync(bool interactive) {
         services.suspended() || book->deviceTransition() || book->pendingProgress() || (!interactive && model->busy()) || model->temporaryTypography() ||
         !isVisible() || model->pages() <= 0 || (!interactive && topControls->isVisible())) return;
     const bool opening = !kosyncStarted && !interactive;
+    // Opening and waking each have their own switch. A skipped one still
+    // counts as started, so periodic syncs and Sync now continue as usual.
+    if (opening && !(std::exchange(kosyncWaking, false) ? kosyncClient->schedule().onSleepWake
+                                                          : kosyncClient->schedule().onOpen)) {
+        kosyncStarted = true;
+        return;
+    }
     if (!interactive && !opening && !kosyncProgress.needsSync(model->state().value("position").toString())) return;
     kosyncStarted = true;
+    if (interactive) kosyncBackgroundFailures = 0;
     if (!interactive) kosyncDeadline.start(10000);
     if (opening) showKosyncOpening();
     if (opening || interactive) prepareKosyncNetwork(interactive, [this, interactive] {
@@ -230,8 +260,21 @@ void Reader::synchronizeKosync(bool interactive) {
         }
         startKosyncExchange(false);
     });
-    else if (kosyncNetwork && !kosyncNetwork->connected()) finishKosync(strings::get("kosync.saved_locally"));
-    else startKosyncExchange(false);
+    else if (kosyncNetwork && !kosyncNetwork->connected()) {
+        // Without permission to turn on Wi-Fi, or after repeated failures,
+        // the position stays local until the next connected sync.
+        if (!kosyncClient->schedule().wakeWifi || kosyncBackgroundFailures >= kosync::backgroundConnectionLimit) {
+            finishKosync(strings::get("kosync.saved_locally"));
+            return;
+        }
+        prepareKosyncNetwork(false, [this] {
+            kosyncReleaseWifi = true;
+            startKosyncExchange(false);
+        });
+    } else {
+        kosyncBackgroundFailures = 0;
+        startKosyncExchange(false);
+    }
 }
 void Reader::prepareKosyncNetwork(bool interactive, std::function<void()> ready) {
     if (!kosyncNetwork && services.syncNetwork) kosyncNetwork = services.syncNetwork();
@@ -242,6 +285,7 @@ void Reader::prepareKosyncNetwork(bool interactive, std::function<void()> ready)
     kosyncNetwork->prepare(interactive, [this, epoch, ready, interactive](bool connected) {
         if (epoch != kosyncEpoch) return;
         kosyncConnecting = false;
+        if (!interactive) kosyncBackgroundFailures = connected ? 0 : kosyncBackgroundFailures + 1;
         if (!connected) {
             const auto message = strings::get("kosync.network_error");
             finishKosync(message);
@@ -305,6 +349,7 @@ void Reader::cancelKosync() {
     kosyncFinished = {};
     kosyncFinishing = false;
     kosyncFlushWaiting = false;
+    kosyncReleaseWifi = false;
     hideKosyncOpening();
 }
 void Reader::finishKosync(const QString &message) {
@@ -316,7 +361,10 @@ void Reader::finishKosync(const QString &message) {
         return;
     }
     kosyncPage->setLastSync(kosyncClient->lastSync());
-    if (kosyncNetwork) kosyncNetwork->cancel();
+    if (kosyncNetwork) {
+        if (std::exchange(kosyncReleaseWifi, false)) kosyncNetwork->release();
+        kosyncNetwork->cancel();
+    }
     kosyncConnecting = kosyncAuthenticating = false;
     const bool finishing = kosyncFinishing;
     const bool opening = kosyncOpening;
@@ -341,11 +389,11 @@ void Reader::finishKosync(const QString &message) {
     finishKosyncPresentation();
     if (finished) finished();
 }
-void Reader::flushKosync(std::function<void()> finished) {
+void Reader::flushKosync(std::function<void()> finished, bool enabled) {
     // A local checkpoint is already durable. Final uploads use only an existing
     // connection and never resolve a remote conflict while closing or asleep.
     if (kosyncConnecting || kosyncAuthenticating || kosyncReaderReady) cancelKosync();
-    if ((kosyncNetwork && !kosyncNetwork->connected()) ||
+    if (!enabled || (kosyncNetwork && !kosyncNetwork->connected()) ||
         book->usesNativeCloudSync() || !kosyncClient->signedIn() || !kosyncAutomatic() ||
         kosyncProgress.pending() || book->pendingProgress() || model->temporaryTypography() ||
         model->pages() <= 0 || kosyncDocument().isEmpty() ||

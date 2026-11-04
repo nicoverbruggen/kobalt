@@ -1,4 +1,5 @@
 #include "kosync_page.h"
+#include "kosync_schedule_sheet.h"
 #include "interfaces/reader/ui/controls/text.h"
 #include "interfaces/reader/ui/style/styles.h"
 #include "interfaces/reader/ui/style/theme.h"
@@ -47,12 +48,8 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
     login_ = ui::makeButton(this, rows, "rrKosyncLogin", strings::get("kosync.login"), [this] {
         if (loginRequested) loginRequested();
     });
-    automatic_ = new ui::DescribedOption(strings::get("kosync.automatic"), strings::get("kosync.automatic_description"), this);
-    automatic_->setObjectName("rrKosyncAutomatic");
-    rows->addWidget(automatic_);
-    connect(automatic_, &QAbstractButton::clicked, this, [this] {
-        if (automaticChanged) automaticChanged(automatic_->isChecked());
-    });
+    automaticButton_ = ui::makeCaptionButton(this, rows, "rrKosyncAutomatic", strings::get("kosync.automatic"),
+                                             [this] { showSchedule(); });
     sync_ = ui::makeButton(this, rows, "rrKosyncNow", strings::get("kosync.sync_now"), [this] {
         if (syncRequested) syncRequested();
     });
@@ -63,7 +60,7 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
         "QPushButton{font-size:%1px;border:0;border-radius:0;text-align:left;padding:0 %2px;"
         "background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}")
         .arg(int(m::chrome::labelText)).arg(int(m::chrome::inset));
-    for (auto *field : {serverButton_, usernameButton_, passwordButton_, deviceNameButton_, matchingButton_}) {
+    for (auto *field : {serverButton_, usernameButton_, passwordButton_, deviceNameButton_, matchingButton_, automaticButton_}) {
         ui::readerStyle(field, rowStyle + QString("QPushButton{min-height:%1px;max-height:%1px;}").arg(int(m::chrome::actionHeight)));
         field->setRule(Qt::BottomEdge);
         field->setIconVisible(false);
@@ -114,13 +111,63 @@ void KosyncPage::setAccount(const QString &server, const QString &username, bool
     username_ = username;
     signedIn_ = signedIn;
     accountEdited_ = false;
-    automatic_->setChecked(automatic);
-    automatic_->setDescription(strings::get(automatic ? "kosync.automatic_description" : "kosync.manual_description"));
-    automatic_->setEnabled(signedIn);
+    automatic_ = automatic;
+    automaticButton_->setEnabled(signedIn);
+    if (!signedIn) dismissSchedule();
+    else if (scheduleSheet_) scheduleSheet_->setChoices(automatic_, schedule_);
+    updateAutomaticCaption();
     sync_->setEnabled(signedIn);
     logout_->setEnabled(signedIn);
     setStatus({}, false);
     updateCaptions();
+}
+void KosyncPage::setSchedule(const kosync::Schedule &schedule) {
+    schedule_ = schedule;
+    if (scheduleSheet_) scheduleSheet_->setChoices(automatic_, schedule_);
+    updateAutomaticCaption();
+}
+void KosyncPage::setScheduleFeatures(bool sleepWake, bool wifi) {
+    if (sleepWake_ == sleepWake && wifi_ == wifi) return;
+    sleepWake_ = sleepWake;
+    wifi_ = wifi;
+    dismissSchedule();
+    updateAutomaticCaption();
+}
+void KosyncPage::updateAutomaticCaption() {
+    QString caption;
+    if (!automatic_)
+        caption = strings::get("kosync.automatic_off_caption");
+    else if (!kosync::syncsWhileReading(schedule_))
+        caption = strings::get("kosync.automatic_caption_never");
+    else if (!wifi_)
+        caption = KosyncScheduleSheet::intervalLabel(schedule_.minutes);
+    else
+        caption = strings::get(schedule_.wakeWifi ? "kosync.automatic_caption_wake" : "kosync.automatic_caption_wait")
+                      .arg(KosyncScheduleSheet::intervalLabel(schedule_.minutes));
+    automaticButton_->setCaption(caption);
+}
+void KosyncPage::showSchedule() {
+    if (scheduleSheet_ || !signedIn_) return;
+    auto *sheet = new KosyncScheduleSheet(overlayParent_, automatic_, schedule_, {sleepWake_, wifi_});
+    scheduleSheet_ = sheet;
+    sheet->closed = [this] { dismissSchedule(); };
+    sheet->automaticChanged = [this](bool enabled) {
+        if (automaticChanged) automaticChanged(enabled);
+    };
+    sheet->scheduleChanged = [this](const kosync::Schedule &schedule) {
+        if (scheduleChanged) scheduleChanged(schedule);
+    };
+    sheet->show();
+    sheet->raise();
+    sheet->fit();
+}
+void KosyncPage::dismissSchedule() {
+    if (!scheduleSheet_) return;
+    auto *sheet = scheduleSheet_.data();
+    scheduleSheet_ = nullptr;
+    sheet->dismissIntervals();
+    sheet->hide();
+    sheet->deleteLater();
 }
 void KosyncPage::updateCaptions() {
     serverButton_->setCaption(server_.isEmpty() ? strings::get("kosync.not_set") : server_);
@@ -160,14 +207,14 @@ void KosyncPage::setStatus(const QString &status, bool busy) {
     const bool authenticating = !nativeCloudSync_ && (!signedIn_ || accountEdited_);
     passwordButton_->setVisible(authenticating);
     login_->setVisible(authenticating);
-    automatic_->setVisible(!nativeCloudSync_ && signedIn_ && !accountEdited_);
+    automaticButton_->setVisible(!nativeCloudSync_ && signedIn_ && !accountEdited_);
     sync_->setVisible(!nativeCloudSync_ && signedIn_ && !accountEdited_);
     logout_->setVisible(!nativeCloudSync_ && signedIn_);
     lastSync_->setVisible(signedIn_ && !accountEdited_);
     for (auto *button : {static_cast<QPushButton *>(serverButton_), static_cast<QPushButton *>(usernameButton_),
                          static_cast<QPushButton *>(passwordButton_), static_cast<QPushButton *>(deviceNameButton_),
                          static_cast<QPushButton *>(matchingButton_), login_}) button->setEnabled(!busy);
-    automatic_->setEnabled(!busy && signedIn_ && !accountEdited_);
+    automaticButton_->setEnabled(!busy && signedIn_ && !accountEdited_);
     sync_->setEnabled(!busy && signedIn_ && !accountEdited_);
     logout_->setEnabled(!busy && signedIn_);
 }
@@ -271,6 +318,7 @@ void KosyncPage::edit(int field) {
 void KosyncPage::dismissEditor() {
     dismissSyncHelp();
     dismissMatchingChoices();
+    dismissSchedule();
     if (!editorDialog) return;
     keyboard_->hide();
     keyboard_->submitted = {};

@@ -8221,6 +8221,44 @@ private slots:
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsKosync"));
         QVERIFY(capture(fixture, name + "-kosync-manual-settings"));
+        // A short screen pages the sheet and the list. Show the page that
+        // holds a control before pressing it.
+        const auto reveal = [&](const char *prefix, const char *control) {
+            const auto previous = QString(prefix) + "Previous", next = QString(prefix) + "Next";
+            for (int turn = 0; turn < 10 && !fixture.visible(control); ++turn) {
+                auto *back = fixture.widget(qPrintable(previous));
+                if (!back || !back->isVisible() || !back->isEnabled()) break;
+                fixture.click(back);
+            }
+            for (int turn = 0; turn < 10 && !fixture.visible(control); ++turn) {
+                auto *forward = fixture.widget(qPrintable(next));
+                if (!forward || !forward->isVisible() || !forward->isEnabled()) break;
+                fixture.click(forward);
+            }
+            return fixture.visible(control);
+        };
+        QVERIFY(fixture.press("rrKosyncAutomatic"));
+        QTRY_VERIFY(fixture.visible("rrKosyncAutomaticPopup"));
+        QVERIFY(!fixture.widget("rrKosyncWhenReading")->isEnabled());
+        // E-reader previews offer the Kobo moments; phone layouts do not.
+        QCOMPARE(bool(fixture.widget("rrKosyncOnSleepWakeRow")), !phonePreset(preset));
+        QCOMPARE(bool(fixture.widget("rrKosyncWifiRow")), !phonePreset(preset));
+        capturePages(fixture, name + "-kosync-automatic-off", "rrKosyncAutomaticPopup");
+        QVERIFY(reveal("rrKosyncAutomaticPopup", "rrKosyncAutomaticOn"));
+        QVERIFY(fixture.press("rrKosyncAutomaticOn"));
+        QTRY_VERIFY(fixture.widget("rrKosyncWhenReading")->isEnabled());
+        capturePages(fixture, name + "-kosync-automatic", "rrKosyncAutomaticPopup");
+        QVERIFY(reveal("rrKosyncAutomaticPopup", "rrKosyncInterval"));
+        QVERIFY(fixture.press("rrKosyncInterval"));
+        QTRY_VERIFY(fixture.visible("rrKosyncIntervalPopup"));
+        // The list opens on the page with the current choice. Capture from its first page.
+        QVERIFY(reveal("rrKosyncIntervalPopup", "rrKosyncInterval_0"));
+        capturePages(fixture, name + "-kosync-interval", "rrKosyncIntervalPopup");
+        QVERIFY(reveal("rrKosyncIntervalPopup", "rrKosyncInterval_5"));
+        QVERIFY(fixture.press("rrKosyncInterval_5"));
+        QTRY_VERIFY(!fixture.visible("rrKosyncIntervalPopup"));
+        QVERIFY(fixture.press("rrKosyncAutomaticClose"));
+        QTRY_VERIFY(!fixture.visible("rrKosyncAutomaticPopup"));
         auto *notice = new reader::KosyncNotice(fixture.window.readerWindow());
         notice->show();
         notice->raise();
@@ -9559,7 +9597,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3576;
+    int expectedScreenshots = lightGallery ? 182 : 3638;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

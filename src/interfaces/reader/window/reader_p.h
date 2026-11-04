@@ -228,7 +228,8 @@ private:
     void startKosyncExchange(bool finishing);
     void continueKosyncWhenReady(std::function<void()> ready);
     void prepareKosyncNetwork(bool interactive, std::function<void()> ready);
-    void flushKosync(std::function<void()> finished);
+    void updateKosyncFeatures();
+    void flushKosync(std::function<void()> finished, bool enabled = true);
     void finishKosync(const QString &message);
     void cancelKosync();
     void showKosyncOpening();
@@ -245,6 +246,12 @@ private:
     std::function<void()> kosyncReaderReady;
     bool kosyncFinishing = false, kosyncOpening = false, kosyncFlushWaiting = false;
     bool kosyncConnecting = false, kosyncAuthenticating = false;
+    // A periodic sync that turned on Wi-Fi turns it off again when it ends.
+    bool kosyncReleaseWifi = false;
+    // Failed background connections in a row, in memory only.
+    int kosyncBackgroundFailures = 0;
+    // The next opening-style sync follows a wake, not a book opening.
+    bool kosyncWaking = false;
     QPointer<ui::ModalOverlay> kosyncDialog;
     kosync::Reconciler kosyncProgress;
     QString kosyncMessage;

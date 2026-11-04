@@ -2,6 +2,7 @@
 #include "native_network_state.h"
 #include "native_dialog_overlay.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include <dlfcn.h>
 #include <utility>
 
@@ -18,6 +19,8 @@ NativeSyncNetworkBindings nativeBindings() {
     const auto request = symbol<void (*)(QObject *, bool, bool)>("_ZN23WirelessWorkflowManager15connectWirelessEbb");
     const auto silent = symbol<void (*)(QObject *)>("_ZN23WirelessWorkflowManager23connectWirelessSilentlyEv");
     const auto cancel = symbol<void (*)(QObject *)>("_ZN23WirelessWorkflowManager6cancelEv");
+    // Present in firmware 4.46 and 6.0.279225.
+    const auto off = symbol<void (*)(QObject *)>("_ZN15WirelessManager3offEv");
     if (!instance || !wirelessInstance || !up || !disabled || !connecting || !accessible || !request || !silent || !cancel) return {};
     QPointer<QObject> workflow = instance();
     QPointer<QObject> wireless = wirelessInstance();
@@ -42,6 +45,15 @@ NativeSyncNetworkBindings nativeBindings() {
         else silent(workflow);
     };
     result.cancel = [workflow, cancel] { if (workflow) cancel(workflow); };
+    if (off) result.turnOff = [wireless, off] {
+        if (!wireless) return;
+        // On firmware 4.46, off() runs `killall dhcpcd` and waits for it on
+        // this thread before it hands the radio to a worker. That breaks the
+        // page-turn rule while the user reads. Report and time the wait until
+        // device measurements decide how Kobalt turns Wi-Fi off.
+        mainthread::BlockingOperation wait("wifi-off");
+        off(wireless);
+    };
     return result;
 }
 }
@@ -64,6 +76,7 @@ NativeSyncNetwork::~NativeSyncNetwork() { cancel(); }
 bool NativeSyncNetwork::connected() const { return workflow && bindings.valid() && bindings.ready(); }
 void NativeSyncNetwork::prepare(bool showUi, std::function<void(bool)> done) {
     cancel();
+    ownsConnection = false;
     const bool available = connected();
     diagnostic("kosync-network-prepare", qt::object({{"interactive", showUi}, {"ready", available},
         {"bindings_available", bool(workflow) && bindings.valid()}}));
@@ -99,10 +112,16 @@ void NativeSyncNetwork::cancelled() { finish(false); }
 void NativeSyncNetwork::finish(bool ready) {
     diagnostic("kosync-network-finished", qt::object({{"ready", ready}, {"owned", requested}}));
     poll.stop();
+    ownsConnection = ready && requested && !interactive;
     requested = false;
     auto done = std::move(finished);
     finished = {};
     if (done) done(ready);
+}
+void NativeSyncNetwork::release() {
+    if (!std::exchange(ownsConnection, false) || !bindings.turnOff || !connected()) return;
+    diagnostic("kosync-network-released");
+    bindings.turnOff();
 }
 void NativeSyncNetwork::cancel() {
     poll.stop();

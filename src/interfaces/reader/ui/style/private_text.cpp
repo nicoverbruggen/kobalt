@@ -157,6 +157,8 @@ struct Fonts {
             return value->handle;
         }
         if (!sources.contains(file)) {
+            // An unknown file is a lookup miss, not a rejected load.
+            if (!pending.contains(file)) return nullptr;
             const auto size = sizes.value(file);
             if (!reserve(size)) {
                 diagnostic("font-load-rejected", {{"file_bytes", double(size)}, {"retained_bytes", double(bytes())},

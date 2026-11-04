@@ -208,16 +208,21 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
         kobalt::diagnostic("settings-unreadable", {{"status", kobalt::storage::readStatusName(savedSettings.status)}},
                            false);
     preferences = appearance::readerPreferences(savedSettings.object, book->layoutPreferences());
-    // Migrate layout once into the shared profile. A damaged settings file is
-    // left for the next explicit settings save to replace.
+    // Remember this book's layout as the last layout in the shared profile.
+    // A damaged settings file is left for the next explicit settings save to
+    // replace.
     const bool settingsReadable = savedSettings.status == kobalt::storage::ReadStatus::Ok ||
                                   savedSettings.status == kobalt::storage::ReadStatus::Missing;
     if (settingsReadable && !model->temporaryTypography()) {
         auto global = appearance::globalPreferences(preferences);
         appearance::rememberTextLayout(global, model->state());
         appearance::rememberPageMargins(global, model->state());
-        if (global != savedSettings.object && !kobalt::storage::writePreferences(book->paths().preferences(), global)) {
-            kobalt::diagnostic("last-appearance-unsaved", {}, kobalt::DiagnosticSeverity::Error);
+        if (global != savedSettings.object) {
+            // The shared settings must be on disk before the reader uses them.
+            // The window is still being built, so no input can arrive.
+            mainthread::AllowBlocking allow("remembered layout before reader input");
+            if (!kobalt::storage::writePreferences(book->paths().preferences(), global))
+                kobalt::diagnostic("last-appearance-unsaved", {}, kobalt::DiagnosticSeverity::Error);
         }
     }
     bookmarks = std::make_unique<kobalt::BookmarkSession>(

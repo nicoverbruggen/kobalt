@@ -299,6 +299,7 @@ The reader also names these lifecycle scopes explicitly:
 
 - `closing reader`: the reader is being destroyed and cannot accept input. Its destructor persists the informational KOSync timestamp and requests a diagnostic flush bounded to one second.
 - `opening status before reader input`: the loading view still owns presentation. Nickel's interface-thread API attempts the status-only update once before the reader accepts input.
+- `remembered layout before reader input`: the reader window is still being built. When the opened book's layout, margins or screen density differ from the last layout remembered in the shared settings, `reader-settings.json` is written, so the reader starts from settings that are on disk.
 - `wifi-off before reader input`: the opened book is not presented yet. With the Wi-Fi power saver on, Nickel's `WirelessWorkflowManager::turnWifiOff()` waits for `killall dhcpcd` on firmware 4.46.23836, and for four child processes on firmware 6.0.279225, before the reader accepts input. Nickel offers no call that hands the whole shutdown to a worker.
 - `final native progress before storage handoff`: USB or shutdown has stopped reader input and drained pending storage work. Nickel's interface-thread API writes and verifies the final native progress before the handoff continues.
 

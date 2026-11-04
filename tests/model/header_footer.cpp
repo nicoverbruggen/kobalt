@@ -155,7 +155,7 @@ int main() {
     values.pages = 193;
     require(content(standard.slotFields[1], values, standard.uppercase[1]).text == values.chapter.toUpper(),
             "Default did not uppercase the chapter title");
-    require(content(standard.slotFields[3], values, false).text.startsWith(QStringLiteral("14 ")) &&
+    require(content(standard.slotFields[3], values, false).text.startsWith(QStringLiteral("15 ")) &&
                 content(standard.slotFields[5], values, false).text == strings::get("common.percent").arg(3),
             "Default footer did not combine chapter pages left with whole-book percentage");
     values.battery = 80;
@@ -190,8 +190,13 @@ int main() {
             "Only lone page counts keep half spaces");
     require(content(Field::Chapter, values, true).text == QStringLiteral("DOWN THE RABBIT-HOLE"),
             "Uppercase did not apply");
-    require(content(Field::ChapterPagesLeft, values, false).text.startsWith(QStringLiteral("14 ")),
+    require(content(Field::ChapterPagesLeft, values, false).text.startsWith(QStringLiteral("15 ")),
             "Pages left counts the current page");
+    auto lastPage = values;
+    lastPage.chapterPage = lastPage.chapterPages;
+    require(content(Field::ChapterPagesLeft, lastPage, false).text ==
+                strings::get("header_footer.pages_left").arg(1).arg(strings::get("stats.page_left")),
+            "The last page of a chapter shows 1 page left");
     const auto battery = content(Field::Battery, values, false);
     require(battery.batteryIcon && battery.text.isEmpty() && battery.battery == 80, "Battery is not an icon");
     require(content(Field::BatteryPercent, values, false).text == strings::get("common.percent").arg(80),

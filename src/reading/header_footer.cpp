@@ -315,7 +315,8 @@ Content content(Field field, const Values &values, bool uppercase) {
         break;
     case Field::ChapterPagesLeft:
         if (values.chapterPages > 0) {
-            const int left = qMax(0, values.chapterPages - values.chapterPage);
+            // The current page is still to be read, as in Stats: the last page shows 1.
+            const int left = qMax(1, values.chapterPages - values.chapterPage + 1);
             result.text = strings::get("header_footer.pages_left")
                               .arg(left)
                               .arg(strings::get(left == 1 ? "stats.page_left" : "stats.pages_left"));

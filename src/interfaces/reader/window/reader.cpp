@@ -675,9 +675,11 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
         type == QEvent::KeyPress) {
         kobalt::diagnosticInput();
     }
-    if (kobalt::diagnosticsActive() && (type == QEvent::TouchBegin || type == QEvent::TouchEnd ||
-        type == QEvent::TouchCancel || type == QEvent::MouseButtonPress || type == QEvent::MouseButtonRelease ||
-        type == QEvent::KeyPress || type == QEvent::KeyRelease)) {
+    // Check the cheap event type before the diagnostics state; this filter
+    // sees every event in the application.
+    if ((type == QEvent::TouchBegin || type == QEvent::TouchEnd || type == QEvent::TouchCancel ||
+         type == QEvent::MouseButtonPress || type == QEvent::MouseButtonRelease || type == QEvent::KeyPress ||
+         type == QEvent::KeyRelease) && kobalt::diagnosticsActive()) {
         const bool input = type != QEvent::TouchCancel;
         kobalt::diagnostic("input-event", {{"type", int(type)},
             {"source_ms", input ? double(static_cast<QInputEvent *>(event)->timestamp()) : 0},
@@ -2162,7 +2164,8 @@ void Reader::toggleBookmark() {
 void Reader::requestFlash(const char *reason) {
     setProperty("reader_full_flash", true);
     pagesSinceFlash = 0;
-    kobalt::diagnostic("full-flash", {{"reason", reason}}, false);
+    if (kobalt::diagnosticsActive())
+        kobalt::diagnostic("full-flash", {{"reason", reason}}, false);
 }
 
 void Reader::recordOpening() {

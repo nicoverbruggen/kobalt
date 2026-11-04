@@ -45,6 +45,10 @@ constexpr int verboseHistory = 5;
 constexpr qint64 batchLimit = 128 * 1024;
 constexpr std::size_t queueLimit = 2048;
 constexpr qint64 quietMilliseconds = 1000, maximumDelay = 5000;
+// Routine activity in normal mode waits longer, so reading does not write the
+// log every few seconds. Warnings, errors, verbose mode and forced flushes at
+// sleep, close, USB and power-off keep the short delay.
+constexpr qint64 routineQuietMilliseconds = 30000, routineMaximumDelay = 60000;
 qint64 monotonicMilliseconds() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -142,7 +146,12 @@ void startWriter() {
             while (queue.empty())
                 wake.wait(&mutex);
             const auto now = monotonicMilliseconds();
-            const auto delay = std::min(firstPending + maximumDelay, std::max(firstPending, lastInput) + quietMilliseconds) - now;
+            const bool urgent = detailed || std::any_of(queue.begin(), queue.end(), [](const Entry &entry) {
+                return entry.severity != DiagnosticSeverity::Activity;
+            });
+            const auto quiet = urgent ? quietMilliseconds : routineQuietMilliseconds;
+            const auto longest = urgent ? maximumDelay : routineMaximumDelay;
+            const auto delay = std::min(firstPending + longest, std::max(firstPending, lastInput) + quiet) - now;
             const bool sampling = std::any_of(queue.begin(), queue.end(), [](const Entry &entry) {
                 return bool(entry.memorySample) || bool(entry.sample);
             });

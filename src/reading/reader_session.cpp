@@ -2133,9 +2133,9 @@ void ReaderSession::dispatch(bool pageTurn) {
             if (timing)
                 diagnostic("render-end", {{"render_id", double(job)}, {"page", engine->page()}, {"elapsed_ms", double(timer.elapsed())}, {"failed", !result.error.isEmpty()}},
                            result.error.isEmpty() ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
-            else
-                diagnostic("render-end", {{"failed", !result.error.isEmpty()}},
-                           result.error.isEmpty() ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
+            else if (!result.error.isEmpty())
+                // Release logging records failed renders only, not every page.
+                diagnostic("render-end", {{"failed", true}}, DiagnosticSeverity::Error);
             result.renderId = job;
             const bool failed = !result.error.isEmpty();
             kobalt::qt::invoke(

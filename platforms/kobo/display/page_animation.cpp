@@ -121,7 +121,9 @@ int PageAnimation::submit(Ioctl next, int fd, unsigned long request, void *argum
                           : update_.width() < 128 || update_.height() < 128                          ? "size"
                                                                                                      : nullptr;
     if (refused) {
-        diagnostic("page-animation", {{"result", refused}, {"waveform", int(original[4])}}, false);
+        // Per-turn details belong to detailed diagnostics only.
+        if (diagnosticsActive())
+            diagnostic("page-animation", {{"result", refused}, {"waveform", int(original[4])}}, false);
         return next(fd, request, argument);
     }
     std::vector<QRect> parts;
@@ -179,12 +181,14 @@ int PageAnimation::submit(Ioctl next, int fd, unsigned long request, void *argum
             next(fd, waitComplete, completion);
         }
         diagnostic("page-animation",
-                   {{"result", "fallback"}, {"bands", int(parts.size())}, {"failed", failed}, {"mono", mono_}}, false);
+                   {{"result", "fallback"}, {"bands", int(parts.size())}, {"failed", failed}, {"mono", mono_}},
+                   DiagnosticSeverity::Warning);
         errno = failed;
         return -1;
     }
     result_ = PageAnimationResult::Swept;
-    diagnostic("page-animation", {{"result", "swept"}, {"bands", int(parts.size())}, {"mono", mono_}}, false);
+    if (diagnosticsActive())
+        diagnostic("page-animation", {{"result", "swept"}, {"bands", int(parts.size())}, {"mono", mono_}}, false);
     return 0;
 }
 int submitPageAnimation(int fd, unsigned long request, void *argument) {

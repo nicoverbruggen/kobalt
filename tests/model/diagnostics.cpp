@@ -145,13 +145,12 @@ int main(int argc, char **argv) {
         qFatal("Quiet logging enabled expensive instrumentation");
     for (int i = 0; i < 20; ++i)
         kobalt::diagnostic("turn", {{"sequence", i}});
-    // Ordinary activity must reach disk without a warning or explicit flush.
-    QElapsedTimer normalWait;
-    normalWait.start();
-    while (!QFile::exists(quietPath) && normalWait.elapsed() < 3000)
-        QThread::msleep(10);
-    if (!QFile::exists(quietPath))
-        qFatal("Normal activity was kept only in memory");
+    // Ordinary activity in normal mode waits for the routine delay, so reading
+    // does not write the log every few seconds. The error and the lifecycle
+    // flush below write it.
+    QThread::msleep(1500);
+    if (QFile::exists(quietPath))
+        qFatal("Normal activity was written before the routine delay");
     QThread::msleep(50);
     if (syncCalls.load() != beforeNormal) qFatal("Normal activity requested a storage sync");
     QJsonObject observed;

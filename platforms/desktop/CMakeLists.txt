@@ -522,6 +522,12 @@ if(BUILD_TESTING)
                 target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}" "${source}")
                 target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime Qt6::Widgets Qt6::Network)
                 set_target_properties(kobalt-${name}-tests PROPERTIES AUTOMOC ON ENABLE_EXPORTS ON)
+            elseif(check STREQUAL "native_dialog_overlay")
+                target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/window_presentation.cpp"
+                    "${KOBALT_ROOT}/platforms/kobo/common/native_font_scale.cpp")
+                target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}" "${source}")
+                target_link_libraries(kobalt-${name}-tests PRIVATE Qt6::Widgets Qt6::Test)
+                set_target_properties(kobalt-${name}-tests PROPERTIES AUTOMOC ON)
             elseif(check STREQUAL "native_progress")
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/native_progress.cpp"
                     "${KOBALT_ROOT}/platforms/kobo/common/native_progress.h")
@@ -640,7 +646,7 @@ if(BUILD_TESTING)
         library kosync chapter_progress)
     kobalt_regressions(model font_axes touch_rotation)
     kobalt_regressions(platform reader_orientation font_sources system_fonts nickel_dictionary_selection
-        nickel_reading_pace_cache nickel_reading_save nickel_event_save nickel_session_calls nickel_session_volume nickel_book_menu nickel_font_scale native_progress native_sync_network native_lifecycle standby_input standby_diagnostics usb_removal page_transition_native page_animation)
+        nickel_reading_pace_cache nickel_reading_save nickel_event_save nickel_session_calls nickel_session_volume nickel_book_menu nickel_font_scale native_progress native_sync_network native_dialog_overlay native_lifecycle standby_input standby_diagnostics usb_removal page_transition_native page_animation)
     kobalt_regressions(engine vertical_spacing source_index columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
         fallback_styles svg_limits image_proportions whitespace links search word_selection reader publisher_markup local_reader document_word_count document_cache alternate_layout)
     kobalt_regressions(component ui acknowledgments kosync_ui)

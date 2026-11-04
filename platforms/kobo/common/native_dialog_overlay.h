@@ -55,6 +55,7 @@ public:
                              reader_->property("kobalt_native_dialog_count").toInt() + 1);
         parent_ = dialog->parentWidget();
         flags_ = dialog->windowFlags();
+        modality_ = dialog->windowModality();
         geometry_ = dialog->geometry();
         propagation_ = dialog->testAttribute(Qt::WA_WindowPropagation);
         transient_ = dialog->windowHandle() ? dialog->windowHandle()->transientParent() : nullptr;
@@ -68,6 +69,10 @@ public:
         dialog->move(position);
         dialog->winId();
         dialog->windowHandle()->setTransientParent(reader->windowHandle());
+        // A transient parent puts the dialog above Kobalt visually, but a
+        // nonmodal window still loses input to the application-modal reader.
+        if (modality_ == Qt::NonModal)
+            dialog->setWindowModality(Qt::WindowModal);
         dialog->setUpdatesEnabled(true);
         // The device's backing store does not composite transparent windows.
         // Retain one copy of the covered reader area until this modal closes.
@@ -94,6 +99,7 @@ public:
         dialog->hide();
         delete backdrop_.data();
         dialog->setParent(parent_, flags_);
+        dialog->setWindowModality(modality_);
         dialog->setAttribute(Qt::WA_WindowPropagation, propagation_);
         if (dialog->windowHandle()) dialog->windowHandle()->setTransientParent(transient_);
         dialog->setGeometry(geometry_);
@@ -127,6 +133,7 @@ private:
     QPointer<QLabel> backdrop_;
     QPointer<QWindow> transient_;
     Qt::WindowFlags flags_;
+    Qt::WindowModality modality_ = Qt::NonModal;
     QRect geometry_;
     bool moving_ = false;
     bool propagation_ = false;

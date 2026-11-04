@@ -7,6 +7,7 @@
 #include "platforms/kobo/common/native_progress.h"
 #include "support/strings.h"
 #include "support/main_thread.h"
+#include "support/diagnostics.h"
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include <QDateTime>
@@ -57,6 +58,10 @@ struct Api {
     // ContentSourceProgressPercent and the stats screen shows it.
     void (*setChapterProgress)(Volume *, const QVariant &) =
         symbol<decltype(setChapterProgress)>("_ZN6Volume25setCurrentChapterProgressERK8QVariant");
+    // Optional. Firmware 4.46 and 6.0: Nickel's reader calls it when a book
+    // closes, with enabled set because the book's storage is connected.
+    bool (*recentBook)(const QByteArray &, const QString &, bool, bool) = symbol<decltype(recentBook)>(
+        "_ZN15ActivityManager22makeRecentBookActivityERK10QByteArrayRK7QStringbb");
     bool (*update)(const QString &, const QVariantMap &, const QVariantMap &, const QString &) =
         symbol<decltype(update)>("_ZN13VolumeManager12updateFieldsERK7QStringRK4QMapIS0_8QVariantES7_S2_");
     void *(*refresh)(const QString &) =
@@ -170,6 +175,18 @@ bool NativeProgress::markReading() {
     }
     native.refresh(db);
     return true;
+}
+void NativeProgress::markRecent() {
+    kobalt::mainthread::BlockingOperation operation("nickel-recent-book");
+    const auto &native = api();
+    if (!native.recentBook || !available() || !NativeLifecycle::nativeProgressSaveAllowed() || deviceTransition())
+        return;
+    const auto db = native.dbName(native.device());
+    NativeDatabaseWait wait(native.connection(db, true), true);
+    // A busy database skips this; it only orders Nickel's recent books.
+    const bool saved = wait.ready() && native.recentBook(book.toUtf8(), db, true, true);
+    if (!saved)
+        diagnostic("nickel-recent-book", kobalt::qt::object({{"saved", false}}), DiagnosticSeverity::Warning);
 }
 bool NativeProgress::write(const ReadingProgress &expected, const QString &position, double percent, bool finished,
                            ReadingProgress *verified, QString *error, const ReadingEstimates *estimates, const ReadingActivity *activity) {

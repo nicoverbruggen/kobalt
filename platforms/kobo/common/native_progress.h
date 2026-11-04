@@ -19,6 +19,9 @@ public:
                ReadingProgress *verified, QString *error, const ReadingEstimates *estimates = nullptr,
                const ReadingActivity *activity = nullptr);
     bool markReading();
+    // Records the book as recently read for Nickel's Home screen, as Nickel's
+    // reader does when a book closes. Best effort; a busy database skips it.
+    void markRecent();
     static void disconnected();
     bool deviceTransition() const {
         return transitioning;

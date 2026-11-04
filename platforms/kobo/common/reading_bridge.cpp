@@ -38,6 +38,7 @@ public:
                                 available ? &estimates : nullptr, &activity);
     }
     bool markReading() override { return progress_->markReading(); }
+    void markRecent() override { progress_->markRecent(); }
     void observeReading(const ReadingActivity &activity) override {
         reading_.start(activity);
         reading_.page(activity);

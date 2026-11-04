@@ -58,6 +58,11 @@ public:
         if (bridge && !released)
             bridge->minuteTick();
     }
+    // After the final native write at close.
+    void markRecent() {
+        if (bridge && !released && bridge->writable())
+            bridge->markRecent();
+    }
     void stopReading(bool background = false, bool nativeAllowed = true);
     void sleepReading(const QJsonObject &preferences);
     void finishReading(std::function<void(bool)> done);

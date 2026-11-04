@@ -2322,6 +2322,7 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
             failExit(request, book->nativeSaveError());
             return;
         }
+        book->markRecent();
         closeSaveProgress = 75;
         if (savingView) showSaving(closeSaveProgress);
         // Keep the verified native baseline with the final local checkpoint.

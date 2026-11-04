@@ -5,7 +5,6 @@
 #include <QFont>
 #include <QLabel>
 #include <QVector>
-#include <QVariant>
 
 class QPainter;
 
@@ -62,9 +61,6 @@ public:
     void setPreviewSource(const FontPreviewSource &value) {
         if (previewSource.identity == value.identity && previewSource.family == value.family) return;
         previewSource = value;
-        setProperty("font_preview_source", !value.files.isEmpty());
-        setProperty("font_preview_key", QString());
-        setProperty("font_preview_ready", false);
         update();
     }
     void setAppearance(const SampleAppearance &value) {

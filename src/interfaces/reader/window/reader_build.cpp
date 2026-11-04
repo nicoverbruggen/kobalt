@@ -1828,6 +1828,10 @@ void Reader::showFontPicker() {
     const auto supplemental = supplementalFontFamily(state.value("language").toString());
     const auto requestedDefault = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
     auto fonts = settings->fontCatalog();
+    // The publisher row's sample uses Libron.
+    for (const auto &font : fonts)
+        if (font.family == QLatin1String("Libron"))
+            items[0].fontFiles = font.files;
     for (int row = fonts.size() - 1; row >= 0; --row) {
         const auto &font = fonts[row];
         if ((font.origin == FontOrigin::BuiltIn && !pickerNativeFamilies.contains(font.family, Qt::CaseInsensitive)) ||
@@ -1880,7 +1884,11 @@ void Reader::showFontPicker() {
     Choice slot{QStringLiteral("Aa"), defaultFace, "rrFontDefaultSlot", strings::get("reader.recommended_fonts")};
     slot.detail = strings::get("reader.set_default_font");
     slot.placeholder = true;
-    if (!services.phoneLayout) items.insert(qMin(2, items.size()), slot);
+    if (!services.phoneLayout) {
+        // Registration reads only metadata. The slot's Aa loads its face when drawn.
+        registerPickerFonts(defaultFace);
+        items.insert(qMin(2, items.size()), slot);
+    }
     choices->defaultRequested = [this](const QString &face, bool instructions) {
         showFontDefaultDialog(face, instructions);
     };

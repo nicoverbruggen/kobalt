@@ -13,7 +13,7 @@ public:
     DescribedOption(const QString &text, const QString &description, QWidget *parent);
     int heightForWidth(int width) const override;
     void setDescription(const QString &text);
-    void setFontPreviewSource(const FontPreviewSource &value) { fontPreview = value; setProperty("font_preview_source", !value.files.isEmpty()); update(); }
+    void setFontPreviewSource(const FontPreviewSource &value) { fontPreview = value; update(); }
     enum class Indicator { Toggle, Square, Radio };
     struct Presentation {
         Presentation();

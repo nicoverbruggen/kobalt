@@ -435,11 +435,6 @@ struct Fixture {
         }, 5000);
     }
     bool click(QWidget *target, QPoint position = QPoint(-1, -1)) {
-        if (target && !QTest::qWaitFor([&] {
-                for (auto *parent = target; parent; parent = parent->parentWidget())
-                    if (parent->property("font_preview_preparing").toBool()) return false;
-                return true;
-            }, 10000)) return false;
         auto *reader = window.readerWindow();
         auto *canvas = window.findChild<QGraphicsView *>();
         if (reader && target && !target->isVisible() && !revealCardRow(target)) return false;
@@ -833,10 +828,6 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     // Model state and visibility can settle before queued layouts and proxy
     // cache updates. Deliver those updates before rendering the visible frame.
     QCoreApplication::processEvents();
-    if (!QTest::qWaitFor([] { return ui::fontPreviewPendingCount() == 0; }, 10000)) {
-        qCritical() << "Font preview jobs did not finish before capture";
-        return false;
-    }
     const auto destination = captureDirectory + '/' + name + ".png";
     QWidget *surface = nativeScreen ? nativeScreen : fixture.window.readerWindow();
     auto *start = fixture.window.findChild<android::StartScreen *>();

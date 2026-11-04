@@ -1,8 +1,6 @@
 #pragma once
 #include <QPainter>
 #include <QStringList>
-#include <QWidget>
-#include <QVariant>
 
 namespace kobalt::ui {
 struct FontPreviewSource {
@@ -12,13 +10,10 @@ struct FontPreviewSource {
 };
 FontPreviewSource fontPreviewSource(const QString &family, const QStringList &files);
 inline constexpr int fontPreviewBitmapBudget = 4 * 1024 * 1024;
-// GUI-thread only. A cache miss queues one bounded worker job and returns false.
-// The caller draws its ordinary label until the bitmap is ready.
-bool drawFontPreview(QWidget *owner, QPainter &painter, QRect area, const QString &text,
-                     const FontPreviewSource &source, int inkHeight, int weight = 0,
-                     bool boldReading = false, bool centered = false, bool wrap = false);
-// Prepare one page offscreen, then release its paints together. Does not wait on the GUI thread.
-void prepareFontPreviewPage(QWidget *page);
+// GUI thread only. Draws the sample from the bounded bitmap cache, rendering
+// it first on a miss. Returns false when the font cannot draw the text; the
+// caller then draws its ordinary label.
+bool drawFontPreview(QPainter &painter, QRect area, const QString &text, const FontPreviewSource &source, int inkHeight,
+                     int weight = 0, bool boldReading = false, bool centered = false, bool wrap = false);
 int fontPreviewCacheBytes();
-int fontPreviewPendingCount();
 }

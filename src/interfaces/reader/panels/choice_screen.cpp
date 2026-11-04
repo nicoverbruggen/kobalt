@@ -161,12 +161,15 @@ private:
 };
 }
 void ChoiceScreen::setFontAppearance(const ui::SampleAppearance &appearance) {
-    if (fontAppearance == appearance) return;
+    if (fontAppearance == appearance)
+        return;
     fontAppearance = appearance;
-    if (mode == Mode::Fonts) {
-        for (auto *label : labels) label->setAppearance(appearance);
-        ui::prepareFontPreviewPage(this);
-    }
+    if (mode == Mode::Fonts)
+        for (int row = 0; row < labels.size(); ++row) {
+            const int index = itemIndex(row);
+            labels[row]->setAppearance(
+                index >= 0 && index < items.size() && !items[index].placeholder ? appearance : ui::SampleAppearance());
+        }
 }
 QJsonObject ChoiceScreen::fontSamples() const {
     QJsonObject result;
@@ -506,23 +509,25 @@ void ChoiceScreen::redrawFonts() {
                 .arg(selectedItem ? "palette(window-text)" : "palette(window)")
                 .arg(int(m::control::border)));
         const QFont labelFont = ui::chromeFont(m::text::body);
+        const auto family = item.value.isEmpty() ? QStringLiteral("Libron") : item.value;
         label->setFont(labelFont);
-        fontCell->helpFont = labelFont;
-        label->setAppearance(fontAppearance);
-        label->setPreviewSource(ui::fontPreviewSource(item.value, item.fontFiles));
+        // The default slot draws its Aa with the private renderer.
+        fontCell->helpFont = QFont(family);
+        label->setAppearance(item.placeholder ? ui::SampleAppearance() : fontAppearance);
+        label->setPreviewSource(ui::fontPreviewSource(family, item.fontFiles));
         label->optical = true;
         label->setWordWrap(true);
         label->setTextFormat(Qt::PlainText);
         label->setText(item.label);
         label->setAlignment(Qt::AlignCenter);
         label->setObjectName(item.name + "Title");
-        auto family = labelFont.family();
-        family.replace('"', "\\\"");
+        auto styleFamily = labelFont.family();
+        styleFamily.replace('"', "\\\"");
         readerStyle(
             label,
             QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;font-weight:400;")
                 .arg(selectedItem ? "palette(window)" : "palette(window-text)")
-                .arg(family)
+                .arg(styleFamily)
                 .arg(labelFont.pixelSize()));
         auto *detail = fontCell->detail;
         detail->setObjectName(item.name + "Detail");
@@ -535,10 +540,12 @@ void ChoiceScreen::redrawFonts() {
                                 .arg(caption.pixelSize()));
         const int inset = ui::px(12), detailWidth = qMax(1, button->width() - 2 * inset);
         // A short cell, as in two rows of six, keeps a line for the name. The
-        // caption drops its first lines, which give the least detail.
+        // caption drops its first lines, which give the least detail. Only a
+        // caption with several lines measures its sample, which loads that face.
         auto lines = item.detail.toUpper().split('\n');
-        while (!item.placeholder && lines.size() > 1 &&
-               button->height() - detail->heightForWidth(detailWidth) - ui::px(32) < labelFont.pixelSize()) {
+        const int sampleHeight = !item.placeholder && lines.size() > 1 ? fontSample(family).pixelSize() : 0;
+        while (sampleHeight && lines.size() > 1 &&
+               button->height() - detail->heightForWidth(detailWidth) - ui::px(32) < sampleHeight) {
             lines.removeFirst();
             detail->setText(lines.join('\n'));
         }
@@ -560,7 +567,6 @@ void ChoiceScreen::redrawFonts() {
     fontHeader->raise();
     fontSectionBar->raise();
     fontPager->raise();
-    ui::prepareFontPreviewPage(this);
     if (changed && isVisible())
         changed();
 }

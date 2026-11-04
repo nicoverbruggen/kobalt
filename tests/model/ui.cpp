@@ -23,9 +23,6 @@
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/window/font_registration.h"
 #include <QFontInfo>
-#include <QGraphicsScene>
-#include <QGraphicsView>
-#include <QGraphicsProxyWidget>
 #include <QFontDatabase>
 #include <QJsonObject>
 #include <QLabel>
@@ -211,126 +208,72 @@ int main(int argc, char **argv) {
         const QStringList files{assets.file("fonts/IBMPlexSans-Regular.ttf")};
         renderPrivateText(QStringLiteral("Font Preview"), chromeFont(32));
         const auto retained = privateInterfaceFontBytes();
-        const auto regular = renderFontPreviewBitmap(files, "IBM Plex Sans", "Font Preview", QSize(400, 100), 30, 0, false, true, false);
-        const auto heavy = renderFontPreviewBitmap(files, "IBM Plex Sans", "Font Preview", QSize(400, 100), 30, 10, false, true, false);
+        const FontPreviewScale scale{30, 34, 8, 192, 5};
+        const auto regular = renderFontPreviewBitmap(files, "IBM Plex Sans", "Font Preview", QSize(400, 100), scale, 0, false, true, false);
+        const auto heavy = renderFontPreviewBitmap(files, "IBM Plex Sans", "Font Preview", QSize(400, 100), scale, 10, false, true, false);
         require(!regular.isNull() && regular.format() == QImage::Format_Indexed8 && regular != heavy,
                 "Bitmap preview lost the selected font or weight");
         require(privateInterfaceFontBytes() == retained, "Isolated preview populated the GUI font cache");
-        require(renderFontPreviewBitmap(files, "IBM Plex Sans", "Too large", QSize(4096, 4096), 30, 0, false, true, false).isNull(),
+        require(renderFontPreviewBitmap(files, "IBM Plex Sans", "Too large", QSize(4096, 4096), scale, 0, false, true, false).isNull(),
                 "Preview accepted an unbounded bitmap");
+        // A script font names itself in Latin letters it lacks. The preview
+        // must use the bundled fallback, as the interface renderer does,
+        // and must not cache an empty bitmap.
+        const QStringList arabic{assets.file("fonts/NotoNaskhArabic-Regular.ttf")};
+        const auto inked = [](const QImage &image) {
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x)
+                    if (image.scanLine(y)[x] >= 128) return true;
+            return false;
+        };
+        const auto fallbacks = privateInterfaceFontFiles();
+        require(fallbacks.contains("NotoSerif-Regular.ttf"), "Preview workers lost the bundled fallback files");
+        const auto named = renderFontPreviewBitmap(arabic, "Noto Naskh Arabic", "Noto Naskh Arabic", QSize(400, 100), scale,
+                                                   0, false, true, false, fallbacks);
+        require(!named.isNull() && inked(named), "Script font preview drew its Latin name without a fallback");
+        require(renderFontPreviewBitmap(arabic, "Noto Naskh Arabic", "Noto Naskh Arabic", QSize(400, 100), scale, 0, false,
+                                        true, false).isNull(),
+                "Preview without fallbacks hid missing glyphs");
+        require(privateInterfaceFontBytes() == retained, "Preview fallbacks populated the GUI font cache");
+        // Labels render their samples while painting, so a page shows every
+        // sample in its first paint. Count renders through the diagnostics.
+        int renders = 0;
+        kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event").toString() == "font-preview-bitmap") ++renders;
+        });
         SampleLabel label;
         label.optical = true;
         label.resize(500, 160);
         label.setFont(chromeFont(32));
         label.setText("Font Preview");
+        const auto plain = label.grab().toImage();
         label.setPreviewSource(fontPreviewSource("IBM Plex Sans", files));
-        label.show();
-        const auto wait = [&] {
-            QElapsedTimer timer;
-            timer.start();
-            while ((!label.property("font_preview_ready").toBool() || fontPreviewPendingCount()) && timer.elapsed() < 5000)
-                app.processEvents(QEventLoop::AllEvents, 10);
-            require(label.property("font_preview_ready").toBool(), "Visible font bitmap did not complete");
-            require(fontPreviewCacheBytes() <= fontPreviewBitmapBudget, "Bitmap cache exceeded its budget");
-        };
-        app.processEvents();
-        wait();
+        const auto first = label.grab().toImage();
+        require(renders == 1 && first != plain, "Font sample did not render in its first paint");
         require(fontPreviewCacheBytes() >= label.width() * label.height() + 1024,
                 "Bitmap cache accounting omitted the coverage palette");
-        const auto firstKey = label.property("font_preview_key").toString();
+        require(label.grab().toImage() == first && renders == 1, "A cached sample rendered again");
         label.setAppearance({8, "off"});
-        app.processEvents();
-        wait();
-        require(label.property("font_preview_key").toString() != firstKey, "Weight reused a stale bitmap");
+        require(label.grab().toImage() != first && renders == 2, "Weight reused a stale bitmap");
         // More distinct labels than fit in the cache must evict old masks.
         for (int i = 0; i < 70; ++i) {
             label.setText(QString("Preview %1").arg(i));
-            app.processEvents();
-            wait();
+            label.grab();
+            require(fontPreviewCacheBytes() <= fontPreviewBitmapBudget, "Bitmap cache exceeded its budget");
         }
         require(privateInterfaceFontBytes() == retained, "Browsing bitmaps retained font files");
-        for (int i = 0; i < 100; ++i) {
-            label.setAppearance({i % 12, i % 2 ? "bold" : "off"});
-            label.setText(QString("Rapid %1").arg(i));
-            label.repaint();
-            require(fontPreviewPendingCount() <= 33, "Preview queue grew without a bound");
-        }
-        app.processEvents();
-        wait();
-        label.hide();
-
-        QWidget page;
-        page.resize(500, 640);
-        struct PagePaintObserver : QObject {
-            QWidget *page = nullptr;
-            bool earlyPaint = false;
-            bool eventFilter(QObject *, QEvent *event) override {
-                if (event->type() == QEvent::Paint && !page->property("font_preview_rendering").toBool() &&
-                    !page->property("font_preview_page_ready").toBool()) earlyPaint = true;
-                return false;
-            }
-        } observer;
-        observer.page = &page;
-        QVector<SampleLabel *> samples;
-        for (int i = 0; i < 4; ++i) {
-            auto *sample = new SampleLabel(&page);
-            sample->optical = true;
-            sample->setGeometry(0, i * 160, 500, 160);
-            sample->setFont(chromeFont(32));
-            sample->setText(QString("Batch %1").arg(i));
-            sample->setPreviewSource(fontPreviewSource("IBM Plex Sans", files));
-            sample->installEventFilter(&observer);
-            samples.append(sample);
-        }
-        prepareFontPreviewPage(&page);
-        require(!page.updatesEnabled(), "Font page painted before its previews were ready");
-        require(!page.isVisible(), "Preparing previews opened a hidden page");
-        page.show();
-        const auto waitPage = [&] {
-            QElapsedTimer timer;
-            timer.start();
-            while (!page.property("font_preview_page_ready").toBool() && timer.elapsed() < 5000)
-                app.processEvents(QEventLoop::AllEvents, 10);
-            require(page.property("font_preview_page_ready").toBool() && page.updatesEnabled(),
-                    "Font page did not release its completed previews");
-            timer.restart();
-            bool painted = false;
-            while (!painted && timer.elapsed() < 1000) {
-                app.processEvents(QEventLoop::AllEvents, 10);
-                painted = true;
-                for (auto *sample : samples) painted &= sample->property("font_preview_ready").toBool();
-            }
-            require(painted, "Font page released an unfinished label");
-        };
-        waitPage();
-        page.hide();
-        QGraphicsScene scene;
-        auto *proxy = scene.addWidget(&page);
-        QGraphicsView canvas(&scene);
-        canvas.resize(520, 660);
-        page.show();
-        canvas.show();
-        app.processEvents();
-        for (auto *sample : samples) sample->setAppearance({9, "bold"});
-        prepareFontPreviewPage(&page);
-        // Replace an unfinished batch, as happens after rotation or rapid paging.
-        for (auto *sample : samples) sample->setText(sample->text() + " next");
-        prepareFontPreviewPage(&page);
-        canvas.viewport()->repaint();
-        waitPage();
-        require(!observer.earlyPaint, "Font page painted a partial batch");
-        require(fontPreviewCacheBytes() <= fontPreviewBitmapBudget, "Font page exceeded its bitmap budget");
-        for (auto *sample : samples)
-            sample->setPreviewSource(fontPreviewSource("Broken", {assets.file("fonts/missing.ttf")}));
-        prepareFontPreviewPage(&page);
-        QElapsedTimer failureTimer;
-        failureTimer.start();
-        while (!page.property("font_preview_page_ready").toBool() && failureTimer.elapsed() < 5000)
-            app.processEvents(QEventLoop::AllEvents, 10);
-        require(page.updatesEnabled(), "An invalid font left the page waiting forever");
-        proxy->setWidget(nullptr);
-        canvas.hide();
-        page.hide();
+        // A font that cannot render keeps the ordinary label and does not
+        // reopen its files on every paint.
+        label.setText("Font Preview");
+        label.setAppearance({});
+        label.setPreviewSource(fontPreviewSource("Broken", {assets.file("fonts/missing.ttf")}));
+        const int before = renders;
+        const auto broken = label.grab().toImage();
+        label.grab();
+        require(renders == before + 1, "A failed sample rendered on every paint");
+        label.setPreviewSource({});
+        require(broken == label.grab().toImage(), "A failed sample did not keep the ordinary label");
+        kobalt::setDiagnosticObserver({});
     }
 
     {

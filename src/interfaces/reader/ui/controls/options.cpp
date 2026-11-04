@@ -289,7 +289,7 @@ void DescribedOption::paintEvent(QPaintEvent *) {
     const auto label = interfaceTextWidth(text(), labelFont) > labelBounds.width()
                            ? elideInterfaceText(text(), labelFont, labelBounds.width())
                            : text();
-    if (drawFontPreview(this, painter, labelBounds, text(), fontPreview, m::choices::sampleInkHeight)) {
+    if (drawFontPreview(painter, labelBounds, text(), fontPreview, m::choices::sampleInkHeight)) {
         // The bitmap has already been aligned within the label bounds.
     } else if (appearance.opticalLabel)
         drawOpticalText(painter, labelBounds, text());

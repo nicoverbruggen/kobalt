@@ -108,6 +108,9 @@ struct Fonts {
         if (rendering) pinned.insert(file);
     }
     QMap<QString, std::function<QByteArray()>> pending;
+    // Font previews open bundled fallbacks from their files. These faces
+    // retain no bytes, so they do not count against the budget.
+    QMap<QString, QString> paths;
     QMap<QString, std::shared_ptr<Face>> faces;
     QHash<FT_Face, Face *> owners;
     // Costs are in 256-byte units, so small measurements do not each take a kilobyte of the budget.
@@ -143,6 +146,15 @@ struct Fonts {
         if (found != faces.end()) {
             use(file);
             return found.value()->handle;
+        }
+        if (!sources.contains(file) && paths.contains(file)) {
+            auto value = std::make_shared<Face>();
+            value->source = file;
+            if (FT_New_Face(library, QFile::encodeName(paths.value(file)).constData(), index, &value->handle))
+                return nullptr;
+            faces.insert(key, value);
+            owners.insert(value->handle, value.get());
+            return value->handle;
         }
         if (!sources.contains(file)) {
             const auto size = sizes.value(file);
@@ -341,7 +353,6 @@ FT_Face primaryFace(const QFont &font) {
     return face;
 }
 FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0) {
-    if (previewFonts) return nullptr;
     if (regular.endsWith("-Regular.ttf")) {
         const auto stem = regular.left(regular.size() - QStringLiteral("Regular.ttf").size());
         QStringList styles;
@@ -356,7 +367,7 @@ FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0) {
         }
         for (const auto &style : styles) {
             const auto file = stem + style + ".ttf";
-            if (fonts().pending.contains(file) || fonts().sources.contains(file)) {
+            if (fonts().pending.contains(file) || fonts().sources.contains(file) || fonts().paths.contains(file)) {
                 if (const auto face = fonts().face(file, index)) {
                     return face;
                 }
@@ -369,7 +380,6 @@ FT_Face faceFor(uint character, QChar::Script script, FT_Face primary, const QFo
     if (primary && FT_Get_Char_Index(primary, character)) {
         return primary;
     }
-    if (previewFonts) return nullptr;
     QString preferred;
     int index = 0;
     switch (script) {
@@ -729,14 +739,15 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
             face = faceFor(cluster[0], QChar::script(cluster[0]), requested, *requestedFont);
             if (!covers(face)) {
                 QStringList files = fonts().pending.keys();
-                for (const auto &file : fonts().sources.keys())
+                for (const auto &file : fonts().sources.keys() + fonts().paths.keys())
                     if (!files.contains(file))
                         files.append(file);
                 for (const auto &file : files) {
                     if (file.endsWith("-Bold.ttf") || file.endsWith("-Italic.ttf") ||
                         file.endsWith("-BoldItalic.ttf")) {
                         const auto regular = file.left(file.lastIndexOf('-') + 1) + "Regular.ttf";
-                        if (fonts().pending.contains(regular) || fonts().sources.contains(regular)) {
+                        if (fonts().pending.contains(regular) || fonts().sources.contains(regular) ||
+                            fonts().paths.contains(regular)) {
                             continue;
                         }
                     }
@@ -980,8 +991,15 @@ PrivateText renderPrivateText(const QString &text, const QFont &font, int weight
                               Qt::LayoutDirection direction, const QVector<PrivateTextStyle> &styles) {
     return layoutPrivateText(text, font, weight, boldRanges, true, underlineRanges, emphasis, direction, styles);
 }
-QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
-                               QSize size, int inkHeight, int weight, bool boldReading, bool centered, bool wrap) {
+QMap<QString, QString> privateInterfaceFontFiles() {
+    QMap<QString, QString> result;
+    const auto &paths = fonts().bundledPaths;
+    for (auto it = paths.cbegin(); it != paths.cend(); ++it) result.insert(it.value(), it.key());
+    return result;
+}
+QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text, QSize size,
+                               const FontPreviewScale &scale, int weight, bool boldReading, bool centered, bool wrap,
+                               const QMap<QString, QString> &fallbacks) {
     if (text.isEmpty() || text.size() > 256 || files.size() > 64 || size.width() <= 0 || size.height() <= 0 ||
         size.width() > 2048 || size.height() > 512 || qint64(size.width()) * size.height() > 256 * 1024)
         return {};
@@ -989,6 +1007,9 @@ QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, 
     if (FT_Init_FreeType(&isolated.library)) return {};
     isolated.glyphs.setMaxCost(512);
     isolated.layouts.setMaxCost(1024);
+    // Characters the face lacks use the same bundled fallbacks as the
+    // interface renderer, so a script font can still show a Latin name.
+    isolated.paths = fallbacks;
     QString chosen;
     int chosenIndex = 0, best = -1;
     // Collections and unnamed styles need metadata inspection. Close each face
@@ -1023,12 +1044,17 @@ QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, 
     } scope(&isolated);
     QFont font(family);
     font.setPixelSize(128);
-    const auto reference = renderPrivateText(QStringLiteral("Hox"), font, 0).image;
-    int top = reference.height(), bottom = -1;
-    for (int y = 0; y < reference.height(); ++y)
-        for (int x = 0; x < reference.width(); ++x)
-            if (qAlpha(reference.pixel(x, y)) >= 128) { top = qMin(top, y); bottom = y; break; }
-    font.setPixelSize(qBound(8, bottom >= top ? qRound(128.0 * inkHeight / (bottom - top + 1)) : inkHeight, 192));
+    // Measure ink rows the same way as the interface sample font.
+    const auto inkRows = [](const QImage &image) {
+        int top = image.height(), bottom = -1;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x)
+                if (qAlpha(image.pixel(x, y)) >= 128) { top = qMin(top, y); bottom = y; break; }
+        return bottom >= top ? bottom - top + 1 : 0;
+    };
+    const int reference = inkRows(renderPrivateText(QStringLiteral("Hox"), font, 0).image);
+    font.setPixelSize(qBound(scale.minimum, reference ? qRound(128.0 * scale.inkHeight / reference) : scale.base,
+                             scale.maximum));
     QImage bitmap(size, QImage::Format_ARGB32_Premultiplied);
     if (bitmap.isNull()) return {};
     bitmap.fill(Qt::transparent);
@@ -1053,8 +1079,9 @@ QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, 
                 if (width < widest) { widest = width; split = i; }
             }
     bool valid;
-    if (split >= 0 && size.height() >= inkHeight * 2 + 4) {
-        const int lineHeight = inkHeight + 4, y = (size.height() - 2 * lineHeight) / 2;
+    const int lineHeight = split < 0 ? 0 : qMax(1, inkRows(renderPrivateText(text + QStringLiteral(" Hox"), font, 0).image)) + scale.lineGap;
+    if (split >= 0 && lineHeight * 2 <= size.height()) {
+        const int y = (size.height() - 2 * lineHeight) / 2;
         valid = draw(text.left(split).trimmed(), QRect(0, y, size.width(), lineHeight)) &&
                 draw(text.mid(split + 1).trimmed(), QRect(0, y + lineHeight, size.width(), lineHeight));
     } else valid = draw(text, QRect(QPoint(), size));

@@ -1051,7 +1051,6 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         pager->setPage(page, pages.size());
         card->fitToWidth(cardWidth);
         fontDialog->centerCard();
-        ui::prepareFontPreviewPage(fontDialog);
     };
     connect(pager->previous, &QPushButton::clicked, fontDialog, [pager, showPage] {
         showPage(pager->turnTarget(-1));

@@ -604,7 +604,7 @@ void SampleLabel::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     painter.setFont(font());
     painter.setPen(palette().color(QPalette::WindowText));
-    if (drawFontPreview(this, painter, rect(), text(), previewSource, m::choices::sampleInkHeight,
+    if (drawFontPreview(painter, rect(), text(), previewSource, m::choices::sampleInkHeight,
                         appearance.weight, appearance.bionic == "bold", alignment().testFlag(Qt::AlignHCenter), wordWrap()))
         return;
     if (needsPrivateText(text(), font())) {

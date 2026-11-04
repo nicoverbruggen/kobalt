@@ -38,9 +38,17 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
 // A native editor needs a Qt face. Only single-face TrueType files are safe
 // to pass to Qt's font loader; private previews keep their existing renderer.
 QByteArray nativeEditorFontData(const QFont &font);
-// Isolated file-backed faces; safe on a worker. Returns an 8-bit coverage bitmap.
-QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
-                               QSize size, int inkHeight, int weight, bool boldReading, bool centered, bool wrap);
+// Bundled interface and fallback font files by name, for font previews.
+QMap<QString, QString> privateInterfaceFontFiles();
+// Sample sizes in device pixels, from the interface metrics.
+struct FontPreviewScale {
+    int inkHeight, base, minimum, maximum, lineGap;
+};
+// Uses isolated file-backed faces and retains no font bytes. Returns an 8-bit coverage bitmap.
+// Characters the font lacks use the bundled `fallbacks` from privateInterfaceFontFiles().
+QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text, QSize size,
+                               const FontPreviewScale &scale, int weight, bool boldReading, bool centered, bool wrap,
+                               const QMap<QString, QString> &fallbacks = {});
 struct PrivateText {
     QImage image;
     int advance = 0;

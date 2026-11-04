@@ -363,7 +363,7 @@ if(BUILD_TESTING)
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
             sleepScreenModesKeepTheStockDefaultAndMigrateTheOptIn sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus remoteKeyActivityRequiresActiveReading
-            finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncMoments minuteClock idleTimers wifiPowerSaver kosyncManualToolbar kosyncManualConnection kosyncPasswordSleep kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave
+            finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock idleTimers wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncPasswordSleep kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave
             progressChoiceKeepAndGo progressChoiceWaitsForSettings finishedSyncWithoutPositionKeepsLocalReading
             progressChoiceForOlderAlert progressChoiceUnavailablePosition
             appearanceOpeningDoesNotRepaintToolbar annotationFramesKeepFirstPaintComplete annotationListResolvesPagesOnDemand)

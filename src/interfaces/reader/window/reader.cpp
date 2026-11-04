@@ -445,7 +445,8 @@ void Reader::sleepReader() {
         syncDialog->hide();
     if (finishDialog)
         finishDialog->hide();
-    flushKosync([] {}, kosyncClient->schedule().onSleepWake);
+    // The power saver turns Wi-Fi off once the sleep sync has ended.
+    flushKosync([this] { saveWifiPowerAtSleep(); }, kosyncClient->schedule().onSleepWake);
     // Keep the page on screen until Nickel's sleep view replaces it, as in
     // Nickel's own reader. sleepViewReady() submits that view.
 }
@@ -505,6 +506,7 @@ void Reader::sleepViewReady() {
 }
 
 void Reader::wakeReader() {
+    cancelWifiPowerAtSleep();
     cancelKosync();
     kosyncStarted = false;
     kosyncWaking = true;

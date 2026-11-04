@@ -45,7 +45,7 @@ void Reader::buildKosync() {
             kosyncProgress = {};
             kosyncPositionFailed = false;
             kosyncPromptDeferred = false;
-            kosyncStarted = false;
+            restartKosync();
         }
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
         kosyncStatus(strings::get(!saved ? "kosync.storage_error" :
@@ -76,7 +76,7 @@ void Reader::buildKosync() {
                     kosyncProgress = {};
                     kosyncPositionFailed = false;
                     kosyncPromptDeferred = false;
-                    kosyncStarted = false;
+                    restartKosync();
                     account();
                 }
                 kosyncStatus(error.isEmpty() ? strings::get("kosync.signed_in") : error);
@@ -90,7 +90,7 @@ void Reader::buildKosync() {
             kosyncProgress = {};
             kosyncPositionFailed = false;
             kosyncPromptDeferred = false;
-            kosyncStarted = false;
+            restartKosync();
             account();
             kosyncStatus(strings::get("kosync.signed_out"));
         } else kosyncStatus(strings::get("kosync.storage_error"));
@@ -98,7 +98,7 @@ void Reader::buildKosync() {
     kosyncPage->automaticChanged = [this, account](bool enabled) {
         if (!kosyncClient->setAutomatic(enabled)) kosyncStatus(strings::get("kosync.storage_error"));
         account();
-        if (enabled) kosyncStarted = false;
+        if (enabled) restartKosync();
         kosyncStatus(kosyncMessage);
     };
     kosyncPage->scheduleChanged = [this, account](const kosync::Schedule &schedule) {
@@ -235,14 +235,15 @@ bool Reader::wifiPowerSaverVisible() const {
     // E-reader previews show the Kobo row, as the Automatic sync sheet does.
     return services.turnOffWifi || (services.devicePreview && services.devicePreview() && !services.phoneLayout);
 }
-bool Reader::wifiPowerSaverApplies() const {
+bool Reader::wifiPowerSaverApplies(bool sleeping) const {
     if (!services.turnOffWifi || !preferences.value(wifiPowerSaverKey).toBool(true) || menuBluetooth->active())
         return false;
     // Nickel's own sync carries store books and books from services that
     // sync through it, and uploads their position when the book closes.
     if (book->usesNativeCloudSync()) return false;
-    // Automatic KOSync expects a connection while the book is open.
-    return !kosyncClient->signedIn() || !kosyncAutomatic();
+    // Automatic KOSync expects a connection while the book is open. At sleep
+    // its last sync has ended, and wake connects again if it syncs.
+    return sleeping || !kosyncClient->signedIn() || !kosyncAutomatic();
 }
 void Reader::saveWifiPower(std::function<void()> next) {
     if (!wifiPowerSaverApplies()) {
@@ -250,11 +251,26 @@ void Reader::saveWifiPower(std::function<void()> next) {
         return;
     }
     QPointer<Reader> guard(this);
-    services.turnOffWifi(this, [guard, next](bool turnedOff) {
+    services.turnOffWifi(this, "wifi-off before reader input", [guard, next](bool turnedOff) {
         if (!guard) return;
-        diagnostic("wifi-power-saver", qt::object({{"turned_off", turnedOff}}));
+        diagnostic("wifi-power-saver", qt::object({{"turned_off", turnedOff}, {"moment", "open"}}));
         next();
     });
+}
+// Nickel turns Wi-Fi off itself about 20 seconds after the sleep screen. With
+// the power saver on, Kobalt does it as soon as the sleep sync has ended.
+void Reader::saveWifiPowerAtSleep() {
+    cancelWifiPowerAtSleep();
+    if (!lifecycleHidden || closing || !wifiPowerSaverApplies(true)) return;
+    auto *request = new QObject(this);
+    wifiSleepRequest = request;
+    services.turnOffWifi(request, "wifi-off at sleep", [request = QPointer<QObject>(request)](bool turnedOff) {
+        diagnostic("wifi-power-saver", qt::object({{"turned_off", turnedOff}, {"moment", "sleep"}}));
+        if (request) request->deleteLater();
+    });
+}
+void Reader::cancelWifiPowerAtSleep() {
+    delete wifiSleepRequest.data();
 }
 void Reader::finishKosyncPresentation() {
     kosyncOpeningGrace.stop();
@@ -315,10 +331,7 @@ void Reader::synchronizeKosync(bool interactive) {
             finishKosync(strings::get("kosync.saved_locally"));
             return;
         }
-        prepareKosyncNetwork(false, [this] {
-            kosyncReleaseWifi = true;
-            startKosyncExchange(false);
-        });
+        prepareKosyncNetwork(false, [this] { startKosyncExchange(false); });
     } else {
         kosyncBackgroundFailures = 0;
         startKosyncExchange(false);
@@ -329,6 +342,10 @@ void Reader::prepareKosyncNetwork(bool interactive, std::function<void()> ready)
     if (!kosyncNetwork) { ready(); return; }
     const auto epoch = kosyncEpoch;
     kosyncConnecting = true;
+    // Opening, wake and periodic syncs connect silently and turn off the
+    // Wi-Fi they turned on when they end. Syncs the user asks for leave
+    // Wi-Fi as it is.
+    if (!interactive) kosyncReleaseWifi = true;
     kosyncStatus(strings::get("kosync.connecting"));
     kosyncNetwork->prepare(interactive, [this, epoch, ready, interactive](bool connected) {
         if (epoch != kosyncEpoch) return;
@@ -387,6 +404,7 @@ void Reader::showKosyncOpening() {
 void Reader::cancelKosync() {
     ++kosyncEpoch;
     if (kosyncNetwork) kosyncNetwork->cancel();
+    releaseKosyncWifi();
     kosyncConnecting = kosyncAuthenticating = false;
     kosyncClient->cancel();
     kosyncDeadline.stop();
@@ -397,8 +415,30 @@ void Reader::cancelKosync() {
     kosyncFinished = {};
     kosyncFinishing = false;
     kosyncFlushWaiting = false;
-    kosyncReleaseWifi = false;
     hideKosyncOpening();
+}
+// Nickel's off() waits for child processes on this thread. At sleep, wake
+// and close the reader takes no input until it returns: wake cancels before
+// it shows the reader. While the reader takes input, the guard reports the
+// wait as wifi-off.
+void Reader::releaseKosyncWifi() {
+    if (!std::exchange(kosyncReleaseWifi, false) || !kosyncNetwork) return;
+    const char *reason = closing || exportRunning ? "wifi-off while closing"
+                         : lifecycleHidden        ? "wifi-off at sleep"
+                                                  : nullptr;
+    if (!reason) {
+        kosyncNetwork->release();
+        return;
+    }
+    mainthread::AllowBlocking allow(reason);
+    kosyncNetwork->release();
+}
+// The next automatic sync is an opening sync again. A wake whose sync could
+// not run yet, for example while signed out, no longer decides which switch
+// that sync follows.
+void Reader::restartKosync() {
+    kosyncStarted = false;
+    kosyncWaking = false;
 }
 void Reader::finishKosync(const QString &message) {
     kosyncReaderRetry.stop();
@@ -409,10 +449,8 @@ void Reader::finishKosync(const QString &message) {
         return;
     }
     kosyncPage->setLastSync(kosyncClient->lastSync());
-    if (kosyncNetwork) {
-        if (std::exchange(kosyncReleaseWifi, false)) kosyncNetwork->release();
-        kosyncNetwork->cancel();
-    }
+    releaseKosyncWifi();
+    if (kosyncNetwork) kosyncNetwork->cancel();
     kosyncConnecting = kosyncAuthenticating = false;
     const bool finishing = kosyncFinishing;
     const bool opening = kosyncOpening;
@@ -440,7 +478,13 @@ void Reader::finishKosync(const QString &message) {
 void Reader::flushKosync(std::function<void()> finished, bool enabled) {
     // A local checkpoint is already durable. Final uploads use only an existing
     // connection and never resolve a remote conflict while closing or asleep.
-    if (kosyncConnecting || kosyncAuthenticating || kosyncReaderReady) cancelKosync();
+    if (kosyncConnecting || kosyncAuthenticating || kosyncReaderReady) {
+        // Keep a connection Kobalt turned on for the final upload below;
+        // finishKosync, or the cancel when it is not up, turns it off.
+        const bool release = std::exchange(kosyncReleaseWifi, false);
+        cancelKosync();
+        kosyncReleaseWifi = release;
+    }
     if (!enabled || (kosyncNetwork && !kosyncNetwork->connected()) ||
         book->usesNativeCloudSync() || !kosyncClient->signedIn() || !kosyncAutomatic() ||
         kosyncProgress.pending() || book->pendingProgress() || model->temporaryTypography() ||

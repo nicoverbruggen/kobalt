@@ -194,8 +194,8 @@ ReaderHostServices readerHostServices() {
     result.syncNetwork = [] { return std::make_unique<NativeSyncNetwork>(); };
     result.kosyncSleepWake = result.kosyncWifiControl = true;
     if (const auto bindings = wifiPowerBindings(); bindings.valid())
-        result.turnOffWifi = [bindings](QObject *context, std::function<void(bool)> done) {
-            saveNativeWifiPower(context, bindings, std::move(done));
+        result.turnOffWifi = [bindings](QObject *context, const char *reason, std::function<void(bool)> done) {
+            saveNativeWifiPower(context, bindings, reason, std::move(done));
         };
     result.presentation = [](QWidget *reader) {
         return makeWindowPresentation(reader, nativeReaderSleepScreenAvailable());

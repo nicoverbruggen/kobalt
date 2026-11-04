@@ -201,7 +201,7 @@ static void wifiPowerSaver() {
     int replies = 0;
     bool result = true;
     const auto save = [&] {
-        kobalt::saveNativeWifiPower(&context, bindings, [&](bool value) {
+        kobalt::saveNativeWifiPower(&context, bindings, "wifi-off before reader input", [&](bool value) {
             ++replies;
             result = value;
         });
@@ -339,6 +339,60 @@ int main(int argc, char **argv) {
         connecting = false;
         replies = savedReplies;
         requests = savedRequests;
+    }
+    {
+        // With the radio state known, Wi-Fi is Kobalt's to turn off only when
+        // its silent request found the radio off, whether the connection
+        // came up or not.
+        const int savedReplies = replies, savedRequests = requests, savedCancelled = cancelled;
+        bool radio = true;
+        int turnedOff = 0;
+        auto releasing = bindings;
+        releasing.radioOn = [&] { return radio; };
+        releasing.turnOff = [&] { ++turnedOff; radio = ready = false; };
+        kobalt::NativeSyncNetwork radioNetwork(releasing);
+        ready = false;
+        connecting = false;
+        radioNetwork.prepare(false, done);
+        ready = true;
+        connecting = false;
+        emit workflow.internetIsAccessible();
+        require(result, "a silent request can connect a radio that is already on");
+        radioNetwork.release();
+        require(turnedOff == 0, "a radio that was already on stays on when Kobalt's request connects it");
+        radio = ready = false;
+        radioNetwork.prepare(false, done);
+        radio = true;
+        radioNetwork.cancel();
+        radioNetwork.release();
+        require(turnedOff == 1 && !radio, "a cancelled silent request turns off the radio it turned on");
+        radioNetwork.prepare(false, done);
+        radio = true;
+        connecting = false;
+        emit workflow.connectingFailed();
+        require(!result, "a silent request can fail with the radio on");
+        radioNetwork.release();
+        require(turnedOff == 2 && !radio, "a failed silent request turns off the radio it turned on");
+        const int beforeRelease = cancelled;
+        radioNetwork.prepare(false, done);
+        radio = true;
+        radioNetwork.release();
+        require(turnedOff == 3 && cancelled == beforeRelease + 1,
+                "release stops a silent request that is still running before it turns the radio off");
+        // Nickel can still be powering the radio for a running request.
+        radioNetwork.prepare(false, done);
+        radioNetwork.release();
+        require(turnedOff == 4, "release turns off a radio that a running request may still bring up");
+        radioNetwork.prepare(true, done);
+        radio = ready = true;
+        connecting = false;
+        emit workflow.internetIsAccessible();
+        radioNetwork.release();
+        require(turnedOff == 4 && radio, "an interactive request leaves the radio on");
+        ready = connecting = false;
+        replies = savedReplies;
+        requests = savedRequests;
+        cancelled = savedCancelled;
     }
     kobalt::NativeSyncNetwork unavailable(kobalt::NativeSyncNetworkBindings{});
     unavailable.prepare(true, done);

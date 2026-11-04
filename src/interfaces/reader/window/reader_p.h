@@ -225,11 +225,13 @@ private:
     QByteArray kosyncDocument() const;
     void prepareKosyncPresentation(std::function<void(bool)> finished);
     // The Wi-Fi power saver runs as the last step before the reader takes
-    // input. It applies only when Kobalt would sync this book and automatic
-    // KOSync is off.
+    // input, and at sleep after the sleep sync. At opening it applies only
+    // when Kobalt would sync this book and automatic KOSync is off.
     bool wifiPowerSaverVisible() const;
-    bool wifiPowerSaverApplies() const;
+    bool wifiPowerSaverApplies(bool sleeping = false) const;
     void saveWifiPower(std::function<void()> next);
+    void saveWifiPowerAtSleep();
+    void cancelWifiPowerAtSleep();
     void finishKosyncPresentation();
     void prepareAnnotationPresentation(std::function<void(bool)> finished);
     void showKosyncChoice();
@@ -242,6 +244,8 @@ private:
     void flushKosync(std::function<void()> finished, bool enabled = true);
     void finishKosync(const QString &message);
     void cancelKosync();
+    void releaseKosyncWifi();
+    void restartKosync();
     void showKosyncOpening();
     void hideKosyncOpening();
     void kosyncStatus(const QString &message);
@@ -256,8 +260,12 @@ private:
     std::function<void()> kosyncReaderReady;
     bool kosyncFinishing = false, kosyncOpening = false, kosyncFlushWaiting = false;
     bool kosyncConnecting = false, kosyncAuthenticating = false;
-    // A periodic sync that turned on Wi-Fi turns it off again when it ends.
+    // The running sync asked for a silent connection. When it ends, the
+    // network controller turns off the Wi-Fi that this request turned on.
     bool kosyncReleaseWifi = false;
+    // The power saver's request at sleep. Wake deletes it, which drops a
+    // Bluetooth answer that arrives after wake.
+    QPointer<QObject> wifiSleepRequest;
     // Failed background connections in a row, in memory only.
     int kosyncBackgroundFailures = 0;
     // The next opening-style sync follows a wake, not a book opening.

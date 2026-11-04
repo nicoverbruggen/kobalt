@@ -11,6 +11,9 @@ namespace kobalt {
 struct NativeSyncNetworkBindings {
     QObject *workflow = nullptr;
     std::function<bool()> ready, disabled, connecting;
+    // Optional: whether the radio is on, connected or not. Without it, only a
+    // ready connection counts as on.
+    std::function<bool()> radioOn;
     std::function<bool()> inputPending;
     std::function<void(bool)> request;
     std::function<void()> cancel;
@@ -38,6 +41,7 @@ private slots:
 
 private:
     void finish(bool ready);
+    bool radioOn() const;
     NativeSyncNetworkBindings bindings;
     QPointer<QObject> workflow;
     QTimer poll;
@@ -45,7 +49,8 @@ private:
     std::function<void(bool)> finished;
     bool requested = false;
     bool interactive = false;
-    // A silent connection this controller started and Nickel completed.
-    bool ownsConnection = false;
+    // A silent request of this controller found the radio off. Wi-Fi is then
+    // Kobalt's to turn off, whether the connection came up or not.
+    bool turnedOn = false;
 };
 }

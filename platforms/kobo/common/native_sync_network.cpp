@@ -29,6 +29,7 @@ NativeSyncNetworkBindings nativeBindings() {
     result.workflow = workflow;
     result.inputPending = [] { return nickel::NativeDialogOverlay::inputPending(); };
     result.disabled = [workflow, disabled] { return !workflow || disabled(workflow); };
+    result.radioOn = [wireless, up] { return wireless && up(wireless); };
     result.connecting = [workflow, connecting] { return workflow && connecting(workflow); };
     result.ready = [workflow, wireless, up, accessible] {
         // up() is Nickel's cached radio state on both firmware generations.
@@ -48,9 +49,10 @@ NativeSyncNetworkBindings nativeBindings() {
     if (off) result.turnOff = [wireless, off] {
         if (!wireless) return;
         // On firmware 4.46, off() runs `killall dhcpcd` and waits for it on
-        // this thread before it hands the radio to a worker. That breaks the
-        // page-turn rule while the user reads. Report and time the wait until
-        // device measurements decide how Kobalt turns Wi-Fi off.
+        // this thread before it hands the radio to a worker; a Clara BW
+        // measured about 87 ms. While the user reads, that breaks the
+        // page-turn rule, so the guard reports it. The reader declares the
+        // wait at sleep and close.
         mainthread::BlockingOperation wait("wifi-off");
         off(wireless);
     };
@@ -79,7 +81,6 @@ NativeSyncNetwork::~NativeSyncNetwork() { cancel(); }
 bool NativeSyncNetwork::connected() const { return workflow && bindings.valid() && bindings.ready(); }
 void NativeSyncNetwork::prepare(bool showUi, std::function<void(bool)> done) {
     cancel();
-    ownsConnection = false;
     const bool available = connected();
     diagnostic("kosync-network-prepare", qt::object({{"interactive", showUi}, {"ready", available},
         {"bindings_available", bool(workflow) && bindings.valid()}}));
@@ -92,6 +93,9 @@ void NativeSyncNetwork::prepare(bool showUi, std::function<void(bool)> done) {
     poll.start();
     if (!bindings.connecting()) {
         requested = true;
+        // A radio that was already on is not Kobalt's, even if this request
+        // connects it. An interactive request leaves Wi-Fi to the user.
+        if (!showUi && !radioOn()) turnedOn = true;
         bindings.request(showUi);
     }
 }
@@ -115,14 +119,23 @@ void NativeSyncNetwork::cancelled() { finish(false); }
 void NativeSyncNetwork::finish(bool ready) {
     diagnostic("kosync-network-finished", qt::object({{"ready", ready}, {"owned", requested}}));
     poll.stop();
-    ownsConnection = ready && requested && !interactive;
     requested = false;
     auto done = std::move(finished);
     finished = {};
     if (done) done(ready);
 }
+bool NativeSyncNetwork::radioOn() const {
+    if (!workflow || !bindings.valid()) return false;
+    return bindings.radioOn ? bindings.radioOn() : bindings.ready();
+}
 void NativeSyncNetwork::release() {
-    if (!std::exchange(ownsConnection, false) || !bindings.turnOff || !connected()) return;
+    if (!std::exchange(turnedOn, false)) return;
+    // A request that is still running would bring the radio back up. Nickel
+    // may still be powering the radio for it, before up() reads true, so turn
+    // it off whenever such a request was running.
+    const bool running = requested;
+    cancel();
+    if (!bindings.turnOff || (!running && !radioOn())) return;
     diagnostic("kosync-network-released");
     bindings.turnOff();
 }

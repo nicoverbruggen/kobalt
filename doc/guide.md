@@ -60,6 +60,8 @@ On a Kobo you also choose what happens while you read and Wi-Fi is off:
 - **Wait** keeps your progress on the device until Wi-Fi is on again. This uses the least battery.
 - **Turn on Wi-Fi** lets Kobalt turn Wi-Fi on, sync, and turn it off again.
 
+The sync when you open a book and the sync after you wake the device can also turn Wi-Fi on. See [Battery and Wi-Fi](#battery-and-wi-fi) for when Kobalt turns it off again.
+
 If Kobalt cannot connect three times in a row, it stops trying until you wake the device or tap **Sync now**. If you turn automatic sync off, a sync button appears in the reading toolbar, and Kobalt syncs only when you tap it.
 
 KOSync receives only what it needs to find your place: an identifier for the book, your position, the percentage, and your device's name and identifier. It does not receive highlights, notes or reading time.
@@ -76,18 +78,24 @@ Kobo's software turns Wi-Fi off:
 - about 2 minutes after the last network activity, on Kobo software 5 and 6
 - on Kobo software 4, only when 15 minutes have also passed since Kobo's software last started or last opened a book in its own reader. Because of this, Wi-Fi can stay on for about 15 minutes after a sync.
 
+### When Kobalt turns Wi-Fi off
+
+- If Kobalt turned Wi-Fi on to sync with KOSync, it turns Wi-Fi off when that sync ends. This is also true when the sync fails, or when you tap **Cancel sync**, close the book or put the device to sleep during the sync.
+- If Wi-Fi was already on, a KOSync sync leaves it on. Kobalt turns it off only through the setting below; Kobo's own idle timeout can also turn it off.
+- **Sign in**, **Sync now** and the sync button in the toolbar leave Wi-Fi as it is.
+
 ### Turn off Wi-Fi when a book opens
 
-To save battery, Kobalt can turn Wi-Fi off as soon as you open a book. You find this setting under **Settings → System → Power management**. It is on by default.
+To save battery, Kobalt can turn Wi-Fi off as soon as you open a book. With this setting on, Kobalt also turns Wi-Fi off at once when the device goes to sleep, after the sleep sync if KOSync syncs at sleep. Without it, Kobo's software does this about 20 seconds later. You find this setting under **Settings → System → Power management**. It is on by default.
 
 Kobalt turns Wi-Fi off only when nothing needs it:
 
 - Bluetooth is off. Kobalt leaves Wi-Fi alone while Bluetooth is on, or when it cannot tell.
 - The book is not from your Kobo account. Kobo's sync needs Wi-Fi to send your progress for those books.
-- Automatic KOSync is off, or you have not set up KOSync.
+- When a book opens: automatic KOSync is off, or you have not set up KOSync. At sleep, the sleep sync has already ended, so automatic KOSync does not keep Wi-Fi on.
 - Kobo's software is not syncing at that moment.
 
-Turning Wi-Fi off takes a moment, so Kobalt does it while the book is still opening, before you can turn a page.
+Turning Wi-Fi off takes a moment, so Kobalt does it while the book is still opening, before you can turn a page, or while the device goes to sleep.
 
 ### Bluetooth
 

@@ -9,7 +9,7 @@ Firmware 4.x runs the Qt 5 package (`platforms/kobo/qt5/`). Firmware 5.x and 6.x
 - **Signals before polls.** Kobalt reacts to Nickel's signals for sleep, wake, USB, sync, battery, Wi-Fi and Bluetooth. It does not poll them.
 - **No regular work while idle.** While a book is open and the user does nothing, only a few timers run, each at most about once a minute.
 - **Timers stop with the reader.** Timers do not fire while the kernel is suspended. Most of Kobalt's timers also stop when the reader hides or sleeps.
-- **The page turn is sacred.** Kobalt never waits for storage or another thread on the main thread while the user can turn a page. Turning Wi-Fi off is the one radio action that waits. It happens before the reader takes input, except after a sync while reading that turned Wi-Fi on; see [When Kobalt turns Wi-Fi off](#when-kobalt-turns-wi-fi-off). See [the main-thread guard](validation.md#main-thread-guard).
+- **The page turn is sacred.** Kobalt never waits for storage or another thread on the main thread while the user can turn a page. Turning Wi-Fi off is the one radio action that waits. It happens before the reader takes input, at sleep or at close, except when a KOSync sync that turned Wi-Fi on ends while the reader takes input; see [When Kobalt turns Wi-Fi off](#when-kobalt-turns-wi-fi-off). See [the main-thread guard](validation.md#main-thread-guard).
 
 ## Timers that repeat while reading
 
@@ -43,7 +43,7 @@ KOSync while reading has no timer. When the reader shows a new position, after a
 | Wake retry (`NativeLifecycle`) | 25 ms | After resume, while Nickel's sleep, PIN or USB view is still shown |
 | Light panel | 500 ms | The light panel is open |
 | Startup | 250 ms, at most 30 s | Kobalt waits for Nickel to finish starting |
-| Wi-Fi saver deadline | 1 s, once | A book opens and the saver waits for the Bluetooth answer |
+| Wi-Fi saver deadline | 1 s, once | A book opens or the device goes to sleep, and the saver waits for the Bluetooth answer |
 | Save retries at sleep, USB and shutdown | 10 to 100 ms, bounded (2.5 s at sleep) | Saves drain at a lifecycle boundary |
 | UI timers (resize, notices, hold gestures, search updates, orientation debounce) | 100 ms to 4 s, once | After user input |
 
@@ -76,15 +76,35 @@ Kobalt never connects for books that Nickel's sync carries.
 
 ### When Kobalt turns Wi-Fi off
 
-1. **After a sync while reading that turned Wi-Fi on.** `NativeSyncNetwork::release` calls `WirelessManager::off()`, only for a silent connection that Kobalt itself started and that is still connected. This runs while the reader is visible, so the main-thread guard reports it as `wifi-off`.
-2. **The Wi-Fi power saver, when a book opens.** `Reader::saveWifiPower` runs as the last step of `preparePresentation`, before the book takes input. It asks the host (`ReaderHostServices::turnOffWifi`; on Kobo `saveNativeWifiPower` in `common/native_wifi_power.cpp`). Wi-Fi goes off only when all of these hold:
-   - The setting `turn_off_wifi_on_open` is on (Settings → System → Power management; default on).
-   - Kobalt's Bluetooth indicator is off, and a fresh D-Bus query answers that the adapter is off. A stopped Bluetooth stack counts as off. No answer within 1 s counts as unknown and keeps Wi-Fi on.
-   - The book is not one that Nickel's sync carries (`ReadingBook::usesNativeCloudSync`).
-   - KOSync is signed out, or automatic sync is off.
-   - Wi-Fi is up (`WirelessManager::up`) and Nickel is not syncing (`SyncManagerBase::isSyncing` on `N3SyncManager::sharedInstance()`).
+These four rules are the contract.
 
-   It then calls Nickel's `WirelessWorkflowManager::turnWifiOff()`, which also respects Nickel's developer setting that keeps Wi-Fi on. The call waits on the main thread for child processes (see below), inside the declared scope `wifi-off before reader input`.
+1. **Wi-Fi that a KOSync sync turned on goes off when that sync ends.** This covers the opening sync, the first sync after wake and a sync while reading. It applies when the sync succeeds, fails, reaches its deadline or is cancelled by Skip, close or sleep. "Turned on" means that Kobalt's silent connection request found the radio off (`WirelessManager::up` false) and asked Nickel for it. A radio that was already on is not Kobalt's, even when Kobalt's request connects it.
+2. **At sleep, the Wi-Fi power saver turns Wi-Fi off at once,** after the sleep sync if KOSync syncs at sleep. Nickel would otherwise do it about 20 seconds after the sleep screen.
+3. **The power saver alone decides about a connection that Kobalt did not open:** when a book opens and at sleep. KOSync never turns it off.
+4. **Syncs that the user asks for leave Wi-Fi as it is.** Sign in, Sync now and the manual toolbar button use Nickel's interactive `connectWireless`, and Kobalt does not turn that Wi-Fi off.
+
+#### KOSync (rules 1, 3 and 4)
+
+`Reader::prepareKosyncNetwork` marks each silent request (`kosyncReleaseWifi`). `Reader::finishKosync` and `Reader::cancelKosync` call `Reader::releaseKosyncWifi`, so every way a sync ends passes through it: success, failure, the sync deadline, Skip, close (`prepareTransition`, the exit flow and the reader's destructor), sleep (`flushKosync`) and wake. It calls `NativeSyncNetwork::release`, which decides whether the Wi-Fi is Kobalt's:
+
+- `NativeSyncNetwork::prepare` records ownership (`turnedOn`) only for a silent request that starts a connection while the radio is off. It does not record it when a connection is already usable, when Nickel is already connecting, in airplane mode or for an interactive request.
+- `release` stops a request that is still running, then calls `WirelessManager::off()` if the radio is on. Ownership ends there, so a second call does nothing.
+
+The sleep sync uses only a connection that is already up. If a sync that turned Wi-Fi on is still sending when the device sleeps, the sleep sync waits for it, sends the final position and then releases the Wi-Fi.
+
+`off()` waits on the main thread (see below). At close, Kobalt declares that wait as `wifi-off while closing`; at sleep and at wake, before the reader is shown, as `wifi-off at sleep`. When a sync ends while the reader takes input (a Skip, the end of a sync while reading or of a wake sync, or an opening sync that outlasts the loading screen), the main-thread guard reports the wait as `wifi-off`. A Clara BW on firmware 4.46 measured about 87 ms.
+
+#### The Wi-Fi power saver (rules 2 and 3)
+
+`Reader::saveWifiPower` runs as the last step of `preparePresentation`, before the book takes input. At sleep, `Reader::saveWifiPowerAtSleep` runs when `flushKosync` finishes, which is after the sleep sync or at once when there is none. Both ask the host (`ReaderHostServices::turnOffWifi`; on Kobo `saveNativeWifiPower` in `common/native_wifi_power.cpp`). Wi-Fi goes off only when all of these hold:
+
+- The setting `turn_off_wifi_on_open` is on (Settings → System → Power management; default on).
+- Kobalt's Bluetooth indicator is off, and a fresh D-Bus query answers that the adapter is off. A stopped Bluetooth stack counts as off. No answer within 1 s counts as unknown and keeps Wi-Fi on.
+- The book is not one that Nickel's sync carries (`ReadingBook::usesNativeCloudSync`).
+- When a book opens only: KOSync is signed out, or automatic sync is off. Automatic KOSync expects a connection while the book is open. At sleep its last sync has ended, so this condition does not apply.
+- Wi-Fi is up (`WirelessManager::up`) and Nickel is not syncing (`SyncManagerBase::isSyncing` on `N3SyncManager::sharedInstance()`).
+
+It then calls Nickel's `WirelessWorkflowManager::turnWifiOff()`, which also respects Nickel's developer setting that keeps Wi-Fi on. The call waits on the main thread for child processes (see below), inside the declared scope `wifi-off before reader input` when a book opens and `wifi-off at sleep` at sleep. Wake deletes the request at sleep (`Reader::cancelWifiPowerAtSleep`), so a Bluetooth answer that comes after wake does not turn Wi-Fi off.
 
 ### What Nickel does when Wi-Fi goes off
 
@@ -93,7 +113,7 @@ Kobalt never connects for books that Nickel's sync carries.
 - Firmware 4.46: `killall dhcpcd`, waited for on the calling thread.
 - Firmware 6.0: `killall dhcpcd-dbus`, `killall dhcpcd`, `wpa_cli terminate` and `killall wpa_supplicant`, each waited for.
 
-Nickel has no call that does the whole shutdown on a worker. This is why Kobalt turns Wi-Fi off only before the reader takes input, or reports the wait when it cannot avoid it.
+Nickel has no call that does the whole shutdown on a worker. This is why Kobalt turns Wi-Fi off before the reader takes input, at sleep or at close where it can, and reports the wait when a sync ends while the reader takes input.
 
 ### Nickel's own Wi-Fi timeouts
 
@@ -149,8 +169,10 @@ Kobalt can delay a suspend, never prevent it for long:
 
 ## Verification
 
-- `lifecycle.wifiPowerSaver`: when the reader asks to turn Wi-Fi off, and that the book waits for the answer.
-- `platform.native-sync-network`: connection handling, `release()` and the saver's Kobo side, including Bluetooth on, unknown and no answer, Nickel syncing, and the declared wait.
-- `lifecycle.kosyncBackgroundWifi` and `lifecycle.kosyncMoments`: when KOSync connects and releases Wi-Fi.
+- `lifecycle.wifiPowerSaver`: when the reader asks to turn Wi-Fi off at opening, and that the book waits for the answer.
+- `lifecycle.wifiPowerSaverAtSleep`: the saver at sleep runs after the sleep sync, also with automatic KOSync, only when the setting is on, and wake drops its request.
+- `platform.native-sync-network`: connection handling, which Wi-Fi `release()` turns off (a radio that was already on, a cancelled, failed or running request, an interactive request) and the saver's Kobo side, including Bluetooth on, unknown and no answer, Nickel syncing, and the declared wait.
+- `lifecycle.kosyncWifiRelease`: opening, wake and periodic syncs release Wi-Fi when they fail, reach their deadline, are skipped or are cancelled by close, and Sync now does not.
+- `lifecycle.kosyncBackgroundWifi` and `lifecycle.kosyncMoments`: when KOSync connects and releases Wi-Fi while reading, and which switch the opening and wake syncs follow.
 - `lifecycle.progressChoiceWaitsForSettings`: the signal-driven position check.
-- Nickel's own timeouts and the time `turnWifiOff()` waits cannot be checked by the native tests. Measure them on a device or an emulated Nickel after a firmware change, and measure the wait on both eMMC and SD-card devices.
+- Nickel's own timeouts, the time `turnWifiOff()` and `off()` wait, and what Nickel does when `off()` follows a cancelled connection request cannot be checked by the native tests. Measure them on a device or an emulated Nickel after a firmware change, and measure the wait on both eMMC and SD-card devices.

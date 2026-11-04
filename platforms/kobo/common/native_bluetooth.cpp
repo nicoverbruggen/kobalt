@@ -122,7 +122,8 @@ void queryNativeBluetoothPower(QObject *context, std::function<void(BluetoothPow
     auto request = QDBusMessage::createMethodCall(bluetoothServiceName(), QStringLiteral("/org/bluez/hci0"),
                                                   QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     request << QStringLiteral("org.bluez.Adapter1") << QStringLiteral("Powered");
-    // The opened book waits for this answer, so keep the timeout short.
+    // An opened book and the power saver at sleep wait for this answer, so
+    // keep the timeout short.
     auto *pending = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(request, 500), context);
     QObject::connect(pending, &QDBusPendingCallWatcher::finished, context,
                      [answer](QDBusPendingCallWatcher *call) {

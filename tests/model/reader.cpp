@@ -1589,6 +1589,77 @@ int main(int argc, char **argv) {
         require(!model.goToPlatform(positions, "text/c.xhtml#point(/1/4/99/1:0)", &error),
                 "An out-of-range plain EPUB point was accepted");
     }
+    for (const bool styled : {false, true}) {
+        // A plain EPUB whose chapter is one <section> with an ID and no IDs on
+        // its paragraphs. CREngine drops the whitespace between the section's
+        // children, so the section's text differs from the source. Nickel
+        // still stores a DOM point into the paragraph. Chapter styles add
+        // CREngine's own <stylesheet> element beside <body>.
+        const QByteArray style = styled ? "\t\t<style>p { text-indent: 1em; }</style>\n" : "";
+        const auto sectioned = storedEpub(
+            {{"mimetype", "application/epub+zip"},
+             {"META-INF/container.xml",
+              "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>"},
+             {"book.opf",
+              "<package xmlns='http://www.idpf.org/2007/opf' version='3.0'><metadata/><manifest><item id='c' href='text/c.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/></spine></package>"},
+             {"text/c.xhtml",
+              "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+              "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\" lang=\"en-GB\" xml:lang=\"en-GB\">\n"
+              "\t<head>\n\t\t<title>I</title>\n" + style + "\t</head>\n"
+              "\t<body epub:type=\"bodymatter z3998:fiction\">\n"
+              "\t\t<section id=\"chapter-1\" role=\"doc-chapter\" epub:type=\"chapter\">\n"
+              "\t\t\t<h2 epub:type=\"z3998:ordinal z3998:roman\">I</h2>\n"
+              "\t\t\t<p>The first paragraph.</p>\n"
+              "\t\t\t<p>\xe2\x80\x9cYou must follow me carefully.\xe2\x80\x9d</p>\n"
+              "\t\t\t<p>Is not <i epub:type=\"se:name\">that</i> rather large?</p>\n"
+              "\t\t</section>\n\t</body>\n</html>\n"}});
+        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        require(model.open(sectioned, QSize(1072, 1328), {}, &error), qPrintable(error));
+        // Heading and paragraph starts, after a three-byte quotation mark,
+        // inside the inline element and in the text after it.
+        for (const auto &point : {"point(/1/4/2/2/1:0)", "point(/1/4/2/4/1:0)", "point(/1/4/2/6/1:7)",
+                                  "point(/1/4/2/8/2/1:2)", "point(/1/4/2/8/3:1)"}) {
+            const auto location = QStringLiteral("text/c.xhtml#") + point;
+            require(model.goToPlatform(positions, location, &error), qPrintable(location + ": " + error));
+            require(model.platformPosition(positions, &error) == location && error.isEmpty(),
+                    qPrintable("Sectioned plain EPUB position did not round-trip: " + location + " -> " +
+                               model.platformPosition(positions, &error)));
+        }
+        require(model.goToPlatform(positions, "text/c.xhtml#point(/1/4/2/6/1:7)", &error) &&
+                    model.position().endsWith(".5"),
+                "Sectioned plain EPUB point mapped to the wrong text offset");
+        require(!model.goToPlatform(positions, "text/c.xhtml#point(/1/4/2/6/1:1)", &error),
+                "A byte offset inside a UTF-8 character was accepted");
+    }
+    {
+        // A KEPUB-shaped chapter: book-columns and book-inner around the text,
+        // a kobo span in one paragraph and none in the other. Nickel's KEPUB
+        // reader is not known to open a point(), so a position outside the
+        // spans keeps the chapter start, as before. Span positions are exact.
+        const auto kepub = storedEpub(
+            {{"mimetype", "application/epub+zip"},
+             {"META-INF/container.xml",
+              "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>"},
+             {"book.opf",
+              "<package xmlns='http://www.idpf.org/2007/opf' version='3.0'><metadata/><manifest><item id='c' href='text/c.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/></spine></package>"},
+             {"text/c.xhtml",
+              "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+              "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+              "\t<head>\n\t\t<title>I</title>\n\t\t<style>p { text-indent: 1em; }</style>\n\t</head>\n"
+              "\t<body>\n"
+              "\t\t<div id=\"book-columns\">\n\t\t\t<div id=\"book-inner\">\n"
+              "\t\t\t\t<p>Plain text outside a span.</p>\n"
+              "\t\t\t\t<p><span class=\"koboSpan\" id=\"kobo.2.1\">Text inside a span.</span></p>\n"
+              "\t\t\t</div>\n\t\t</div>\n\t</body>\n</html>\n"}});
+        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        require(model.open(kepub, QSize(1072, 1328), {}, &error), qPrintable(error));
+        require(model.goToPlatform(positions, "text/c.xhtml#point(/1/4/2/2/2/1:6)", &error), qPrintable(error));
+        require(model.platformPosition(positions, &error) == "text/c.xhtml" && error.isEmpty(),
+                qPrintable("A KEPUB position outside a kobo span wrote a point: " + model.platformPosition(positions, &error)));
+        require(model.goToPlatform(positions, "text/c.xhtml#kobo.2.1:5", &error), qPrintable(error));
+        require(model.platformPosition(positions, &error) == "text/c.xhtml#kobo.2.1:5",
+                "A KEPUB span position lost its exact form");
+    }
     kobalt::ReaderModel native(kobalt::test::readerFonts());
     require(native.open(bytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
     require(native.goToPlatform(positions, chapter2 + "#kobo.8.1:7", &error), qPrintable(error));
@@ -2193,9 +2264,14 @@ int main(int argc, char **argv) {
     }
     require(css.goTo("/body/DocFragment[2]/body/p[1]/text().4"), "Cannot select a node without an ID");
     const auto unlabelledAnchor = css.position();
-    require(css.platformPosition(positions, &error) == chapter2 && error.isEmpty() &&
+    // The chapter's <style> gives CREngine a <stylesheet> element beside
+    // <body>; the paragraph without an ID still gets Nickel's DOM point.
+    require(css.platformPosition(positions, &error) == chapter2 + "#point(/1/2/1/1:4)" && error.isEmpty() &&
                 css.position() == unlabelledAnchor,
-            "Missing source ID prevented chapter-only native progress or moved the local position");
+            "Missing source ID prevented a native DOM point or moved the local position");
+    require(css.goToPlatform(positions, chapter2 + "#point(/1/2/1/1:4)", &error) &&
+                css.position() == "/body[1]/DocFragment[2]/body[1]/p[1]/text()[1].4",
+            "Native DOM point beside a stylesheet did not return to the same text");
     require(css.goTo("/body/DocFragment[2]/body/p[4]/text().1"), "Cannot select whitespace fixture");
     const auto normalizedAnchor = css.position();
     require(css.platformPosition(positions, &error) == chapter2 && error.isEmpty() &&

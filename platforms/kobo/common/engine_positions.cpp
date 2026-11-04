@@ -114,7 +114,9 @@ ldomNode *engineBody(ldomNode *fragment) {
     ldomNode *body = nullptr;
     for (int i = 0; i < fragment->getChildCount(); ++i) {
         auto *child = fragment->getChildNode(i);
-        if (!child->isElement())
+        // CREngine keeps the chapter's styles in a <stylesheet> element
+        // beside <body>. It is not part of the body's structure.
+        if (!child->isElement() || child->isNodeName("stylesheet"))
             continue;
         if (body || !child->isNodeName("body"))
             return nullptr;
@@ -210,11 +212,15 @@ bool sourceElementPath(const Source &source, int element, ElementPath &path) {
 }
 // A native point() resolves to an element with an ID and an offset in it, or,
 // in a chapter without IDs, to an element path and an offset in that element.
+// The path, text and offset of the containing element are also kept when an
+// ancestor has an ID, so the decoder can use them if that ID's text changed.
 struct NativePoint {
     QString id;
     int offset = 0;
     ElementPath path;
     QString text;
+    int elementOffset = 0;
+    bool located = false;
 };
 // Nickel point() locations count DOM children from the document element and
 // measure offsets in UTF-8 bytes. Resolve against the original XML before
@@ -248,6 +254,14 @@ bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, N
     if (prefix.toUtf8() != utf8.left(bytes))
         return false;
     const int position = nodes[target].begin + prefix.size();
+    const int element = nodes[target].element ? target : nodes[target].parent;
+    result.located = element > 0 && sourceElementPath(source, element, result.path);
+    if (result.located) {
+        result.text = source.textOf(element);
+        result.elementOffset = position - nodes[element].begin;
+    } else {
+        result.path = {};
+    }
     for (int node = target; node > 0; node = nodes[node].parent) {
         if (!nodes[node].id.isEmpty()) {
             result.id = nodes[node].id;
@@ -270,11 +284,9 @@ bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, N
             }
         }
     }
-    const int element = nodes[target].element ? target : nodes[target].parent;
-    if (element <= 0 || !sourceElementPath(source, element, result.path))
+    if (!result.located)
         return false;
-    result.offset = position - nodes[element].begin;
-    result.text = source.textOf(element);
+    result.offset = result.elementOffset;
     return true;
 }
 // The point() Nickel stores for `units` UTF-16 units into `element`, or an
@@ -447,12 +459,19 @@ QString NickelPositionCodec::decode(const ReaderModel &model, const QString &loc
         return fail(strings::get("error.native_chapter_is_not_in_the_publication_spine"));
     ldomNode *element = nullptr;
     QString sourceText;
-    if (structural && id.isEmpty()) {
-        // A chapter without IDs: find the element by its path from <body>.
+    // Find the point's own element by its path from <body>.
+    const auto byPath = [&] {
         element = engineElement(fragment, point.path);
         if (!element || qstring(element->getText()) != point.text)
-            return fail(strings::get("error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
+            return false;
         sourceText = point.text;
+        offset = point.elementOffset;
+        return true;
+    };
+    if (structural && id.isEmpty()) {
+        // A chapter without IDs.
+        if (!byPath())
+            return fail(strings::get("error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     } else if (id.isEmpty()) {
         if (offset)
             return fail(strings::get("error.invalid_native_chapter_position"));
@@ -465,8 +484,16 @@ QString NickelPositionCodec::decode(const ReaderModel &model, const QString &loc
         // TENG offsets count UTF-16 units in the source DOM. CREngine uses
         // UTF-32 and can normalize whitespace. Reject a changed text stream
         // rather than turning the same number into a position in different text.
-        if (!nativeText(doc, path, id, element, sourceText, error))
-            return {};
+        bool textChanged = false;
+        if (!nativeText(doc, path, id, element, sourceText, error, &textChanged)) {
+            // CREngine drops the whitespace between block children, so an ID
+            // on a section around paragraphs without IDs fails this check. A
+            // native point still names its own element, which can match.
+            if (!structural || !textChanged || !point.located || !byPath())
+                return {};
+            if (error)
+                error->clear();
+        }
     }
     if (offset > sourceText.size())
         return fail(strings::get("error.native_text_offset_exceeds_its_anchor"));
@@ -566,7 +593,20 @@ QString NickelPositionCodec::encode(const ReaderModel &model, QString *error) {
     QString sourceText;
     bool textChanged = false;
     if (!nativeText(doc, path, id, element, sourceText, error, &textChanged)) {
-        return textChanged ? chapterFallback() : QString();
+        if (!textChanged)
+            return {};
+        if (error)
+            error->clear();
+        // A KEPUB keeps its text in kobo.x.y spans inside book-columns and
+        // book-inner. Nickel's KEPUB reader is not known to open a point(),
+        // so it keeps the chapter start there, as before.
+        if (id.startsWith("kobo.") || id == "book-inner" || id == "book-columns")
+            return chapterFallback();
+        // CREngine drops the whitespace between block children, so an ID on
+        // a section around paragraphs without IDs fails this check. Nickel's
+        // DOM point for the nearest element can still match; otherwise this
+        // falls back to the chapter.
+        return structuralPoint();
     }
     int units = 0;
     if (!unitsBefore(element, target, pointer.getOffset(), units, error))

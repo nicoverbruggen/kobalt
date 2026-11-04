@@ -328,6 +328,13 @@ if(BUILD_TESTING)
     add_dependencies(kobalt-tests kobalt-startup-recovery-tests)
     add_test(NAME platform.startup-recovery COMMAND kobalt-startup-recovery-tests)
     set_tests_properties(platform.startup-recovery PROPERTIES LABELS "platform" TIMEOUT 30)
+    add_executable(kobalt-native-startup-wait-tests "${KOBALT_ROOT}/tests/native_startup_wait.cpp")
+    set_target_properties(kobalt-native-startup-wait-tests PROPERTIES AUTOMOC OFF)
+    target_include_directories(kobalt-native-startup-wait-tests PRIVATE "${KOBALT_ROOT}")
+    target_compile_options(kobalt-native-startup-wait-tests PRIVATE -Wall -Wextra -Werror)
+    add_dependencies(kobalt-tests kobalt-native-startup-wait-tests)
+    add_test(NAME platform.native-startup-wait COMMAND kobalt-native-startup-wait-tests)
+    set_tests_properties(platform.native-startup-wait PROPERTIES LABELS "platform" TIMEOUT 30)
     add_test(NAME build.eval-device-outcomes COMMAND "${CMAKE_COMMAND}"
         "-DTEST_EXECUTABLE=${CMAKE_COMMAND}"
         "-DTEST_ARGUMENTS=-DCOMPARE=$<TARGET_FILE:kobalt-eval-compare>;-P;${KOBALT_ROOT}/tests/eval_device_outcomes.cmake"

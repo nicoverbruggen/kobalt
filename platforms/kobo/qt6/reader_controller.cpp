@@ -11,6 +11,7 @@
 #include "platforms/kobo/common/crash_reports.h"
 #include "support/diagnostics.h"
 #include "platforms/kobo/common/native_startup.h"
+#include "platforms/kobo/common/native_startup_wait.h"
 #include "platforms/kobo/common/reader_environment.h"
 #include "platforms/kobo/common/reader_coordinator.h"
 #include "platforms/kobo/common/address_hook.h"
@@ -247,17 +248,25 @@ public:
             kobalt::diagnostic("startup-recovered", kobalt::qt::object({{"reason", "native-state"},
                                                                         {"elapsed_ms", double(elapsed.elapsed())}}));
         }
-        if (!nativeInitialized || nativeFinishing) {
-            if (elapsed.elapsed() >= 30000) {
-                rejected = true;
+        const auto nativeWaitResult = nativeWait.update(nativeInitialized && !nativeFinishing, elapsed.elapsed());
+        using WaitResult = kobalt::nickel::NativeStartupWait::Result;
+        if (nativeWaitResult == WaitResult::Waiting || nativeWaitResult == WaitResult::TimedOut) {
+            if (nativeWaitResult == WaitResult::TimedOut) {
                 retry.stop();
                 environment().reportSession(
-                          kobalt::qt::object({{"status", "stock"}, {"reason", "Native initialization not observed"}}));
-                kobalt::diagnostic("startup-failed", kobalt::qt::object({{"reason", "native-initialization"}}), kobalt::DiagnosticSeverity::Error);
-                return;
+                          kobalt::qt::object({{"status", "stock"}, {"reason", "Waiting for native initialization"}}));
+                kobalt::diagnostic("startup-deferred", kobalt::qt::object({{"reason", "native-initialization"},
+                                                                         {"elapsed_ms", double(elapsed.elapsed())}}));
             }
             waiting("native-initialization");
             return;
+        }
+        if (nativeWaitResult == WaitResult::Recovered) {
+            // Resume bounded retries if the screen or native services need more time.
+            ticks = 0;
+            retry.start();
+            kobalt::diagnostic("startup-recovered", kobalt::qt::object({{"reason", "late-native-initialization"},
+                                                                      {"elapsed_ms", double(elapsed.elapsed())}}));
         }
         auto *screen = QGuiApplication::primaryScreen();
         if (!screen || screen->size().isEmpty()) {
@@ -356,6 +365,7 @@ private:
     QPointer<ReaderCoordinator> controller;
     QTimer retry;
     QElapsedTimer elapsed;
+    kobalt::nickel::NativeStartupWait nativeWait;
     QString lastWait;
     bool initializing = false, reentered = false, rejected = false;
     int ticks = 0;

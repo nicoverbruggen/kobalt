@@ -65,7 +65,7 @@ NickelHook also parks the library outside `imageformats` for the first three sec
 
 To install a new build over a temporary build, copy the new package, then delete `.adds/kobalt/uninstall-now` before you eject. If you leave it, the next start removes the new library.
 
-Kobalt waits for Nickel to finish initialization before creating its reader controller. If Kobalt misses the completion callback, it can recover by checking the existing Power Manager and Nickel's application connection. The check does not create the manager. An unrecognized native layout cannot enable recovery. If native readiness is still unconfirmed after 30 seconds, Kobalt records `startup-failed` and keeps the built-in reader active for that boot.
+Kobalt waits for Nickel to finish initialization before creating its reader controller. If Kobalt misses the completion callback, it can recover by checking the existing Power Manager and Nickel's application connection. The check does not create the manager. An unrecognized native layout cannot enable recovery. If native readiness is still unconfirmed after 30 seconds, Kobalt records `startup-deferred` and stops periodic checks. The built-in reader remains available. A later completion callback or book-opening attempt can still initialize Kobalt. Recovery records `startup-recovered` with reason `late-native-initialization` and resumes bounded retries if the screen or native services need more time. A book already opened in the built-in reader stays there until it is closed and opened again.
 
 ## Files on user storage
 

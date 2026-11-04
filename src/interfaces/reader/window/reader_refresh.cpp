@@ -80,6 +80,9 @@ void Reader::refresh() {
     // once the reader is free, including after an apply above closes Settings.
     if (progressCheckDeferred && !progressBlocked())
         progressTick();
+    // The KOsync choice was checked above, before an apply could close
+    // Settings. Without this second check it waits for the next refresh.
+    showKosyncChoice();
     const bool pickingFont = syncFontPicker();
     showChapterText();
     // Publish only the final viewport. A cancelled intermediate layout must

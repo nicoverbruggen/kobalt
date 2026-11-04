@@ -1056,6 +1056,9 @@ void ReaderCoordinator::runScenarios(const QString &path) {
         source.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(source.readAll()).object() : QJsonObject();
     kobalt::scenario::Options options;
     options.filter = file.value("filter").toString();
+    // A check that only needs to see each scenario work can run fewer repetitions.
+    if (file.value("repeat_scale").toDouble() > 0)
+        options.repeatScale = file.value("repeat_scale").toDouble();
     const auto books = file.value("books").toObject();
     for (auto it = books.begin(); it != books.end(); ++it)
         if (QFileInfo(it.value().toObject().value("file").toString()).fileName() == QFileInfo(run.filePath).fileName())

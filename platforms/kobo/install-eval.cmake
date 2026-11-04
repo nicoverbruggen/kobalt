@@ -1,6 +1,8 @@
 # Copies an evaluation package onto a Kobo connected over USB.
 #   cmake -DPACKAGE=build/kobo-qt5-eval/Kobalt-qt5-eval.zip -DDEVICE=/Volumes/KOBOeReader
 #       -P platforms/kobo/install-eval.cmake
+# Optional: -DSCENARIO_FILTER=kosync. runs only matching scenarios, and
+# -DREPEAT_SCALE=0.2 runs one repetition in five (at least one each).
 if(NOT DEFINED PACKAGE OR NOT DEFINED DEVICE)
     message(FATAL_ERROR "PACKAGE and DEVICE are required")
 endif()
@@ -13,11 +15,19 @@ endif()
 if(DEFINED SCENARIO_FILTER AND NOT SCENARIO_FILTER MATCHES "^[a-z0-9.-]+$")
     message(FATAL_ERROR "SCENARIO_FILTER must be a scenario identifier or prefix")
 endif()
+if(DEFINED REPEAT_SCALE AND NOT REPEAT_SCALE MATCHES "^[0-9]+(\\.[0-9]+)?$")
+    message(FATAL_ERROR "REPEAT_SCALE must be a positive number, such as 0.2 for one repetition in five")
+endif()
 file(ARCHIVE_EXTRACT INPUT "${PACKAGE}" DESTINATION "${DEVICE}")
+set(scenarios "${DEVICE}/.adds/kobalt/scenarios/scenarios.json")
 if(DEFINED SCENARIO_FILTER)
-    set(scenarios "${DEVICE}/.adds/kobalt/scenarios/scenarios.json")
     file(READ "${scenarios}" scenario_json)
     string(JSON scenario_json SET "${scenario_json}" filter "\"${SCENARIO_FILTER}\"")
+    file(WRITE "${scenarios}" "${scenario_json}\n")
+endif()
+if(DEFINED REPEAT_SCALE)
+    file(READ "${scenarios}" scenario_json)
+    string(JSON scenario_json SET "${scenario_json}" repeat_scale "${REPEAT_SCALE}")
     file(WRITE "${scenarios}" "${scenario_json}\n")
 endif()
 # Results from an earlier run must not pass for this one.

@@ -143,6 +143,8 @@ Two other measurements come from the same run's event log. The book opening afte
 
 Before installing, check that Kobalt's Settings › System › Power management › Smart Wi-Fi power saving is on. It is on unless someone turned it off. Checking it after the restart would mean opening a book, and any opening starts the run: with another book the run is skipped, and with the benchmark book it starts before Wi-Fi is on.
 
+Add `-DREPEAT_SCALE=0.2` to the install command for one sample instead of five, when the run only has to show that the scenario works.
+
 For firmware 4:
 
 ```sh

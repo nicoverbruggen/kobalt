@@ -6,6 +6,7 @@
 #include "record_writer.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
+#include <cstring>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -40,7 +41,13 @@ constexpr qint64 maxDatabaseBytes = (qint64(1) << 32) - 1;
 constexpr int bookmarkKind = 0, highlightKind = 1;
 struct Failure { QString code; };
 void check(bool ok, const char *code) {
-    if (!ok) throw Failure{QString::fromLatin1(code)};
+    if (!ok) {
+        // Only steps that open or write files can run out of descriptors.
+        for (const auto *step : {"database-open", "database-write", "database-commit", "database-publish"})
+            if (std::strcmp(code, step) == 0)
+                reportDescriptorExhaustion(code);
+        throw Failure{QString::fromLatin1(code)};
+    }
 }
 QString utf8Text(const QVariant &value) {
     // Qt 5.2's SQLite TEXT conversion stops at embedded NUL. These columns

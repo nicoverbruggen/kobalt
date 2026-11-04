@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "reading/reading_bridge.h"
 #include "support/strings.h"
@@ -161,6 +162,8 @@ QVariantMap NativeProgress::persisted(QString *error) const {
                 for (int i = 0; i < record.count(); ++i)
                     result.insert(record.fieldName(i), query.value(i));
             }
+        } else {
+            reportDescriptorExhaustion("nickel-database-open");
         }
         if (!result.isEmpty() && native.tolino(native.device())) {
             QVariantMap bookmark;

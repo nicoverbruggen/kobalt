@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "local_resources.h"
 
 #include "image_policy.h"
@@ -216,9 +217,12 @@ private:
 std::unique_ptr<PublicationEndpoint> openLocalPublication(const QString &path, QString *error) {
     QFile file(path);
     Publication publication;
-    if (!file.open(QIODevice::ReadOnly) || !publication.inspect(file, error)) {
+    if (!file.open(QIODevice::ReadOnly)) {
+        reportDescriptorExhaustion("book-open");
         return {};
     }
+    if (!publication.inspect(file, error))
+        return {};
     return std::make_unique<LocalPublication>(path);
 }
 }

@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "assets.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -147,8 +148,13 @@ bool AssetBundle::available() const {
         restoreRecoveredAsset(data->root, path, size, hash);
         QFile file(path);
         const QFileInfo info(file);
-        if (!regularMember(data->root, path) || !file.open(QIODevice::ReadOnly) || file.size() != size ||
-            digest(file) != hash)
+        if (!regularMember(data->root, path))
+            return false;
+        if (!file.open(QIODevice::ReadOnly)) {
+            reportDescriptorExhaustion("asset-open");
+            return false;
+        }
+        if (file.size() != size || digest(file) != hash)
             return false;
         verified.append({path, size, info.lastModified(), hash});
     }

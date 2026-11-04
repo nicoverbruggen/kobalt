@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QElapsedTimer>
 #include <QThread>
@@ -13,7 +14,10 @@
 #include <atomic>
 #include <dlfcn.h>
 #include <cerrno>
+#include <fcntl.h>
+#include <sys/resource.h>
 #include <unistd.h>
+#include <QJsonArray>
 
 // Count actual sync requests, while still performing the filesystem sync.
 static std::atomic<int> syncCalls{0};
@@ -174,18 +178,84 @@ int main(int argc, char **argv) {
     if (!sampled.load() || !sampledMemory.value("rss_kib").isDouble() ||
         !sampledMemory.value("peak_rss_kib").isDouble()) qFatal("Explicit performance memory sample was lost");
     if (syncCalls.load() != beforeNormal) qFatal("Memory sampling requested a storage sync");
+    {
+        // Run out of descriptors for real: the report must still list them.
+        QJsonObject observed;
+        kobalt::setDiagnosticObserver([&](const QJsonObject &entry) { observed = entry; });
+        kobalt::reportDescriptorExhaustion("not-exhausted", EACCES);
+        if (!observed.isEmpty())
+            qFatal("A different open error reported descriptor exhaustion");
+        rlimit original{};
+        if (getrlimit(RLIMIT_NOFILE, &original) != 0)
+            qFatal("Cannot read the descriptor limit");
+        rlimit lowered = original;
+        lowered.rlim_cur = 96;
+        if (setrlimit(RLIMIT_NOFILE, &lowered) != 0)
+            qFatal("Cannot lower the descriptor limit");
+        std::vector<int> opened;
+        int error = 0;
+        for (int i = 0; i < 1000; ++i) {
+            const int fd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+            if (fd < 0) {
+                error = errno;
+                break;
+            }
+            opened.push_back(fd);
+        }
+        if (error != EMFILE)
+            qFatal("The lowered limit did not give EMFILE");
+        errno = EMFILE;
+        kobalt::reportDescriptorExhaustion("test-open", error);
+        const int after = errno;
+        // A second report within a minute is skipped.
+        auto first = observed;
+        observed = {};
+        kobalt::reportDescriptorExhaustion("test-open-again", error);
+        // The line reaches the log while descriptors are still exhausted.
+        const int spare = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+        if (spare >= 0)
+            opened.push_back(spare);
+        kobalt::flushDiagnostics();
+        for (const int fd : opened)
+            ::close(fd);
+        if (setrlimit(RLIMIT_NOFILE, &original) != 0)
+            qFatal("Cannot restore the descriptor limit");
+        const bool logged = read(quietPath).contains("\"descriptor-exhaustion\"");
+        if (opened.size() < 32)
+            qFatal("The test did not open enough descriptors to exhaust the limit");
+        if (!logged)
+            qFatal("The descriptor report did not reach the log while descriptors were exhausted");
+        if (after != EMFILE)
+            qFatal("The descriptor report changed errno");
+        if (!observed.isEmpty())
+            qFatal("A second descriptor report within a minute was logged");
+        if (first.value("event").toString() != "descriptor-exhaustion" ||
+            first.value("context").toString() != "test-open" || first.value("errno").toInt() != EMFILE ||
+            !first.value("listed").toBool() || first.value("open").toInt() < int(opened.size()) - 1)
+            qFatal("The descriptor report did not list the open descriptors");
+#ifdef Q_OS_LINUX
+        const auto top = first.value("most_opened").toArray();
+        if (top.isEmpty() || top.first().toObject().value("path").toString() != "/dev/null" ||
+            top.first().toObject().value("count").toInt() < int(opened.size()) - 1)
+            qFatal("The descriptor report did not name the most opened file");
+#endif
+        kobalt::setDiagnosticObserver({});
+    }
+    // The descriptor check above wrote its own error; count from here.
+    const int beforeError = syncCalls.load();
     kobalt::diagnostic("save", {{"ok", false}}, kobalt::DiagnosticSeverity::Error);
     QElapsedTimer syncWait;
     syncWait.start();
-    while (syncCalls.load() == beforeNormal && syncWait.elapsed() < 3000) QThread::msleep(10);
-    if (syncCalls.load() == beforeNormal) qFatal("Error batch did not request a sync");
+    while (syncCalls.load() == beforeError && syncWait.elapsed() < 3000) QThread::msleep(10);
+    if (syncCalls.load() == beforeError) qFatal("Error batch did not request a sync");
     kobalt::flushDiagnostics();
     const int beforeBoundary = syncCalls.load();
     kobalt::flushDiagnostics();
     if (syncCalls.load() <= beforeBoundary) qFatal("Empty lifecycle flush did not sync prior batches");
     const auto quietBytes = read(quietPath);
     if (quietBytes.count("\"event\":\"turn\"") != 20 ||
-        !quietBytes.contains("\"sequence\":19") || !quietBytes.contains("\"severity\":\"error\"") ||
+        !quietBytes.contains("\"sequence\":19") ||
+        !QRegularExpression("\"event\":\"save\"[^\\n]*\"severity\":\"error\"|\"severity\":\"error\"[^\\n]*\"event\":\"save\"").match(QString::fromUtf8(quietBytes)).hasMatch() ||
         quietBytes.contains("rss_kib"))
         qFatal("Normal log lost activity fields or collected detailed memory data");
     if (sampledMemory.contains("kobalt_rss_kib") || sampledMemory.contains("kobalt_peak_kib"))

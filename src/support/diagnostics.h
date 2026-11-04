@@ -4,6 +4,7 @@
 #include <QElapsedTimer>
 #include <QJsonObject>
 #include <QString>
+#include <cerrno>
 #include <functional>
 
 namespace kobalt {
@@ -37,6 +38,12 @@ void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severi
 void diagnostic(const char *event, QJsonObject fields = {}, bool durable = true);
 // Defers a pending batch until input is quiet, with a five-second maximum.
 void diagnosticInput();
+// Call after an open, database or network call fails. When the error says the
+// process or system ran out of file descriptors (EMFILE or ENFILE), logs an
+// error with the open descriptors: the total, the count by kind and the five
+// most opened files. Other errors do nothing. It runs in every build, at most
+// once a minute, and keeps errno unchanged.
+void reportDescriptorExhaustion(const char *context, int error = errno);
 // Explicit performance sample, collected and delivered on the logging worker.
 // Once the base is known, it also has `kobalt_rss_kib` and `kobalt_peak_kib`:
 // resident and peak memory above that base.

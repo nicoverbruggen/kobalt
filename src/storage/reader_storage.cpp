@@ -64,14 +64,20 @@ bool writeJson(const QString &path, const QJsonObject &object) {
     mainthread::BlockingOperation blockingOperation("json-write");
     QSaveFile file(path);
     const auto bytes = QJsonDocument(object).toJson();
-    return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+    if (!file.open(QIODevice::WriteOnly)) {
+        reportDescriptorExhaustion("json-write");
+        return false;
+    }
+    return file.write(bytes) == bytes.size() && file.commit();
 }
 JsonRead readJsonFile(const QString &path, qint64 maxBytes) {
     QFile file(path);
     if (!file.exists())
         return {{}, ReadStatus::Missing};
-    if (!file.open(QIODevice::ReadOnly))
+    if (!file.open(QIODevice::ReadOnly)) {
+        reportDescriptorExhaustion("json-read");
         return {{}, ReadStatus::Unreadable};
+    }
     maxBytes = qMax<qint64>(0, maxBytes);
     if (file.size() > maxBytes)
         return {{}, ReadStatus::TooLarge};

@@ -7,16 +7,22 @@
 #include <QCoreApplication>
 #include <QThread>
 #include <QDir>
+#include <QHash>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRegularExpression>
+#include <QVector>
 #include <QWaitCondition>
 #include <cerrno>
+#include <cstdlib>
+#include <cstring>
+#include <dirent.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -87,9 +93,39 @@ QJsonObject record(const Entry &entry) {
     fields["main_thread"] = entry.mainThread;
     return fields;
 }
+// One descriptor held in reserve: with none left, listing them or opening the
+// log would fail. Whoever needs the slot closes the reserve, uses the slot and
+// takes the reserve back at once.
+std::atomic<int> descriptorReserve{-1};
+std::atomic<qint64> descriptorReported{-1};
+void takeDescriptorReserve() {
+    if (descriptorReserve.load() >= 0)
+        return;
+    int reserve = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+    // Keep standard input, output and error free for their usual numbers.
+    if (reserve >= 0 && reserve < 3) {
+        const int moved = ::fcntl(reserve, F_DUPFD_CLOEXEC, 3);
+        ::close(reserve);
+        reserve = moved;
+    }
+    int expected = -1;
+    if (reserve >= 0 && !descriptorReserve.compare_exchange_strong(expected, reserve))
+        ::close(reserve);
+}
+bool releaseDescriptorReserve() {
+    const int reserve = descriptorReserve.exchange(-1);
+    if (reserve < 0)
+        return false;
+    ::close(reserve);
+    return true;
+}
 void append(const QString &name, const QByteArray &bytes, bool sync, qint64 fileLimit, int history) {
     const auto path = QFile::encodeName(name);
-    int fd = ::open(path.constData(), O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0600);
+    const int flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC;
+    int fd = ::open(path.constData(), flags, 0600);
+    // Out of descriptors, the log uses the reserve's slot.
+    if (fd < 0 && (errno == EMFILE || errno == ENFILE) && releaseDescriptorReserve())
+        fd = ::open(path.constData(), flags, 0600);
     struct stat info {};
     if (fd >= 0 && fstat(fd, &info) == 0 && S_ISREG(info.st_mode)) {
         if (info.st_size + bytes.size() > fileLimit) {
@@ -124,6 +160,7 @@ void append(const QString &name, const QByteArray &bytes, bool sync, qint64 file
     }
     if (fd >= 0)
         ::close(fd);
+    takeDescriptorReserve();
 }
 void enqueue(Entry entry) {
     if (queue.size() >= queueLimit)
@@ -383,6 +420,7 @@ void initializeDiagnostics(const QString &directory, bool verbose) {
             return;
         logPath = directory + "/events.jsonl";
         detailed = verbose;
+        takeDescriptorReserve();
         lastInput = monotonicMilliseconds();
     }
     auto fields = kobalt::qt::object({{"build", __DATE__ " " __TIME__}, {"qt", qVersion()}});
@@ -489,5 +527,97 @@ bool flushDiagnostics(int milliseconds) {
     mainthread::blocking("diagnostic-log-flush");
     QMutexLocker lock(&mutex);
     return drain(milliseconds);
+}
+namespace {
+// Event logs never carry book paths. System files, Kobalt's and other mods'
+// folders and the files directly in Nickel's .kobo folder keep their path. Its
+// subfolders name store books by their IDs, and other platforms keep imported
+// books beside the profile, so those and any other file are named only by
+// their extension.
+QString descriptorTarget(const QString &path) {
+    static const char *const kept[] = {"/dev/", "/proc/", "/sys/", "/usr/", "/lib/", "/etc/", "/bin/",
+                                       "/mnt/onboard/.adds/"};
+    for (const auto *prefix : kept)
+        if (path.startsWith(QLatin1String(prefix)))
+            return path;
+    static const QLatin1String nickel("/mnt/onboard/.kobo/");
+    if (path.startsWith(nickel) && !path.mid(nickel.size()).contains('/'))
+        return path;
+    const auto name = path.section('/', -1);
+    const auto suffix = name.contains('.') ? name.section('.', -1) : QString();
+    static const QRegularExpression plain("^[A-Za-z0-9]{1,8}$");
+    return plain.match(suffix).hasMatch() ? QStringLiteral("other file .") + suffix.toLower()
+                                          : QStringLiteral("other file");
+}
+}
+void reportDescriptorExhaustion(const char *context, int error) {
+    if (error != EMFILE && error != ENFILE)
+        return;
+    const int savedError = errno;
+    const auto now = monotonicMilliseconds();
+    auto last = descriptorReported.load();
+    if ((last >= 0 && now - last < 60000) || !descriptorReported.compare_exchange_strong(last, now)) {
+        errno = savedError;
+        return;
+    }
+    releaseDescriptorReserve();
+    int total = 0, files = 0, sockets = 0, pipes = 0, inotify = 0, other = 0;
+    bool listed = false;
+    QHash<QString, int> targets;
+#ifdef Q_OS_MACOS
+    // macOS lists descriptors without link targets, so it reports only the total.
+    const char *directoryPath = "/dev/fd";
+#else
+    const char *directoryPath = "/proc/self/fd";
+#endif
+    if (DIR *directory = ::opendir(directoryPath)) {
+        listed = true;
+        const int own = ::dirfd(directory);
+        while (const auto *entry = ::readdir(directory)) {
+            if (entry->d_name[0] == '.' || std::atoi(entry->d_name) == own)
+                continue;
+            ++total;
+            char target[512];
+            const auto link = QByteArray(directoryPath) + '/' + entry->d_name;
+            const auto length = ::readlink(link.constData(), target, sizeof(target) - 1);
+            if (length <= 0) {
+                ++other;
+                continue;
+            }
+            target[length] = 0;
+            if (std::strncmp(target, "socket:", 7) == 0)
+                ++sockets;
+            else if (std::strncmp(target, "pipe:", 5) == 0)
+                ++pipes;
+            else if (std::strcmp(target, "anon_inode:inotify") == 0)
+                ++inotify;
+            else if (target[0] == '/') {
+                ++files;
+                ++targets[QString::fromLocal8Bit(target)];
+            } else
+                ++other;
+        }
+        ::closedir(directory);
+    }
+    // Take the slot back at once, before whatever leaks takes it.
+    takeDescriptorReserve();
+    QHash<QString, int> named;
+    for (auto it = targets.cbegin(); it != targets.cend(); ++it)
+        named[descriptorTarget(it.key())] += it.value();
+    QVector<QPair<int, QString>> ranked;
+    for (auto it = named.cbegin(); it != named.cend(); ++it)
+        ranked.append({it.value(), it.key()});
+    std::sort(ranked.begin(), ranked.end(), [](const QPair<int, QString> &a, const QPair<int, QString> &b) {
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+    });
+    QJsonArray top;
+    for (int i = 0; i < ranked.size() && i < 5; ++i)
+        top.append(qt::object({{"path", ranked[i].second}, {"count", ranked[i].first}}));
+    diagnostic("descriptor-exhaustion",
+               qt::object({{"context", QString::fromLatin1(context)}, {"errno", error}, {"listed", listed},
+                           {"open", total}, {"files", files}, {"sockets", sockets}, {"pipes", pipes},
+                           {"inotify", inotify}, {"other", other}, {"most_opened", top}}),
+               DiagnosticSeverity::Error);
+    errno = savedError;
 }
 }

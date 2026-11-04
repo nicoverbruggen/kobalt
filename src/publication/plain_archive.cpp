@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "native_archive.h"
 #include "publication.h"
 #include "support/qt_compat.h"
@@ -82,7 +83,11 @@ bool PlainArchive::open(const QString &path) {
     QFile file(path);
     Publication publication;
     QString error;
-    if (!file.open(QIODevice::ReadOnly) || !publication.inspect(file, &error))
+    if (!file.open(QIODevice::ReadOnly)) {
+        reportDescriptorExhaustion("book-open");
+        return false;
+    }
+    if (!publication.inspect(file, &error))
         return false;
     auto data = std::make_unique<Data>();
     data->path = path;

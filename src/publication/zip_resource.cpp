@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "zip_resource.h"
 #include "resource_cache.h"
 #include <QFile>
@@ -157,9 +158,12 @@ bool ZipResource::open(QIODevice &source, const QString &name, qint64 limit) {
 bool ZipResource::open(const QString &path, const QString &name, ZipResourceIndex &index, qint64 limit) {
     data_.reset();
     auto file = std::make_unique<QFile>(path);
-    if (!file->open(QIODevice::ReadOnly) || !open(*file, name, index, limit)) {
+    if (!file->open(QIODevice::ReadOnly)) {
+        reportDescriptorExhaustion("book-open");
         return false;
     }
+    if (!open(*file, name, index, limit))
+        return false;
     data_->ownedFile = std::move(file);
     return true;
 }

@@ -1,5 +1,7 @@
 #include "kosync.h"
 #include "support/main_thread.h"
+#include <fcntl.h>
+#include <unistd.h>
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
 #include "support/strings.h"
@@ -446,6 +448,15 @@ void Client::sendRequest(const QByteArray &method, const QString &path, const QU
         if (status == 0 && transientNetworkError(reply->error()) &&
             retryRequest(method, path, server, username, key, body, done, attempt)) return;
         if (reply->error() != QNetworkReply::NoError || status != 200 || bytes->size() > storage::maxJsonBytes) {
+            // Qt opens sockets on its own thread, so errno here says nothing.
+            // A transport failure checks whether descriptors ran out now.
+            if (status == 0) {
+                const int probe = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+                if (probe >= 0)
+                    ::close(probe);
+                else
+                    reportDescriptorExhaustion("kosync-request");
+            }
             done(status, {}, message("kosync.network_error")); return;
         }
         QJsonParseError error;

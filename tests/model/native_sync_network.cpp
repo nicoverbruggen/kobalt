@@ -1,4 +1,6 @@
 #include "platforms/kobo/common/native_sync_network.h"
+#include "platforms/kobo/common/native_wifi_power.h"
+#include "support/main_thread.h"
 #include "platforms/kobo/common/window_presentation.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/native_dialog_overlay.h"
@@ -173,9 +175,75 @@ static void nativePrompt() {
                 !kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
             "sleeping or closing the reader restores all native modal ownership");
 }
+// The power saver turns Wi-Fi off only while it is on, Nickel is not
+// syncing and Bluetooth is known to be off, and it checks again after the
+// asynchronous Bluetooth answer.
+static void wifiPowerSaver() {
+    using kobalt::BluetoothPower;
+    bool wifi = true, syncing = false;
+    int queries = 0, turnedOff = 0, violations = 0;
+    std::function<void(BluetoothPower)> answer;
+    kobalt::NativeWifiPowerBindings bindings;
+    bindings.wifiOn = [&] { return wifi; };
+    bindings.nickelSyncing = [&] { return syncing; };
+    bindings.bluetooth = [&](QObject *, std::function<void(BluetoothPower)> reply) {
+        ++queries;
+        answer = std::move(reply);
+    };
+    bindings.turnOff = [&] {
+        require(!kobalt::mainthread::interactive(), "Wi-Fi off runs inside a declared wait");
+        ++turnedOff;
+        wifi = false;
+    };
+    kobalt::mainthread::setViolationHandler([&](const char *) { ++violations; });
+    kobalt::mainthread::Interaction reader([] { return true; });
+    QObject context;
+    int replies = 0;
+    bool result = true;
+    const auto save = [&] {
+        kobalt::saveNativeWifiPower(&context, bindings, [&](bool value) {
+            ++replies;
+            result = value;
+        });
+    };
+    wifi = false;
+    save();
+    require(replies == 1 && !result && queries == 0, "Wi-Fi that is already off needs no Bluetooth query");
+    wifi = true;
+    syncing = true;
+    save();
+    require(replies == 2 && !result && queries == 0, "Nickel's sync keeps Wi-Fi on");
+    syncing = false;
+    for (const auto power : {BluetoothPower::On, BluetoothPower::Unknown}) {
+        save();
+        answer(power);
+        require(!result && turnedOff == 0, "Bluetooth that is on or unknown keeps Wi-Fi on");
+    }
+    save();
+    syncing = true;
+    answer(BluetoothPower::Off);
+    require(!result && turnedOff == 0, "a sync that starts during the query keeps Wi-Fi on");
+    syncing = false;
+    save();
+    require(replies == 5 && queries == 4, "the saver waits for the Bluetooth answer");
+    answer(BluetoothPower::Off);
+    require(replies == 6 && result && turnedOff == 1 && !wifi, "Bluetooth off turns Wi-Fi off once");
+    require(violations == 0, "the declared wait is not reported as a violation");
+    // A Bluetooth stack that never answers must not hold the opening.
+    wifi = true;
+    save();
+    QEventLoop loop;
+    QTimer::singleShot(kobalt::nativeWifiPowerDeadlineMs + 500, &loop, &QEventLoop::quit);
+    loop.exec();
+    require(replies == 7 && !result && turnedOff == 1, "an unanswered Bluetooth query keeps Wi-Fi on after the deadline");
+    answer(BluetoothPower::Off);
+    require(replies == 7 && turnedOff == 1, "a late Bluetooth answer is ignored");
+    kobalt::mainthread::setViolationHandler({});
+}
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     wifiNotifications();
+    wifiPowerSaver();
     nativePrompt();
     Workflow workflow;
     bool ready = true, disabled = false, connecting = false, interactive = false;

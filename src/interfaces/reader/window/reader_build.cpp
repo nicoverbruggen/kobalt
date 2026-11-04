@@ -1249,6 +1249,7 @@ void Reader::buildSettings() {
     settingsInputs.warmthSupported = warmthSupported;
     settingsInputs.sleepScreenSupported = presentation->supportsSleepScreen();
     settingsInputs.automaticBookOpeningSupported = services.automaticBookOpening && services.setAutomaticBookOpening;
+    settingsInputs.wifiPowerSaverSupported = services.turnOffWifi || services.devicePreview;
 #ifndef KOBALT_READER_HARDWARE
     settingsInputs.debugProgressAvailable = true;
 #endif
@@ -1331,6 +1332,8 @@ void Reader::buildSettings() {
     minimalAnnotationOption = settings->minimalAnnotationOption;
     automaticOpeningOption = settings->automaticOpeningOption;
     hideTabLabelsOption = settings->hideTabLabelsOption;
+    wifiPowerSaverOption = settings->wifiPowerSaverOption;
+    settings->showPowerManagement(wifiPowerSaverVisible());
     hideTabLabelsOption->setVisible(!services.phoneLayout);
     linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
@@ -1492,6 +1495,8 @@ void Reader::buildSettings() {
         settingsHeaderFooterWeight = 2;
         settingsTimeRemainingFormat = "detailed";
         hideTabLabelsOption->setChecked(false);
+        if (wifiPowerSaverOption)
+            wifiPowerSaverOption->setChecked(true);
         for (const auto *key : appearance::fallbackFontKeys)
             settingsFontFaces[key] = QString();
         showSettingsFonts();

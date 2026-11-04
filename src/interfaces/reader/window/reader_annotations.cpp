@@ -1081,8 +1081,9 @@ void Reader::preparePresentation(std::function<void(bool)> finished) {
     prepareKosyncPresentation([this, finished = std::move(finished)](bool ready) mutable {
         if (!ready) { finished(false); return; }
         prepareAnnotationPresentation([this, finished = std::move(finished)](bool ready) {
-            if (ready) book->markNativeReading();
-            finished(ready);
+            if (!ready) { finished(false); return; }
+            book->markNativeReading();
+            saveWifiPower([this, finished] { finished(!closing && !lifecycleHidden); });
         });
     });
 }

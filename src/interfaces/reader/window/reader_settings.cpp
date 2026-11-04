@@ -231,6 +231,7 @@ void Reader::refreshHostPresentation() {
     auto *settings = static_cast<reader::SettingsPanel *>(general);
     const bool devicePreview = services.devicePreview && services.devicePreview();
     settings->showDictionaries(services.downloadableDictionaries && !devicePreview);
+    settings->showPowerManagement(wifiPowerSaverVisible());
     updateKosyncFeatures();
     updateMenuStatus();
     resizeEvent(nullptr);
@@ -276,6 +277,8 @@ void Reader::openSettings() {
     settingsHeaderFooterWeight = ui::headerFooterAddedWeight();
     settingsTimeRemainingFormat = remainingTime::approximate(preferences) ? "approximate" : "detailed";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
+    if (wifiPowerSaverOption)
+        wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(true));
     for (auto *face : {&settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace, &settingsDictionaryFontFace})
         if (!model->fontFaces().contains(*face))
             face->clear();
@@ -542,6 +545,8 @@ void Reader::applySettings() {
     next["dictionary_font_size"] = settingsDictionaryFontSize;
     next["header_footer_added_weight"] = settingsHeaderFooterWeight;
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
+    if (wifiPowerSaverOption)
+        next[wifiPowerSaverKey] = wifiPowerSaverOption->isChecked();
     next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
     for (const auto *key : appearance::fallbackFontKeys)
         next[key] = settingsFontFaces.value(key).toString();

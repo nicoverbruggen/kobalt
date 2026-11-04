@@ -36,6 +36,8 @@ struct SettingsPanelInputs {
     bool downloadableDictionaries = true;
     bool sleepScreenSupported = false;
     bool automaticBookOpeningSupported = false;
+    // The host can turn Wi-Fi off when a book opens, or previews a host that can.
+    bool wifiPowerSaverSupported = false;
 };
 // Qt parents own every widget. Reader installs policy callbacks after construction.
 class SettingsPanel final : public ui::Panel {
@@ -84,8 +86,11 @@ public:
     // the page, such as returning to the section list.
     std::function<void()> refitRequested;
     void showDictionaries(bool visible);
+    void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
     ui::DescribedOption *hideTabLabelsOption = nullptr;
+    QWidget *powerSection = nullptr;
+    ui::DescribedOption *wifiPowerSaverOption = nullptr;
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
     ui::DescribedOption *lightDarkModeOption = nullptr;

@@ -1,4 +1,6 @@
 #include "platforms/kobo/common/native_ui.h"
+#include "platforms/kobo/common/native_wifi_power.h"
+#include <QDBusError>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
@@ -111,6 +113,31 @@ private:
 }
 void observeNativeBluetooth(QObject *context, std::function<void(bool)> changed) {
     new BluetoothStatus(context, std::move(changed));
+}
+void queryNativeBluetoothPower(QObject *context, std::function<void(BluetoothPower)> answer) {
+    if (!QDBusConnection::systemBus().isConnected()) {
+        answer(BluetoothPower::Unknown);
+        return;
+    }
+    auto request = QDBusMessage::createMethodCall(bluetoothServiceName(), QStringLiteral("/org/bluez/hci0"),
+                                                  QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    request << QStringLiteral("org.bluez.Adapter1") << QStringLiteral("Powered");
+    // The opened book waits for this answer, so keep the timeout short.
+    auto *pending = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(request, 500), context);
+    QObject::connect(pending, &QDBusPendingCallWatcher::finished, context,
+                     [answer](QDBusPendingCallWatcher *call) {
+                         const QDBusPendingReply<QDBusVariant> reply = *call;
+                         call->deleteLater();
+                         if (!reply.isError()) {
+                             answer(reply.value().variant().toBool() ? BluetoothPower::On : BluetoothPower::Off);
+                             return;
+                         }
+                         // A stopped stack or a missing adapter cannot be powered.
+                         // A timeout or another error leaves the state unknown.
+                         const auto type = reply.error().type();
+                         answer(type == QDBusError::ServiceUnknown || type == QDBusError::UnknownObject
+                                    ? BluetoothPower::Off : BluetoothPower::Unknown);
+                     });
 }
 void reportNativeBluetoothActivity(QObject *context, QKeyEvent *event) {
     if (!context)

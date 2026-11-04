@@ -214,6 +214,31 @@ void Reader::prepareKosyncPresentation(std::function<void(bool)> finished) {
     kosyncDeadline.start(10000);
     prepareKosyncNetwork(false, [this] { startKosyncExchange(false); });
 }
+bool Reader::wifiPowerSaverVisible() const {
+    // E-reader previews show the Kobo row, as the Automatic sync sheet does.
+    return services.turnOffWifi || (services.devicePreview && services.devicePreview() && !services.phoneLayout);
+}
+bool Reader::wifiPowerSaverApplies() const {
+    if (!services.turnOffWifi || !preferences.value(wifiPowerSaverKey).toBool(true) || menuBluetooth->active())
+        return false;
+    // Nickel's own sync carries store books and books from services that
+    // sync through it, and uploads their position when the book closes.
+    if (book->usesNativeCloudSync()) return false;
+    // Automatic KOSync expects a connection while the book is open.
+    return !kosyncClient->signedIn() || !kosyncAutomatic();
+}
+void Reader::saveWifiPower(std::function<void()> next) {
+    if (!wifiPowerSaverApplies()) {
+        next();
+        return;
+    }
+    QPointer<Reader> guard(this);
+    services.turnOffWifi(this, [guard, next](bool turnedOff) {
+        if (!guard) return;
+        diagnostic("wifi-power-saver", qt::object({{"turned_off", turnedOff}}));
+        next();
+    });
+}
 void Reader::finishKosyncPresentation() {
     kosyncOpeningGrace.stop();
     auto finished = std::exchange(kosyncPresentationReady, {});

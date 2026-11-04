@@ -103,6 +103,12 @@ struct ReaderHostServices {
     // Automatic KOsync moments the host supports: a device sleep and wake
     // lifecycle, and a sync while reading that may turn on Wi-Fi.
     bool kosyncSleepWake = false, kosyncWifiControl = false;
+    // Optional: turns Wi-Fi off for the Wi-Fi power saver while an opened book
+    // waits to be presented, before it takes input. The host leaves Wi-Fi
+    // alone unless it is on, Bluetooth is known to be off and the host's own
+    // sync is idle, then calls done with whether it turned Wi-Fi off. Turning
+    // Wi-Fi off can wait for child processes on the main thread.
+    std::function<void(QObject *context, std::function<void(bool)> done)> turnOffWifi;
     PresentationFactory presentation;
     // Empty in hardware builds. Keep the value layout independent of the
     // diagnostic macro used by the constructing and consuming targets.

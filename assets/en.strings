@@ -778,6 +778,9 @@
 "settings.section_reading_menu" = "Reading menu";
 "settings.section_reader" = "Reader";
 "settings.section_sleep" = "Sleep and wake";
+"settings.section_power" = "Power management";
+"settings.wifi_power_saver" = "Turn off Wi-Fi when a book opens";
+"settings.wifi_power_saver_description" = "Saves battery. Wi-Fi stays on while Bluetooth is on or a sync needs it.";
 "settings.navigation_taps_and_swipes" = "Swipes and taps";
 "settings.navigation_taps_and_swipes_description" = "Default";
 "settings.navigation_taps_only" = "Taps only";

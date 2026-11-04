@@ -58,6 +58,8 @@
 class QVBoxLayout;
 
 namespace kobalt::reader {
+// Global preference for the Wi-Fi power saver. Missing means on.
+inline constexpr const char *wifiPowerSaverKey = "turn_off_wifi_on_open";
 // Input and accessibility target only. The cached header image supplies its
 // pixels and invalidates only the part whose text changed.
 class ChapterHeader : public QPushButton {
@@ -222,6 +224,12 @@ private:
     void synchronizeKosync(bool interactive = false);
     QByteArray kosyncDocument() const;
     void prepareKosyncPresentation(std::function<void(bool)> finished);
+    // The Wi-Fi power saver runs as the last step before the reader takes
+    // input. It applies only when Kobalt would sync this book and automatic
+    // KOSync is off.
+    bool wifiPowerSaverVisible() const;
+    bool wifiPowerSaverApplies() const;
+    void saveWifiPower(std::function<void()> next);
     void finishKosyncPresentation();
     void prepareAnnotationPresentation(std::function<void(bool)> finished);
     void showKosyncChoice();
@@ -322,6 +330,7 @@ private:
     kobalt::LightPanel *lightPopup = nullptr;
     QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption, *lightGestureFeedbackOption, *denseGraphOption;
     QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr, *hideTabLabelsOption = nullptr;
+    QCheckBox *wifiPowerSaverOption = nullptr;
     QPushButton *autoRotateOption;
     bool hideNativeStatus() const;
     QJsonObject preferences;

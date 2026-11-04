@@ -3992,6 +3992,76 @@ private slots:
         QCOMPARE(network->requests, 1);
         QVERIFY(network->interactive);
     }
+    void wifiPowerSaver_data() {
+        QTest::addColumn<QString>("account");
+        QTest::addColumn<bool>("enabled");
+        QTest::addColumn<bool>("bluetooth");
+        QTest::addColumn<bool>("expected");
+        QTest::newRow("no-account") << "none" << true << false << true;
+        QTest::newRow("manual-sync") << "manual" << true << false << true;
+        QTest::newRow("automatic") << "default" << true << false << false;
+        QTest::newRow("automatic-never-while-reading") << "never" << true << false << false;
+        QTest::newRow("automatic-turn-on-wifi") << "wake" << true << false << false;
+        QTest::newRow("setting-off") << "none" << false << false << false;
+        QTest::newRow("bluetooth-on") << "none" << true << true << false;
+    }
+    // The saver asks the host to turn Wi-Fi off only when automatic KOSync is
+    // off or not set up, whatever the schedule, and the book is presented only
+    // after the host answers.
+    void wifiPowerSaver() {
+        QFETCH(QString, account);
+        QFETCH(bool, enabled);
+        QFETCH(bool, bluetooth);
+        QFETCH(bool, expected);
+        QTcpServer stalled;
+        QVERIFY(stalled.listen(QHostAddress::LocalHost));
+        auto paths = testPaths();
+        if (!enabled) QVERIFY(storage::writePreferences(paths.preferences(), {{"turn_off_wifi_on_open", false}}));
+        if (account != "none") {
+            QJsonObject saved{{"schema", 1}, {"server", QString("https://127.0.0.1:%1").arg(stalled.serverPort())},
+                              {"username", "test-reader"}, {"key", QString(32, 'a')},
+                              {"device_id", "test-device"}, {"automatic", account != "manual"}};
+            if (account != "default" && account != "manual") {
+                for (const auto *key : {"sync_on_open", "sync_on_sleep_wake", "sync_on_close"})
+                    saved[key] = false;
+                saved["sync_interval_minutes"] = account == "never" ? kosync::neverWhileReading : 15;
+                saved["wake_wifi"] = account == "wake";
+            } else
+                saved["sync_on_open"] = false;
+            QVERIFY(storage::writeJson(paths.syncAccount(), saved));
+        }
+        auto network = std::make_shared<SyncNetworkState>();
+        int requests = 0;
+        std::function<void(bool)> answer;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.syncNetwork = [network] { return std::make_unique<TestSyncNetwork>(network); };
+            services.kosyncSleepWake = services.kosyncWifiControl = true;
+            services.observeBluetooth = [bluetooth](QObject *, std::function<void(bool)> changed) {
+                if (bluetooth) changed(true);
+            };
+            services.turnOffWifi = [&](QObject *, std::function<void(bool)> done) {
+                ++requests;
+                answer = std::move(done);
+            };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool presented = false, ready = false;
+        host.window()->preparePresentation([&](bool value) {
+            presented = true;
+            ready = value;
+        });
+        QCOMPARE(requests, expected ? 1 : 0);
+        if (expected) {
+            QVERIFY(!presented);
+            answer(true);
+        }
+        QVERIFY(presented && ready);
+        QCOMPARE(network->requests, 0);
+    }
     // A periodic sync may turn on Wi-Fi only when the schedule allows it. Three
     // failed background connections stop further tries until Sync now, and a
     // sync that turned on Wi-Fi releases it when it ends.

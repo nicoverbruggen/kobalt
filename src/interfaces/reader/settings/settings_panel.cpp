@@ -590,6 +590,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     sessionTimeoutButton = ui::makeCaptionButton(systemPage, nullptr, "rrSessionTimeout",
                                                 strings::get("settings.session_timeout"), [] {});
     systemRows->addWidget(sessionTimeoutButton);
+    if (inputs.wifiPowerSaverSupported) {
+        powerSection = section(systemPage, systemRows, "rrSystemPowerSection", strings::get("settings.section_power"));
+        wifiPowerSaverOption = check(systemPage, "rrWifiPowerSaver", strings::get("settings.wifi_power_saver"),
+                                     strings::get("settings.wifi_power_saver_description"));
+        systemRows->addWidget(wifiPowerSaverOption);
+    }
     section(systemPage, systemRows, "rrSystemInterfaceSection", strings::get("settings.section_user_interface"));
     uiFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiFont", strings::get("settings.ui_font"), [] {});
     uiMonoFontButton =
@@ -740,9 +746,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                               lightGestureFeedbackOption,
                                               denseGraphOption,
                                               hideTabLabelsOption,
+                                              wifiPowerSaverOption,
                                               automaticOpeningOption,
                                               minimalAnnotationOption};
     for (auto *option : options) {
+        if (!option)
+            continue;
         auto presentation = option->presentation();
         presentation.indicator = ui::DescribedOption::Indicator::Square;
         presentation.pressedFill = true;
@@ -1760,6 +1769,12 @@ void SettingsPanel::showDictionaries(bool visible) {
     if (!visible && settingsPages->currentIndex() == DictionariesSettings)
         settingsPages->setCurrentIndex(DisplaySettings);
     fitRail();
+}
+void SettingsPanel::showPowerManagement(bool visible) {
+    if (!powerSection)
+        return;
+    powerSection->setVisible(visible);
+    wifiPowerSaverOption->setVisible(visible);
 }
 void SettingsPanel::fitRail(int availableHeight) {
     // As wide as the widest visible label, or the icon above it, with the

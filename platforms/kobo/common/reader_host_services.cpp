@@ -6,13 +6,42 @@
 #include "native_light.h"
 #include "native_progress.h"
 #include "native_ui.h"
+#include "native_wifi_power.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "window_presentation.h"
 #include <QPointer>
 #include <dlfcn.h>
+#include <utility>
 
 namespace kobalt::nickel {
 namespace {
+NativeWifiPowerBindings wifiPowerBindings() {
+    const auto wireless = reinterpret_cast<QObject *(*)()>(dlsym(RTLD_DEFAULT, "_ZN15WirelessManager14sharedInstanceEv"));
+    const auto up = reinterpret_cast<bool (*)(QObject *)>(dlsym(RTLD_DEFAULT, "_ZNK15WirelessManager2upEv"));
+    const auto workflow =
+        reinterpret_cast<QObject *(*)()>(dlsym(RTLD_DEFAULT, "_ZN23WirelessWorkflowManager14sharedInstanceEv"));
+    // Nickel's own off path, used by its idle timeout and the Wi-Fi toggle.
+    // It honors the developer setting that keeps Wi-Fi on.
+    const auto turnOff =
+        reinterpret_cast<void (*)(QObject *)>(dlsym(RTLD_DEFAULT, "_ZN23WirelessWorkflowManager11turnWifiOffEv"));
+    const auto syncManager = reinterpret_cast<void *(*)()>(dlsym(RTLD_DEFAULT, "_ZN13N3SyncManager14sharedInstanceEv"));
+    const auto syncing = reinterpret_cast<bool (*)(const void *)>(dlsym(RTLD_DEFAULT, "_ZNK15SyncManagerBase9isSyncingEv"));
+    if (!wireless || !up || !workflow || !turnOff || !syncManager || !syncing) return {};
+    NativeWifiPowerBindings result;
+    result.wifiOn = [wireless, up] {
+        auto *manager = wireless();
+        return manager && up(manager);
+    };
+    result.nickelSyncing = [syncManager, syncing] {
+        const auto *manager = syncManager();
+        return manager && syncing(manager);
+    };
+    result.bluetooth = queryNativeBluetoothPower;
+    result.turnOff = [workflow, turnOff] {
+        if (auto *manager = workflow()) turnOff(manager);
+    };
+    return result;
+}
 QString syncDeviceModel() {
     const auto current = reinterpret_cast<const void *(*)()>(dlsym(RTLD_DEFAULT, "_ZN6Device16getCurrentDeviceEv"));
     const auto *device = current ? current() : nullptr;
@@ -164,6 +193,10 @@ ReaderHostServices readerHostServices() {
     result.keyboard = ui::makeWidgetKeyboard;
     result.syncNetwork = [] { return std::make_unique<NativeSyncNetwork>(); };
     result.kosyncSleepWake = result.kosyncWifiControl = true;
+    if (const auto bindings = wifiPowerBindings(); bindings.valid())
+        result.turnOffWifi = [bindings](QObject *context, std::function<void(bool)> done) {
+            saveNativeWifiPower(context, bindings, std::move(done));
+        };
     result.presentation = [](QWidget *reader) {
         return makeWindowPresentation(reader, nativeReaderSleepScreenAvailable());
     };

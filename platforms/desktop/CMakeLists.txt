@@ -363,7 +363,7 @@ if(BUILD_TESTING)
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
             sleepScreenModesKeepTheStockDefaultAndMigrateTheOptIn sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus remoteKeyActivityRequiresActiveReading
-            finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncMoments kosyncManualToolbar kosyncManualConnection kosyncPasswordSleep kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave
+            finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncMoments wifiPowerSaver kosyncManualToolbar kosyncManualConnection kosyncPasswordSleep kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave
             progressChoiceKeepAndGo progressChoiceWaitsForSettings finishedSyncWithoutPositionKeepsLocalReading
             progressChoiceForOlderAlert progressChoiceUnavailablePosition
             appearanceOpeningDoesNotRepaintToolbar annotationFramesKeepFirstPaintComplete annotationListResolvesPagesOnDemand)
@@ -515,7 +515,9 @@ if(BUILD_TESTING)
                     "${KOBALT_ROOT}/platforms/kobo/common/native_sync_network.h"
                     "${KOBALT_ROOT}/platforms/kobo/common/window_presentation.cpp"
                     "${KOBALT_ROOT}/platforms/kobo/common/native_font_scale.cpp"
-                    "${KOBALT_ROOT}/platforms/kobo/common/native_wifi.cpp")
+                    "${KOBALT_ROOT}/platforms/kobo/common/native_wifi.cpp"
+                    "${KOBALT_ROOT}/platforms/kobo/common/native_wifi_power.cpp"
+                    "${KOBALT_ROOT}/platforms/kobo/common/native_wifi_power.h")
                 target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}" "${source}")
                 target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime Qt6::Widgets Qt6::Network)
                 set_target_properties(kobalt-${name}-tests PROPERTIES AUTOMOC ON ENABLE_EXPORTS ON)

@@ -1,5 +1,6 @@
 #include "support/qt_compat.h"
 #include "support/diagnostics.h"
+#include "support/crash_context.h"
 #include "support/strings.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -192,6 +193,23 @@ int main(int argc, char **argv) {
     kobalt::setDiagnosticNativeFontBytes(0);
     if (syncCalls.load() != beforeNormal) qFatal("Memory sampling requested a storage sync");
     {
+        // A normal batch does not write its resource sample, but it still
+        // refreshes the crash report's snapshot. Wait out the one-second sample
+        // interval so the next batch takes a sample. Flush first, so the
+        // batch with the explicit sample above cannot overwrite the marker.
+        kobalt::flushDiagnostics();
+        const char noSample[] = "none\n";
+        kobalt::crashContext::resources.store(noSample, sizeof(noSample) - 1);
+        QThread::msleep(1100);
+        kobalt::diagnostic("sample-probe");
+        kobalt::flushDiagnostics();
+        if (!QByteArray(kobalt::crashContext::resources.data, int(kobalt::crashContext::resources.size))
+                 .contains("resource_sample_monotonic_ms"))
+            qFatal("A normal batch did not refresh the crash report's resource sample");
+        if (read(quietPath).contains("rss_kib"))
+            qFatal("A normal batch wrote its resource sample");
+    }
+    {
         // Run out of descriptors for real: the report must still list them.
         QJsonObject observed;
         kobalt::setDiagnosticObserver([&](const QJsonObject &entry) { observed = entry; });
@@ -269,8 +287,8 @@ int main(int argc, char **argv) {
     if (quietBytes.count("\"event\":\"turn\"") != 20 ||
         !quietBytes.contains("\"sequence\":19") ||
         !QRegularExpression("\"event\":\"save\"[^\\n]*\"severity\":\"error\"|\"severity\":\"error\"[^\\n]*\"event\":\"save\"").match(QString::fromUtf8(quietBytes)).hasMatch() ||
-        !quietBytes.contains("resource_sample_monotonic_ms"))
-        qFatal("Normal log lost activity fields or resource sampling");
+        quietBytes.contains("rss_kib") || quietBytes.contains("resource_sample_monotonic_ms"))
+        qFatal("Normal log lost activity fields or wrote a resource sample");
     if (sampledMemory.contains("kobalt_rss_kib") || sampledMemory.contains("kobalt_peak_kib"))
         qFatal("Kobalt's memory share was reported before its base");
     // The base is taken once; later samples report memory above it.
@@ -292,6 +310,13 @@ int main(int argc, char **argv) {
     // trace. Preserve its first input, render, standby and final save records.
     QTemporaryDir verbose;
     kobalt::initializeDiagnostics(verbose.path(), true);
+    const auto verbosePath = verbose.path() + "/events.jsonl";
+    // A detailed log writes the resource sample into the batch's first line.
+    QThread::msleep(1100);
+    kobalt::diagnostic("sample-probe");
+    kobalt::flushDiagnostics();
+    if (!read(verbosePath).contains("\"resource_sample_monotonic_ms\""))
+        qFatal("A detailed batch did not write its resource sample");
     kobalt::diagnostic("power-observer", {{"standby_request", true}, {"standby_resume", true}});
     kobalt::diagnostic("standby-request");
     kobalt::diagnostic("standby-resumed");
@@ -302,7 +327,6 @@ int main(int argc, char **argv) {
     }
     kobalt::diagnostic("retention-final-save");
     kobalt::flushDiagnostics();
-    const auto verbosePath = verbose.path() + "/events.jsonl";
     auto retained = read(verbosePath);
     if (retained.size() <= 256 * 1024 || !retained.contains("standby-request") ||
         !retained.contains("standby-resumed") || !retained.contains("\"sequence\":0,") ||

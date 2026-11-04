@@ -207,6 +207,7 @@ void startWriter() {
                 return entry.severity != DiagnosticSeverity::Activity;
             }));
             const bool sample = now - lastMemory >= 1000;
+            const bool writeSample = detailed;
             writing = true;
             lock.unlock();
             QString path;
@@ -235,7 +236,15 @@ void startWriter() {
                 }
                 auto fields = record(entry);
                 if (sample && !sampled) {
-                    addMemory(fields);
+                    // Normal logs keep the sample out of the line. Taking it still
+                    // refreshes the crash report's resource snapshot and raises
+                    // memory-pressure warnings.
+                    if (writeSample) {
+                        addMemory(fields);
+                    } else {
+                        QJsonObject unwritten;
+                        addMemory(unwritten);
+                    }
                     sampled = true;
                     lastMemory = now;
                 }

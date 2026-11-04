@@ -390,6 +390,14 @@ void paintGeometry(QPainter &painter, const Geometry &shape, ControlIcon glyph, 
         painter.translate(side / 2, side / 2);
         painter.scale(factor, factor);
         painter.translate(-bounds.center());
+    } else if (shape.canvas == 256 && (glyph < ControlIcon::WifiNone || glyph > ControlIcon::WifiMedium)) {
+        // Phosphor artwork can sit off-center in its canvas: the moon is high
+        // and to the right, the open book low. Keep the asset's size and
+        // center its visible ink, so icons line up with their text. Partial
+        // Wi-Fi bars keep the full signal's baseline.
+        painter.translate(side / 2, side / 2);
+        painter.scale(side / shape.canvas, side / shape.canvas);
+        painter.translate(-shape.inkBounds().center());
     } else
         painter.scale(side / shape.canvas, side / shape.canvas);
     painter.setPen(shape.filled ? QPen(Qt::NoPen) : QPen(color, shape.stroke, Qt::SolidLine, shape.cap, shape.join));

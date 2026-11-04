@@ -141,7 +141,7 @@ The opt-in `kosync.wifi-off` scenario measures how long Nickel's Wi-Fi shutdown 
 
 Two other measurements come from the same run's event log. The book opening after the installation restart includes the bundled-asset check, which later openings skip; it is the last `reader-shown` event before `scenario-run-start`. When Wi-Fi is on and a book opens while automatic KOSync is off, the Wi-Fi power saver turns it off and logs a `main-thread-wait` with the allowance `wifi-off before reader input`; during a scenario run KOSync is paused, so this happens at that same opening. The log can also hold earlier sessions, so always take the events just before `scenario-run-start`.
 
-Before installing, check that Kobalt's Settings › System › Power management › Turn off Wi-Fi when a book opens is on. It is on unless someone turned it off. Checking it after the restart would mean opening a book, and any opening starts the run: with another book the run is skipped, and with the benchmark book it starts before Wi-Fi is on.
+Before installing, check that Kobalt's Settings › System › Power management › Smart Wi-Fi power saving is on. It is on unless someone turned it off. Checking it after the restart would mean opening a book, and any opening starts the run: with another book the run is skipped, and with the benchmark book it starts before Wi-Fi is on.
 
 For firmware 4:
 

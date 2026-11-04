@@ -65,6 +65,9 @@ public:
     static bool protectStandbyInput();
     static void disconnected();
     static bool canSuspend();
+    // For the scenario player: true makes canSuspend answer false, so Nickel's
+    // standby leaves the device awake while a run lasts.
+    static void holdAwake(bool hold);
     static void beginUsb();
     static bool interceptUsb(QObject *manager);
     static bool interceptUsbWorkflow(QObject *manager);

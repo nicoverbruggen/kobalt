@@ -1135,34 +1135,11 @@ void ReaderCoordinator::runScenarios(const QString &path) {
         return manager && radio.up(manager);
     };
     host.realMilliseconds = ReadingTimer::platformClock();
-    // A timed kernel wake lock, renewed while the run lasts, keeps Nickel's
-    // standby from suspending the device. A run that stops early cannot keep
-    // the device awake for longer than one lock.
-    host.keepAwake = [this](bool awake) {
-        static QPointer<QTimer> renew;
-        const auto write = [](const char *file, const QByteArray &value) {
-            QFile control(QString::fromLatin1(file));
-            const bool ok = control.open(QIODevice::WriteOnly) && control.write(value) == value.size();
-            if (!ok)
-                kobalt::diagnostic("scenario-wake-lock-failed", kobalt::qt::object({{"file", QString::fromLatin1(file)}}),
-                                   kobalt::DiagnosticSeverity::Warning);
-            return ok;
-        };
-        // 60 seconds, in nanoseconds.
-        const auto lock = [write] { write("/sys/power/wake_lock", QByteArrayLiteral("kobalt-eval 60000000000")); };
-        if (awake) {
-            lock();
-            if (!renew) {
-                renew = new QTimer(this);
-                connect(renew, &QTimer::timeout, this, lock);
-            }
-            renew->start(30000);
-        } else {
-            if (renew)
-                renew->stop();
-            write("/sys/power/wake_unlock", QByteArrayLiteral("kobalt-eval"));
-        }
-    };
+    // Nickel asks canSuspend before each standby, so a refusal keeps the
+    // device awake. A kernel wake lock does not work here: Nickel reads
+    // wakeup_count on the GUI thread before it suspends, and that read waits
+    // while a lock is held, which freezes the reader and the run with it.
+    host.keepAwake = [](bool awake) { NativeLifecycle::holdAwake(awake); };
     host.sleepPersistence = [this](const QJsonObject &request) {
         auto &options = scenario::sleepPersistenceOptions();
         const auto action = request.value("action").toString();

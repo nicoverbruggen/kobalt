@@ -326,7 +326,15 @@ void NativeLifecycle::finishWake() {
 bool NativeLifecycle::protectStandbyInput() {
     return active && !active->blocked() && active->readerInputActive && active->readerInputActive();
 }
+namespace {
+bool awakeHeld = false;
+}
+void NativeLifecycle::holdAwake(bool hold) {
+    awakeHeld = hold;
+}
 bool NativeLifecycle::canSuspend() {
+    if (awakeHeld)
+        return false;
     // Active storage work must finish before standby. Only low battery
     // requests a new reading save here; ordinary activity can stay in memory.
     return !active ||

@@ -24,7 +24,9 @@ namespace kobalt::ui {
 bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening = false,
                                     const QMap<QString, QByteArray> &checked = {});
 // Font buffers only; glyphs and shaped text have separate bounded caches.
-inline constexpr qint64 privateInterfaceFontBudget = 48LL * 1024 * 1024;
+// A ceiling for safety, not memory set aside: one book face, the bundled
+// CJK collection and the interface faces fit together without eviction.
+inline constexpr qint64 privateInterfaceFontBudget = 100LL * 1024 * 1024;
 // Count retained font buffers once, including collections with several faces.
 qint64 privateInterfaceFontBytes();
 // Shapes `text` once with a throwaway face on the calling thread. HarfBuzz

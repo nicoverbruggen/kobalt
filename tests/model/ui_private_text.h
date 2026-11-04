@@ -453,7 +453,9 @@ inline void checkPrivateInterfaceText(const kobalt::AssetBundle &assets) {
         const auto path = catalogDirectory.path() + QString("/font-%1.ttf").arg(i);
         require(QFile::copy(assets.file("fonts/IBMPlexSans-Regular.ttf"), path), "Cannot copy font fixture");
         QFile padded(path);
-        require(padded.open(QIODevice::ReadWrite) && padded.resize(18 * 1024 * 1024), "Cannot pad font fixture");
+        // Three of these already exceed the budget, so the reload cycles below must evict.
+        require(padded.open(QIODevice::ReadWrite) && padded.resize(privateInterfaceFontBudget * 3 / 8),
+                "Cannot pad font fixture");
         padded.close();
         require(registerPrivateInterfaceFont(path, QString("Budget Test %1").arg(i)), "Cannot register budget fixture");
         catalogFiles.append(path);

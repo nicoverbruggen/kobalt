@@ -160,8 +160,12 @@ void Reader::syncKosyncWhileReading() {
 // Monotonic time, which on Kobo and Android leaves out time asleep, so the
 // interval counts reading time.
 qint64 Reader::kosyncClock() const {
-    if (services.monotonicMilliseconds)
-        return services.monotonicMilliseconds();
+    if (services.monotonicMilliseconds) {
+        // A host clock that fails reports -1; use the steady clock instead.
+        const auto now = services.monotonicMilliseconds();
+        if (now >= 0)
+            return now;
+    }
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }

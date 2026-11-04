@@ -72,6 +72,9 @@ struct ReaderHostServices {
     std::function<bool(bool)> setAutomaticBookOpening;
     std::function<QString()> clock;
     // Optional monotonic milliseconds for interval checks; tests replace it.
+    // Kobo supplies a clock that includes suspended time, so the intervals
+    // count real time while Nickel keeps the device in standby. -1 means the
+    // clock failed.
     std::function<qint64()> monotonicMilliseconds;
     // Optional local time of day in milliseconds for the reader's minute tick;
     // tests replace it.

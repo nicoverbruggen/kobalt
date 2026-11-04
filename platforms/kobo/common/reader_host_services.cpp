@@ -9,6 +9,7 @@
 #include "native_wifi_power.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "window_presentation.h"
+#include "reading/reading_timer.h"
 #include <QPointer>
 #include <dlfcn.h>
 #include <utility>
@@ -167,6 +168,10 @@ ReaderHostServices readerHostServices() {
     result.browserAvailable = nativeReaderBrowserAvailable;
     result.openBrowser = nativeReaderOpenBrowser;
     result.clock = nativeReaderClock;
+    // Nickel suspends the device between interactions. Count KOSync's
+    // intervals in real time, including that standby, as the reading
+    // duration does.
+    result.monotonicMilliseconds = ReadingTimer::platformClock();
     result.battery = [] {
         const auto status = nativeReaderBattery();
         return BatteryStatus{status.percent, status.charging, status.fullyCharged};

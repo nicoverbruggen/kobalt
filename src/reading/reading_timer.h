@@ -10,6 +10,9 @@ public:
     // A negative result means the clock could not be read. The optional source
     // also lets regression checks replay standby without suspending the host.
     using Clock = std::function<qint64()>;
+    // The suspend-inclusive clock on Kobo, or none elsewhere. KOSync's
+    // intervals use it too.
+    static Clock platformClock();
     explicit ReadingTimer(Clock clock = platformClock());
     void start();
     void invalidate();
@@ -18,7 +21,6 @@ public:
     qint64 elapsed() const;
 
 private:
-    static Clock platformClock();
     Clock clock;
     QElapsedTimer fallback;
     qint64 baseline = -1;

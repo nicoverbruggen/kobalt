@@ -139,6 +139,7 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions) {
                 }
                 if (appearanceEdit.preview() && appearanceEdit.preview()->busy())
                     return;
+                diagnostic("font-default-confirm", {}, false);
                 auto next = preferences;
                 next["default_font_face"] = face;
                 if (!writePreferences(next)) {
@@ -155,6 +156,7 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions) {
                     preview.apply(settings);
                 });
                 showFontPicker();
+                diagnostic("font-default-applied", {}, false);
             });
     for (auto *button : card->findChildren<QPushButton *>()) {
         button->setFocusPolicy(Qt::StrongFocus);

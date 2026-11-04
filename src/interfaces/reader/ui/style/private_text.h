@@ -23,19 +23,24 @@ namespace kobalt::ui {
 // manifest. They are used instead of reading those files again.
 bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening = false,
                                     const QMap<QString, QByteArray> &checked = {});
+// Font buffers only; glyphs and shaped text have separate bounded caches.
+inline constexpr qint64 privateInterfaceFontBudget = 48LL * 1024 * 1024;
 // Count retained font buffers once, including collections with several faces.
 qint64 privateInterfaceFontBytes();
 // Shapes `text` once with a throwaway face on the calling thread. HarfBuzz
 // sets up its shared tables on first use, so the first interface text drawn
 // afterwards does not pay for it. Safe on any thread.
 void warmTextShaping(const QByteArray &font, const QString &text);
-// Retains reading-font bytes for the private renderer before user storage is
-// released, including font-picker samples. Qt's font loader never sees them.
-// Returns whether the font was retained.
+// Registers metadata only. Each style's bytes load when first rendered and
+// may be evicted between layouts. Qt's font loader never sees them.
+// Returns whether the file could be registered.
 bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFamily);
 // A native editor needs a Qt face. Only single-face TrueType files are safe
 // to pass to Qt's font loader; private previews keep their existing renderer.
 QByteArray nativeEditorFontData(const QFont &font);
+// Isolated file-backed faces; safe on a worker. Returns an 8-bit coverage bitmap.
+QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
+                               QSize size, int inkHeight, int weight, bool boldReading, bool centered, bool wrap);
 struct PrivateText {
     QImage image;
     int advance = 0;

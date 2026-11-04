@@ -771,6 +771,7 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
     closeSearch = cell(ui::ControlIcon::Close, "libraryCloseSearch", strings::get("library.close_search"));
     closeSearch->hide();
     query = new QLineEdit(this);
+    kobalt::ui::prepareNativeEditor(query);
     query->setObjectName("librarySearchQuery");
     query->setMaxLength(128);
     query->setPlaceholderText(strings::get("library.search_placeholder"));

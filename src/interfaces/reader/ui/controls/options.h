@@ -1,5 +1,6 @@
 #pragma once
 #include "../style/theme.h"
+#include "../style/font_preview.h"
 #include <QCheckBox>
 #include <QFont>
 #include <QVector>
@@ -12,6 +13,7 @@ public:
     DescribedOption(const QString &text, const QString &description, QWidget *parent);
     int heightForWidth(int width) const override;
     void setDescription(const QString &text);
+    void setFontPreviewSource(const FontPreviewSource &value) { fontPreview = value; setProperty("font_preview_source", !value.files.isEmpty()); update(); }
     enum class Indicator { Toggle, Square, Radio };
     struct Presentation {
         Presentation();
@@ -64,6 +66,7 @@ protected:
 
 private:
     Presentation appearance;
+    FontPreviewSource fontPreview;
     QString description, value;
     ValueStyle valueStyle;
     QWidget *preview = nullptr;

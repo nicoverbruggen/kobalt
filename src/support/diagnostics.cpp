@@ -1,6 +1,7 @@
 #include "build_info.h"
 #include "qt_compat.h"
 #include "diagnostics.h"
+#include "crash_context.h"
 #include "main_thread.h"
 #include "strings.h"
 #include <QDateTime>
@@ -27,9 +28,12 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
+#include <dirent.h>
 #include <thread>
 #include <time.h>
 #include <unistd.h>
@@ -41,6 +45,7 @@
 namespace kobalt {
 namespace {
 QMutex mutex;
+std::atomic<int> retainedFontBytes{0}, nativeFontBytes{0}, previewBytes{0};
 QString logPath;
 bool paused = false, detailed = true;
 bool syncing = true;
@@ -201,7 +206,7 @@ void startWriter() {
             const bool sync = syncing && (forceFlush || std::any_of(batch.begin(), batch.end(), [](const Entry &entry) {
                 return entry.severity != DiagnosticSeverity::Activity;
             }));
-            const bool sample = detailed && now - lastMemory >= 1000;
+            const bool sample = now - lastMemory >= 1000;
             writing = true;
             lock.unlock();
             QString path;
@@ -334,6 +339,11 @@ void addMemory(QJsonObject &fields) {
     QFile memory("/proc/self/status");
     if (memory.open(QIODevice::ReadOnly)) {
         for (const auto &line : memory.readAll().split('\n')) {
+            if (line.startsWith("VmSize:") || line.startsWith("VmData:") || line.startsWith("Threads:")) {
+                const auto parts = line.simplified().split(' ');
+                if (parts.size() >= 2)
+                    fields[line.startsWith("VmSize:") ? "virtual_kib" : line.startsWith("VmData:") ? "data_kib" : "threads"] = parts[1].toDouble();
+            }
             if (line.startsWith("VmRSS:") || line.startsWith("VmHWM:")) {
                 const auto parts = line.simplified().split(' ');
                 if (parts.size() >= 2)
@@ -342,6 +352,59 @@ void addMemory(QJsonObject &fields) {
         }
     }
 #endif
+    fields["private_font_bytes"] = retainedFontBytes.load();
+    fields["native_fallback_font_bytes"] = nativeFontBytes.load();
+    fields["font_preview_bitmap_bytes"] = previewBytes.load();
+    fields["resource_sample_monotonic_ms"] = double(monotonicMilliseconds());
+#ifdef __linux__
+    QFile systemMemory("/proc/meminfo");
+    if (systemMemory.open(QIODevice::ReadOnly)) {
+        for (const auto &line : systemMemory.readAll().split('\n')) {
+            const auto parts = line.simplified().split(' ');
+            if (parts.size() < 2) continue;
+            if (parts[0] == "MemAvailable:") fields["available_kib"] = parts[1].toDouble();
+            if (parts[0] == "MemFree:") fields["free_kib"] = parts[1].toDouble();
+        }
+    }
+    // Do not count the sampler's own proc/sysfs handles as application usage.
+    systemMemory.close();
+    memory.close();
+    frequency.close();
+    if (auto *directory = opendir("/proc/self/fd")) {
+        int count = 0, highest = -1;
+        while (const auto *entry = readdir(directory)) {
+            char *end = nullptr;
+            const long fd = std::strtol(entry->d_name, &end, 10);
+            if (!entry->d_name[0] || *end || fd < 0 || fd == dirfd(directory)) continue;
+            ++count;
+            highest = qMax(highest, int(fd));
+        }
+        closedir(directory);
+        fields["fd_count"] = count;
+        fields["fd_highest"] = highest;
+    }
+#endif
+    rlimit limit{};
+    if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+        fields["fd_soft_limit"] = limit.rlim_cur == RLIM_INFINITY ? -1.0 : double(limit.rlim_cur);
+        fields["fd_hard_limit"] = limit.rlim_max == RLIM_INFINITY ? -1.0 : double(limit.rlim_max);
+    }
+    // Keep pressure evidence even in release logs. The available value is not
+    // interchangeable with MemFree; old kernels may provide only the latter.
+    const bool low = fields.contains("available_kib") && fields.value("available_kib").toDouble() < 16 * 1024;
+    if (fields.contains("available_kib")) fields["memory_pressure"] = low;
+    static qint64 lastWarning = -60000;
+    const auto now = monotonicMilliseconds();
+    if (low && now - lastWarning >= 60000) {
+        lastWarning = now;
+        diagnostic("memory-pressure", {{"available_kib", fields.value("available_kib")}}, DiagnosticSeverity::Warning);
+    }
+    QJsonObject resources;
+    for (const auto *key : {"resource_sample_monotonic_ms", "rss_kib", "peak_rss_kib", "virtual_kib", "data_kib",
+                           "available_kib", "free_kib", "threads", "fd_count", "fd_highest", "fd_soft_limit", "fd_hard_limit", "memory_pressure", "private_font_bytes", "native_fallback_font_bytes", "font_preview_bitmap_bytes"})
+        if (fields.contains(key)) resources[key] = fields.value(key);
+    const auto snapshot = QJsonDocument(resources).toJson(QJsonDocument::Compact) + '\n';
+    crashContext::resources.store(snapshot.constData(), std::size_t(snapshot.size()));
     const qint64 base = memoryBase;
     if (base < 0)
         return;
@@ -351,6 +414,9 @@ void addMemory(QJsonObject &fields) {
         fields["kobalt_peak_kib"] = fields.value("peak_rss_kib").toDouble() - double(base);
 }
 }
+void setDiagnosticFontBytes(qint64 bytes) { retainedFontBytes.store(int(bytes)); }
+void setDiagnosticPreviewBytes(int bytes) { previewBytes.store(bytes); }
+void setDiagnosticNativeFontBytes(qint64 bytes) { nativeFontBytes.store(int(bytes)); }
 void setDiagnosticsSync(bool enabled) {
     QMutexLocker lock(&mutex);
     syncing = enabled;
@@ -483,6 +549,20 @@ void diagnostic(const char *event, QJsonObject fields, bool) {
 }
 void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severity) {
     const int savedErrno = errno;
+    // Record only event names and resource counters, never arbitrary paths,
+    // book identifiers or user text. This survives an unflushed event queue.
+    char recent[1024];
+    int used = std::snprintf(recent, sizeof(recent), "event=%.*s monotonic_ms=%lld", 96, event,
+                             static_cast<long long>(monotonicMilliseconds()));
+    for (const auto *key : {"file_bytes", "retained_bytes", "budget_bytes", "released_bytes", "id"}) {
+        if (!fields.contains(key) || used < 0 || used >= int(sizeof(recent)) - 2) continue;
+        const int n = std::snprintf(recent + used, sizeof(recent) - std::size_t(used), " %s=%.0f", key, fields.value(key).toDouble());
+        if (n > 0) used = qMin(int(sizeof(recent)) - 2, used + n);
+    }
+    if (used > 0 && used < int(sizeof(recent)) - 1) {
+        recent[used++] = '\n';
+        crashContext::event(recent, std::size_t(used));
+    }
     Entry entry{{}, QByteArray(event), std::move(fields), severity,
                 monotonicMilliseconds(), QDateTime::currentMSecsSinceEpoch()};
 #ifdef __linux__

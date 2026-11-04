@@ -376,8 +376,7 @@ void Reader::syncAppearanceControls(bool pickingFont) {
     const auto bionic = settings->state().value("bold_reading").toString("off");
     const bool normalWeight = bionic == "off";
     const auto weightAxis = settings->weightAxis();
-    // The font samples follow the displayed page, so a thickness change
-    // updates them in the same screen update as the book text.
+    // The selected-font button follows the displayed page's appearance.
     const ui::SampleAppearance sampleAppearance{
         normalWeight ? settings->state().value("weight_steps").toInt(settings->thickness()) : 0, bionic};
     choices->setFontAppearance(sampleAppearance);

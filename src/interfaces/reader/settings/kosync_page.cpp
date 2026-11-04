@@ -1,3 +1,4 @@
+#include "interfaces/reader/ui/style/fonts.h"
 #include "kosync_page.h"
 #include "kosync_schedule_sheet.h"
 #include "interfaces/reader/ui/controls/text.h"
@@ -238,6 +239,7 @@ void KosyncPage::edit(int field) {
     title->style()->unpolish(title);
     title->style()->polish(title);
     auto *editor = new QLineEdit(card);
+    kobalt::ui::prepareNativeEditor(editor);
     editor->setObjectName("rrKosyncInput");
     // Native keys have no click focus. Keep their focus fallback on the input
     // instead of repainting the modal backdrop on every press and release.

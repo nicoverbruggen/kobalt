@@ -6,6 +6,7 @@
 #include "ui/highlight_paint.h"
 #include "assets/assets.h"
 #include "assets/bundled_fonts.h"
+#include "support/diagnostics.h"
 
 #include <QCache>
 #include <QFontMetrics>
@@ -38,6 +39,7 @@ namespace {
 struct Face {
     QByteArray bytes;
     FT_Face handle = nullptr;
+    QString source;
     // HarfBuzz keeps its table accelerators and shape plans on this font.
     // A font created for each measurement rebuilt them every time.
     hb_font_t *shaper = nullptr;
@@ -67,6 +69,44 @@ struct RegisteredFace {
 struct Fonts {
     FT_Library library = nullptr;
     QMap<QString, QByteArray> sources;
+    QMap<QString, qint64> sizes;
+    QMap<QString, QString> bundledPaths;
+    QStringList recent;
+    QSet<QString> pinned;
+    int rendering = 0;
+    qint64 bytes() const {
+        qint64 total = 0;
+        for (const auto &value : sources) total += value.size();
+        return total;
+    }
+    bool reserve(qint64 size) {
+        if (size <= 0 || size > privateInterfaceFontBudget) return false;
+        while (bytes() + size > privateInterfaceFontBudget) {
+            QString victim;
+            for (const auto &file : recent)
+                if (!pinned.contains(file) && pending.contains(file)) { victim = file; break; }
+            if (victim.isEmpty()) return false;
+            // Cached text contains pixels, but primary/glyph lookups contain face pointers.
+            clearLayouts();
+            glyphs.clear();
+            for (auto it = faces.begin(); it != faces.end();) {
+                if (it.value()->source == victim) {
+                    owners.remove(it.value()->handle);
+                    it = faces.erase(it);
+                } else ++it;
+            }
+            const auto released = sources.take(victim).size();
+            recent.removeAll(victim);
+            setDiagnosticFontBytes(bytes());
+            diagnostic("font-cache-evict", {{"released_bytes", released}, {"retained_bytes", double(bytes())}}, false);
+        }
+        return true;
+    }
+    void use(const QString &file) {
+        recent.removeAll(file);
+        recent.append(file);
+        if (rendering) pinned.insert(file);
+    }
     QMap<QString, std::function<QByteArray()>> pending;
     QMap<QString, std::shared_ptr<Face>> faces;
     QHash<FT_Face, Face *> owners;
@@ -78,7 +118,6 @@ struct Fonts {
     QCache<QByteArray, GlyphMask> glyphs{4096};
     QVector<QPair<QFont, QString>> descriptions;
     QMap<QString, QVector<RegisteredFace>> registered;
-    QMap<QString, QString> registeredPaths;
     // Registrations already made, by path and expected family.
     QSet<QString> registrations;
     ~Fonts() {
@@ -102,16 +141,37 @@ struct Fonts {
         const QString key = file + ':' + QString::number(index);
         auto found = faces.find(key);
         if (found != faces.end()) {
+            use(file);
             return found.value()->handle;
         }
         if (!sources.contains(file)) {
-            const auto read = pending.value(file);
-            const auto bytes = read ? read() : QByteArray();
-            if (bytes.isEmpty())
+            const auto size = sizes.value(file);
+            if (!reserve(size)) {
+                diagnostic("font-load-rejected", {{"file_bytes", double(size)}, {"retained_bytes", double(bytes())},
+                    {"budget_bytes", double(privateInterfaceFontBudget)}}, DiagnosticSeverity::Warning);
                 return nullptr;
-            sources.insert(file, bytes);
+            }
+            diagnostic("font-load-start", {{"file_bytes", double(size)}, {"retained_bytes", double(bytes())}}, false);
+            const auto read = pending.value(file);
+            QByteArray data;
+            try {
+                data = read ? read() : QByteArray();
+            } catch (const std::bad_alloc &) {
+                return nullptr;
+            }
+            if (data.isEmpty() || data.size() != size) {
+                diagnostic("font-load-failed", {{"file_bytes", double(size)}}, DiagnosticSeverity::Warning);
+                return nullptr;
+            }
+            sources.insert(file, data);
+            setDiagnosticFontBytes(bytes());
+            diagnostic("font-load-end", {{"file_bytes", double(size)}, {"retained_bytes", double(bytes())}}, false);
         }
+        // Even an unreadable face must remain eligible for eviction. A file
+        // can change after metadata discovery but keep the same byte size.
+        use(file);
         auto value = std::make_shared<Face>();
+        value->source = file;
         value->bytes = sources.value(file);
         if (value->bytes.isEmpty() ||
             FT_New_Memory_Face(library, reinterpret_cast<const FT_Byte *>(value->bytes.constData()),
@@ -154,7 +214,9 @@ struct Fonts {
 int cacheCost(qint64 bytes) {
     return int(qMin<qint64>(2147483647, qMax<qint64>(1, (bytes + 255) / 256)));
 }
+thread_local Fonts *previewFonts = nullptr;
 Fonts &fonts() {
+    if (previewFonts) return *previewFonts;
     static Fonts value;
     return value;
 }
@@ -251,6 +313,7 @@ const RegisteredFace *registeredFace(const QFont &font) {
     return best;
 }
 FT_Face resolvePrimaryFace(const QFont &font) {
+    if (previewFonts) return previewFonts->faces.value("preview")->handle;
     if (interfaceFamily(font)) {
         return fonts().face(primaryFile(font));
     }
@@ -267,7 +330,9 @@ FT_Face primaryFace(const QFont &font) {
     auto &primaries = fonts().primaries;
     const auto found = primaries.constFind(key);
     if (found != primaries.cend()) {
-        return found.value();
+        const auto face = found.value();
+        if (auto *owner = fonts().owners.value(face)) fonts().use(owner->source);
+        return face;
     }
     const auto face = resolvePrimaryFace(font);
     if (face) {
@@ -276,6 +341,7 @@ FT_Face primaryFace(const QFont &font) {
     return face;
 }
 FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0) {
+    if (previewFonts) return nullptr;
     if (regular.endsWith("-Regular.ttf")) {
         const auto stem = regular.left(regular.size() - QStringLiteral("Regular.ttf").size());
         QStringList styles;
@@ -303,6 +369,7 @@ FT_Face faceFor(uint character, QChar::Script script, FT_Face primary, const QFo
     if (primary && FT_Get_Char_Index(primary, character)) {
         return primary;
     }
+    if (previewFonts) return nullptr;
     QString preferred;
     int index = 0;
     switch (script) {
@@ -401,13 +468,22 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening, con
     }
     state.clearFaces();
     state.registered.clear();
-    state.registeredPaths.clear();
     state.registrations.clear();
     state.sources.clear();
+    state.sizes.clear();
+    state.bundledPaths.clear();
+    state.recent.clear();
+    state.pinned.clear();
     state.pending = pending;
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+        const auto path = assets.file("fonts/" + it.key());
+        state.sizes.insert(it.key(), QFileInfo(path).size());
+        state.bundledPaths.insert(QFileInfo(path).absoluteFilePath(), it.key());
+    }
     for (auto it = checked.cbegin(); it != checked.cend(); ++it)
         if (pending.contains(it.key()) && !it.value().isEmpty())
             state.sources.insert(it.key(), it.value());
+    setDiagnosticFontBytes(state.bytes());
     return true;
 }
 void warmTextShaping(const QByteArray &font, const QString &text) {
@@ -454,52 +530,37 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
     if (state.registrations.contains(registrationKey)) {
         return true;
     }
-    QString key = state.registeredPaths.value(path);
-    if (key.isEmpty()) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly) || file.size() <= 0 || file.size() > 64 * 1024 * 1024) {
-            return false;
-        }
-        const auto bytes = file.readAll();
-        if (bytes.isEmpty()) {
-            return false;
-        }
-        const QString bundled = QFileInfo(path).fileName();
-        if (!state.sources.contains(bundled) && state.pending.contains(bundled))
-            state.face(bundled);
-        if (state.sources.contains(bundled) && state.sources.value(bundled) == bytes) {
-            key = bundled;
-        } else {
-            key = "reading:" + path;
-            state.sources.insert(key, bytes);
-        }
-        state.registeredPaths.insert(path, key);
-    }
-    if (!expectedFamily.isEmpty() && state.registered.contains(expectedFamily)) {
-        for (const auto &registered : state.registered.value(expectedFamily)) {
-            if (registered.file == key) {
-                state.registrations.insert(registrationKey);
-                return true;
-            }
-        }
-    }
-    const auto first = state.face(key);
-    if (!first || first->num_faces <= 0 || first->num_faces > 256) {
-        return false;
-    }
+    QString key = state.bundledPaths.value(QFileInfo(path).absoluteFilePath());
+    if (key.isEmpty()) key = "reading:" + path;
+    const auto size = QFileInfo(path).size();
+    if (size <= 0 || size > privateInterfaceFontBudget) return false;
+    // Inspect one face at a time. Keep metadata, not buffers for every style.
     QVector<QPair<QString, RegisteredFace>> pending;
-    for (int index = 0; index < first->num_faces; ++index) {
-        const auto face = state.face(key, index);
-        if (!face) {
-            return false;
-        }
+    FT_Face first = nullptr;
+    if (FT_New_Face(state.library, QFile::encodeName(path).constData(), 0, &first)) return false;
+    const auto count = first->num_faces;
+    FT_Done_Face(first);
+    if (count <= 0 || count > 256) return false;
+    for (int index = 0; index < count; ++index) {
+        FT_Face face = nullptr;
+        if (FT_New_Face(state.library, QFile::encodeName(path).constData(), index, &face)) return false;
         const QString family = QString::fromUtf8(face->family_name);
         const RegisteredFace entry{key, index, bool(face->style_flags & FT_STYLE_FLAG_BOLD),
                                    bool(face->style_flags & FT_STYLE_FLAG_ITALIC)};
+        FT_Done_Face(face);
         pending.append({family, entry});
-        if (!expectedFamily.isEmpty() && expectedFamily != family && first->num_faces == 1) {
+        if (!expectedFamily.isEmpty() && expectedFamily != family && count == 1)
             pending.append({expectedFamily, entry});
-        }
+    }
+    if (!state.pending.contains(key)) {
+        state.sizes.insert(key, size);
+        state.pending.insert(key, [path, size] {
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly) || file.size() != size) return QByteArray();
+            // Bound the read even if a file grows after the size check.
+            auto data = file.read(size);
+            return data.size() == size ? data : QByteArray();
+        });
     }
     for (const auto &value : pending) {
         auto &entries = state.registered[value.first];
@@ -533,6 +594,11 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
                                      PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,
                                      Qt::LayoutDirection direction = Qt::LayoutDirectionAuto,
                                      const QVector<PrivateTextStyle> &styles = {}) {
+    struct Rendering {
+        Fonts &state;
+        Rendering(Fonts &value) : state(value) { ++state.rendering; }
+        ~Rendering() { if (!--state.rendering) state.pinned.clear(); }
+    } rendering(fonts());
     QString text = input;
     if (font.capitalization() == QFont::AllUppercase) {
         text = text.toUpper();
@@ -543,8 +609,8 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
     if (text.isEmpty() || !fonts().library) {
         return result;
     }
-    const bool interface = interfaceFamily(font) || font.family() == interfaceFont().family() ||
-                           font.family() == chromeFont().family() || font.family() == headerFooterFont().family();
+    const bool interface = !previewFonts && (interfaceFamily(font) || font.family() == interfaceFont().family() ||
+                           font.family() == chromeFont().family() || font.family() == headerFooterFont().family());
     const int steps = weight < 0 ? (interface ? interfaceWeight() : 0) : qBound(0, weight, 12);
     QString cacheKey = fonts().description(font) + ':' + QString::number(steps) + ':' + QString::number(rasterize) + ':' +
                        QString::number(font.capitalization()) + ':' + QString::number(font.letterSpacingType()) + ':' +
@@ -913,6 +979,95 @@ PrivateText renderPrivateText(const QString &text, const QFont &font, int weight
                               const QVector<QPair<int, int>> &underlineRanges, PrivateTextEmphasis emphasis,
                               Qt::LayoutDirection direction, const QVector<PrivateTextStyle> &styles) {
     return layoutPrivateText(text, font, weight, boldRanges, true, underlineRanges, emphasis, direction, styles);
+}
+QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
+                               QSize size, int inkHeight, int weight, bool boldReading, bool centered, bool wrap) {
+    if (text.isEmpty() || text.size() > 256 || files.size() > 64 || size.width() <= 0 || size.height() <= 0 ||
+        size.width() > 2048 || size.height() > 512 || qint64(size.width()) * size.height() > 256 * 1024)
+        return {};
+    Fonts isolated;
+    if (FT_Init_FreeType(&isolated.library)) return {};
+    isolated.glyphs.setMaxCost(512);
+    isolated.layouts.setMaxCost(1024);
+    QString chosen;
+    int chosenIndex = 0, best = -1;
+    // Collections and unnamed styles need metadata inspection. Close each face
+    // before looking at the next. No QByteArray contains the whole font file.
+    for (const auto &path : files) {
+        const auto bytes = QFileInfo(path).size();
+        if (bytes <= 0 || bytes > 64LL * 1024 * 1024) continue;
+        const auto encoded = QFile::encodeName(path);
+        int count = 1;
+        for (int index = 0; index < count; ++index) {
+            FT_Face face = nullptr;
+            if (FT_New_Face(isolated.library, encoded.constData(), index, &face)) break;
+            count = qBound(1, int(face->num_faces), 256);
+            const int score = (QString::fromUtf8(face->family_name) == family ? 4 : 0) +
+                              (!(face->style_flags & FT_STYLE_FLAG_BOLD) ? 1 : 0) +
+                              (!(face->style_flags & FT_STYLE_FLAG_ITALIC) ? 2 : 0);
+            FT_Done_Face(face);
+            if (score > best) { best = score; chosen = path; chosenIndex = index; }
+            if (best == 7) break;
+        }
+        if (best == 7) break;
+    }
+    if (chosen.isEmpty()) return {};
+    auto face = std::make_shared<Face>();
+    if (FT_New_Face(isolated.library, QFile::encodeName(chosen).constData(), chosenIndex, &face->handle)) return {};
+    isolated.faces.insert("preview", face);
+    isolated.owners.insert(face->handle, face.get());
+    struct Scope {
+        Fonts *previous;
+        explicit Scope(Fonts *state) : previous(previewFonts) { previewFonts = state; }
+        ~Scope() { previewFonts = previous; }
+    } scope(&isolated);
+    QFont font(family);
+    font.setPixelSize(128);
+    const auto reference = renderPrivateText(QStringLiteral("Hox"), font, 0).image;
+    int top = reference.height(), bottom = -1;
+    for (int y = 0; y < reference.height(); ++y)
+        for (int x = 0; x < reference.width(); ++x)
+            if (qAlpha(reference.pixel(x, y)) >= 128) { top = qMin(top, y); bottom = y; break; }
+    font.setPixelSize(qBound(8, bottom >= top ? qRound(128.0 * inkHeight / (bottom - top + 1)) : inkHeight, 192));
+    QImage bitmap(size, QImage::Format_ARGB32_Premultiplied);
+    if (bitmap.isNull()) return {};
+    bitmap.fill(Qt::transparent);
+    QPainter painter(&bitmap);
+    painter.setFont(font);
+    painter.setPen(Qt::black);
+    const auto draw = [&](QString line, QRect area) {
+        const auto ranges = boldReading && !FT_IS_FIXED_WIDTH(face->handle) ? samplePrefixes(line) : QVector<QPair<int, int>>();
+        line = elidePrivateText(line, font, area.width(), ranges);
+        const auto rendered = renderPrivateText(line, font, boldReading ? 0 : weight, ranges);
+        if (rendered.missingGlyphs) return false;
+        drawOpticalPrivateText(painter, area, line, centered ? Qt::AlignHCenter : Qt::AlignLeft,
+                               boldReading ? 0 : weight, ranges);
+        return true;
+    };
+    int split = -1, widest = INT_MAX;
+    if (wrap && measurePrivateText(text, font) > size.width())
+        for (int i = 1; i < text.size() - 1; ++i)
+            if (text[i].isSpace()) {
+                const int width = qMax(measurePrivateText(text.left(i).trimmed(), font),
+                                       measurePrivateText(text.mid(i + 1).trimmed(), font));
+                if (width < widest) { widest = width; split = i; }
+            }
+    bool valid;
+    if (split >= 0 && size.height() >= inkHeight * 2 + 4) {
+        const int lineHeight = inkHeight + 4, y = (size.height() - 2 * lineHeight) / 2;
+        valid = draw(text.left(split).trimmed(), QRect(0, y, size.width(), lineHeight)) &&
+                draw(text.mid(split + 1).trimmed(), QRect(0, y + lineHeight, size.width(), lineHeight));
+    } else valid = draw(text, QRect(QPoint(), size));
+    painter.end();
+    if (!valid) return {};
+    // Keep only coverage. The GUI colors it for the current theme/selection.
+    QImage mask(size, QImage::Format_Indexed8);
+    QVector<QRgb> colors(256);
+    for (int i = 0; i < 256; ++i) colors[i] = qRgba(0, 0, 0, i);
+    mask.setColorTable(colors);
+    for (int y = 0; y < size.height(); ++y)
+        for (int x = 0; x < size.width(); ++x) mask.scanLine(y)[x] = qAlpha(bitmap.pixel(x, y));
+    return mask;
 }
 int measurePrivateText(const QString &text, const QFont &font, const QVector<QPair<int, int>> &boldRanges,
                        PrivateTextEmphasis emphasis, Qt::LayoutDirection direction) {

@@ -778,7 +778,7 @@ QString Reader::bookFace() {
 }
 
 void Reader::registerPickerFonts(const QString &family) {
-    // Samples draw from the private faces, never from Qt's font database. Adding
+    // Private text uses these faces without adding them to Qt's font database. Adding
     // a font there and removing it when the reader closes makes Qt rebuild the
     // whole database on the next text it draws, Nickel's Home included. On the
     // Mac that rebuild was about 100 ms of a 125 ms close.
@@ -786,7 +786,7 @@ void Reader::registerPickerFonts(const QString &family) {
         ui::registerPrivateInterfaceFont(path, family);
     };
     // Match the engine's source precedence so duplicate sideloads cannot
-    // replace a bundled face in font-name previews.
+    // replace a bundled face in private text.
     // Qt 5.2 on firmware 4 keeps the first face it sees for a weight and
     // slant. A bold face whose PANOSE weight says "medium" is filed under
     // normal weight there, so register each family's regular face first.
@@ -937,6 +937,7 @@ void Reader::schedulePreviewWarm() {
 }
 
 void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation) {
+    diagnostic("appearance-preview-request", {}, false);
     appearanceViewport = bodySize();
     appearanceEdit.mutate(
         *model, bodySize(),
@@ -944,6 +945,8 @@ void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation) {
             refresh();
         },
         [this] {
+            diagnostic("appearance-preview-opened", {{"ready", appearanceEdit.ready()},
+                {"failed", !appearanceEdit.error().isEmpty()}}, false);
             if (exitPending || appearanceEdit.finishPending() || appearanceEdit.externalDestination())
                 resumeAppearanceApply();
             else
@@ -1164,10 +1167,6 @@ void Reader::openSettingsFont(const QString &key) {
                 settingsFontFaces[key] = family;
             showSettingsFonts();
             refresh();
-        },
-        [this](const QStringList &families) {
-            for (const auto &family : families)
-                registerPickerFonts(family);
         });
     settingsFontPopup = panel->fontDialog;
     if (!settingsFontPopup)

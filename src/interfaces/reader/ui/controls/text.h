@@ -1,9 +1,11 @@
 #pragma once
 #include "../style/metrics.h"
 #include "../style/private_text.h"
+#include "../style/font_preview.h"
 #include <QFont>
 #include <QLabel>
 #include <QVector>
+#include <QVariant>
 
 class QPainter;
 
@@ -57,6 +59,14 @@ class SampleLabel : public PrivateTextLabel {
 public:
     using PrivateTextLabel::PrivateTextLabel;
     bool optical = false;
+    void setPreviewSource(const FontPreviewSource &value) {
+        if (previewSource.identity == value.identity && previewSource.family == value.family) return;
+        previewSource = value;
+        setProperty("font_preview_source", !value.files.isEmpty());
+        setProperty("font_preview_key", QString());
+        setProperty("font_preview_ready", false);
+        update();
+    }
     void setAppearance(const SampleAppearance &value) {
         if (appearance == value)
             return;
@@ -72,6 +82,7 @@ protected:
 
 private:
     SampleAppearance appearance;
+    FontPreviewSource previewSource;
 };
 // UI labels inherit the interface weight. Font samples pass their own appearance.
 void drawOpticalText(QPainter &painter, const QRectF &area, const QString &text, bool centered = false);

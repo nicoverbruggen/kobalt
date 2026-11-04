@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "reading/reading_density.h"
 #include "interfaces/reader/ui/controls/buttons.h"
 #include "interfaces/reader/ui/controls/icons.h"
@@ -22,6 +23,9 @@
 #include "interfaces/reader/ui/style/fonts.h"
 #include "interfaces/reader/window/font_registration.h"
 #include <QFontInfo>
+#include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QGraphicsProxyWidget>
 #include <QFontDatabase>
 #include <QJsonObject>
 #include <QLabel>
@@ -154,6 +158,9 @@ int main(int argc, char **argv) {
     qputenv("FONTCONFIG_FILE", fontConfig.toUtf8());
 #endif
     QApplication app(argc, argv);
+    QTemporaryDir diagnosticDirectory;
+    require(diagnosticDirectory.isValid(), "Cannot create font diagnostic directory");
+    kobalt::initializeDiagnostics(diagnosticDirectory.path());
     {
         // The loading view is built before the whole bundle is verified. A
         // font used before then must not stop the faces registering later.
@@ -174,7 +181,158 @@ int main(int argc, char **argv) {
                 QFontInfo(kobalt::ui::chromeFont()).family() == "IBM Plex Mono" &&
                 QFontInfo(kobalt::ui::brandFont(32)).family() == "Instrument Serif",
             "Component font substitution");
+    {
+        int loads = 0;
+        kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event").toString() == "font-native-fallback-load") ++loads;
+        });
+        QLineEdit editor;
+        editor.setFont(kobalt::ui::interfaceFont(24));
+        kobalt::ui::prepareNativeEditor(&editor);
+        editor.setText("Latin text");
+        editor.resize(400, 80);
+        QPixmap image(editor.size());
+        editor.render(&image);
+        require(loads == 0, "Latin editor loaded script fallback fonts");
+        editor.setText(QString::fromUtf8("مرحبا"));
+        editor.render(&image);
+        require(loads == 1, "Arabic editor did not load exactly its needed fallback");
+        editor.render(&image);
+        require(loads == 1, "Unchanged editor registered its fallback again");
+        require(kobalt::ui::initializeInterfaceFonts(kobalt::test::readerAssets()), "Cannot reset editor fonts");
+        editor.render(&image);
+        require(loads == 2, "Existing editor lost its fallback after asset reinitialization");
+        kobalt::setDiagnosticObserver({});
+    }
     checkPrivateInterfaceText(kobalt::test::readerAssets());
+    {
+        using namespace kobalt::ui;
+        const auto &assets = kobalt::test::readerAssets();
+        const QStringList files{assets.file("fonts/IBMPlexSans-Regular.ttf")};
+        renderPrivateText(QStringLiteral("Font Preview"), chromeFont(32));
+        const auto retained = privateInterfaceFontBytes();
+        const auto regular = renderFontPreviewBitmap(files, "IBM Plex Sans", "Font Preview", QSize(400, 100), 30, 0, false, true, false);
+        const auto heavy = renderFontPreviewBitmap(files, "IBM Plex Sans", "Font Preview", QSize(400, 100), 30, 10, false, true, false);
+        require(!regular.isNull() && regular.format() == QImage::Format_Indexed8 && regular != heavy,
+                "Bitmap preview lost the selected font or weight");
+        require(privateInterfaceFontBytes() == retained, "Isolated preview populated the GUI font cache");
+        require(renderFontPreviewBitmap(files, "IBM Plex Sans", "Too large", QSize(4096, 4096), 30, 0, false, true, false).isNull(),
+                "Preview accepted an unbounded bitmap");
+        SampleLabel label;
+        label.optical = true;
+        label.resize(500, 160);
+        label.setFont(chromeFont(32));
+        label.setText("Font Preview");
+        label.setPreviewSource(fontPreviewSource("IBM Plex Sans", files));
+        label.show();
+        const auto wait = [&] {
+            QElapsedTimer timer;
+            timer.start();
+            while ((!label.property("font_preview_ready").toBool() || fontPreviewPendingCount()) && timer.elapsed() < 5000)
+                app.processEvents(QEventLoop::AllEvents, 10);
+            require(label.property("font_preview_ready").toBool(), "Visible font bitmap did not complete");
+            require(fontPreviewCacheBytes() <= fontPreviewBitmapBudget, "Bitmap cache exceeded its budget");
+        };
+        app.processEvents();
+        wait();
+        require(fontPreviewCacheBytes() >= label.width() * label.height() + 1024,
+                "Bitmap cache accounting omitted the coverage palette");
+        const auto firstKey = label.property("font_preview_key").toString();
+        label.setAppearance({8, "off"});
+        app.processEvents();
+        wait();
+        require(label.property("font_preview_key").toString() != firstKey, "Weight reused a stale bitmap");
+        // More distinct labels than fit in the cache must evict old masks.
+        for (int i = 0; i < 70; ++i) {
+            label.setText(QString("Preview %1").arg(i));
+            app.processEvents();
+            wait();
+        }
+        require(privateInterfaceFontBytes() == retained, "Browsing bitmaps retained font files");
+        for (int i = 0; i < 100; ++i) {
+            label.setAppearance({i % 12, i % 2 ? "bold" : "off"});
+            label.setText(QString("Rapid %1").arg(i));
+            label.repaint();
+            require(fontPreviewPendingCount() <= 33, "Preview queue grew without a bound");
+        }
+        app.processEvents();
+        wait();
+        label.hide();
+
+        QWidget page;
+        page.resize(500, 640);
+        struct PagePaintObserver : QObject {
+            QWidget *page = nullptr;
+            bool earlyPaint = false;
+            bool eventFilter(QObject *, QEvent *event) override {
+                if (event->type() == QEvent::Paint && !page->property("font_preview_rendering").toBool() &&
+                    !page->property("font_preview_page_ready").toBool()) earlyPaint = true;
+                return false;
+            }
+        } observer;
+        observer.page = &page;
+        QVector<SampleLabel *> samples;
+        for (int i = 0; i < 4; ++i) {
+            auto *sample = new SampleLabel(&page);
+            sample->optical = true;
+            sample->setGeometry(0, i * 160, 500, 160);
+            sample->setFont(chromeFont(32));
+            sample->setText(QString("Batch %1").arg(i));
+            sample->setPreviewSource(fontPreviewSource("IBM Plex Sans", files));
+            sample->installEventFilter(&observer);
+            samples.append(sample);
+        }
+        prepareFontPreviewPage(&page);
+        require(!page.updatesEnabled(), "Font page painted before its previews were ready");
+        require(!page.isVisible(), "Preparing previews opened a hidden page");
+        page.show();
+        const auto waitPage = [&] {
+            QElapsedTimer timer;
+            timer.start();
+            while (!page.property("font_preview_page_ready").toBool() && timer.elapsed() < 5000)
+                app.processEvents(QEventLoop::AllEvents, 10);
+            require(page.property("font_preview_page_ready").toBool() && page.updatesEnabled(),
+                    "Font page did not release its completed previews");
+            timer.restart();
+            bool painted = false;
+            while (!painted && timer.elapsed() < 1000) {
+                app.processEvents(QEventLoop::AllEvents, 10);
+                painted = true;
+                for (auto *sample : samples) painted &= sample->property("font_preview_ready").toBool();
+            }
+            require(painted, "Font page released an unfinished label");
+        };
+        waitPage();
+        page.hide();
+        QGraphicsScene scene;
+        auto *proxy = scene.addWidget(&page);
+        QGraphicsView canvas(&scene);
+        canvas.resize(520, 660);
+        page.show();
+        canvas.show();
+        app.processEvents();
+        for (auto *sample : samples) sample->setAppearance({9, "bold"});
+        prepareFontPreviewPage(&page);
+        // Replace an unfinished batch, as happens after rotation or rapid paging.
+        for (auto *sample : samples) sample->setText(sample->text() + " next");
+        prepareFontPreviewPage(&page);
+        canvas.viewport()->repaint();
+        waitPage();
+        require(!observer.earlyPaint, "Font page painted a partial batch");
+        require(fontPreviewCacheBytes() <= fontPreviewBitmapBudget, "Font page exceeded its bitmap budget");
+        for (auto *sample : samples)
+            sample->setPreviewSource(fontPreviewSource("Broken", {assets.file("fonts/missing.ttf")}));
+        prepareFontPreviewPage(&page);
+        QElapsedTimer failureTimer;
+        failureTimer.start();
+        while (!page.property("font_preview_page_ready").toBool() && failureTimer.elapsed() < 5000)
+            app.processEvents(QEventLoop::AllEvents, 10);
+        require(page.updatesEnabled(), "An invalid font left the page waiting forever");
+        proxy->setWidget(nullptr);
+        canvas.hide();
+        page.hide();
+    }
+
     {
         using namespace kobalt::ui;
         const int savedWeight = interfaceWeight();
@@ -1554,23 +1712,14 @@ int main(int argc, char **argv) {
         QVector<Choice> choices;
         for (int i = 0; i < 25; ++i)
             choices.append({QString("Font %1").arg(i), QString("Family %1").arg(i), QString("font%1").arg(i)});
-        QVector<QStringList> requestedPages;
-        picker.fontPageRequested = [&](const QStringList &families) {
-            requestedPages.append(families);
-        };
+        const auto bytesBeforeBrowsing = privateInterfaceFontBytes();
         picker.setDropdownGeometry(QRect(0, 200, 1072, picker.fontPanelHeight()));
         picker.showChoices("Font", choices, {}, ChoiceScreen::Mode::Fonts);
-        require(requestedPages.size() == 1, "Opening the font picker did not request its visible page once");
         auto *next = picker.findChild<QPushButton *>("rrFontPagerNext");
         auto *previous = picker.findChild<QPushButton *>("rrFontPagerPrevious");
         require(next && previous, "Font picker lacks paging controls");
         for (int page = 0; page < 3; ++page) {
             app.processEvents();
-            QStringList expectedFamilies;
-            for (int i = page * 12; i < qMin((page + 1) * 12, int(choices.size())); ++i)
-                expectedFamilies.append(choices[i].value);
-            require(requestedPages.size() == page + 1 && requestedPages.last() == expectedFamilies,
-                    "Font picker requested families outside the visible page");
             int visible = 0;
             QVector<QRect> rectangles;
             for (int i = 0; i < choices.size(); ++i) {
@@ -1578,6 +1727,9 @@ int main(int argc, char **argv) {
                 if (!button || !button->isVisible())
                     continue;
                 require((i / 12) == page, "Grid skipped or repeated a font");
+                const auto *name = picker.findChild<QLabel *>(choices[i].name + "Title");
+                require(name && name->font().family() == chromeFont().family(),
+                        "Font browsing used the candidate family to paint its name");
                 require(picker.rect().contains(button->geometry()), "Grid cell escaped the panel");
                 for (const auto &rect : rectangles)
                     require(!rect.intersects(button->geometry()), "Grid cells overlap");
@@ -1591,14 +1743,8 @@ int main(int argc, char **argv) {
         }
         for (int turn = 0; turn < 2; ++turn)
             previous->click();
-        require(requestedPages.size() == 5 && requestedPages[3] == requestedPages[1] &&
-                    requestedPages[4] == requestedPages[0],
-                "Returning to a font page requested different families");
         previous->click();
-        require(requestedPages.last() == QStringList{choices.last().value},
-                "Font previous did not request the last page");
         next->click();
-        require(requestedPages.last() == requestedPages.first(), "Font next did not request the first page");
         for (const QSize size : {QSize(1072, picker.fontPanelHeight()), QSize(600, 450)}) {
             picker.setFontGeometry(QRect(QPoint(), size));
             app.processEvents();
@@ -1608,8 +1754,8 @@ int main(int argc, char **argv) {
                         "Grid clips a cell after resize");
             }
         }
-        require(requestedPages.size() == 7, "Resizing the font picker requested a hidden font page");
-        picker.fontPageRequested = {};
+        require(privateInterfaceFontBytes() == bytesBeforeBrowsing,
+                "Browsing or resizing the font picker retained candidate font bytes");
         require(picker.findChild<QPushButton *>("font0")->width() == picker.width() / 3 &&
                     picker.findChild<QPushButton *>("font1")->width() == picker.width() / 3,
                 "Default slots must each occupy a third of a row");

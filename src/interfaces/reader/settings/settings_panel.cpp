@@ -967,8 +967,7 @@ SettingsPanel::~SettingsPanel() {
     delete fontDialog;
 }
 void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingFont> &fonts, const QString &current,
-                                    const QString &emptyLabel, std::function<void(const QString &)> chosen,
-                                    std::function<void(const QStringList &)> prepareFonts) {
+                                    const QString &emptyLabel, std::function<void(const QString &)> chosen) {
     if (fontDialog || fonts.isEmpty())
         return;
     fontDialog = new ui::ModalOverlay(parentWidget());
@@ -1021,32 +1020,15 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         pages.append({first, end - first});
         first = end;
     }
-    const auto showPage = [this, choices, pager, section, card, cardWidth, rowHeight, pages, fonts,
-                           prepareFonts](int page) {
+    const auto showPage = [this, choices, pager, section, card, cardWidth, rowHeight, pages, fonts](int page) {
         page = qBound(0, page, int(pages.size()) - 1);
         const auto range = pages[page];
-        QStringList families;
-        for (int index = range.first; index < range.first + range.second; ++index)
-            if (!fonts[index].family.isEmpty())
-                families.append(fonts[index].family);
-        if (prepareFonts)
-            prepareFonts(families);
         for (int index = range.first; index < range.first + range.second; ++index) {
-            if (fonts[index].family.isEmpty())
-                continue;
             auto *option = choices->options()[index];
-            const auto sample = ui::fontSample(fonts[index].family);
-            option->setFont(sample);
-            auto look = option->presentation();
-            look.labelPixels = sample.pixelSize();
-            look.opticalLabel = true;
-            option->setPresentation(look);
-            auto family = sample.family();
-            family.replace('\\', "\\\\");
-            family.replace('"', "\\\"");
-            readerStyle(
-                option,
-                QString("font-family:\"%1\";font-size:%2px;font-weight:400;").arg(family).arg(sample.pixelSize()));
+            option->setFontPreviewSource(ui::fontPreviewSource(fonts[index].family, fonts[index].files));
+            auto presentation = option->presentation();
+            presentation.opticalLabel = !fonts[index].family.isEmpty();
+            option->setPresentation(presentation);
         }
         QString caption;
         switch (fonts[range.first].origin) {
@@ -1069,6 +1051,7 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         pager->setPage(page, pages.size());
         card->fitToWidth(cardWidth);
         fontDialog->centerCard();
+        ui::prepareFontPreviewPage(fontDialog);
     };
     connect(pager->previous, &QPushButton::clicked, fontDialog, [pager, showPage] {
         showPage(pager->turnTarget(-1));

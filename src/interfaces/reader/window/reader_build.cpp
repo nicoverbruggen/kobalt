@@ -1820,10 +1820,7 @@ void Reader::showFontPicker() {
     if (!appearanceEdit.panelOpen() || panels->currentIndex() != 0)
         return;
     const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
-    choices->fontPageRequested = [this](const QStringList &families) {
-        for (const auto &family : families)
-            registerPickerFonts(family);
-    };
+    diagnostic("font-picker-open", {}, false);
     QVector<Choice> items{
         {strings::get("reader.publisher_fonts"), QString(), "rrFontChoice0", strings::get("reader.recommended_fonts")}};
     pickerNativeFamilies = services.fontFamilies();
@@ -1855,6 +1852,7 @@ void Reader::showFontPicker() {
             break;
         }
         items.append({fontDisplayName(font.family), font.family, QString("rrFontChoice%1").arg(items.size()), section});
+        items.last().fontFiles = font.files;
     }
     QString defaultFace = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
     int defaultIndex = -1;
@@ -1890,6 +1888,7 @@ void Reader::showFontPicker() {
         const auto *current = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
         if (!appearanceEdit.queued() && face == current->fontFace())
             return;
+        diagnostic("font-preview-request", {}, false);
         mutateAppearance([this, face](ReaderSession &preview) {
             if (preview.style(preview.fontSize(), preview.spacing(), face, preview.margin()))
                 choices->selectValue(face);

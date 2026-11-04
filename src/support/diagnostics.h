@@ -10,6 +10,10 @@
 namespace kobalt {
 QJsonObject diagnosticDeviceFields(const QByteArray &version);
 QString diagnosticErrorCode(const QString &reason);
+// Owners publish counters; the worker samples them without touching GUI caches.
+void setDiagnosticFontBytes(qint64 bytes);
+void setDiagnosticNativeFontBytes(qint64 bytes);
+void setDiagnosticPreviewBytes(int bytes);
 void pauseDiagnostics(bool paused);
 // True only for detailed diagnostics or an evaluation observer. Callers must
 // check before collecting timings, memory statistics or per-page details.

@@ -6,6 +6,9 @@
 #include <QEvent>
 #include <QFontDatabase>
 #include <QLabel>
+#include <QLineEdit>
+#include <QRawFont>
+#include "support/diagnostics.h"
 #include <QStringList>
 #include <QVector>
 #include <QWidget>
@@ -39,11 +42,13 @@ const QVector<Family> &families() {
 }
 struct Registration {
     bool registered = false;
+    unsigned fallbackGeneration = 0;
     QVector<QVector<int>> ids;
     QVector<int> scriptFallbackIds;
     // Interface faces and script fallbacks load separately: the opening view
     // needs only the faces, before the whole asset bundle is verified.
     QMap<QString, QByteArray> sources, fallbackSources;
+    QMap<QString, std::function<QByteArray()>> fallbackReaders;
     // Faces read and checked ahead of the first opening.
     std::future<QMap<QString, QByteArray>> preparing;
 };
@@ -78,20 +83,6 @@ QVector<QVector<int>> addFaces() {
             if (id >= 0)
                 ids.last().append(id);
         }
-    }
-    return ids;
-}
-QVector<int> addScriptFallbacks(const QMap<QString, QByteArray> &sources) {
-    QVector<int> ids;
-    for (const auto *file : scriptFallbackFontFiles) {
-        const auto bytes = sources.value(file);
-        const int id = bytes.isEmpty() ? -1 : QFontDatabase::addApplicationFontFromData(bytes);
-        if (id < 0) {
-            for (const int added : ids)
-                QFontDatabase::removeApplicationFont(added);
-            return {};
-        }
-        ids.append(id);
     }
     return ids;
 }
@@ -218,7 +209,7 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed) {
     const auto readers = assets.deferredFontData(files);
     if (readers.isEmpty())
         return false;
-    QMap<QString, QByteArray> sources, fallbackSources;
+    QMap<QString, QByteArray> sources;
     for (const auto &family : families())
         for (const auto &face : family.faces) {
             const auto bytes = readers.value(QLatin1String(face.file))();
@@ -226,32 +217,87 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed) {
                 return false;
             sources.insert(face.file, bytes);
         }
-    for (const auto *file : scriptFallbackFontFiles) {
-        const auto bytes = readers.value(QLatin1String(file))();
-        if (bytes.isEmpty())
-            return false;
-        fallbackSources.insert(file, bytes);
-    }
-    // A different bundle member can disappear while these fonts are read.
-    // Check the whole bundle again before replacing the registered faces.
-    if (!assets.available())
-        return false;
+    if (!assets.available()) return false;
+    // Native editors need only the scripts actually present in their text.
+    // Private text has its own lazy fallback selection and byte budget.
     auto &current = registration();
-    if (current.fallbackSources != fallbackSources) {
-        auto scriptFallbackIds = addScriptFallbacks(fallbackSources);
-        if (scriptFallbackIds.size() != int(scriptFallbackFontFiles.size()))
-            return false;
-        for (const int id : current.scriptFallbackIds)
-            QFontDatabase::removeApplicationFont(id);
-        current.fallbackSources = std::move(fallbackSources);
-        current.scriptFallbackIds = std::move(scriptFallbackIds);
-    }
+    for (const int id : current.scriptFallbackIds) QFontDatabase::removeApplicationFont(id);
+    current.scriptFallbackIds.clear();
+    current.fallbackSources.clear();
+    ++current.fallbackGeneration;
+    setDiagnosticNativeFontBytes(0);
+    current.fallbackReaders.clear();
+    for (const auto *file : scriptFallbackFontFiles)
+        current.fallbackReaders.insert(file, readers.value(file));
     if (!replaceFaces(std::move(sources), &facesChanged))
         return false;
     if (changed) {
         *changed = facesChanged;
     }
     return true;
+}
+namespace {
+class EditorFallbacks : public QObject {
+public:
+    explicit EditorFallbacks(QLineEdit *editor) : QObject(editor) { editor->installEventFilter(this); }
+    bool eventFilter(QObject *object, QEvent *event) override {
+        if (event->type() != QEvent::Paint || preparing) return false;
+        auto *editor = static_cast<QLineEdit *>(object);
+        const auto text = editor->text().isEmpty() ? editor->placeholderText() : editor->text();
+        const auto font = editor->font();
+        auto &current = registration();
+        if (text == previousText && font == previousFont && generation == current.fallbackGeneration) return false;
+        preparing = true;
+        const auto primary = QRawFont::fromFont(font);
+        bool added = false;
+        for (const auto character : text.toUcs4()) {
+            if (primary.isValid() && primary.supportsCharacter(character)) continue;
+            QString stem;
+            switch (QChar::script(character)) {
+            case QChar::Script_Arabic: stem = "NotoNaskhArabic"; break;
+            case QChar::Script_Hebrew: stem = "NotoSerifHebrew"; break;
+            case QChar::Script_Armenian: stem = "NotoSerifArmenian"; break;
+            case QChar::Script_Georgian: stem = "NotoSerifGeorgian"; break;
+            case QChar::Script_Devanagari: stem = "NotoSerifDevanagari"; break;
+            case QChar::Script_Bengali: stem = "NotoSerifBengali"; break;
+            case QChar::Script_Tamil: stem = "NotoSerifTamil"; break;
+            case QChar::Script_Thai: stem = "NotoSerifThai"; break;
+            default: continue;
+            }
+            const bool bold = font.weight() >= QFont::Bold;
+            const bool italic = font.italic() && stem == "NotoSerifTamil";
+            const auto file = stem + (bold ? (italic ? "-BoldItalic.ttf" : "-Bold.ttf")
+                                          : (italic ? "-Italic.ttf" : "-Regular.ttf"));
+            if (current.fallbackSources.contains(file)) continue;
+            const auto read = current.fallbackReaders.value(file);
+            const auto bytes = read ? read() : QByteArray();
+            if (bytes.isEmpty()) continue;
+            const int id = QFontDatabase::addApplicationFontFromData(bytes);
+            if (id < 0) continue;
+            added = true;
+            current.scriptFallbackIds.append(id);
+            current.fallbackSources.insert(file, bytes);
+            qint64 retained = 0;
+            for (const auto &value : current.fallbackSources) retained += value.size();
+            setDiagnosticNativeFontBytes(retained);
+            diagnostic("font-native-fallback-load", {{"file_bytes", bytes.size()}}, false);
+        }
+        if (added) editor->setFont(renewedFont(font));
+        generation = current.fallbackGeneration;
+        previousText = text;
+        previousFont = font;
+        preparing = false;
+        return false;
+    }
+private:
+    bool preparing = false;
+    unsigned generation = 0;
+    QString previousText;
+    QFont previousFont;
+};
+}
+void prepareNativeEditor(QLineEdit *editor) {
+    new EditorFallbacks(editor);
 }
 bool setInterfaceWeight(int steps) {
     const int previous = requestedSteps;

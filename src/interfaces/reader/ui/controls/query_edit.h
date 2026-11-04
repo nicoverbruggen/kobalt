@@ -2,11 +2,12 @@
 #include <QGraphicsProxyWidget>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include "interfaces/reader/ui/style/fonts.h"
 
 namespace kobalt::ui {
 class QueryEdit final : public QLineEdit {
 public:
-    using QLineEdit::QLineEdit;
+    explicit QueryEdit(QWidget *parent = nullptr) : QLineEdit(parent) { prepareNativeEditor(this); }
 
 protected:
     void keyReleaseEvent(QKeyEvent *event) override {

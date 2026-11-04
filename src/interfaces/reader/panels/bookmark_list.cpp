@@ -207,6 +207,7 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     title->style()->unpolish(title);
     title->style()->polish(title);
     auto *input = new QLineEdit(card);
+    kobalt::ui::prepareNativeEditor(input);
     input->setObjectName("rrPinName");
     input->setMaxLength(128);
     input->setText(row.pinName.isEmpty() ? row.chapter : row.pinName);

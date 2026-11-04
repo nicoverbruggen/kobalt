@@ -161,15 +161,12 @@ private:
 };
 }
 void ChoiceScreen::setFontAppearance(const ui::SampleAppearance &appearance) {
-    if (fontAppearance == appearance)
-        return;
+    if (fontAppearance == appearance) return;
     fontAppearance = appearance;
-    if (mode == Mode::Fonts)
-        for (int row = 0; row < labels.size(); ++row) {
-            const int index = itemIndex(row);
-            labels[row]->setAppearance(
-                index >= 0 && index < items.size() && !items[index].placeholder ? appearance : ui::SampleAppearance());
-        }
+    if (mode == Mode::Fonts) {
+        for (auto *label : labels) label->setAppearance(appearance);
+        ui::prepareFontPreviewPage(this);
+    }
 }
 QJsonObject ChoiceScreen::fontSamples() const {
     QJsonObject result;
@@ -200,14 +197,12 @@ ChoiceScreen::ChoiceScreen(QWidget *parent) : kobalt::ui::Panel(parent), navigat
     connect(fontPager->previous, &QPushButton::clicked, this, [this] {
         if (pageCount() > 1) {
             page = fontPager->turnTarget(-1);
-            requestFontPage();
             redraw();
         }
     });
     connect(fontPager->next, &QPushButton::clicked, this, [this] {
         if (pageCount() > 1) {
             page = fontPager->turnTarget(1);
-            requestFontPage();
             redraw();
         }
     });
@@ -279,8 +274,6 @@ void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices, 
     for (int i = 0; i < items.size(); ++i)
         if (!current.isEmpty() && items[i].value == current)
             page = pageForIndex(i);
-    if (mode == Mode::Fonts)
-        requestFontPage();
     redraw();
     for (auto *widget : findChildren<QWidget *>())
         widget->ensurePolished();
@@ -343,18 +336,6 @@ int ChoiceScreen::pageForIndex(int index) const {
         return 0;
     }
     return index / pageSize;
-}
-
-void ChoiceScreen::requestFontPage() {
-    if (!fontPageRequested || mode != Mode::Fonts || page < 0 || page >= fontPages.size())
-        return;
-    QStringList families;
-    for (const int index : fontPages[page]) {
-        const QString family = items[index].value.isEmpty() ? QStringLiteral("Libron") : items[index].value;
-        if (!families.contains(family))
-            families.append(family);
-    }
-    fontPageRequested(families);
 }
 
 void ChoiceScreen::layoutChoices() {
@@ -524,10 +505,11 @@ void ChoiceScreen::redrawFonts() {
                 "QPushButton{min-height:0;padding:0;border:0;border-right:%2px solid palette(light);border-bottom:%2px solid palette(light);background:%1;}")
                 .arg(selectedItem ? "palette(window-text)" : "palette(window)")
                 .arg(int(m::control::border)));
-        const QFont labelFont = fontSample(item.value.isEmpty() ? QStringLiteral("Libron") : item.value);
+        const QFont labelFont = ui::chromeFont(m::text::body);
         label->setFont(labelFont);
         fontCell->helpFont = labelFont;
-        label->setAppearance(item.placeholder ? ui::SampleAppearance() : fontAppearance);
+        label->setAppearance(fontAppearance);
+        label->setPreviewSource(ui::fontPreviewSource(item.value, item.fontFiles));
         label->optical = true;
         label->setWordWrap(true);
         label->setTextFormat(Qt::PlainText);
@@ -578,6 +560,7 @@ void ChoiceScreen::redrawFonts() {
     fontHeader->raise();
     fontSectionBar->raise();
     fontPager->raise();
+    ui::prepareFontPreviewPage(this);
     if (changed && isVisible())
         changed();
 }

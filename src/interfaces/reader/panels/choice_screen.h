@@ -17,6 +17,7 @@ struct Choice {
     int page = -1;
     QString detail = {};
     bool placeholder = false;
+    QStringList fontFiles = {};
 };
 
 // The chapter list covers the header's action row with its own Chapters bar.
@@ -57,7 +58,6 @@ public:
     std::function<void(const QString &)> selected;
     std::function<void()> back, changed;
     std::function<void(const QString &, bool instructions)> defaultRequested;
-    std::function<void(const QStringList &)> fontPageRequested;
     QJsonObject fontSamples() const;
     void setFontAppearance(const ui::SampleAppearance &appearance);
     explicit ChoiceScreen(QWidget *parent);
@@ -80,7 +80,6 @@ private:
     int pageCount() const;
     int itemIndex(int row) const;
     int pageForIndex(int index) const;
-    void requestFontPage();
     void layoutChoices();
     QVector<Choice> items;
     ui::SampleAppearance fontAppearance;

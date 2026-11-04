@@ -1,4 +1,6 @@
 #include "platforms/kobo/common/crash_reports.h"
+#include "support/diagnostics.h"
+#include "support/crash_context.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -27,6 +29,15 @@ int crash(const char *kind, const char *directory, const char *mount) {
     for (const int signal : {SIGSEGV, SIGBUS, SIGABRT})
         std::signal(signal, hostHandler);
     kobalt::installCrashReports(QString::fromLocal8Bit(directory), QString::fromLocal8Bit(mount));
+    kobalt::diagnostic("font-load-start", {{"file_bytes", 123456}, {"retained_bytes", 7890}}, false);
+    const char resource[] = "{\"resource_sample_monotonic_ms\":1,\"rss_kib\":456}\n";
+    kobalt::crashContext::resources.store(resource, sizeof(resource) - 1);
+    // A writer interrupted while owning a slot must not deadlock the handler.
+    kobalt::crashContext::events[15].busy.test_and_set();
+    if (std::strcmp(kind, "sent") == 0) {
+        kill(getpid(), SIGSEGV);
+        for (;;) pause();
+    }
     if (std::strcmp(kind, "abort") == 0)
         std::abort();
     kobalt_test_crash_here();
@@ -80,6 +91,9 @@ int main(int argc, char **argv) {
         !(report.contains("\nsignal: SIGSEGV (") || report.contains("\nsignal: SIGBUS (")) ||
         !report.contains("\nbacktrace:\n") || !report.contains("\nsymbols:\n") || !report.endsWith("end\n"))
         qFatal("The fault report lost its signal, backtrace or symbols:\n%s", report.constData());
+    if (!report.contains("event=font-load-start") || !report.contains("retained_bytes=7890") ||
+        !report.contains("resource_sample_monotonic_ms"))
+        qFatal("Crash context lost an unflushed event or resource sample");
     if (!report.contains("kobalt_test_crash_here"))
         qFatal("The fault report does not name the crashing function:\n%s", report.constData());
 
@@ -112,6 +126,18 @@ int main(int argc, char **argv) {
     if (names.size() != kobalt::crashReportLimit || names.first() != "crash-20000101-000006-1.txt" ||
         names.last().startsWith("crash-20000101-") || !QFile::exists(full + "/notes.txt"))
         qFatal("A full set did not keep the newest reports: %s", qPrintable(names.join(", ")));
+
+#ifdef __linux__
+    // Darwin reports kill(SIGSEGV) as SEGV_ACCERR without sender information.
+    // Linux supplies SI_USER, which is the Kobo report format under test.
+    const auto sent = root.path() + "/sent";
+    const auto sentStatus = crashChild(sent, {}, "sent");
+    if (sentStatus != 100 + SIGSEGV)
+        qFatal("Sent signal did not chain: %d", sentStatus);
+    const auto sentReport = read(sent + '/' + reports(sent).first());
+    if (!sentReport.contains("sender_pid:") || !sentReport.contains("sender_uid:") || sentReport.contains("\naddress:"))
+        qFatal("Sent signal was reported as a fault address");
+#endif
 
     // Without the mounted storage, the report is skipped and the crash still chains.
     const auto unmounted = root.path() + "/unmounted";

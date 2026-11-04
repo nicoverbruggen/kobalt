@@ -165,6 +165,8 @@ int main(int argc, char **argv) {
     if (observed.value("measurement").toInt() != 42 || observed.contains("rss_kib"))
         qFatal("Observer lost fields or sampled memory on the caller");
     kobalt::setDiagnosticObserver({});
+    kobalt::setDiagnosticFontBytes(123456);
+    kobalt::setDiagnosticNativeFontBytes(654321);
     QJsonObject sampledMemory;
     std::atomic<bool> sampled{false};
     kobalt::sampleDiagnosticMemory([&](QJsonObject fields) {
@@ -177,6 +179,17 @@ int main(int argc, char **argv) {
     while (!sampled.load() && sampleWait.elapsed() < 3000) QThread::msleep(10);
     if (!sampled.load() || !sampledMemory.value("rss_kib").isDouble() ||
         !sampledMemory.value("peak_rss_kib").isDouble()) qFatal("Explicit performance memory sample was lost");
+    if (sampledMemory.value("private_font_bytes").toInt() != 123456 ||
+        sampledMemory.value("native_fallback_font_bytes").toInt() != 654321 ||
+        sampledMemory.value("fd_soft_limit").toDouble() <= 0 ||
+        !sampledMemory.value("resource_sample_monotonic_ms").isDouble())
+        qFatal("Resource sample lost published font counters, descriptor limit or timestamp");
+#ifdef __linux__
+    if (sampledMemory.value("fd_count").toInt() <= 0 || sampledMemory.value("fd_highest").toInt() < 0)
+        qFatal("Resource sample lost descriptor usage");
+#endif
+    kobalt::setDiagnosticFontBytes(0);
+    kobalt::setDiagnosticNativeFontBytes(0);
     if (syncCalls.load() != beforeNormal) qFatal("Memory sampling requested a storage sync");
     {
         // Run out of descriptors for real: the report must still list them.
@@ -256,8 +269,8 @@ int main(int argc, char **argv) {
     if (quietBytes.count("\"event\":\"turn\"") != 20 ||
         !quietBytes.contains("\"sequence\":19") ||
         !QRegularExpression("\"event\":\"save\"[^\\n]*\"severity\":\"error\"|\"severity\":\"error\"[^\\n]*\"event\":\"save\"").match(QString::fromUtf8(quietBytes)).hasMatch() ||
-        quietBytes.contains("rss_kib"))
-        qFatal("Normal log lost activity fields or collected detailed memory data");
+        !quietBytes.contains("resource_sample_monotonic_ms"))
+        qFatal("Normal log lost activity fields or resource sampling");
     if (sampledMemory.contains("kobalt_rss_kib") || sampledMemory.contains("kobalt_peak_kib"))
         qFatal("Kobalt's memory share was reported before its base");
     // The base is taken once; later samples report memory above it.

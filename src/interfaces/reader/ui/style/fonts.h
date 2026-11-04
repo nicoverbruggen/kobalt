@@ -3,14 +3,18 @@
 #include <QFont>
 
 class QWidget;
+class QLineEdit;
+
 namespace kobalt {
 class AssetBundle;
 }
 
 namespace kobalt::ui {
+// Load native-editor script fallbacks only when their characters are displayed.
+void prepareNativeEditor(QLineEdit *editor);
 // Consume verified bytes on the GUI thread before constructing reading controls.
-// The registration cache owns its data, so Qt never needs the asset storage
-// to remain mounted.
+// Loaded faces own their bytes. Script fallback readers stay deferred until
+// a native editor needs their characters.
 // `changed` reports replaced interface faces, which widgets drawn before
 // this call must apply again.
 bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed = nullptr);

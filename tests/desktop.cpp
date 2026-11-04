@@ -435,6 +435,11 @@ struct Fixture {
         }, 5000);
     }
     bool click(QWidget *target, QPoint position = QPoint(-1, -1)) {
+        if (target && !QTest::qWaitFor([&] {
+                for (auto *parent = target; parent; parent = parent->parentWidget())
+                    if (parent->property("font_preview_preparing").toBool()) return false;
+                return true;
+            }, 10000)) return false;
         auto *reader = window.readerWindow();
         auto *canvas = window.findChild<QGraphicsView *>();
         if (reader && target && !target->isVisible() && !revealCardRow(target)) return false;
@@ -828,6 +833,10 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     // Model state and visibility can settle before queued layouts and proxy
     // cache updates. Deliver those updates before rendering the visible frame.
     QCoreApplication::processEvents();
+    if (!QTest::qWaitFor([] { return ui::fontPreviewPendingCount() == 0; }, 10000)) {
+        qCritical() << "Font preview jobs did not finish before capture";
+        return false;
+    }
     const auto destination = captureDirectory + '/' + name + ".png";
     QWidget *surface = nativeScreen ? nativeScreen : fixture.window.readerWindow();
     auto *start = fixture.window.findChild<android::StartScreen *>();
@@ -845,7 +854,9 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     const int band = start && surface == start->library() ? expected.height() - surface->height() : 0;
     if (!surface || !surface->isVisible() || (preset < 1 || preset > 5) || band < 0 || (band && preset != 3) ||
         (surface->size() + QSize(0, band) != expected && surface->size() != turned)) {
-        qCritical() << "Screenshot surface does not have the native reader dimensions:" << name;
+        qCritical() << "Screenshot surface does not have the native reader dimensions:" << name
+                    << "actual" << (surface ? surface->size() : QSize()) << "expected" << expected
+                    << "visible" << (surface && surface->isVisible());
         return false;
     }
     for (auto *child : surface->findChildren<QWidget *>()) {

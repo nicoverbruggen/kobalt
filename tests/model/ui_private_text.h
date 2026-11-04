@@ -444,6 +444,51 @@ inline void checkPrivateInterfaceText(const kobalt::AssetBundle &assets) {
                         "Line fitting found a different break from a full scan");
             }
     }
+    // Registering a large catalog must not retain any of its file contents.
+    const auto beforeCatalog = privateInterfaceFontBytes();
+    QTemporaryDir catalogDirectory;
+    require(catalogDirectory.isValid(), "Cannot create font catalog fixture");
+    QStringList catalogFiles;
+    for (int i = 0; i < 4; ++i) {
+        const auto path = catalogDirectory.path() + QString("/font-%1.ttf").arg(i);
+        require(QFile::copy(assets.file("fonts/IBMPlexSans-Regular.ttf"), path), "Cannot copy font fixture");
+        QFile padded(path);
+        require(padded.open(QIODevice::ReadWrite) && padded.resize(18 * 1024 * 1024), "Cannot pad font fixture");
+        padded.close();
+        require(registerPrivateInterfaceFont(path, QString("Budget Test %1").arg(i)), "Cannot register budget fixture");
+        catalogFiles.append(path);
+    }
+    require(privateInterfaceFontBytes() == beforeCatalog, "Font metadata registration retained file bytes");
+    const auto oversized = catalogDirectory.filePath("oversized.ttf");
+    require(QFile::copy(catalogFiles.first(), oversized), "Cannot copy oversized font fixture");
+    QFile oversizedFile(oversized);
+    require(oversizedFile.open(QIODevice::ReadWrite) && oversizedFile.resize(privateInterfaceFontBudget + 1),
+            "Cannot grow oversized font fixture");
+    oversizedFile.close();
+    require(!registerPrivateInterfaceFont(oversized, "Oversized Test"), "Oversized font was accepted");
+    const auto damaged = catalogDirectory.filePath("damaged.ttf");
+    require(QFile::copy(catalogFiles.first(), damaged) && registerPrivateInterfaceFont(damaged, "Damaged Test"),
+            "Cannot register changing font fixture");
+    QFile damagedFile(damaged);
+    require(damagedFile.open(QIODevice::ReadWrite) && damagedFile.write("bad!", 4) == 4,
+            "Cannot damage font after metadata discovery");
+    damagedFile.close();
+    QFont damagedFont("Damaged Test");
+    damagedFont.setPixelSize(32);
+    renderPrivateText(QStringLiteral("Unreadable face"), damagedFont);
+    // The later reload cycles must reclaim this invalid source too.
+
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        for (int i = 0; i < catalogFiles.size(); ++i) {
+            QFont candidate(QString("Budget Test %1").arg(i));
+            candidate.setPixelSize(32);
+            const auto result = renderPrivateText(QString("Candidate %1 round %2").arg(i).arg(cycle), candidate);
+            require(!result.image.isNull() && result.missingGlyphs == 0, "Evicted font did not reload");
+            require(privateInterfaceFontBytes() <= privateInterfaceFontBudget, "Font cache exceeded its byte budget");
+        }
+        const auto multilingual = renderPrivateText(QStringLiteral("中文 한국어 العربية हिन्दी"), font);
+        require(multilingual.missingGlyphs == 0, "Fallback faces were lost after font cache eviction");
+    }
     require(registerPrivateInterfaceFont(assets.file("fonts/NotoSerifCJK-Regular.ttc"), "Noto Serif CJK SC"),
             "Cannot retain the CJK collection");
     QFont cjkFont("Noto Serif CJK SC");
@@ -473,9 +518,11 @@ inline void checkPrivateInterfaceText(const kobalt::AssetBundle &assets) {
     require(registerPrivateInterfaceFont(readingPath, "Retained Reading Test"),
             "Cannot retain a TrueType preview font");
     require(fontFamilies() == familiesBefore, "Private reading registration changed Qt's font database");
-    require(QFile::remove(readingPath), "Cannot remove private reading-font fixture");
+
     QFont retainedReading("Retained Reading Test");
     retainedReading.setPixelSize(32);
+    renderPrivateText(QStringLiteral("Hox"), retainedReading);
+    require(QFile::remove(readingPath), "Cannot remove private reading-font fixture");
     const auto retainedSample = renderPrivateText(QStringLiteral("Hox"), retainedReading);
     require(needsPrivateText(QStringLiteral("Hox"), retainedReading) && !retainedSample.image.isNull() &&
                 retainedSample.missingGlyphs == 0,

@@ -1,6 +1,7 @@
 #include "crash_reports.h"
 #include "build_info.h"
 #include "support/diagnostics.h"
+#include "support/crash_context.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -424,11 +425,20 @@ void writeReport(int signal, siginfo_t *info, void *context) {
     if (info) {
         out << "code: ";
         out.dec(info->si_code);
-        out << "\naddress: ";
-        out.hex(uintptr_t(info->si_addr));
+        if (info->si_code <= 0 || info->si_code == SI_USER || info->si_code == SI_QUEUE) {
+            out << "\nsender_pid: ";
+            out.dec(info->si_pid);
+            out << "\nsender_uid: ";
+            out.dec(info->si_uid);
+        } else if (signal == SIGSEGV || signal == SIGBUS || signal == SIGILL || signal == SIGFPE) {
+            out << "\naddress: ";
+            out.hex(uintptr_t(info->si_addr));
+        }
         out << "\n";
     }
 
+    out.flush();
+    crashContext::writeTo(fd);
     readMappings();
     const auto registers = writeRegisters(context);
     out << "\npc ";
@@ -494,14 +504,8 @@ void writeReport(int signal, siginfo_t *info, void *context) {
 bool repeatsOnReturn(int signal, const siginfo_t *info) {
     if (signal == SIGABRT || !info || info->si_code <= 0)
         return false;
-#ifdef SI_USER
-    if (info->si_code == SI_USER)
+    if (info->si_code == SI_USER || info->si_code == SI_QUEUE)
         return false;
-#endif
-#ifdef SI_QUEUE
-    if (info->si_code == SI_QUEUE)
-        return false;
-#endif
     return true;
 }
 void handle(int signal, siginfo_t *info, void *context) {

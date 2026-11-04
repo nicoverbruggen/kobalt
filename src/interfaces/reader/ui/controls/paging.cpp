@@ -57,6 +57,18 @@ public:
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override {
+        // An application-wide filter: check the event type first.
+        switch (event->type()) {
+        case QEvent::TouchCancel:
+        case QEvent::Hide:
+        case QEvent::WindowDeactivate:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseMove:
+        case QEvent::MouseButtonRelease:
+            break;
+        default:
+            return false;
+        }
         auto *widget = qobject_cast<QWidget *>(object);
         if (!widget)
             return false;

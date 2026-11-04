@@ -402,6 +402,12 @@ private:
         controller.open(path, pixels(), openedKey, restart);
     }
     bool eventFilter(QObject *object, QEvent *event) override {
+        // An application-wide filter: check the event type first. A new
+        // branch below for another type must add it here.
+        const auto type = event->type();
+        if (type != QEvent::Close && type != QEvent::Show && type != QEvent::Hide && type != QEvent::EnabledChange &&
+            type != QEvent::PaletteChange && type != QEvent::Resize)
+            return QWidget::eventFilter(object, event);
         auto *reader = controller.window();
         if (reader && object == reader && event->type() == QEvent::Close && reader->updatesEnabled())
             surfaceHandoff.capture();

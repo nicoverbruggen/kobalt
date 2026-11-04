@@ -177,7 +177,10 @@ public:
 
 private:
     bool eventFilter(QObject *object, QEvent *event) override {
-        if (reader && reader->isVisible() && (event->type() == QEvent::Polish || event->type() == QEvent::Show)) {
+        // An application-wide filter: check the event type first.
+        if (event->type() != QEvent::Polish && event->type() != QEvent::Show)
+            return false;
+        if (reader && reader->isVisible()) {
             // Nickel's dialogs keep Nickel's Large Print scale over the reader.
             auto *widget = qobject_cast<QWidget *>(object);
             if (widget && widget->isWindow() && nativeDialog(widget) && !ownedByReader(widget))

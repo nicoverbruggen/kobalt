@@ -38,14 +38,14 @@ public:
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override {
-        if (object == reader && event->type() == QEvent::Close) {
+        if (event->type() == QEvent::Close && object == reader) {
             reader->setProperty("kobalt_native_browser", false);
             reader.clear();
             canRestore = {};
             waiting = false;
         }
-        auto *widget = qobject_cast<QWidget *>(object);
-        if (waiting && widget && event->type() == QEvent::Show) {
+        auto *widget = waiting && event->type() == QEvent::Show ? qobject_cast<QWidget *>(object) : nullptr;
+        if (widget) {
             QWidget *browserDialog = nullptr;
             if (widget->objectName() == "N3Dialog" && widget->findChild<QWidget *>("N3BrowserView"))
                 browserDialog = widget;
@@ -61,7 +61,7 @@ protected:
                 hideReader();
             }
         }
-        if (object == dialog && (event->type() == QEvent::Hide || event->type() == QEvent::Destroy)) {
+        if ((event->type() == QEvent::Hide || event->type() == QEvent::Destroy) && object == dialog) {
             // Sleep hides Nickel's whole page stack without closing its
             // browser. Retain the handoff until that dialog really closes.
             if (event->type() == QEvent::Hide && canRestore && !canRestore())

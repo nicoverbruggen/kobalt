@@ -669,6 +669,24 @@ bool Reader::event(QEvent *event) {
 
 bool Reader::eventFilter(QObject *watched, QEvent *event) {
     const auto type = event->type();
+    // This filter sees every event in the application. Leave at once for the
+    // frequent types it never handles. A new branch for one of these types
+    // must remove it from this list.
+    switch (type) {
+    case QEvent::Timer:
+    case QEvent::MetaCall:
+    case QEvent::SockAct:
+    case QEvent::UpdateRequest:
+    case QEvent::UpdateLater:
+    case QEvent::DeferredDelete:
+    case QEvent::LayoutRequest:
+    case QEvent::ChildAdded:
+    case QEvent::ChildPolished:
+    case QEvent::ChildRemoved:
+        return false;
+    default:
+        break;
+    }
     if (type == QEvent::TouchBegin || type == QEvent::TouchUpdate || type == QEvent::MouseButtonPress ||
         type == QEvent::KeyPress) {
         kobalt::diagnosticInput();
@@ -769,7 +787,7 @@ bool Reader::eventFilter(QObject *watched, QEvent *event) {
     }
     // Reflow temporarily blocks rotation without repainting its buttons in
     // disabled colors. Keep the selected orientation visible until it changes.
-    auto *rotationButton = qobject_cast<QPushButton *>(watched);
+    auto *rotationButton = controlInput ? qobject_cast<QPushButton *>(watched) : nullptr;
     if (controlInput && rotationButton &&
         (rotationButtons.contains(rotationButton) || rotationButton == autoRotateOption) && rotationControlsBlocked()) {
         event->accept();

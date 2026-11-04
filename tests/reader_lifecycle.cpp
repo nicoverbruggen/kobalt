@@ -3422,8 +3422,10 @@ private slots:
         std::function<void(WifiStatus)> wifiChanged;
         std::function<void(bool)> bluetoothChanged;
         QString clockText = "09:00";
+        int timeOfDay = 9 * 3600000;
         host.configureServices = [&](ReaderHostServices &services) {
             services.clock = [&] { return clockText; };
+            services.millisecondsOfDay = [&] { return timeOfDay; };
             services.observeWifi = [&](QObject *, std::function<void(WifiStatus)> changed) {
                 wifiChanged = changed;
                 changed({true, true, 4});
@@ -3493,11 +3495,13 @@ private slots:
         // Minute changes keep the same centering while the menu stays open.
         const auto sessionBounds = session->geometry();
         auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
+        timeOfDay += 60000;
         QVERIFY(timer && QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
         QVERIFY(session->text().isEmpty());
         QVERIFY(!session->isVisible());
         QCOMPARE(session->geometry(), sessionBounds);
         clockText = "9:01";
+        timeOfDay += 60000;
         QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
         QCOMPARE(clock->text(), clockText);
         QCOMPARE(clock->width(), clock->sizeHint().width());

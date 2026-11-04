@@ -246,6 +246,10 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
               services.devicePreview = [this] {
                   return screenPreset != 0;
               };
+              // An emulated sleep or power-off suspends the reader as on Kobo.
+              services.suspended = [this, host = services.suspended] {
+                  return deviceAsleep || poweredOff || (host && host());
+              };
               services.pageButtons = [this] {
                   return screenPreset == 2;
               };
@@ -287,6 +291,14 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     deviceFrame = new DeviceFrame(stage);
     deviceFrame->hide();
     stack = new QStackedWidget(stage);
+    // Covers the screen while the emulated device sleeps or is off, and
+    // takes the taps a sleeping device would ignore.
+    offScreen = new QLabel(stage);
+    offScreen->setObjectName("desktopOffScreen");
+    offScreen->setAlignment(Qt::AlignCenter);
+    offScreen->setAutoFillBackground(true);
+    offScreen->setPalette(palette);
+    offScreen->hide();
     connect(deviceFrame->previous, &QPushButton::clicked, this, [this] {
         turnPage(-1, true);
     });
@@ -371,6 +383,20 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
                                tr("Saved to %1").arg(QDir::toNativeSeparators(path)), screenshot);
         }
     });
+    sleepButton = new QPushButton(tr("Sleep"), pickers);
+    sleepButton->setObjectName("desktopSleep");
+    sleepButton->setCheckable(true);
+    sleepButton->setFocusPolicy(Qt::NoFocus);
+    sleepButton->setToolTip(tr("Put the e-reader preview to sleep, or wake it, as the power button does on a Kobo."));
+    choices->addWidget(sleepButton);
+    connect(sleepButton, &QPushButton::clicked, this, [this](bool checked) { setDeviceAsleep(checked); });
+    powerButton = new QPushButton(tr("Power off"), pickers);
+    powerButton->setObjectName("desktopPowerOff");
+    powerButton->setCheckable(true);
+    powerButton->setFocusPolicy(Qt::NoFocus);
+    powerButton->setToolTip(tr("Power the e-reader preview off, or on again. The book closes as on a Kobo."));
+    choices->addWidget(powerButton);
+    connect(powerButton, &QPushButton::clicked, this, [this](bool checked) { setPoweredOff(checked); });
     layout->addWidget(pickers, 0, 1);
     layout->addWidget(version, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
     toolbar->addWidget(contents);
@@ -586,6 +612,62 @@ QString Window::saveScreenshot(const QString &directory, QString *error) {
 bool Window::phonePreview() const {
     return screenPreset == 3;
 }
+bool Window::ereaderPreview() const {
+    return screenPreset != 0 && !phonePreview();
+}
+void Window::setDeviceAsleep(bool asleep) {
+    auto *reader = controller.window();
+    if (asleep == deviceAsleep || poweredOff || (asleep && (!reader || !ereaderPreview()))) {
+        updateDeviceControls();
+        return;
+    }
+    if (asleep) {
+        // The same order as the Kobo host: the reader prepares for sleep,
+        // then hands the screen to the sleep view.
+        deviceAsleep = true;
+        reader->sleepReader();
+        reader->sleepViewReady();
+        offScreen->setText(tr("Asleep"));
+        offScreen->show();
+        offScreen->raise();
+    } else {
+        offScreen->hide();
+        if (reader) reader->prepareWake();
+        deviceAsleep = false;
+        if (reader) reader->wakeReader();
+        sizeCanvas();
+    }
+    setPreviewControlsEnabled(!deviceAsleep);
+}
+void Window::setPoweredOff(bool off) {
+    if (off == poweredOff || deviceAsleep || (off && !ereaderPreview())) {
+        updateDeviceControls();
+        return;
+    }
+    poweredOff = off;
+    if (off) {
+        offScreen->setText(tr("Powered off"));
+        offScreen->show();
+        offScreen->raise();
+        // A Kobo power-off asks the reader to finish its saves, the same
+        // call the controller makes when it closes the book.
+        controller.close();
+    } else {
+        offScreen->hide();
+    }
+    setPreviewControlsEnabled(!off);
+}
+void Window::updateDeviceControls() {
+    const bool ereader = ereaderPreview();
+    sleepButton->setVisible(ereader);
+    powerButton->setVisible(ereader);
+    sleepButton->setEnabled(ereader && !poweredOff && (deviceAsleep || controller.window()));
+    powerButton->setEnabled(ereader && !deviceAsleep && (poweredOff || controller.idle() || controller.window()));
+    sleepButton->setChecked(deviceAsleep);
+    sleepButton->setText(deviceAsleep ? tr("Wake") : tr("Sleep"));
+    powerButton->setChecked(poweredOff);
+    powerButton->setText(poweredOff ? tr("Power on") : tr("Power off"));
+}
 QSize Window::pixels() const {
     if (screenPreset) {
         QSize size = screenPreset == 2 ? QSize(1264, 1680) : phonePreview() ? QSize(720, 1600) : QSize(1072, 1448);
@@ -623,6 +705,7 @@ void Window::sizeCanvas() {
     canvas->setNativePixels(renderingDpi != 0);
     canvas->setTransform(QTransform::fromScale(scale, scale));
     canvas->setSceneRect(QRectF(QPointF(), pixels()));
+    offScreen->setGeometry(stack->geometry());
     // The library uses the reader's controls, so it gets the reader's size and scale.
     // Android shows its status bar over the Library, so the phone's camera
     // band stays outside it.
@@ -638,10 +721,13 @@ void Window::selectScreen(int index) {
     setTouchCursor(screenPreset && underMouse(), QApplication::mouseButtons() & Qt::LeftButton);
     rotateAction->setEnabled(screenPicker->isEnabled() && screenPreset != 0);
     sizeCanvas();
+    updateDeviceControls();
     if (auto *reader = controller.window())
         reader->refreshHostPresentation();
 }
 void Window::setPreviewControlsEnabled(bool enabled) {
+    enabled = enabled && !deviceAsleep && !poweredOff;
+    updateDeviceControls();
     screenPicker->setEnabled(enabled);
     resolutionPicker->setEnabled(enabled);
     textSizePicker->setEnabled(enabled);

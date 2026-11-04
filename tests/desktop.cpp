@@ -6982,6 +6982,47 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(image.pixelColor(ribbon.left() - 2, 0), paper);
         }
     }
+    // An e-reader preview sleeps, wakes and powers off through the reader
+    // calls the Kobo host makes. Phone and window previews have no such controls.
+    void deviceEmulation() {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        picker->setCurrentIndex(1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *sleep = fixture.window.findChild<QPushButton *>("desktopSleep");
+        auto *power = fixture.window.findChild<QPushButton *>("desktopPowerOff");
+        auto *off = fixture.window.findChild<QWidget *>("desktopOffScreen");
+        QVERIFY(sleep && power && off);
+        QVERIFY(!sleep->isHidden() && sleep->isEnabled() && !power->isHidden() && power->isEnabled());
+        const auto position = fixture.state().value("position");
+        sleep->click();
+        QVERIFY(!off->isHidden());
+        QVERIFY(fixture.window.readerWindow()->isHidden());
+        QVERIFY(!picker->isEnabled() && !power->isEnabled());
+        QCOMPARE(sleep->text(), QStringLiteral("Wake"));
+        sleep->click();
+        QVERIFY(off->isHidden());
+        QTRY_VERIFY(!fixture.window.readerWindow()->isHidden());
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(picker->isEnabled());
+        QCOMPARE(fixture.state().value("position"), position);
+        power->click();
+        QVERIFY(!off->isHidden() && !sleep->isEnabled());
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.window.idle(), 10000);
+        QVERIFY(!fixture.window.readerWindow());
+        QCOMPARE(power->text(), QStringLiteral("Power on"));
+        power->click();
+        QVERIFY(off->isHidden() && picker->isEnabled());
+        QVERIFY(!sleep->isEnabled());
+        picker->setCurrentIndex(3);
+        QVERIFY(sleep->isHidden() && power->isHidden());
+        picker->setCurrentIndex(0);
+        QVERIFY(sleep->isHidden() && power->isHidden());
+    }
     void desktopControls() {
         Fixture fixture;
         QVERIFY(fixture.prepared);

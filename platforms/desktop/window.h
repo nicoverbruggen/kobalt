@@ -11,6 +11,8 @@ class QComboBox;
 class QScreen;
 class QActionGroup;
 class QAction;
+class QLabel;
+class QPushButton;
 namespace kobalt::android {
 class WidgetCanvas;
 class StartScreen;
@@ -68,6 +70,16 @@ private:
     QMetaObject::Connection screenChanged, logicalDpiChanged, physicalDpiChanged;
     bool closing = false, repairPending = false, failed = false;
     bool phonePreview() const;
+    // An e-reader preview can sleep, wake and power off as a Kobo does. The
+    // reader gets the same calls as from the Kobo host, so sleep and
+    // shutdown behavior can be checked on the Mac.
+    QPushButton *sleepButton, *powerButton;
+    QLabel *offScreen;
+    bool deviceAsleep = false, poweredOff = false;
+    bool ereaderPreview() const;
+    void setDeviceAsleep(bool asleep);
+    void setPoweredOff(bool off);
+    void updateDeviceControls();
     QSize pixels() const;
     void sizeCanvas();
     void watchScreen(QScreen *screen);

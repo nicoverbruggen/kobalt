@@ -21,6 +21,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlRecord>
+#include <cmath>
 #include <dlfcn.h>
 
 namespace kobalt {
@@ -62,6 +63,10 @@ struct Api {
     // closes, with enabled set because the book's storage is connected.
     bool (*recentBook)(const QByteArray &, const QString &, bool, bool) = symbol<decltype(recentBook)>(
         "_ZN15ActivityManager22makeRecentBookActivityERK10QByteArrayRK7QStringbb");
+    // Optional. Firmware 4.46 writes a KEPUB chapter row's ___PercentRead
+    // with it when a book closes or saves its bookmark.
+    void (*chapterPercent)(const QString &, int, const QString &) =
+        symbol<decltype(chapterPercent)>("_ZN17ShortcoverManager17updatePercentReadERK7QStringiS2_");
     bool (*update)(const QString &, const QVariantMap &, const QVariantMap &, const QString &) =
         symbol<decltype(update)>("_ZN13VolumeManager12updateFieldsERK7QStringRK4QMapIS0_8QVariantES7_S2_");
     void *(*refresh)(const QString &) =
@@ -86,6 +91,40 @@ struct Api {
 const Api &api() {
     static const Api value;
     return value;
+}
+// Firmware 4 names a KEPUB chapter row "<book>!<OPF folder>!<path from the
+// OPF>", where a sideloaded book's part is its path without "file://". A
+// position holds the path from the archive root, so find the row of this book
+// whose last two parts join to it. Other books have no such rows.
+QString chapterRow(const QString &database, const QString &book, const QString &file) {
+    QString result;
+    const auto name = QStringLiteral("kobalt-chapter-row");
+    {
+        auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+        db.setDatabaseName(database);
+        db.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
+        if (db.open()) {
+            QSqlQuery query(db);
+            query.prepare("SELECT ContentID FROM content WHERE BookID = ? AND ContentType = 9");
+            query.addBindValue(book);
+            if (query.exec()) {
+                while (result.isEmpty() && query.next()) {
+                    const auto id = query.value(0).toString();
+                    const int first = id.indexOf(QLatin1Char('!'));
+                    const auto rest = first < 0 ? QString() : id.mid(first + 1);
+                    const int split = rest.indexOf(QLatin1Char('!'));
+                    if (split < 0)
+                        continue;
+                    const auto folder = rest.left(split), path = rest.mid(split + 1);
+                    if ((folder.isEmpty() ? path : folder + QLatin1Char('/') + path) == file)
+                        result = id;
+                }
+            }
+        }
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(name);
+    return result;
 }
 // Firmware 4 stores a chapter path and an optional element ID, for example
 // "OEBPS/chapter1.xhtml#kobo.9.3". It has no text offset. The shared reader
@@ -264,6 +303,15 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         const double chapter = wordEstimates::chapterProgress(*activity);
         if (chapter >= 0)
             native.setChapterProgress(&volume, QVariant(chapter));
+    }
+    // Nickel's reader also writes the current KEPUB chapter's percentage on its
+    // own row, in this transaction, while the book is not finished.
+    if (!timeOnly && !finished && activity && native.chapterPercent) {
+        const double chapter = wordEstimates::chapterProgress(*activity);
+        const auto row = chapter < 0 ? QString()
+            : chapterRow(native.connection(db, false).databaseName(), book, location.section(QLatin1Char('#'), 0, 0));
+        if (!row.isEmpty())
+            native.chapterPercent(row, int(std::floor(chapter * 100)), db);
     }
     auto after = native.values(&volume);
     if (timeOnly) {

@@ -75,6 +75,7 @@
 #include <QSensorManager>
 #endif
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QSlider>
 #include <QStyle>
 #include <QTemporaryDir>
@@ -3387,6 +3388,124 @@ private slots:
         QTRY_VERIFY(wifi->isVisible());
         wifiChanged({false, false, -1});
         QTRY_VERIFY(!wifi->isVisible());
+    }
+    void readingTimeStatus_data() {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<int>("ppi");
+        QTest::addColumn<qreal>("textScale");
+        QTest::addColumn<QSize>("viewport");
+        for (bool dark : {false, true})
+            for (int ppi : {300, 212})
+                for (qreal scale : {1.0, 1.5})
+                    for (QSize viewport : {QSize(1072, 1448), QSize(1448, 600)})
+                        QTest::newRow(qPrintable(QString("%1-%2-%3-%4x%5")
+                            .arg(dark ? "dark" : "light").arg(ppi).arg(scale).arg(viewport.width()).arg(viewport.height())))
+                            << dark << ppi << scale << viewport;
+    }
+    void readingTimeStatus() {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        QFETCH(qreal, textScale);
+        QFETCH(QSize, viewport);
+        const int previousDensity = ui::density();
+        const qreal previousTextScale = ui::textScale();
+        const auto restore = qScopeGuard([&] {
+            ui::setDensity(previousDensity);
+            ui::setLargeText(previousTextScale);
+        });
+        ui::setDensity(ppi);
+        ui::setLargeText(textScale);
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.preferences(), {{"dark_mode", dark}}));
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{host};
+        std::function<void(WifiStatus)> wifiChanged;
+        std::function<void(bool)> bluetoothChanged;
+        QString clockText = "09:00";
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.clock = [&] { return clockText; };
+            services.observeWifi = [&](QObject *, std::function<void(WifiStatus)> changed) {
+                wifiChanged = changed;
+                changed({true, true, 4});
+            };
+            services.observeBluetooth = [&](QObject *, std::function<void(bool)> changed) {
+                bluetoothChanged = changed;
+                changed(true);
+            };
+        };
+        const QSize size(ui::px(viewport.width()), ui::px(viewport.height()));
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), size);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), size);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(clickAt(canvas, QPoint(size.width() / 2, size.height() / 2)));
+        auto *session = host.window()->findChild<QLabel *>("rrMenuSession");
+        auto *clock = host.window()->findChild<QLabel *>("rrMenuClock");
+        auto *wifi = host.window()->findChild<QWidget *>("rrMenuWifi");
+        auto *bluetooth = host.window()->findChild<QWidget *>("rrMenuBluetooth");
+        auto *battery = host.window()->findChild<QWidget *>("rrMenuBattery");
+        QVERIFY(session && clock && wifi && bluetooth && battery);
+        QCOMPARE(clock->width(), clock->sizeHint().width());
+        const auto font = session->font();
+        const auto batteryBounds = battery->geometry();
+        const auto bluetoothBounds = bluetooth->geometry();
+        const auto wifiBounds = wifi->geometry();
+        for (int minutes : {5, 15, 120}) {
+            // Use the production wording without waiting for a long reading session.
+            session->setText(strings::get("reader.session_minutes").arg(minutes));
+            for (int radios : {3, 1, 2, 0, 3}) {
+                bluetoothChanged(!(radios & 2));
+                wifiChanged({bool(radios & 1), bool(radios & 1), 4});
+                bluetoothChanged(radios & 2);
+                QTRY_VERIFY(session->isVisible());
+                QCOMPARE(session->font(), font);
+                QCOMPARE(battery->geometry(), batteryBounds);
+                QWidget *right = wifi->isVisible() ? wifi : bluetooth->isVisible() ? bluetooth : battery;
+                if (session->width() > 0) {
+                    QVERIFY(session->x() >= clock->geometry().right() + 1);
+                    QVERIFY(session->geometry().right() < right->x());
+                }
+                const int available = right->x() - clock->geometry().right() - 1 - 2 * int(ui::metrics::chrome::inset);
+                if (session->sizeHint().width() <= available)
+                    QVERIFY2(session->width() >= session->sizeHint().width(), qPrintable(session->text()));
+                if (available >= 0) {
+                    const qreal midpoint = (clock->geometry().right() + 1 + right->x()) / 2.;
+                    QVERIFY(qAbs(QRectF(session->geometry()).center().x() - midpoint) <= .5);
+                }
+                if (radios == 3) {
+                    QCOMPARE(bluetooth->geometry(), bluetoothBounds);
+                    QCOMPARE(wifi->geometry(), wifiBounds);
+                }
+                const auto capture = qEnvironmentVariable("KOBALT_READING_TIME_CAPTURE_DIR");
+                if (!capture.isEmpty()) {
+                    QVERIFY(QDir().mkpath(capture));
+                    QVERIFY(host.window()->grab(QRect(0, 0, size.width(), ui::textPx(60))).save(
+                        capture + QString("/reading-time-%1-%2-%3-%4-%5%6.png")
+                            .arg(dark ? "dark" : "light").arg(ppi).arg(textScale).arg(minutes).arg(radios)
+                            .arg(isShortHeight(size.height(), ppi) ? "-short" : "")));
+                }
+            }
+        }
+        // Minute changes keep the same centering while the menu stays open.
+        const auto sessionBounds = session->geometry();
+        auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
+        QVERIFY(timer && QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QVERIFY(session->text().isEmpty());
+        QVERIFY(!session->isVisible());
+        QCOMPARE(session->geometry(), sessionBounds);
+        clockText = "9:01";
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(clock->text(), clockText);
+        QCOMPARE(clock->width(), clock->sizeHint().width());
+        const int available = wifi->x() - clock->geometry().right() - 1 - 2 * int(ui::metrics::chrome::inset);
+        if (available >= 0) {
+            const qreal midpoint = (clock->geometry().right() + 1 + wifi->x()) / 2.;
+            QVERIFY(qAbs(QRectF(session->geometry()).center().x() - midpoint) <= .5);
+        }
     }
     void remoteKeyActivityRequiresActiveReading() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);

@@ -558,7 +558,8 @@ void Reader::updateGraph() {
 
 void Reader::updateMenuStatus() {
     const auto time = services.clock();
-    if (menuClock->text() != time)
+    const bool clockChanged = menuClock->text() != time;
+    if (clockChanged)
         menuClock->setText(time);
     const auto battery = services.battery();
     menuBattery->setStatus(battery.percent, battery.charging);
@@ -567,6 +568,8 @@ void Reader::updateMenuStatus() {
     if (menuSession->text() != session)
         menuSession->setText(session);
     menuSession->setVisible(!hideNativeStatus() && !session.isEmpty());
+    if (clockChanged && navigation && topControls->isVisible())
+        navigation->updateSessionGeometry();
     if (chapterGraph && chapterGraph->isVisible())
         updateReadingStats();
 }

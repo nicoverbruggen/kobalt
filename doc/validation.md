@@ -1,5 +1,7 @@
 # Native validation
 
+`lifecycle.readingTimeStatus` checks visible reading-time text at Clara BW width and in a short landscape viewport with one-, two- and three-digit minutes and each Wi-Fi/Bluetooth combination. It checks text fitting where space permits, centering between the clock and the visible status icons, clock and icon clearance, unchanged typography and icon positions, and session updates while the menu stays open, in both themes at 212 and 300 PPI with normal and 150% interface text. Set `KOBALT_READING_TIME_CAPTURE_DIR` to an absolute directory to capture the status strip. These headless checks do not verify physical Kobo firmware.
+
 On Linux, `platform.screensaver-loader` verifies that Screensaver discovery opens library handles only after `dl_iterate_phdr` returns. This prevents a loader-lock inversion with concurrent library loading. The shutdown tests retain coverage of both Screensaver hook orders and delayed saves.
 
 `platform.startup-recovery` checks repeated interrupted initialization, successful retries, later stock-reader crashes, normal shutdown, legacy marker migration, timestamp-independent failure counts, a retry after damaged records, durable removal notices and their cleanup after recovery, failed notice writes, and refusal of unsafe or unavailable storage. It exercises the production recovery file handling without a Kobo. Full loader removal and restart behavior also require device validation.

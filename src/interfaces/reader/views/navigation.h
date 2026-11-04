@@ -125,6 +125,7 @@ public:
         scrubber = widget;
     }
     void update(QSize size, const NavigationState &state);
+    void updateSessionGeometry();
     int navigationTop() const {
         return bar->y();
     }

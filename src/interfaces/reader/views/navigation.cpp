@@ -436,8 +436,6 @@ void Navigation::update(QSize size, const NavigationState &state) {
     const int statusRight = size.width() - (inlineStatus ? rightActions * int(c::cellWidth) : 0) - c::inset;
     clock->setGeometry(statusLeft, statusTop, ui::textPx(160), ui::metrics::panel::statusHeight);
     battery->move(statusRight - battery->width(), statusTop);
-    int sessionInset = inlineStatus ? qMax(statusLeft + ui::textPx(196) - int(c::inset), size.width() - battery->x() + int(c::inset))
-                                    : ui::textPx(196);
     const int statusGap = ui::metrics::panel::bluetoothGap;
     QWidget *previousStatus = nullptr;
     const auto placeStatus = [&](QWidget *indicator) {
@@ -445,7 +443,6 @@ void Navigation::update(QSize size, const NavigationState &state) {
             : battery->x() - statusGap - (int(ui::metrics::panel::bluetoothIconSize) + indicator->width()) / 2;
         indicator->move(x, statusTop);
         previousStatus = indicator;
-        sessionInset = qMax(sessionInset, size.width() - indicator->x() + int(c::inset));
     };
     if (bluetooth) {
         bluetooth->setVisible(statusVisible && bluetooth->active());
@@ -458,8 +455,7 @@ void Navigation::update(QSize size, const NavigationState &state) {
         if (wifi->active())
             placeStatus(wifi);
     }
-    session->setGeometry(sessionInset, statusTop, qMax(0, size.width() - 2 * sessionInset),
-                         ui::metrics::panel::statusHeight);
+    updateSessionGeometry();
     settings->setGeometry(size.width() - c::cellWidth, statusHeight(), c::cellWidth, c::actionHeight);
     bookmarks->setGeometry(size.width() - 2 * c::cellWidth, statusHeight(), c::cellWidth, c::actionHeight);
     if (annotate) {
@@ -553,6 +549,19 @@ void Navigation::update(QSize size, const NavigationState &state) {
         upperEdge->hide();
         lowerEdge->hide();
     }
+}
+void Navigation::updateSessionGeometry() {
+    clock->resize(qMin(ui::textPx(160), clock->sizeHint().width()), clock->height());
+    int right = battery->x();
+    if (bluetooth && bluetooth->active())
+        right = qMin(right, bluetooth->x());
+    if (wifi && wifi->active())
+        right = qMin(right, wifi->x());
+    right = qMax(0, right - int(c::inset));
+    const int left = qMin(right, clock->geometry().right() + 1 + int(c::inset));
+    // Center the session in the gap after the time text, without reserving
+    // the clock's unused width or moving the status icons.
+    session->setGeometry(left, clock->y(), right - left, ui::metrics::panel::statusHeight);
 }
 bool Navigation::contains(QPoint global) const {
     return bar->isVisible() && QRect(bar->mapToGlobal(QPoint()), bar->size()).contains(global);

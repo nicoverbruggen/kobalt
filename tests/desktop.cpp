@@ -1092,25 +1092,35 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
         }
         QVERIFY(fixture.press(qPrintable("rrVerticalSpacing_" + mode)));
         QVERIFY(fixture.visible("rrVerticalSpacingPopup"));
-        QVERIFY(fixture.press("rrVerticalSpacingClose"));
-        QTRY_VERIFY(!fixture.visible("rrVerticalSpacingPopup"));
-        // Which pages to adjust has its own row, available once a mode is chosen.
-        QVERIFY(reveal("rrVerticalSpacingScope"));
-        QCOMPARE(fixture.widget("rrVerticalSpacingScope")->isEnabled(), mode != "off");
+        QVERIFY(!fixture.widget("rrVerticalSpacingScope"));
+        auto *scope = fixture.widget("rrVerticalSpacingScopeControls");
+        QVERIFY(scope);
+        QCOMPARE(scope->isEnabled(), mode != "off");
+        auto *overlay = static_cast<ui::ModalOverlay *>(fixture.widget("rrVerticalSpacingPopup"));
+        QTRY_VERIFY(overlay->rect().contains(overlay->card()->geometry()));
+        const auto *preview = fixture.widget("rrStylingPreview");
+        const auto *modeControls = fixture.widget("rrVerticalSpacing_off")->parentWidget();
+        QTRY_VERIFY(preview->geometry().bottom() < modeControls->geometry().top());
+        QVERIFY(modeControls->geometry().bottom() < scope->geometry().top());
+        QCOMPARE(fixture.widget("rrVerticalSpacingScope_all")->font(), fixture.widget("rrVerticalSpacing_off")->font());
         if (mode != "off") {
-            QVERIFY(fixture.press("rrVerticalSpacingScope"));
-            QTRY_VERIFY(fixture.visible("rrVerticalSpacingScope_all"));
-            QTRY_VERIFY_WITH_TIMEOUT(fixture.widget("rrStylingPreview")->property("sample_ready").toBool(), 10000);
             QVERIFY(fixture.press(protection ? "rrVerticalSpacingScope_protection" : "rrVerticalSpacingScope_all"));
             if (config) QVERIFY(scene("scope"));
             if (config) {
                 QVERIFY(fixture.press("rrVerticalSpacingScope_protection"));
                 QVERIFY(scene("scope-protection"));
+                // Normal keeps the saved scope while disabling its controls.
+                QVERIFY(fixture.press("rrVerticalSpacing_off"));
+                QVERIFY(!scope->isEnabled());
+                QVERIFY(static_cast<QPushButton *>(fixture.widget("rrVerticalSpacingScope_protection"))->isChecked());
+                QVERIFY(fixture.press(qPrintable("rrVerticalSpacing_" + mode)));
+                QVERIFY(scope->isEnabled());
+                QVERIFY(static_cast<QPushButton *>(fixture.widget("rrVerticalSpacingScope_protection"))->isChecked());
                 QVERIFY(fixture.press(protection ? "rrVerticalSpacingScope_protection" : "rrVerticalSpacingScope_all"));
             }
-            QVERIFY(fixture.press("rrVerticalSpacingScopeClose"));
-            QTRY_VERIFY(!fixture.visible("rrVerticalSpacingScopePopup"));
         }
+        QVERIFY(fixture.press("rrVerticalSpacingClose"));
+        QTRY_VERIFY(!fixture.visible("rrVerticalSpacingPopup"));
         if (columns) {
             QVERIFY(fixture.press("rrSettingsDisplay"));
             QVERIFY(reveal("rrLandscapeColumns"));
@@ -9053,7 +9063,7 @@ private slots:
         QCOMPARE(fixture.widget("rrParagraphSpacing")->minimumHeight(), fixture.widget("rrWordSpacing")->minimumHeight());
         QCOMPARE(fixture.widget("rrParagraphSpacing")->maximumHeight(), fixture.widget("rrWordSpacing")->maximumHeight());
         for (const auto *name : {"rrWordSpacing", "rrJustificationTracking", "rrParagraphSpacing",
-                                 "rrWidowsOrphans", "rrVerticalSpacing", "rrVerticalSpacingScope"}) {
+                                 "rrWidowsOrphans", "rrVerticalSpacing"}) {
             QVERIFY(revealSettingsOption(fixture, name));
             const auto *row = fixture.widget(name);
             const auto font = ui::interfaceFont(ui::metrics::chrome::descriptionText);
@@ -9672,7 +9682,7 @@ int main(int argc, char **argv) {
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
     QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3675;
+    int expectedScreenshots = lightGallery ? 182 : 3668;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";

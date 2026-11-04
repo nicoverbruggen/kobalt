@@ -356,9 +356,6 @@ void Reader::showAdvancedText(int changed) {
     panel->hangingPunctuationButton->setCaption(strings::get(settingsHangingPunctuation ? "common.on" : "common.off").toUpper());
     panel->widowsOrphansButton->setCaption(strings::get(("settings.widows_orphans_" + settingsWidowsOrphans).toUtf8().constData()).toUpper());
     panel->verticalSpacingButton->setCaption(strings::get(("settings.vertical_spacing_" + settingsVerticalSpacing).toUtf8().constData()).toUpper());
-    panel->verticalSpacingScopeButton->setCaption(strings::get(("settings.vertical_spacing_scope_" + settingsVerticalSpacingScope).toUtf8().constData()).toUpper());
-    // The scope chooses which gaps page spacing adjusts, so it waits for a mode.
-    panel->verticalSpacingScopeButton->setEnabled(settingsVerticalSpacing != "off");
     cancelStylingSamples();
     panel->invalidateStylingSamples(changed);
 }
@@ -384,8 +381,6 @@ int Reader::stylingChoice(int feature) const {
         return settingsWidowsOrphans == "allow" ? 2 : settingsWidowsOrphans == "avoid" ? 1 : 0;
     case Feature::VerticalSpacing:
         return settingsVerticalSpacing == "expand" ? 2 : settingsVerticalSpacing == "center" ? 1 : 0;
-    case Feature::VerticalSpacingScope:
-        return settingsVerticalSpacingScope == "protection" ? 1 : 0;
     }
     return 0;
 }
@@ -430,22 +425,17 @@ void Reader::renderStylingSamples(int requested) {
         {Feature::HangingPunctuation, "hanging_punctuation", {false, true}},
         {Feature::Pagination, "widows_orphans", {QStringLiteral("publisher"), QStringLiteral("avoid"), QStringLiteral("allow")}},
         {Feature::VerticalSpacing, "vertical_justification", {QStringLiteral("off"), QStringLiteral("center"), QStringLiteral("expand")}},
-        {Feature::VerticalSpacingScope, "vertical_spacing_scope", {QStringLiteral("all"), QStringLiteral("protection")}},
     };
     registerPickerFonts(QString::fromLatin1(defaultFontFace));
     for (const auto &entry : requests) {
         const int feature = int(entry.feature);
         if (feature != requested)
             continue;
-        // With page spacing Normal, both scopes draw the same pages and the
-        // row is unavailable.
-        if (entry.feature == Feature::VerticalSpacingScope && settingsVerticalSpacing == "off")
-            continue;
         const bool spacing = entry.feature == Feature::WordSpacing || entry.feature == Feature::Tracking || entry.feature == Feature::HangingPunctuation;
         StyleSampleRequest request;
         request.key = entry.key;
         request.values = entry.values;
-        const bool vertical = entry.feature == Feature::VerticalSpacing || entry.feature == Feature::VerticalSpacingScope;
+        const bool vertical = entry.feature == Feature::VerticalSpacing;
         if (spacing) {
             // Spacing depends on the font, so these samples use the book's typography.
             request.settings = settings;

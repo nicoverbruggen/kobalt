@@ -1410,17 +1410,13 @@ void Reader::buildSettings() {
         });
     });
     connect(settings->verticalSpacingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showAdvancedTextChoices(SettingsPanel::AdvancedText::VerticalSpacing,
-            stylingChoice(int(SettingsPanel::AdvancedText::VerticalSpacing)), [this](int index) {
-            settingsVerticalSpacing = QStringList{"off", "center", "expand"}.at(index);
-            showAdvancedText(int(SettingsPanel::AdvancedText::VerticalSpacing));
-        });
-    });
-    connect(settings->verticalSpacingScopeButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showAdvancedTextChoices(SettingsPanel::AdvancedText::VerticalSpacingScope,
-            stylingChoice(int(SettingsPanel::AdvancedText::VerticalSpacingScope)), [this](int index) {
-            settingsVerticalSpacingScope = index ? "protection" : "all";
-            showAdvancedText(int(SettingsPanel::AdvancedText::VerticalSpacingScope));
+        settings->showPageSpacingChoices(stylingChoice(int(SettingsPanel::AdvancedText::VerticalSpacing)),
+            settingsVerticalSpacingScope == "protection" ? 1 : 0, [this](int mode, int scope) {
+            const QString nextScope = scope ? "protection" : "all";
+            const bool scopeChanged = settingsVerticalSpacingScope != nextScope;
+            settingsVerticalSpacing = QStringList{"off", "center", "expand"}.at(mode);
+            settingsVerticalSpacingScope = nextScope;
+            showAdvancedText(scopeChanged ? -1 : int(SettingsPanel::AdvancedText::VerticalSpacing));
         });
     });
     bionicOption = settings->bionicOption;

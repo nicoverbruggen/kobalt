@@ -55,9 +55,10 @@ public:
     static QString timeRemainingFormatLabel(const QString &format);
     void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
     static QString columnSpacingLabel(int percent);
-    enum class AdvancedText { WordSpacing, Tracking, HangingPunctuation, Pagination, VerticalSpacing, VerticalSpacingScope, ParagraphSpacing };
+    enum class AdvancedText { WordSpacing, Tracking, HangingPunctuation, Pagination, VerticalSpacing, ParagraphSpacing };
     static QString paragraphSpacingLabel(int percent);
     void showBeautifier(const QJsonObject &current, std::function<void(QJsonObject)> chosen);
+    void showPageSpacingChoices(int mode, int scope, std::function<void(int, int)> chosen);
     void showParagraphAdjustments(int spacing, int indent, std::function<void(int, int)> chosen);
     // The sheet stays open while choosing, so each choice can be compared in
     // its preview.
@@ -103,7 +104,7 @@ public:
     ui::CaptionButton *dictionaryFontButton = nullptr, *dictionaryFontSizeButton = nullptr;
     ui::DescribedOption *landscapeColumnsOption = nullptr;
     ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr;
-    ui::CaptionButton *verticalSpacingButton = nullptr, *verticalSpacingScopeButton = nullptr;
+    ui::CaptionButton *verticalSpacingButton = nullptr;
     ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr, *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;
     ui::CaptionButton *paragraphSpacingButton = nullptr, *beautifierButton = nullptr;
     ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr, *sleepTileButton = nullptr, *menuViewButton = nullptr;
@@ -123,7 +124,7 @@ protected:
 
 private:
     void showStylingChoices(AdvancedText feature, int current, std::function<void(int)> chosen,
-                            const QString &alignment, int indent, std::function<void(int, int)> paragraphChosen);
+                            const QString &alignment, int secondary, std::function<void(int, int)> pairChosen);
     QWidget *tabRail = nullptr, *optionsColumn = nullptr;
     QLabel *settingsTitle = nullptr;
     ui::CellButton *backButton = nullptr;

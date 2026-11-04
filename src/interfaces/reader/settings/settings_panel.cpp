@@ -542,9 +542,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     verticalSpacingButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrVerticalSpacing",
         strings::get("settings.vertical_spacing_mode"), [] {});
     verticalSpacingButton->setDescription(strings::get("settings.vertical_spacing_description"));
-    verticalSpacingScopeButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrVerticalSpacingScope",
-        strings::get("settings.vertical_spacing_apply_to"), [] {});
-    verticalSpacingScopeButton->setDescription(strings::get("settings.vertical_spacing_scope_description"));
     section(stylingPage, stylingRows, "rrNormalizationSection", strings::get("reader.book_beautifier"));
     beautifierButton = ui::makeCaptionButton(stylingPage, stylingRows, "rrBeautifierSettings",
         strings::get("reader.book_beautifier"), [] {});
@@ -561,8 +558,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
           std::pair{trackingButton, ui::ControlIcon::AlignJustify},
           std::pair{hangingPunctuationButton, ui::ControlIcon::HangingPunctuation},
           std::pair{widowsOrphansButton, ui::ControlIcon::WidowsOrphans},
-          std::pair{verticalSpacingButton, ui::ControlIcon::SpreadVertical},
-          std::pair{verticalSpacingScopeButton, ui::ControlIcon::Dictionary}}) {
+          std::pair{verticalSpacingButton, ui::ControlIcon::SpreadVertical}}) {
         button->setIconVisible(true);
         ui::buttonIcon(button, icon);
     }
@@ -787,7 +783,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
           tapZonesButton, tappableLinksButton, navigationBarButton,
           menuViewButton, uiFontButton, uiMonoFontButton, headerFooterFontButton, headerFooterWeightButton,
           dictionaryFontButton, dictionaryFontSizeButton, timeRemainingFormatButton,
-          defaultFontButton, serifFontButton, sansFontButton, monoFontButton, beautifierButton, wordSpacingButton, paragraphSpacingButton, trackingButton, hangingPunctuationButton, widowsOrphansButton, verticalSpacingButton, verticalSpacingScopeButton}) {
+          defaultFontButton, serifFontButton, sansFontButton, monoFontButton, beautifierButton, wordSpacingButton, paragraphSpacingButton, trackingButton, hangingPunctuationButton, widowsOrphansButton, verticalSpacingButton}) {
         button->setRule(Qt::BottomEdge);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults)
@@ -799,7 +795,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                 .arg(int(c::labelText))
                 .arg(int(c::listActionHeight))
                 .arg(int(c::inset)));
-        if (button == beautifierButton || button == wordSpacingButton || button == paragraphSpacingButton || button == trackingButton || button == hangingPunctuationButton || button == widowsOrphansButton || button == verticalSpacingButton || button == verticalSpacingScopeButton) {
+        if (button == beautifierButton || button == wordSpacingButton || button == paragraphSpacingButton || button == trackingButton || button == hangingPunctuationButton || button == widowsOrphansButton || button == verticalSpacingButton) {
             button->setMaximumHeight(QWIDGETSIZE_MAX);
             readerStyle(button, QString("QPushButton{font-size:%1px;border:0;border-radius:0;text-align:left;padding:0;background:palette(window);color:palette(window-text);}").arg(int(c::labelText)));
             button->setMinimumHeight(c::listActionHeight);
@@ -1443,12 +1439,15 @@ void SettingsPanel::showAdvancedTextChoices(AdvancedText feature, int current, s
                                             const QString &alignment) {
     showStylingChoices(feature, current, std::move(chosen), alignment, -1, {});
 }
+void SettingsPanel::showPageSpacingChoices(int mode, int scope, std::function<void(int, int)> chosen) {
+    showStylingChoices(AdvancedText::VerticalSpacing, mode, {}, {}, scope, std::move(chosen));
+}
 void SettingsPanel::showParagraphAdjustments(int spacing, int indent, std::function<void(int, int)> chosen) {
     showStylingChoices(AdvancedText::ParagraphSpacing, spacing, {}, {}, indent, std::move(chosen));
 }
 void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::function<void(int)> chosen,
-                                      const QString &alignment, int indent,
-                                      std::function<void(int, int)> paragraphChosen) {
+                                      const QString &alignment, int secondary,
+                                      std::function<void(int, int)> pairChosen) {
     if (fontDialog)
         return;
     ui::PanelTiming timing("styling");
@@ -1457,7 +1456,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
     const bool tracking = feature == AdvancedText::Tracking;
     const bool paragraph = feature == AdvancedText::ParagraphSpacing;
     const bool spacing = feature == AdvancedText::WordSpacing || tracking || feature == AdvancedText::HangingPunctuation;
-    const bool vertical = feature == AdvancedText::VerticalSpacing || feature == AdvancedText::VerticalSpacingScope;
+    const bool vertical = feature == AdvancedText::VerticalSpacing;
     QString key, prefix;
     QStringList values;
     switch (feature) {
@@ -1474,8 +1473,6 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
     case AdvancedText::VerticalSpacing:
         // Centering is the recommended adjustment, so it comes before Expand.
         key = "settings.vertical_spacing"; prefix = "rrVerticalSpacing"; values = {"off", "center", "expand"}; break;
-    case AdvancedText::VerticalSpacingScope:
-        key = "settings.vertical_spacing_scope"; prefix = "rrVerticalSpacingScope"; values = {"all", "protection"}; break;
     }
     const auto text = [key](const QString &suffix) { return strings::get((key + suffix).toUtf8().constData()); };
     fontDialog->setObjectName(prefix + "Popup");
@@ -1613,16 +1610,56 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current, std::f
             indentSlider->setAccessibleDescription(paragraphSpacingLabel(value));
         };
         connect(indentSlider, &QSlider::valueChanged, indentSlider, showIndent);
-        slider->committed = [indentSlider, paragraphChosen](int value) {
-            paragraphChosen(value, indentSlider->value());
+        slider->committed = [indentSlider, pairChosen](int value) {
+            pairChosen(value, indentSlider->value());
         };
-        indentSlider->committed = [slider, paragraphChosen](int value) {
-            paragraphChosen(slider->value(), value);
+        indentSlider->committed = [slider, pairChosen](int value) {
+            pairChosen(slider->value(), value);
         };
-        indentSlider->setValue(indent);
-        showIndent(indent);
+        indentSlider->setValue(secondary);
+        showIndent(secondary);
     } else {
         describe(current);
+    }
+    if (vertical && pairChosen) {
+        auto selection = std::make_shared<std::pair<int, int>>(current, secondary);
+        auto *area = new QWidget(card);
+        area->setObjectName("rrVerticalSpacingScopeControls");
+        auto *rows = new QVBoxLayout(area);
+        rows->setContentsMargins(c::inset, 0, c::inset, ui::px(24));
+        rows->setSpacing(ui::px(16));
+        auto *label = new ui::InterfaceLabel(strings::get("settings.vertical_spacing_scope"), area);
+        readerStyle(label, styles::font(c::labelText));
+        rows->addWidget(label);
+        auto *segments = new QHBoxLayout;
+        segments->setSpacing(0);
+        rows->addLayout(segments);
+        auto *group = new QButtonGroup(area);
+        const QStringList values{"all", "protection"};
+        const int segmentWidth = (stylingSheetWidth(parentWidget()) - 2 * int(m::control::border) - 2 * int(c::inset)) / 2;
+        for (int index = 0; index < values.size(); ++index) {
+            const QString key = "settings.vertical_spacing_scope_" + values[index];
+            auto *button = segmentButton(area, segments, group, "rrVerticalSpacingScope_" + values[index],
+                                        strings::get(key.toUtf8().constData()));
+            button->setAccessibleName(button->text());
+            button->setAccessibleDescription(strings::get((key + "_description").toUtf8().constData()));
+            button->ensurePolished();
+            if (ui::interfaceTextWidth(button->text(), button->font()) + ui::px(36) > segmentWidth)
+                button->setText(strings::get((key + "_short").toUtf8().constData()));
+            button->setChecked(index == secondary);
+            connect(button, &QPushButton::clicked, this, [selection, pairChosen, index] {
+                selection->second = index;
+                pairChosen(selection->first, index);
+            });
+        }
+        area->setEnabled(current != 0);
+        card->rows()->addWidget(area);
+        hint->hide();
+        chosen = [area, selection, pairChosen](int value) {
+            selection->first = value;
+            area->setEnabled(value != 0);
+            pairChosen(value, selection->second);
+        };
     }
     for (int index = 0; index < buttons.size(); ++index)
         connect(buttons[index], &QPushButton::clicked, this, [this, index, describe, chosen] {

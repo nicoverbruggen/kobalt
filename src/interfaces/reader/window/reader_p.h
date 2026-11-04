@@ -619,7 +619,7 @@ private:
     // The selected option of a SettingsPanel::AdvancedText setting, in sheet order.
     int stylingChoice(int feature) const;
     // The latest sample render of each setting. Setting one stops its render.
-    std::array<std::shared_ptr<std::atomic_bool>, 7> stylingSampleRenders;
+    std::array<std::shared_ptr<std::atomic_bool>, 6> stylingSampleRenders;
     // Includes queued renders until their results reach the GUI thread.
     int stylingSamplesPending = 0;
     void cancelStylingSamples();

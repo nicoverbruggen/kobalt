@@ -434,7 +434,10 @@ void Navigation::update(QSize size, const NavigationState &state) {
         : statusHeight() - (statusVisible ? int(ui::metrics::chrome::statusHeight) : 0) + ui::textPx(10);
     const int statusLeft = inlineStatus ? exitCell + int(c::inset) : int(c::inset);
     const int statusRight = size.width() - (inlineStatus ? rightActions * int(c::cellWidth) : 0) - c::inset;
-    clock->setGeometry(statusLeft, statusTop, ui::textPx(160), ui::metrics::panel::statusHeight);
+    // The final width at once: a full width first, then the text width, would
+    // repaint the toolbar on every update.
+    clock->setGeometry(statusLeft, statusTop, qMin(ui::textPx(160), clock->sizeHint().width()),
+                       ui::metrics::panel::statusHeight);
     battery->move(statusRight - battery->width(), statusTop);
     const int statusGap = ui::metrics::panel::bluetoothGap;
     QWidget *previousStatus = nullptr;

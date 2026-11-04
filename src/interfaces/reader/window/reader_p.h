@@ -314,6 +314,8 @@ private:
     quint64 sleepCoverRequest = 0;
     Qt::ScreenOrientation sleepOrientation = Qt::PrimaryOrientation;
     QTimer *clockTimer = nullptr;
+    // The minute of the day the clock timer was last armed in.
+    int clockMinute = -1;
 #ifdef KOBALT_READER_HARDWARE
     const bool liveState = QFile::exists(book->paths().directory + "/live-state");
 #endif
@@ -488,6 +490,8 @@ private:
     QString bookFace();
 
     void startClock();
+    void startClock(int now);
+    int millisecondsOfDay() const;
     void updateMenuStatus();
     void updateReadingStats();
     void configureNavigation();

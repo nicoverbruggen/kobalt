@@ -183,6 +183,10 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
     turnStarted.invalidate();
     setObjectName("rrReader");
     setAttribute(Qt::WA_DeleteOnClose);
+    // Member timers belong to the window, so a check of its children finds them.
+    for (auto *timer : {&kosyncDeadline, &kosyncOpeningGrace, &kosyncReaderRetry, &renderNoticeTimer, &resizeTimer,
+                        &annotationModeHide, &brightnessHide, &lightFeedback})
+        timer->setParent(this);
     presentation = services.presentation(this);
     Q_ASSERT(presentation);
     dictionary = services.dictionary();
@@ -564,7 +568,15 @@ void Reader::startClockTimer() {
     connect(clockTimer, &QTimer::timeout, this, [this] {
         if (!isVisible() || services.suspended())
             return;
-        startClock();
+        // A timer that fires before the minute changes only re-arms, so the
+        // minute work runs once a minute.
+        const int now = millisecondsOfDay();
+        const bool due = now / 60000 != clockMinute;
+        // The tick itself always re-arms from this minute.
+        clockTimer->stop();
+        startClock(now);
+        if (!due)
+            return;
         // The minute work runs whether or not a clock is shown.
         book->minuteTick();
         if (minuteTicked)

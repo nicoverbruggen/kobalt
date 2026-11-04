@@ -1507,13 +1507,26 @@ void Reader::lookupSelection() {
     });
 }
 
+int Reader::millisecondsOfDay() const {
+    return services.millisecondsOfDay ? services.millisecondsOfDay() : QTime::currentTime().msecsSinceStartOfDay();
+}
+
+void Reader::startClock() {
+    startClock(millisecondsOfDay());
+}
+
 // Wake once a minute, just after the wall-clock minute changes. The session
 // minutes appear only in the reading menu, which pauses the reading clock and
 // refreshes its status when it opens, so no other minute needs a wakeup. The
 // reader's other periodic work runs on the same tick.
-void Reader::startClock() {
-    const auto clock = 60000 - QTime::currentTime().msecsSinceStartOfDay() % 60000;
-    clockTimer->start(int(clock) + 50);
+void Reader::startClock(int now) {
+    // A restart after the minute changed, before its tick ran, keeps that tick.
+    if (clockTimer->isActive() && now / 60000 != clockMinute) {
+        clockTimer->start(0);
+        return;
+    }
+    clockMinute = now / 60000;
+    clockTimer->start(60000 - now % 60000 + 50);
 }
 
 void Reader::configureNavigation() {

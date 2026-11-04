@@ -565,6 +565,7 @@ void ReadingPage::mark(const QVector<QRect> &rectangles) {
 ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     : QWidget(parent), cancelAnimation(std::move(cancelAnimation)) {
     Q_ASSERT(this->cancelAnimation);
+    viewportNoticeTimer.setParent(this);
     viewportNoticeTimer.setSingleShot(true);
     viewportNoticeTimer.setInterval(1000);
     viewportNoticeTimer.setTimerType(Qt::PreciseTimer);

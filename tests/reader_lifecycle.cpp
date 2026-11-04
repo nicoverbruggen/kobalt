@@ -548,10 +548,12 @@ private slots:
             preferences["header_footer_text"] = QJsonObject{{"header_size", "off"}};
         QVERIFY(storage::writePreferences(testPaths().preferences(), preferences));
         QString time = "09:00";
+        int timeOfDay = 9 * 3600000 + 30000;
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
         host.configureServices = [&](ReaderHostServices &services) {
             services.clock = [&] { return time; };
+            services.millisecondsOfDay = [&] { return timeOfDay; };
         };
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(fixture(), nativeSize);
@@ -569,6 +571,7 @@ private slots:
         const auto body = page->image.cacheKey();
         const auto position = host.session()->state().value("position");
         time = "09:01";
+        timeOfDay = 9 * 3600000 + 60050;
         QVERIFY(QMetaObject::invokeMethod(clock, "timeout", Qt::DirectConnection));
         QVERIFY(!host.window()->property("reader_page_turn").toBool());
         QVERIFY(page->headerText().contains(time));
@@ -4012,6 +4015,116 @@ private slots:
         host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
         QCOMPARE(network->requests, 1);
         QVERIFY(network->interactive);
+    }
+    // The reader wakes once a minute, just after the minute changes, with a
+    // precise timer. A timer that fires early only re-arms; the minute work
+    // runs once.
+    void minuteClock() {
+        auto paths = testPaths();
+        int timeOfDay = 10 * 3600000 + 30000;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&timeOfDay](ReaderHostServices &services) {
+            services.millisecondsOfDay = [&timeOfDay] { return timeOfDay; };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool presented = false;
+        host.window()->preparePresentation([&](bool ready) { presented = ready; });
+        QVERIFY(presented);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
+        QVERIFY(timer && timer->isActive() && timer->isSingleShot());
+        QCOMPARE(timer->timerType(), Qt::PreciseTimer);
+        QCOMPARE(timer->interval(), 30050);
+        int ticks = 0;
+        host.window()->minuteTicked = [&ticks] { ++ticks; };
+        // An early fire at 10:00:59.640 re-arms for the rest of the minute.
+        timeOfDay = 10 * 3600000 + 59640;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(ticks, 0);
+        QVERIFY(timer->isActive());
+        QCOMPARE(timer->interval(), 410);
+        // The fire after the minute changes runs the minute work once.
+        timeOfDay = 10 * 3600000 + 60050;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(ticks, 1);
+        QCOMPARE(timer->interval(), 60000);
+        timeOfDay = 10 * 3600000 + 60060;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(ticks, 1);
+        // Midnight is a new minute too.
+        timeOfDay = 23 * 3600000 + 59 * 60000 + 30000;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(ticks, 2);
+        timeOfDay = 50;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(ticks, 3);
+        QCOMPARE(timer->interval(), 60000);
+    }
+    // While a book sits open and nobody reads, nothing on the main thread may
+    // wake more often than the reader's minute clock.
+    void idleTimers() {
+        auto paths = testPaths();
+        // Ten o'clock exactly: the clock is armed for a minute and stays out of the window.
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [](ReaderHostServices &services) {
+            services.millisecondsOfDay = [] { return 10 * 3600000; };
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool presented = false;
+        host.window()->preparePresentation([&](bool ready) { presented = ready; });
+        QVERIFY(presented);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QVERIFY(host.session()->turn(1));
+        QTRY_VERIFY(!host.session()->busy());
+        // The turn's follow-up work ends on its own: neighbour pages, the
+        // opening record and the short delays after a turn.
+        const auto activeTimers = [&] {
+            QStringList active;
+            for (auto *timer : host.window()->findChildren<QTimer *>())
+                if (timer->isActive() && timer->objectName() != "rrClockTimer" &&
+                    (timer->interval() < 60000 || !timer->isSingleShot()))
+                    active.append(QString("%1 (%2 ms%3)")
+                                      .arg(timer->objectName().isEmpty() ? QString("unnamed") : timer->objectName())
+                                      .arg(timer->interval())
+                                      .arg(timer->isSingleShot() ? ", single shot" : ""));
+            return active;
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(activeTimers().isEmpty(),
+                                  qPrintable("Active reader timers: " + activeTimers().join(", ")), 10000);
+        // No timer of any main-thread object fires for a few idle seconds:
+        // this also covers unparented timers and single-shot calls.
+        struct TimerEvents final : QObject {
+            QStringList seen;
+            bool eventFilter(QObject *object, QEvent *event) override {
+                if (event->type() == QEvent::Timer) {
+                    auto name = QString::fromLatin1(object->metaObject()->className());
+                    if (!object->objectName().isEmpty())
+                        name += ' ' + object->objectName();
+                    if (auto *timer = qobject_cast<QTimer *>(object))
+                        name += QString(" (%1 ms)").arg(timer->interval());
+                    seen.append(name);
+                }
+                return false;
+            }
+        } events;
+        qApp->installEventFilter(&events);
+        QTest::qWait(3000);
+        qApp->removeEventFilter(&events);
+        events.seen.removeDuplicates();
+        QVERIFY2(events.seen.isEmpty(), qPrintable("Timer events while idle: " + events.seen.join(", ")));
     }
     void wifiPowerSaver_data() {
         QTest::addColumn<QString>("account");

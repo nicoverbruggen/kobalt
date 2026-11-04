@@ -21,7 +21,7 @@ While a book is open and the device is awake, Kobalt wakes once a minute, just a
 | Reading pace | Asks Nickel for the reading pace on Nickel's worker thread, for the time estimates. At most once a minute | `ReadingBook::minuteTick` → `ReadingBridge::minuteTick` → `ReadingPaceCache::tick` (`common/reading_pace_cache.h`) |
 | Reader check | Repeats the visibility checks. Reads Nickel's saved position, for a position from another device, only when Nickel has reported a sync, an account update or USB. If those signals are unavailable, it reads at most once a minute and logs `native-progress-signals-unavailable` | `ReaderWindow::minuteTicked` → `ReaderCoordinator::poll` (`common/reader_coordinator.cpp`) |
 
-The tick runs whether or not the page shows a clock. It stops when the reader hides or the device sleeps. The reading-time minutes in the menu need no tick of their own: opening the menu pauses the reading clock and refreshes the status.
+The timer is precise and armed for 50 ms after the next minute. If it ever fires before the minute changes, it only re-arms, so the minute work runs once a minute. The tick runs whether or not the page shows a clock. It stops when the reader hides or the device sleeps. The reading-time minutes in the menu need no tick of their own: opening the menu pauses the reading clock and refreshes the status.
 
 One other timer can repeat:
 

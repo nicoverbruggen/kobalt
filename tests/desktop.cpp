@@ -7942,8 +7942,7 @@ private slots:
         QFETCH(bool, dark);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
-        auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
-        picker->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
@@ -8149,7 +8148,7 @@ private slots:
         preferences["default_font_face"] = "NV Bitter";
         preferences[appearance::inheritTextLayoutKey] = false;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -8461,7 +8460,7 @@ private slots:
             services.light = [light](QWidget *) { return std::make_unique<GestureLight>(light); };
         });
         QVERIFY(fixture.prepared);
-        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(preset);
+        selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);

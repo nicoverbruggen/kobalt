@@ -5539,6 +5539,46 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("position"), origin);
     }
     void publisherFontDefault_data() { bookmarks_data(); }
+    void fontPagingClearsCaptions() {
+        // Font pages reuse their cells. A cell that shows another font must
+        // repaint completely, so a caption from the previous page cannot stay
+        // on screen. Qt 5.2 on Kobo leaves a hidden caption's area unpainted
+        // unless the cell asks for a full repaint. Desktop Qt 6 repaints that
+        // area by itself, so this check guards the contract but cannot show
+        // the Qt 5.2 failure.
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        QVERIFY(fixture.press("rrFont"));
+        QTRY_VERIFY(fixture.visible("rrChoices"));
+        auto *choices = dynamic_cast<ChoiceScreen *>(fixture.widget("rrChoices"));
+        QVERIFY(choices);
+        QVector<Choice> fonts{{"Publisher Fonts", {}, "testFont0", "Fonts", 0, -1, "No embedded fonts\nUses Libron"}};
+        for (int i = 1; i < 40; ++i)
+            fonts.append({QString("Font %1").arg(i), "Libron", QString("testFont%1").arg(i), "Fonts"});
+        choices->showChoices("Font", fonts, {}, ChoiceScreen::Mode::Fonts);
+        QTRY_VERIFY(fixture.visible("testFont0Detail"));
+        auto *cell = fixture.widget("testFont0");
+        QVERIFY(cell);
+        QTest::qWait(100);
+        struct Paints : QObject {
+            QRegion painted;
+            bool eventFilter(QObject *, QEvent *event) override {
+                if (event->type() == QEvent::Paint) painted += static_cast<QPaintEvent *>(event)->region();
+                return false;
+            }
+        } paints;
+        cell->installEventFilter(&paints);
+        QVERIFY(fixture.press("rrFontPagerNext"));
+        QTRY_VERIFY(cell->isVisible() && cell->objectName() != "testFont0");
+        QTRY_VERIFY2(paints.painted.contains(cell->rect()), "A reused font cell kept pixels from the previous page");
+        cell->removeEventFilter(&paints);
+    }
     void kfFontVariants() {
         QTemporaryDir fonts;
         QVERIFY(fonts.isValid());

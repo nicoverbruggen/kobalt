@@ -493,6 +493,11 @@ void ChoiceScreen::redrawFonts() {
                                                    defaultRequested(value, false);
                                            })
                                          : std::function<void()>{};
+        // Qt 5.2 does not repaint the area that a caption leaves when it is
+        // hidden. A cell that shows another font repaints completely, so a
+        // caption from the previous page cannot stay on screen.
+        if (button->objectName() != item.name)
+            button->update();
         button->setObjectName(item.name);
         button->setAccessibleName(item.placeholder ? item.detail : item.label);
         button->setAccessibleDescription(item.detail);

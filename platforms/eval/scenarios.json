@@ -557,6 +557,31 @@
         {"open":"benchmark"}
       ],
       "sample": {"event":"book-close","field":"total_ms","stages":true}
+    },
+    {
+      "id": "kosync.wifi-off",
+      "kind": "e2e",
+      "opt_in": true,
+      "paths": ["src/interfaces/reader/window/reader_kosync.cpp","src/reading/kosync.cpp","platforms/kobo/common/native_sync_network.cpp"],
+      "book": "benchmark",
+      "needs": ["kosync","wifi-control"],
+      "repeat": 5,
+      "setup": [
+        {"kosync":{"schema":1,"server":"https://127.0.0.1:9","username":"kobalt-eval","key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","device_id":"kobalt-eval","automatic":true,"sync_interval_minutes":0,"wake_wifi":true,"sync_on_open":false,"sync_on_sleep_wake":false,"sync_on_close":false}},
+        {"open":"benchmark"},
+        {"settle":true}
+      ],
+      "steps": [
+        {"wait_ms":31000},
+        {"key":"PageDown"},
+        {"event":"kosync-network-finished","where":{"ready":true,"owned":true},"timeout":25000},
+        {"event":"main-thread-wait","where":{"operation":"wifi-off"},"timeout":30000}
+      ],
+      "sample": {"event":"main-thread-wait","field":"elapsed_ms"},
+      "teardown": [
+        {"kosync":{}},
+        {"open":"benchmark"}
+      ]
     }
   ]
 }

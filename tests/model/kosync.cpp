@@ -468,6 +468,22 @@ int main(int argc, char **argv) {
     const auto accountBytes = account.readAll();
     account.close();
     require(!accountBytes.contains(QString::fromUtf8("pässword").toUtf8()), "plaintext password is not stored");
+    {
+        // A scenario account replaces the saved one in memory and is never written.
+        kosync::overrideAccount(QJsonObject{{"schema", 1}, {"server", "https://127.0.0.1:9"}, {"username", "eval"},
+                                            {"key", QString(32, 'a')}, {"device_id", "eval-device"}, {"automatic", true},
+                                            {"sync_interval_minutes", 0}, {"wake_wifi", true}});
+        kosync::Client scenario(path, nullptr, &network);
+        require(scenario.signedIn() && scenario.username() == "eval" && scenario.schedule().minutes == 0 &&
+                    scenario.schedule().wakeWifi, "a scenario account is used instead of the saved one");
+        require(!scenario.setAutomatic(false), "a scenario account is never saved");
+        kosync::overrideAccount({});
+        QFile unchanged(path);
+        require(unchanged.open(QIODevice::ReadOnly) && unchanged.readAll() == accountBytes,
+                "the saved account is unchanged by a scenario account");
+        kosync::Client saved(path, nullptr, &network);
+        require(saved.username() == "reader", "clearing the scenario account restores the saved one");
+    }
     require(!(account.permissions() & (QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther)),
             "account permissions exclude group and other users");
     kosync::Client reopened(path, nullptr, &network);

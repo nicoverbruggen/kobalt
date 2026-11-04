@@ -79,7 +79,7 @@ Both runs must measure the same subject. `CALIBRATE` adds the pair to `build/eva
 
 Micro-benchmarks lay out and draw text with new content in each sample, so the layout cache cannot hide the work: a dictionary entry, a footnote, the AGPL notice, a page draw, a wrapped label and an elided title.
 
-All other scenarios come from `platforms/eval/scenarios.json` and run through the reader's built-in scenario player, in the production desktop window. A scenario names its book, optional `setup` steps that run once, the `steps` of one sample, `after` steps that tidy up between samples and `teardown` steps that run at the end. Steps press a control by its object name, hold a word or a link found by its text, send a page key, wait for a control to appear or close, wait for the reader to settle, wait for a diagnostics event, and open or close a book. The reader has settled when its engine has no work queued or running, including drawing the pages beside the current one. A page key sent earlier waits for that drawing or misses the page cache, so a sample would measure the race instead of the turn. A list of names or points in a step takes the next entry in each sample. The sample is a field of a diagnostics event, the time since a `mark` step, or the process's memory from a diagnostics event. The player sends taps and holds through the window system, as real input arrives. Page keys call the reader directly and skip its filter for page turns less than 200 ms after the last one, so a sample measures the turn and not the filter. It is compiled only into the test executable and into evaluation packages.
+All other scenarios come from `platforms/eval/scenarios.json` and run through the reader's built-in scenario player, in the production desktop window. A scenario names its book, optional `setup` steps that run once, the `steps` of one sample, `after` steps that tidy up between samples and `teardown` steps that run at the end. Steps press a control by its object name, hold a word or a link found by its text, send a page key, wait for a control to appear or close, wait for the reader to settle, wait for a diagnostics event, let a fixed time pass (`wait_ms`), and open or close a book. An event step can require more fields with `where`, such as `{"operation":"wifi-off"}`. A `kosync` step sets a KOSync account in memory for the rest of the scenario; the saved account is not read or written, and the account ends with the scenario, also after a failure. The reader has settled when its engine has no work queued or running, including drawing the pages beside the current one. A page key sent earlier waits for that drawing or misses the page cache, so a sample would measure the race instead of the turn. A list of names or points in a step takes the next entry in each sample. The sample is a field of a diagnostics event, the time since a `mark` step, or the process's memory from a diagnostics event. The player sends taps and holds through the window system, as real input arrives. Page keys call the reader directly and skip its filter for page turns less than 200 ms after the last one, so a sample measures the turn and not the filter. It is compiled only into the test executable and into evaluation packages.
 
 The scenarios cover book opening and closing, page turns, a page turn back into the previous chapter, the reading menu, a text-size change, long and short dictionary entries, a long footnote, Settings, Acknowledgments, the licence notice and memory use. The word-spacing and tracking scenarios open their Styling sheets and wait for the sample to paint. Their panel-open events use panel styling and include sample_ms for construction and the wait for the rendered sample. Pending sample renders, including cancelled jobs, keep the reader busy until their results reach the GUI thread. They use the benchmark book, a small notes fixture and War and Peace. On the Mac, a substituted dictionary service gives "set" a long entry and other words a short one, as a real English dictionary does.
 
@@ -125,7 +125,7 @@ cmake -DPACKAGE=build/kobo-qt5-eval/Kobalt-qt5-eval.zip -DDEVICE=/Volumes/KOBOeR
 cmake -DDEVICE=/Volumes/KOBOeReader -DOUTPUT=<run>/device-qt5 -P platforms/kobo/collect-eval.cmake
 ```
 
-The install script warns when the Kobo has no dictionary. Between the two commands, eject the Kobo, let it restart, open ★ Kobalt Benchmark in Kobalt and wait for the run to end. KOSync stays paused while the scenario file is on the Kobo, so the run does not read or send the reading position. The collect script copies `scenarios.jsonl` and the event log into a run's `device-qt5` folder. `compare.cmake` then reports the device timings like the Mac ones. Device timings compare only with runs on the same model, storage and firmware.
+The install script warns when the Kobo has no dictionary. Between the two commands, eject the Kobo, let it restart, open ★ Kobalt Benchmark in Kobalt and wait for the run to end. KOSync stays paused while the scenario file is on the Kobo, so the run does not read or send the reading position. Only a scenario with its own `kosync` account syncs, and only with that account. The collect script copies `scenarios.jsonl` and the event log into a run's `device-qt5` folder. `compare.cmake` then reports the device timings like the Mac ones. Device timings compare only with runs on the same model, storage and firmware.
 
 The evaluation can also drive a device through an external runner, a program outside this repository. Pass it with `DEVICE_RUNNER` or `KOBALT_DEVICE_RUNNER`. `run.cmake` builds each target's evaluation package and calls:
 
@@ -134,6 +134,38 @@ The evaluation can also drive a device through an external runner, a program out
 ```
 
 The runner installs the package, opens the test book in Kobalt, waits for the `scenario-run-end` event and copies `scenarios.jsonl` into the output folder. It exits with zero when it wrote the file, even if a scenario failed. The comparator still reads `device.json` from runs recorded by an earlier runner.
+
+### Wi-Fi off and first open
+
+The opt-in `kosync.wifi-off` scenario measures how long Nickel's Wi-Fi shutdown blocks the main thread after a KOSync sync that Kobalt started. It needs a device with a saved Wi-Fi network. The scenario closes the open book, then sets an in-memory KOSync account that syncs every page and may turn on Wi-Fi. Its server address is on the device itself, where nothing listens (`https://127.0.0.1:9`). Each sample waits 31 seconds and turns a page. Kobalt then turns Wi-Fi on for the sync, the request is refused and retried for about five seconds, and Kobalt turns Wi-Fi off again. The sample is the `main-thread-wait` of that `wifi-off`. Kobalt's KOSync request stays on the device, and the saved KOSync account is neither used nor changed. Nickel's own connection checks still run while Wi-Fi is on. The scenario needs a host that can turn Wi-Fi off through Nickel, so the Mac player skips it. A sync that succeeded would report a storage error, because the scenario account is never saved; with this server address, no sync succeeds.
+
+Two other measurements come from the same run's event log. The book opening after the installation restart includes the bundled-asset check, which later openings skip; it is the last `reader-shown` event before `scenario-run-start`. When Wi-Fi is on and a book opens while automatic KOSync is off, the Wi-Fi power saver turns it off and logs a `main-thread-wait` with the allowance `wifi-off before reader input`; during a scenario run KOSync is paused, so this happens at that same opening. The log can also hold earlier sessions, so always take the events just before `scenario-run-start`.
+
+Before installing, check that Kobalt's Settings › System › Power management › Turn off Wi-Fi when a book opens is on. It is on unless someone turned it off. Checking it after the restart would mean opening a book, and any opening starts the run: with another book the run is skipped, and with the benchmark book it starts before Wi-Fi is on.
+
+For firmware 4:
+
+```sh
+bash platforms/kobo/build.sh qt5-eval
+cmake -DPACKAGE=build/kobo-qt5-eval/Kobalt-qt5-eval.zip -DDEVICE=/Volumes/KOBOeReader -DSCENARIO_FILTER=kosync.wifi-off -P platforms/kobo/install-eval.cmake
+```
+
+For firmware 5 and 6:
+
+```sh
+bash platforms/kobo/build.sh qt6-eval
+cmake -DPACKAGE=build/kobo-qt6-eval/Kobalt-qt6-eval.zip -DDEVICE=/Volumes/KOBOeReader -DSCENARIO_FILTER=kosync.wifi-off -P platforms/kobo/install-eval.cmake
+```
+
+Then:
+
+1. Eject the Kobo and let it restart.
+2. Turn Bluetooth off in Nickel. With Bluetooth on, the saver leaves Wi-Fi on and the scenario cannot measure.
+3. Turn Wi-Fi on and wait until it is connected.
+4. Open ★ Kobalt Benchmark in Kobalt. This must be the first book opened after the restart. The saver turns Wi-Fi off, and the run takes about four minutes.
+5. Collect the results with `collect-eval.cmake` as above, into `<run>/device-qt5` or `<run>/device-qt6`.
+
+`scenarios.jsonl` holds the five KOSync samples. If a sample fails with "no kosync-network-finished event", Wi-Fi was already on when the page turned, or it did not connect within KOSync's ten-second limit. "No main-thread-wait event" means Kobalt connected but did not turn Wi-Fi off.
 
 ## Device reference
 

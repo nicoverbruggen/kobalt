@@ -23,6 +23,10 @@ bool validLogin(const QString &server, const QString &username, const QString &p
 // reaches the network. The saved setting and manual syncs are unchanged.
 void pauseAutomatic(bool paused);
 bool automaticPaused();
+// For the scenario player: clients created afterwards use this account
+// instead of the saved one and never write it. An empty object restores the
+// saved account. Call on the GUI thread.
+void overrideAccount(const QJsonObject &account);
 struct Progress {
     QString position, device, deviceId;
     double percentage = 0;

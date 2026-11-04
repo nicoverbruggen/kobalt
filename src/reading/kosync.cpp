@@ -32,6 +32,15 @@ bool automaticPaused() {
     return paused;
 }
 namespace {
+QJsonObject &accountOverride() {
+    static QJsonObject account;
+    return account;
+}
+}
+void overrideAccount(const QJsonObject &account) {
+    accountOverride() = account;
+}
+namespace {
 QString message(const char *key) { return strings::get(key); }
 // Every client writes the account through this one writer, so a client that
 // opens later reads the account only after earlier writes finished. Never
@@ -145,8 +154,12 @@ Client::Client(QString accountPath, QObject *parent, QNetworkAccessManager *netw
     deviceId_ = QUuid::createUuid().toString();
     // Read after any account write that another client queued.
     accountWriter().flush();
-    const auto read = storage::readJsonFile(accountPath_);
+    const bool overridden = !accountOverride().isEmpty();
+    const auto read = overridden ? storage::JsonRead{accountOverride(), storage::ReadStatus::Ok}
+                                 : storage::readJsonFile(accountPath_);
     if (read.status == storage::ReadStatus::Missing) return;
+    // A scenario account lives in memory only.
+    if (overridden) writable_ = false;
     const auto &object = read.object;
     const auto url = serverUrl(object.value("server").toString());
     const auto key = object.value("key").toString().toLatin1();

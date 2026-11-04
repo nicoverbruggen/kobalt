@@ -58,6 +58,9 @@ NativeSyncNetworkBindings nativeBindings() {
 }
 }
 NativeSyncNetwork::NativeSyncNetwork() : NativeSyncNetwork(nativeBindings()) {}
+bool NativeSyncNetwork::canTurnOff() {
+    return bool(nativeBindings().turnOff);
+}
 NativeSyncNetwork::NativeSyncNetwork(NativeSyncNetworkBindings api)
     : bindings(std::move(api)), workflow(bindings.workflow) {
     elapsed.invalidate();

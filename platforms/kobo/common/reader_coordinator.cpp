@@ -48,6 +48,7 @@
 #ifdef KOBALT_SCENARIO_PLAYER
 #include "reading/kosync.h"
 #include "scenario/player.h"
+#include "native_sync_network.h"
 #include "scenario/sleep_persistence.h"
 #include <QFileInfo>
 #include <QJsonArray>
@@ -1054,6 +1055,7 @@ void ReaderCoordinator::runScenarios(const QString &path) {
     host.busy = [this] { return run.reader && (run.reader->busy() ||
                                              run.reader->property("eval_sleep_cover_pending").toBool()); };
     host.idle = [this] { return idleForBenchmark(); };
+    host.wifiControl = [] { return NativeSyncNetwork::canTurnOff(); };
     host.sleepPersistence = [this](const QJsonObject &request) {
         auto &options = scenario::sleepPersistenceOptions();
         const auto action = request.value("action").toString();

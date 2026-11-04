@@ -23,6 +23,8 @@ class NativeSyncNetwork final : public QObject, public SyncNetwork {
 public:
     NativeSyncNetwork();
     explicit NativeSyncNetwork(NativeSyncNetworkBindings bindings);
+    // Whether this firmware lets Kobalt turn Wi-Fi off again after a sync.
+    static bool canTurnOff();
     ~NativeSyncNetwork() override;
     bool connected() const override;
     void prepare(bool interactive, std::function<void(bool)> finished) override;

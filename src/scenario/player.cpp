@@ -55,16 +55,20 @@ public:
         QMutexLocker lock(&mutex);
         queue.clear();
     }
-    // Consumes events until one matches, and returns it.
-    QJsonObject next(const QString &name, const QString &panel, int timeout) {
+    // Consumes events until one matches, and returns it. `where` lists
+    // further fields the event must have, such as an operation name.
+    QJsonObject next(const QString &name, const QString &panel, const QJsonObject &where, int timeout) {
         QJsonObject found;
         waitUntil([&] {
             QMutexLocker lock(&mutex);
             while (!queue.empty()) {
                 const auto event = queue.front();
                 queue.pop_front();
-                if (event.value("event").toString() == name &&
-                    (panel.isEmpty() || event.value("panel").toString() == panel)) {
+                bool match = event.value("event").toString() == name &&
+                             (panel.isEmpty() || event.value("panel").toString() == panel);
+                for (auto it = where.begin(); match && it != where.end(); ++it)
+                    match = event.value(it.key()) == it.value();
+                if (match) {
                     found = event;
                     return true;
                 }
@@ -209,7 +213,7 @@ public:
         }
         if (step.contains("event")) {
             const auto name = step.value("event").toString(), panel = step.value("panel").toString();
-            const auto event = events.next(name, panel, step.value("timeout").toInt(10000));
+            const auto event = events.next(name, panel, step.value("where").toObject(), step.value("timeout").toInt(10000));
             if (event.isEmpty())
                 return "no " + name + " event";
             matched[name] = event;
@@ -222,6 +226,31 @@ public:
                                                                                                 : "the reader stayed busy";
         if (step.contains("mark")) {
             mark.start();
+            return {};
+        }
+        // Lets time pass, for example a sync interval, with events running.
+        // One timer, so the device sleeps in between.
+        if (step.contains("wait_ms")) {
+            QEventLoop loop;
+            QTimer::singleShot(qMax(0, step.value("wait_ms").toInt()), &loop, &QEventLoop::quit);
+            loop.exec();
+            return {};
+        }
+        // A KOSync account that exists for this scenario only, in memory.
+        // Automatic sync runs while it is set; an empty object ends it. The
+        // open book closes first, so its reader can never sync with the saved
+        // account; the next opening uses the scenario account.
+        if (step.contains("kosync")) {
+            if (auto *reader = host.reader ? host.reader() : nullptr) {
+                events.skip();
+                reader->close();
+                current.clear();
+                if (!closed())
+                    return "the open book did not close";
+            }
+            const auto account = step.value("kosync").toObject();
+            kosync::overrideAccount(account);
+            kosync::pauseAutomatic(account.isEmpty());
             return {};
         }
         return "unknown step";
@@ -395,6 +424,7 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
     struct Restore {
         bool syncPaused;
         ~Restore() {
+            kosync::overrideAccount({});
             kosync::pauseAutomatic(syncPaused);
         }
     } restore{syncPaused};
@@ -431,6 +461,21 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             bool enabled;
             ~SleepCleanup() { if (enabled) host.sleepPersistence({}); }
         } sleepCleanup{host, needs(scenario, "sleep-persistence") && bool(host.sleepPersistence)};
+        if (needs(scenario, "wifi-control") && !(host.wifiControl && host.wifiControl())) {
+            result["status"] = QStringLiteral("skipped");
+            result["reason"] = QStringLiteral("the host cannot turn Wi-Fi on and off");
+            result["samples"] = samples;
+            result["stages"] = stages;
+            results.append(result);
+            continue;
+        }
+        // A scenario's KOSync account ends with it, also after a failure.
+        struct AccountCleanup {
+            ~AccountCleanup() {
+                kosync::overrideAccount({});
+                kosync::pauseAutomatic(true);
+            }
+        } accountCleanup;
         if (needs(scenario, "dictionary") && host.dictionary && !host.dictionary()) {
             result["status"] = QStringLiteral("skipped");
             result["reason"] = QStringLiteral("no dictionary is installed");

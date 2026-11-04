@@ -43,6 +43,9 @@ struct Host {
     // Evaluation-only sleep persistence benchmark. Returns measurements, or an
     // `error`. An empty request restores overrides and drains pending writes.
     std::function<QJsonObject(const QJsonObject &)> sleepPersistence;
+    // Whether KOSync can turn Wi-Fi on and off on this host. Optional;
+    // scenarios that need it are skipped without it.
+    std::function<bool()> wifiControl;
 };
 struct Options {
     // Runs only scenarios whose id starts with this, or that this starts with.

@@ -1,6 +1,7 @@
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "reading/reading_bridge.h"
+#include "reading/word_estimates.h"
 #include "support/strings.h"
 #include "support/main_thread.h"
 #include "platforms/kobo/common/native_database_wait.h"
@@ -64,6 +65,10 @@ struct Api {
         symbol<decltype(setBookEstimate)>("_ZN6Volume21setRestOfBookEstimateERK8QVariant");
     void (*setChapterEstimate)(Volume *, const QVariant &) =
         symbol<decltype(setChapterEstimate)>("_ZN6Volume25setCurrentChapterEstimateERK8QVariant");
+    // Present in firmware 4.46 and 6.0.279225. The sync upload sends it as
+    // ContentSourceProgressPercent and the stats screen shows it.
+    void (*setChapterProgress)(Volume *, const QVariant &) =
+        symbol<decltype(setChapterProgress)>("_ZN6Volume25setCurrentChapterProgressERK8QVariant");
     void (*setPages)(void *, const QVariant &) =
         symbol<decltype(setPages)>("_ZN7Content11setNumPagesERK8QVariant");
     bool (*update)(const QString &, const QVariantMap &, const QVariantMap &, const QString &) =
@@ -155,7 +160,7 @@ QVariantMap NativeProgress::persisted(QString *error) const {
         if (db.open()) {
             QSqlQuery query(db);
             query.prepare(
-                "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate, ___NumPages FROM content WHERE ContentID = ? AND ContentType = 6");
+                "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate, CurrentChapterProgress, ___NumPages FROM content WHERE ContentID = ? AND ContentType = 6");
             query.addBindValue(book);
             if (query.exec() && query.next()) {
                 const auto record = query.record();
@@ -292,6 +297,11 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         if (estimates->chapterMilliseconds >= 0)
             native.setChapterEstimate(&volume, QVariant(finished ? 0 : int(estimates->chapterMilliseconds / 1000)));
     }
+    if (activity && native.setChapterProgress) {
+        const double chapter = wordEstimates::chapterProgress(*activity);
+        if (chapter >= 0)
+            native.setChapterProgress(&volume, QVariant(chapter));
+    }
     auto after = native.values(&volume);
     if (timeOnly && !tolino) {
         // Nickel stores the time in whole seconds, as updateBookmark does.
@@ -342,7 +352,8 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         // sync sideloaded EPUB files, and only the bookmark call clears it.
         && (timeOnly || !stored.value("ReadStateSynced").toBool()) && !stored.value("FirstTimeReading").toBool() &&
         stored.value("RestOfBookEstimate").toInt() == after.value("RestOfBookEstimate").toInt() &&
-        stored.value("CurrentChapterEstimate").toInt() == after.value("CurrentChapterEstimate").toInt();
+        stored.value("CurrentChapterEstimate").toInt() == after.value("CurrentChapterEstimate").toInt() &&
+        qAbs(stored.value("CurrentChapterProgress").toDouble() - after.value("CurrentChapterProgress").toDouble()) < 1e-9;
     if (!matches) {
         // A native notification is not proof of persistence. Discard its cache
         // if the independently committed row does not match.

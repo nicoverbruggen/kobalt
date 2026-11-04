@@ -35,6 +35,28 @@ inline ReadingChapter readingChapter(const ReadingActivity &activity) {
     return {words, qBound(1, activity.page + 1, pages), pages};
 }
 
+// The part of the current chapter before this page, from 0 to 1, or -1 when
+// the layout is unknown. Nickel's reader stores the same value as
+// CurrentChapterProgress, and its sync uploads it as the chapter percentage.
+// Unlike readingChapter, it does not need word counts.
+inline double chapterProgress(const ReadingActivity &activity) {
+    const auto &selection = activity.chapter;
+    if (activity.pages <= 0 || activity.page < 0 || activity.page >= activity.pages)
+        return -1;
+    if (selection.current < -1 || selection.current >= activity.chapters.size() || selection.next < -1 ||
+        selection.next >= activity.chapters.size())
+        return -1;
+    if (selection.current >= 0) {
+        if (selection.pages <= 0 || selection.page < 1 || selection.page > selection.pages)
+            return -1;
+        return double(selection.page - 1) / selection.pages;
+    }
+    const int pages = selection.next >= 0 && selection.next < activity.chapters.size()
+                          ? qMax(1, activity.chapters[selection.next].page)
+                          : activity.pages;
+    return double(qBound(1, activity.page + 1, pages) - 1) / pages;
+}
+
 inline int pageWords(const ReadingActivity &activity) {
     const auto chapter = readingChapter(activity);
     if (chapter.words < 0 || chapter.pages <= 0)

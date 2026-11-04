@@ -1,6 +1,7 @@
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "reading/reading_bridge.h"
+#include "reading/word_estimates.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "native_location.h"
 #include "platforms/kobo/common/native_progress.h"
@@ -52,6 +53,10 @@ struct Api {
         symbol<decltype(setBookEstimate)>("_ZN6Volume21setRestOfBookEstimateERK8QVariant");
     void (*setChapterEstimate)(Volume *, const QVariant &) =
         symbol<decltype(setChapterEstimate)>("_ZN6Volume25setCurrentChapterEstimateERK8QVariant");
+    // Present in firmware 4.46 and 6.0.279225. The sync upload sends it as
+    // ContentSourceProgressPercent and the stats screen shows it.
+    void (*setChapterProgress)(Volume *, const QVariant &) =
+        symbol<decltype(setChapterProgress)>("_ZN6Volume25setCurrentChapterProgressERK8QVariant");
     bool (*update)(const QString &, const QVariantMap &, const QVariantMap &, const QString &) =
         symbol<decltype(update)>("_ZN13VolumeManager12updateFieldsERK7QStringRK4QMapIS0_8QVariantES7_S2_");
     void *(*refresh)(const QString &) =
@@ -121,7 +126,7 @@ QVariantMap NativeProgress::persisted(QString *error) const {
         if (db.open()) {
             QSqlQuery query(db);
             query.prepare(
-                "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate FROM content WHERE ContentID = ? AND ContentType = 6");
+                "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate, CurrentChapterProgress FROM content WHERE ContentID = ? AND ContentType = 6");
             query.addBindValue(book);
             if (query.exec() && query.next()) {
                 const auto record = query.record();
@@ -167,7 +172,7 @@ bool NativeProgress::markReading() {
     return true;
 }
 bool NativeProgress::write(const ReadingProgress &expected, const QString &position, double percent, bool finished,
-                           ReadingProgress *verified, QString *error, const ReadingEstimates *estimates, const ReadingActivity *) {
+                           ReadingProgress *verified, QString *error, const ReadingEstimates *estimates, const ReadingActivity *activity) {
     // Nickel's Volume API runs on the GUI thread at lifecycle boundaries.
     kobalt::mainthread::BlockingOperation blockingOperation("nickel-progress-write");
     const auto fail = [error](const QString &message) {
@@ -238,6 +243,11 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         if (estimates->chapterMilliseconds >= 0)
             native.setChapterEstimate(&volume, QVariant(finished ? 0 : int(estimates->chapterMilliseconds / 1000)));
     }
+    if (activity && native.setChapterProgress) {
+        const double chapter = wordEstimates::chapterProgress(*activity);
+        if (chapter >= 0)
+            native.setChapterProgress(&volume, QVariant(chapter));
+    }
     auto after = native.values(&volume);
     if (timeOnly) {
         // Nickel stores the time in whole seconds, as updateBookmark does.
@@ -277,7 +287,9 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
                          && (timeOnly || !row.value("ReadStateSynced").toBool()) &&
                          !row.value("FirstTimeReading").toBool() &&
                          row.value("RestOfBookEstimate").toInt() == after.value("RestOfBookEstimate").toInt() &&
-                         row.value("CurrentChapterEstimate").toInt() == after.value("CurrentChapterEstimate").toInt();
+                         row.value("CurrentChapterEstimate").toInt() == after.value("CurrentChapterEstimate").toInt() &&
+                         qAbs(row.value("CurrentChapterProgress").toDouble() -
+                              after.value("CurrentChapterProgress").toDouble()) < 1e-9;
     if (!matches) {
         // A native notification is not proof of persistence. Discard its cache
         // if the independently committed row does not match.

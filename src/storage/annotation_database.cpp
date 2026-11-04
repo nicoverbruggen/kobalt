@@ -207,8 +207,8 @@ void createDatabase(const QString &path, const QString &directory) {
 std::atomic_bool profileUnsynced{false}, profileBlocked{false}, profileCheckpointRunning{false};
 // A failed checkpoint makes standby wait a while before asking for another,
 // so a full or failing card cannot keep the device awake.
-std::atomic<qint64> profileSynced{0}, profileCheckpointFailed{-1};
-constexpr qint64 checkpointInterval = 60000, checkpointRetry = 300000;
+std::atomic<qint64> profileCheckpointFailed{-1};
+constexpr qint64 checkpointRetry = 300000;
 qint64 monotonicMilliseconds() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -258,7 +258,6 @@ public:
             profileUnsynced = true;
         } else {
             profileUnsynced = false;
-            profileSynced = monotonicMilliseconds();
         }
     }
     // Folds the log into the main file. `truncate` also empties the log file.
@@ -273,7 +272,6 @@ public:
         q.finish();
         if (done) {
             profileUnsynced = false;
-            profileSynced = monotonicMilliseconds();
             profileCheckpointFailed = -1;
         } else {
             profileCheckpointFailed = monotonicMilliseconds();
@@ -405,7 +403,6 @@ private:
         }
         path_ = path;
         profileUnsynced = false;
-        profileSynced = monotonicMilliseconds();
         // Mac and Android leave through Qt; close the file cleanly then.
         static bool closesAtExit = false;
         if (!std::exchange(closesAtExit, true) && QCoreApplication::instance())
@@ -1140,10 +1137,9 @@ void checkpointProfile() {
 bool profileHasUnsyncedWrites() {
     return profileUnsynced;
 }
-bool profileCheckpointDue(bool urgent) {
-    const auto now = monotonicMilliseconds();
+bool profileCheckpointDue() {
     const qint64 failed = profileCheckpointFailed;
-    return profileUnsynced && (urgent || now - profileSynced >= checkpointInterval) && (failed < 0 || now - failed >= checkpointRetry);
+    return profileUnsynced && (failed < 0 || monotonicMilliseconds() - failed >= checkpointRetry);
 }
 void requestProfileCheckpoint() {
     if (profileCheckpointRunning.exchange(true))

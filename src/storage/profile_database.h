@@ -21,10 +21,9 @@ ProfileDatabaseState inspectProfileDatabase(const QString &directory, QString *e
 // Syncs recent commits and folds them into the main file, for example before
 // sleep.
 void checkpointProfile();
-// True when routine commits need durability and the last sync is at least
-// a minute old. Urgent low-battery standby skips that age check. A failed
-// checkpoint suppresses maintenance retries for five minutes.
-bool profileCheckpointDue(bool urgent = false);
+// True when routine commits need durability. A failed checkpoint suppresses
+// further attempts for five minutes. Low-battery standby uses it.
+bool profileCheckpointDue();
 // True while routine commits wait for a sync.
 bool profileHasUnsyncedWrites();
 // Starts a checkpoint on the writer thread without waiting for it.

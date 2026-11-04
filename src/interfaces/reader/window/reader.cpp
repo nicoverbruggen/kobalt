@@ -2527,7 +2527,7 @@ bool Reader::flushBeforeStandby() {
             });
         return false;
     }
-    if (lowBattery && kobalt::storage::profileCheckpointDue(true)) {
+    if (lowBattery && kobalt::storage::profileCheckpointDue()) {
         kobalt::storage::requestProfileCheckpoint();
         return false;
     }

@@ -837,7 +837,7 @@ void routineSyncs() {
                 storage::readBookState(paths, "sync-book").status == storage::ReadStatus::Ok,
             "Cannot repeat an unchanged record");
     require(storage::profileHasUnsyncedWrites(), "A commit without changes was counted as a sync");
-    require(!storage::profileCheckpointDue(), "A checkpoint was due within a minute of the last sync");
+    require(storage::profileCheckpointDue(), "Unsynced routine writes did not make a checkpoint due");
     require(storage::writeBookState(paths, "sync-book", qt::object({{"book", "sync-book"}, {"position", "third"}})) &&
                 !storage::profileHasUnsyncedWrites(),
             "A changed synced commit did not sync earlier routine writes");

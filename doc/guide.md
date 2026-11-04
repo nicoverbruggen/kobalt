@@ -50,7 +50,7 @@ To set it up, open **Settings → Sync** and sign in with your KOSync server, us
 
 The **Automatic sync** row on the Sync page opens a sheet where you choose when Kobalt syncs:
 
-- **While you read**: how often Kobalt sends your progress while the book is open. Choose every page, every minute, every 5, 15 or 30 minutes, every hour, or never. The default is every 15 minutes. Syncing more often uses more battery.
+- **While you read**: how often Kobalt sends your progress as you read. Choose every page, every minute, every 5, 15 or 30 minutes, every hour, or never. The default is every 15 minutes. Kobalt checks when you turn a page, so a book you leave open does not sync until you read on. If those syncs are on, it also syncs when the device sleeps or you close the book. Syncing more often uses more battery.
 - **When you open a book**: Kobalt gets your latest progress. If another device is further along, it asks before moving.
 - **When your device sleeps or wakes** (Kobo only): Kobalt sends your progress before sleep if you are online, and gets your latest progress when you wake the device.
 - **When you close the book**: Kobalt sends your progress if you are online.

@@ -237,7 +237,8 @@ private:
     void continueKosyncWhenReady(std::function<void()> ready);
     void prepareKosyncNetwork(bool interactive, std::function<void()> ready);
     void updateKosyncFeatures();
-    void updateKosyncTimer();
+    void syncKosyncWhileReading();
+    qint64 kosyncClock() const;
     void flushKosync(std::function<void()> finished, bool enabled = true);
     void finishKosync(const QString &message);
     void cancelKosync();
@@ -248,7 +249,7 @@ private:
     std::unique_ptr<SyncNetwork> kosyncNetwork;
     KosyncPage *kosyncPage = nullptr;
     static constexpr int kosyncFinishBudget = 2000;
-    QTimer kosyncTimer, kosyncDeadline, kosyncOpeningGrace, kosyncReaderRetry;
+    QTimer kosyncDeadline, kosyncOpeningGrace, kosyncReaderRetry;
     QElapsedTimer kosyncFinishingElapsed;
     std::function<void()> kosyncFinished;
     std::function<void(bool)> kosyncPresentationReady;
@@ -266,6 +267,10 @@ private:
     QString kosyncMessage;
     quint64 kosyncEpoch = 0;
     bool kosyncStarted = false;
+    // The position the last check saw, and when a sync last started, an
+    // opening or wake skipped it or a deferred choice came back, from kosyncClock().
+    QString kosyncSeenPosition;
+    qint64 kosyncSubmitted = 0;
     bool kosyncPositionFailed = false;
     bool kosyncPromptDeferred = false;
     void showFontPicker();

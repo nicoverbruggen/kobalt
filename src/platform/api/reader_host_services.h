@@ -71,6 +71,8 @@ struct ReaderHostServices {
     std::function<bool()> automaticBookOpening;
     std::function<bool(bool)> setAutomaticBookOpening;
     std::function<QString()> clock;
+    // Optional monotonic milliseconds for interval checks; tests replace it.
+    std::function<qint64()> monotonicMilliseconds;
     std::function<BatteryStatus()> battery;
     // Optional native notifications. The subscription ends with context.
     std::function<void(QObject *context, std::function<void()> changed)> observeBattery;

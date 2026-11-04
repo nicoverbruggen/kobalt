@@ -3,6 +3,7 @@
 #include "support/diagnostics.h"
 #include <QTimer>
 #include "interfaces/reader/views/kosync_notice.h"
+#include <chrono>
 #include <utility>
 #include <QLocale>
 
@@ -27,17 +28,12 @@ void Reader::buildKosync() {
     kosyncClient->setDefaultDeviceName(services.deviceName.isEmpty() ? QStringLiteral("Kobalt")
                                                                  : services.deviceName + QStringLiteral(" (Kobalt)"));
     kosyncPage->setNativeCloudSync(book->usesNativeCloudSync());
-    kosyncTimer.setParent(this);
-    kosyncTimer.setObjectName("rrKosyncTimer");
-    kosyncTimer.setInterval(30000);
-    connect(&kosyncTimer, &QTimer::timeout, this, [this] { synchronizeKosync(); });
     const auto account = [this] {
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
         kosyncPage->setDeviceName(kosyncClient->customDeviceName(), kosyncClient->defaultDeviceName());
         kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(), kosyncClient->signedIn(),
                                kosyncClient->automatic());
         kosyncPage->setSchedule(kosyncClient->schedule());
-        updateKosyncTimer();
         updateKosyncToolbar();
     };
     account();
@@ -144,14 +140,30 @@ void Reader::buildKosync() {
         if (kosyncReaderReady) continueKosyncWhenReady(std::move(kosyncReaderReady));
     });
 }
-// Runs only while the reader is awake; sleep stops it and wake restarts it.
-void Reader::updateKosyncTimer() {
-    kosyncTimer.setInterval(kosync::scheduleIntervalMilliseconds(kosyncClient->schedule()));
-    if (kosyncClient->signedIn() && kosyncAutomatic() && !book->usesNativeCloudSync() &&
-        kosync::syncsWhileReading(kosyncClient->schedule()) && !lifecycleHidden)
-        kosyncTimer.start();
-    else
-        kosyncTimer.stop();
+// While you read, a changed position syncs once the chosen interval has passed
+// since the last submission: 30 seconds for "every page". No timer runs, so a
+// reader left open wakes nothing; its last position goes up at the next page
+// or, if those syncs are on, at sleep or close.
+void Reader::syncKosyncWhileReading() {
+    if (!kosyncStarted)
+        return;
+    const auto position = model->state().value("position").toString();
+    if (position.isEmpty() || position == kosyncSeenPosition)
+        return;
+    kosyncSeenPosition = position;
+    const auto schedule = kosyncClient->schedule();
+    if (!kosync::syncsWhileReading(schedule) ||
+        kosyncClock() - kosyncSubmitted < kosync::scheduleIntervalMilliseconds(schedule))
+        return;
+    synchronizeKosync();
+}
+// Monotonic time, which on Kobo and Android leaves out time asleep, so the
+// interval counts reading time.
+qint64 Reader::kosyncClock() const {
+    if (services.monotonicMilliseconds)
+        return services.monotonicMilliseconds();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 void Reader::updateKosyncFeatures() {
     // A desktop e-reader preview shows what a Kobo offers. A desktop window
@@ -213,6 +225,7 @@ void Reader::prepareKosyncPresentation(std::function<void(bool)> finished) {
     // continues behind a cancellable popover once the reader is presented.
     kosyncPresentationReady = std::move(finished);
     kosyncStarted = true;
+    kosyncSubmitted = kosyncClock();
     kosyncOpening = true;
     kosyncOpeningGrace.start(500);
     kosyncDeadline.start(10000);
@@ -259,6 +272,9 @@ void Reader::synchronizeKosync(bool interactive) {
         if (interactive) {
             kosyncPositionFailed = false;
             kosyncStatus(strings::get("kosync.pending"));
+        } else {
+            // A deferred choice comes back once per interval, not on every page.
+            kosyncSubmitted = kosyncClock();
         }
         kosyncPromptDeferred = false;
         showKosyncChoice();
@@ -275,10 +291,13 @@ void Reader::synchronizeKosync(bool interactive) {
     if (opening && !(std::exchange(kosyncWaking, false) ? kosyncClient->schedule().onSleepWake
                                                           : kosyncClient->schedule().onOpen)) {
         kosyncStarted = true;
+        // The interval starts now, so the first page does not do the skipped sync.
+        kosyncSubmitted = kosyncClock();
         return;
     }
     if (!interactive && !opening && !kosyncProgress.needsSync(model->state().value("position").toString())) return;
     kosyncStarted = true;
+    kosyncSubmitted = kosyncClock();
     if (interactive) kosyncBackgroundFailures = 0;
     if (!interactive) kosyncDeadline.start(10000);
     if (opening) showKosyncOpening();

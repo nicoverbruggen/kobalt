@@ -23,12 +23,13 @@ While a book is open and the device is awake, Kobalt wakes once a minute, just a
 
 The tick runs whether or not the page shows a clock. It stops when the reader hides or the device sleeps. The reading-time minutes in the menu need no tick of their own: opening the menu pauses the reading clock and refreshes the status.
 
-Two other timers can repeat:
+One other timer can repeat:
 
 | Timer | Interval | When it runs | Code |
 | --- | --- | --- | --- |
 | Reader check fallback | 65 s, pushed back by every minute tick | Only fires when the minute tick is not running: the reader is hidden or asleep but awake enough for timers. Stops when no book is open | `ReaderCoordinator` timer |
-| KOSync while reading | The chosen interval: every page (a 30 s check), 1, 5, 15 (default), 30 or 60 minutes, or never | Signed in, automatic sync on, not a book that Nickel's sync carries, interval not "never". Stops at sleep and starts again at wake | `kosyncTimer` and `Reader::updateKosyncTimer` (`src/interfaces/reader/window/reader_kosync.cpp`) |
+
+KOSync while reading has no timer. When the reader shows a new position, after a page turn, a jump or a link, it syncs if the chosen interval has passed since the last sync: 30 seconds for every page, or 1, 5, 15 (default), 30 or 60 minutes. A book left open wakes nothing for KOSync; its last position goes up at the next page or, if those syncs are on, at sleep or close. It needs a signed-in account with automatic sync on, a book that Nickel's sync does not carry, and an interval other than never (`Reader::syncKosyncWhileReading` in `src/interfaces/reader/window/reader_kosync.cpp`).
 
 ## Timers that run only for a short time
 

@@ -71,6 +71,10 @@ void Reader::refresh() {
         !model->busy() && model->turnDirection() != 0 && model->image().cacheKey() != page->image.cacheKey();
     if (!turnFrame || book->usesLocalPace())
         observeReading();
+    // A sync can call into the host's network; on a turn it starts after the
+    // new page is painted, in the refresh that paintTurn() requests.
+    if (!turnFrame)
+        syncKosyncWhileReading();
     if (!turnFrame) turnPainted = false;
     if (!darkReady)
         return;

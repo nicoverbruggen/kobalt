@@ -253,22 +253,27 @@ int main(int argc, char **argv) {
         require(notice.primaryButton()->isVisible(), "in-flight sync offers cancellation");
         int completions = 0;
         notice.completed = [&] { ++completions; notice.hide(); };
-        QElapsedTimer elapsed;
-        elapsed.start();
+        auto *dismissal = notice.findChild<QTimer *>("rrKosyncSuccessTimer");
+        require(dismissal, "the success notice owns its dismissal timer");
         notice.complete();
         require(notice.completing(), "success has a pending automatic dismissal");
         require(notice.findChild<QLabel *>("rrModalTitle")->text() == strings::get("kosync.completed") &&
                 notice.descriptionLabel()->text() == strings::get("kosync.up_to_date") &&
                 !notice.primaryButton()->isVisible(), "successful sync shows confirmation without a button");
-        QTest::qWait(1000);
-        require(notice.isVisible() && completions == 0, "success does not disappear immediately");
-        require(QTest::qWaitFor([&] { return completions == 1; }, 2000) && elapsed.elapsed() >= 1500,
+        // Check the timer instead of waiting for it: the interval is the delay.
+        require(dismissal->isActive() && dismissal->isSingleShot() && dismissal->interval() >= 1500,
                 "success automatically dismisses after at least 1.5 seconds");
+        QCoreApplication::processEvents();
+        require(notice.isVisible() && completions == 0, "success does not disappear immediately");
+        dismissal->stop();
+        QMetaObject::invokeMethod(dismissal, "timeout", Qt::DirectConnection);
+        require(completions == 1 && !notice.isVisible(), "the dismissal timer closes the success notice");
         notice.show();
         notice.complete();
+        require(dismissal->isActive(), "a shown notice can confirm success again");
         notice.hide();
         require(!notice.completing(), "hidden notices release their pending confirmation");
-        QTest::qWait(1600);
+        QCoreApplication::processEvents();
         require(completions == 1, "hiding the success notice cancels its dismissal timer");
     }
     {

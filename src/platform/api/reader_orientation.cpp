@@ -67,6 +67,10 @@ ReaderOrientation::ReaderOrientation(QOrientationSensor *sensor, std::function<v
     Q_ASSERT(!sensor);
     Q_UNUSED(sensor);
 #endif
+    // The member timer belongs to this object and has a name, so tests can
+    // check and run it instead of waiting for it.
+    debounce.setParent(this);
+    debounce.setObjectName("rrOrientationDebounce");
     debounce.setSingleShot(true);
     debounce.setInterval(250);
     connect(&debounce, &QTimer::timeout, this, [this] {

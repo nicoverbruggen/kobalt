@@ -45,6 +45,9 @@ KosyncNotice::KosyncNotice(QWidget *parent)
     cancel->setProperty("reader_primary_action", false);
     ui::readerStyle(cancel, "QPushButton{border:none;padding:0;min-height:0;font-weight:400;" +
                             ui::styles::font(ui::metrics::chrome::labelText) + "}");
+    // The member timer belongs to the notice, so a check of its children finds it.
+    successTimer.setParent(this);
+    successTimer.setObjectName("rrKosyncSuccessTimer");
     successTimer.setSingleShot(true);
     successTimer.setTimerType(Qt::PreciseTimer);
     connect(&successTimer, &QTimer::timeout, this, [this] { if (completed) completed(); });

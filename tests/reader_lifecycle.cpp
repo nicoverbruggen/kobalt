@@ -44,6 +44,7 @@
 #include "support/book_fixtures.h"
 #include "support/engine_fixtures.h"
 #include "support/host_presentation.h"
+#include "support/input_clock.h"
 #include "support/reading_bridge_fixture.h"
 #include "support/strings.h"
 
@@ -175,10 +176,16 @@ EngineFontInputs testFonts;
 QString testPlaceholder;
 QString profile;
 QString coverBook, textBook;
-std::atomic_bool delayUsbEncoding{false}, usbEncodingReturned{false};
+std::atomic_bool delayUsbEncoding{false}, releaseUsbEncoding{false}, usbEncodingReturned{false};
+// A delayed encoding holds the engine worker until the test releases it, so
+// the mapping outlasts the reader's deadline without a fixed sleep. The bound
+// keeps a failed test from holding the worker for good.
 QString usbPosition(const ReaderModel &model, QString *error) {
     if (delayUsbEncoding) {
-        QThread::msleep(2500);
+        QElapsedTimer held;
+        held.start();
+        while (!releaseUsbEncoding && held.elapsed() < 10000)
+            QThread::msleep(1);
         usbEncodingReturned = true;
     }
     return nickel::positionCodec().encode(model, error);
@@ -298,6 +305,7 @@ public:
             services.suspended = [] { return false; };
             services.clock = [] { return QStringLiteral("09:00"); };
             services.openBrowser = [](const QUrl &, QWidget *) { return false; };
+            services.inputMilliseconds = test::inputMilliseconds;
             if (configureServices)
                 configureServices(services);
             window_ = createReaderWindow(std::move(book), rotation ? rotation : &orientation, std::move(services));
@@ -369,6 +377,43 @@ struct CloseHost {
             qFatal("Reader lifecycle test did not drain");
     }
 };
+
+// The reader's armed timers apart from its minute clock: repeating timers and
+// single-shot timers due within a minute. The follow-up work after a turn or
+// an opening uses such timers and ends on its own. A test that proves that
+// nothing more happens waits for this list to empty instead of for a time.
+QStringList activeReaderTimers(ReaderWindow *window) {
+    QStringList active;
+    for (auto *timer : window->findChildren<QTimer *>())
+        if (timer->isActive() && timer->objectName() != "rrClockTimer" &&
+            (timer->interval() < 60000 || !timer->isSingleShot()))
+            active.append(QString("%1 (%2 ms%3)")
+                              .arg(timer->objectName().isEmpty() ? QString("unnamed") : timer->objectName())
+                              .arg(timer->interval())
+                              .arg(timer->isSingleShot() ? ", single shot" : ""));
+    return active;
+}
+
+// Runs the reader's armed sync deadline now instead of waiting for it.
+// Returns false when no single-shot deadline with this interval is armed: 10 s
+// for a sync, 2 s for the final sync at close or sleep.
+bool runKosyncDeadline(ReaderWindow *window, int interval = 10000) {
+    auto *deadline = window->findChild<QTimer *>("rrKosyncDeadline");
+    if (!deadline || !deadline->isActive() || !deadline->isSingleShot() || deadline->interval() != interval)
+        return false;
+    deadline->stop();
+    QMetaObject::invokeMethod(deadline, "timeout", Qt::DirectConnection);
+    return true;
+}
+
+// The position-mapping deadline of the reader's only shutdown or USB request:
+// a single-shot 2 s timer. Returns nullptr when there is not exactly one.
+QTimer *transitionMappingDeadline(ReaderWindow *window) {
+    const auto deadlines = window->findChildren<QTimer *>("rrTransitionMappingDeadline");
+    if (deadlines.size() != 1 || !deadlines.last()->isSingleShot() || deadlines.last()->interval() != 2000)
+        return nullptr;
+    return deadlines.last();
+}
 
 class Canvas final : public android::WidgetCanvas {
 public:
@@ -521,9 +566,18 @@ private slots:
         int completed = 0;
         engineActivity().pause(true);
         host.window()->prepareShutdown([&] { ++completed; });
-        const bool timedOut = QTest::qWaitFor([&] { return completed == 1; }, 4000);
+        // The paused engine holds the mapping, so its 2 s deadline ends the
+        // wait. Check it and run it now instead of waiting for it.
+        auto *deadline = transitionMappingDeadline(host.window());
+        const bool armed = deadline && deadline->isActive();
+        if (armed) {
+            deadline->stop();
+            QMetaObject::invokeMethod(deadline, "timeout", Qt::DirectConnection);
+        }
+        const bool timedOut = armed && QTest::qWaitFor([&] { return completed == 1; }, 4000);
         // Always release the worker before an assertion or fixture cleanup.
         engineActivity().pause(false);
+        QVERIFY(armed);
         QVERIFY(timedOut);
         bool drained = false;
         ReaderSession::drain([&] { drained = true; });
@@ -1870,10 +1924,10 @@ private slots:
         host.window()->wakeReader();
         QVERIFY(host.window()->isVisible());
         QTRY_COMPARE(host.window()->size(), screenSize);
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         host.window()->pageButton(-1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 1);
     }
@@ -1956,7 +2010,11 @@ private slots:
         } resetDiagnostics;
         host.window()->pageButton(-1);
         QVERIFY(!host.session()->busy());
-        QTest::qWait(300);
+        // Real idle time before the input that turns: the diagnostics clocks
+        // measure it and the check below must exclude it. 100 ms is well
+        // above the 20 ms tolerance. The skip passes the duplicate-turn filter.
+        test::skipPageTurnWindow();
+        QTest::qWait(100);
         host.window()->pageButton(1);
         QTRY_VERIFY(!painted.isEmpty());
         QCOMPARE(host.session()->page(), 1);
@@ -1994,12 +2052,12 @@ private slots:
         QTest::mouseClick(page, Qt::LeftButton, Qt::NoModifier, QPoint(page->width() * 9 / 10, page->height() / 2));
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 1);
         QVERIFY(input.value("source_ms").toDouble() > 0);
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         // Host callbacks, including Android buttons, have no Qt source time.
         host.window()->pageButton(1);
         QCOMPARE(input.value("source_ms").toDouble(), 0.0);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 3);
     }
@@ -2031,12 +2089,12 @@ private slots:
             page->tapped(forward);
         QTRY_COMPARE(host.session()->page(), 3);
         QTRY_VERIFY(!host.session()->busy());
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         page->swiped(1);
         page->swiped(1);
         page->swiped(-1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 4);
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         page->tapped(forward);
         page->tapped(forward);
         page->tapped(center);
@@ -2409,13 +2467,22 @@ private slots:
         rotation.start(Qt::PortraitOrientation);
         host.window()->show();
         QTRY_VERIFY(host.window()->readyForPresentation());
+        // A new angle arms the 250 ms debounce. The sleep request cancels it,
+        // and a sample while asleep does not arm it again, so no turn can
+        // follow. Check the timer instead of waiting past its interval.
+        auto *debounce = rotation.findChild<QTimer *>("rrOrientationDebounce");
+        QVERIFY(debounce && debounce->isSingleShot());
         factory.backend->sample(QOrientationReading::TopDown);
+        QVERIFY(debounce->isActive());
+        QCOMPARE(debounce->interval(), 250);
         host.window()->sleepReader();
         QVERIFY(host.window()->isVisible());
-        QTest::qWait(300);
+        QVERIFY(!debounce->isActive());
+        QCoreApplication::processEvents();
         QCOMPARE(shown, Qt::PortraitOrientation);
         factory.backend->sample(QOrientationReading::TopDown);
-        QTest::qWait(300);
+        QVERIFY(!debounce->isActive());
+        QCoreApplication::processEvents();
         QCOMPARE(shown, Qt::PortraitOrientation);
         if (handoff) {
             host.window()->sleepViewReady();
@@ -3639,7 +3706,7 @@ private slots:
         } else {
             QVERIFY(!host.idle());
             QCOMPARE(host.progress->current.status, 1);
-            QTest::qWait(210);
+            test::skipPageTurnWindow();
             host.window()->pageButton(1);
             if (suppress) {
                 QTest::qWait(100);
@@ -3897,9 +3964,17 @@ private slots:
             auto *notice = dynamic_cast<reader::KosyncNotice *>(popup.data());
             QVERIFY(notice);
             notice->complete();
-            QTRY_VERIFY_WITH_TIMEOUT(!popup || !popup->isVisible(), 2500);
+            // Run the dismissal timer instead of waiting for it.
+            auto *dismissal = notice->findChild<QTimer *>("rrKosyncSuccessTimer");
+            QVERIFY(dismissal && dismissal->isActive());
+            dismissal->stop();
+            QMetaObject::invokeMethod(dismissal, "timeout", Qt::DirectConnection);
+            QTRY_VERIFY(!popup || !popup->isVisible());
         } else {
-            QTRY_VERIFY_WITH_TIMEOUT(!popup || !popup->isVisible(), 12000);
+            // The stalled server never answers, so the sync deadline ends the
+            // opening sync. Run it instead of waiting 10 s for it.
+            QVERIFY(runKosyncDeadline(host.window()));
+            QTRY_VERIFY(!popup || !popup->isVisible());
         }
         QVERIFY(host.window()->property("reader_full_flash").toBool());
         QTRY_COMPARE(paints.painted, QRegion(paper->rect()));
@@ -4028,9 +4103,21 @@ private slots:
             QCOMPARE(network->requests, 1);
             QVERIFY(network->interactive);
             QVERIFY(!host.window()->findChild<QWidget *>("rrKosyncOpening"));
-            QEventLoop permission;
-            QTimer::singleShot(connection == "permission" ? 11200 : 100, &permission, &QEventLoop::quit);
-            permission.exec();
+            if (connection == "permission") {
+                // An interactive connection arms the sync deadline only once
+                // it connects, so a permission prompt can take as long as the
+                // user needs. Check that no reader timer is left that could
+                // end the wait, instead of waiting past the 10 s deadline.
+                QTRY_VERIFY2_WITH_TIMEOUT(activeReaderTimers(host.window()).isEmpty(),
+                                          qPrintable("Active reader timers: " +
+                                                     activeReaderTimers(host.window()).join(", ")), 10000);
+                auto *deadline = host.window()->findChild<QTimer *>("rrKosyncDeadline");
+                QVERIFY(deadline && !deadline->isActive());
+            } else {
+                QEventLoop permission;
+                QTimer::singleShot(100, &permission, &QEventLoop::quit);
+                permission.exec();
+            }
             QVERIFY(bool(network->completed));
             QVERIFY(!host.window()->findChild<QPushButton *>("rrKosyncServer")->isEnabled());
             QCOMPARE(network->cancellations, 0);
@@ -4240,19 +4327,9 @@ private slots:
         QTRY_VERIFY(!host.session()->busy());
         // The turn's follow-up work ends on its own: neighbour pages, the
         // opening record and the short delays after a turn.
-        const auto activeTimers = [&] {
-            QStringList active;
-            for (auto *timer : host.window()->findChildren<QTimer *>())
-                if (timer->isActive() && timer->objectName() != "rrClockTimer" &&
-                    (timer->interval() < 60000 || !timer->isSingleShot()))
-                    active.append(QString("%1 (%2 ms%3)")
-                                      .arg(timer->objectName().isEmpty() ? QString("unnamed") : timer->objectName())
-                                      .arg(timer->interval())
-                                      .arg(timer->isSingleShot() ? ", single shot" : ""));
-            return active;
-        };
-        QTRY_VERIFY2_WITH_TIMEOUT(activeTimers().isEmpty(),
-                                  qPrintable("Active reader timers: " + activeTimers().join(", ")), 10000);
+        QTRY_VERIFY2_WITH_TIMEOUT(activeReaderTimers(host.window()).isEmpty(),
+                                  qPrintable("Active reader timers: " + activeReaderTimers(host.window()).join(", ")),
+                                  10000);
         // No timer of any main-thread object fires for a few idle seconds:
         // this also covers unparented timers and single-shot calls.
         struct TimerEvents final : QObject {
@@ -4355,6 +4432,7 @@ private slots:
     void kosyncBackgroundWifi() {
         QTcpServer stalled;
         QVERIFY(stalled.listen(QHostAddress::LocalHost));
+        QSignalSpy attempts(&stalled, &QTcpServer::newConnection);
         auto paths = testPaths();
         QVERIFY(storage::writeJson(paths.syncAccount(), {
             {"schema", 1}, {"server", QString("https://127.0.0.1:%1").arg(stalled.serverPort())},
@@ -4406,7 +4484,8 @@ private slots:
         readOn(5);
         QCOMPARE(network->requests, 2);
         QVERIFY(!network->interactive);
-        QTRY_VERIFY_WITH_TIMEOUT(!network->completed, 12000);
+        QVERIFY(runKosyncDeadline(host.window()));
+        QTRY_VERIFY(!network->completed);
         for (int attempt = 2; attempt <= kosync::backgroundConnectionLimit; ++attempt) {
             readOn(5);
             QCOMPARE(network->requests, 1 + attempt);
@@ -4430,8 +4509,12 @@ private slots:
         auto completed = std::move(network->completed);
         network->completed = {};
         completed(true);
-        // The stalled server ends the exchange at its deadline.
-        QTRY_COMPARE_WITH_TIMEOUT(network->releases, 2 + kosync::backgroundConnectionLimit, 12000);
+        // The stalled server ends the exchange at its deadline. Run it once
+        // the request has reached the server.
+        QTRY_VERIFY(attempts.count() > 0);
+        QCOMPARE(network->releases, 1 + kosync::backgroundConnectionLimit);
+        QVERIFY(runKosyncDeadline(host.window()));
+        QTRY_COMPARE(network->releases, 2 + kosync::backgroundConnectionLimit);
         network->connected = false;
         // Without permission to turn on Wi-Fi, a periodic sync stays local.
         host.window()->findChild<QPushButton *>("rrKosyncAutomatic")->click();
@@ -4487,6 +4570,7 @@ private slots:
         QFETCH(QString, scenario);
         QTcpServer stalled;
         QVERIFY(stalled.listen(QHostAddress::LocalHost));
+        QSignalSpy attempts(&stalled, &QTcpServer::newConnection);
         auto paths = testPaths();
         const bool opening = scenario.startsWith("opening");
         QVERIFY(storage::writeJson(paths.syncAccount(), {
@@ -4563,8 +4647,12 @@ private slots:
             QCOMPARE(network->releases, 0);
             if (scenario == "wake-end") {
                 // The stalled server ends the exchange at the sync deadline.
+                // Run it once the request has reached the server.
                 complete(true);
-                QTRY_COMPARE_WITH_TIMEOUT(network->releases, 1, 12000);
+                QTRY_VERIFY(attempts.count() > 0);
+                QCOMPARE(network->releases, 0);
+                QVERIFY(runKosyncDeadline(host.window()));
+                QTRY_COMPARE(network->releases, 1);
             } else if (scenario == "wake-skip") {
                 skip();
                 QCOMPARE(network->releases, 1);
@@ -4789,11 +4877,19 @@ private slots:
             QTRY_VERIFY(window->findChild<QWidget *>("rrKosyncOpening"));
             QVERIFY(click(canvas, window->findChild<QPushButton *>("rrKosyncCancel")));
         } else {
+            // The stalled server never answers, so the final sync ends at its
+            // 2 s budget. Run that deadline instead of waiting for it. The
+            // busy-event-loop row has already passed it, and a live server
+            // answers.
+            if (!live && transition != "blocked") QVERIFY(runKosyncDeadline(window, 2000));
             QTRY_VERIFY_WITH_TIMEOUT(!window || !window->pendingNetworkSync(), 3500);
             QVERIFY(elapsed.elapsed() < 3500);
             if (transition == "close") QTRY_VERIFY(host.idle());
             else if (!live) {
                 QVERIFY(window);
+                // Delete the notice that the sleep dismissed, so the check
+                // after wake finds the new one.
+                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
                 window->wakeReader();
                 QTRY_VERIFY(window->findChild<QWidget *>("rrKosyncOpening"));
                 QVERIFY(click(canvas, window->findChild<QPushButton *>("rrKosyncCancel")));
@@ -5189,7 +5285,11 @@ private slots:
         canvas.resize(900, 900);
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
-        QTest::qWait(2300);
+        // A retry of the opening status would need an armed timer. Wait for
+        // the follow-up work of the opening to end instead of for a time.
+        QTRY_VERIFY2_WITH_TIMEOUT(activeReaderTimers(host.window()).isEmpty(),
+                                  qPrintable("Active reader timers: " + activeReaderTimers(host.window()).join(", ")),
+                                  10000);
         QCOMPARE(host.progress->openingAttempts, 1);
         QCOMPARE(host.progress->writeAttempts, 0);
         host.window()->preparePresentation([](bool) {});
@@ -5302,7 +5402,7 @@ private slots:
 
         const auto turn = [&](int direction) {
             const auto before = host.session()->state().value("position");
-            QTest::qWait(210);
+            test::skipPageTurnWindow();
             host.window()->pageButton(direction);
             QTRY_VERIFY(!host.session()->busy() && host.session()->state().value("position") != before);
             QTRY_VERIFY(!host.book()->savesPending());
@@ -5317,7 +5417,9 @@ private slots:
             host.book()->saveReadingActivity();
             QTRY_VERIFY(!host.book()->savesPending());
         }
-        QTest::qWait(350);
+        // A pending appearance retry keeps savesPending() true, so none can
+        // follow once it is false.
+        QCoreApplication::processEvents();
         flushDiagnostics();
         QCOMPARE(failures.load(), 1);
 
@@ -5476,14 +5578,18 @@ private slots:
         QTRY_COMPARE(stored(), current());
         const auto turn = [&] {
             const auto before = current();
-            QTest::qWait(210);
+            test::skipPageTurnWindow();
             host.window()->pageButton(1);
             QTRY_VERIFY(!host.session()->busy() && current() != before);
             QTRY_VERIFY(!host.book()->savesPending());
         };
         const auto initial = stored();
         turn();
-        QTest::qWait(2200);
+        // A delayed save after the turn would need an armed timer. Wait for
+        // the turn's follow-up work to end instead of for a time.
+        QTRY_VERIFY2_WITH_TIMEOUT(activeReaderTimers(host.window()).isEmpty(),
+                                  qPrintable("Active reader timers: " + activeReaderTimers(host.window()).join(", ")),
+                                  10000);
         QCOMPARE(stored(), initial);
         QTRY_VERIFY(host.window()->flushBeforeStandby());
         QCOMPARE(stored(), initial);
@@ -5517,7 +5623,8 @@ private slots:
         QTRY_VERIFY(host.window()->flushBeforeStandby());
         QVERIFY(QFile::setPermissions(paths.database(), QFileDevice::ReadOwner | QFileDevice::WriteOwner));
         host.book()->saveReadingActivity();
-        QTest::qWait(350);
+        // A save and its retries keep savesPending() true until they end.
+        QTRY_VERIFY(!host.book()->savesPending());
         QCOMPARE(failures, 1);
         QVERIFY(stored() != current());
         host.window()->checkpoint();
@@ -5540,16 +5647,19 @@ private slots:
     }
     void usbFinalSave() {
         QFETCH(QString, outcome);
-        struct ResetDelay {
-            ~ResetDelay() {
-                delayUsbEncoding = false;
-            }
-        } resetDelay;
         QTemporaryDir root;
         auto paths = testPaths();
         paths.directory = root.path();
         ReaderFixture host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{host};
+        // Ends before the cleanup closes the reader, so a failed row never
+        // leaves the engine worker held.
+        struct ResetDelay {
+            ~ResetDelay() {
+                delayUsbEncoding = false;
+                releaseUsbEncoding = true;
+            }
+        } resetDelay;
         const auto identity = QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
         host.progress = std::make_shared<test::HostProgress>();
         host.progress->current = {identity, "OEBPS/c1.xhtml", 100, 1, true};
@@ -5565,7 +5675,7 @@ private slots:
             host.progress->publish({identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true});
         }
         const auto before = host.progress->current;
-        usbEncodingReturned = false;
+        usbEncodingReturned = releaseUsbEncoding = false;
         delayUsbEncoding = outcome == "timeout";
         const int attempts = host.progress->writeAttempts;
         int completed = 0;
@@ -5576,9 +5686,20 @@ private slots:
             host.window()->prepareShutdown([&] { ++completed; }, true);
         else
             host.window()->prepareUsb([&] { ++completed; });
+        // The engine mapping has a 2 s deadline. Check the timer and run it
+        // now instead of waiting for it.
+        QPointer<QTimer> mappingDeadline = transitionMappingDeadline(host.window());
+        QVERIFY(mappingDeadline);
+        const auto runMappingDeadline = [&] {
+            mappingDeadline->stop();
+            QMetaObject::invokeMethod(mappingDeadline, "timeout", Qt::DirectConnection);
+        };
         if (outcome == "battery-low-held") {
             QTRY_VERIFY(host.progress->finishDone);
-            QTest::qWait(2200);
+            // The deadline bounds only the mapping, which has returned and
+            // cancelled it, so nothing releases the held storage finish.
+            QVERIFY(!mappingDeadline || !mappingDeadline->isActive());
+            QCoreApplication::processEvents();
             QCOMPARE(completed, 0);
             QCOMPARE(host.progress->writeAttempts, attempts);
             QVERIFY(!host.window()->findChild<QPushButton *>("rrCloseSaveRetry"));
@@ -5603,10 +5724,19 @@ private slots:
             } else
                 host.window()->findChild<QPushButton *>("rrCloseSaveQuit")->click();
         }
+        if (outcome == "timeout") {
+            // The held mapping cannot finish the transition; the deadline does.
+            QVERIFY(mappingDeadline && mappingDeadline->isActive());
+            QCoreApplication::processEvents();
+            QCOMPARE(completed, 0);
+            runMappingDeadline();
+        }
         QTRY_COMPARE_WITH_TIMEOUT(completed, 1, 3000);
         QVERIFY(elapsed.elapsed() < 2400);
         if (outcome == "timeout") {
-            QTRY_VERIFY_WITH_TIMEOUT(usbEncodingReturned.load(), 3000);
+            QVERIFY(!usbEncodingReturned);
+            releaseUsbEncoding = true;
+            QTRY_VERIFY(usbEncodingReturned.load());
             // Drain the late engine callback while the window remains alive.
             QTest::qWait(100);
         }
@@ -6447,8 +6577,14 @@ private:
             QCOMPARE(popup->findChild<QLabel *>("rrModalTitle")->text(), strings::get("kosync.completed"));
             QVERIFY(!popup->findChild<QPushButton *>("rrKosyncCancel")->isVisible());
             QVERIFY(!host.window()->flushBeforeStandby());
-            QTest::qWait(1000);
+            // The confirmation stays for its dismissal timer's interval. Check
+            // the timer and run it now instead of waiting for it.
+            auto *dismissal = popup->findChild<QTimer *>("rrKosyncSuccessTimer");
+            QVERIFY(dismissal && dismissal->isActive() && dismissal->interval() >= 1500);
+            QCoreApplication::processEvents();
             QVERIFY(popup && popup->isVisible());
+            dismissal->stop();
+            QMetaObject::invokeMethod(dismissal, "timeout", Qt::DirectConnection);
         }
         QTRY_VERIFY(!popup || !popup->isVisible());
         QCOMPARE(network->requests, 1);
@@ -6513,7 +6649,9 @@ private:
             const auto identity = QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
             QCOMPARE(storage::readBookState(paths, identity).object.value("position").toString(), position);
         } else if (scenario == "deadline") {
-            QTRY_VERIFY_WITH_TIMEOUT(!popup || !popup->isVisible(), 12000);
+            // The connection never answers, so the sync deadline cancels it.
+            QVERIFY(runKosyncDeadline(host.window()));
+            QTRY_VERIFY(!popup || !popup->isVisible());
             QCOMPARE(network->cancellations, 1);
             QCOMPARE(attempts.count(), 0);
         } else {

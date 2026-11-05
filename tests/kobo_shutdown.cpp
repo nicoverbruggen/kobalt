@@ -2,10 +2,13 @@
 #include "platforms/kobo/common/screensaver_compatibility.h"
 #include "storage/annotation_database.h"
 #include "storage/profile_database.h"
+#include <QAbstractEventDispatcher>
 #include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <QLibrary>
+#include <chrono>
 #include <dlfcn.h>
 
 extern "C" void kobalt_power_off(void *, bool);
@@ -61,6 +64,31 @@ void recordHandoff() {
 }
 void powerOff(void *, bool low) { recordHandoff(); ++powerOffs; batteryLow = low; }
 void reboot(void *) { recordHandoff(); ++reboots; }
+// The single-shot timers that can still fire in this thread: active
+// single-shot QTimers under the lifecycle, the lifecycle's own timers, and
+// QTimer::singleShot calls, which Qt keeps under the event dispatcher. A
+// shutdown deadline would be one of them. The lifecycle's repeating test
+// command poll is not a deadline.
+QStringList pendingSingleShots(QObject &lifecycle) {
+    auto *dispatcher = QAbstractEventDispatcher::instance();
+    QStringList pending;
+    const auto add = [&](QObject *object) {
+        for (const auto &timer : dispatcher->timersForObject(object))
+            pending.append(QString("%1 (%2 ms)").arg(QString::fromLatin1(object->metaObject()->className()))
+                               .arg(std::chrono::duration_cast<std::chrono::milliseconds>(timer.interval).count()));
+    };
+    add(&lifecycle);
+    for (auto *timer : lifecycle.findChildren<QTimer *>())
+        if (timer->isSingleShot()) add(timer);
+    for (auto *object : dispatcher->children()) add(object);
+    return pending;
+}
+// Runs the events that are already queued, and the deferred deletes they
+// cause, without waiting for any timer.
+void processQueuedEvents() {
+    QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+}
 }
 void N3PowerWorkflowManager::powerOff(bool low) { ::powerOff(this, low); }
 
@@ -83,6 +111,26 @@ private slots:
     void cleanup() {
         kobalt::storage::reopenProfile();
         kobalt::storage::closeProfile();
+    }
+    void timerCheckSeesDeadlines() {
+        // The held-shutdown checks rely on this: a deadline started as a
+        // single-shot call or as a lifecycle timer is listed.
+        kobalt::NativeLifecycle lifecycle(nullptr);
+        QVERIFY(lifecycle.connected());
+        processQueuedEvents();
+        QVERIFY2(pendingSingleShots(lifecycle).isEmpty(), qPrintable(pendingSingleShots(lifecycle).join(", ")));
+        // A single-shot call stays registered until it fires, even when its
+        // context is gone. Use a short one so that it cannot outlive this case.
+        bool fired = false;
+        QTimer::singleShot(1, &lifecycle, [&] { fired = true; });
+        QCOMPARE(pendingSingleShots(lifecycle).size(), 1);
+        QTRY_VERIFY(fired);
+        processQueuedEvents();
+        QVERIFY(pendingSingleShots(lifecycle).isEmpty());
+        QTimer deadline(&lifecycle);
+        deadline.setSingleShot(true);
+        deadline.start(3000);
+        QCOMPARE(pendingSingleShots(lifecycle).size(), 1);
     }
     void completion_data() {
         QTest::addColumn<int>("mode");
@@ -113,9 +161,12 @@ private slots:
         QCOMPARE(powerOffs + reboots, 0);
         QVERIFY(kobalt::NativeLifecycle::nativeSessionSaveAllowed());
         if (stalled) {
-            // Process events beyond the former forced-shutdown deadline.
-            // Required saves must retain storage for every shutdown mode.
-            QTest::qWait(3500);
+            // No deadline forces the shutdown: required saves must retain
+            // storage for every shutdown mode. Check that no timer is left
+            // that could end the wait, instead of waiting past a deadline.
+            processQueuedEvents();
+            QVERIFY2(pendingSingleShots(lifecycle).isEmpty(),
+                     qPrintable("A timer could end the held shutdown: " + pendingSingleShots(lifecycle).join(", ")));
             QCOMPARE(powerOffs + reboots, 0);
             QVERIFY2(available(), "Pending shutdown closed the profile before saves completed");
             QVERIFY(kobalt::NativeLifecycle::nativeSessionSaveAllowed());
@@ -248,8 +299,11 @@ private slots:
             QVERIFY(drained);
             QCOMPARE(powerOffs, 0);
             QVERIFY(kobalt::NativeLifecycle::nativeSessionSaveAllowed());
-            // A slow or failed save must not be bypassed by the other mod.
-            QTest::qWait(3500);
+            // A slow or failed save must not be bypassed by the other mod,
+            // and no timer may end the held shutdown.
+            processQueuedEvents();
+            QVERIFY2(pendingSingleShots(lifecycle).isEmpty(),
+                     qPrintable("A timer could end the held shutdown: " + pendingSingleShots(lifecycle).join(", ")));
             QCOMPARE(powerOffs, 0);
             QVERIFY(kobalt::AnnotationDatabase::transaction(profilePath, [](QSqlDatabase &) { return true; }));
             QVERIFY(kobalt::NativeLifecycle::nativeProgressSaveAllowed());

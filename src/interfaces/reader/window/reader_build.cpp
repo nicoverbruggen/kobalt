@@ -1585,6 +1585,7 @@ void Reader::buildNotices() {
     brightnessNotice->setObjectName("rrBrightnessNotice");
     brightnessNotice->setAttribute(Qt::WA_TransparentForMouseEvents);
     brightnessNotice->hide();
+    brightnessHide.setObjectName("rrBrightnessHideTimer");
     brightnessHide.setSingleShot(true);
     brightnessHide.setInterval(m::lightSwipe::hideMilliseconds);
     connect(&brightnessHide, &QTimer::timeout, brightnessNotice, &QWidget::hide);
@@ -1597,6 +1598,7 @@ void Reader::buildNotices() {
 }
 
 void Reader::connectLightGestures() {
+    lightFeedback.setObjectName("rrLightFeedbackTimer");
     lightFeedback.setSingleShot(true);
     lightFeedback.setInterval(m::lightSwipe::feedbackMilliseconds);
     connect(&lightFeedback, &QTimer::timeout, this, [this] {

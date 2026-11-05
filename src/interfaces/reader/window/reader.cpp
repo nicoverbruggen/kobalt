@@ -190,13 +190,26 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb) {
     };
     // Bound the engine mapping wait, not required storage acknowledgements.
     // USB must not release a session that still owns unsaved reading time.
-    kobalt::qt::later(2000, this, [completed, complete, usb] {
+    // Each request has its own deadline, so a superseded request still reports
+    // its timeout. The name lets tests check and run it instead of waiting.
+    auto *deadline = new QTimer(this);
+    deadline->setObjectName("rrTransitionMappingDeadline");
+    deadline->setSingleShot(true);
+    connect(deadline, &QTimer::timeout, this, [deadline, completed, complete, usb] {
+        deadline->deleteLater();
         if (std::exchange(*completed, true))
             return;
         kobalt::diagnostic(usb ? "usb-save-timeout" : "shutdown-save-timeout");
         complete({}, {}, false);
     });
-    model->nativePosition([completed, complete](const QString &location, const QString &error) {
+    deadline->start(2000);
+    model->nativePosition([completed, complete, timer = QPointer<QTimer>(deadline)](const QString &location,
+                                                                                    const QString &error) {
+        // Once the mapping has returned, the deadline has nothing left to do.
+        if (timer) {
+            timer->stop();
+            timer->deleteLater();
+        }
         if (!std::exchange(*completed, true))
             complete(location, error, true);
     });
@@ -2133,7 +2146,8 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, pageNav
         book->deviceTransition() || appearanceEdit.panelOpen() || appearanceEdit.applying())
         return;
     if (!pageTurnClock.isValid()) pageTurnClock.start();
-    const bool accepted = !userInput || pageTurnFilter.accept(sourceTime, pageTurnClock.elapsed(), clock);
+    const qint64 delivered = services.inputMilliseconds ? services.inputMilliseconds() : pageTurnClock.elapsed();
+    const bool accepted = !userInput || pageTurnFilter.accept(sourceTime, delivered, clock);
     if (kobalt::diagnosticsActive())
         kobalt::diagnostic("page-turn-input", {{"direction", direction}, {"source_ms", double(sourceTime)},
             {"accepted", accepted}, {"busy", model->busy()}, {"page", model->page()}}, false);

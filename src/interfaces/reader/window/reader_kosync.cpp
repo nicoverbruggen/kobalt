@@ -113,6 +113,9 @@ void Reader::buildKosync() {
         : strings::get(kosyncClient->signedIn() ? "kosync.signed_in" : "kosync.signed_out");
     kosyncStatus(kosyncClient->storageError().isEmpty() ? status : kosyncClient->storageError());
     kosyncFinishingElapsed.invalidate();
+    // Names let tests check and run the timers instead of waiting for them.
+    kosyncDeadline.setObjectName("rrKosyncDeadline");
+    kosyncOpeningGrace.setObjectName("rrKosyncOpeningGrace");
     kosyncDeadline.setSingleShot(true);
     connect(&kosyncDeadline, &QTimer::timeout, this, [this] {
         diagnostic("kosync-deadline", qt::object({{"connecting", kosyncConnecting},

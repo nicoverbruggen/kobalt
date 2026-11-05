@@ -40,6 +40,7 @@
 #include "support/book_fixtures.h"
 #include "support/engine_fixtures.h"
 #include "support/font_fixtures.h"
+#include "support/input_clock.h"
 #include "support/literary_book.h"
 #include "support/screenshot_gallery.h"
 #include "support/screenshot_runner.h"
@@ -317,6 +318,7 @@ struct Fixture {
                      // Dictionary management belongs to standalone hosts. Its
                      // gallery rows use the same reader sizes without Kobo chrome.
                      if (standaloneSettings) services.devicePreview = [] { return false; };
+                     services.inputMilliseconds = test::inputMilliseconds;
                      if (configure) configure(services);
                  }) {
         window.resize(920, 800);
@@ -427,7 +429,7 @@ struct Fixture {
         if (!reader) return false;
         const int previous = state().value("page").toInt();
         // Separate deliberate setup turns from duplicate input rejected by the reader.
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         reader->pageButton(direction);
         return QTest::qWaitFor([&] {
             const auto current = state();
@@ -735,6 +737,21 @@ void selectPreview(Fixture &fixture, int preset) {
         rotate->trigger();
 }
 
+// Runs the reader's armed light feedback timer and then its notice hide timer
+// now, instead of waiting for them. Returns false when a timer is missing.
+bool runLightTimers(QWidget *reader) {
+    for (const char *name : {"rrLightFeedbackTimer", "rrBrightnessHideTimer"}) {
+        auto *timer = reader->findChild<QTimer *>(name);
+        if (!timer) return false;
+        if (timer->isActive()) {
+            timer->stop();
+            QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+        }
+    }
+    QCoreApplication::processEvents();
+    return true;
+}
+
 // The phone in portrait and in landscape.
 bool phonePreset(int preset) {
     return preset == 3 || preset == 5;
@@ -941,7 +958,7 @@ void captureReturnPressed(Fixture &fixture, const QString &name) {
     auto *canvas = fixture.window.findChild<QGraphicsView *>();
     QVERIFY(button && title && canvas);
     // Panel close briefly guards the same corner against an accidental exit.
-    QTest::qWait(ui::metrics::contents::exitGuardMilliseconds + 10);
+    // The guard compares press times, and QTest clicks are 500 ms apart.
     const auto point = canvas->mapFromScene(title->mapTo(fixture.window.readerWindow(), title->rect().center()));
     QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, point);
     QTRY_VERIFY(button->isDown());
@@ -2270,8 +2287,11 @@ void checkImageViewer(int preset, bool dark, bool screenshots) {
         QVERIFY(!pageImageAtPoint(page->image, bounds.center()));
         const auto point = view->mapFromScene(page->mapTo(fixture.window.readerWindow(), bounds.center() + QPoint(0, page->topHeight())));
         QTest::mousePress(view->viewport(), Qt::LeftButton, Qt::NoModifier, point);
-        QTest::qWait(550);
+        // The hold timer compares event times, so a release this much later
+        // completes the hold without waiting for the timer.
+        QTest::lastMouseTimestamp += ui::metrics::lookup::holdMilliseconds + 50;
         QTest::mouseRelease(view->viewport(), Qt::LeftButton, Qt::NoModifier, point);
+        QCoreApplication::processEvents();
         QVERIFY(!fixture.visible("rrImageViewer"));
     }
     // A single-page image book still needs its floating action, even without page navigation.
@@ -2337,9 +2357,13 @@ private slots:
         page.setReflowText("Longer words.");
         QCOMPARE(page.snapshot().pixelColor(22, body.top() + 30), ink);
         page.setReflowText({});
-        QTest::qWait(800);
+        // Check the notice delay and run it instead of waiting for it.
+        auto *notice = page.findChild<QTimer *>("rrViewportNoticeTimer");
+        QVERIFY(notice && notice->isActive() && notice->isSingleShot() && notice->interval() >= 1000);
+        QCoreApplication::processEvents();
         QCOMPARE(page.snapshot(), preview); // Short transitions show no notice.
-        QTest::qWait(300);
+        notice->stop();
+        QMetaObject::invokeMethod(notice, "timeout", Qt::DirectConnection);
         QVERIFY(page.snapshot() != preview); // The delayed static notice appears.
         QCOMPARE(page.image.cacheKey(), original);
         int taps = 0;
@@ -3061,7 +3085,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(hasText(reader->findChild<QWidget *>("rrPage")->grab().toImage()));
         const int page = fixture.state().value("page").toInt();
         // The preceding navigation used the same 200 ms input guard.
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         reader->pageButton(1);
         QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("page").toInt() > page, 30000);
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
@@ -3257,8 +3281,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrReturn"));
         // Closing the list intentionally guards Exit against the release
-        // of the tap that dismissed it. Wait for that defined input interval.
-        QTest::qWait(ui::metrics::contents::exitGuardMilliseconds + 20);
+        // of the tap that dismissed it. The guard compares press times, and
+        // QTest clicks are 500 ms apart, more than the guard interval.
         QVERIFY(fixture.press("rrReturn"));
         QTRY_VERIFY(fixture.window.idle());
         fixture.window.openBook(book);
@@ -4246,7 +4270,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.stored("highlights.json", "highlights").first().toObject(), saved);
         QVERIFY(fixture.turnPage(-1));
         QTRY_VERIFY(fixture.state().value("page").toInt() == previousPage && !fixture.state().value("busy").toBool());
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         QVERIFY(fixture.drag(page, QPoint(page->width() - 10, page->height() / 2),
                              QPoint(page->width() / 2, page->height() / 2)));
         QTRY_VERIFY(fixture.state().value("page").toInt() != previousPage);
@@ -5317,9 +5341,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(dark ? pressedGray > idleGray : pressedGray < idleGray);
             const QPoint other = (rect == note ? ordinary : note).center() + QPoint(0, top);
             QCOMPARE(pressed.pixel(other), before.pixel(other));
-            QTest::qWait(ui::metrics::lookup::holdMilliseconds + 50);
-            QCOMPARE(holds, 0);
+            // The hold timer compares event times, so a release this much
+            // later completes the hold without waiting for the timer.
+            QTest::lastMouseTimestamp += ui::metrics::lookup::holdMilliseconds + 50;
             QTest::mouseRelease(&page, Qt::LeftButton, Qt::NoModifier, at);
+            QCOMPARE(holds, 0);
             QCOMPARE(page.snapshot(), before);
         }
         QCOMPARE(taps, 2);
@@ -6020,7 +6046,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!notice->isVisible());
         // With no pop-up, neither release nor its delayed timer requests cleanup.
         if (feedback == 0) {
-            QTest::qWait(1100);
+            QVERIFY(runLightTimers(reader));
             QVERIFY(!reader->property("reader_full_flash").toBool());
         }
         QCOMPARE(events.shows, feedback != 0 ? 1 : 0);
@@ -6039,7 +6065,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_COMPARE(value->text(), QString::number(final) + '%');
             QTRY_VERIFY(!notice->isVisible());
         } else {
-            QTest::qWait(200);
+            QVERIFY(runLightTimers(reader));
             QVERIFY(!notice->isVisible());
         }
         QCOMPARE(warmth ? light->warmth : light->brightness, final);
@@ -6091,7 +6117,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(page->lightStarted(failure != "brightness-write"));
             page->lightChanged(.2);
             QCoreApplication::sendPostedEvents(fixture.window.readerWindow());
-            QTest::qWait(200);
+            QVERIFY(runLightTimers(fixture.window.readerWindow()));
             QVERIFY(!fixture.visible("rrBrightnessNotice"));
             page->lightFinished(false);
         }
@@ -6613,8 +6639,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrSettingsClose"));
         // Exit-guard timing has its own lifecycle check. Here the settings
         // reflow can outlast that guard; close only after layout has settled.
-        QTest::qWait(ui::metrics::contents::exitGuardMilliseconds + 10);
-        QCOMPARE(storage::readJson(fixture.paths.preferences()).value("word_spacing").toInt(), 120);
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("word_spacing").toInt(), 120);
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("justification_tracking").toInt(), 15);
         QVERIFY(storage::readJson(fixture.paths.preferences()).value("hanging_punctuation").toBool());
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("widows_orphans").toString(), "avoid");
@@ -6894,8 +6919,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 1);
         if (!fixture.visible("rrReturn"))
             QVERIFY(fixture.press("rrPage"));
-        // Settings guards Exit for the release of its Close tap.
-        QTest::qWait(ui::metrics::contents::exitGuardMilliseconds + 20);
+        // Settings guards Exit for the release of its Close tap. The guard
+        // compares press times, and QTest clicks are 500 ms apart.
         QVERIFY(fixture.press("rrReturn"));
         QTRY_VERIFY(fixture.window.idle());
         QVERIFY(createBook(fixture.directory.path(), "other-columns.epub"));
@@ -6918,8 +6943,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 1);
         if (!fixture.visible("rrReturn"))
             QVERIFY(fixture.press("rrPage"));
-        // Settings guards Exit for the release of its Close tap.
-        QTest::qWait(ui::metrics::contents::exitGuardMilliseconds + 20);
+        // Settings guards Exit for the release of its Close tap. The guard
+        // compares press times, and QTest clicks are 500 ms apart.
         QVERIFY(fixture.press("rrReturn"));
         QTRY_VERIFY(fixture.window.idle());
         fixture.window.openBook(book);
@@ -7186,7 +7211,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() > page);
         auto *previous = fixture.window.findChild<QPushButton *>("desktopDevicePrevious");
         QVERIFY(previous);
-        QTest::qWait(210);
+        test::skipPageTurnWindow();
         QTest::mouseClick(previous, Qt::LeftButton);
         QTRY_VERIFY(!fixture.state().value("busy").toBool() && fixture.state().value("page").toInt() == page);
         // The return divider depends on the gap, including the exact cell-width boundary.

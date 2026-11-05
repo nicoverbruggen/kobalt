@@ -76,6 +76,11 @@ struct ReaderHostServices {
     // count real time while Nickel keeps the device in standby. -1 means the
     // clock failed.
     std::function<qint64()> monotonicMilliseconds;
+    // Optional monotonic milliseconds at which page-turn input arrives, for the
+    // filter that drops duplicate turns. Tests replace it to move past the
+    // filter window without waiting. Hosts leave it empty: the reader then
+    // uses its own monotonic timer.
+    std::function<qint64()> inputMilliseconds;
     // Optional local time of day in milliseconds for the reader's minute tick;
     // tests replace it.
     std::function<int()> millisecondsOfDay;

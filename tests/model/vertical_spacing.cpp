@@ -255,6 +255,7 @@ void decorativePages() {
 }
 }
 
+// Checks Expand and Center page spacing: unchanged breaks, geometry, hit tests, decorative content and cached reopening.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     spacingGeometry();

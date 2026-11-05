@@ -16,6 +16,7 @@ static void write(const QString &path, const QByteArray &bytes) {
     QFile file(path);
     require(file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size(), "Cannot write fixture");
 }
+// Checks the Android asset installer: cleanup after install and cached startup, retention after failure and unrelated entries.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir profile, outside;

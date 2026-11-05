@@ -122,6 +122,7 @@ void compareLayout(const QString &path, const QString &query, const QString &out
     record.write(QJsonDocument(result).toJson());
 }
 }
+// Checks book normalization: reversible styling, protected paragraphs, text initials, explicit overrides, caches and previews.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     if (argc == 5 && QByteArray(argv[1]) == "--compare") {

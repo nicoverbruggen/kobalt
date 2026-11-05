@@ -2374,6 +2374,7 @@ private slots:
         QVERIFY(!page.viewportTransition());
         QCOMPARE(page.snapshot().pixelColor(1, body.center().y()), QColor(Qt::black));
     }
+    // Checks that rotation, preset changes and resizing keep the position, a superseded resize shows no frame and taps wait.
     void viewportChanges() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -2470,8 +2471,10 @@ private slots:
         QCOMPARE(page->image.size(), QSize(page->width(), page->height() - page->topHeight() - page->bottomHeight()));
         QCOMPARE(fixture.state().value("position"), position);
     }
+    // Checks the image viewer from Zoom image and a cover hold: zoom, pan, Fit, touch gestures, dismissal and kept zoom and pan.
     void imageViewer_data() { screenshotVariants(); }
     void imageViewer() { QFETCH(int, preset); QFETCH(bool, dark); checkImageViewer(preset, dark, false); }
+    // Checks the page-animation setting for each support value: availability, explanation, toggle and typography.
     void pageAnimationCompatibility_data() { screenshotVariants(); }
     void pageAnimationCompatibility() {
         QFETCH(int, preset);
@@ -2479,6 +2482,7 @@ private slots:
         checkPageAnimationCompatibility(preset, dark);
     }
 
+    // Checks that a failed gallery worker stops the run quickly, ends the other workers and leaves no captures.
     void galleryWorkerFailure() {
         QTemporaryDir directory(QDir::tempPath() + "/gallery workers-XXXXXX");
         QVERIFY(directory.isValid());
@@ -2565,6 +2569,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!test::screenshotJobs(script, directory.path(), destination, false, images, {{"fixture:2-light", {"about"}}}));
         QVERIFY(images.isEmpty());
     }
+    // Checks gallery generation and its rejection of changed bytes, invalid PNGs, stale dimensions and incomplete captures.
     void galleryIntegrity() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -2793,6 +2798,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(start->library()->findChild<QPushButton *>("libraryOpenBook")->isVisible());
         QVERIFY(!start->findChild<QWidget *>("androidIntro"));
     }
+    // Checks a first start without an index: no intro screen or root Back, the single-book picker and a first-folder scan.
     void libraryOnboarding() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -2823,6 +2829,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(view->findChild<QPushButton *>("librarySort")->isVisible());
         QVERIFY(start.libraryShown());
     }
+    // Checks that opening a book adds it to the Library once, keeps its cover and returns to the Library on close.
     void library() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -2871,6 +2878,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!start->dismissModal());
         QVERIFY(start->libraryShown());
     }
+    // Checks that a new book inherits text settings, and that marking a book unread resets it but keeps its marks.
     void libraryTextInheritance() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -3157,6 +3165,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
         QCOMPARE(fixture.state().value("position").toString(), position);
     }
+    // Checks that a book marked finished in the Library reopens at the start and then resumes normally.
     void restartFinishedBooks() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -3211,6 +3220,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::newRow("light") << false;
         QTest::newRow("dark") << true;
     }
+    // Checks pinned bookmarks: pinning, editing, icon pages, the shortcut bar, the pin limit, jumps, returns, unpinning and removal.
     void pinnedBookmarks_data() { screenshotVariants(); }
     void pinnedBookmarks() { QFETCH(int, preset); QFETCH(bool, dark); checkPinnedBookmarks(preset, dark); }
     void bookmarks() {
@@ -3290,6 +3300,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QCOMPARE(fixture.state().value("bookmark_count").toInt(), 0);
     }
+    // Checks saving, editing and removing annotations through the reader, and both export formats to the default folder and a picker.
     void annotations_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<bool>("pickerExport");
@@ -3336,6 +3347,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 0);
         QTRY_VERIFY(fixture.stored("bookmarks.json", "bookmarks").isEmpty());
     }
+    // Checks the touch pointer over the reader: transparent corners, centered hotspot, hover and press opacity, Leave and Fill window.
     void touchCursor() {
         Fixture fixture(false);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -3415,6 +3427,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         hover(library->viewport());
         QVERIFY(!touchPointer());
     }
+    // Checks that keys and preview page buttons page the Library grid and list, but not behind its menu or a notice.
     void libraryPageButtons() {
         Fixture fixture(false, false, true);
         QVERIFY(fixture.prepared);
@@ -3452,6 +3465,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(library->dismiss());
         }
     }
+    // Checks that page buttons and Page Up/Down page the open panel, not the book, and that nothing pages behind a notice.
     void hardwarePageButtons_data() {
         QTest::addColumn<QString>("view");
         for (const auto *view : {"dictionary", "dictionary-choices", "footnote", "settings", "settings-fonts",
@@ -3612,6 +3626,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(counter->text(), initial);
         QCOMPARE(fixture.state().value("position"), position);
     }
+    // Checks book search from a dictionary lookup: edited query, results, navigation and return to the original position.
     void dictionaryBookSearch_data() { screenshotVariants(); }
     void dictionaryBookSearch() {
         QFETCH(int, preset);
@@ -3710,6 +3725,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             wordBounds = bounds;
         }
     }
+    // Checks dictionary book search for accented, astral, multiword and long terms, and no search while suspended or hidden.
     void dictionaryBookSearchUnicode_data() { bookmarks_data(); }
     void dictionaryBookSearchUnicode() {
         QFETCH(bool, dark);
@@ -3772,6 +3788,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrDictionary"));
         QCOMPARE(fixture.state().value("position"), original);
     }
+    // Checks that an edited lookup submitted through the reader replaces the header word and keeps the passage and position.
     void dictionaryEditing_data() { bookmarks_data(); }
     void dictionaryEditing() {
         QFETCH(bool, dark);
@@ -3913,6 +3930,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(android::takeRefreshFrame(reader, canvas->viewport(), damage).clean);
         QVERIFY(!android::takeRefreshFrame(reader, canvas->viewport(), damage).clean);
     }
+    // Checks word lookup with adjustment handles, then entering annotation mode and saving the range, for one density and theme.
     void wordSelection_data() { annotationSelection_data(); }
     void wordSelection() {
         QFETCH(bool, dark);
@@ -4660,12 +4678,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrAnnotationOverlap"));
         QCOMPARE(fixture.stored("highlights.json", "highlights"), highlights);
     }
+    // Checks both strip-size sliders through the canvas: steps, Off, preset changes, the sheet layout and persistence after reopening.
     void headerFooterSizes_data() { screenshotVariants(); }
     void headerFooterSizes() {
         QFETCH(int, preset);
         QFETCH(bool, dark);
         checkHeaderFooterSizes(preset, dark);
     }
+    // Checks selecting the percentage-only battery field in the paged chooser and its persistence after reopening.
     void batteryPercentageOnly_data() { bookmarks_data(); }
     void batteryPercentageOnly() {
         using namespace headerfooter;
@@ -4731,6 +4751,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
         QCOMPARE(page->chrome.slotFields[2], Field::BatteryPercentOnly);
     }
+    // Checks that the header and footer sheet stays open across screenshot, toolbar, page and tab taps, and closes to Layout.
     void headerFooterDismissal_data() { bookmarks_data(); }
     void headerFooterDismissal() {
         QFETCH(bool, dark);
@@ -5201,6 +5222,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("marks_sort").toString(), QString("oldest"));
         }
     }
+    // Checks held links: the selection menu, the footnote panel and its refresh, a passage jump and return, and the website prompt.
     void links_data() { bookmarks_data(); }
     void links() {
         QFETCH(bool, dark);
@@ -5290,6 +5312,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrBrowserConfirmation"));
         QCOMPARE(fixture.state().value("position"), origin);
     }
+    // Checks the circular footnote highlights, with one shared edge and no double tint where neighbors overlap.
     void footnoteHighlightShapes() {
         ReadingPage page(nullptr, [] {});
         page.resize(300, 400);
@@ -5317,6 +5340,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         page.revealLinks({});
         QCOMPARE(qGray(page.snapshot().pixel(90, 116 + top)), 255);
     }
+    // Checks the gray press on revealed links, release and cancellation, and holds and swipes in and after reveal mode.
     void revealedLinkPress_data() { bookmarks_data(); }
     void revealedLinkPress() {
         QFETCH(bool, dark);
@@ -5369,6 +5393,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(holds, 1);
         QTest::mouseRelease(&page, Qt::LeftButton, Qt::NoModifier, at);
     }
+    // Checks footnote hit targets: circular boundaries, overlapping targets, exact-link priority and disabled modes.
     void footnoteHitTargets() {
         const QVector<PageLink> links{
             {"first", {QRect(100, 100, 8, 32)}, LinkKind::Footnote},
@@ -5400,6 +5425,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(linkAtPoint(wide, QPoint(160, 98), "footnotes", 6).index, -1);
         QCOMPARE(linkAtPoint(wide, QPoint(160, 110), "footnotes", 6).index, 0);
     }
+    // Checks the direct link-tap choices: footnote and website routing, target sizes, page-tap priority and link reveal.
     void tappableLinks_data() { bookmarks_data(); }
     void tappableLinks() {
         QFETCH(bool, dark);
@@ -5532,6 +5558,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.click(fixture.widget("rrPage"), fixture.linkPoint(fixture.directory.path() + "/second.epub", "short note")));
         QTRY_VERIFY(fixture.visible("rrLinkPanel"));
     }
+    // Checks a bookmark-corner link: a followed link keeps bookmarks, an unfollowed one toggles, and empty corner space toggles.
     void bookmarkCornerLinks_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<QString>("mode");
@@ -5604,7 +5631,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 0);
         QCOMPARE(fixture.state().value("position"), origin);
     }
+    // Checks Publisher Fonts as the default through Defaults and the Text picker, and how a new book inherits it.
     void publisherFontDefault_data() { bookmarks_data(); }
+    // Checks that a reused font cell repaints its whole area after paging.
+    // Qt 5.2 does not repaint a hidden caption's area; desktop Qt 6 does, so this cannot show that failure.
     void fontPagingClearsCaptions() {
         // Font pages reuse their cells. A cell that shows another font must
         // repaint completely, so a caption from the previous page cannot stay
@@ -5645,6 +5675,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY2(paints.painted.contains(cell->rect()), "A reused font cell kept pixels from the previous page");
         cell->removeEventFilter(&paints);
     }
+    // Checks the selected KF row in both font pickers, unchanged defaults and the reading position after reopening.
     void kfFontVariants() {
         QTemporaryDir fonts;
         QVERIFY(fonts.isValid());
@@ -5795,6 +5826,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QCOMPARE(fixture.state().value("font_face"), originalFace);
     }
+    // Checks Settings choices through the canvas: when each is saved, values after reopening, Keep defaults and a failed save.
     void settings_data() { bookmarks_data(); }
     void dictionarySafeArea() {
         SafeArea safe;
@@ -5973,6 +6005,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QVERIFY(found);
     }
+    // Checks brightness and warmth gestures with each feedback choice: queued commands, deferred notices and cancellation.
     void lightGestureFeedback_data() {
         QTest::addColumn<int>("feedback");
         QTest::addColumn<bool>("warmth");
@@ -6070,6 +6103,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QCOMPARE(warmth ? light->warmth : light->brightness, final);
     }
+    // Checks that light gestures stay safe without light control, with gestures off and when light calls fail.
     void lightGestureUnavailable_data() {
         QTest::addColumn<bool>("feedback");
         QTest::addColumn<QString>("failure");
@@ -6127,6 +6161,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(light->savedWarmth, -1);
         QVERIFY(!fixture.visible("rrBrightnessNotice"));
     }
+    // Checks the optional Light shortcut for dark mode: drafts, persistence, hosts without Light, a busy writer and save failure.
     void lightDarkModeShortcut_data() {
         QTest::addColumn<bool>("available");
         QTest::newRow("with-light") << true;
@@ -6254,6 +6289,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_VERIFY(!fixture.window.readerWindow());
         }
     }
+    // Checks that the light feedback setting persists after reopening, leaves edge gestures on, and then shows the notice.
     void lightGestureFeedbackPersistence() {
         auto light = std::make_shared<GestureLightState>();
         Fixture fixture(false, false, false, true, false, false, [light](ReaderHostServices &services) {
@@ -6401,11 +6437,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("show_link_indicator").toBool(), !previous);
     }
+    // Checks the Page spacing sheet through the reader: every mode and scope, the sample, one and two columns, and saved values.
     void verticalJustification() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
         verticalJustificationTour(fixture, "six-inch-light", false);
     }
+    // Checks the Styling sheets in Settings: rendered samples, every option, drafts until Settings closes and global persistence.
     void advancedText_data() {
         QTest::addColumn<int>("dpi");
         QTest::addColumn<QString>("bookFont");
@@ -6661,6 +6699,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.state().value("hanging_punctuation").toBool());
         QTRY_COMPARE(fixture.state().value("widows_orphans").toString(), "avoid");
     }
+    // Checks that panels and toolbars span a wide Mac window, Styling sheets keep their width, and toolbars follow narrower sizes.
     void fullWidthPanels_data() { bookmarks_data(); }
     void fullWidthPanels() {
         QFETCH(bool, dark);
@@ -6742,6 +6781,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.widget("rrControlsTop")->width(), 720);
         QTRY_COMPARE(fixture.widget("rrBottomNavigation")->width(), 720);
     }
+    // Checks that margins, orientation and Beautifier choices are global over another book's saved values, also after a relaunch.
     void globalLayout() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -6820,6 +6860,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         relaunched.close();
         QTRY_VERIFY(relaunched.idle());
     }
+    // Checks landscape columns in Settings > Display: the spacing choice, rotation, one global setting and the last-page hint.
     void columns_data() { bookmarks_data(); }
     void columns() {
         QFETCH(bool, dark);
@@ -7001,6 +7042,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_optical_size"), selected.value("font_optical_size"));
         QCOMPARE(fixture.state().value("font_face"), selected.value("font_face"));
     }
+    // Checks the Android page-animation checkbox, its Off default and persistence, and real reader turns.
     void androidPageAnimations_data() { bookmarks_data(); }
     void androidPageAnimations() {
         QFETCH(bool, dark);
@@ -7051,6 +7093,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(row->isChecked(), style == pageTurn::Style::Sweep);
         }
     }
+    // Checks that the phone's rounded screen corners and border match the bezel on screen and in exported screenshots.
     void phoneFrame() {
         Fixture fixture(false, false, true);
         QVERIFY(fixture.prepared);
@@ -7090,6 +7133,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             }
         }
     }
+    // Checks that the phone bookmark ribbon reaches the top edge through the camera band and clears when removed.
     void bookmarkRibbonSafeArea_data() { bookmarks_data(); }
     void bookmarkRibbonSafeArea() {
         QFETCH(bool, dark);
@@ -7158,6 +7202,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         picker->setCurrentIndex(0);
         QVERIFY(sleep->isHidden() && power->isHidden());
     }
+    // Checks the desktop preview controls: resolution and rotation keep the position, and the return divider at each gap.
     void desktopControls() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
@@ -7241,6 +7286,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      back->palette().color(gap >= cell ? QPalette::Mid : QPalette::Window));
         }
     }
+    // Checks that a second controller in the same process does not recover the first one's active reading session.
     void sameProcessReadersDoNotRecoverEachOther() {
         QTemporaryDir directory;
         storage::Paths paths{directory.path()};
@@ -7279,6 +7325,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }));
         QCOMPARE(live, 1);
     }
+    // Checks that a controller recovers an interrupted earlier session and records each opened book under its source key.
     void standaloneHistorySourceKeys() {
 
         QTemporaryDir directory;
@@ -7331,6 +7378,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(value("SELECT COUNT(*) FROM reading_sessions WHERE source_key='content://library/second' AND status='completed'").toInt(), 1);
         QCOMPARE(value("SELECT COUNT(*) FROM reading_sessions WHERE status='active'").toInt(), 0);
     }
+    // Checks that closing the reader lets the host capture visible text before the widget hides, with one notification.
     void booxRetirementFrame() {
 
         QTemporaryDir directory;
@@ -7390,6 +7438,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 ink += qGray(lastFrame.pixel(x, y)) < 100;
         QVERIFY(ink > 100);
     }
+    // Checks that each BOOX menu dismissal requests one cleanup frame, kept until a submission is accepted.
     void booxMenuDismissalRefresh_data() {
         QTest::addColumn<bool>("dark");
         QTest::newRow("light") << false;
@@ -7440,6 +7489,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(!android::takeRefreshFrame(reader, canvas->viewport(), damage).clean);
         }
     }
+    // Checks the Stats and Navigate default views with annotation mode on, without moving the position or the saved preference.
     void annotationDefaultView_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<QString>("menuView");
@@ -7507,6 +7557,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("default_menu_view").toString(), menuView);
     }
+    // Checks that returning from a bookmark jump restores the exact position from each default menu view, then hides the return.
     void bookmarkReturn_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<QString>("menuView");
@@ -7705,6 +7756,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(queryPixels(), int(ui::px(36)));
         QVERIFY(start->library()->isVisible());
     }
+    // Checks Navigate swipes, thumbnail taps, book boundaries, cancelled sequences and page-button preview movement.
     void navigation_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<bool>("defaultNavigate");
@@ -8408,6 +8460,7 @@ private slots:
         notice->hide();
         delete notice;
     }
+    // Checks the primary-view tour that the light gallery captures, in both themes and reader sizes.
     void primaryViews_data() { screenshotVariants(); }
     void primaryViews() {
         QFETCH(int, preset);

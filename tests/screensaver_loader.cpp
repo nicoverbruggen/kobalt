@@ -37,6 +37,8 @@ void (*nativePowerOff)(void *, bool) = nullptr;
 void diagnostic(const char *, QJsonObject, bool) {}
 }
 
+// Checks that Screensaver discovery opens library handles only after `dl_iterate_phdr` returns.
+// This prevents a loader-lock inversion with concurrent library loading.
 int main() {
     if (!kobalt::connectScreensaverPowerOff() || callbacks == 0 || opens == 0 || nestedOpens != 0) {
         std::fprintf(stderr, "Library inspection: callbacks=%d opens=%d opens inside callback=%d\n",

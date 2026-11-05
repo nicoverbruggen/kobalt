@@ -66,6 +66,7 @@ void compare(ReaderModel &model, const Ranges &ranges, bool geometry = false) {
     }
 }
 }
+// Checks cached annotation visibility and overlap against the previous algorithms, and bounded anchor-name lookups.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     ReaderModel model(test::readerFonts());

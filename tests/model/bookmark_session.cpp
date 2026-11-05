@@ -56,6 +56,7 @@ QByteArray read(const QString &path) {
 }
 }
 
+// Checks bookmark editing, merging, reflow and reopening on the JSON and SQLite backends, including failed writes.
 int main(int argc, char **argv) {
     const bool sqlite = argc == 3 && QByteArray(argv[2]) == "--sqlite";
     qputenv("KOBALT_ANNOTATIONS_SQLITE", sqlite ? "1" : "0");

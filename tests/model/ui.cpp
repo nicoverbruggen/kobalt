@@ -141,6 +141,7 @@ protected:
         Panel::paintEvent(event);
     }
 };
+// Checks the production controls in pixels: geometry, borders, themes, labels, sliders, dictionary rendering and paging.
 int main(int argc, char **argv) {
 #ifdef Q_OS_LINUX
     // Noto Sans Math may be installed system-wide. This fixture must begin

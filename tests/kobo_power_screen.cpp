@@ -77,6 +77,7 @@ protected:
         }
     }
 };
+// Checks the Kobo sleep and power-off frames: saved and prepared backdrops, battery status, invalidation by a later book and handoff repaints.
 class PowerScreenTests : public QObject {
     Q_OBJECT
 private slots:

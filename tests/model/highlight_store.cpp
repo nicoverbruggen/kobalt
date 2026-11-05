@@ -37,6 +37,7 @@ void replace(const QString &path, const QByteArray &data) {
             "Cannot write fixture");
 }
 }
+// Checks the highlight store and ZIP export: Markdown and HTML entries, notes, the embedded font and destinations.
 int main() {
     // These cases obstruct legacy JSON files; SQLite behavior has its own database regressions.
     qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");

@@ -53,6 +53,7 @@ QVariant rawValue(const QString &directory, const QString &sql) {
 
 
 }
+// Checks the SQLite profile: batched commits and rollback, JSON and beta 3 import, schema checks, backups of unusable files and the catalogue.
 int main(int argc, char **argv) {
     if (argc == 2) qputenv("TMPDIR", QByteArray(argv[1]));
     QCoreApplication app(argc, argv);

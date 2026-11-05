@@ -360,6 +360,7 @@ int liveServer(const QString &server, const QString &certificate) {
     return 0;
 }
 }
+// Checks progress reconciliation, document identity, matching modes, accounts, the schedule, responses, read retries and hostname lookups.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     if (argc == 4 && QByteArray(argv[1]) == "--server")

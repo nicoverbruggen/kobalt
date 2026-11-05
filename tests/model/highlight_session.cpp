@@ -66,6 +66,7 @@ void drain() {
 
 }
 
+// Checks highlight editing, overlap, notes, reflow, reopening and export order on the JSON and SQLite backends.
 int main(int argc, char **argv) {
     const bool sqlite = argc == 3 && QByteArray(argv[2]) == "--sqlite";
     qputenv("KOBALT_ANNOTATIONS_SQLITE", sqlite ? "1" : "0");

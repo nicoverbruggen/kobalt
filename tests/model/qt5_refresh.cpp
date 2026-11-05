@@ -47,6 +47,7 @@ void diagnostic(const char *, QJsonObject, bool) {}
 DiagnosticOperation::DiagnosticOperation(const char *name) : operation(name) {}
 DiagnosticOperation::~DiagnosticOperation() = default;
 }
+// Checks the Qt5 refresh adapter through both policy-list ABIs: i.MX text sweeps, coverage, full flashes and image exclusions.
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     using namespace kobalt;

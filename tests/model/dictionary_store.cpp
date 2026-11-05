@@ -356,6 +356,7 @@ protected:
         return reply;
     }
 };
+// Checks dictionary downloads, archive limits, source names, installation, lookup and removal, with controlled replies.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir temp;

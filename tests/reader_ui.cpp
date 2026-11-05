@@ -125,6 +125,7 @@ void variants() {
 class ReaderUiTests final : public QObject {
     Q_OBJECT
 private slots:
+    // Checks Sweep frames in both directions: whole stationary bands, exact endpoints, sleep snapshots, cancellation and Off.
     void pageTurnFrames_data() { variants(); }
     void pageTurnFrames() {
         QFETCH(bool, dark);
@@ -243,6 +244,7 @@ private slots:
         page.refreshContent(true);
         QCOMPARE(animation->state(), QTimeLine::NotRunning);
     }
+    // Checks chapter-list swipes through the canvas: forward, backward and wrapped paging without selecting a row.
     void pagedListSwipes_data() { variants(); }
     void pagedListSwipes() {
         QFETCH(bool, dark);
@@ -296,6 +298,7 @@ private slots:
         QVERIFY(click(canvas, row));
         QCOMPARE(selected, 1);
     }
+    // Checks that list swipes respect nested pagers, disabled arrows, small or vertical moves, held rows and gesture controls.
     void pagedSwipesRespectControls() {
         ui::setDensity(300);
         QWidget host;
@@ -358,6 +361,7 @@ private slots:
         drag(&row, {-300, 0});
         QCOMPARE(outerTurns.count(), 1);
     }
+    // Checks font-cell swipes, default-font holds and delayed held drags, without selecting a font during a swipe.
     void pagedFontSwipesKeepHolds() {
         ui::setDensity(300);
         QWidget host;
@@ -474,6 +478,7 @@ private slots:
         QTRY_COMPARE(fired.size(), 1);
         QVERIFY(!timer.finish(&release));
     }
+    // Checks that clicking or pressing Space on the selected font keeps it checked, and that the help cell never becomes selected.
     void fontSelectionDoesNotToggle_data() { variants(); }
     void fontSelectionDoesNotToggle() {
         QFETCH(bool, dark);
@@ -613,6 +618,7 @@ private slots:
         QCOMPARE(widget->pressed, ulong(1000));
         QCOMPARE(widget->released, ulong(2000));
     }
+    // Checks the widget keyboard: key fonts and layout, typing, symbols, selection replacement, deletion, submission and placement.
     void widgetKeyboardEntry_data() { variants(); }
     void widgetKeyboardEntry() {
         QFETCH(bool, dark);
@@ -749,6 +755,7 @@ private slots:
         QVERIFY(!guardedPanel);
         QVERIFY(host.property("reader_keyboard_bounds").toRect().isEmpty());
     }
+    // Checks accent popups: delayed releases, uppercase variants, drag selection, Escape, cancellation, hiding and placement.
     void widgetKeyboardAccents_data() { variants(); }
     void widgetKeyboardAccents() {
         QFETCH(bool, dark);
@@ -831,6 +838,7 @@ private slots:
         QCOMPARE(editor.text(), QString::fromUtf8("ée"));
         QVERIFY(!panel->findChild<QWidget *>("widgetKeyboardAccents"));
     }
+    // Checks the letter rows of each locale's keyboard layout and the switch to symbols and back.
     void widgetKeyboardLayouts_data() {
         QTest::addColumn<QString>("localeName");
         QTest::addColumn<QStringList>("rows");
@@ -870,6 +878,7 @@ private slots:
         symbols->click(); symbols->click();
         QCOMPARE(panel->findChild<QPushButton *>("widgetKey1_0")->text(), rows[0].left(1));
     }
+    // Checks one-shot Shift, double-tap Caps Lock, missing or delayed timestamps, clock wrap and input at the length limit.
     void widgetKeyboardCase_data() { variants(); }
     void widgetKeyboardCase() {
         QFETCH(bool, dark);
@@ -978,6 +987,7 @@ private slots:
         untimedTap(); untimedTap();
         QCOMPARE(shift->accessibleName(), strings::get("keyboard.caps_lock"));
     }
+    // Checks that the keyboard survives a deleted editor or parent, and destruction from its submit callback or a bounds callback in `show()`.
     void widgetKeyboardLifetime() {
         QWidget host;
         auto *editor = new QLineEdit(&host);
@@ -1358,6 +1368,7 @@ private slots:
                 view->findChild<QPushButton *>("libraryFoldersBack")->click();
         }
     }
+    // Checks the Library action buttons and More menu: frames, labels in each state, icons, accessible names, dismissal and callbacks.
     void libraryActionButtons_data() { variants(); }
     void libraryActionButtons() {
         QFETCH(bool, dark);
@@ -1482,6 +1493,7 @@ private slots:
         QTRY_COMPARE(added, 2);
         QCOMPARE(rescanned, 1);
     }
+    // Checks the list layout: toolbar-to-pager bounds, even row dividers, hit targets to each row's last pixel and the pager's space as books change.
     void libraryListFillsPage_data() { variants(); }
     void libraryListFillsPage() {
         QFETCH(bool, dark);
@@ -1558,6 +1570,7 @@ private slots:
         QCOMPARE(counter->text(), QString("1 of 2"));
         QCOMPARE(pages->geometry().bottom() + 1, pager->y());
     }
+    // Checks that the startup widget and system-bar bands follow the Library palette through repeated theme changes.
     void libraryThemeSurface_data() { variants(); }
     void libraryThemeSurface() {
         QFETCH(bool, dark);
@@ -1586,6 +1599,7 @@ private slots:
             QCOMPARE(host.grab().toImage().pixelColor(2, host.height() - 2), paper);
         }
     }
+    // Checks that window size, safe-area margins, the Library canvas and its system-bar rules follow portrait, landscape and cutout surfaces.
     void libraryCanvasFollowsViewport_data() { variants(); }
     void libraryCanvasFollowsViewport() {
         QFETCH(bool, dark);
@@ -1684,6 +1698,7 @@ private slots:
         QTRY_COMPARE(canvas->viewport()->y(), 0);
         QCOMPARE(canvas->viewport()->height(), canvas->height());
     }
+    // Checks BOOX app canvases: Library and opening frames, retries after rejected submissions, and pause and resume.
     void booxAppCanvases_data() { variants(); }
     void booxAppCanvases() {
         QFETCH(bool, dark);
@@ -1819,6 +1834,7 @@ private slots:
         QTest::qWait(100);
         QCOMPARE(frames.size(), 2);
     }
+    // Checks the reader-to-Library handoff behind a captured reader frame, with one clean reveal at the final size.
     void booxLibraryHandoff_data() { variants(); }
     void booxLibraryHandoff() {
         QFETCH(bool, dark);
@@ -1892,6 +1908,7 @@ private slots:
         QTest::qWait(80);
         QCOMPARE(frames.size(), count);
     }
+    // Checks that onboarding heading ink clears the label edges, with scrolling only on short screens.
     void libraryOnboardingLayout_data() { variants(); }
     void libraryOnboardingLayout() {
         QFETCH(bool, dark);
@@ -1937,6 +1954,7 @@ private slots:
             }
         }
     }
+    // Checks that the scan caption never overlaps the six-square indicator or its trailing gap.
     void libraryScanCaption_data() { variants(); }
     void libraryScanCaption() {
         QFETCH(bool, dark);
@@ -2063,6 +2081,7 @@ private slots:
         QCOMPARE(notice.primaryButton()->geometry().bottom(), notice.card()->height() - 3);
         QCOMPARE(notice.grab().toImage().pixelColor(0, 0), backdrop.pixelColor(0, 0));
     }
+    // Checks that the continuation-hint area repaints blank after paging to the last page, a one-page list, a smaller gap or a page reset.
     void continuationHintClears_data() { variants(); }
     void continuationHintClears() {
         QFETCH(bool, dark);
@@ -2107,6 +2126,7 @@ private slots:
             QCOMPARE(owner.grab().toImage().copy(gap), blank);
         }
     }
+    // Checks that rows, trailing row actions and menu actions press gray, while a selected row and a pressed toolbar cell fill with ink.
     void listPressFeedback_data() { variants(); }
     void listPressFeedback() {
         QFETCH(bool, dark);
@@ -2143,6 +2163,7 @@ private slots:
         toolbar.setDown(true);
         QCOMPARE(background(&toolbar), ui::themeColors(dark).ink);
     }
+    // Checks the gray press on checkbox rows and color swatches, its cancellation and the unchanged disabled controls.
     void optionAndSwatchPressFeedback_data() { variants(); }
     void optionAndSwatchPressFeedback() {
         QFETCH(bool, dark);
@@ -2824,6 +2845,7 @@ private slots:
         QCoreApplication::processEvents();
         QCOMPARE(paints.count, 0);
     }
+    // Checks opening-screen cover proportions and placement above the status, the brand without a cover and a late cover after a fallback.
     void openingCoverLayout() {
         for (const QSize screen : {QSize(1072, 1448), QSize(1448, 1072), QSize(600, 800)}) {
             QWidget owner;
@@ -2901,6 +2923,7 @@ private slots:
         QCoreApplication::processEvents();
         QCOMPARE(calls, 1);
     }
+    // Checks that strip changes leave the reading body unpainted, strip captures match full-page crops and a rejected BOOX frame retries unchanged.
     void readingStripChangesLeaveBodyUnpainted_data() { variants(); }
     void readingStripChangesLeaveBodyUnpainted() {
         QFETCH(bool, dark);
@@ -2979,6 +3002,7 @@ private slots:
                 QVERIFY(page.stripSnapshot(true).isNull());
         }
     }
+    // Checks that chapter page counts stay complete in every strip slot when a long chapter title must be shortened.
     void chapterPageSurvivesLongTitles_data() { variants(); }
     void chapterPageSurvivesLongTitles() {
         QFETCH(bool, dark);

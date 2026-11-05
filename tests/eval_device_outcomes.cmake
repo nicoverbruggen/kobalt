@@ -1,3 +1,4 @@
+# Checks failed, skipped and missing device scenarios in both result formats, and a run without a device part.
 cmake_minimum_required(VERSION 3.22)
 set(root "${CMAKE_CURRENT_BINARY_DIR}/device-outcomes")
 set(base "${root}/base")

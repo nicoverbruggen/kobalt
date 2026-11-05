@@ -91,6 +91,7 @@ void workflow(void *manager) {
 void poweredOff(void *, bool) { ++shutdowns; }
 }
 
+// Checks the Kobo lifecycle adapter with controlled Nickel signals: sleep-view handoff, PIN rotation, USB entry and power-off.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir root;

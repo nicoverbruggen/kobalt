@@ -21,6 +21,7 @@ QByteArray record(const char *model, const char *firmware = "4.45.23697") {
     return QByteArray("serial,kernel,") + firmware + ",date,build,00000000-0000-0000-0000-000000000" + model;
 }
 }
+// Checks the Qt5 touch-rotation fix: which models and firmware get it, the mapping in each orientation, clamping and delegation.
 int main() {
     using namespace kobalt::nickel4;
     require(reversedTouchForVersion(record("391")), "Clara BW must use corrected mapping");

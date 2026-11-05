@@ -7,6 +7,7 @@
 #include "check.h"
 #include <limits>
 using namespace kobalt;
+// Checks progress percentages, local and downloaded book paths, Nickel position formats and which of native or local progress wins.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     struct Display { int page, pages, percent; };

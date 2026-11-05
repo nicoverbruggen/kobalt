@@ -29,6 +29,7 @@ PageAnimationSupport pageAnimationSupport() {
 }
 AnimationPanel pageAnimationPanel() { return animationPanel("", driver); }
 }
+// Checks the page-animation support predicate and band submission for each Kobo display driver, with fake display calls.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     using namespace kobalt;

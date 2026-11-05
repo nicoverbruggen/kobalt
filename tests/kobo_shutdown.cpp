@@ -92,6 +92,7 @@ void processQueuedEvents() {
 }
 void N3PowerWorkflowManager::powerOff(bool low) { ::powerOff(this, low); }
 
+// Checks that power-off, battery-low power-off and reboot wait for saves without a deadline, close the profile first and chain with Screensaver.
 class ShutdownTests : public QObject {
     Q_OBJECT
 private slots:

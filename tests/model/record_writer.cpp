@@ -59,6 +59,7 @@ RecordWriter::Write record(Log &log, const std::string &name, bool result = true
 }
 }
 
+// Checks record writers: queue order, replaced waiting writes, synchronous writes, cancellation, destruction and time limits.
 int main() {
     {
         // Writers share one thread. Writes run in the order their writers

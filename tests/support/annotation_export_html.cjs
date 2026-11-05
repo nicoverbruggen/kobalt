@@ -1,4 +1,5 @@
 // Run against HTML extracted from the production exporter. No browser or network is used.
+// Checks search, date sorting, annotation numbers, the styling toggle, printing every annotation and local times in two zones.
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');

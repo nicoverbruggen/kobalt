@@ -461,6 +461,7 @@ void intervals() {
             "Different editions were merged");
 }
 }
+// Checks reading history: the version-2 upgrade, profile ownership and crash recovery, failed commits and retries, clock changes and editions.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");

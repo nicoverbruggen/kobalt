@@ -936,6 +936,7 @@ void defaultBackend() {
     }
     qputenv("KOBALT_ANNOTATIONS_SQLITE", "1"); require(annotationDatabaseEnabled(), "Explicit SQLite override ignored");
 }
+// Checks the SQLite annotation database: JSON import, profile location, schema checks, failed writes, quotas and order limits.
 int main(int argc, char **argv) {
     // Firmware runners supply a writable isolated parent on user storage.
     if (argc == 3 && QByteArray(argv[1]) == "--order-regressions")

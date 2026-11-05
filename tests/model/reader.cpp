@@ -795,6 +795,7 @@ static void checkVerticalJustification() {
     }
 }
 
+// Checks the restored reader assertions: rendering, embedded fonts, Bold Reading, variable axes, source positions and previews.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     checkPageFormat();

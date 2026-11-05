@@ -17,6 +17,7 @@ static void expect(bool value, const char *message) {
     if (!value)
         qFatal("%s", message);
 }
+// Checks font-source precedence, KF/NV collection pairs and hidden KF rows that still render under their saved name.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     expect(argc == 3, "supply a bundled font fixture and a book");

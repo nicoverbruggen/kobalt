@@ -141,6 +141,7 @@ QStringList titles(const QVector<const Book *> &books) {
 }
 }
 
+// Checks the Library catalogue: reading books and covers, series, the saved index, folder scans and finished status.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
 

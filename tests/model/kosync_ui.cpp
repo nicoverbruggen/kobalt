@@ -234,6 +234,7 @@ void checkPhoneSettings() {
     ui::setDensity(savedDensity);
 }
 }
+// Checks the KOSync Settings tab: account editors and keyboard, matching, Kobo-managed books, the Automatic sync sheet and the sync notice.
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));

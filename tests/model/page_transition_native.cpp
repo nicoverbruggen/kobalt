@@ -38,6 +38,7 @@ bool pageAnimationSucceeded() {
     return result == PageAnimationResult::Swept;
 }
 }
+// Checks native page turns: text turns sweep and keep the final pixels, picture and colour turns get one full refresh, failures clean the page.
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     QWidget reader;

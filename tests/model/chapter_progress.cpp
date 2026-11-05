@@ -19,6 +19,7 @@ bool same(double actual, double expected) { return std::abs(actual - expected) <
 int uploaded(double progress) { return int(std::floor(progress * 100)); }
 }
 
+// Checks the chapter fractions Kobo writes to Nickel, `CurrentChapterProgress` and the chapter row value; an unknown layout writes nothing.
 int main() {
     const QVector<ChapterLink> chapters{{"One", "a", 4, 0, 0}, {"Two", "b", 12, 0, 0}, {"Three", "c", 21, 0, 0}};
     // Nickel's reader divides the pages before the current one by the

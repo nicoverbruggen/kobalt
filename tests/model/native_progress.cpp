@@ -49,6 +49,7 @@ N3SyncManager *N3SyncManager::sharedInstance() {
     return &manager;
 }
 
+// Checks Tolino bookmark verification, and that Nickel sync, account and USB signals notify the reader once a USB transition ends.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QVariantMap bookmark{{"position", "chapter.xhtml#p:7"}, {"currentPosition", "2"},

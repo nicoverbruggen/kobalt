@@ -26,6 +26,7 @@ QByteArray read(const QString &path) {
 }
 }
 
+// Checks the JSON bookmark store: book keys, edited-file adoption, damaged and oversized files, failed writes, page merging and excerpts.
 int main() {
     // These cases obstruct legacy JSON files; SQLite behavior has its own database regressions.
     qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");

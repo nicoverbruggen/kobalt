@@ -4,6 +4,7 @@
 
 #define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "line %d: %s\n", __LINE__, #value); return 1; } } while (0)
 
+// Checks the shared Qt5 and Qt6 startup wait: ready before 30 seconds, one timeout at 30 seconds and later recovery, with no sleeping.
 int main() {
     using kobalt::nickel::NativeStartupWait;
     using Result = NativeStartupWait::Result;

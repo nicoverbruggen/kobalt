@@ -10,6 +10,7 @@
 #include <thread>
 #include <utility>
 
+// Checks the event flush against a competing SQLite writer: kept buffers, bounded recovery, timeout and rollback.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir directory;

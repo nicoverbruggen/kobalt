@@ -50,6 +50,7 @@ std::array<int, 4> paragraphPages(kobalt::ReaderModel &model) {
 }
 }
 
+// Checks justification tracking, word spacing, widow and orphan control and hanging punctuation, with previews and cached reopening.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     using kobalt::ReaderModel;

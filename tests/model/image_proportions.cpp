@@ -21,6 +21,7 @@ static QRect redBounds(const QImage &image) {
     return bounds;
 }
 
+// Checks image sizes for authored proportions, caps, CSS and SVG in previews and cached reopening, and dark-mode image inversion.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     // Square artwork deliberately differs from the authored dimensions: caps

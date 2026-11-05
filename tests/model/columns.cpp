@@ -97,6 +97,7 @@ void chapterProgress() {
     }
 }
 }
+// Checks each column against a single-column render, screen counts, gutters, selection, search, links and reading order.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     chapterProgress();

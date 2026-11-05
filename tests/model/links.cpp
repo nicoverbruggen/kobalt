@@ -299,6 +299,7 @@ void noteMatching() {
 }
 }
 
+// Checks link classification and note detection: explicit and inferred notes, passage overrides and missing targets.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     require(argc == 2, "Pass the synthetic links EPUB");

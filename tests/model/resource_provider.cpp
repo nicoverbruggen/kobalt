@@ -248,6 +248,7 @@ QByteArray body(const QByteArray &response) {
     return response.mid(end + 4);
 }
 }
+// Checks the resource provider: font identification from bytes, font obfuscation, ZIP CRCs, byte limits and local HTTP serving.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir dir;

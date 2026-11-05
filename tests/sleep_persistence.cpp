@@ -18,6 +18,7 @@ void require(bool condition, const char *message) {
     }
 }
 }
+// Checks the sleep-image writer: exact pixels and metadata, stale tokens, lossless encoding and native-cover references.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QTemporaryDir directory;

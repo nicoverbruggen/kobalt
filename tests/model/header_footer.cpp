@@ -12,6 +12,7 @@
 using namespace kobalt;
 using namespace kobalt::headerfooter;
 
+// Checks header and footer layouts: defaults, legacy flags and sizes, the battery field, time-remaining text and round trips.
 int main() {
     // Default keeps the chapter prominent and the footer free of a bar.
     const auto standard = presetLayout(Preset::Default);

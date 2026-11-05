@@ -31,6 +31,7 @@ QRect word(kobalt::ReaderModel &model, const QString &text) {
 }
 }
 
+// Checks paragraph gap and first-line indent overrides, Publisher restoration, special blocks and cached reopening.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     const QSize size(1072, 1800);

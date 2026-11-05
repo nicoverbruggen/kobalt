@@ -369,6 +369,7 @@ void checkLatestReading(Factory &factory) {
 }
 
 }
+// Checks sensor orientation: locks, opening, sleep and wake, and handoff to Nickel and the PIN screen. Without sensors, the main below checks manual rotation.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     Factory factory;

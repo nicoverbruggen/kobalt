@@ -167,6 +167,7 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
     std::printf("PASS: %s literary excerpts, native TOC, search, selection, reflow and reopen\n", qPrintable(language));
 }
 }
+// Checks Arabic, Hebrew, Hindi and Japanese excerpts: chapter titles, script glyphs, direction, search, selection and reflow.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     const auto entries = QJsonDocument::fromJson(read(QStringLiteral(KOBALT_TEST_CORPUS) + "/catalog.json")).array();

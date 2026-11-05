@@ -7,6 +7,7 @@
 
 #define CHECK(value) do { if (!(value)) { fprintf(stderr, "line %d: %s\n", __LINE__, #value); return 1; } } while (0)
 
+// Checks the startup marker: removal after two unfinished starts, the removal notice, streak resets, old and invalid markers and unusable paths.
 int main(void) {
     char directory[4096], path[4096], link[4096], notice[4096];
     const char *tmp = getenv("TMPDIR");

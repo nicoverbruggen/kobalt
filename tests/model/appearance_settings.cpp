@@ -9,6 +9,7 @@
 
 using namespace kobalt;
 
+// Checks appearance settings: defaults, invalid values, migrations, global and book precedence, new-book inheritance and which changes need a new layout.
 int main() {
     require(!remainingTime::approximate({}), "Older preferences did not retain detailed estimates");
     for (const auto *format : {"detailed", "approximate"}) {

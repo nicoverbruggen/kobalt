@@ -19,6 +19,7 @@ void waitFor(const std::function<bool()> &ready) {
     require(ready(), "Timed out waiting for native save");
 }
 }
+// Checks the native reading-time save worker: queued intervals, held flushes, repeated finishes and timeouts.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     {

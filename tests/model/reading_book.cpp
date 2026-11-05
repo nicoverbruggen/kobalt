@@ -134,6 +134,7 @@ private:
 };
 }
 
+// Checks the reading-book session: saved fields, background saves, image views, finish state, reading time and history.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     {

@@ -240,6 +240,7 @@ static void wifiPowerSaver() {
     require(replies == 7 && turnedOff == 1, "a late Bluetooth answer is ignored");
     kobalt::mainthread::setViolationHandler({});
 }
+// Checks the Kobo connection controller, Wi-Fi release, signal levels, the power saver and native prompts above the reader, with fake native calls.
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     wifiNotifications();

@@ -1,4 +1,5 @@
 // Run against the generated gallery with an installed Playwright module.
+// Checks the capture inventory, PNG bytes, cards, filters, viewer controls, frames, keyboard navigation and focus.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';

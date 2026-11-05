@@ -115,6 +115,7 @@ void roundTrip(ReaderModel &model) {
     require(model.alternateLayoutBytes() == 0, "An idle book retained an alternate layout");
 }
 }
+// Checks that a retained portrait or landscape layout is reused only when it matches and renders like a full reflow.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     if (qEnvironmentVariableIsSet("KOBALT_LAYOUT_TIMINGS")) {

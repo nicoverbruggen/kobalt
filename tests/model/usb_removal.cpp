@@ -6,6 +6,7 @@ void check(bool value) {
         std::abort();
 }
 
+// Checks that a USB session that removed Kobalt's marker reports the removal once, and that other sessions do not.
 int main() {
     kobalt::UsbRemoval removal;
     check(!removal.finish(false));

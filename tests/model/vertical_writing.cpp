@@ -16,6 +16,7 @@ static QRect ink(const QImage &image) {
         }
     return box;
 }
+// Checks vertical Japanese text: column layout, page progression, selection, reflow, mixed writing modes and combined underline and overline.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     const auto chapter = [](const QByteArray &mode) {

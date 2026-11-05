@@ -18,6 +18,7 @@ static QByteArray hash(const QImage &image) {
                                                             image.bytesPerLine() * image.height()),
                                     QCryptographicHash::Sha256);
 }
+// Checks parsed and cached pixel equality, chapters, typography changes, Bionic modes, fingerprints and cache policies.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     require(argc == 2, "Pass the document-cache EPUB fixture");

@@ -72,6 +72,17 @@ bool faultStatus(int status) {
 }
 }
 
+// Crashes child processes with a fault and with `abort`. On Linux it also sends
+// `SIGSEGV` and verifies sender fields instead of a fault address. Reports
+// include a bounded resource snapshot and recent operation breadcrumbs,
+// including events that have not reached the asynchronous log. An interrupted
+// breadcrumb writer must not block the handler. Each report must name the
+// signal and contain the backtrace and symbol sections, and the fault report
+// must name the crashing function. The previous handler must still run after
+// each report. A full set of reports must keep the newest ones and leave other
+// files alone. Without the mounted storage, no report may be written. Register
+// capture and stack scanning for ARM Linux run only on a Kobo; read a report on
+// a device after a crash to check them.
 int main(int argc, char **argv) {
     self = argv[0];
     if (argc == 5 && std::strcmp(argv[1], "--crash") == 0)

@@ -516,6 +516,7 @@ private slots:
         engineActivity().pause(false);
         directory.reset();
     }
+    // Checks that an event delivered during reader destruction no longer reaches the reader's application filter.
     void teardownRemovesApplicationFilter() {
         class Probe : public QWidget {
         public:
@@ -551,6 +552,7 @@ private slots:
         QTRY_VERIFY(host.idle());
         QVERIFY2(delivered, "The reader's application filter still consumed events during teardown");
     }
+    // Checks that shutdown ends at the position-conversion deadline with a stalled engine, keeps the local position and writes no native one.
     void shutdownFinalSaveTimesOut() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -586,6 +588,7 @@ private slots:
         QCOMPARE(host.progress->writes, writes);
         QVERIFY(!storage::readBookState(testPaths(), identity).object.value("position").toString().isEmpty());
     }
+    // Checks that a clock tick repaints only the changed reading strips and does not count as a page turn.
     void clockUpdatesOnlyReadingStrips_data() {
         QTest::addColumn<bool>("custom");
         QTest::addColumn<bool>("header");
@@ -643,6 +646,7 @@ private slots:
         QCoreApplication::processEvents();
         QVERIFY(paints.painted.isEmpty());
     }
+    // Checks that hiding the reader stops its clock and that showing it restarts the clock without changing the page.
     void clockStopsWhileReaderIsHidden_data() {
         QTest::addColumn<bool>("browser");
         QTest::newRow("ordinary-hide") << false;
@@ -717,6 +721,7 @@ private slots:
         QVERIFY(clock->interval() > 0);
         QVERIFY(clock->interval() <= 60050);
     }
+    // Checks that the host checkpoint, registered first as on Android, pauses the reading clock before later callbacks.
     void backgroundCheckpointStopsBeforeOtherCallbacks() {
         qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
         bool suspended = false;
@@ -760,6 +765,7 @@ private slots:
         qApp->applicationStateChanged(Qt::ApplicationInactive);
         QVERIFY2(checkpointSawPausedSession, "Host checkpoint left the session running until a later callback");
     }
+    // Checks that after a failed background save the paused reading time stops growing and is saved into the same session row on resume.
     void backgroundWriteFailureRetriesWithoutCountingPause() {
         qputenv("KOBALT_ANNOTATIONS_SQLITE", "1");
         bool suspended = false;
@@ -807,6 +813,7 @@ private slots:
         qApp->applicationStateChanged(Qt::ApplicationActive);
         QCOMPARE(value("SELECT COUNT(*) FROM reading_sessions").toInt(), 1);
     }
+    // Checks reading sessions through checkpoints, paused time while inactive, a new session after a long pause, hide and show, and shutdown.
     void standaloneReadingHistory_data() {
         QTest::addColumn<bool>("native");
         QTest::newRow("standalone") << false;
@@ -998,6 +1005,7 @@ private slots:
         }
     }
 
+    // Checks that Light replaces the default menu view, closing Light restores it, and other tabs or dismissal do not reopen it.
     void lightReplacesDefaultMenu_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<QString>("menuView");
@@ -2108,6 +2116,7 @@ private slots:
         QTRY_VERIFY(settings->isVisible() && settings->isEnabled());
     }
 
+    // Checks that the return header closes the book and that reopening it keeps the saved position.
     void exitThroughReaderAndReopen() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -2223,6 +2232,7 @@ private slots:
         QVERIFY(!row || !row->isVisible());
     }
 
+    // Checks that a search highlight stays when an unedited panel opens and is gone after a text-size or margin change.
     void searchHighlightClearsOnReflow_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<bool>("layout");
@@ -3185,6 +3195,7 @@ private slots:
         QCOMPARE(page.snapshot(true), blank);
     }
 
+    // Checks that the chapter, book and sleep-screen time-remaining texts use the same detailed or approximate format.
     void timeRemainingFormatShared_data() {
         QTest::addColumn<bool>("approximate");
         QTest::newRow("detailed") << false;
@@ -3364,6 +3375,7 @@ private slots:
         QVERIFY(cover.isNull());
     }
 
+    // Checks Wi-Fi indicator placement, size and visibility in the status strip, in both themes and densities.
     void wifiStatus_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<int>("ppi");
@@ -3456,6 +3468,7 @@ private slots:
         wifiChanged({false, false, -1});
         QTRY_VERIFY(!wifi->isVisible());
     }
+    // Checks that reading-time text fits and centers in the status strip for each minute width and radio icon combination.
     void readingTimeStatus_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<int>("ppi");
@@ -3628,6 +3641,7 @@ private slots:
         QCOMPARE(reports, 2);
     }
 
+    // Checks both finish-dialog choices, with and without "Don't ask again": ignored while suspended, kept through sleep and close requests.
     void finishChoiceSurvivesSleepAndRequiresActiveReader_data() {
         QTest::addColumn<bool>("markFinished");
         QTest::addColumn<bool>("exitRequested");
@@ -3717,6 +3731,7 @@ private slots:
         }
     }
 
+    // Checks that "Don't ask again" on the finish prompt survives reopening and a fresh process, and that other books still ask.
     void finishPromptPersistence() {
         // A fresh process must restore the choice without any prior Reader state.
         const auto inherited = qEnvironmentVariable("KOBALT_TEST_FINISH_PROFILE");
@@ -3802,6 +3817,7 @@ private slots:
         }
     }
 
+    // Checks that missing, unusable and manual-only accounts never sync while reading, the toolbar Sync button and the Automatic sync sheet.
     void kosyncAccountGating_data() {
         QTest::addColumn<QString>("account");
         for (const auto *name : {"missing", "signed-out", "not-authenticated", "malformed", "future-account",
@@ -3890,6 +3906,7 @@ private slots:
         QCOMPARE(attempts.count(), 0);
         if (account != "logout") QCOMPARE(accountBytes(), original);
     }
+    // Checks the opening sync against a stalled server: input blocking, Cancel sync, grace period, timeout and repaint.
     void kosyncOpening_data() {
         QTest::addColumn<QString>("outcome");
         QTest::newRow("cancel-sync") << QString("cancel");
@@ -3982,6 +3999,7 @@ private slots:
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() > page);
     }
+    // Checks that sleep dismisses a revealed password editor and that it reopens masked and empty after wake.
     void kosyncPasswordSleep() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -4012,6 +4030,7 @@ private slots:
         QCOMPARE(input->echoMode(), QLineEdit::Password);
         QVERIFY(input->text().isEmpty());
     }
+    // Checks the toolbar Sync button: the first-use prompt until confirmed, an interactive request, the busy button and the error notice.
     void kosyncManualToolbar() {
         const auto paths = testPaths();
         QVERIFY(storage::writeJson(paths.syncAccount(), {
@@ -4065,6 +4084,7 @@ private slots:
         QCOMPARE(network->requests, 2);
         QVERIFY(!kosync::Client(paths.syncAccount()).manualExplanation());
     }
+    // Checks Sync now in Settings: no deadline while a connection waits for permission, then the Syncing notice and its Cancel.
     void kosyncManualConnection_data() {
         QTest::addColumn<QString>("connection");
         for (const auto *connection : {"permission", "connected", "desktop"})
@@ -4149,6 +4169,7 @@ private slots:
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
         QTRY_VERIFY(!settings->isVisible());
     }
+    // Checks that the opening sync sends no HTTP before a connection is ready: Cancel, the deadline, sleep, and a later Sync now or Sign in.
     void kosyncNetwork_data() {
         QTest::addColumn<QString>("scenario");
         for (const auto *scenario : {"cancel", "deadline", "ready", "sleep", "login"})
@@ -4158,6 +4179,7 @@ private slots:
         QFETCH(QString, scenario);
         verifyKosyncNetwork(scenario);
     }
+    // Checks that each sync moment switched off starts no connection, and how a skipped opening sync starts the interval.
     void kosyncMoments_data() {
         QTest::addColumn<int>("minutes");
         QTest::addColumn<bool>("automaticAfterWake");
@@ -4352,6 +4374,7 @@ private slots:
         events.seen.removeDuplicates();
         QVERIFY2(events.seen.isEmpty(), qPrintable("Timer events while idle: " + events.seen.join(", ")));
     }
+    // Checks when opening a book asks the host to turn Wi-Fi off: each account and schedule, the saver setting and Bluetooth.
     void wifiPowerSaver_data() {
         QTest::addColumn<QString>("account");
         QTest::addColumn<bool>("enabled");
@@ -4556,6 +4579,7 @@ private slots:
         QCOMPARE(status->text(), strings::get("kosync.saved_locally"));
         QCOMPARE(network->requests, requests);
     }
+    // Checks that opening, wake and periodic syncs release their Wi-Fi request however they end, and that Sync now does not.
     void kosyncWifiRelease_data() {
         QTest::addColumn<QString>("scenario");
         for (const auto *scenario : {"opening-skip", "opening-failure", "wake-end", "wake-skip", "wake-close", "periodic-close"})
@@ -4675,6 +4699,7 @@ private slots:
             QCOMPARE(network->releases, 1);
         }
     }
+    // Checks that the Wi-Fi power saver turns Wi-Fi off only after the sleep sync, and that wake drops the request.
     void wifiPowerSaverAtSleep_data() {
         QTest::addColumn<bool>("enabled");
         QTest::newRow("saver-on") << true;
@@ -4743,6 +4768,7 @@ private slots:
         host.window()->wakeReader();
         QVERIFY(!context);
     }
+    // Checks the final sync at close and sleep: local position first, a bounded wait and wake during it; `https-*` rows need a real server.
     void kosyncFinal_data() {
         QTest::addColumn<QString>("transition");
         QTest::addColumn<bool>("inFlight");
@@ -4915,6 +4941,7 @@ private slots:
         QCOMPARE(storage::readBookState(paths, identity).object.value("position").toString(), position);
     }
 
+    // Checks that revoking native reading fails its pending save once, ignores the late reply and still offers Retry for a failed local save.
     void revokedNativeDrainRetainsLocalSave() {
         const auto paths = testPaths();
         ReaderFixture host(paths, testFonts, testPlaceholder);
@@ -4982,6 +5009,7 @@ private slots:
         QCOMPARE(host.progress->stopAttempts, stops);
     }
 
+    // Checks that close waits for a held profile writer, shows the saving notice only after a delay and closes once the writer is free.
     void closeWaitsForLocalSave() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -5026,6 +5054,7 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
     }
 
+    // Checks that a failed native position or reading-time save keeps the reader open with Retry, then Quit or Return after a failed retry.
     void closeRetriesRequiredNativeSaves_data() {
         QTest::addColumn<bool>("timeSave");
         QTest::addColumn<bool>("discard");
@@ -5149,6 +5178,7 @@ private slots:
         QCOMPARE(storage::readBookState(paths, identity).object.value("position"), saved.value("position"));
     }
 
+    // Checks that at close the native position write waits for the native reading-time write.
     void closeWaitsForNativeTimeBeforePosition() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -5180,6 +5210,7 @@ private slots:
         QCOMPARE(host.progress->finishAttempts, 1);
     }
 
+    // Checks that at sleep the native position waits for the reading-time write: immediate, delayed, failed, timed-out and busy-database cases.
     void sleepWaitsForNativeTimeBeforePosition_data() {
         QTest::addColumn<int>("delay");
         QTest::addColumn<bool>("saved");
@@ -5256,6 +5287,7 @@ private slots:
         }
     }
 
+    // Checks that opening marks the book as reading in Nickel once, writes no position and does not retry after a failure.
     void nativeOpeningStatus_data() {
         QTest::addColumn<bool>("fails");
         QTest::newRow("saved") << false;
@@ -5357,6 +5389,7 @@ private slots:
         QCOMPARE(stored(), anchor);
     }
 
+    // Checks that a failed appearance save stops after three attempts, page turns and background saves do not retry it, and a commit does.
     void appearanceRetryCooldown() {
         QTemporaryDir root;
         auto paths = testPaths();
@@ -5446,6 +5479,7 @@ private slots:
                      .value("top_margin_pixels"), host.book()->checkpointState().value("top_margin_pixels"));
     }
 
+    // Checks that settings that become unusable while a book is open do not fail the close and stay unchanged.
     void closeWithUnusableSettings() {
         QTemporaryDir root;
         auto paths = testPaths();
@@ -5480,6 +5514,7 @@ private slots:
         QCOMPARE(settings.readAll(), future);
     }
 
+    // Checks that the profile-reset notice shows in the open reader with the backup folder and closes on confirm.
     void recoveryNoticeAfterFirstPage() {
         const auto paths = testPaths();
         ReaderFixture host(paths, testFonts, testPlaceholder);
@@ -5549,6 +5584,7 @@ private slots:
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrBenchmarkNotice"));
     }
 
+    // Checks that activity saves wait for a batch without timers, save at once on low battery until charging, and cool down after a failure.
     void activityBatchesAndLowBattery() {
         QTemporaryDir root;
         auto paths = testPaths();
@@ -5809,6 +5845,7 @@ private slots:
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
     }
 
+    // Checks that a newer synced position waits while Settings covers the page, and asks once Settings closes.
     void progressChoiceWaitsForSettings() {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{host};
@@ -6025,6 +6062,7 @@ private slots:
         QCoreApplication::processEvents();
         QCOMPARE(paints.count, 0);
     }
+    // Checks that the annotation list looks up pages on demand through closing, tab switches, wake, reflow and deletion.
     void annotationListResolvesPagesOnDemand() {
         QTemporaryDir directory;
         storage::Paths paths{directory.path()};
@@ -6167,6 +6205,7 @@ private slots:
         QCOMPARE(store.highlights().size(), 1999);
     }
 
+    // Checks that the footer, progress bar, Stats, sleep snapshot and saved book percent agree at the first, a middle and the last page.
     void progressPercentagesAgree_data() {
         QTest::addColumn<int>("position");
         QTest::newRow("first") << 0;

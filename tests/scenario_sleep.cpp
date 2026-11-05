@@ -30,6 +30,7 @@ void require(bool condition, const char *message) {
     }
 }
 }
+// Checks the scenario player's sleep benchmark, KOSync account, `native-sync`, `wifi` and event steps, real-time waits and keep-awake, with a controlled host.
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     auto scenario = QJsonObject{{"id", "sleep.test"}, {"opt_in", true}, {"repeat", 1},

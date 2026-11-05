@@ -1198,6 +1198,7 @@ int run(int argc, char **argv) {
     return result;
 }
 
+// Checks the reader session: opening failures, sync previews and imports, stale results, appearance progress, buffered turns, previews and non-linear pages.
 int main(int argc, char **argv) {
     const int result = run(argc, argv);
     std::puts(

@@ -71,6 +71,7 @@ static void modalReaderInput(Qt::WindowModality modality) {
             "sleep handoff must restore the prompt's original modality and ownership");
 }
 
+// Checks native-shaped dialogs above an application-modal reader: input through the active modal, dismissal and restore.
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     for (const auto modality : {Qt::NonModal, Qt::WindowModal, Qt::ApplicationModal})

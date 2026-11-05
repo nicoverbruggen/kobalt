@@ -1,8 +1,8 @@
 #include "platforms/kobo/common/home_sleep_screen.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/window_presentation.h"
-#include "interfaces/reader/views/sleep_screen.h"
-#include "interfaces/reader/ui/style/fonts.h"
+#include "app/reader/views/sleep_screen.h"
+#include "ui/style/fonts.h"
 #include "assets/assets.h"
 #include "storage/sleep_snapshot.h"
 #include <QSqlDatabase>

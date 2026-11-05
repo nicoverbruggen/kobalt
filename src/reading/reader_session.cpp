@@ -4,7 +4,7 @@
 #include "reader_session.h"
 #include "kosync.h"
 #include "engine_worker.h"
-#include "ui/highlight_paint.h"
+#include "render/highlight_paint.h"
 #include "appearance_settings.h"
 #include "engine/crengine/engine_activity.h"
 #include "support/diagnostics.h"

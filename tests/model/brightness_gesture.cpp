@@ -1,5 +1,5 @@
 #include "support/qt_compat.h"
-#include "ui/brightness_gesture.h"
+#include "ui/input/brightness_gesture.h"
 #include <QCoreApplication>
 #include <cmath>
 #define CHECK(x)                                                                                                       \

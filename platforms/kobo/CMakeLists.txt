@@ -85,7 +85,7 @@ file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/embedded_resources.h" CONTENT
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS "${source}/*.cpp" "${source}/*.h")
 # The scenario player is built only into evaluation packages.
 list(FILTER shared EXCLUDE REGEX "/src/scenario/")
-list(FILTER shared EXCLUDE REGEX "/(library|interfaces/library)/")
+list(FILTER shared EXCLUDE REGEX "/(library|app/library)/")
 file(GLOB adapters CONFIGURE_DEPENDS "common/*.cpp" "common/*.h" "qt${KOBALT_QT_MAJOR}/*.cpp" "qt${KOBALT_QT_MAJOR}/*.h" "display/*.cpp")
 add_library(kobalt MODULE ${shared} ${adapters} common/install.c common/startup_recovery.c "${hooks}/nh.c" "${hooks}/resources.c"
     "${CMAKE_CURRENT_BINARY_DIR}/nhplugin.h")
@@ -100,7 +100,7 @@ else()
         COMPILE_DEFINITIONS KOBALT_SQLITE_ANNOTATIONS_DEFAULT=0)
 endif()
 target_include_directories(kobalt PRIVATE "${hooks}" "${CMAKE_CURRENT_BINARY_DIR}"
-    "${source}/interfaces/reader/ui/controls")
+    "${source}/ui/controls")
 target_include_directories(kobalt SYSTEM PRIVATE "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
     "${prefix}/include" "${prefix}/include/harfbuzz" "${prefix}/include/freetype2" "${prefix}/include/fribidi")
 target_compile_options(kobalt PRIVATE -Wall -Wextra -Werror -Wno-missing-field-initializers -fvisibility=hidden

@@ -1,6 +1,6 @@
 #include "reader_host_services.h"
 #include "native_dictionary.h"
-#include "interfaces/reader/ui/controls/keyboard.h"
+#include "ui/controls/keyboard.h"
 #include "native_sync_network.h"
 #include "native_lifecycle.h"
 #include "native_light.h"

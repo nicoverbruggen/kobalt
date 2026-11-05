@@ -1,6 +1,6 @@
 #include "services.h"
-#include "interfaces/reader/ui/controls/keyboard.h"
-#include "interfaces/reader/ui/style/fonts.h"
+#include "ui/controls/keyboard.h"
+#include "ui/style/fonts.h"
 #include <QGuiApplication>
 #include <QDesktopServices>
 #include <QKeyEvent>

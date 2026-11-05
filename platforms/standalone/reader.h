@@ -2,7 +2,7 @@
 #include "platform/api/reader_orientation.h"
 #include "platform/api/reader_host_services.h"
 #include "reading/reader_session.h"
-#include "interfaces/reader_window.h"
+#include "app/reader_window.h"
 #include "storage/reader_storage.h"
 #include "storage/reading_history.h"
 #include "publication/publication_endpoint.h"

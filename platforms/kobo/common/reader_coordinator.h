@@ -1,5 +1,5 @@
 #pragma once
-#include "interfaces/reader_interface.h"
+#include "app/reader_interface.h"
 #include "native_dialog_overlay.h"
 #include "engine/crengine/reader_model.h"
 #include "reading/reading_progress.h"

@@ -1,5 +1,5 @@
 #pragma once
-#include "model/page_refresh_regions.h"
+#include "render/page_refresh_regions.h"
 #include <QImage>
 #include <QVector>
 #if defined(__arm__) && defined(__ARM_NEON)

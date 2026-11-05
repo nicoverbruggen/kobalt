@@ -1,8 +1,8 @@
 #include "reader_inputs.h"
-#include "interfaces/reader/ui/style/fonts.h"
+#include "ui/style/fonts.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
-#include "interfaces/reader/settings/acknowledgments.h"
+#include "app/reader/settings/acknowledgments.h"
 #include <QApplication>
 #include <QFile>
 #include <QJsonDocument>

@@ -119,7 +119,7 @@ private:
         if (!wanted("text."))
             return;
         using namespace kobalt::ui;
-        const QStringList paths{"src/interfaces/reader/ui/style/", "src/interfaces/reader/ui/controls/"};
+        const QStringList paths{"src/ui/style/", "src/ui/controls/"};
         const int width = 992, height = 560, count = qMax(20, repetitions * 6);
         const auto body = DictionaryPanel::definitionFont({}, 100);
         auto layout = [&](const QString &id, const QFont &font, std::function<void(PrivateRichText &, int)> fill,

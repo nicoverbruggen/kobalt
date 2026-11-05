@@ -16,7 +16,7 @@
 #include <QPaintEvent>
 #include <QtMath>
 #include <functional>
-#include "ui/input.h"
+#include "ui/input/input.h"
 
 namespace kobalt::standalone {
 // Qt caches each damaged rectangle, but its default proxy paints their bounding

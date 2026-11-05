@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ui/tap_zones.h"
+#include "render/tap_zones.h"
 #include <QJsonObject>
 
 namespace kobalt::pageNavigation {

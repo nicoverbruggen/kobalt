@@ -1,5 +1,5 @@
 #pragma once
-#include "interfaces/reader_interface.h"
+#include "app/reader_interface.h"
 #include "platform/api/keyboard_controller.h"
 #include <QStackedWidget>
 #include <functional>

@@ -17,7 +17,7 @@ While a book is open and the device is awake, Kobalt wakes once a minute, just a
 
 | Work on the minute tick | What it does | Code |
 | --- | --- | --- |
-| Clock | Updates the header clock, battery and time-left fields when the page shows them, and the menu status when the menu is open | `clockTimer` and `Reader::startClock` (`src/interfaces/reader/window/reader.cpp`, `reader_build.cpp`) |
+| Clock | Updates the header clock, battery and time-left fields when the page shows them, and the menu status when the menu is open | `clockTimer` and `Reader::startClock` (`src/app/reader/window/reader.cpp`, `reader_build.cpp`) |
 | Reading pace | Asks Nickel for the reading pace on Nickel's worker thread, for the time estimates. At most once a minute | `ReadingBook::minuteTick` → `ReadingBridge::minuteTick` → `ReadingPaceCache::tick` (`common/reading_pace_cache.h`) |
 | Reader check | Repeats the visibility checks. Reads Nickel's saved position, for a position from another device, only when Nickel has reported a sync, an account update or USB. If those signals are unavailable, it reads at most once a minute and logs `native-progress-signals-unavailable` | `ReaderWindow::minuteTicked` → `ReaderCoordinator::poll` (`common/reader_coordinator.cpp`) |
 
@@ -29,7 +29,7 @@ One other timer can repeat:
 | --- | --- | --- | --- |
 | Reader check fallback | 65 s, pushed back by every minute tick | Only fires when the minute tick is not running: the reader is hidden or asleep but awake enough for timers. Stops when no book is open | `ReaderCoordinator` timer |
 
-KOSync while reading has no timer. When the reader shows a new position, after a page turn, a jump or a link, it syncs if the chosen interval has passed since the last sync. On Kobo the interval counts real time, also while Nickel keeps the device in standby between page turns (`CLOCK_BOOTTIME`, the same clock as the reading duration): 30 seconds for every page, or 1, 5, 15 (default), 30 or 60 minutes. A book left open wakes nothing for KOSync; its last position goes up at the next page or, if those syncs are on, at sleep or close. It needs a signed-in account with automatic sync on, a book that Nickel's sync does not carry, and an interval other than never (`Reader::syncKosyncWhileReading` in `src/interfaces/reader/window/reader_kosync.cpp`).
+KOSync while reading has no timer. When the reader shows a new position, after a page turn, a jump or a link, it syncs if the chosen interval has passed since the last sync. On Kobo the interval counts real time, also while Nickel keeps the device in standby between page turns (`CLOCK_BOOTTIME`, the same clock as the reading duration): 30 seconds for every page, or 1, 5, 15 (default), 30 or 60 minutes. A book left open wakes nothing for KOSync; its last position goes up at the next page or, if those syncs are on, at sleep or close. It needs a signed-in account with automatic sync on, a book that Nickel's sync does not carry, and an interval other than never (`Reader::syncKosyncWhileReading` in `src/app/reader/window/reader_kosync.cpp`).
 
 ## Timers that run only for a short time
 

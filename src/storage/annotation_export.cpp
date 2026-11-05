@@ -1,7 +1,7 @@
 #include "annotation_export.h"
 #include "support/main_thread.h"
 #include "annotation_export_html.h"
-#include "ui/highlight_paint.h"
+#include "render/highlight_paint.h"
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QDir>

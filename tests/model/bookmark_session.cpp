@@ -4,7 +4,7 @@
 #include "check.h"
 #include "reading/bookmark_session.h"
 #include "reading/reader_session.h"
-#include "interfaces/opening_message.h"
+#include "app/messages/opening_message.h"
 #include "publication/native_resources.h"
 #include "publication/native_archive.h"
 #include "publication/resource_server.h"

@@ -1,7 +1,7 @@
 #include "check.h"
 #include "annotation_session_checks.h"
 #include "storage/profile_database.h"
-#include "interfaces/opening_message.h"
+#include "app/messages/opening_message.h"
 #include "publication/native_archive.h"
 #include "publication/native_resources.h"
 #include "publication/resource_server.h"

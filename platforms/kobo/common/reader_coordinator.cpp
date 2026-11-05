@@ -7,7 +7,7 @@
 #include "support/strings.h"
 #include "book_menu.h"
 #include "browser_handoff.h"
-#include "interfaces/reader_window.h"
+#include "app/reader_window.h"
 #include "reading/reading_book.h"
 #include "reading/reading_timer.h"
 #include "storage/profile_database.h"
@@ -34,12 +34,12 @@
 #include "support/main_thread.h"
 #include "reader_environment.h"
 #include "reader_host_services.h"
-#include "interfaces/reader/ui/style/fonts.h"
-#include "interfaces/reader_interface.h"
-#include "interfaces/opening_message.h"
-#include "interfaces/recovery_message.h"
+#include "ui/style/fonts.h"
+#include "app/reader_interface.h"
+#include "app/messages/opening_message.h"
+#include "app/messages/recovery_message.h"
 #ifdef KOBALT_SCENARIO_PLAYER
-#include "interfaces/benchmark_message.h"
+#include "app/messages/benchmark_message.h"
 #endif
 #include "platforms/kobo/display/screen_density.h"
 #include <NickelHook.h>

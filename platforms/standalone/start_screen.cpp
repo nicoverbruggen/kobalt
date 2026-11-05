@@ -1,10 +1,10 @@
 #include "start_screen.h"
-#include "interfaces/library/library_view.h"
+#include "app/library/library_view.h"
 #include "library/library_store.h"
 #include "canvas.h"
-#include "interfaces/reader/views/opening.h"
-#include "interfaces/reader/ui/style/metrics.h"
-#include "interfaces/reader/ui/style/theme.h"
+#include "app/reader/views/opening.h"
+#include "ui/style/metrics.h"
+#include "ui/style/theme.h"
 #include "support/strings.h"
 #include <QDialog>
 #include <QResizeEvent>

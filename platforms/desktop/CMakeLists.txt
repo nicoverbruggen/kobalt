@@ -74,7 +74,7 @@ configure_file("${source}/support/build_info.h.in" build_info.h @ONLY)
 # Keep portable objects separate so UI edits do not relink standalone checks.
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS
     "${source}/dictionaries/*.cpp" "${source}/engine/*.cpp"
-    "${source}/library/*.cpp" "${source}/model/*.cpp"
+    "${source}/library/*.cpp" "${source}/render/*.cpp"
     "${source}/reading/*.cpp" "${source}/storage/*.cpp")
 add_library(kobalt-core OBJECT ${shared} display.cpp
     "${source}/assets/assets.cpp" "${source}/assets/bundled_fonts.cpp" "${source}/assets/font_catalog.cpp"
@@ -86,7 +86,7 @@ add_library(kobalt-core OBJECT ${shared} display.cpp
     "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
     "${source}/publication/plain_archive.cpp")
 target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}"
-    "${source}/interfaces/reader/ui/controls")
+    "${source}/ui/controls")
 target_include_directories(kobalt-core SYSTEM PUBLIC
     "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
     "${KOBALT_TEST_DEPENDENCIES}/include" "${KOBALT_TEST_DEPENDENCIES}/include/harfbuzz"
@@ -127,13 +127,13 @@ else()
     # so Qt and its plugins resolve their own font and image library symbols.
     target_link_options(kobalt-core INTERFACE "LINKER:--exclude-libs,ALL")
 endif()
-file(GLOB_RECURSE interfaces CONFIGURE_DEPENDS "${source}/interfaces/*.cpp")
-add_library(kobalt-desktop OBJECT ${interfaces}
+file(GLOB_RECURSE app_sources CONFIGURE_DEPENDS "${source}/app/*.cpp" "${source}/ui/*.cpp")
+add_library(kobalt-desktop OBJECT ${app_sources}
     window.cpp services.cpp
     ../standalone/reader.cpp ../standalone/start_screen.cpp
     "${source}/platform/api/reader_orientation.cpp")
 target_link_libraries(kobalt-desktop PUBLIC kobalt-core)
-set_source_files_properties("${source}/interfaces/reader/views/reading_page.cpp" PROPERTIES
+set_source_files_properties("${source}/app/reader/views/reading_page.cpp" PROPERTIES
     COMPILE_DEFINITIONS KOBALT_DESKTOP_POINTER)
 target_compile_options(kobalt-desktop PRIVATE -Wall -Wextra)
 # A build from a linked Git worktree is a variant named after the worktree's

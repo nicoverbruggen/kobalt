@@ -284,7 +284,7 @@ set(kobo "${root}/platforms/kobo")
 set(hooks "${kobo}/toolchains/nickelhook-qt6")
 file(GLOB_RECURSE shared "${root}/src/*.cpp")
 list(FILTER shared EXCLUDE REGEX "/src/scenario/")
-list(FILTER shared EXCLUDE REGEX "/(library|interfaces/library)/")
+list(FILTER shared EXCLUDE REGEX "/(library|app/library)/")
 set(c_sources "${kobo}/common/install.c" "${kobo}/common/startup_recovery.c" "${hooks}/nh.c" "${hooks}/resources.c")
 foreach(sdk qt5 qt6)
     file(GLOB adapters "${kobo}/common/*.cpp" "${kobo}/${sdk}/*.cpp" "${kobo}/display/*.cpp")
@@ -337,7 +337,7 @@ set(kobalt_defines "-DKOBALT_CONFIG_DIR=\"/mnt/onboard/.adds/kobalt\"" "-DKOBALT
     "-DKOBALT_VERSION=\"syntax-check\"" "-DNH_VERSION=\"syntax-check\""
     ${qt_defines} -DQT_DBUS_LIB -DQT_NETWORK_LIB -DQT_SENSORS_LIB -DQT_SQL_LIB -Dkobalt_EXPORTS -DHAVE_OFF64_T=1)
 set(kobalt_includes "-iquote${root}" "-iquote${root}/src" "-I${hooks}" "-I${generated}" "-I${moc}"
-    "-I${root}/src/interfaces/reader/ui/controls")
+    "-I${root}/src/ui/controls")
 foreach(include IN LISTS dependency_includes)
     list(APPEND kobalt_includes -isystem "${include}")
 endforeach()

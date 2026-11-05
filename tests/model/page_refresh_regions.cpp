@@ -1,4 +1,4 @@
-#include "model/page_refresh_regions.h"
+#include "render/page_refresh_regions.h"
 #include "check.h"
 
 #include <QImage>

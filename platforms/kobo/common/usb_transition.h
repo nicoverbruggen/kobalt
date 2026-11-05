@@ -1,6 +1,6 @@
 #pragma once
 
-#include "interfaces/reader_window.h"
+#include "app/reader_window.h"
 
 #include <QVector>
 

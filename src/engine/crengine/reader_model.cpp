@@ -1,6 +1,6 @@
 #include "column_view.h"
 #include <cmath>
-#include "ui/image_damage.h"
+#include "render/image_damage.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "reader_model.h"
@@ -14,7 +14,7 @@
 #include "reader_alignment.h"
 #include "document_cache.h"
 #include "font_weight.h"
-#include "model/page_refresh_regions.h"
+#include "render/page_refresh_regions.h"
 #include "page_pixels.h"
 #include <QCryptographicHash>
 #include <QFileInfo>

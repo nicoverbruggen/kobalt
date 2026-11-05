@@ -2,12 +2,12 @@
 
 #include "check.h"
 #include "assets/assets.h"
-#include "interfaces/reader/ui/style/private_text.h"
-#include "interfaces/reader/ui/style/rich_text.h"
-#include "interfaces/reader/ui/controls/rows.h"
-#include "interfaces/reader/ui/controls/text.h"
-#include "interfaces/reader/ui/style/styles.h"
-#include "interfaces/reader/ui/style/theme.h"
+#include "ui/style/private_text.h"
+#include "ui/style/rich_text.h"
+#include "ui/controls/rows.h"
+#include "ui/controls/text.h"
+#include "ui/style/styles.h"
+#include "ui/style/theme.h"
 
 #include <QPainter>
 #include <QTextBoundaryFinder>

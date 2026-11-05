@@ -1,5 +1,5 @@
 #include "support/qt_compat.h"
-#include "ui/image_damage.h"
+#include "render/image_damage.h"
 #include <QCoreApplication>
 #include <QPainter>
 #include <random>

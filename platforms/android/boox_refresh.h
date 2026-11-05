@@ -1,7 +1,7 @@
 #pragma once
-#include "interfaces/reader/views/reading_page.h"
+#include "app/reader/views/reading_page.h"
 #include "platforms/android/refresh.h"
-#include "ui/image_damage.h"
+#include "render/image_damage.h"
 
 #include <QPointer>
 

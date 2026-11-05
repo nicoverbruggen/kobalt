@@ -1,7 +1,7 @@
 #include "reader_inputs.h"
 #include "reading/reader_session.h"
 #include "reading/kosync.h"
-#include "interfaces/opening_message.h"
+#include "app/messages/opening_message.h"
 #include "publication/native_resources.h"
 #include "publication/native_archive.h"
 #include "publication/resource_server.h"

@@ -1,12 +1,12 @@
 #include "window.h"
-#include "interfaces/library/library_view.h"
+#include "app/library/library_view.h"
 #include "services.h"
 #include "platforms/standalone/canvas.h"
 #include "platforms/standalone/start_screen.h"
 #include "platform/api/safe_area.h"
-#include "interfaces/reader/views/reading_page.h"
+#include "app/reader/views/reading_page.h"
 #include "reading/reading_density.h"
-#include "interfaces/reader/ui/style/scale.h"
+#include "ui/style/scale.h"
 #include <QActionGroup>
 #include <QComboBox>
 #include <QCloseEvent>

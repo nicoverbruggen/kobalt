@@ -1,7 +1,7 @@
 #include "window.h"
 #include "assets/assets.h"
 #include "assets/bundled_fonts.h"
-#include "interfaces/reader/ui/style/fonts.h"
+#include "ui/style/fonts.h"
 #include "reading/reading_density.h"
 #include "support/diagnostics.h"
 #include <QApplication>

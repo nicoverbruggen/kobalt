@@ -1,7 +1,7 @@
 #include "services.h"
 #include "runtime.h"
 #include "light.h"
-#include "interfaces/reader/ui/style/fonts.h"
+#include "ui/style/fonts.h"
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QDesktopServices>

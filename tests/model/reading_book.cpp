@@ -3,7 +3,7 @@
 #include "reading/reading_book.h"
 #include "reading/appearance_settings.h"
 #include "reading/session_timeout.h"
-#include "interfaces/opening_message.h"
+#include "app/messages/opening_message.h"
 #include "reading/reader_session.h"
 #include "storage/reader_storage.h"
 #include "storage/annotation_database.h"

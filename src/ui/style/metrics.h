@@ -290,6 +290,11 @@ inline constexpr TextPx noticeText{24};
 namespace selection {
 inline constexpr Px outline{2}, handleRadius{14}, handleHitRadius{32};
 }
+namespace input {
+// A long press on controls, lists and the library. Word lookup in the reader
+// uses lookup::holdMilliseconds.
+inline constexpr int longPressMilliseconds = 550;
+}
 namespace lookup {
 inline constexpr int heightPercent = 46, holdMilliseconds = 500;
 // On a short screen the sheet can take up to this share, if the word stays clear.

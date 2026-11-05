@@ -46,3 +46,17 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_
 file(GLOB_RECURSE string_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/../src/*.h")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${string_sources})
 kobalt_generate_strings("${CMAKE_CURRENT_SOURCE_DIR}/en.strings" "${CMAKE_CURRENT_BINARY_DIR}/../kobalt_strings.inc" ${string_sources})
+
+# Data that C++ code embeds goes next to the generated strings, in the
+# platform's binary folder, which every platform adds to its include path.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries.json" DICTIONARY_CATALOG)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/../src/dictionaries/catalog.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/../dictionary_catalog.h" @ONLY)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/export/annotations.css" ANNOTATION_EXPORT_STYLE)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/export/annotations.js" ANNOTATION_EXPORT_SEARCH)
+# The script ends the inline <script> element without a trailing newline.
+string(REGEX REPLACE "\n$" "" ANNOTATION_EXPORT_SEARCH "${ANNOTATION_EXPORT_SEARCH}")
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/../src/storage/annotation_export_html.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/../annotation_export_html.h" @ONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/export/annotations.css" "${CMAKE_CURRENT_SOURCE_DIR}/export/annotations.js")

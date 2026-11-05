@@ -1,4 +1,5 @@
 #include "page_animation.h"
+#include "framebuffer_driver.h"
 #include "support/diagnostics.h"
 #include <array>
 #include <vector>
@@ -24,9 +25,9 @@ void PageAnimation::arm(int direction, const QRect &update, bool dark, bool vert
 PageAnimationSupport animationSupport(const QByteArray &driver, bool enabled, bool hookAvailable) {
     if (!enabled || !hookAvailable)
         return PageAnimationSupport::Unavailable;
-    if (driver == "hwtcon")
+    if (mtkFramebuffer(driver))
         return PageAnimationSupport::Supported;
-    if (driver.startsWith("mxc_epdc"))
+    if (imxFramebuffer(driver))
         return PageAnimationSupport::Uncertain;
     return PageAnimationSupport::Unavailable;
 }

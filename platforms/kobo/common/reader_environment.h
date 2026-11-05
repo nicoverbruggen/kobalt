@@ -7,8 +7,8 @@
 #include "support/diagnostics.h"
 
 namespace kobalt::nickel {
-inline constexpr auto configDir = "/mnt/onboard/.adds/kobalt";
-inline constexpr auto selectionPath = "/mnt/onboard/.adds/kobalt/config.json";
+inline constexpr auto configDir = KOBALT_CONFIG_DIR;
+inline constexpr auto selectionPath = KOBALT_CONFIG_DIR "/config.json";
 #ifdef KOBALT_READER_HARDWARE
 inline constexpr auto startupPath = KOBALT_CONFIG_DIR "/startup-session";
 inline constexpr auto activePath = KOBALT_CONFIG_DIR "/active-session.json";
@@ -35,7 +35,7 @@ struct ReaderEnvironment {
         if (!paths.sessionReport.isEmpty())
             sessionReports.post([path = paths.sessionReport, report] { return storage::writeJson(path, report); }, {});
     }
-    AssetBundle assets{QStringLiteral("/mnt/onboard/.adds/kobalt/assets"), QStringLiteral(KOBALT_VERSION)};
+    AssetBundle assets{QStringLiteral(KOBALT_CONFIG_DIR "/assets"), QStringLiteral(KOBALT_VERSION)};
     FontCopies fontCopies;
     storage::Paths paths{QString::fromLatin1(configDir),
 #ifdef KOBALT_READER_HARDWARE

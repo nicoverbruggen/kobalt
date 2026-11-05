@@ -41,7 +41,7 @@ public:
     Window(EngineFontInputs fonts, QString placeholder)
         : controller(storage::Paths{QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/config"},
                      std::move(fonts), std::move(placeholder), [this] {
-                         auto services = android::readerServices();
+                         auto services = android::readerHostServices();
                          services.nativeDialogParent = [this] { return this; };
                          // The cutout and system-bar bands above and below the
                          // reader, while it shows. The sides stay window margins.
@@ -68,7 +68,7 @@ public:
         setAutoFillBackground(true);
         layout = new QStackedLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
-        const auto services = android::readerServices();
+        const auto services = android::readerHostServices();
         start = new standalone::StartScreen(services.presentation, store, services.textScale);
         start->setLibrarySystemBarBorders(true);
         // A book picked while the library is shown joins it; see openBook.

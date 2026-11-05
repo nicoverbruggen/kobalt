@@ -89,7 +89,7 @@ public:
     }
 };
 }
-ReaderHostServices readerServices() {
+ReaderHostServices readerHostServices() {
     ReaderHostServices result;
 #ifdef Q_OS_MACOS
     result.deviceName = QStringLiteral("Mac");

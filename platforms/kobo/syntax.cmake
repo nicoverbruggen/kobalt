@@ -267,7 +267,7 @@ endif()
 
 set(generated "${work}/generated")
 file(MAKE_DIRECTORY "${generated}")
-foreach(name build_info.h kobalt_strings.inc reader_styles.h reader_hyphenation.h)
+foreach(name build_info.h kobalt_strings.inc reader_styles.h reader_hyphenation.h dictionary_catalog.h annotation_export_html.h)
     if(NOT EXISTS "${desktop}/${name}")
         message(FATAL_ERROR "Missing ${desktop}/${name}. Configure the desktop build again.")
     endif()

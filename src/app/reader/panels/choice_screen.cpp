@@ -37,7 +37,7 @@ public:
         detail->setAlignment(Qt::AlignCenter);
         detail->setWordWrap(true);
         hold.setSingleShot(true);
-        hold.setInterval(550);
+        hold.setInterval(m::input::longPressMilliseconds);
         connect(&hold, &QTimer::timeout, this, [this] { triggerHold(); });
     }
     QLabel *detail;

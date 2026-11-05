@@ -330,7 +330,7 @@ public:
                                                       progress ? test::hostReadingBridge(progress) : nullptr,
                                                       baseline, baseline, QString(), utc);
             book_ = book.get();
-            auto services = desktop::readerServices();
+            auto services = desktop::readerHostServices();
             services.desktopUi = false;
             services.suspended = [] { return false; };
             services.clock = [] { return QStringLiteral("09:00"); };

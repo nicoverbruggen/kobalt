@@ -48,7 +48,7 @@ inline constexpr Px emptyMargin{54}, emptyWidth{800}, buttonHeight{108};
 inline constexpr TextPx message{56}, body{30};
 // A held finger may drift this far, about 4 mm, before the hold becomes a drag.
 inline constexpr Px holdSlop{48};
-inline constexpr int longPressMilliseconds = 550, coverCacheEntries = 64, throttleMilliseconds = 1000;
+inline constexpr int coverCacheEntries = 64, throttleMilliseconds = 1000;
 }
 namespace lm = metrics;
 // The view behind each toolbar cell, in toolbar order.
@@ -124,7 +124,7 @@ public:
         setAttribute(Qt::WA_OpaquePaintEvent);
         covers.setMaxCost(lm::coverCacheEntries);
         hold.setSingleShot(true);
-        hold.setInterval(lm::longPressMilliseconds);
+        hold.setInterval(ui::metrics::input::longPressMilliseconds);
         connect(&hold, &QTimer::timeout, this, [this] { triggerHold(); });
     }
     struct Placement {

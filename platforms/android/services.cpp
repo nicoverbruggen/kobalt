@@ -58,7 +58,7 @@ public:
     }
 };
 }
-ReaderHostServices readerServices() {
+ReaderHostServices readerHostServices() {
     ReaderHostServices result;
     const auto model = QJniObject::getStaticObjectField("android/os/Build", "MODEL", "Ljava/lang/String;").toString().trimmed();
     const auto maker = QJniObject::getStaticObjectField("android/os/Build", "MANUFACTURER", "Ljava/lang/String;").toString().trimmed();

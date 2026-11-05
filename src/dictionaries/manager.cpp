@@ -1,7 +1,7 @@
 #include "manager.h"
 #include "support/main_thread.h"
 #include "stardict.h"
-#include "dictionary_catalog.h"
+#include <dictionary_catalog.h>
 #include "publication/zip_resource.h"
 #include "storage/reader_storage.h"
 #include "support/qt_compat.h"

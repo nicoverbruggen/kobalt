@@ -1,6 +1,7 @@
 #include "keyboard.h"
 #include "buttons.h"
 #include "ui/style/fonts.h"
+#include "ui/style/metrics.h"
 #include "ui/style/theme.h"
 #include "ui/style/scale.h"
 #include "platform/api/kobo_refresh.h"
@@ -198,7 +199,7 @@ public:
         });
         panel->hide();
         hold.setSingleShot(true);
-        hold.setInterval(550);
+        hold.setInterval(metrics::input::longPressMilliseconds);
         QObject::connect(&hold, &QTimer::timeout, this, [this] { showAccents(); });
         platform::textRefresh(panel);
         panel->installEventFilter(this);

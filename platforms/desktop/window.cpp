@@ -241,7 +241,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     : clockSource(std::move(clock)), controller(
           paths, std::move(fonts), std::move(placeholder),
           [this, configureServices = std::move(configureServices)] {
-              auto services = readerServices();
+              auto services = readerHostServices();
               services.nativeDialogParent = [this] { return this; };
               services.devicePreview = [this] {
                   return screenPreset != 0;
@@ -408,10 +408,10 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         renderingDpi = resolutionPicker->currentData().toInt();
         sizeCanvas();
     });
-    start = new standalone::StartScreen(readerServices().presentation, store, [this] {
+    start = new standalone::StartScreen(readerHostServices().presentation, store, [this] {
         return textSize / 100.0;
     });
-    start->setKeyboardFactory(readerServices().keyboard);
+    start->setKeyboardFactory(readerHostServices().keyboard);
     connect(textSizePicker, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
         textSize = textSizePicker->currentData().toInt();
         // An open book keeps its size until it closes, and the Library takes

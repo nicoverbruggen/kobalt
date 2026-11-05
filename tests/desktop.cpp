@@ -2810,7 +2810,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         library::Store store(directory.path(), std::make_shared<library::LocalSource>());
-        standalone::StartScreen start(desktop::readerServices().presentation, store);
+        standalone::StartScreen start(desktop::readerHostServices().presentation, store);
         start.resize(640, 800);
         start.show();
         QVERIFY(start.libraryShown());
@@ -7298,7 +7298,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTemporaryDir directory;
         storage::Paths paths{directory.path()};
         const auto services = [] {
-            auto result = desktop::readerServices();
+            auto result = desktop::readerHostServices();
             result.suspended = [] { return false; };
             return result;
         };
@@ -7356,7 +7356,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         };
         standalone::ReaderController controller(paths, engineFontInputs(*assets, {}, {}),
             placeholderFontFamily(*assets, *copies), [] {
-                auto services = desktop::readerServices();
+                auto services = desktop::readerHostServices();
                 services.suspended = [] { return false; };
                 return services;
             }, [](Qt::ScreenOrientation) {});
@@ -7392,7 +7392,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         storage::Paths paths{directory.path()};
         QVERIFY(storage::writeJson(paths.preferences(), {{"default_menu_view", "none"}, {"highlight_help_seen", true}}));
         standalone::ReaderController controller(paths, engineFontInputs(*assets, {}, {}),
-                                             placeholderFontFamily(*assets, *copies), desktop::readerServices,
+                                             placeholderFontFamily(*assets, *copies), desktop::readerHostServices,
                                              [](Qt::ScreenOrientation) {});
         const auto drain = qScopeGuard([&] {
             controller.close();
@@ -8838,7 +8838,7 @@ private slots:
         if (phonePreset(preset)) QVERIFY(hint->font().pixelSize() >= int(ui::px(22)));
         QVERIFY(capture(fixture, name + "-loading-cover-slow", view));
         view->hide();
-        auto baseline = createEmbeddedOpening(reader, desktop::readerServices().presentation);
+        auto baseline = createEmbeddedOpening(reader, desktop::readerHostServices().presentation);
         baseline->window()->setGeometry(reader->rect());
         baseline->setCover({});
         baseline->setProgress(45);

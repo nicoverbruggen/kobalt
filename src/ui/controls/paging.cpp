@@ -108,7 +108,7 @@ protected:
         // including when queued input arrives before the hold timer fires.
         const quint32 duration = quint32(mouse->timestamp()) - timestamp;
         const bool held = receiver->property("reader_swipe_hold").toBool() &&
-                          (elapsed.elapsed() >= 550 || (timestamp && duration >= 550));
+                          (elapsed.elapsed() >= m::input::longPressMilliseconds || (timestamp && duration >= m::input::longPressMilliseconds));
         if (mouse->button() != Qt::LeftButton || !swipe || !eligible(receiver))
             return false;
         QPointer<QWidget> alive = pager;

@@ -1,6 +1,6 @@
 # Working on Kobalt
 
-Read [Building](doc/building.md) before running a build. This branch is rebuilding the development tooling incrementally. Do not restore retired runners wholesale.
+Read [Building](doc/building.md) before running a build. Do not restore retired runners wholesale.
 
 ## Build ownership
 
@@ -73,6 +73,8 @@ Do not open a visible app or run visible UI tests without authorization. Prefer 
 Treat storage IO on Kobo as expensive. Devices store data on eMMC or, on older models, an SD card, and their speed differs widely. Measure storage-bound work, such as syncs and saves, on both kinds, and judge changes by the slower one.
 
 Stop and reap run-owned helper processes and remove scratch profiles, staging directories and temporary containers when a run ends, including on failure or interruption. Preserve the user's app state, active runs, SDKs and incremental caches. Retain useful current results and unresolved failure evidence rather than every successful raw log indefinitely.
+
+Remove run outputs and scratch state with `cmake -DPATHS="<path1>;<path2>" -P platforms/cleanup.cmake`, not with `rm -rf` on a variable path. It removes only paths inside the worktree's `build/` folder, outside `build/dependency-cache/`, or inside an agent scratch folder. It refuses everything else and fails when it refuses a path.
 
 ## Repository practice
 

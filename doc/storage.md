@@ -14,7 +14,7 @@ The retired `native_hide_status_bar` preference is removed when settings are nor
 
 `light_dark_mode_shortcut` is an optional global Boolean. Missing or invalid values use false, preserving the existing Light panel until the shortcut is enabled in Display settings. It controls only shortcut visibility. Dark mode remains available in Settings on every host. Settings schema 1 stays unchanged.
 
-`turn_off_wifi_on_open` is an optional global Boolean for the Kobo Wi-Fi power saver. Missing or invalid values use false. False keeps Wi-Fi as Nickel leaves it when a book opens and at sleep. The key keeps its name; the setting is shown as Smart Wi-Fi power saving. Hosts without the power saver preserve the value. This keeps settings schema 1.
+`turn_off_wifi_on_open` is an optional global Boolean for the Kobo Wi-Fi power saver. Missing or invalid values use false. False keeps Wi-Fi as Nickel leaves it when a book opens and at sleep. The key keeps its name; the setting is shown as Smart Wi-Fi power saving. The feature is not final until beta 7. Until then the settings cleanup (`cleanPreferences` in `src/reading/appearance_settings.cpp`) removes this key whenever settings are read or written, so Kobalt never saves it and the power saver stays off. This keeps settings schema 1.
 
 `time_remaining_format` is an optional global string with values `detailed` and `approximate`. Missing or invalid values use Detailed. The choice controls the display of remaining-time estimates in the header, footer and Kobalt sleep screens. It does not change stored reading pace, book state or cache identity. Settings schema 1 stays unchanged.
 

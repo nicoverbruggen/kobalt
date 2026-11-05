@@ -99,7 +99,7 @@ The sleep sync uses only a connection that is already up. If a sync that turned 
 
 `Reader::saveWifiPower` runs as the last step of `preparePresentation`, before the book takes input. At sleep, `Reader::saveWifiPowerAtSleep` runs when `flushKosync` finishes, which is after the sleep sync or at once when there is none. Both ask the host (`ReaderHostServices::turnOffWifi`; on Kobo `saveNativeWifiPower` in `common/native_wifi_power.cpp`). Until beta 7, Kobo provides neither this service nor `holdWifiOff`, so rules 2, 3 and 5 do not apply there and only KOSync turns Wi-Fi off. Wi-Fi goes off only when all of these hold:
 
-- The setting `turn_off_wifi_on_open` is on (Settings → System → Power management; default off).
+- The setting `turn_off_wifi_on_open` is on (Settings → System → Power management; default off). Until beta 7 the settings cleanup removes this key, so it is never on.
 - Kobalt's Bluetooth indicator is off, and a fresh D-Bus query answers that the adapter is off. A stopped Bluetooth stack counts as off. No answer within 1 s counts as unknown and keeps Wi-Fi on.
 - The book is not one that Nickel's sync carries (`ReadingBook::usesNativeCloudSync`).
 - When a book opens only: KOSync is signed out, or automatic sync is off. Automatic KOSync expects a connection while the book is open. At sleep its last sync has ended, so this condition does not apply.

@@ -259,6 +259,18 @@ int main(int argc, char **argv)
             "Settings cleanup lost intent");
     require(storage::readJson(paths.preferences()) == clean.object,
             "Clean settings were not persisted");
+    // Until beta 7 the Wi-Fi power saver setting is never saved, and reading
+    // the settings removes a saved one.
+    require(storage::writePreferences(paths.preferences(),
+                                      qt::object({ { "turn_off_wifi_on_open", true } }))
+                    && !storage::readJson(paths.preferences()).contains("turn_off_wifi_on_open"),
+            "Wi-Fi power saver setting was saved");
+    require(storage::writeJson(paths.preferences(),
+                               qt::object({ { "schema", 1 }, { "turn_off_wifi_on_open", true } })),
+            "Wi-Fi power saver fixture");
+    require(!storage::readPreferences(paths.preferences()).object.contains("turn_off_wifi_on_open")
+                    && !storage::readJson(paths.preferences()).contains("turn_off_wifi_on_open"),
+            "Saved Wi-Fi power saver setting was not removed");
     write(paths.preferences(), "{\"schema\":99,\"new_option\":true}");
     const auto settingsBytes = bytes(paths.preferences());
     require(storage::readPreferences(paths.preferences()).status == ReadStatus::Unsupported

@@ -116,6 +116,9 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         && preferences.value("kobalt_sleep_screen").isBool())
         preferences[sleep::preferenceKey] = sleep::value(sleep::mode(preferences));
     preferences.remove("kobalt_sleep_screen");
+    // Smart Wi-Fi power saving is not final yet. Until beta 7 its setting is
+    // never saved, and a saved one is removed, so the saver stays off.
+    preferences.remove("turn_off_wifi_on_open");
     preferences.remove("highlight_help_seen");
     bool oldChrome = false;
     for (const auto *key : { "show_header", "show_footer", "show_clock", "show_progress_bar",

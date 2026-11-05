@@ -14,13 +14,13 @@
 #include <QtMath>
 
 namespace kobalt::reader {
-namespace c = ui::metrics::chrome;
+namespace chrome = ui::metrics::chrome;
 namespace {
 // The tab labels are capitals, so the cap height is their ink.
 int tabCapital(int pixels) {
     return ui::interfaceInkBounds(QStringLiteral("H"), ui::interfaceFont(pixels)).height();
 }
-constexpr ui::Px toolbarBorder = c::heavyRule;
+constexpr ui::Px toolbarBorder = chrome::heavyRule;
 class ToolbarRules final : public QWidget {
 public:
     explicit ToolbarRules(QWidget *parent) : QWidget(parent) {
@@ -38,7 +38,7 @@ protected:
         if (status)
             painter.fillRect(0, status - border, width(), border, ink);
         for (int cell = 1; cell <= property("right_actions").toInt(); ++cell) {
-            painter.fillRect(width() - cell * c::cellWidth - border, status, border, height() - status, ink);
+            painter.fillRect(width() - cell * chrome::cellWidth - border, status, border, height() - status, ink);
         }
         ui::paintEdges(painter, rect(), Qt::BottomEdge, palette().color(QPalette::WindowText), toolbarBorder);
     }
@@ -61,7 +61,7 @@ class Tab final : public ui::Button {
 public:
     Tab(const QString &label, ui::ControlIcon icon, QWidget *parent) : ui::Button(label, parent), glyph(icon) {
         setCheckable(true);
-        setFont(ui::interfaceFont(c::tabText));
+        setFont(ui::interfaceFont(chrome::tabText));
         setAccessibleName(label);
         setToolTip(label);
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
@@ -75,7 +75,7 @@ public:
     void setSampleFace(const QString &face) {
         auto next = ui::fontSample(face);
         // Samples are sized for the 40 pixel cell icons; grow with the tab icon.
-        next.setPixelSize(qRound(next.pixelSize() * qreal(c::tabIcon) / c::cellIcon * ui::detail::iconScale));
+        next.setPixelSize(qRound(next.pixelSize() * qreal(chrome::tabIcon) / chrome::cellIcon * ui::detail::iconScale));
         if (sample == next)
             return;
         sample = next;
@@ -97,10 +97,10 @@ protected:
         const auto color = active ? paper : ink;
         // Centering the icon box and the label's ink as one group lines every
         // tab up.
-        const auto label = ui::interfaceFont(c::tabText);
-        const int capital = tabCapital(c::tabText);
-        const int top = labelsHidden ? (height() - c::tabIcon) / 2 : (height() - c::tabIcon - c::tabGap - capital) / 2;
-        const QRect icon((width() - c::tabIcon) / 2, top, c::tabIcon, c::tabIcon);
+        const auto label = ui::interfaceFont(chrome::tabText);
+        const int capital = tabCapital(chrome::tabText);
+        const int top = labelsHidden ? (height() - chrome::tabIcon) / 2 : (height() - chrome::tabIcon - chrome::tabGap - capital) / 2;
+        const QRect icon((width() - chrome::tabIcon) / 2, top, chrome::tabIcon, chrome::tabIcon);
         painter.setPen(color);
         if (glyph == ui::ControlIcon::Typography) {
             painter.setFont(sample);
@@ -110,7 +110,7 @@ protected:
         if (labelsHidden)
             return;
         painter.setFont(label);
-        ui::drawOpticalText(painter, QRect(ui::px(2), icon.bottom() + 1 + c::tabGap, width() - ui::px(4), capital),
+        ui::drawOpticalText(painter, QRect(ui::px(2), icon.bottom() + 1 + chrome::tabGap, width() - ui::px(4), capital),
                             text(), true);
     }
 
@@ -140,7 +140,7 @@ BottomNavigation::BottomNavigation(QWidget *parent) : ui::Panel(parent, Qt::TopE
     stay->setObjectName("rrNavLinkStay");
     stay->setAccessibleName(strings::get("reader.stay_here"));
     stay->setToolTip(stay->accessibleName());
-    stay->setFixedWidth(c::cellWidth);
+    stay->setFixedWidth(chrome::cellWidth);
     stay->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     stay->setRule(ui::Edges(Qt::LeftEdge) | Qt::BottomEdge);
     returnLayout->addWidget(stay);
@@ -240,7 +240,7 @@ void BottomNavigation::updateLabels() {
     for (auto *tab : tabs)
         shown += !tab->isHidden();
     bool fit = shown > 0;
-    const auto font = ui::interfaceFont(c::tabText);
+    const auto font = ui::interfaceFont(chrome::tabText);
     for (auto *tab : tabs)
         if (!tab->isHidden() && ui::interfaceTextWidth(tab->text(), font) > width() / qMax(1, shown) - ui::px(4))
             fit = false;
@@ -261,10 +261,10 @@ void BottomNavigation::setReturnLabel(const QString &label, const QString &note)
 // standard size, the bar keeps its height when the labels are hidden.
 int BottomNavigation::barHeight() {
     if (ui::textScale() == 1)
-        return c::actionHeight;
-    const int icon = c::tabIcon - ui::px(c::tabIcon.design());
-    const int label = tabCapital(c::tabText) - tabCapital(ui::px(c::tabText.design()));
-    return c::actionHeight + icon + label;
+        return chrome::actionHeight;
+    const int icon = chrome::tabIcon - ui::px(chrome::tabIcon.design());
+    const int label = tabCapital(chrome::tabText) - tabCapital(ui::px(chrome::tabText.design()));
+    return chrome::actionHeight + icon + label;
 }
 int BottomNavigation::navigationHeight() const {
     return barHeight() + (returnRow->isHidden() ? 0 : ui::metrics::links::returnHeight);
@@ -286,15 +286,15 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
     sessionStyle = session->styleSheet();
     settingsStyle = settings->styleSheet();
     bookmarksStyle = bookmarks->styleSheet();
-    ui::readerStyle(session, ui::styles::font(c::countText) + "font-style:italic;");
+    ui::readerStyle(session, ui::styles::font(chrome::countText) + "font-style:italic;");
     ui::readerStyle(settings, "QPushButton{border:none;padding:0;}");
-    settings->setFixedSize(c::cellWidth, c::actionHeight);
+    settings->setFixedSize(chrome::cellWidth, chrome::actionHeight);
     if (auto *button = dynamic_cast<ui::Button *>(settings)) {
         settingsPaint = button->paintMode();
         button->setPaintMode(ui::ButtonPaintMode::ToolbarCell);
     }
     ui::readerStyle(bookmarks, "QPushButton{border:none;padding:0;}");
-    bookmarks->setFixedSize(c::cellWidth, c::actionHeight);
+    bookmarks->setFixedSize(chrome::cellWidth, chrome::actionHeight);
     if (auto *button = dynamic_cast<ui::Button *>(bookmarks)) {
         bookmarksPaint = button->paintMode();
         button->setPaintMode(ui::ButtonPaintMode::ToolbarCell);
@@ -302,7 +302,7 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
     if (search) {
         searchStyle = search->styleSheet();
         ui::readerStyle(search, "QPushButton{border:none;padding:0;}");
-        search->setFixedSize(c::cellWidth, c::actionHeight);
+        search->setFixedSize(chrome::cellWidth, chrome::actionHeight);
         if (auto *button = dynamic_cast<ui::Button *>(search)) {
             searchPaint = button->paintMode();
             button->setPaintMode(ui::ButtonPaintMode::ToolbarCell);
@@ -311,7 +311,7 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
     if (sync) {
         syncStyle = sync->styleSheet();
         ui::readerStyle(sync, "QPushButton{border:none;padding:0;}");
-        sync->setFixedSize(c::cellWidth, c::actionHeight);
+        sync->setFixedSize(chrome::cellWidth, chrome::actionHeight);
         if (auto *button = dynamic_cast<ui::Button *>(sync)) {
             syncPaint = button->paintMode();
             button->setPaintMode(ui::ButtonPaintMode::ToolbarCell);
@@ -320,7 +320,7 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
     if (annotate) {
         annotateStyle = annotate->styleSheet();
         ui::readerStyle(annotate, "QPushButton{border:none;padding:0;}");
-        annotate->setFixedSize(c::cellWidth, c::actionHeight);
+        annotate->setFixedSize(chrome::cellWidth, chrome::actionHeight);
         if (auto *button = dynamic_cast<ui::Button *>(annotate)) {
             annotatePaint = button->paintMode();
             button->setPaintMode(ui::ButtonPaintMode::ToolbarCell);
@@ -328,7 +328,7 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
     }
     if (formattingWarning) {
         formattingWarningStyle = formattingWarning->styleSheet();
-        formattingWarning->setFixedSize(c::cellWidth, c::actionHeight);
+        formattingWarning->setFixedSize(chrome::cellWidth, chrome::actionHeight);
         ui::readerStyle(formattingWarning, "QPushButton{border:none;padding:0;}");
         if (auto *button = dynamic_cast<ui::Button *>(formattingWarning)) {
             formattingWarningPaint = button->paintMode();
@@ -419,10 +419,10 @@ void Navigation::update(QSize size, const NavigationState &state) {
     // When the caption nearly reaches the actions, the exit action meets them,
     // so its divider and theirs draw as one line.
     const int exitWidth = exitAction->sizeHint().width();
-    const int exitRoom = size.width() - rightActions * c::cellWidth;
-    const int exitCell = exitWidth > exitRoom ? int(c::cellWidth) : exitRoom - exitWidth < c::cellWidth / 2 ? exitRoom : exitWidth;
+    const int exitRoom = size.width() - rightActions * chrome::cellWidth;
+    const int exitCell = exitWidth > exitRoom ? int(chrome::cellWidth) : exitRoom - exitWidth < chrome::cellWidth / 2 ? exitRoom : exitWidth;
     // A narrow gap should not look like an empty toolbar cell.
-    const bool returnDivider = exitRoom - exitCell >= int(c::cellWidth);
+    const bool returnDivider = exitRoom - exitCell >= int(chrome::cellWidth);
     if (exitAction->property("reader_return_divider").toBool() != returnDivider) {
         exitAction->setProperty("reader_return_divider", returnDivider);
         exitAction->update();
@@ -430,10 +430,10 @@ void Navigation::update(QSize size, const NavigationState &state) {
     // The status line keeps its proportions as large text enlarges it. It
     // sits at the bottom of a taller camera band, or inside the action row.
     const int statusTop = inlineStatus
-        ? statusHeight() + (int(c::actionHeight) - int(ui::metrics::panel::statusHeight)) / 2
+        ? statusHeight() + (int(chrome::actionHeight) - int(ui::metrics::panel::statusHeight)) / 2
         : statusHeight() - (statusVisible ? int(ui::metrics::chrome::statusHeight) : 0) + ui::textPx(10);
-    const int statusLeft = inlineStatus ? exitCell + int(c::inset) : int(c::inset);
-    const int statusRight = size.width() - (inlineStatus ? rightActions * int(c::cellWidth) : 0) - c::inset;
+    const int statusLeft = inlineStatus ? exitCell + int(chrome::inset) : int(chrome::inset);
+    const int statusRight = size.width() - (inlineStatus ? rightActions * int(chrome::cellWidth) : 0) - chrome::inset;
     // The final width at once: a full width first, then the text width, would
     // repaint the toolbar on every update.
     clock->setGeometry(statusLeft, statusTop, qMin(ui::textPx(160), clock->sizeHint().width()),
@@ -459,24 +459,24 @@ void Navigation::update(QSize size, const NavigationState &state) {
             placeStatus(wifi);
     }
     updateSessionGeometry();
-    settings->setGeometry(size.width() - c::cellWidth, statusHeight(), c::cellWidth, c::actionHeight);
-    bookmarks->setGeometry(size.width() - 2 * c::cellWidth, statusHeight(), c::cellWidth, c::actionHeight);
+    settings->setGeometry(size.width() - chrome::cellWidth, statusHeight(), chrome::cellWidth, chrome::actionHeight);
+    bookmarks->setGeometry(size.width() - 2 * chrome::cellWidth, statusHeight(), chrome::cellWidth, chrome::actionHeight);
     if (annotate) {
-        annotate->setGeometry(size.width() - 3 * c::cellWidth, statusHeight(), c::cellWidth, c::actionHeight);
+        annotate->setGeometry(size.width() - 3 * chrome::cellWidth, statusHeight(), chrome::cellWidth, chrome::actionHeight);
     }
     if (search) {
-        search->setGeometry(size.width() - (annotate ? 4 : 3) * c::cellWidth, statusHeight(), c::cellWidth,
-                            c::actionHeight);
+        search->setGeometry(size.width() - (annotate ? 4 : 3) * chrome::cellWidth, statusHeight(), chrome::cellWidth,
+                            chrome::actionHeight);
     }
     if (sync) {
-        sync->setGeometry(size.width() - ((annotate ? 4 : 3) + (search ? 1 : 0)) * c::cellWidth,
-                          statusHeight(), c::cellWidth, c::actionHeight);
+        sync->setGeometry(size.width() - ((annotate ? 4 : 3) + (search ? 1 : 0)) * chrome::cellWidth,
+                          statusHeight(), chrome::cellWidth, chrome::actionHeight);
     }
     if (formattingWarning) {
-        formattingWarning->setGeometry(size.width() - ((annotate ? 4 : 3) + (search ? 1 : 0) + syncActions) * c::cellWidth,
-                                       statusHeight(), c::cellWidth, c::actionHeight);
+        formattingWarning->setGeometry(size.width() - ((annotate ? 4 : 3) + (search ? 1 : 0) + syncActions) * chrome::cellWidth,
+                                       statusHeight(), chrome::cellWidth, chrome::actionHeight);
     }
-    exitAction->setGeometry(0, statusHeight(), exitCell, c::actionHeight);
+    exitAction->setGeometry(0, statusHeight(), exitCell, chrome::actionHeight);
     if (rules->property("right_actions").toInt() != rightActions) {
         rules->setProperty("right_actions", rightActions);
         rules->update();
@@ -560,8 +560,8 @@ void Navigation::updateSessionGeometry() {
         right = qMin(right, bluetooth->x());
     if (wifi && wifi->active())
         right = qMin(right, wifi->x());
-    right = qMax(0, right - int(c::inset));
-    const int left = qMin(right, clock->geometry().right() + 1 + int(c::inset));
+    right = qMax(0, right - int(chrome::inset));
+    const int left = qMin(right, clock->geometry().right() + 1 + int(chrome::inset));
     // Center the session in the gap after the time text, without reserving
     // the clock's unused width or moving the status icons.
     session->setGeometry(left, clock->y(), right - left, ui::metrics::panel::statusHeight);

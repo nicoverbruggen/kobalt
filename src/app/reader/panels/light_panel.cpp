@@ -16,7 +16,7 @@
 #include <utility>
 
 namespace kobalt {
-namespace m = ui::metrics;
+namespace metrics = ui::metrics;
 namespace {
 class SwipeBand : public QWidget {
 public:
@@ -31,7 +31,7 @@ protected:
 class SwipeIcon : public QWidget {
 public:
     explicit SwipeIcon(QWidget *parent) : QWidget(parent) {
-        setFixedSize(m::text::heading, m::text::heading);
+        setFixedSize(metrics::text::heading, metrics::text::heading);
     }
 
 protected:
@@ -44,13 +44,13 @@ protected:
 LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent, Qt::BottomEdge), light(light) {
     setObjectName("rrLightPanel");
     auto *outer = new QVBoxLayout(this);
-    outer->setContentsMargins(0, m::control::border, 0, 0);
+    outer->setContentsMargins(0, metrics::control::border, 0, 0);
     outer->setSpacing(0);
     auto *controls = new QWidget(this);
     auto *rows = new QVBoxLayout(controls);
     outer->addWidget(controls);
-    rows->setContentsMargins(m::panel::contentMargins);
-    rows->setSpacing(m::control::rowGap);
+    rows->setContentsMargins(metrics::panel::contentMargins);
+    rows->setSpacing(metrics::control::rowGap);
     automaticBrightness = new ui::DescribedOption(strings::get("light_panel.automatic_brightness"),
                                                   strings::get("light_panel.automatic_brightness_description"), this);
     automaticBrightness->setObjectName("rrAutomaticBrightness");
@@ -66,11 +66,11 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     for (auto *option : {automaticBrightness, automaticWarmth, darkMode}) {
         auto presentation = option->presentation();
         presentation.indicator = ui::DescribedOption::Indicator::Square;
-        presentation.labelPixels = m::chrome::labelText;
-        presentation.descriptionPixels = m::chrome::descriptionText;
-        presentation.indicatorSize = {m::chrome::checkSize, m::chrome::checkSize};
+        presentation.labelPixels = metrics::chrome::labelText;
+        presentation.descriptionPixels = metrics::chrome::descriptionText;
+        presentation.indicatorSize = {metrics::chrome::checkSize, metrics::chrome::checkSize};
         presentation.leadingIndicator = true;
-        presentation.minimumRowHeight = m::control::stepSize;
+        presentation.minimumRowHeight = metrics::control::stepSize;
         option->setPresentation(presentation);
     }
     connect(automaticBrightness, &QCheckBox::clicked, this, [this](bool enabled) {
@@ -93,13 +93,13 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     warmthRow = ui::controlRowOf(warmthSlider);
     automaticRows = new QWidget(controls);
     auto *automaticSection = new QVBoxLayout(automaticRows);
-    automaticSection->setContentsMargins(0, m::control::rowGap, 0, 0);
+    automaticSection->setContentsMargins(0, metrics::control::rowGap, 0, 0);
     automaticSection->setSpacing(0);
     auto *automaticPanel = new ui::Panel(automaticRows);
     automaticPanel->setDividers(Qt::TopEdge);
     automaticSection->addWidget(automaticPanel);
     auto *automaticLayout = new QVBoxLayout(automaticPanel);
-    automaticLayout->setContentsMargins(0, m::control::rowGap, 0, 0);
+    automaticLayout->setContentsMargins(0, metrics::control::rowGap, 0, 0);
     automaticLayout->setSpacing(0);
     automaticLayout->addWidget(automaticBrightness);
     automaticLayout->addWidget(automaticWarmth);
@@ -108,15 +108,15 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     swipeTip = new ui::InterfaceLabel(this);
     swipeTip->setObjectName("rrLightSwipeTip");
     swipeTip->setWordWrap(true);
-    ui::readerStyle(swipeTip, ui::styles::font(m::text::secondary) +
+    ui::readerStyle(swipeTip, ui::styles::font(metrics::text::secondary) +
                                   "font-style:italic;background:transparent;color:palette(placeholder-text);");
     swipeRow = new SwipeBand(this);
     swipeRow->setObjectName("rrLightSwipeBand");
     ui::readerStyle(swipeRow, "QWidget{background:transparent;}");
     auto *tipLayout = new QHBoxLayout(swipeRow);
-    tipLayout->setContentsMargins(m::panel::contentMargins.left(), m::panel::contentMargins.top() + ui::px(4),
-                                  m::panel::contentMargins.right(), m::panel::contentMargins.bottom());
-    tipLayout->setSpacing(m::spacing::row);
+    tipLayout->setContentsMargins(metrics::panel::contentMargins.left(), metrics::panel::contentMargins.top() + ui::px(4),
+                                  metrics::panel::contentMargins.right(), metrics::panel::contentMargins.bottom());
+    tipLayout->setSpacing(metrics::spacing::row);
     tipLayout->addWidget(new SwipeIcon(swipeRow), 0, Qt::AlignTop);
     tipLayout->addWidget(swipeTip, 1);
     outer->insertWidget(0, swipeRow);
@@ -153,7 +153,7 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent) : ui::Panel(parent
     connect(&poll, &QTimer::timeout, this, [this] {
         refreshValues();
     });
-    poll.setInterval(m::light::pollMilliseconds);
+    poll.setInterval(metrics::light::pollMilliseconds);
     for (auto *widget : findChildren<QWidget *>())
         platform::textRefresh(widget);
     platform::textRefresh(this);
@@ -197,10 +197,10 @@ void LightPanel::layoutPanel() {
     const int width = parentWidget()->width();
     // Hidden options can retain a minimum height measured at their initial
     // narrow width. Fit them to the actual row before measuring the panel.
-    const int rowWidth = qMax(1, width - m::panel::contentMargins.left() - m::panel::contentMargins.right());
+    const int rowWidth = qMax(1, width - metrics::panel::contentMargins.left() - metrics::panel::contentMargins.right());
     for (auto *option : {automaticBrightness, automaticWarmth, darkMode})
         option->setMinimumHeight(option->heightForWidth(rowWidth));
-    int automaticHeight = 2 * int(m::control::rowGap);
+    int automaticHeight = 2 * int(metrics::control::rowGap);
     for (auto *option : {automaticBrightness, automaticWarmth})
         if (!option->isHidden()) automaticHeight += option->heightForWidth(rowWidth);
     automaticRows->setMinimumHeight(automaticHeight);
@@ -228,7 +228,7 @@ void LightPanel::layoutPanel() {
         layout()->invalidate();
         height = measuredHeight();
     }
-    const QRect bounds = placement ? placement(height) : QRect(0, m::panel::toolbarHeight, width, height);
+    const QRect bounds = placement ? placement(height) : QRect(0, metrics::panel::toolbarHeight, width, height);
     const bool moved = geometry() != bounds;
     setGeometry(bounds);
     if (moved && isVisible() && changed)

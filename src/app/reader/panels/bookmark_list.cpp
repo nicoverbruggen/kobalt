@@ -27,7 +27,7 @@
 #include "reading/reading_density.h"
 
 namespace kobalt {
-namespace c = ui::metrics::chrome;
+namespace chrome = ui::metrics::chrome;
 namespace strip = ui::metrics::contents;
 BookmarkList::BookmarkList(QWidget *parent, KeyboardFactory factory) : Panel(parent), makeKeyboard(std::move(factory)) {
     window()->installEventFilter(this);
@@ -41,28 +41,28 @@ BookmarkList::BookmarkList(QWidget *parent, KeyboardFactory factory) : Panel(par
             back();
     });
     listHeader = new ui::ListHeader(this);
-    listHeader->setTrailingInset(c::cellWidth);
+    listHeader->setTrailingInset(chrome::cellWidth);
     summary = listHeader->leftLabel();
     summary->setObjectName("rrBookmarkListSummary");
     pageHeading = listHeader->rightLabel();
     pageHeading->setObjectName("rrBookmarkListPageHeading");
     for (auto *label : {summary, pageHeading}) {
-        label->setFont(ui::interfaceFont(c::captionText));
-        ui::readerStyle(label, ui::styles::font(c::captionText) +
+        label->setFont(ui::interfaceFont(chrome::captionText));
+        ui::readerStyle(label, ui::styles::font(chrome::captionText) +
                                    "background:transparent;border:none;color:palette(placeholder-text);");
     }
     empty = new ui::InterfaceLabel(strings::get("bookmarks.empty"), this);
     empty->setObjectName("rrBookmarkListEmpty");
     empty->setTextFormat(Qt::PlainText);
     empty->setAlignment(Qt::AlignCenter);
-    ui::readerStyle(empty, ui::styles::font(c::labelText) + "background:transparent;");
+    ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
     emptyHint = new ui::InterfaceLabel(strings::get("bookmarks.empty_hint"), this);
     emptyHint->setObjectName("rrBookmarkListEmptyHint");
     emptyHint->setTextFormat(Qt::PlainText);
     emptyHint->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     emptyHint->setWordWrap(true);
     ui::readerStyle(emptyHint,
-                    ui::styles::font(c::descriptionText) + "color:palette(placeholder-text);background:transparent;");
+                    ui::styles::font(chrome::descriptionText) + "color:palette(placeholder-text);background:transparent;");
     pager = new ui::PagerBar(this, "rrBookmarkList");
     pager->previous->setAccessibleName(strings::get("bookmarks.previous"));
     pager->next->setAccessibleName(strings::get("bookmarks.next"));
@@ -85,8 +85,8 @@ BookmarkList::BookmarkList(QWidget *parent, KeyboardFactory factory) : Panel(par
     for (auto *tab : {bookmarksTab, annotationsTab}) {
         tab->setCheckable(true);
         static_cast<ui::Button *>(tab)->setPaintMode(ui::ButtonPaintMode::ToolbarCell);
-        tab->setFont(ui::brandFont(c::titleText));
-        ui::readerStyle(tab, "QPushButton{border:none;padding:0;min-height:0;" + ui::styles::brand(c::titleText) + "}");
+        tab->setFont(ui::brandFont(chrome::titleText));
+        ui::readerStyle(tab, "QPushButton{border:none;padding:0;min-height:0;" + ui::styles::brand(chrome::titleText) + "}");
     }
     connect(bookmarksTab, &QPushButton::clicked, this, [this] {
         if (tabRequested)
@@ -213,9 +213,9 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     input->setText(row.pinName.isEmpty() ? row.chapter : row.pinName);
     input->setAccessibleName(strings::get("bookmarks.pin_name"));
     input->setPlaceholderText(strings::get("bookmarks.pin_name"));
-    input->setMinimumHeight(c::actionHeight);
+    input->setMinimumHeight(chrome::actionHeight);
     input->setTextMargins(ui::metrics::notice::cardMargins.left(), 0, ui::metrics::notice::cardMargins.right(), 0);
-    ui::readerStyle(input, QString("QLineEdit{border:%1px solid palette(mid);border-radius:0;padding:0;background:palette(window);color:palette(window-text);").arg(int(ui::metrics::control::border)) + ui::styles::font(c::labelText) + "}");
+    ui::readerStyle(input, QString("QLineEdit{border:%1px solid palette(mid);border-radius:0;padding:0;background:palette(window);color:palette(window-text);").arg(int(ui::metrics::control::border)) + ui::styles::font(chrome::labelText) + "}");
     auto *inputRow = new QWidget(card);
     auto *inputLayout = new QHBoxLayout(inputRow);
     inputLayout->setContentsMargins(ui::metrics::notice::cardMargins.left(), ui::metrics::notice::cardMargins.top(),
@@ -238,7 +238,7 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     const bool shortScreen = isShortHeight(parentWidget()->height(), ui::density());
     const int columns = shortScreen ? 6 : 4, iconRows = shortScreen ? 1 : 3;
     for (int row = 0; row < iconRows; ++row)
-        grid->setRowMinimumHeight(row, c::actionHeight);
+        grid->setRowMinimumHeight(row, chrome::actionHeight);
     auto *group = new QButtonGroup(gridWidget);
     group->setExclusive(true);
     const auto icons = ui::bookmarkIconNames();
@@ -247,10 +247,10 @@ void BookmarkList::openPin(const BookmarkRow &row) {
     auto page = std::make_shared<int>(qMax(0, int(icons.indexOf(*selected))) / pageSize);
     QVector<ui::CellButton *> iconButtons;
     for (int i = 0; i < pageSize; ++i) {
-        auto *button = new ui::CellButton(ui::ControlIcon::Star, gridWidget, qRound(1.2 * int(c::cellIcon)));
+        auto *button = new ui::CellButton(ui::ControlIcon::Star, gridWidget, qRound(1.2 * int(chrome::cellIcon)));
         button->setRule(ui::Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge);
         button->setCheckable(true);
-        button->setFixedHeight(c::actionHeight);
+        button->setFixedHeight(chrome::actionHeight);
         group->addButton(button);
         grid->addWidget(button, i / columns, i % columns);
         iconButtons.append(button);
@@ -333,10 +333,10 @@ void BookmarkList::openSort() {
     card->rows()->setSpacing(0);
     card->rows()->addSpacing(ui::metrics::notice::cardMargins.top());
     auto *title = card->title(strings::get("marks.sort_title"));
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     card->rows()->addSpacing(ui::metrics::notice::cardMargins.bottom());
     auto *options = new ui::RadioList(card);
-    options->setMinimumRowHeight(c::listActionHeight);
+    options->setMinimumRowHeight(chrome::listActionHeight);
     options->setTopDivider(true);
     const QStringList values{"position", "newest", "oldest"};
     const QStringList keys{"marks.sort_position", "marks.sort_newest", "marks.sort_oldest"};
@@ -396,7 +396,7 @@ int BookmarkList::rowHeight() const {
     const int excerptHeight = privateText ? qMax(ui::measurePrivateTextSize(sample, font).height(),
                                                  ui::renderPrivateText(sample, font).image.height())
                                           : qMax(metrics.height(), metrics.tightBoundingRect(sample).height());
-    const int lineHeight = qMax(excerptHeight, ui::interfaceLineHeight(ui::interfaceFont(c::labelText)));
+    const int lineHeight = qMax(excerptHeight, ui::interfaceLineHeight(ui::interfaceFont(chrome::labelText)));
     return qMax(int(ui::metrics::list::threeLines),
                 2 * int(ui::metrics::list::lineInset) + 4 * lineHeight + int(ui::metrics::control::border));
 }
@@ -404,7 +404,7 @@ int BookmarkList::pageCount() const {
     return qMax(1, int(pageStarts.size()));
 }
 int BookmarkList::listTop() const {
-    return c::actionHeight + strip::stripHeight;
+    return chrome::actionHeight + strip::stripHeight;
 }
 void BookmarkList::showAnnotations(QVector<BookmarkRow> list, bool pending) {
     showItems(std::move(list), true, pending);
@@ -468,7 +468,7 @@ void BookmarkList::showEvent(QShowEvent *event) {
 void BookmarkList::paintEvent(QPaintEvent *event) {
     ui::Panel::paintEvent(event);
     QPainter painter(this);
-    painter.fillRect(0, c::actionHeight - c::heavyRule, width(), c::heavyRule, palette().color(QPalette::WindowText));
+    painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule, palette().color(QPalette::WindowText));
     painter.fillRect(0, listTop() - ui::metrics::control::border, width(), ui::metrics::control::border,
                      ui::dividerColor(this));
 }
@@ -477,8 +477,8 @@ void BookmarkList::arrange() {
     const auto font = excerptFont();
     const int textLineHeight = ui::needsPrivateText(QStringLiteral("Mg"), font)
         ? ui::measurePrivateTextLayout(QStringLiteral("Mg"), font).lineHeight : QFontMetrics(font).lineSpacing();
-    const int lineHeight = qMax(ui::px(44), qMax(textLineHeight, ui::interfaceLineHeight(ui::interfaceFont(c::captionText))));
-    const int textWidth = qMax(1, width() - c::cellWidth - 2 * ui::metrics::list::inset);
+    const int lineHeight = qMax(ui::px(44), qMax(textLineHeight, ui::interfaceLineHeight(ui::interfaceFont(chrome::captionText))));
+    const int textWidth = qMax(1, width() - chrome::cellWidth - 2 * ui::metrics::list::inset);
     if (excerptCacheFont != font || excerptCacheWidth != textWidth || excerptCacheLineHeight != textLineHeight) {
         excerptLineCache.clear();
         excerptCacheFont = font;
@@ -505,7 +505,7 @@ void BookmarkList::arrange() {
         total += itemHeight;
     }
     excerptLineCache.swap(nextLineCache);
-    const int capacity = total > available ? qMax(1, available - c::actionHeight) : available;
+    const int capacity = total > available ? qMax(1, available - chrome::actionHeight) : available;
     pageStarts = {0};
     int used = 0;
     for (int i = 0; i < items.size(); ++i) {
@@ -519,24 +519,24 @@ void BookmarkList::arrange() {
     while (page + 1 < pageStarts.size() && pageStarts[page + 1] <= first)
         ++page;
     rows = (page + 1 < pageStarts.size() ? pageStarts[page + 1] : items.size()) - pageStarts[page];
-    const int barHeight = c::actionHeight - c::heavyRule;
+    const int barHeight = chrome::actionHeight - chrome::heavyRule;
     moreButton->setEnabled(bool(actionsRequested) && !loading);
-    const int reserved = 3 * c::cellWidth;
+    const int reserved = 3 * chrome::cellWidth;
     const int tabWidth = qMax(1, (width() - reserved) / 2);
-    close->setGeometry(0, 0, c::cellWidth, barHeight);
-    annotationsTab->setGeometry(c::cellWidth, 0, tabWidth, barHeight);
-    bookmarksTab->setGeometry(c::cellWidth + tabWidth, 0, qMax(1, width() - reserved - tabWidth), barHeight);
-    moreButton->setGeometry(width() - c::cellWidth, 0, c::cellWidth, barHeight);
-    listHeader->setGeometry(0, c::actionHeight, width(), ui::metrics::list::headerHeight);
-    sortButton->setGeometry(width() - 2 * c::cellWidth, 0, c::cellWidth, barHeight);
+    close->setGeometry(0, 0, chrome::cellWidth, barHeight);
+    annotationsTab->setGeometry(chrome::cellWidth, 0, tabWidth, barHeight);
+    bookmarksTab->setGeometry(chrome::cellWidth + tabWidth, 0, qMax(1, width() - reserved - tabWidth), barHeight);
+    moreButton->setGeometry(width() - chrome::cellWidth, 0, chrome::cellWidth, barHeight);
+    listHeader->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
+    sortButton->setGeometry(width() - 2 * chrome::cellWidth, 0, chrome::cellWidth, barHeight);
     if (sortPopup) {
         sortPopup->setGeometry(rect());
         sortPopup->centerCard();
     }
-    pager->setGeometry(0, height() - c::actionHeight, width(), c::actionHeight);
+    pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     const int itemHeight = rowHeight();
-    empty->setGeometry(c::inset, top + itemHeight / 2, qMax(1, width() - 2 * c::inset), itemHeight / 2);
-    emptyHint->setGeometry(2 * c::inset, top + itemHeight, qMax(1, width() - 4 * c::inset), itemHeight);
+    empty->setGeometry(chrome::inset, top + itemHeight / 2, qMax(1, width() - 2 * chrome::inset), itemHeight / 2);
+    emptyHint->setGeometry(2 * chrome::inset, top + itemHeight, qMax(1, width() - 4 * chrome::inset), itemHeight);
 }
 void BookmarkList::redraw() {
     const int first = pageStarts.value(page, 0);
@@ -592,7 +592,7 @@ void BookmarkList::redraw() {
     int used = listTop();
     for (int i = first; i < first + rows; ++i)
         used += itemHeights.value(i);
-    pager->setBlankArea({c::inset, used, width() - 2 * c::inset, pager->y() - used});
+    pager->setBlankArea({chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used});
     while (buttons.size() < qMin(rows, int(items.size()))) {
         const int row = buttons.size();
         auto *button = new ui::ListRow(this);
@@ -620,7 +620,7 @@ void BookmarkList::redraw() {
     int lastPage = 0;
     for (const auto &item : items)
         lastPage = qMax(lastPage, item.page);
-    const int numberWidth = ui::interfaceTextWidth(QString::number(lastPage + 1), ui::interfaceFont(c::captionText));
+    const int numberWidth = ui::interfaceTextWidth(QString::number(lastPage + 1), ui::interfaceFont(chrome::captionText));
     int y = listTop();
     for (int row = 0; row < buttons.size(); ++row) {
         const int index = pageStarts.value(page, 0) + row;
@@ -652,7 +652,7 @@ void BookmarkList::redraw() {
         auto *itemRow = static_cast<ui::ListRow *>(button);
         itemRow->setActionIcon(annotations ? ui::ControlIcon::Close : ui::ControlIcon::More);
         itemRow->setDetailFont(excerptFont());
-        itemRow->setMetadataFont(ui::interfaceFont(c::captionText));
+        itemRow->setMetadataFont(ui::interfaceFont(chrome::captionText));
         itemRow->setTitle(item.pinName.isEmpty() ? chapter : item.pinName);
         itemRow->setTitlePixels(ui::px(24));
         itemRow->setTitleIcon(ui::ControlIcon::Pin, !annotations && !item.pinIcon.isEmpty(), !annotations);

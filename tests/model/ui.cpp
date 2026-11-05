@@ -668,7 +668,7 @@ int main(int argc, char **argv) {
         setDensity(savedDensity);
     }
     for (bool dark : {false, true}) {
-        namespace m = kobalt::ui::metrics;
+        namespace metrics = kobalt::ui::metrics;
         QWidget host;
         host.resize(640, 600);
         host.setProperty("reader_dark", dark);
@@ -715,11 +715,11 @@ int main(int argc, char **argv) {
             "A new render inherits the previous loading notice");
         kobalt::ui::ListRow row(&host);
         row.setTitle("A very long chapter name that must fit in a narrow row");
-        require(row.sizeHint().height() == m::list::oneLine, "One-line row has a different height");
+        require(row.sizeHint().height() == metrics::list::oneLine, "One-line row has a different height");
         row.setDetail("A passage from the book");
-        require(row.sizeHint().height() == m::list::twoLines, "Two-line row has a different height");
+        require(row.sizeHint().height() == metrics::list::twoLines, "Two-line row has a different height");
         row.setCaption("12 MAY 2026");
-        require(row.sizeHint().height() == m::list::threeLines, "Three-line row has a different height");
+        require(row.sizeHint().height() == metrics::list::threeLines, "Three-line row has a different height");
         auto *remove = row.addAction("remove", "Remove bookmark");
         row.setLeading("01");
         row.setAccessory(kobalt::ui::ListRow::Caption{"123", 60});
@@ -728,7 +728,7 @@ int main(int argc, char **argv) {
         QApplication::processEvents();
         require(row.titleLabel()->text() != row.text() && row.titleLabel()->text().contains(QChar(0x2026)),
                 "Row title is not elided");
-        require(remove->width() == m::chrome::cellWidth && remove->height() == row.height() &&
+        require(remove->width() == metrics::chrome::cellWidth && remove->height() == row.height() &&
                     remove->geometry().right() == row.width() - 1,
                 "Trailing action does not fill its cell");
         require(row.titleLabel()->geometry().right() < row.trailingLabel()->x() &&
@@ -748,7 +748,7 @@ int main(int argc, char **argv) {
         row.setEnabled(false);
         require(qGray(row.grab().toImage().pixel(3, 3)) == (dark ? 0 : 255), "Disabled row highlights");
         kobalt::ui::ListHeader header(&host);
-        header.resize(480, m::list::headerHeight);
+        header.resize(480, metrics::list::headerHeight);
         header.setCaptions("Contents · 16 chapters", "Page");
         require(header.leftLabel()->text() == QStringLiteral("Contents · 16 chapters") &&
                     header.rightLabel()->text() == "Page" &&
@@ -1418,8 +1418,8 @@ int main(int argc, char **argv) {
     }
     std::puts("PASS: chapter row highlights, paging and navigation in light and dark themes");
     {
-        namespace g = kobalt::ui::metrics::chapters;
-        namespace c = kobalt::ui::metrics::chrome;
+        namespace chapterMetrics = kobalt::ui::metrics::chapters;
+        namespace chrome = kobalt::ui::metrics::chrome;
         using kobalt::strings::get;
         QWidget host;
         host.resize(1072, 1448);
@@ -1427,7 +1427,7 @@ int main(int argc, char **argv) {
         host.setFont(kobalt::ui::interfaceFont());
         kobalt::ui::readerStyle(&host, kobalt::ui::styles::reader());
         kobalt::ChapterGraph graph(&host);
-        graph.resize(1072, g::graphHeight);
+        graph.resize(1072, chapterMetrics::graphHeight);
         host.show();
         graph.open();
         QApplication::processEvents();
@@ -1453,8 +1453,8 @@ int main(int argc, char **argv) {
         graph.setData(chapters, {}, true, {});
         QApplication::processEvents();
         const auto image = bars->grab().toImage();
-        const int chartHeight = g::barsHeight, barWidth = g::maximumBarWidth;
-        const int groupLeft = (image.width() - 2 * barWidth - g::gapWide) / 2;
+        const int chartHeight = chapterMetrics::barsHeight, barWidth = chapterMetrics::maximumBarWidth;
+        const int groupLeft = (image.width() - 2 * barWidth - chapterMetrics::gapWide) / 2;
         require(qGray(image.pixel(groupLeft, chartHeight / 2)) == 255 &&
                     qGray(image.pixel(image.width() - groupLeft - barWidth, chartHeight / 2)) == 0,
                 "Graph heights do not distinguish native word counts from equal page lengths");
@@ -1472,10 +1472,10 @@ int main(int argc, char **argv) {
         QApplication::processEvents();
         require(graph.graphPages() == 1, "Twenty-one chapters did not fit on one dense chart");
         const auto capped = bars->grab().toImage();
-        const int evenWidth = (capped.width() - 20 * g::gapWide) / 21,
-                  evenLeft = (capped.width() - 21 * evenWidth - 20 * g::gapWide) / 2;
-        const int outlierLeft = evenLeft + 20 * (evenWidth + g::gapWide);
-        require(qGray(capped.pixel(evenLeft, chartHeight - chartHeight / g::scaleCap + 2)) == 0,
+        const int evenWidth = (capped.width() - 20 * chapterMetrics::gapWide) / 21,
+                  evenLeft = (capped.width() - 21 * evenWidth - 20 * chapterMetrics::gapWide) / 2;
+        const int outlierLeft = evenLeft + 20 * (evenWidth + chapterMetrics::gapWide);
+        require(qGray(capped.pixel(evenLeft, chartHeight - chartHeight / chapterMetrics::scaleCap + 2)) == 0,
                 "An outlier flattened the other chapters");
         // A capped chapter reaches the top of the chart with an unbroken outline.
         for (int y = 0; y < chartHeight; ++y)
@@ -1497,10 +1497,10 @@ int main(int argc, char **argv) {
         while (next->isEnabled())
             next->click();
         require(graph.graphPage() == graph.graphPages() - 1, "Graph paging skipped its final entries");
-        graph.resize(1448, g::graphHeight);
+        graph.resize(1448, chapterMetrics::graphHeight);
         QApplication::processEvents();
         require(graph.graphPage() < graph.graphPages(), "Resizing left the graph outside its page range");
-        graph.resize(1072, g::graphHeight);
+        graph.resize(1072, chapterMetrics::graphHeight);
         // The sparse chart pages twenty chapters at a time.
         chapters.resize(21);
         graph.setDense(false);
@@ -1561,7 +1561,7 @@ int main(int argc, char **argv) {
                     text("rrGraphBookDetail") == get("stats.words").arg("35,706"),
                 "Chapter number, session or word count is missing");
         for (int width : {758, 1072, 1448}) {
-            graph.resize(width, g::graphHeight);
+            graph.resize(width, chapterMetrics::graphHeight);
             graph.setProgress("Large book", 1, 3500, 3500, 1, 10000);
             QApplication::processEvents();
             for (const auto *name : {"rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell"}) {
@@ -1570,10 +1570,10 @@ int main(int argc, char **argv) {
                            *detail = cell->findChildren<QLabel *>().at(4);
                 require(figure->width() >= kobalt::qt::textWidth(figure->fontMetrics(), figure->text()),
                         "Stats clips a large figure");
-                require(unit->geometry().right() < cell->width() - c::inset + 1, "A figure unit runs past its cell");
+                require(unit->geometry().right() < cell->width() - chrome::inset + 1, "A figure unit runs past its cell");
                 // The same padding sits above the caption and below the last line.
-                require(cell->findChildren<QLabel *>().at(0)->y() == g::cellPadding &&
-                            detail->geometry().bottom() + 1 + g::cellPadding <= cell->height(),
+                require(cell->findChildren<QLabel *>().at(0)->y() == chapterMetrics::cellPadding &&
+                            detail->geometry().bottom() + 1 + chapterMetrics::cellPadding <= cell->height(),
                         "A Stats cell lost its padding");
             }
         }
@@ -1581,12 +1581,12 @@ int main(int argc, char **argv) {
         // wrap evenly on narrower screens instead of shortening.
         graph.setReading(23, 35706, 45 * 60000, (12 * 60 + 45) * 60000);
         for (int width : {758, 1072, 1264}) {
-            graph.resize(width, g::graphHeight);
+            graph.resize(width, chapterMetrics::graphHeight);
             QApplication::processEvents();
             for (const auto *name : {"rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell"}) {
                 const auto *detail = graph.findChild<QWidget *>(name)->findChildren<QLabel *>().at(4);
                 const auto lines = detail->text().split('\n');
-                require(!detail->text().contains(QChar(0x2026)) && lines.size() <= g::detailLines &&
+                require(!detail->text().contains(QChar(0x2026)) && lines.size() <= chapterMetrics::detailLines &&
                             (width < 1072 || lines.size() == 1),
                         "A Stats detail was cut off or wrapped on a wide screen");
                 for (const auto &line : lines)
@@ -1598,31 +1598,31 @@ int main(int argc, char **argv) {
                 "Book time left is missing");
         // On the Nia the hours use a clock format instead of wrapping.
         graph.setReading(23, 35706, 45 * 60000, (12 * 60 + 5) * 60000);
-        graph.resize(758, g::graphHeight);
+        graph.resize(758, chapterMetrics::graphHeight);
         QApplication::processEvents();
         require(text("rrGraphBookDetail") ==
                         get("stats.time_left").arg(get("stats.duration_clock").arg(12).arg("05")) &&
                     text("rrGraphNextChapter") == get("stats.time_left").arg(get("stats.duration_minutes").arg(45)),
                 "A narrow cell did not use the clock format for hours only");
         graph.setReading(23, 35706);
-        graph.resize(1072, g::graphHeight);
+        graph.resize(1072, chapterMetrics::graphHeight);
         // At its own density a Nia has the Clara's physical layout, so every
         // detail fits on one line, as it does on the Clara.
         for (const int ppi : {212, 227}) {
             kobalt::ui::setDensity(ppi);
             kobalt::ChapterGraph scaled(&host);
-            scaled.resize(ppi == 212 ? 758 : 1404, g::graphHeight);
+            scaled.resize(ppi == 212 ? 758 : 1404, chapterMetrics::graphHeight);
             scaled.setData(chapters, {20, -1, 1, 1}, true, {});
             scaled.setProgress("The Second Voyage", 4, 10, 12, 25, 100);
             scaled.setReading(23, 35706, 45 * 60000, (12 * 60 + 45) * 60000);
             scaled.open();
             QApplication::processEvents();
-            require(scaled.height() >= int(g::graphHeight) && int(g::cellHeight) == kobalt::ui::px(253),
+            require(scaled.height() >= int(chapterMetrics::graphHeight) && int(chapterMetrics::cellHeight) == kobalt::ui::px(253),
                     "Stats did not scale its height");
             for (const auto *name : {"rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell"}) {
                 const auto *cell = scaled.findChild<QWidget *>(name);
                 const auto labels = cell->findChildren<QLabel *>();
-                require(cell->height() == int(g::cellHeight) && labels.at(0)->y() == int(g::cellPadding),
+                require(cell->height() == int(chapterMetrics::cellHeight) && labels.at(0)->y() == int(chapterMetrics::cellPadding),
                         "A scaled Stats cell lost its size or padding");
                 require(!labels.at(4)->text().contains('\n') && !labels.at(4)->text().contains(QChar(0x2026)) &&
                             kobalt::qt::textWidth(labels.at(4)->fontMetrics(), labels.at(4)->text()) <=
@@ -2181,23 +2181,23 @@ int main(int argc, char **argv) {
     {
         // Standard text keeps the description at its design offset below the
         // title; only large text makes the title line taller.
-        namespace m = kobalt::ui::metrics;
+        namespace metrics = kobalt::ui::metrics;
         const auto look = option.presentation();
         QFont description = option.font();
         description.setPixelSize(look.descriptionPixels);
         description.setWeight(QFont::Normal);
         description.setItalic(false);
-        const int width = 900, textWidth = width - 2 * look.horizontalInset - m::settings::labelLeft -
-                                           look.indicatorSize.width() - m::settings::toggleGap;
+        const int width = 900, textWidth = width - 2 * look.horizontalInset - metrics::settings::labelLeft -
+                                           look.indicatorSize.width() - metrics::settings::toggleGap;
         require(option.heightForWidth(width) ==
-                    qMax(look.minimumRowHeight, m::settings::descriptionTop + m::settings::descriptionBottom +
+                    qMax(look.minimumRowHeight, metrics::settings::descriptionTop + metrics::settings::descriptionBottom +
                          kobalt::ui::wrappedInterfaceTextHeight(option.accessibleDescription(), description, textWidth)),
                 "Standard text moved the setting description");
     }
     {
         // A radio label's capitals center on its circle at every text size.
         // A word without descenders shows where the capitals sit.
-        namespace m = kobalt::ui::metrics;
+        namespace metrics = kobalt::ui::metrics;
         const auto capitalsBelowCircle = [&optionsHost, &app](qreal scale) {
             kobalt::ui::setLargeText(scale);
             kobalt::ui::RadioList list(&optionsHost);
@@ -2218,9 +2218,9 @@ int main(int argc, char **argv) {
                         }
                 return (first + last) / 2.0;
             };
-            const int circleRight = m::chrome::inset + m::chrome::checkSize;
-            return inkRows(circleRight + m::settings::toggleGap, image.width()) -
-                   inkRows(m::chrome::inset, circleRight);
+            const int circleRight = metrics::chrome::inset + metrics::chrome::checkSize;
+            return inkRows(circleRight + metrics::settings::toggleGap, image.width()) -
+                   inkRows(metrics::chrome::inset, circleRight);
         };
         const qreal standard = capitalsBelowCircle(1), large = capitalsBelowCircle(1.5);
         kobalt::ui::setLargeText(1);
@@ -2247,8 +2247,8 @@ int main(int argc, char **argv) {
                         }
                 return (first + last) / 2.0;
             };
-            const int circleRight = m::chrome::inset + m::chrome::checkSize;
-            return inkMiddle(row.width() / 2, row.width()) - inkMiddle(m::chrome::inset, circleRight);
+            const int circleRight = metrics::chrome::inset + metrics::chrome::checkSize;
+            return inkMiddle(row.width() / 2, row.width()) - inkMiddle(metrics::chrome::inset, circleRight);
         };
         require(qAbs(valueBelowCircle("Title") - valueBelowCircle("Jumpy")) < 1,
                 "A radio row's value moved with its raised label");

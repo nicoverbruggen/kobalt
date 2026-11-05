@@ -17,8 +17,8 @@
 #include <QTimer>
 #include <QPainter>
 namespace kobalt::reader {
-namespace c = ui::metrics::chrome;
-namespace m = ui::metrics;
+namespace chrome = ui::metrics::chrome;
+namespace metrics = ui::metrics;
 namespace {
 QString bytes(qint64 value) {
     const bool gb = value >= 1000000000;
@@ -41,7 +41,7 @@ public:
     explicit DictionaryLine(QWidget *parent) : QWidget(parent) {
         name = new ui::InterfaceLabel(this);
         name->setWordWrap(true);
-        ui::readerStyle(name, ui::styles::font(c::labelText) + "background:transparent;");
+        ui::readerStyle(name, ui::styles::font(chrome::labelText) + "background:transparent;");
         metadata = new ui::InterfaceLabel(this);
         ui::captionLabel(metadata);
     }
@@ -71,7 +71,7 @@ QIcon transferProgressIcon(int percent, const QColor &ink) {
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     const QRectF circle = QRectF(image.rect()).adjusted(1, 1, -1, -1);
-    painter.setPen(QPen(ink, m::control::border));
+    painter.setPen(QPen(ink, metrics::control::border));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(circle);
     painter.setPen(Qt::NoPen);
@@ -104,8 +104,8 @@ DictionariesPage::DictionariesPage(QWidget *parent) : QWidget(parent) {
     storage = new StorageLabel(this);
     storage->setObjectName("rrDictionariesStorage");
     ui::captionLabel(storage);
-    storage->setContentsMargins(c::inset, 0, c::inset, 0);
-    storage->setFixedHeight(m::list::headerHeight);
+    storage->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    storage->setFixedHeight(metrics::list::headerHeight);
     layout->addWidget(storage);
     connect(pager->previous, &QPushButton::clicked, this, [this] {
         failedId.clear();
@@ -270,20 +270,20 @@ void DictionariesPage::redraw() {
         }
     }
     const bool compact = list->width() < ui::px(850);
-    const auto labelFont = ui::interfaceFont(c::labelText);
+    const auto labelFont = ui::interfaceFont(chrome::labelText);
     const int actionWidth = compact ? qMax(ui::px(132), ui::interfaceTextWidth(strings::get("dictionaries.remove"), labelFont) + ui::px(48)) : ui::px(220);
-    const int nameWidth = qMax(1, list->width() - actionWidth - 3 * c::inset);
+    const int nameWidth = qMax(1, list->width() - actionWidth - 3 * chrome::inset);
     const auto headerHeight = [&](const QString &text) {
-        return compact ? qMax(int(m::list::headerHeight), ui::wrappedInterfaceTextHeight(text, ui::interfaceFont(c::captionText), list->width() - 2 * c::inset) + ui::px(16)) : int(m::list::headerHeight);
+        return compact ? qMax(int(metrics::list::headerHeight), ui::wrappedInterfaceTextHeight(text, ui::interfaceFont(chrome::captionText), list->width() - 2 * chrome::inset) + ui::px(16)) : int(metrics::list::headerHeight);
     };
     QVector<QVector<Item>> pages(1);
     int used = 0;
     QString previousSection;
-    const int available = qMax(int(m::list::headerHeight + m::list::twoLines), list->height());
+    const int available = qMax(int(metrics::list::headerHeight + metrics::list::twoLines), list->height());
     for (const auto &group : groups) {
         bool first = true;
         for (const auto &entry : group.entries) {
-            const int rowHeight = compact ? qMax(int(m::list::twoLines), ui::wrappedInterfaceTextHeight(entry.name, labelFont, nameWidth) + ui::interfaceLineHeight(ui::interfaceFont(c::captionText)) + ui::px(36)) : entry.id == failedId ? int(m::list::twoLines) : int(m::list::oneLine);
+            const int rowHeight = compact ? qMax(int(metrics::list::twoLines), ui::wrappedInterfaceTextHeight(entry.name, labelFont, nameWidth) + ui::interfaceLineHeight(ui::interfaceFont(chrome::captionText)) + ui::px(36)) : entry.id == failedId ? int(metrics::list::twoLines) : int(metrics::list::oneLine);
             bool sectionHeader = first && previousSection != group.section;
             bool languageHeader = first && !group.language.isEmpty();
             int headers = (sectionHeader ? headerHeight(group.section) : 0) + (languageHeader ? headerHeight(group.language) : 0);
@@ -344,7 +344,7 @@ void DictionariesPage::redraw() {
         auto *row = created ? nullptr : static_cast<DictionaryTextRow *>(layout->itemAt(0)->widget());
         if (created) {
             layout = new QHBoxLayout(line);
-            layout->setContentsMargins(0, 0, c::inset, 0);
+            layout->setContentsMargins(0, 0, chrome::inset, 0);
             layout->setSpacing(0);
             row = new DictionaryTextRow(line);
             row->setFocusPolicy(Qt::NoFocus);
@@ -369,8 +369,8 @@ void DictionariesPage::redraw() {
         line->name->setAlignment(Qt::AlignLeft | Qt::AlignTop);
         const int metadataHeight = ui::interfaceLineHeight(line->metadata->font());
         const int textTop = qMax(0, (item.height - nameHeight - ui::px(6) - metadataHeight) / 2);
-        line->name->setGeometry(c::inset, textTop, nameWidth, nameHeight);
-        line->metadata->setGeometry(c::inset, line->name->geometry().bottom() + 1 + ui::px(6), nameWidth, metadataHeight);
+        line->name->setGeometry(chrome::inset, textTop, nameWidth, nameHeight);
+        line->metadata->setGeometry(chrome::inset, line->name->geometry().bottom() + 1 + ui::px(6), nameWidth, metadataHeight);
         line->name->raise();
         line->metadata->raise();
         row->trailingLabel()->setObjectName(QString("rrDictionarySize%1").arg(index));
@@ -410,7 +410,7 @@ void DictionariesPage::redraw() {
         if (action->property("action_width").toInt() != actionWidth) {
             ui::readerStyle(action, ui::styles::outlined() +
                 QString("QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;min-width:%3px;max-width:%3px;padding:0;border:%4px solid palette(window-text);}")
-                    .arg(int(c::labelText)).arg(ui::px(66)).arg(actionWidth - 2 * int(m::control::border)).arg(int(m::control::border)));
+                    .arg(int(chrome::labelText)).arg(ui::px(66)).arg(actionWidth - 2 * int(metrics::control::border)).arg(int(metrics::control::border)));
             action->setFixedSize(actionWidth, ui::px(66));
             action->setProperty("action_width", actionWidth);
         }
@@ -451,7 +451,7 @@ void DictionariesPage::redraw() {
         child->deleteLater();
     }
     const int listBottom = list->y() + y;
-    pager->setBlankArea({c::inset, listBottom, width() - 2 * c::inset, pager->y() - listBottom});
+    pager->setBlankArea({chrome::inset, listBottom, width() - 2 * chrome::inset, pager->y() - listBottom});
     refreshStorage();
 }
 void DictionariesPage::refreshStorage() {

@@ -18,7 +18,7 @@
 #include <QScrollBar>
 
 namespace kobalt::reader {
-namespace m = ui::metrics;
+namespace metrics = ui::metrics;
 namespace styles = ui::styles;
 using ui::readerStyle;
 using ui::buttonIcon;
@@ -64,21 +64,21 @@ StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRo
     auto *line = controls();
     auto *caption = this->caption();
     auto *captionRows = new QVBoxLayout(caption);
-    captionRows->setContentsMargins(0, 0, m::control::captionRight, 0);
+    captionRows->setContentsMargins(0, 0, metrics::control::captionRight, 0);
     captionRows->setSpacing(0);
-    setMarkerBand(m::control::sliderLabelHeight);
+    setMarkerBand(metrics::control::sliderLabelHeight);
     auto *labels = new QVBoxLayout;
     labels->setSpacing(ui::px(2));
     auto *heading = new QHBoxLayout;
     heading->setContentsMargins(0, 0, 0, 0);
     heading->setSpacing(ui::px(6));
     auto *titleLabel = new ui::InterfaceLabel(title, caption);
-    readerStyle(titleLabel, styles::font(m::text::secondary));
+    readerStyle(titleLabel, styles::font(metrics::text::secondary));
     heading->addWidget(titleLabel, 1);
     labels->addLayout(heading);
     valueLabel = new ui::InterfaceLabel(caption);
     valueLabel->setObjectName(name + "Value");
-    readerStyle(valueLabel, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
+    readerStyle(valueLabel, styles::font(metrics::control::captionValueText) + "color:palette(placeholder-text);");
     labels->addWidget(valueLabel);
     captionRows->addLayout(labels);
     captionRows->setAlignment(labels, Qt::AlignVCenter);
@@ -86,7 +86,7 @@ StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRo
     // so the caption takes one line.
     stackedChanged = [captionRows, labels, heading, value = valueLabel](bool stacked) {
         auto margins = captionRows->contentsMargins();
-        margins.setRight(stacked ? 0 : int(m::control::captionRight));
+        margins.setRight(stacked ? 0 : int(metrics::control::captionRight));
         captionRows->setContentsMargins(margins);
         if (stacked) {
             labels->removeWidget(value);
@@ -115,7 +115,7 @@ StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRo
         auto *column = new QVBoxLayout;
         column->setContentsMargins(0, 0, 0, 0);
         column->setSpacing(0);
-        column->addSpacing(m::control::sliderLabelHeight);
+        column->addSpacing(metrics::control::sliderLabelHeight);
         column->addWidget(button, 0, Qt::AlignVCenter);
         line->addLayout(column);
     };
@@ -148,8 +148,8 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
     setObjectName("rrMenu");
     setFrameStyle(QFrame::Box);
     auto *rows = new QVBoxLayout(this);
-    rows->setContentsMargins(m::panel::margins);
-    rows->setSpacing(m::panel::gap);
+    rows->setContentsMargins(metrics::panel::margins);
+    rows->setSpacing(metrics::panel::gap);
     rows->setSizeConstraint(QLayout::SetNoConstraint);
     // Rows that do not fit are shown a page at a time inside the clip.
     clip = new QWidget(this);
@@ -164,11 +164,11 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
     for (int index = TypographyPage; index <= LayoutPage; ++index) {
         auto *page = new QWidget;
         auto *controls = new QVBoxLayout(page);
-        controls->setContentsMargins(m::panel::rowsMargins);
+        controls->setContentsMargins(metrics::panel::rowsMargins);
         pages->addWidget(page);
     }
     pager = new ui::PagerBar(this, "rrAppearance");
-    pager->setFixedHeight(m::chrome::actionHeight);
+    pager->setFixedHeight(metrics::chrome::actionHeight);
     pager->hide();
     rows->addWidget(pager);
     connect(pager->previous, &QPushButton::clicked, this, [this] { showRows(pager->turnTarget(-1)); });
@@ -230,7 +230,7 @@ int AppearanceSheet::fitHeight(int width, int availableHeight) {
     if (overflow) {
         // Lay out at the natural height, then split on complete row
         // boundaries. Squeezing the rows would overlap their controls.
-        const int room = qMax(1, availableHeight - extra - int(m::chrome::actionHeight) - layout()->spacing());
+        const int room = qMax(1, availableHeight - extra - int(metrics::chrome::actionHeight) - layout()->spacing());
         pages->setGeometry(0, 0, innerWidth, contentHeight);
         pages->currentWidget()->setGeometry(0, 0, innerWidth, contentHeight);
         rows->setGeometry(QRect(0, 0, innerWidth, contentHeight));
@@ -273,9 +273,9 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     fontButton->setObjectName("rrFont");
     readerStyle(
         fontButton,
-        QString("min-height:%1px;max-height:%1px;").arg(m::choices::fontButtonHeight - 2 * m::control::padding));
+        QString("min-height:%1px;max-height:%1px;").arg(metrics::choices::fontButtonHeight - 2 * metrics::control::padding));
     typeRows->addWidget(fontButton);
-    typeRows->addSpacing(m::control::fontPickerGap);
+    typeRows->addSpacing(metrics::control::fontPickerGap);
     // Text size counts half points and margins count 300 ppi pixels, so both
     // look the same on every screen; the engine gets device pixels.
     sizeSlider =
@@ -313,7 +313,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     }
     marginSlider->setMarkers(marginMarks);
     verticalMarginSlider->setMarkers(marginMarks);
-    typeRows->addSpacing(m::control::sectionGap);
+    typeRows->addSpacing(metrics::control::sectionGap);
     kobalt::ui::SegmentedRow alignment(typography, typeRows, "rrAlignment", strings::get("reader.alignment"));
     auto alignmentButton = [&](const char *name, const char *value, const QString &label, ControlIcon icon) {
         auto *button = alignment.add(name);
@@ -325,7 +325,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
             button->setText(strings::get("common.auto"));
         else {
             buttonIcon(button, icon);
-            button->setIconSize(QSize(m::control::chapterIconSize, m::control::chapterIconSize));
+            button->setIconSize(QSize(metrics::control::chapterIconSize, metrics::control::chapterIconSize));
         }
         alignmentButtons.append(button);
     };
@@ -377,13 +377,13 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
                 {static_cast<ControlIcon>(int(ControlIcon::Portrait) + index), ui::IconRendition::OriginalAsset,
                  sideButtons});
             button->setIconSize(inputs.automaticRotationAvailable
-                                    ? QSize(m::control::chapterIconSize, m::control::chapterIconSize)
-                                    : QSize(m::control::iconSize, m::control::iconSize));
+                                    ? QSize(metrics::control::chapterIconSize, metrics::control::chapterIconSize)
+                                    : QSize(metrics::control::iconSize, metrics::control::iconSize));
         }
         autoRotateOption = rotation.add("rrAutoRotate", strings::get("reader.both"));
         if (inputs.automaticRotationAvailable) {
             buttonIcon(autoRotateOption, ControlIcon::RotationBoth);
-            autoRotateOption->setIconSize(QSize(m::control::chapterIconSize, m::control::chapterIconSize));
+            autoRotateOption->setIconSize(QSize(metrics::control::chapterIconSize, metrics::control::chapterIconSize));
             inlineIconLabel(autoRotateOption);
             auto buttons = rotationButtons;
             buttons.append(autoRotateOption);
@@ -402,9 +402,9 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     // As tall as the segmented rows above it, with their label size. QSS
     // heights exclude the reader style's padding, as for the font button.
     const int rowHeight =
-        m::control::segmentHeight + 2 * int(m::control::segmentVerticalPadding) + 2 * int(m::control::border);
-    readerStyle(headerFooterRow, QString("min-height:%1px;max-height:%1px;").arg(rowHeight - 2 * m::control::padding) +
-                                     styles::font(m::text::secondary));
+        metrics::control::segmentHeight + 2 * int(metrics::control::segmentVerticalPadding) + 2 * int(metrics::control::border);
+    readerStyle(headerFooterRow, QString("min-height:%1px;max-height:%1px;").arg(rowHeight - 2 * metrics::control::padding) +
+                                     styles::font(metrics::text::secondary));
     chromeRow->addWidget(headerFooterRow, 1);
 
     // The rest lives in the Header and footer sheet, which supplies these
@@ -425,17 +425,17 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
     }
     customRows->addLayout(cards);
     // The presets are a choice of their own; keep them apart from the slots.
-    customRows->addSpacing(m::spacing::section);
+    customRows->addSpacing(metrics::spacing::section);
     slotMap = new SlotMap(custom, true);
     customRows->addWidget(slotMap);
     slotHint = new ui::InterfaceLabel(strings::get("header_footer.custom_hint"), custom);
     slotHint->setObjectName("rrHeaderFooterHint");
     slotHint->setWordWrap(true);
     // The same secondary text as the sliders' current values, so it follows the theme.
-    readerStyle(slotHint, styles::font(m::control::captionValueText) +
+    readerStyle(slotHint, styles::font(metrics::control::captionValueText) +
                               "font-style:italic;color:palette(placeholder-text);");
     customRows->addWidget(slotHint);
-    customRows->addSpacing(m::spacing::row);
+    customRows->addSpacing(metrics::spacing::row);
     auto switchRow = [custom, customRows](const char *name, const QString &label, QVector<QPushButton *> &buttons) {
         ui::SegmentedRow row(custom, customRows, name, label, strings::get("header_footer.progress_bar_detail"));
         for (const bool enabled : {false, true}) {
@@ -446,10 +446,10 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout, const Appearanc
         }
     };
     switchRow("rrHeaderFooterProgressBar", strings::get("header_footer.progress_bar"), progressBarButtons);
-    customRows->addSpacing(m::spacing::row);
+    customRows->addSpacing(metrics::spacing::row);
     auto *divider = new ui::Panel(custom);
     divider->setObjectName("rrHeaderFooterSizeDivider");
-    divider->setFixedHeight(m::control::border);
+    divider->setFixedHeight(metrics::control::border);
     divider->setDividers(Qt::TopEdge);
     customRows->addWidget(divider);
     headerSizeControl = new StripSizeControl(custom, false);

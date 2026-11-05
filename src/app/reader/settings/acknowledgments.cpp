@@ -19,8 +19,8 @@
 
 namespace kobalt {
 namespace styles = kobalt::ui::styles;
-namespace m = ui::metrics;
-namespace c = ui::metrics::chrome;
+namespace metrics = ui::metrics;
+namespace chrome = ui::metrics::chrome;
 namespace {
 QString groupTitle(const QString &id) {
     if (id == "kobalt")
@@ -43,7 +43,7 @@ LicenseText::LicenseText(QWidget *parent) : QWidget(parent) {
     // License text is laid out in columns. Firmware 4 ships no fixed-width
     // font, so every firmware uses the bundled one. At this size most notices
     // keep their own line breaks.
-    const QFont font = kobalt::ui::chromeFont(m::acknowledgments::noticeText);
+    const QFont font = kobalt::ui::chromeFont(metrics::acknowledgments::noticeText);
     setFont(font);
     document.setFont(font);
 }
@@ -82,7 +82,7 @@ void LicenseText::ensureLayout() {
     if (!stale)
         return;
     stale = false;
-    const int margin = m::acknowledgments::textMargin;
+    const int margin = metrics::acknowledgments::textMargin;
     document.layout(qMax(1, width() - 2 * margin), qMax(1, height() - 2 * margin));
     page = qBound(0, page, document.pages() - 1);
 }
@@ -90,7 +90,7 @@ void LicenseText::paintEvent(QPaintEvent *) {
     ensureLayout();
     QPainter painter(this);
     painter.fillRect(rect(), palette().color(QPalette::Window));
-    const int margin = m::acknowledgments::textMargin;
+    const int margin = metrics::acknowledgments::textMargin;
     const int pageHeight = qMax(1, height() - 2 * margin), start = page * pageHeight;
     painter.translate(margin, margin - start);
     document.draw(painter, QRectF(0, start, qMax(1, width() - 2 * margin), pageHeight), palette());
@@ -101,14 +101,14 @@ Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent) {
     QFile file(":/kobalt/acknowledgments.json");
     if (file.open(QIODevice::ReadOnly))
         entries = QJsonDocument::fromJson(file.readAll()).array();
-    back = new ui::CellButton(ui::ControlIcon::Back, this, c::backIcon);
+    back = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
     back->setObjectName("rrAcknowledgmentsBack");
     back->setRule(Qt::RightEdge);
     back->setAccessibleName(strings::get("common.back"));
     title = new ui::InterfaceLabel(this);
     title->setObjectName("rrAcknowledgmentsTitle");
     title->setTextFormat(Qt::PlainText);
-    ui::readerStyle(title, styles::brand(c::titleText) + "background:transparent;");
+    ui::readerStyle(title, styles::brand(chrome::titleText) + "background:transparent;");
     section = new ui::InterfaceLabel(this);
     section->setObjectName("rrAcknowledgmentsSection");
     ui::captionLabel(section);
@@ -129,8 +129,8 @@ Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent) {
         label->setTextFormat(Qt::PlainText);
     }
     ui::readerStyle(intro,
-                    styles::font(c::descriptionText) + "background:transparent;color:palette(placeholder-text);");
-    ui::readerStyle(description, styles::font(c::labelText) + "background:transparent;");
+                    styles::font(chrome::descriptionText) + "background:transparent;color:palette(placeholder-text);");
+    ui::readerStyle(description, styles::font(chrome::labelText) + "background:transparent;");
     version = new ui::InterfaceLabel(this);
     version->setObjectName("rrLicenseVersion");
     ui::captionLabel(version);
@@ -140,7 +140,7 @@ Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent) {
     url = new ui::InterfaceLabel(this);
     url->setObjectName("rrLicenseUrl");
     url->setTextFormat(Qt::PlainText);
-    ui::readerStyle(url, styles::caption(c::numberText));
+    ui::readerStyle(url, styles::caption(chrome::numberText));
     text = new LicenseText(this);
     pager = new ui::PagerBar(this, "rrAcknowledgments");
     connect(back, &QPushButton::clicked, this, [this] {
@@ -200,7 +200,7 @@ void Acknowledgments::paintEvent(QPaintEvent *event) {
     QFrame::paintEvent(event);
     QPainter painter(this);
     ui::paintHeaderRules(painter, this);
-    painter.fillRect(0, divider, width(), m::control::border, ui::dividerColor(this));
+    painter.fillRect(0, divider, width(), metrics::control::border, ui::dividerColor(this));
 }
 void Acknowledgments::turnPage(int direction) {
     if (entry >= 0) {
@@ -214,13 +214,13 @@ void Acknowledgments::turnPage(int direction) {
 }
 void Acknowledgments::redraw(bool paging) {
     const bool reading = entry >= 0;
-    const int textWidth = qMax(1, width() - 2 * c::inset), captionHeight = c::statusHeight - m::control::border;
-    back->setGeometry(0, c::statusHeight, c::cellWidth, c::actionHeight - c::heavyRule);
-    title->setGeometry(c::cellWidth + c::inset, c::statusHeight, qMax(1, width() - c::cellWidth - 2 * c::inset),
-                       c::actionHeight - c::heavyRule);
-    section->setGeometry(c::inset, 0, textWidth / 2, captionHeight);
-    detail->setGeometry(width() / 2, 0, qMax(1, width() / 2 - c::inset), captionHeight);
-    pager->setGeometry(0, height() - c::actionHeight, width(), c::actionHeight);
+    const int textWidth = qMax(1, width() - 2 * chrome::inset), captionHeight = chrome::statusHeight - metrics::control::border;
+    back->setGeometry(0, chrome::statusHeight, chrome::cellWidth, chrome::actionHeight - chrome::heavyRule);
+    title->setGeometry(chrome::cellWidth + chrome::inset, chrome::statusHeight, qMax(1, width() - chrome::cellWidth - 2 * chrome::inset),
+                       chrome::actionHeight - chrome::heavyRule);
+    section->setGeometry(chrome::inset, 0, textWidth / 2, captionHeight);
+    detail->setGeometry(width() / 2, 0, qMax(1, width() / 2 - chrome::inset), captionHeight);
+    pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     const auto item = reading ? entries.at(entry).toObject() : QJsonObject();
     title->setText(reading ? item.value("name").toString() : strings::get("acknowledgments.acknowledgments"));
     section->setText(reading ? strings::get("acknowledgments.acknowledgments") : strings::get("settings.about"));
@@ -232,44 +232,44 @@ void Acknowledgments::redraw(bool paging) {
         label->setVisible(reading);
     int count = 1;
     if (reading) {
-        int y = c::headerHeight() + c::blockTop;
-        description->setGeometry(c::inset, y, textWidth, description->heightForWidth(textWidth));
-        y = description->geometry().bottom() + 1 + c::textGap;
-        const int captionLine = ui::interfaceLineHeight(ui::captionFont()) + c::textGap;
+        int y = chrome::headerHeight() + chrome::blockTop;
+        description->setGeometry(chrome::inset, y, textWidth, description->heightForWidth(textWidth));
+        y = description->geometry().bottom() + 1 + chrome::textGap;
+        const int captionLine = ui::interfaceLineHeight(ui::captionFont()) + chrome::textGap;
         const int versionWidth =
             version->text().isEmpty()
                 ? 0
                 : qMin(textWidth / 2, ui::interfaceTextWidth(version->text(), ui::captionFont()));
-        version->setGeometry(c::inset, y, versionWidth, captionLine);
-        const int licenseLeft = c::inset + (versionWidth ? versionWidth + m::acknowledgments::captionGap : 0);
-        license->setGeometry(licenseLeft, y, qMax(1, width() - c::inset - licenseLeft), captionLine);
+        version->setGeometry(chrome::inset, y, versionWidth, captionLine);
+        const int licenseLeft = chrome::inset + (versionWidth ? versionWidth + metrics::acknowledgments::captionGap : 0);
+        license->setGeometry(licenseLeft, y, qMax(1, width() - chrome::inset - licenseLeft), captionLine);
         y += captionLine;
-        url->setGeometry(c::inset, y, textWidth, ui::interfaceLineHeight(ui::chromeFont(c::numberText)) + c::textGap);
-        divider = url->geometry().bottom() + 1 + c::blockTop;
+        url->setGeometry(chrome::inset, y, textWidth, ui::interfaceLineHeight(ui::chromeFont(chrome::numberText)) + chrome::textGap);
+        divider = url->geometry().bottom() + 1 + chrome::blockTop;
         // The document supplies its own margin; line its text up with the inset.
-        const int top = divider + m::control::border + c::blockTop - m::acknowledgments::textMargin;
-        const int side = c::inset - m::acknowledgments::textMargin, wanted = text->page;
+        const int top = divider + metrics::control::border + chrome::blockTop - metrics::acknowledgments::textMargin;
+        const int side = chrome::inset - metrics::acknowledgments::textMargin, wanted = text->page;
         // Measuring without the pager can clamp the page; restore it afterwards.
         text->setGeometry(side, top, qMax(1, width() - 2 * side), qMax(1, height() - top));
         if (text->pages() > 1)
-            text->setGeometry(side, top, qMax(1, width() - 2 * side), qMax(1, height() - c::actionHeight - top));
+            text->setGeometry(side, top, qMax(1, width() - 2 * side), qMax(1, height() - chrome::actionHeight - top));
         text->page = wanted;
         count = text->pages();
     } else {
-        intro->setGeometry(c::inset, c::headerHeight() + c::blockTop, textWidth, intro->heightForWidth(textWidth));
-        divider = intro->geometry().bottom() + 1 + c::blockTop;
+        intro->setGeometry(chrome::inset, chrome::headerHeight() + chrome::blockTop, textWidth, intro->heightForWidth(textWidth));
+        divider = intro->geometry().bottom() + 1 + chrome::blockTop;
     }
-    const int rowsTop = divider + m::control::border;
+    const int rowsTop = divider + metrics::control::border;
     // Page the list by height. A group heading always has a row below it, and
     // a group that continues on the next page repeats its heading there.
     listPages.clear();
-    const int available = qMax<int>(m::list::headerHeight + m::list::twoLines, height() - rowsTop - c::actionHeight);
+    const int available = qMax<int>(metrics::list::headerHeight + metrics::list::twoLines, height() - rowsTop - chrome::actionHeight);
     QVector<int> current;
     QString group;
     int used = 0;
     for (int index = 0; index < entries.size(); ++index) {
         const auto next = entries.at(index).toObject().value("group").toString();
-        const int need = (next != group ? m::list::headerHeight : 0) + m::list::twoLines;
+        const int need = (next != group ? metrics::list::headerHeight : 0) + metrics::list::twoLines;
         if (!current.isEmpty() && used + need > available) {
             listPages.append(current);
             current.clear();
@@ -277,10 +277,10 @@ void Acknowledgments::redraw(bool paging) {
         }
         if (next != group || current.isEmpty()) {
             current.append(-1);
-            used += m::list::headerHeight;
+            used += metrics::list::headerHeight;
         }
         current.append(index);
-        used += m::list::twoLines;
+        used += metrics::list::twoLines;
         group = next;
     }
     if (!current.isEmpty())
@@ -324,9 +324,9 @@ void Acknowledgments::redraw(bool paging) {
             auto *label = headings.at(heading++);
             label->leftLabel()->setObjectName("rrAcknowledgmentsGroup_" + project.value("group").toString());
             label->setCaptions(groupTitle(project.value("group").toString()));
-            label->setGeometry(0, y, width(), m::list::headerHeight);
+            label->setGeometry(0, y, width(), metrics::list::headerHeight);
             label->show();
-            y += m::list::headerHeight;
+            y += metrics::list::headerHeight;
             continue;
         }
         auto *button = rows.at(row++);
@@ -336,10 +336,10 @@ void Acknowledgments::redraw(bool paging) {
         itemRow->setTitle(project.value("name").toString());
         itemRow->setCaption(project.value("license").toString());
         itemRow->setAccessory(ui::ListRow::Chevron{});
-        button->setGeometry(0, y, width(), m::list::twoLines);
+        button->setGeometry(0, y, width(), metrics::list::twoLines);
         button->show();
         button->update();
-        y += m::list::twoLines;
+        y += metrics::list::twoLines;
     }
     for (; row < rows.size(); ++row)
         rows.at(row)->hide();
@@ -347,7 +347,7 @@ void Acknowledgments::redraw(bool paging) {
         headings.at(heading)->hide();
     pager->setPage(page, count, {}, !reading);
     if (!reading)
-        pager->setBlankArea({c::inset, y, width() - 2 * c::inset, pager->y() - y});
+        pager->setBlankArea({chrome::inset, y, width() - 2 * chrome::inset, pager->y() - y});
     if (reading)
         text->update();
     if (!paging)

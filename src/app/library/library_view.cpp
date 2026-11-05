@@ -29,7 +29,7 @@
 #include <QVBoxLayout>
 
 namespace kobalt::library {
-namespace c = ui::metrics::chrome;
+namespace chrome = ui::metrics::chrome;
 using ui::Px;
 using ui::TextPx;
 namespace metrics {
@@ -50,7 +50,6 @@ inline constexpr TextPx message{56}, body{30};
 inline constexpr Px holdSlop{48};
 inline constexpr int coverCacheEntries = 64, throttleMilliseconds = 1000;
 }
-namespace lm = metrics;
 // The view behind each toolbar cell, in toolbar order.
 constexpr View modeViews[] = {View::Home, View::List, View::Grid};
 
@@ -60,13 +59,13 @@ ui::Button *actionButton(QWidget *parent, const QString &text, const char *name,
     button->setObjectName(name);
     button->setProperty("reader_primary_action", primary);
     ui::readerStyle(button, (primary ? ui::styles::primary() : ui::styles::outlined()) +
-                               "QPushButton{" + ui::styles::font(c::labelText) + "}");
+                               "QPushButton{" + ui::styles::font(chrome::labelText) + "}");
     button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     button->setFocusPolicy(Qt::StrongFocus);
     return button;
 }
 int minimumListRowHeight() {
-    return qMax<int>(ui::metrics::list::threeLines, lm::thumbHeight + 2 * lm::thumbPadding);
+    return qMax<int>(ui::metrics::list::threeLines, metrics::thumbHeight + 2 * metrics::thumbPadding);
 }
 QString countText(int count) {
     return count == 1 ? strings::get("library.count_one") : strings::get("library.count").arg(count);
@@ -91,7 +90,7 @@ QString seriesText(const Book &book) {
 }
 // Plain caption text as the reader's list headers draw it.
 void drawCaption(QPainter &painter, const QRect &rect, const QString &text, Qt::Alignment alignment,
-                 const QColor &color, int pixels = c::captionText) {
+                 const QColor &color, int pixels = chrome::captionText) {
     auto font = ui::captionFont(pixels);
     painter.setFont(font);
     painter.setPen(color);
@@ -122,7 +121,7 @@ public:
         setObjectName("libraryPages");
         setProperty("reader_owns_swipes", true);
         setAttribute(Qt::WA_OpaquePaintEvent);
-        covers.setMaxCost(lm::coverCacheEntries);
+        covers.setMaxCost(metrics::coverCacheEntries);
         hold.setSingleShot(true);
         hold.setInterval(ui::metrics::input::longPressMilliseconds);
         connect(&hold, &QTimer::timeout, this, [this] { triggerHold(); });
@@ -150,14 +149,14 @@ public:
             for (int row = 0; row < perPage && first + row < books.size(); ++row) {
                 const int top = rowTop(row);
                 const QRect area(0, top, width(), rowTop(row + 1) - top);
-                const QRect cover(c::inset, area.center().y() - lm::thumbHeight / 2, lm::thumbWidth, lm::thumbHeight);
+                const QRect cover(chrome::inset, area.center().y() - metrics::thumbHeight / 2, metrics::thumbWidth, metrics::thumbHeight);
                 result.append({area, cover, books[first + row]});
             }
         } else {
             const int first = page * perPage;
             for (int i = 0; i < perPage && first + i < books.size(); ++i) {
                 const int column = i % columns, row = i / columns;
-                const QRect area(c::inset + column * (cellWidth + lm::gridGap), rowTop(row), cellWidth, cellHeight);
+                const QRect area(chrome::inset + column * (cellWidth + metrics::gridGap), rowTop(row), cellWidth, cellHeight);
                 // A cover narrower than its column stands in the middle of it.
                 const QRect cover(area.left() + (cellWidth - coverWidth) / 2, area.top(), coverWidth, coverWidth * 3 / 2);
                 result.append({area, cover, books[first + i]});
@@ -190,9 +189,9 @@ protected:
         painter.fillRect(event->rect(), paper);
         placed = placements();
         if (placed.isEmpty() && !emptyText.isEmpty()) {
-            painter.setFont(ui::interfaceFont(c::labelText));
+            painter.setFont(ui::interfaceFont(chrome::labelText));
             painter.setPen(ui::noteColor(this));
-            ui::drawWrappedInterfaceText(painter, rect().adjusted(c::inset, 0, -c::inset, -height() / 3), emptyText, Qt::AlignCenter);
+            ui::drawWrappedInterfaceText(painter, rect().adjusted(chrome::inset, 0, -chrome::inset, -height() / 3), emptyText, Qt::AlignCenter);
             return;
         }
         if (view == View::List)
@@ -215,7 +214,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override {
         // These pixels are the reader's 300 PPI pixels, so the system drag
         // distance, in screen points, would cancel a hold on the slightest drift.
-        if ((event->pos() - start).manhattanLength() > lm::holdSlop) {
+        if ((event->pos() - start).manhattanLength() > metrics::holdSlop) {
             hold.stop();
             setHighlight(-1);
         }
@@ -223,7 +222,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override {
         if (!std::exchange(gestureActive, false))
             return;
-        if ((event->pos() - start).manhattanLength() > lm::holdSlop)
+        if ((event->pos() - start).manhattanLength() > metrics::holdSlop)
             hold.stop();
         QPointer<BookPages> guard(this);
         if (hold.finish(event))
@@ -338,28 +337,28 @@ private:
             perPage = qMax(1, available / minimumListRowHeight());
             pages = (books.size() + perPage - 1) / perPage;
         } else {
-            const int room = width() - 2 * c::inset, height = available - lm::gridTop;
-            const int target = coverSize == CoverSize::Small    ? int(lm::smallCover)
-                               : coverSize == CoverSize::Medium ? int(lm::mediumCover)
-                                                                : int(lm::largeCover);
-            int below = lm::gridBarGap + lm::barHeight;
+            const int room = width() - 2 * chrome::inset, height = available - metrics::gridTop;
+            const int target = coverSize == CoverSize::Small    ? int(metrics::smallCover)
+                               : coverSize == CoverSize::Medium ? int(metrics::mediumCover)
+                                                                : int(metrics::largeCover);
+            int below = metrics::gridBarGap + metrics::barHeight;
             if (home)
-                below += lm::gridBarGap + percentHeight();
+                below += metrics::gridBarGap + percentHeight();
             // The nearest whole number of columns and rows for the target
             // size; covers then shrink to fit both ways, so a page is full.
-            columns = qMax(2, qRound(qreal(room + lm::gridGap) / (target + lm::gridGap)));
+            columns = qMax(2, qRound(qreal(room + metrics::gridGap) / (target + metrics::gridGap)));
             const int gridRows =
-                qMax(1, qRound(qreal(height + lm::gridGap) / (target * 3 / 2 + below + lm::gridGap)));
-            cellWidth = (room - (columns - 1) * lm::gridGap) / columns;
-            const int tallest = (height - (gridRows - 1) * lm::gridGap) / gridRows - below;
+                qMax(1, qRound(qreal(height + metrics::gridGap) / (target * 3 / 2 + below + metrics::gridGap)));
+            cellWidth = (room - (columns - 1) * metrics::gridGap) / columns;
+            const int tallest = (height - (gridRows - 1) * metrics::gridGap) / gridRows - below;
             coverWidth = qMax(1, qMin(cellWidth, tallest * 2 / 3));
             cellHeight = coverWidth * 3 / 2 + below;
             perPage = columns * gridRows;
             if (home) {
-                firstTop = lm::gridTop;
-                rowStep = cellHeight + lm::gridGap;
+                firstTop = metrics::gridTop;
+                rowStep = cellHeight + metrics::gridGap;
             } else {
-                spread(gridRows, cellHeight, lm::gridGap);
+                spread(gridRows, cellHeight, metrics::gridGap);
             }
             pages = (books.size() + perPage - 1) / perPage;
         }
@@ -414,10 +413,10 @@ private:
             if (isHighlighted(hit))
                 painter.fillRect(area, palette().color(QPalette::Midlight));
             paintCover(painter, hit.cover, book, ink, paper, true);
-            const int left = hit.cover.right() + 1 + c::inset, right = area.right() - lm::progressWidth;
+            const int left = hit.cover.right() + 1 + chrome::inset, right = area.right() - metrics::progressWidth;
             const int textWidth = qMax(1, right - left);
-            auto title = ui::interfaceFont(c::labelText);
-            auto author = ui::interfaceFont(c::descriptionText);
+            auto title = ui::interfaceFont(chrome::labelText);
+            auto author = ui::interfaceFont(chrome::descriptionText);
             auto caption = ui::captionFont();
             const int titleHeight = ui::interfaceLineHeight(title), authorHeight = ui::interfaceLineHeight(author),
                       captionHeight = ui::interfaceLineHeight(caption);
@@ -440,14 +439,14 @@ private:
             if (!caption_.isEmpty())
                 drawCaption(painter, QRect(left, y, textWidth, captionHeight), caption_, Qt::AlignLeft, ink);
             // Progress column: the percentage over a bar, or New or Done.
-            const QRect column(area.right() - lm::progressWidth, area.top(), lm::progressWidth - c::inset,
+            const QRect column(area.right() - metrics::progressWidth, area.top(), metrics::progressWidth - chrome::inset,
                                area.height());
             const bool reading = book.status() == Status::Reading;
-            drawCaption(painter, column.adjusted(0, 0, 0, reading ? -lm::barHeight - gap : 0), statusText(book),
-                        Qt::AlignRight, ink, c::numberText);
+            drawCaption(painter, column.adjusted(0, 0, 0, reading ? -metrics::barHeight - gap : 0), statusText(book),
+                        Qt::AlignRight, ink, chrome::numberText);
             if (reading) {
-                const QRect bar(column.right() + 1 - lm::barWidth, column.center().y() + captionHeight / 2,
-                                lm::barWidth, lm::barHeight);
+                const QRect bar(column.right() + 1 - metrics::barWidth, column.center().y() + captionHeight / 2,
+                                metrics::barWidth, metrics::barHeight);
                 ui::paintEdges(painter, bar, Qt::LeftEdge | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge, ink,
                                qMax(1, ui::px(2)));
                 painter.fillRect(QRect(bar.left(), bar.top(), bar.width() * book.percent / 100, bar.height()), ink);
@@ -467,21 +466,21 @@ private:
                                ui::px(8));
             // A book in progress shows the list's outlined bar, without a number.
             if (book.status() == Status::Reading) {
-                const QRect bar(hit.cover.left(), hit.cover.bottom() + 1 + lm::gridBarGap, hit.cover.width(),
-                                lm::barHeight);
+                const QRect bar(hit.cover.left(), hit.cover.bottom() + 1 + metrics::gridBarGap, hit.cover.width(),
+                                metrics::barHeight);
                 ui::paintEdges(painter, bar, Qt::LeftEdge | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge, ink,
                                qMax(1, ui::px(2)));
                 painter.fillRect(QRect(bar.left(), bar.top(), bar.width() * book.percent / 100, bar.height()), ink);
                 // On its own line, the percentage always has the cover's width.
                 if (home)
                     drawCaption(painter,
-                                QRect(bar.left(), bar.bottom() + 1 + lm::gridBarGap, bar.width(), percentHeight()),
-                                strings::get("common.percent").arg(book.percent), Qt::AlignLeft, ink, c::numberText);
+                                QRect(bar.left(), bar.bottom() + 1 + metrics::gridBarGap, bar.width(), percentHeight()),
+                                strings::get("common.percent").arg(book.percent), Qt::AlignLeft, ink, chrome::numberText);
             }
         }
     }
     static int percentHeight() {
-        return ui::interfaceLineHeight(ui::captionFont(c::numberText));
+        return ui::interfaceLineHeight(ui::captionFont(chrome::numberText));
     }
 };
 
@@ -499,7 +498,7 @@ public:
     // Whether the caption fits beside scan progress this wide.
     bool fitsBeside(int progress) const {
         return ui::interfaceTextWidth(text().toUpper(), ui::captionFont()) <=
-               width() - 2 * c::inset - progress - ui::px(24);
+               width() - 2 * chrome::inset - progress - ui::px(24);
     }
 
 protected:
@@ -507,12 +506,12 @@ protected:
         QPainter painter(this);
         const auto paper = palette().color(QPalette::Window), ink = palette().color(QPalette::WindowText);
         painter.fillRect(rect(), isDown() ? palette().color(QPalette::Midlight) : paper);
-        const int left = busy && progressWidth ? c::inset + progressWidth + ui::px(24) : int(c::inset);
+        const int left = busy && progressWidth ? chrome::inset + progressWidth + ui::px(24) : int(chrome::inset);
         auto font = ui::captionFont();
         painter.setFont(font);
         const int chevron = ui::px(18), gap = ui::px(12);
         const bool choices = !busy && !plain;
-        const int available = qMax(1, width() - left - c::inset - (choices ? chevron + gap : 0));
+        const int available = qMax(1, width() - left - chrome::inset - (choices ? chevron + gap : 0));
         const auto shown = painter.fontMetrics().elidedText(text().toUpper(), Qt::ElideRight, available);
         drawCaption(painter, QRect(left, 0, available, height()), shown, Qt::AlignLeft, ink);
         if (choices)
@@ -530,7 +529,7 @@ public:
     explicit SortSheet(QWidget *parent) : ui::Panel(parent) {
         setObjectName("librarySortSheet");
         auto *rows = new QHBoxLayout(this);
-        rows->setContentsMargins(0, 0, 0, c::heavyRule);
+        rows->setContentsMargins(0, 0, 0, chrome::heavyRule);
         rows->setSpacing(0);
         for (int index = 0; index < 3; ++index) {
             columns[index] = new ui::Panel(this, index ? ui::Edges(Qt::LeftEdge) : ui::Edges());
@@ -593,7 +592,7 @@ protected:
     void paintEvent(QPaintEvent *event) override {
         ui::Panel::paintEvent(event);
         QPainter painter(this);
-        painter.fillRect(0, height() - c::heavyRule, width(), c::heavyRule, palette().color(QPalette::WindowText));
+        painter.fillRect(0, height() - chrome::heavyRule, width(), chrome::heavyRule, palette().color(QPalette::WindowText));
     }
 
 private:
@@ -608,15 +607,15 @@ class FolderPage final : public ui::Panel {
 public:
     FolderPage(const Index &index, QWidget *parent) : ui::Panel(parent), index(index) {
         setObjectName("libraryFolders");
-        back = new ui::CellButton(ui::ControlIcon::Back, this, c::backIcon);
+        back = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
         back->setObjectName("libraryFoldersBack");
         back->setRule(Qt::RightEdge);
         back->setAccessibleName(strings::get("library.back"));
         title = new kobalt::ui::InterfaceLabel(strings::get("library.folders"), this);
         title->setTextFormat(Qt::PlainText);
-        ui::readerStyle(title, ui::styles::brand(c::titleText) + "background:transparent;");
+        ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
         heading = new ui::ListHeader(this);
-        heading->setTrailingInset(c::cellWidth);
+        heading->setTrailingInset(chrome::cellWidth);
         viewport = new QWidget(this);
         content = new QWidget(viewport);
         pager = new ui::PagerBar(this, "libraryFolders");
@@ -634,18 +633,18 @@ public:
         auto look = check->presentation();
         look.indicator = ui::DescribedOption::Indicator::Square;
         look.dividers = Qt::BottomEdge;
-        look.horizontalInset = c::inset;
-        look.labelPixels = c::labelText;
-        look.descriptionPixels = c::descriptionText;
-        look.indicatorSize = {c::checkSize, c::checkSize};
-        look.minimumRowHeight = c::optionHeight;
+        look.horizontalInset = chrome::inset;
+        look.labelPixels = chrome::labelText;
+        look.descriptionPixels = chrome::descriptionText;
+        look.indicatorSize = {chrome::checkSize, chrome::checkSize};
+        look.minimumRowHeight = chrome::optionHeight;
         check->setPresentation(look);
         add = actionButton(content, strings::get("library.add_folder"), "libraryFoldersAdd", true);
         rescan = actionButton(content, strings::get("library.rescan"), "libraryFoldersRescan", false);
         description = new kobalt::ui::InterfaceLabel(strings::get("library.folders_description"), content);
         description->setWordWrap(true);
         description->setTextFormat(Qt::PlainText);
-        ui::readerStyle(description, ui::styles::font(c::descriptionText) +
+        ui::readerStyle(description, ui::styles::font(chrome::descriptionText) +
                                          "color:palette(placeholder-text);background:transparent;");
         hide();
     }
@@ -689,7 +688,7 @@ protected:
     void paintEvent(QPaintEvent *event) override {
         ui::Panel::paintEvent(event);
         QPainter painter(this);
-        painter.fillRect(0, c::actionHeight - c::heavyRule, width(), c::heavyRule,
+        painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule,
                          palette().color(QPalette::WindowText));
     }
 
@@ -702,11 +701,11 @@ private:
     ui::PagerBar *pager;
     int page = 0;
     void arrange() {
-        const int bar = c::actionHeight - c::heavyRule;
-        back->setGeometry(0, 0, c::cellWidth, bar);
-        title->setGeometry(c::cellWidth + c::inset, 0, qMax(1, width() - c::cellWidth - 2 * c::inset), bar);
-        heading->setGeometry(0, c::actionHeight, width(), ui::metrics::list::headerHeight);
-        const int top = c::actionHeight + ui::metrics::list::headerHeight;
+        const int bar = chrome::actionHeight - chrome::heavyRule;
+        back->setGeometry(0, 0, chrome::cellWidth, bar);
+        title->setGeometry(chrome::cellWidth + chrome::inset, 0, qMax(1, width() - chrome::cellWidth - 2 * chrome::inset), bar);
+        heading->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
+        const int top = chrome::actionHeight + ui::metrics::list::headerHeight;
         int y = 0;
         QVector<QPair<int, int>> items;
         for (int i = 0; i < rows.size() && i < index.folders.size(); ++i) {
@@ -718,19 +717,19 @@ private:
         check->setGeometry(0, y, width(), checkHeight);
         items.append({y, y + checkHeight});
         y += checkHeight + ui::metrics::spacing::gutter;
-        const int buttons = width() - 2 * c::inset, buttonHeight = add->sizeHint().height();
-        add->setGeometry(c::inset, y, buttons, buttonHeight);
+        const int buttons = width() - 2 * chrome::inset, buttonHeight = add->sizeHint().height();
+        add->setGeometry(chrome::inset, y, buttons, buttonHeight);
         items.append({y, y + buttonHeight});
         y += buttonHeight + ui::metrics::spacing::row;
-        rescan->setGeometry(c::inset, y, buttons, buttonHeight);
+        rescan->setGeometry(chrome::inset, y, buttons, buttonHeight);
         items.append({y, y + buttonHeight});
         y += buttonHeight + ui::metrics::spacing::gutter;
         const int descriptionHeight = description->heightForWidth(buttons);
-        description->setGeometry(c::inset, y, buttons, descriptionHeight);
+        description->setGeometry(chrome::inset, y, buttons, descriptionHeight);
         items.append({y, y + descriptionHeight});
         const int bodyHeight = y + descriptionHeight;
         const bool overflow = bodyHeight > height() - top;
-        const int available = qMax(1, height() - top - (overflow ? int(c::actionHeight) : 0));
+        const int available = qMax(1, height() - top - (overflow ? int(chrome::actionHeight) : 0));
         QVector<int> starts{0};
         int start = 0;
         for (const auto &item : items) {
@@ -748,9 +747,9 @@ private:
         const int used = qMin(available, qMax(0, end - starts[page]));
         viewport->setGeometry(0, top, width(), used);
         content->setGeometry(0, -starts[page], width(), bodyHeight);
-        pager->setGeometry(0, height() - c::actionHeight, width(), c::actionHeight);
+        pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
         pager->setPage(page, starts.size(), {}, true);
-        pager->setBlankArea({c::inset, top + used, qMax(1, width() - 2 * int(c::inset)), available - used});
+        pager->setBlankArea({chrome::inset, top + used, qMax(1, width() - 2 * int(chrome::inset)), available - used});
     }
 };
 
@@ -777,7 +776,7 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
     query->setPlaceholderText(strings::get("library.search_placeholder"));
     query->setInputMethodHints(Qt::ImhNoPredictiveText);
     ui::readerStyle(query, "QLineEdit{border:none;padding:0;background:palette(window);" +
-                               ui::styles::font(c::queryText) + "}");
+                               ui::styles::font(chrome::queryText) + "}");
     query->hide();
     // Home first, then the views that list every book.
     const char *modeNames[] = {"libraryViewHome", "libraryViewList", "libraryViewGrid"};
@@ -803,7 +802,7 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
     empty = buildEmpty();
     throttle = new QTimer(this);
     throttle->setSingleShot(true);
-    throttle->setInterval(lm::throttleMilliseconds);
+    throttle->setInterval(metrics::throttleMilliseconds);
     connect(throttle, &QTimer::timeout, this, [this] {
         rebuild(true);
     });
@@ -852,7 +851,7 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
         sortSheet->sorts->setCurrent(int(this->index.settings.sort));
         sortSheet->filters->setCurrent(this->index.settings.hideFinished ? 1 : 0);
         sortSheet->covers->setCurrent(int(this->index.settings.coverSize));
-        const int top = c::actionHeight + lm::toolbarHeight;
+        const int top = chrome::actionHeight + metrics::toolbarHeight;
         sortSheet->arrange(isShortHeight(height(), ui::density()), this->index.settings.view == View::Grid);
         sortSheet->setGeometry(0, top, width(), sortSheet->sizeHint().height());
         sortSheet->show();
@@ -904,9 +903,9 @@ QWidget *LibraryView::buildEmpty() {
     auto *page = new QWidget;
     page->setObjectName("libraryEmptyPage");
     auto *outer = new QVBoxLayout(page);
-    outer->setContentsMargins(lm::emptyMargin, lm::emptyMargin, lm::emptyMargin, lm::emptyMargin);
+    outer->setContentsMargins(metrics::emptyMargin, metrics::emptyMargin, metrics::emptyMargin, metrics::emptyMargin);
     auto *content = new QWidget(page);
-    content->setMaximumWidth(lm::emptyWidth);
+    content->setMaximumWidth(metrics::emptyWidth);
     content->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto *column = new QVBoxLayout(content);
     column->setContentsMargins(0, 0, 0, 0);
@@ -924,20 +923,20 @@ QWidget *LibraryView::buildEmpty() {
     message->setMargin(ui::px(8));
     message->setWordWrap(true);
     message->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    ui::readerStyle(message, ui::styles::brand(lm::message, true) + "background:transparent;");
+    ui::readerStyle(message, ui::styles::brand(metrics::message, true) + "background:transparent;");
     column->addWidget(message);
     column->addSpacing(ui::px(24));
     auto *body = new kobalt::ui::InterfaceLabel(strings::get("library.empty_body"), page);
     body->setObjectName("libraryEmptyBody");
     body->setWordWrap(true);
     body->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    ui::readerStyle(body, ui::styles::font(lm::body) + "color:palette(placeholder-text);background:transparent;");
+    ui::readerStyle(body, ui::styles::font(metrics::body) + "color:palette(placeholder-text);background:transparent;");
     column->addWidget(body);
     column->addSpacing(ui::px(40));
     const auto button = [this, page, column](const QString &text, const char *name, bool primary,
                                              std::function<void()> action) {
         auto *created = actionButton(page, text, name, primary);
-        created->setMinimumHeight(lm::buttonHeight);
+        created->setMinimumHeight(metrics::buttonHeight);
         column->addWidget(created);
         column->addSpacing(ui::metrics::spacing::row);
         connect(created, &QPushButton::clicked, this, std::move(action));
@@ -1117,7 +1116,7 @@ void LibraryView::rebuild(bool keepPage) {
     if (pages->view == View::List) {
         // Decide whether a pager is needed before measuring the list. Otherwise
         // its previous visibility can leave an unnecessary page or stale count.
-        const int available = qMax(1, height() - c::actionHeight - lm::toolbarHeight);
+        const int available = qMax(1, height() - chrome::actionHeight - metrics::toolbarHeight);
         const int capacity = qMax(1, available / minimumListRowHeight());
         pager->setVisible(pages->books.size() > capacity);
         arrange();
@@ -1134,25 +1133,25 @@ void LibraryView::rebuild(bool keepPage) {
     QWidget::update();
 }
 void LibraryView::arrange() {
-    const int bar = c::actionHeight - c::heavyRule;
+    const int bar = chrome::actionHeight - chrome::heavyRule;
     int x = width();
     if (!searching) {
-        x -= c::cellWidth;
-        more->setGeometry(x, 0, c::cellWidth, bar);
+        x -= chrome::cellWidth;
+        more->setGeometry(x, 0, chrome::cellWidth, bar);
     }
     more->setVisible(!searching);
-    x -= c::cellWidth;
+    x -= chrome::cellWidth;
     (searching ? static_cast<QWidget *>(closeSearch) : static_cast<QWidget *>(search))
-        ->setGeometry(x, 0, c::cellWidth, bar);
+        ->setGeometry(x, 0, chrome::cellWidth, bar);
     const int left = 0;
     query->setGeometry(left, 0, qMax(1, x - left), bar);
-    query->setTextMargins(c::inset, 0, c::inset, 0);
-    const int toolbarTop = c::actionHeight;
+    query->setTextMargins(chrome::inset, 0, chrome::inset, 0);
+    const int toolbarTop = chrome::actionHeight;
     for (int i = 0; i < modes.size(); ++i)
-        modes[i]->setGeometry(width() - (modes.size() - i) * lm::modeWidth, toolbarTop, lm::modeWidth,
-                              lm::toolbarHeight - ui::metrics::control::border);
-    sort->setGeometry(0, toolbarTop, qMax(1, width() - modes.size() * lm::modeWidth),
-                      lm::toolbarHeight - ui::metrics::control::border);
+        modes[i]->setGeometry(width() - (modes.size() - i) * metrics::modeWidth, toolbarTop, metrics::modeWidth,
+                              metrics::toolbarHeight - ui::metrics::control::border);
+    sort->setGeometry(0, toolbarTop, qMax(1, width() - modes.size() * metrics::modeWidth),
+                      metrics::toolbarHeight - ui::metrics::control::border);
     const auto hint = progress->sizeHint();
     auto *sortButton = static_cast<SortButton *>(sort);
     // As the reader's tabs drop labels that do not fit, scan progress gives
@@ -1160,13 +1159,13 @@ void LibraryView::arrange() {
     const bool squares = sortButton->busy && sortButton->fitsBeside(hint.width());
     sortButton->progressWidth = squares ? hint.width() : 0;
     progress->setVisible(squares);
-    progress->setGeometry(c::inset, toolbarTop + (lm::toolbarHeight - hint.height()) / 2, hint.width(), hint.height());
-    const int top = toolbarTop + lm::toolbarHeight;
-    const int bottom = !pager->isHidden() ? height() - c::actionHeight : height();
+    progress->setGeometry(chrome::inset, toolbarTop + (metrics::toolbarHeight - hint.height()) / 2, hint.width(), hint.height());
+    const int top = toolbarTop + metrics::toolbarHeight;
+    const int bottom = !pager->isHidden() ? height() - chrome::actionHeight : height();
     const int gap = pages->view == View::List ? 0 : ui::px(8);
     pages->setGeometry(0, top + gap, width(), qMax(1, bottom - top - gap));
-    pager->setGeometry(0, height() - c::actionHeight, width(), c::actionHeight);
-    empty->setGeometry(0, c::actionHeight, width(), qMax(1, height() - c::actionHeight));
+    pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
+    empty->setGeometry(0, chrome::actionHeight, width(), qMax(1, height() - chrome::actionHeight));
     if (folderPage)
         folderPage->setGeometry(rect());
     if (overlay)
@@ -1188,23 +1187,23 @@ void LibraryView::paintEvent(QPaintEvent *event) {
     // The reader style sheet on this root widget keeps its own text color, so
     // take the ink from the theme rather than the palette.
     const auto &ink = ui::themeColors(dark).ink;
-    painter.fillRect(0, c::actionHeight - c::heavyRule, width(), c::heavyRule, ink);
-    painter.fillRect(0, c::actionHeight + lm::toolbarHeight - ui::metrics::control::border, width(),
+    painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule, ink);
+    painter.fillRect(0, chrome::actionHeight + metrics::toolbarHeight - ui::metrics::control::border, width(),
                      ui::metrics::control::border, ui::dividerColor(this));
     if (searching)
         return;
-    const int bar = c::actionHeight - c::heavyRule;
-    const int left = c::inset;
+    const int bar = chrome::actionHeight - chrome::heavyRule;
+    const int left = chrome::inset;
     // Search and More take the right of the header.
-    const int right = width() - 2 * c::cellWidth - c::inset;
-    auto titleFont = ui::brandFont(c::titleText);
+    const int right = width() - 2 * chrome::cellWidth - chrome::inset;
+    auto titleFont = ui::brandFont(chrome::titleText);
     painter.setFont(titleFont);
     painter.setPen(ink);
     const auto heading = strings::get("library.title");
     const int titleWidth = qMin(ui::interfaceTextWidth(heading, painter.font()), qMax(1, right - left));
     ui::drawInterfaceText(painter, QRect(left, 0, titleWidth, bar), ui::elideInterfaceText(heading, painter.font(), qMax(1, right - left)), Qt::AlignLeft | Qt::AlignVCenter);
     const int shown = index.visibleCount();
-    painter.setFont(ui::interfaceFont(c::countText));
+    painter.setFont(ui::interfaceFont(chrome::countText));
     painter.setPen(ui::noteColor(this));
     const int countLeft = left + titleWidth + ui::px(24);
     if (right > countLeft)

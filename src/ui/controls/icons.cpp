@@ -44,7 +44,6 @@ ControlIcon bookmarkIcon(const QString &name) {
     const int index = bookmarkIconNames().indexOf(name);
     return index < 0 ? ControlIcon::Star : icons[index];
 }
-namespace m = metrics;
 namespace {
 struct Geometry {
     QPainterPath path;
@@ -405,8 +404,8 @@ void paintGeometry(QPainter &painter, const Geometry &shape, ControlIcon glyph, 
     if (rendition == IconRendition::Action) {
         const QRectF bounds = shape.inkBounds();
         const qreal fraction =
-            qreal(glyph == ControlIcon::Close ? int(m::control::closeInkSize) : int(m::control::actionInkSize)) /
-            int(m::control::iconCanvas);
+            qreal(glyph == ControlIcon::Close ? int(metrics::control::closeInkSize) : int(metrics::control::actionInkSize)) /
+            int(metrics::control::iconCanvas);
         // Phosphor regular assets share a 256-unit canvas and 16-unit strokes.
         // Fitting each silhouette separately changes that stroke weight. Use
         // the same scale, anchored to the Settings icon's 224-unit extent.
@@ -609,7 +608,7 @@ void iconAction(QPushButton *button, ControlIcon icon, const QString &label) {
     control->setText({});
     control->setAccessibleName(label);
     control->setIconConfiguration({icon, IconRendition::Action});
-    control->setIconSize(QSize(m::control::iconSize, m::control::iconSize));
+    control->setIconSize(QSize(metrics::control::iconSize, metrics::control::iconSize));
 }
 
 }

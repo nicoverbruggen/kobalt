@@ -13,32 +13,31 @@
 #include <cmath>
 
 namespace kobalt::ui {
-namespace m = metrics;
 void paintBrandIcon(QPainter &painter, const QRectF &bounds, const QColor &ink) {
     painter.save();
     painter.translate(bounds.topLeft());
-    painter.scale(bounds.width() / m::opening::icon.width(), bounds.height() / m::opening::icon.height());
+    painter.scale(bounds.width() / metrics::opening::icon.width(), bounds.height() / metrics::opening::icon.height());
     for (int line = 0; line < 6; ++line)
-        painter.fillRect(QRectF(0, line * m::opening::iconBarPitch,
-                                line == 5 ? m::opening::finalBarWidth : m::opening::icon.width(),
-                                m::opening::iconBarHeight),
+        painter.fillRect(QRectF(0, line * metrics::opening::iconBarPitch,
+                                line == 5 ? metrics::opening::finalBarWidth : metrics::opening::icon.width(),
+                                metrics::opening::iconBarHeight),
                          ink);
     painter.restore();
 }
 void BrandIcon::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    const auto size = m::opening::icon.size().scaled(rect().size(), Qt::KeepAspectRatio);
+    const auto size = metrics::opening::icon.size().scaled(rect().size(), Qt::KeepAspectRatio);
     paintBrandIcon(painter,
                    QRectF((width() - size.width()) / 2, (height() - size.height()) / 2, size.width(), size.height()),
                    palette().color(QPalette::WindowText));
 }
 ProgressBar::ProgressBar(QWidget *parent) : QWidget(parent) {
-    setFixedHeight(m::notice::progressHeight + 2 * m::control::border);
+    setFixedHeight(metrics::notice::progressHeight + 2 * metrics::control::border);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setAttribute(Qt::WA_OpaquePaintEvent);
 }
 QRect ProgressBar::fillRect(int value) const {
-    const int border = m::control::border;
+    const int border = metrics::control::border;
     const QRect inside = rect().adjusted(border, border, -border, -border);
     const int filled = qMax(0, inside.width()) * value / 100;
     return QRect(layoutDirection() == Qt::RightToLeft ? inside.right() - filled + 1 : inside.left(), inside.top(),
@@ -57,23 +56,23 @@ void ProgressBar::setValue(int value) {
 }
 void ProgressBar::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    const int border = m::control::border;
+    const int border = metrics::control::border;
     painter.fillRect(rect(), palette().color(QPalette::WindowText));
     painter.fillRect(rect().adjusted(border, border, -border, -border), palette().color(QPalette::Window));
     painter.fillRect(fillRect(percent), palette().color(QPalette::WindowText));
 }
 LightSwipeNotice::LightSwipeNotice(QWidget *parent)
     : Panel(parent, Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge) {
-    setEdgeWidth(m::chrome::heavyRule);
+    setEdgeWidth(metrics::chrome::heavyRule);
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setFocusPolicy(Qt::NoFocus);
     percentage = new ui::InterfaceLabel(this);
     percentage->setObjectName("rrLightSwipeValue");
     caption = new ui::InterfaceLabel(this);
     caption->setObjectName("rrLightSwipeCaption");
-    readerStyle(percentage, styles::font(m::lightSwipe::percentText));
-    readerStyle(caption, styles::font(m::lightSwipe::captionText) + "color:@swipe-caption-ink@;");
-    auto font = interfaceFont(m::lightSwipe::captionText);
+    readerStyle(percentage, styles::font(metrics::lightSwipe::percentText));
+    readerStyle(caption, styles::font(metrics::lightSwipe::captionText) + "color:@swipe-caption-ink@;");
+    auto font = interfaceFont(metrics::lightSwipe::captionText);
     font.setLetterSpacing(QFont::AbsoluteSpacing, px(2));
     caption->setFont(font);
     setLevel(false, 0);
@@ -90,26 +89,26 @@ void LightSwipeNotice::setLevel(bool warmth, int value) {
         update();
 }
 void LightSwipeNotice::centerIn(const QSize &viewport) {
-    const int cardWidth = qMin(int(m::lightSwipe::width), qMax(1, viewport.width() - 2 * int(m::spacing::section)));
-    const int cardHeight = qMin(int(m::lightSwipe::height), viewport.height());
+    const int cardWidth = qMin(int(metrics::lightSwipe::width), qMax(1, viewport.width() - 2 * int(metrics::spacing::section)));
+    const int cardHeight = qMin(int(metrics::lightSwipe::height), viewport.height());
     setGeometry((viewport.width() - cardWidth) / 2, (viewport.height() - cardHeight) / 2, cardWidth, cardHeight);
 }
 void LightSwipeNotice::resizeEvent(QResizeEvent *event) {
     Panel::resizeEvent(event);
-    const int x = m::lightSwipe::inset + m::lightSwipe::iconWidth + m::lightSwipe::gap;
+    const int x = metrics::lightSwipe::inset + metrics::lightSwipe::iconWidth + metrics::lightSwipe::gap;
     const int top =
-        (height() - int(m::lightSwipe::percentText + m::lightSwipe::captionGap + m::lightSwipe::captionText)) / 2;
-    percentage->setGeometry(x, top, qMax(0, width() - x - int(m::lightSwipe::inset)), m::lightSwipe::percentText);
-    caption->setGeometry(x, top + m::lightSwipe::percentText + m::lightSwipe::captionGap,
-                         qMax(0, width() - x - int(m::lightSwipe::inset)), m::lightSwipe::captionText);
+        (height() - int(metrics::lightSwipe::percentText + metrics::lightSwipe::captionGap + metrics::lightSwipe::captionText)) / 2;
+    percentage->setGeometry(x, top, qMax(0, width() - x - int(metrics::lightSwipe::inset)), metrics::lightSwipe::percentText);
+    caption->setGeometry(x, top + metrics::lightSwipe::percentText + metrics::lightSwipe::captionGap,
+                         qMax(0, width() - x - int(metrics::lightSwipe::inset)), metrics::lightSwipe::captionText);
 }
 void LightSwipeNotice::paintEvent(QPaintEvent *event) {
     Panel::paintEvent(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     const qreal side = warm ? 64. : 72.;
-    const qreal scale = qMin(qreal(m::lightSwipe::iconWidth) / side, qreal(m::lightSwipe::iconHeight) / side);
-    painter.translate(m::lightSwipe::inset + (m::lightSwipe::iconWidth - side * scale) / 2.,
+    const qreal scale = qMin(qreal(metrics::lightSwipe::iconWidth) / side, qreal(metrics::lightSwipe::iconHeight) / side);
+    painter.translate(metrics::lightSwipe::inset + (metrics::lightSwipe::iconWidth - side * scale) / 2.,
                       (height() - side * scale) / 2.);
     painter.scale(scale, scale);
     if (!warm)
@@ -163,16 +162,16 @@ void LightSwipeNotice::paintEvent(QPaintEvent *event) {
 }
 
 BluetoothIndicator::BluetoothIndicator(QWidget *parent) : QWidget(parent) {
-    setFixedSize(m::panel::bluetoothIconSize, m::panel::statusHeight);
+    setFixedSize(metrics::panel::bluetoothIconSize, metrics::panel::statusHeight);
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setAccessibleName(strings::get("components.bluetooth_enabled"));
     hide();
 }
 WifiIndicator::WifiIndicator(QWidget *parent) : QWidget(parent) {
-    const int width = m::panel::wifiIconWidth;
-    const int reference = m::panel::bluetoothIconSize;
+    const int width = metrics::panel::wifiIconWidth;
+    const int reference = metrics::panel::bluetoothIconSize;
     // Equal width parity keeps their centers on the same pixel grid.
-    setFixedSize(width + (width - reference) % 2, m::panel::statusHeight);
+    setFixedSize(width + (width - reference) % 2, metrics::panel::statusHeight);
     setAttribute(Qt::WA_TransparentForMouseEvents);
     hide();
 }
@@ -190,7 +189,7 @@ bool WifiIndicator::setStatus(bool radio, bool online, int bars) {
 }
 void WifiIndicator::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    const int side = m::panel::bluetoothIconSize;
+    const int side = metrics::panel::bluetoothIconSize;
     const ControlIcon levels[] = {ControlIcon::WifiNone, ControlIcon::WifiLow,
                                   ControlIcon::WifiMedium, ControlIcon::WifiHigh};
     // Map Nickel's 0..4 reports to Phosphor's four signal silhouettes.
@@ -201,14 +200,14 @@ void WifiIndicator::paintEvent(QPaintEvent *) {
 }
 void BluetoothIndicator::paintEvent(QPaintEvent *) {
     QPainter painter(this);
-    const int side = m::panel::bluetoothIconSize;
+    const int side = metrics::panel::bluetoothIconSize;
     paintOpeningIcon(painter, ControlIcon::Bluetooth, QRectF(0, (height() - side) / 2., side, side),
                      palette().color(QPalette::WindowText));
 }
 
 BatteryIndicator::BatteryIndicator(QWidget *parent) : InterfaceLabel(parent) {
-    setFixedSize(m::panel::batteryWidth, m::panel::statusHeight);
-    setContentsMargins(0, 0, m::panel::batteryTextInset, 0);
+    setFixedSize(metrics::panel::batteryWidth, metrics::panel::statusHeight);
+    setContentsMargins(0, 0, metrics::panel::batteryTextInset, 0);
     setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     setStatus(-1, false);
 }
@@ -227,14 +226,14 @@ void BatteryIndicator::setStatus(int value, bool pluggedIn) {
 }
 AnnotationModeNotice::AnnotationModeNotice(QWidget *parent)
     : Panel(parent, Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge) {
-    setEdgeWidth(m::chrome::heavyRule);
+    setEdgeWidth(metrics::chrome::heavyRule);
     setAttribute(Qt::WA_TransparentForMouseEvents);
     setFocusPolicy(Qt::NoFocus);
     state = new InterfaceLabel(this);
     state->setObjectName("rrAnnotationModeState");
     caption = new InterfaceLabel(strings::get("annotations.mode").toUpper(), this);
-    readerStyle(state, styles::font(m::lightSwipe::percentText));
-    readerStyle(caption, styles::font(m::chrome::descriptionText) + "color:palette(placeholder-text);");
+    readerStyle(state, styles::font(metrics::lightSwipe::percentText));
+    readerStyle(caption, styles::font(metrics::chrome::descriptionText) + "color:palette(placeholder-text);");
     setModeEnabled(false);
 }
 void AnnotationModeNotice::setModeEnabled(bool enabled) {
@@ -244,24 +243,24 @@ void AnnotationModeNotice::setModeEnabled(bool enabled) {
     update();
 }
 void AnnotationModeNotice::centerIn(const QSize &viewport) {
-    const int w = qMin(int(m::lightSwipe::width), qMax(1, viewport.width() - 2 * int(m::spacing::section)));
-    const int h = qMin(int(m::lightSwipe::height), viewport.height());
+    const int w = qMin(int(metrics::lightSwipe::width), qMax(1, viewport.width() - 2 * int(metrics::spacing::section)));
+    const int h = qMin(int(metrics::lightSwipe::height), viewport.height());
     setGeometry((viewport.width() - w) / 2, (viewport.height() - h) / 2, w, h);
 }
 void AnnotationModeNotice::resizeEvent(QResizeEvent *event) {
     Panel::resizeEvent(event);
-    const int x = m::lightSwipe::inset + m::lightSwipe::iconWidth + m::lightSwipe::gap;
-    const int top = (height() - int(m::lightSwipe::percentText + m::lightSwipe::captionGap + m::lightSwipe::captionText)) / 2;
-    const int w = qMax(0, width() - x - int(m::lightSwipe::inset));
-    state->setGeometry(x, top, w, m::lightSwipe::percentText);
-    caption->setGeometry(x, top + m::lightSwipe::percentText + m::lightSwipe::captionGap, w, m::lightSwipe::captionText);
+    const int x = metrics::lightSwipe::inset + metrics::lightSwipe::iconWidth + metrics::lightSwipe::gap;
+    const int top = (height() - int(metrics::lightSwipe::percentText + metrics::lightSwipe::captionGap + metrics::lightSwipe::captionText)) / 2;
+    const int w = qMax(0, width() - x - int(metrics::lightSwipe::inset));
+    state->setGeometry(x, top, w, metrics::lightSwipe::percentText);
+    caption->setGeometry(x, top + metrics::lightSwipe::percentText + metrics::lightSwipe::captionGap, w, metrics::lightSwipe::captionText);
 }
 void AnnotationModeNotice::paintEvent(QPaintEvent *event) {
     Panel::paintEvent(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const int side = m::lightSwipe::iconWidth;
-    const QRect icon(m::lightSwipe::inset, (height() - side) / 2, side, side);
+    const int side = metrics::lightSwipe::iconWidth;
+    const QRect icon(metrics::lightSwipe::inset, (height() - side) / 2, side, side);
     const auto ink = palette().color(QPalette::WindowText);
     paintOpeningIcon(painter, ControlIcon::Annotate, icon, ink);
     if (!modeEnabled) {
@@ -276,13 +275,13 @@ void AnnotationModeNotice::paintEvent(QPaintEvent *event) {
 void paintBattery(QPainter &painter, const QRectF &body, int percent, bool charging, const QColor &ink,
                   const QColor &paper) {
     // The menu's battery is the reference size; smaller ones scale its parts.
-    const qreal scale = body.height() / int(m::panel::batteryBodyHeight);
+    const qreal scale = body.height() / int(metrics::panel::batteryBodyHeight);
     const auto part = [scale](int pixels) {
         return px(pixels) * scale;
     };
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(ink, m::panel::batteryStroke));
+    painter.setPen(QPen(ink, metrics::panel::batteryStroke));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(body);
     painter.fillRect(QRectF(body.right() + part(2), body.center().y() - part(4), part(3), part(8)), ink);
@@ -305,8 +304,8 @@ void paintBatteryBolt(QPainter &painter, const QPointF &center, qreal scale, con
     painter.restore();
 }
 qreal batteryWidth(qreal bodyHeight) {
-    const qreal scale = bodyHeight / int(m::panel::batteryBodyHeight);
-    return (int(m::panel::batteryBodyWidth) + px(5)) * scale;
+    const qreal scale = bodyHeight / int(metrics::panel::batteryBodyHeight);
+    return (int(metrics::panel::batteryBodyWidth) + px(5)) * scale;
 }
 QFont batteryTextFont(QFont font, qreal bodyHeight, int weight) {
     const auto sample = renderPrivateText(QStringLiteral("100%"), font, weight).image;
@@ -335,8 +334,8 @@ void BatteryIndicator::paintEvent(QPaintEvent *event) {
         // Align the visible digits with the icon, rather than the padded font line.
         drawOpticalPrivateText(painter, contentsRect(), text(), alignment());
     }
-    const QRectF body(width() - m::panel::batteryIconSize + 1, (height() - m::panel::batteryBodyHeight) / 2.0,
-                      m::panel::batteryBodyWidth, m::panel::batteryBodyHeight);
+    const QRectF body(width() - metrics::panel::batteryIconSize + 1, (height() - metrics::panel::batteryBodyHeight) / 2.0,
+                      metrics::panel::batteryBodyWidth, metrics::panel::batteryBodyHeight);
     paintBattery(painter, body, percent, charging, palette().color(QPalette::WindowText),
                  palette().color(QPalette::Window));
 }
@@ -353,7 +352,7 @@ void Panel::paintEvent(QPaintEvent *event) {
     QFrame::paintEvent(event);
     QPainter painter(this);
     paintEdges(painter, rect(), separators, palette().color(softEdges ? QPalette::Mid : QPalette::WindowText),
-               edgeWidth > 0 ? edgeWidth : int(m::control::border));
-    paintEdges(painter, rect(), dividers, dividerColor(this), m::control::border);
+               edgeWidth > 0 ? edgeWidth : int(metrics::control::border));
+    paintEdges(painter, rect(), dividers, dividerColor(this), metrics::control::border);
 }
 }

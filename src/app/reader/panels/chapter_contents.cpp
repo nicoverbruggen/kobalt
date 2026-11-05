@@ -13,8 +13,8 @@
 #include <QPainter>
 
 namespace kobalt {
-namespace m = ui::metrics::contents;
-namespace c = ui::metrics::chrome;
+namespace contents = ui::metrics::contents;
+namespace chrome = ui::metrics::chrome;
 ChapterContents::ChapterContents(QWidget *parent) : Panel(parent) {
     setObjectName("rrContents");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
@@ -28,12 +28,12 @@ ChapterContents::ChapterContents(QWidget *parent) : Panel(parent) {
     title = new ui::InterfaceLabel(strings::get("chapter_contents.chapters"), this);
     title->setObjectName("rrContentsTitle");
     title->setTextFormat(Qt::PlainText);
-    ui::readerStyle(title, ui::styles::brand(c::titleText) + "background:transparent;");
+    ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
     position = new ui::InterfaceLabel(this);
     position->setObjectName("rrContentsPosition");
     position->setTextFormat(Qt::PlainText);
     position->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    ui::readerStyle(position, ui::styles::font(c::countText) + "background:transparent;");
+    ui::readerStyle(position, ui::styles::font(chrome::countText) + "background:transparent;");
     listHeader = new ui::ListHeader(this);
     summary = listHeader->leftLabel();
     summary->setObjectName("rrContentsSummary");
@@ -43,7 +43,7 @@ ChapterContents::ChapterContents(QWidget *parent) : Panel(parent) {
     empty->setObjectName("rrContentsEmpty");
     empty->setTextFormat(Qt::PlainText);
     empty->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    ui::readerStyle(empty, ui::styles::font(c::labelText) + "background:transparent;");
+    ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
     pager = new ui::PagerBar(this, "rrContents");
     pager->previous->setAccessibleName(strings::get("chapter_contents.previous_chapters"));
     pager->next->setAccessibleName(strings::get("chapter_contents.next_chapters"));
@@ -87,25 +87,25 @@ void ChapterContents::resizeEvent(QResizeEvent *) {
 void ChapterContents::paintEvent(QPaintEvent *event) {
     ui::Panel::paintEvent(event);
     QPainter painter(this);
-    painter.fillRect(0, c::actionHeight - c::heavyRule, width(), c::heavyRule, palette().color(QPalette::WindowText));
-    painter.fillRect(0, c::actionHeight + m::stripHeight - ui::metrics::control::border, width(),
+    painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule, palette().color(QPalette::WindowText));
+    painter.fillRect(0, chrome::actionHeight + contents::stripHeight - ui::metrics::control::border, width(),
                      ui::metrics::control::border, ui::dividerColor(this));
 }
 void ChapterContents::arrange() {
-    const int first = page * rows, top = c::actionHeight + m::stripHeight, available = height() - top;
+    const int first = page * rows, top = chrome::actionHeight + contents::stripHeight, available = height() - top;
     // Leave room for the pager only when the list needs more than one page.
     rows = qMax(1, available / ui::metrics::list::oneLine);
     if (items.size() > rows)
-        rows = qMax(1, (available - c::actionHeight) / ui::metrics::list::oneLine);
+        rows = qMax(1, (available - chrome::actionHeight) / ui::metrics::list::oneLine);
     page = first / rows;
     // The Chapters bar takes the place of the header's action row.
-    const int barHeight = c::actionHeight - c::heavyRule, titleLeft = c::cellWidth + c::inset;
-    close->setGeometry(0, 0, c::cellWidth, barHeight);
+    const int barHeight = chrome::actionHeight - chrome::heavyRule, titleLeft = chrome::cellWidth + chrome::inset;
+    close->setGeometry(0, 0, chrome::cellWidth, barHeight);
     title->setGeometry(titleLeft, 0, qMax(1, width() / 2 - titleLeft), barHeight);
-    position->setGeometry(width() / 2, 0, qMax(1, width() / 2 - c::inset), barHeight);
-    listHeader->setGeometry(0, c::actionHeight, width(), ui::metrics::list::headerHeight);
-    pager->setGeometry(0, height() - c::actionHeight, width(), c::actionHeight);
-    empty->setGeometry(c::inset, top, qMax(1, width() - 2 * c::inset), ui::metrics::list::oneLine);
+    position->setGeometry(width() / 2, 0, qMax(1, width() / 2 - chrome::inset), barHeight);
+    listHeader->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
+    pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
+    empty->setGeometry(chrome::inset, top, qMax(1, width() - 2 * chrome::inset), ui::metrics::list::oneLine);
 }
 void ChapterContents::redraw() {
     page = qBound(0, page, pageCount() - 1);
@@ -118,8 +118,8 @@ void ChapterContents::redraw() {
     const bool pagesKnown = lastPage >= 0;
     listHeader->setCaptions(summary->text(), pagesKnown ? strings::get("chapter_contents.page") : QString());
     pager->setPage(page, pageCount(), {}, true);
-    const int used = c::actionHeight + m::stripHeight + qMin(rows, qMax(0, int(items.size()) - page * rows)) * int(ui::metrics::list::oneLine);
-    pager->setBlankArea({c::inset, used, width() - 2 * c::inset, pager->y() - used});
+    const int used = chrome::actionHeight + contents::stripHeight + qMin(rows, qMax(0, int(items.size()) - page * rows)) * int(ui::metrics::list::oneLine);
+    pager->setBlankArea({chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used});
     while (buttons.size() < qMin(rows, int(items.size()))) {
         const int row = buttons.size();
         auto *button = new ui::ListRow(this);
@@ -155,13 +155,13 @@ void ChapterContents::redraw() {
         button->setEnabled(!item.value.isEmpty());
         button->setCheckable(true);
         button->setChecked(active);
-        button->setGeometry(0, c::actionHeight + m::stripHeight + row * ui::metrics::list::oneLine, width(),
+        button->setGeometry(0, chrome::actionHeight + contents::stripHeight + row * ui::metrics::list::oneLine, width(),
                             ui::metrics::list::oneLine);
         auto *itemRow = static_cast<ui::ListRow *>(button);
         itemRow->setTitle(item.label);
         label->setObjectName(item.name + "Title");
         itemRow->setLeading(QString("%1").arg(index + 1, digits, 10, QChar('0')),
-                            qBound(0, item.depth - rootDepth, 6) * m::indent);
+                            qBound(0, item.depth - rootDepth, 6) * contents::indent);
         itemRow->leadingLabel()->setObjectName(item.name + "Number");
         itemRow->setAccessory(
             ui::ListRow::Caption{item.page >= 0 ? QString::number(item.page + 1) : QString(), pageWidth});

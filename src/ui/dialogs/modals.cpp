@@ -16,14 +16,13 @@
 #include <algorithm>
 
 namespace kobalt::ui {
-namespace m = metrics;
 PopupCard::PopupCard(QWidget *parent)
     : Panel(parent, Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge) {
     setEdgeWidth(2);
     readerStyle(this, styles::popup());
     contentRows = new QVBoxLayout(this);
-    contentRows->setContentsMargins(m::notice::cardMargins);
-    contentRows->setSpacing(m::notice::cardGap);
+    contentRows->setContentsMargins(metrics::notice::cardMargins);
+    contentRows->setSpacing(metrics::notice::cardGap);
 }
 QLabel *PopupCard::message(const QString &text, const QString &name) {
     auto *label = new ui::InterfaceLabel(text, this);
@@ -35,12 +34,12 @@ QLabel *PopupCard::message(const QString &text, const QString &name) {
 }
 QLabel *PopupCard::title(const QString &text, const QString &name) {
     auto *label = message(text, name);
-    readerStyle(label, styles::font(m::chrome::labelText, true));
+    readerStyle(label, styles::font(metrics::chrome::labelText, true));
     return label;
 }
 QHBoxLayout *PopupCard::actions() {
     auto *row = horizontalRow();
-    row->setSpacing(m::notice::cardGap);
+    row->setSpacing(metrics::notice::cardGap);
     contentRows->addLayout(row);
     return row;
 }
@@ -70,13 +69,13 @@ public:
         setFocusPolicy(Qt::StrongFocus);
         setProperty("reader_primary_action", primary);
         readerStyle(this, "QPushButton{border:none;padding:0;min-height:0;" +
-                              styles::font(m::chrome::labelText, primary) + "}");
+                              styles::font(metrics::chrome::labelText, primary) + "}");
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     }
     QSize sizeHint() const override {
         auto size = Button::sizeHint();
-        const int vertical = m::control::outlinedVerticalPadding + m::control::border;
-        size.setHeight(qMax<int>(m::chrome::actionHeight, fontMetrics().height() + 2 * vertical));
+        const int vertical = metrics::control::outlinedVerticalPadding + metrics::control::border;
+        size.setHeight(qMax<int>(metrics::chrome::actionHeight, fontMetrics().height() + 2 * vertical));
         return size;
     }
 
@@ -89,12 +88,12 @@ protected:
         auto edges = Edges(Qt::TopEdge);
         if (property("reader_modal_left_rule").toBool())
             edges |= Qt::LeftEdge;
-        paintEdges(painter, rect(), edges, dividerColor(this), m::control::border);
+        paintEdges(painter, rect(), edges, dividerColor(this), metrics::control::border);
         painter.setFont(font());
-        const int inset = m::control::outlinedHorizontalPadding + m::control::border;
+        const int inset = metrics::control::outlinedHorizontalPadding + metrics::control::border;
         painter.setPen(ink);
         drawWrappedInterfaceText(painter,
-            rect().adjusted(inset, m::control::outlinedVerticalPadding, -inset, -m::control::outlinedVerticalPadding), text(), Qt::AlignCenter);
+            rect().adjusted(inset, metrics::control::outlinedVerticalPadding, -inset, -metrics::control::outlinedVerticalPadding), text(), Qt::AlignCenter);
     }
 };
 QLabel *modalContent(PopupCard *card, const ModalContent &content) {
@@ -102,12 +101,12 @@ QLabel *modalContent(PopupCard *card, const ModalContent &content) {
     const int border = 2;
     card->rows()->setContentsMargins(border, border, border, border);
     card->rows()->setSpacing(0);
-    const auto padding = m::notice::cardMargins;
+    const auto padding = metrics::notice::cardMargins;
     readerStyle(card, styles::popup() +
         QString("QLabel[reader_modal_content=\"true\"]{padding:%1px %2px %3px %4px;} "
                 "QLabel[reader_modal_heading=\"true\"]{border-bottom:%5px solid palette(light);}")
             .arg(int(padding.top())).arg(int(padding.right())).arg(int(padding.bottom())).arg(int(padding.left()))
-            .arg(int(m::control::border)));
+            .arg(int(metrics::control::border)));
     if (!content.image.isNull())
         card->image(content.image);
     auto *title = card->title(content.title, "rrModalTitle");
@@ -120,7 +119,7 @@ QLabel *modalContent(PopupCard *card, const ModalContent &content) {
     description->setTextFormat(Qt::PlainText);
     description->setProperty("reader_modal_content", true);
     description->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    readerStyle(description, styles::font(m::chrome::descriptionText));
+    readerStyle(description, styles::font(metrics::chrome::descriptionText));
     return description;
 }
 }
@@ -142,12 +141,12 @@ void PopupCard::fitToWidth(int width) {
             visible.append(button);
             button->ensurePolished();
             longest = qMax(longest, button->fontMetrics().boundingRect(button->text()).width() +
-                                        2 * int(m::control::outlinedHorizontalPadding + m::control::border));
+                                        2 * int(metrics::control::outlinedHorizontalPadding + metrics::control::border));
         }
         bool stacked = visible.size() == 2 && 2 * longest + actionRows->spacing() > textWidth;
         if (visible.size() == 2 && !stacked) {
             const int labelWidth = (textWidth - actionRows->spacing()) / 2 -
-                                   2 * int(m::control::outlinedHorizontalPadding + m::control::border);
+                                   2 * int(metrics::control::outlinedHorizontalPadding + metrics::control::border);
             for (auto *button : visible) {
                 const auto bounds = button->fontMetrics().boundingRect(QRect(0, 0, qMax(1, labelWidth), 10000),
                                                                        Qt::TextWordWrap, button->text());
@@ -169,12 +168,12 @@ void PopupCard::fitToWidth(int width) {
                                 : stacked         ? textWidth
                                           : (textWidth - (visible.size() - 1) * actionRows->spacing()) / visible.size();
         for (auto *button : visible) {
-            const int horizontal = m::control::outlinedHorizontalPadding + m::control::border;
-            const int vertical = m::control::outlinedVerticalPadding + m::control::border;
+            const int horizontal = metrics::control::outlinedHorizontalPadding + metrics::control::border;
+            const int vertical = metrics::control::outlinedVerticalPadding + metrics::control::border;
             const auto bounds = button->fontMetrics().boundingRect(
                 QRect(0, 0, qMax(1, buttonWidth - 2 * horizontal), 10000), Qt::TextWordWrap, button->text());
             button->setFixedHeight(
-                qMax<int>(m::chrome::actionHeight, bounds.height() + 2 * vertical));
+                qMax<int>(metrics::chrome::actionHeight, bounds.height() + 2 * vertical));
         }
     }
     for (auto *label : findChildren<QLabel *>(QString(), Qt::FindDirectChildrenOnly)) {
@@ -213,7 +212,7 @@ void PopupCard::fitToHeight(int height) {
     if (!rowPager) {
         const auto owner = parentWidget() ? parentWidget()->objectName() : QString();
         rowPager = new PagerBar(this, owner.isEmpty() ? QStringLiteral("rrCard") : owner);
-        rowPager->setFixedHeight(m::chrome::actionHeight);
+        rowPager->setFixedHeight(metrics::chrome::actionHeight);
         const auto turn = [this](int direction) {
             showRowPage(rowPager->turnTarget(direction));
             if (auto *overlay = dynamic_cast<ModalOverlay *>(parentWidget()))
@@ -243,7 +242,7 @@ void PopupCard::fitToHeight(int height) {
         rows.append(row);
         pagedHeight += rowHeight(row) + contentRows->spacing();
     }
-    const int room = qMax(1, height - (natural - pagedHeight) - int(m::chrome::actionHeight) - contentRows->spacing());
+    const int room = qMax(1, height - (natural - pagedHeight) - int(metrics::chrome::actionHeight) - contentRows->spacing());
     int used = 0;
     for (auto *row : rows) {
         const int needed = rowHeight(row) + contentRows->spacing();
@@ -359,7 +358,7 @@ void ModalOverlay::paintEvent(QPaintEvent *) {
         lines.setCosmetic(true);
         painter.setPen(lines);
         painter.setRenderHint(QPainter::Antialiasing, false);
-        const int pitch = qMax(1, int(m::notice::backdropPitch));
+        const int pitch = qMax(1, int(metrics::notice::backdropPitch));
         for (int x = -height(); x < width(); x += pitch)
             painter.drawLine(x, 0, x + height(), height());
     }
@@ -381,10 +380,10 @@ void ModalOverlay::centerCard() {
     if (anchor.isEmpty()) {
         // A card taller than the screen pages its rows instead. Cards placed
         // above a keyboard keep their own fitting, and their input stays shown.
-        const int room = height() - 2 * int(m::notice::sideClearance);
+        const int room = height() - 2 * int(metrics::notice::sideClearance);
         // Long wrapped descriptions can exceed one page. Use spare landscape
         // width before paging rows, since a single row cannot be split.
-        const int availableWidth = width() - 2 * int(m::notice::sideClearance);
+        const int availableWidth = width() - 2 * int(metrics::notice::sideClearance);
         if (cardArea.isEmpty() && room > 0 && content->height() > room &&
             width() > height() && content->width() < availableWidth)
             content->fitToWidth(availableWidth);
@@ -422,7 +421,7 @@ bool ModalOverlay::eventFilter(QObject *object, QEvent *event) {
     return QWidget::eventFilter(object, event);
 }
 void ModalOverlay::fitCard() {
-    content->fitToWidth(qMin<int>(m::notice::cardWidth, qMax(1, width() - 2 * m::notice::sideClearance)));
+    content->fitToWidth(qMin<int>(metrics::notice::cardWidth, qMax(1, width() - 2 * metrics::notice::sideClearance)));
     centerCard();
 }
 QRect ModalOverlay::progressUpdateRect(int percent, const QString &message) const {

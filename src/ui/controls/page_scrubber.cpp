@@ -16,14 +16,14 @@
 #include <QTouchEvent>
 
 namespace kobalt::ui {
-namespace m = metrics::scrubber;
+namespace scrubber = metrics::scrubber;
 namespace {
 // Both card sizes hang the ribbon from the page border.
 void paintThumbnail(QPainter &painter, const QRect &card, const QImage &image, bool bookmarked, const QColor &ink) {
     if (image.isNull()) {
         return;
     }
-    const QRect room = card.adjusted(m::padding, m::padding, -m::padding, -m::padding);
+    const QRect room = card.adjusted(scrubber::padding, scrubber::padding, -scrubber::padding, -scrubber::padding);
     const QSize fitted = image.size().scaled(room.size(), Qt::KeepAspectRatio);
     const QRect target(room.center() - QPoint(fitted.width() / 2, fitted.height() / 2), fitted);
     // Ordinary cards already have fitted pixels. Oversized desktop previews
@@ -92,7 +92,7 @@ public:
     void setImage(const QImage &source) {
         image = {};
         if (!source.isNull()) {
-            const QSize room = rect().adjusted(m::padding, m::padding, -m::padding, -m::padding).size();
+            const QSize room = rect().adjusted(scrubber::padding, scrubber::padding, -scrubber::padding, -scrubber::padding).size();
             const QSize fitted = source.size().scaled(room, Qt::KeepAspectRatio);
             image = fitted.width() <= 1024 && fitted.height() <= 1024
                         ? source.scaled(fitted, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
@@ -186,7 +186,7 @@ PageScrubber::PageScrubber(QWidget *parent) : QWidget(parent), position(new Sett
     for (auto *label : {rangeLabel, overviewLabel, rangeStart, rangeEnd, overviewStart, overviewEnd}) {
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
         label->setAlignment(Qt::AlignCenter);
-        captionLabel(label, m::text);
+        captionLabel(label, scrubber::text);
     }
     overviewLabel->setText(strings::get("reader.whole_book").toUpper());
     for (auto *label : {rangeStart, overviewStart}) {
@@ -223,9 +223,9 @@ PageScrubber::PageScrubber(QWidget *parent) : QWidget(parent), position(new Sett
     chapterLabel->setObjectName("rrPreviewChapterCaption");
     chapterLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
     chapterLabel->setAlignment(Qt::AlignCenter);
-    captionLabel(chapterLabel, m::text);
+    captionLabel(chapterLabel, scrubber::text);
     readerStyle(chapterLabel,
-                "QLabel{" + styles::caption(m::text) + "background:transparent;color:palette(window-text);}");
+                "QLabel{" + styles::caption(scrubber::text) + "background:transparent;color:palette(window-text);}");
     chapterLabel->hide();
     overviewRule = new Panel(this, Qt::LeftEdge);
     overviewRule->setSoftEdges(true);
@@ -270,7 +270,7 @@ PageScrubber::PageScrubber(QWidget *parent) : QWidget(parent), position(new Sett
     stay = new NavigationButton<DismissButton>(actions);
     stay->setObjectName("rrScrubberStay");
     stay->setAccessibleName(strings::get("reader.stay_here"));
-    stay->setContentsMargins(0, int(m::actionTop) + int(metrics::control::border), 0, metrics::control::border);
+    stay->setContentsMargins(0, int(scrubber::actionTop) + int(metrics::control::border), 0, metrics::control::border);
     readerStyle(stay, "QPushButton{border:none;padding:0;min-height:0;}");
     stay->hide();
     dismissImage = new NavigationButton<DismissButton>(actions);
@@ -335,7 +335,7 @@ void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString
 }
 int PageScrubber::maximumZoomLevel() const {
     int level = 0;
-    while (level < lastZoomLevel && zoomScales[level + 1] <= totalPages / m::minimumZoomSpan) {
+    while (level < lastZoomLevel && zoomScales[level + 1] <= totalPages / scrubber::minimumZoomSpan) {
         ++level;
     }
     return level;
@@ -607,19 +607,19 @@ void PageScrubber::cancel() {
     }
 }
 QRect PageScrubber::previewBounds() const {
-    const int gap = m::gap;
+    const int gap = scrubber::gap;
     const int room = qMax(1, width() - 2 * gap);
     const int pageHeight = qMax(1, panelBounds().top() - actionsHeight());
     const int availableHeight = qMax(1, pageHeight - 2 * gap);
-    const int targetHeight = qMin(availableHeight, qRound(pageHeight * m::previewHeightFraction));
-    const QSize imageRoom(qMax(1, room - 2 * int(m::padding)), qMax(1, targetHeight - 2 * int(m::padding)));
+    const int targetHeight = qMin(availableHeight, qRound(pageHeight * scrubber::previewHeightFraction));
+    const QSize imageRoom(qMax(1, room - 2 * int(scrubber::padding)), qMax(1, targetHeight - 2 * int(scrubber::padding)));
     const auto fitted = pageSize.scaled(imageRoom, Qt::KeepAspectRatio);
-    const int w = qMin(room, fitted.width() + 2 * int(m::padding));
-    const int h = qMin(availableHeight, fitted.height() + 2 * int(m::padding));
+    const int w = qMin(room, fitted.width() + 2 * int(scrubber::padding));
+    const int h = qMin(availableHeight, fitted.height() + 2 * int(scrubber::padding));
     return {(width() - w) / 2, (pageHeight - h) / 2, w, h};
 }
 QRect PageScrubber::barBounds() const {
-    const int barHeight = barVisible ? qMin(height(), int(m::barHeight)) : 0;
+    const int barHeight = barVisible ? qMin(height(), int(scrubber::barHeight)) : 0;
     return {0, height() - barHeight, width(), barHeight};
 }
 QRect PageScrubber::panelBounds() const {
@@ -627,11 +627,11 @@ QRect PageScrubber::panelBounds() const {
         return barBounds();
     }
     const int panelHeight =
-        int(m::barHeight + m::captionHeight) + (overviewExpanded && zoomAvailable() ? int(m::overviewHeight) : 0);
+        int(scrubber::barHeight + scrubber::captionHeight) + (overviewExpanded && zoomAvailable() ? int(scrubber::overviewHeight) : 0);
     return {0, qMax(0, height() - panelHeight), width(), qMin(height(), panelHeight)};
 }
 QRect PageScrubber::imageBounds() const {
-    return previewBounds().adjusted(m::padding, m::padding, -m::padding, -m::padding);
+    return previewBounds().adjusted(scrubber::padding, scrubber::padding, -scrubber::padding, -scrubber::padding);
 }
 void PageScrubber::updateMask() {
     const QRegion previousArea = mask().isEmpty() ? QRegion(rect()) : mask();
@@ -677,7 +677,7 @@ void PageScrubber::resizeEvent(QResizeEvent *) {
 }
 int PageScrubber::actionsHeight() const {
     return linksAction->isHidden() && returnAction->isHidden() && imageAction->isHidden()
-               ? 0 : int(m::actionTop + m::actionHeight);
+               ? 0 : int(scrubber::actionTop + scrubber::actionHeight);
 }
 void PageScrubber::setLinksAction(const QString &label) {
     if (linksAction->text() == label) {
@@ -719,11 +719,11 @@ void PageScrubber::arrange() {
     const bool hasLinks = !linksAction->isHidden(), hasReturn = !returnAction->isHidden();
     const int idealLinks = hasLinks ? linksAction->sizeHint().width() + 2 * edge : 0;
     const int idealReturn = hasReturn ? returnAction->sizeHint().width() + edge : 0;
-    const int closeWidth = hasReturn ? int(m::closeWidth) : 0;
-    const int gap = hasLinks && hasReturn ? int(m::gap) : 0;
-    const int idealImage = imageLabel.isEmpty() ? 0 : imageAction->sizeHint().width() + edge + int(m::closeWidth);
-    const int imageGap = hasLinks || hasReturn ? int(m::gap) : 0;
-    const int available = qMax(0, width() - 2 * int(m::gap));
+    const int closeWidth = hasReturn ? int(scrubber::closeWidth) : 0;
+    const int gap = hasLinks && hasReturn ? int(scrubber::gap) : 0;
+    const int idealImage = imageLabel.isEmpty() ? 0 : imageAction->sizeHint().width() + edge + int(scrubber::closeWidth);
+    const int imageGap = hasLinks || hasReturn ? int(scrubber::gap) : 0;
+    const int available = qMax(0, width() - 2 * int(scrubber::gap));
     const bool hasImage = idealImage && (!(hasLinks || hasReturn) ||
                          idealImage + imageGap + idealLinks + gap + idealReturn + closeWidth <= available);
     imageAction->setVisible(hasImage);
@@ -736,8 +736,8 @@ void PageScrubber::arrange() {
     const QRect center = previewBounds();
     const QSize side(qMax(1, qRound(center.width() * .92)), qMax(1, qRound(center.height() * .92)));
     const int y = center.center().y() - side.height() / 2;
-    preceding->setGeometry(center.left() - int(m::gap) - side.width(), y, side.width(), side.height());
-    following->setGeometry(center.right() + 1 + int(m::gap), y, side.width(), side.height());
+    preceding->setGeometry(center.left() - int(scrubber::gap) - side.width(), y, side.width(), side.height());
+    following->setGeometry(center.right() + 1 + int(scrubber::gap), y, side.width(), side.height());
     preceding->setVisible(selecting() && candidate > 0);
     following->setVisible(selecting() && candidate < totalPages - 1);
     barRule->setVisible(mapVisible);
@@ -762,27 +762,27 @@ void PageScrubber::arrange() {
     barRule->setGeometry(0, bar.top(), width(), metrics::control::border);
     previous->setGeometry(0, bar.top(), button, bar.height());
     next->setGeometry(qMax(0, width() - button), bar.top(), button, bar.height());
-    zoomOut->setGeometry(0, bar.top() - int(m::overviewHeight), button, m::overviewHeight);
-    zoomIn->setGeometry(qMax(0, width() - button), zoomOut->y(), button, m::overviewHeight);
-    const int x = previous->geometry().right() + 1 + int(m::gap);
-    const int trackWidth = qMax(1, next->x() - int(m::gap) - x);
-    position->setGeometry(x, bar.top() + int(m::verticalPadding), trackWidth, position->minimumHeight());
-    rangeLabel->setGeometry(x, position->geometry().bottom() + 1, trackWidth, m::rangeLabelHeight);
-    overview->setGeometry(x, zoomOut->y() + int(m::verticalPadding), trackWidth,
-                          int(m::overviewHeight - m::rangeLabelHeight - 2 * m::verticalPadding));
-    overview->setContentsMargins(0, 0, 0, m::overviewBottomPadding);
-    overviewLabel->setGeometry(x, overview->geometry().bottom() + 1 - int(m::overviewBottomPadding), trackWidth,
-                               m::rangeLabelHeight);
+    zoomOut->setGeometry(0, bar.top() - int(scrubber::overviewHeight), button, scrubber::overviewHeight);
+    zoomIn->setGeometry(qMax(0, width() - button), zoomOut->y(), button, scrubber::overviewHeight);
+    const int x = previous->geometry().right() + 1 + int(scrubber::gap);
+    const int trackWidth = qMax(1, next->x() - int(scrubber::gap) - x);
+    position->setGeometry(x, bar.top() + int(scrubber::verticalPadding), trackWidth, position->minimumHeight());
+    rangeLabel->setGeometry(x, position->geometry().bottom() + 1, trackWidth, scrubber::rangeLabelHeight);
+    overview->setGeometry(x, zoomOut->y() + int(scrubber::verticalPadding), trackWidth,
+                          int(scrubber::overviewHeight - scrubber::rangeLabelHeight - 2 * scrubber::verticalPadding));
+    overview->setContentsMargins(0, 0, 0, scrubber::overviewBottomPadding);
+    overviewLabel->setGeometry(x, overview->geometry().bottom() + 1 - int(scrubber::overviewBottomPadding), trackWidth,
+                               scrubber::rangeLabelHeight);
     const int inset = metrics::control::sliderInset;
     const int endpointWidth = qMax(1, (trackWidth - 2 * inset) / 4);
     for (auto *label : {rangeStart, overviewStart}) {
         label->setGeometry(x + inset, label == rangeStart ? rangeLabel->y() : overviewLabel->y(), endpointWidth,
-                           m::rangeLabelHeight);
+                           scrubber::rangeLabelHeight);
     }
     for (auto *label : {rangeEnd, overviewEnd}) {
         label->setGeometry(x + trackWidth - inset - endpointWidth,
                            label == rangeEnd ? rangeLabel->y() : overviewLabel->y(), endpointWidth,
-                           m::rangeLabelHeight);
+                           scrubber::rangeLabelHeight);
     }
     const int rowHeight = actionsHeight();
     actions->setVisible(rowHeight > 0);
@@ -791,10 +791,10 @@ void PageScrubber::arrange() {
     const int linksWidth = labels ? qMin(idealLinks, room * idealLinks / labels) : 0;
     const int returnWidth = labels ? qMin(idealReturn, room - linksWidth) : 0;
     const int groupWidth = imageSpace + linksWidth + gap + returnWidth + closeWidth;
-    const int groupTop = panelBounds().top() - rowHeight - int(m::gap);
+    const int groupTop = panelBounds().top() - rowHeight - int(scrubber::gap);
     actions->setGeometry((width() - groupWidth) / 2, groupTop, groupWidth, rowHeight);
-    const int top = m::actionTop, body = m::actionHeight;
-    const int imageClose = hasImage ? qMin(imageWidth, int(m::closeWidth)) : 0;
+    const int top = scrubber::actionTop, body = scrubber::actionHeight;
+    const int imageClose = hasImage ? qMin(imageWidth, int(scrubber::closeWidth)) : 0;
     const int imageButton = imageWidth - imageClose;
     imageAction->setGeometry(edge, top + edge, qMax(0, imageButton - edge), body - 2 * edge);
     imageAction->setRule({});
@@ -866,16 +866,16 @@ void PageScrubber::updateCaption() {
     }
     const QString pageLabel = strings::get("reader.menu_page_of").arg(page + 1).arg(totalPages);
     const QString label = chapterName.isEmpty() ? pageLabel : pageLabel + QStringLiteral(" · ") + chapterName;
-    captionBackground->setGeometry(0, panelBounds().top(), width(), m::captionHeight);
+    captionBackground->setGeometry(0, panelBounds().top(), width(), scrubber::captionHeight);
     captionBackground->show();
     chapterLabel->setGeometry(captionBackground->geometry());
     const int toggleWidth = zoomAvailable() ? int(metrics::chrome::cellWidth) : 0;
     overviewToggle->setGeometry(width() - toggleWidth, captionBackground->y() + int(metrics::chrome::heavyRule),
                                 toggleWidth,
-                                int(m::captionHeight - metrics::chrome::heavyRule - metrics::control::border));
+                                int(scrubber::captionHeight - metrics::chrome::heavyRule - metrics::control::border));
     overviewRule->setGeometry(overviewToggle->geometry().adjusted(-int(metrics::control::border), 0, 0, 0));
     chapterLabel->setText(
-        elideInterfaceText(label, chapterLabel->font(), chapterLabel->width() - 2 * (int(m::padding) + toggleWidth)));
+        elideInterfaceText(label, chapterLabel->font(), chapterLabel->width() - 2 * (int(scrubber::padding) + toggleWidth)));
     chapterLabel->setAccessibleName(label);
     chapterLabel->show();
 }

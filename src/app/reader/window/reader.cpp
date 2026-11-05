@@ -47,7 +47,7 @@
 namespace kobalt::reader {
 namespace strings = kobalt::strings;
 using namespace kobalt::storage;
-namespace m = kobalt::ui::metrics;
+namespace metrics = kobalt::ui::metrics;
 using kobalt::ui::makeButton;
 using kobalt::platform::textRefresh;
 using kobalt::Choice;
@@ -1149,8 +1149,8 @@ void Reader::resizeEvent(QResizeEvent *) {
     }
     header->setGeometry(0, 0, width(), page->topHeight());
     header->setVisible(page->topHeight() > 0);
-    topControls->setGeometry(0, 0, width(), navigation ? navigation->toolbarHeight() : m::panel::toolbarHeight);
-    bottomControls->setGeometry(m::panel::footer(size()));
+    topControls->setGeometry(0, 0, width(), navigation ? navigation->toolbarHeight() : metrics::panel::toolbarHeight);
+    bottomControls->setGeometry(metrics::panel::footer(size()));
     fitAppearance();
     if (navigation)
         chapterGraph->setAvailableHeight(navigation->contentBottom(size()) - navigation->toolbarHeight());
@@ -1165,7 +1165,7 @@ void Reader::resizeEvent(QResizeEvent *) {
     bookmarkList->setGeometry(0, bookmarkTop, width(),
                               (navigation ? navigation->contentBottom(size()) : height()) - bookmarkTop);
     busyNotice->setGeometry(rect());
-    busyNotice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    busyNotice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     busyNotice->centerCard();
     brightnessNotice->centerIn(size());
     annotationModeNotice->centerIn(size());
@@ -1374,7 +1374,7 @@ void Reader::updateLinkReturn() {
                            !choices->isVisible() && !searchPanel->isVisible() && !dictionaryPanel->isVisible();
     linkReturnAvailable = available;
     linkReturn->setVisible(available);
-    const int footerHeight = m::panel::footerHeight + (available ? m::links::returnHeight + m::panel::footerGap : 0);
+    const int footerHeight = metrics::panel::footerHeight + (available ? metrics::links::returnHeight + metrics::panel::footerGap : 0);
     bottomControls->setGeometry(0, height() - footerHeight, width(), footerHeight);
     syncNavigation();
 }
@@ -1388,7 +1388,7 @@ bool Reader::openLink(QPoint point, bool direct) {
     const auto links = session->pageLinks();
     const auto hit = linkAtPoint(links, point,
                                 direct ? preferences.value("tappable_links").toString("footnotes") : QString("all"),
-                                int(m::links::revealPadding), direct ? 0 : ui::px(6));
+                                int(metrics::links::revealPadding), direct ? 0 : ui::px(6));
     if (hit.index >= 0) {
         const auto &link = links[hit.index];
         const auto bounds = hit.bounds;
@@ -1623,7 +1623,7 @@ void Reader::activateNavigation(kobalt::NavigationDestination destination) {
 
 QRect Reader::panelBounds(int panelHeight) const {
     return navigation ? navigation->panelBounds(size(), panelHeight)
-                      : QRect(0, m::panel::toolbarHeight, width(), panelHeight);
+                      : QRect(0, metrics::panel::toolbarHeight, width(), panelHeight);
 }
 
 void Reader::syncStatusBoundary() {
@@ -1710,11 +1710,11 @@ void Reader::syncLinkDiscovery() {
     // compact outlined box inside it, in the strip's text size.
     const auto stripButton = [&](QPushButton *button, int strip, int text) {
         const int box =
-            qMin(strip - 2 * int(m::links::stripButtonInset),
-                 ui::interfaceLineHeight(ui::interfaceFont(text)) + 2 * int(m::links::stripButtonInset));
+            qMin(strip - 2 * int(metrics::links::stripButtonInset),
+                 ui::interfaceLineHeight(ui::interfaceFont(text)) + 2 * int(metrics::links::stripButtonInset));
         restyle(button, styles::outlined() + QString("QPushButton{%1min-height:0;padding:0 %2px;margin:%3px 0;}")
                                                  .arg(styles::font(text))
-                                                 .arg(int(m::links::stripButtonPadding))
+                                                 .arg(int(metrics::links::stripButtonPadding))
                                                  .arg(qMax(0, (strip - box) / 2)));
         button->setFixedHeight(strip);
     };
@@ -1728,8 +1728,8 @@ void Reader::syncLinkDiscovery() {
         // number. Without a footer it stays just above the bottom edge.
         QRect strip = page->footerTextRect();
         if (strip.isEmpty())
-            strip = QRect(0, height() - page->bottomHeight() - m::reading::stripHeight(page->chrome.footerSize),
-                          width(), m::reading::stripHeight(page->chrome.footerSize));
+            strip = QRect(0, height() - page->bottomHeight() - metrics::reading::stripHeight(page->chrome.footerSize),
+                          width(), metrics::reading::stripHeight(page->chrome.footerSize));
         strip.translate(page->mapTo(this, QPoint()));
         const int text = page->footerTextPixels();
         linkIndicator->setText(QString::number(count));
@@ -1739,7 +1739,7 @@ void Reader::syncLinkDiscovery() {
         linkIndicator->setIconSize(QSize(text, text));
         stripButton(linkIndicator, strip.height(), text);
         linkIndicator->adjustSize();
-        linkIndicator->move(strip.right() + 1 - m::reading::headerSide - linkIndicator->width(), strip.y());
+        linkIndicator->move(strip.right() + 1 - metrics::reading::headerSide - linkIndicator->width(), strip.y());
         linkIndicator->raise();
     }
 
@@ -1765,8 +1765,8 @@ void Reader::syncLinkDiscovery() {
         linkDiscovery->setEdges({});
         linkDiscovery->setDividers(top ? Qt::BottomEdge : Qt::TopEdge);
         // Children paint their own background, so keep them off the divider.
-        const int border = m::control::border;
-        row->setContentsMargins(m::reading::headerSide, top ? 0 : border, m::reading::headerSide, top ? border : 0);
+        const int border = metrics::control::border;
+        row->setContentsMargins(metrics::reading::headerSide, top ? 0 : border, metrics::reading::headerSide, top ? border : 0);
         const QString stripText = QString("QLabel{font-family:'%1';%2color:%3;}")
                                       .arg(kobalt::ui::headerFooterFont().family())
                                       .arg(styles::font(text))
@@ -1777,19 +1777,19 @@ void Reader::syncLinkDiscovery() {
     } else {
         // Above the tabs the row matches the return row: the same height, the
         // icon in the same column and a divider instead of a second heavy rule.
-        const int rule = m::chrome::heavyRule;
+        const int rule = metrics::chrome::heavyRule;
         linkDiscovery->setEdges(Qt::TopEdge);
         linkDiscovery->setDividers(navigation ? Qt::BottomEdge : kobalt::ui::Edges());
-        row->setContentsMargins(m::chrome::inset, rule, m::chrome::inset, m::control::border);
+        row->setContentsMargins(metrics::chrome::inset, rule, metrics::chrome::inset, metrics::control::border);
         linkDiscoveryIcon->setPixmap(kobalt::ui::controlIcon(kobalt::ui::ControlIcon::Link, ink)
-                                         .pixmap(m::control::iconSize, m::control::iconSize));
+                                         .pixmap(metrics::control::iconSize, metrics::control::iconSize));
         restyle(linkDiscoveryHint,
-                QString("QLabel{%1color:%2;}").arg(styles::font(m::chrome::labelText)).arg(ink.name()));
-        restyle(linkDiscoveryToggle, styles::outlined() + "QPushButton{" + styles::font(m::chrome::labelText) + "}");
+                QString("QLabel{%1color:%2;}").arg(styles::font(metrics::chrome::labelText)).arg(ink.name()));
+        restyle(linkDiscoveryToggle, styles::outlined() + "QPushButton{" + styles::font(metrics::chrome::labelText) + "}");
         linkDiscoveryToggle->setText(label);
         // Cover the navigation's own heavy rule, so its tabs start below this divider.
         const int bottom = navigation ? navigation->navigationTop() + rule : bottomControls->y();
-        const int rowHeight = m::links::returnHeight + rule;
+        const int rowHeight = metrics::links::returnHeight + rule;
         linkDiscovery->setGeometry(0, qMax(0, bottom - rowHeight), width(), rowHeight);
     }
     if (linkDiscovery->isVisible())
@@ -1899,10 +1899,10 @@ void Reader::syncNavigation() {
         // short screen has no room for the slot map there, so the sheet covers
         // the action row with its own bar, as Chapters does.
         const int top = isShortHeight(height(), ui::density()) ? navigation->statusHeight()
-                                                              : navigation->toolbarHeight() - int(m::chrome::heavyRule);
+                                                              : navigation->toolbarHeight() - int(metrics::chrome::heavyRule);
         const int room = qMax(1, bottom - top);
         int sheetHeight = qMin(headerFooterView->preferredHeight(width()), room);
-        if (room - sheetHeight < m::headerFooter::toolbarSnap) {
+        if (room - sheetHeight < metrics::headerFooter::toolbarSnap) {
             sheetHeight = room;
         }
         headerFooterView->setGeometry(0, bottom - sheetHeight, width(), sheetHeight);

@@ -20,7 +20,7 @@
 #include <utility>
 
 namespace kobalt::reader {
-namespace m = kobalt::ui::metrics;
+namespace metrics = kobalt::ui::metrics;
 namespace strings = kobalt::strings;
 namespace {
 const char *exportFormatName(AnnotationExportFormat format) {
@@ -140,7 +140,7 @@ void Reader::confirmMarksExport(AnnotationExportFormat format, bool replace, con
         if (session->busy() || closing || lifecycleHidden || services.suspended() || book->deviceTransition()) return;
         accepted();
     });
-    dialog->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    dialog->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     dialog->centerCard();
     dialog->show();
     dialog->raise();
@@ -207,7 +207,7 @@ void Reader::finishMarksExport(AnnotationExportFormat format, bool saved, const 
     };
     notice->dismissed = done;
     connect(notice->primaryButton(), &QPushButton::clicked, this, done);
-    notice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    notice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     notice->centerCard();
     notice->show();
     notice->raise();
@@ -236,7 +236,7 @@ void Reader::buildAnnotations() {
         paintAnnotationDraft();
     };
     auto *rows = annotationPopover->card()->rows();
-    rows->setContentsMargins(m::control::border, m::control::border, m::control::border, m::control::border);
+    rows->setContentsMargins(metrics::control::border, metrics::control::border, metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
     annotationPopover->hide();
 }
@@ -319,14 +319,14 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
         card->message(strings::get("annotations.overlap"), "rrAnnotationOverlap");
     if (!highlights->writable() && !highlights->error().isEmpty())
         card->message(strings::get("annotations.load_failed"), "rrAnnotationLoadError");
-    int desiredWidth = m::links::popupWidth;
+    int desiredWidth = metrics::links::popupWidth;
     const auto section = [card, rows](const char *name, const char *key, bool divider = false) {
         auto *header = new ui::Panel(card);
         header->setDividers(ui::Edges(Qt::BottomEdge) | (divider ? ui::Edges(Qt::TopEdge) : ui::Edges{}));
         header->setObjectName(name);
         header->setFixedHeight(ui::px(40));
         auto *layout = new QHBoxLayout(header);
-        layout->setContentsMargins(m::chrome::inset, 0, m::chrome::inset, 0);
+        layout->setContentsMargins(metrics::chrome::inset, 0, metrics::chrome::inset, 0);
         auto *label = new ui::InterfaceLabel(strings::get(key), header);
         ui::captionLabel(label);
         layout->addWidget(label);
@@ -358,8 +358,8 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
     }
     const int paletteHeight = colorAnnotations() && colorChanged ? ui::HighlightPalette::compactHeight() : 0;
     const int rowHeight = qBound(
-        ui::px(56), (height() - 2 * int(m::notice::sideClearance) - paletteHeight) / qMax(1, int(menuActions.size())),
-        int(m::links::actionHeight));
+        ui::px(56), (height() - 2 * int(metrics::notice::sideClearance) - paletteHeight) / qMax(1, int(menuActions.size())),
+        int(metrics::links::actionHeight));
     const bool compact = compactActions && menuActions.size() <= 4;
     if (styleChanged)
         section("rrAnnotationActionsSection", "annotations.actions_section", true);
@@ -372,7 +372,7 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
             labelWidth = qMax(labelWidth, ui::interfaceTextWidth(action.label, font));
         // Qt can elide at the rounded text advance. Leave room for fractional glyph widths.
         desiredWidth = qMax(desiredWidth, columns * (labelWidth + ui::px(4) + 2 * ui::px(16)) +
-                                           2 * int(m::control::border));
+                                           2 * int(metrics::control::border));
         auto *strip = new QWidget(card);
         strip->setFixedHeight(ui::px(104) * ((menuActions.size() + columns - 1) / columns));
         buttons = new QGridLayout(strip);
@@ -411,9 +411,9 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
             ui::readerStyle(button,
                             QString("QPushButton{min-height:%1px;max-height:%1px;padding:0;border:none;}").arg(rowHeight));
             button->ensurePolished();
-            const int rowWidth = m::chrome::inset + m::chrome::cellIcon + ui::px(20) +
-                                 ui::interfaceTextWidth(action.label, button->font()) + m::chrome::actionRight;
-            desiredWidth = qMax(desiredWidth, rowWidth + 2 * int(m::control::border));
+            const int rowWidth = metrics::chrome::inset + metrics::chrome::cellIcon + ui::px(20) +
+                                 ui::interfaceTextWidth(action.label, button->font()) + metrics::chrome::actionRight;
+            desiredWidth = qMax(desiredWidth, rowWidth + 2 * int(metrics::control::border));
         }
     }
     for (int i = 0; i < rows->count(); ++i)
@@ -422,7 +422,7 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
             widget->show();
         }
     rows->activate();
-    card->fitToWidth(qMin(desiredWidth, width() - 2 * int(m::notice::sideClearance)));
+    card->fitToWidth(qMin(desiredWidth, width() - 2 * int(metrics::notice::sideClearance)));
     annotationPopover->anchorTo(anchor);
     for (auto *widget : annotationPopover->findChildren<QWidget *>()) {
         widget->setPalette(palette());
@@ -1378,7 +1378,7 @@ void Reader::showSavedAnnotationAt(const QString &id, QRect anchor, bool navigat
 void Reader::showAnnotationMatches(QVector<QString> ids, QRect anchor, int listPage) {
     const int reservedRows = annotationMode ? (annotationStart.isEmpty() ? 4 : 5) : 3;
     const int pageSize =
-        qBound(1, (height() - 2 * int(m::notice::sideClearance)) / int(m::links::actionHeight) - reservedRows, 3);
+        qBound(1, (height() - 2 * int(metrics::notice::sideClearance)) / int(metrics::links::actionHeight) - reservedRows, 3);
     const int pages = qMax(1, (ids.size() + pageSize - 1) / pageSize);
     listPage = qBound(0, listPage, pages - 1);
     QVector<AnnotationAction> actions;
@@ -1452,7 +1452,7 @@ void Reader::removeAnnotation(const QString &id) {
     choice->setObjectName("rrRemoveAnnotation");
     auto *text = choice->descriptionLabel();
     text->setObjectName("rrRemoveAnnotationDetail");
-    ui::readerStyle(text, ui::styles::font(m::chrome::descriptionText) + "color:palette(placeholder-text);");
+    ui::readerStyle(text, ui::styles::font(metrics::chrome::descriptionText) + "color:palette(placeholder-text);");
     const auto finish = [this, id, choice](bool remove) {
         choice->hide();
         choice->deleteLater();
@@ -1468,7 +1468,7 @@ void Reader::removeAnnotation(const QString &id) {
     connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] {
         finish(true);
     });
-    choice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    choice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     choice->centerCard();
     choice->show();
     choice->raise();

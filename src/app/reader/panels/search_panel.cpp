@@ -16,11 +16,11 @@
 #include <QtMath>
 
 namespace kobalt {
-namespace m = ui::metrics;
-namespace c = ui::metrics::chrome;
+namespace metrics = ui::metrics;
+namespace chrome = ui::metrics::chrome;
 SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Panel(parent) {
     setObjectName("rrSearch");
-    back = new ui::CellButton(ui::ControlIcon::Back, this, c::backIcon);
+    back = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
     back->setObjectName("rrSearchBack");
     back->setRule(Qt::RightEdge);
     back->setAccessibleName(strings::get("common.back"));
@@ -28,8 +28,8 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     query->setObjectName("rrSearchQuery");
     query->setMaxLength(256);
     ui::readerStyle(query, "QLineEdit{border:none;padding:0;background:palette(window);" +
-                               ui::styles::font(c::queryText) + "}");
-    query->setTextMargins(c::inset - m::control::border, 0, m::search::clearWidth + m::search::clearRight, 0);
+                               ui::styles::font(chrome::queryText) + "}");
+    query->setTextMargins(chrome::inset - metrics::control::border, 0, metrics::search::clearWidth + metrics::search::clearRight, 0);
     query->setPlaceholderText(strings::get("search_panel.find_a_word_or_phrase"));
     query->setClearButtonEnabled(false);
     clear = ui::makeButton(query, nullptr, "rrSearchClear", {}, [this] {
@@ -39,7 +39,7 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     });
     clear->setAccessibleName(strings::get("search_panel.clear_search"));
     ui::buttonIcon(clear, ui::ControlIcon::Close);
-    clear->setIconSize(QSize(m::search::clearIcon, m::search::clearIcon));
+    clear->setIconSize(QSize(metrics::search::clearIcon, metrics::search::clearIcon));
     ui::readerStyle(
         clear,
         "QPushButton{border:none;padding:0;min-height:0;background:palette(window);} QPushButton:pressed{background:palette(midlight);}");
@@ -55,7 +55,7 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     keyboard->submitted = [this] {
         run();
     };
-    submit = new ui::CellButton(ui::ControlIcon::Search, this, c::backIcon);
+    submit = new ui::CellButton(ui::ControlIcon::Search, this, chrome::backIcon);
     submit->setObjectName("rrSearchSubmit");
     submit->setRule(Qt::LeftEdge);
     submit->setAccessibleName(strings::get("search_panel.search"));
@@ -90,20 +90,20 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     empty->setObjectName("rrSearchEmpty");
     empty->setTextFormat(Qt::PlainText);
     empty->setWordWrap(true);
-    ui::readerStyle(empty, ui::styles::font(c::labelText) + "background:transparent;");
+    ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
     hint = new ui::InterfaceLabel(this);
     hint->setObjectName("rrSearchHint");
     hint->setTextFormat(Qt::PlainText);
     hint->setWordWrap(true);
     ui::readerStyle(hint,
-                    ui::styles::font(c::descriptionText) + "background:transparent;color:palette(placeholder-text);");
+                    ui::styles::font(chrome::descriptionText) + "background:transparent;color:palette(placeholder-text);");
     edit = ui::makeCaptionButton(this, nullptr, "rrSearchEdit", strings::get("search_panel.edit"), [this] {
         query->setFocus();
         keyboard->show();
     });
     for (auto *action : {original, edit}) {
         action->setRule(Qt::BottomEdge);
-        ui::readerStyle(action, ui::styles::font(c::labelText));
+        ui::readerStyle(action, ui::styles::font(chrome::labelText));
     }
     edit->setRule(ui::Edges(Qt::TopEdge) | Qt::BottomEdge);
     updates.setSingleShot(true);
@@ -158,7 +158,7 @@ QFont SearchPanel::excerptFont() const {
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setWeight(QFont::Normal);
     font.setItalic(false);
-    font.setPixelSize(m::search::excerptText);
+    font.setPixelSize(metrics::search::excerptText);
     return font;
 }
 QString SearchPanel::caption(const SearchHit &hit) const {
@@ -241,44 +241,44 @@ void SearchPanel::paintEvent(QPaintEvent *event) {
     ui::paintHeaderRules(painter, this);
 }
 void SearchPanel::redraw() {
-    const int first = resultPage * pageSize, textWidth = qMax(1, width() - 2 * c::inset);
+    const int first = resultPage * pageSize, textWidth = qMax(1, width() - 2 * chrome::inset);
     const auto font = excerptFont();
     // Book text keeps a reading line height rather than the tight UI default.
-    const QString excerptBlock = QString("<div style=\"line-height:%1%\">%2</div>").arg(m::search::excerptLineHeight);
+    const QString excerptBlock = QString("<div style=\"line-height:%1%\">%2</div>").arg(metrics::search::excerptLineHeight);
     if (!rowHeight || measuredWidth != width()) {
         measuredWidth = width();
         // Room for two excerpt lines, or for a long bold match on its own.
         QStringList sample;
-        for (int line = 0; line < m::search::excerptLines; ++line)
+        for (int line = 0; line < metrics::search::excerptLines; ++line)
             sample.append("M");
         qreal lines = ui::excerptTextHeight(excerptBlock.arg(sample.join("<br>")), font, textWidth);
         lines =
             qMax(lines, ui::excerptTextHeight(excerptBlock.arg("<b><u>" + submittedQuery.toHtmlEscaped() + "</u></b>"),
                                               font, textWidth));
-        rowHeight = qMax(int(m::list::threeLines), m::search::excerptTop + qCeil(lines) + m::search::rowBottom);
+        rowHeight = qMax(int(metrics::list::threeLines), metrics::search::excerptTop + qCeil(lines) + metrics::search::rowBottom);
     }
     const bool returning = canReturn && !hits.isEmpty();
-    const int listTop = c::headerHeight() + (returning ? m::list::twoLines : 0);
-    pageSize = qMax(1, (height() - listTop - c::actionHeight) / rowHeight);
+    const int listTop = chrome::headerHeight() + (returning ? metrics::list::twoLines : 0);
+    pageSize = qMax(1, (height() - listTop - chrome::actionHeight) / rowHeight);
     const int count = qMax(1, (int(hits.size()) + pageSize - 1) / pageSize);
     resultPage = qBound(0, first / pageSize, count - 1);
-    status->setGeometry(c::inset, 0, textWidth, c::statusHeight - m::control::border);
-    const int cellHeight = c::actionHeight - c::heavyRule;
-    back->setGeometry(0, c::statusHeight, c::cellWidth, cellHeight);
-    submit->setGeometry(width() - c::cellWidth, c::statusHeight, c::cellWidth, cellHeight);
-    query->setGeometry(c::cellWidth, c::statusHeight, qMax(1, width() - 2 * c::cellWidth), cellHeight);
-    clear->setGeometry(query->width() - m::search::clearWidth - m::search::clearRight, 0, m::search::clearWidth,
+    status->setGeometry(chrome::inset, 0, textWidth, chrome::statusHeight - metrics::control::border);
+    const int cellHeight = chrome::actionHeight - chrome::heavyRule;
+    back->setGeometry(0, chrome::statusHeight, chrome::cellWidth, cellHeight);
+    submit->setGeometry(width() - chrome::cellWidth, chrome::statusHeight, chrome::cellWidth, cellHeight);
+    query->setGeometry(chrome::cellWidth, chrome::statusHeight, qMax(1, width() - 2 * chrome::cellWidth), cellHeight);
+    clear->setGeometry(query->width() - metrics::search::clearWidth - metrics::search::clearRight, 0, metrics::search::clearWidth,
                        query->height());
-    pager->setGeometry(0, height() - c::actionHeight, width(), c::actionHeight);
+    pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     pager->setPage(resultPage, count,
                    strings::get("search_panel.result_range")
                        .arg(resultPage * pageSize + 1)
                        .arg(qMin((resultPage + 1) * pageSize, int(hits.size()))),
                    true);
     const int used = listTop + qMin(pageSize, qMax(0, int(hits.size()) - resultPage * pageSize)) * rowHeight;
-    pager->setBlankArea({c::inset, used, width() - 2 * c::inset, pager->y() - used});
+    pager->setBlankArea({chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used});
     original->setVisible(returning);
-    original->setGeometry(0, c::headerHeight(), width(), m::list::twoLines);
+    original->setGeometry(0, chrome::headerHeight(), width(), metrics::list::twoLines);
     const bool waiting = hits.isEmpty() && !scanning;
     empty->setVisible(waiting);
     hint->setVisible(waiting);
@@ -288,16 +288,16 @@ void SearchPanel::redraw() {
     hint->setText(submittedQuery.isEmpty() ? strings::get("search_panel.search_hint")
                                            : strings::get("search_panel.no_matches_hint"));
     const int emptyHeight = empty->heightForWidth(textWidth), hintHeight = hint->heightForWidth(textWidth);
-    empty->setGeometry(c::inset, c::headerHeight() + m::search::emptyTop, textWidth, emptyHeight);
-    hint->setGeometry(c::inset, empty->geometry().bottom() + 1 + c::textGap, textWidth, hintHeight);
-    edit->setGeometry(0, hint->geometry().bottom() + 1 + m::search::emptyBottom, width(), m::list::twoLines);
+    empty->setGeometry(chrome::inset, chrome::headerHeight() + metrics::search::emptyTop, textWidth, emptyHeight);
+    hint->setGeometry(chrome::inset, empty->geometry().bottom() + 1 + chrome::textGap, textWidth, hintHeight);
+    edit->setGeometry(0, hint->geometry().bottom() + 1 + metrics::search::emptyBottom, width(), metrics::list::twoLines);
     auto family = font.family();
     family.replace('\\', "\\\\");
     family.replace('"', "\\\"");
     const auto excerptStyle =
         QString("background:transparent;border:none;font-family:\"%1\";font-size:%2px;font-weight:400;")
             .arg(family)
-            .arg(int(m::search::excerptText));
+            .arg(int(metrics::search::excerptText));
     while (buttons.size() < pageSize) {
         const int row = buttons.size();
         renderedStarts.append(QString());
@@ -319,7 +319,7 @@ void SearchPanel::redraw() {
             QString(
                 "QPushButton{border:none;border-radius:0;border-bottom:%1px solid palette(light);background:palette(window);min-height:0;padding:0;}"
                 " QPushButton:pressed{background:palette(midlight);}")
-                .arg(int(m::control::border)));
+                .arg(int(metrics::control::border)));
         connect(button, &QPushButton::clicked, this, [this, row] {
             const int index = resultPage * pageSize + row;
             if (index < hits.size() && selected) {
@@ -336,10 +336,10 @@ void SearchPanel::redraw() {
             continue;
         const auto &hit = hits[index];
         buttons[row]->setGeometry(0, listTop + row * rowHeight, width(), rowHeight);
-        metadata[row]->setGeometry(c::inset, m::search::captionTop, textWidth,
-                                   m::search::excerptTop - m::search::captionTop - c::textGap);
-        labels[row]->setGeometry(c::inset, m::search::excerptTop, textWidth,
-                                 rowHeight - m::search::excerptTop - m::search::rowBottom);
+        metadata[row]->setGeometry(chrome::inset, metrics::search::captionTop, textWidth,
+                                   metrics::search::excerptTop - metrics::search::captionTop - chrome::textGap);
+        labels[row]->setGeometry(chrome::inset, metrics::search::excerptTop, textWidth,
+                                 rowHeight - metrics::search::excerptTop - metrics::search::rowBottom);
         if (labels[row]->property("reader_style").toString() != excerptStyle)
             ui::readerStyle(labels[row], excerptStyle);
         if (renderedStarts[row] == hit.start && renderedSizes[row] == labels[row]->size())

@@ -14,7 +14,6 @@
 #include <utility>
 
 namespace kobalt::ui {
-namespace m = metrics;
 namespace {
 class RowTitle final : public PrivateTextLabel {
 public:
@@ -23,7 +22,7 @@ public:
     bool hasIcon = false;
     bool optical = false;
     int iconInset() const {
-        return hasIcon ? fontMetrics().height() + qMax(0, int(m::chrome::selectorGap) - px(5)) : 0;
+        return hasIcon ? fontMetrics().height() + qMax(0, int(metrics::chrome::selectorGap) - px(5)) : 0;
     }
 
 protected:
@@ -59,8 +58,8 @@ ListRow::ListRow(QWidget *parent) : Button(parent) {
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         label->setStyleSheet("background:transparent;border:none;");
     }
-    readerStyle(title, styles::font(m::chrome::labelText) + "background:transparent;border:none;");
-    readerStyle(detail, styles::font(m::chrome::descriptionText) + "background:transparent;border:none;");
+    readerStyle(title, styles::font(metrics::chrome::labelText) + "background:transparent;border:none;");
+    readerStyle(detail, styles::font(metrics::chrome::descriptionText) + "background:transparent;border:none;");
     ui::captionLabel(caption);
     ui::captionLabel(leading);
     ui::captionLabel(trailing);
@@ -208,8 +207,8 @@ void ListRow::setActionIcon(ControlIcon icon) {
 QSize ListRow::sizeHint() const {
     const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
     if (lines > 3)
-        return {0, int(m::list::threeLines) + (lines - 3) * detail->fontMetrics().height() + titleGap};
-    return {0, (lines == 3 ? int(m::list::threeLines) : lines == 2 ? int(m::list::twoLines) : int(m::list::oneLine)) + titleGap};
+        return {0, int(metrics::list::threeLines) + (lines - 3) * detail->fontMetrics().height() + titleGap};
+    return {0, (lines == 3 ? int(metrics::list::threeLines) : lines == 2 ? int(metrics::list::twoLines) : int(metrics::list::oneLine)) + titleGap};
 }
 void ListRow::resizeEvent(QResizeEvent *) {
     arrange();
@@ -217,7 +216,7 @@ void ListRow::resizeEvent(QResizeEvent *) {
 void ListRow::moveEvent(QMoveEvent *) {
     // Sibling actions stay enabled when their row cannot be opened.
     if (action && action->parentWidget() != this)
-        action->move(x() + width() - m::chrome::cellWidth, y());
+        action->move(x() + width() - metrics::chrome::cellWidth, y());
 }
 void ListRow::changeEvent(QEvent *event) {
     Button::changeEvent(event);
@@ -310,18 +309,18 @@ void ListRow::arrange() {
     if (!title || arranging || synchronizing)
         return;
     arranging = true;
-    const int end = width() - (action ? int(m::chrome::cellWidth) : 0) - m::list::inset;
-    const int lead = hasLeadingIcon ? int(m::control::iconSize + m::chrome::selectorGap)
-                     : leadingText.isEmpty() ? 0 : int(m::list::leadingWidth);
+    const int end = width() - (action ? int(metrics::chrome::cellWidth) : 0) - metrics::list::inset;
+    const int lead = hasLeadingIcon ? int(metrics::control::iconSize + metrics::chrome::selectorGap)
+                     : leadingText.isEmpty() ? 0 : int(metrics::list::leadingWidth);
     const auto *trailingCaption = accessory.caption();
     const int trail = trailingCaption ? qMax(trailingCaption->reservedWidth, trailing->textWidth(trailingCaption->text))
                       : accessory.kind() == Accessory::Kind::None ? 0
-                                                                  : int(m::chrome::cellIcon);
-    const int start = m::list::inset + lead + indentation;
-    const int textWidth = qMax(0, end - start - trail - (trail ? int(m::contents::pageGap) : 0));
+                                                                  : int(metrics::chrome::cellIcon);
+    const int start = metrics::list::inset + lead + indentation;
+    const int textWidth = qMax(0, end - start - trail - (trail ? int(metrics::contents::pageGap) : 0));
     const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
-    const int top = lines == 1 ? 0 : int(m::list::lineInset);
-    const int lineHeight = qMax(1, (height() - 2 * top - titleGap - m::control::border) / lines);
+    const int top = lines == 1 ? 0 : int(metrics::list::lineInset);
+    const int lineHeight = qMax(1, (height() - 2 * top - titleGap - metrics::control::border) / lines);
     const int titleInset = static_cast<RowTitle *>(title)->iconInset();
     title->setGeometry(start, top, textWidth, lineHeight);
     title->setText(title->elidedText(titleText, qMax(0, textWidth - titleInset)));
@@ -338,13 +337,13 @@ void ListRow::arrange() {
     }
     leading->setVisible(!hasLeadingIcon && !leadingText.isEmpty());
     leading->setText(leadingText);
-    leading->setGeometry(m::list::inset, 0, lead, height() - m::control::border);
+    leading->setGeometry(metrics::list::inset, 0, lead, height() - metrics::control::border);
     trailing->setVisible(trailingCaption != nullptr);
     trailing->setText(trailingCaption ? trailingCaption->text : QString());
     trailing->setGeometry(qMax(start, end - trail), top, qMax(0, qMin(trail, end - start)), lineHeight);
     if (action) {
         const QPoint origin = action->parentWidget() == this ? QPoint() : pos();
-        action->setGeometry(origin.x() + width() - m::chrome::cellWidth, origin.y(), m::chrome::cellWidth, height());
+        action->setGeometry(origin.x() + width() - metrics::chrome::cellWidth, origin.y(), metrics::chrome::cellWidth, height());
     }
     arranging = false;
     updateGeometry();
@@ -360,18 +359,18 @@ void ListRow::paintEvent(QPaintEvent *) {
         paper = themeColors(this).pressedPaper;
     painter.fillRect(rect(), paper);
     if (hasLeadingIcon) {
-        const int side = m::control::iconSize;
+        const int side = metrics::control::iconSize;
         painter.save();
         if (!isEnabled())
             painter.setOpacity(.4);
-        icon().paint(&painter, QRect(m::list::inset, (height() - side) / 2, side, side),
+        icon().paint(&painter, QRect(metrics::list::inset, (height() - side) / 2, side, side),
                      Qt::AlignCenter, QIcon::Normal, current ? QIcon::On : QIcon::Off);
         painter.restore();
     }
-    const int end = width() - (action ? int(m::chrome::cellWidth) : 0) - m::list::inset;
+    const int end = width() - (action ? int(metrics::chrome::cellWidth) : 0) - metrics::list::inset;
     if (accessory.kind() == Accessory::Kind::Chevron || accessory.kind() == Accessory::Kind::Check) {
         painter.setRenderHint(QPainter::Antialiasing);
-        const int side = m::chrome::cellIcon;
+        const int side = metrics::chrome::cellIcon;
         const QRectF area(end - side, (height() - side) / 2.0, side, side);
         if (accessory.kind() == Accessory::Kind::Chevron)
             controlIcon(ControlIcon::Next, ink).paint(&painter, area.toRect());
@@ -383,7 +382,7 @@ void ListRow::paintEvent(QPaintEvent *) {
             painter.drawPolyline(check);
         }
     }
-    painter.fillRect(0, height() - m::control::border, width(), m::control::border, dividerColor(this));
+    painter.fillRect(0, height() - metrics::control::border, width(), metrics::control::border, dividerColor(this));
 }
 ListHeader::ListHeader(QWidget *parent) : QWidget(parent) {
     left = new ui::InterfaceLabel(this);
@@ -399,7 +398,7 @@ void ListHeader::setCaptions(const QString &a, const QString &b) {
     resizeEvent(&event);
 }
 QSize ListHeader::sizeHint() const {
-    return {0, int(m::list::headerHeight)};
+    return {0, int(metrics::list::headerHeight)};
 }
 void ListHeader::setTrailingInset(int pixels) {
     trailingInset = qMax(0, pixels);
@@ -407,12 +406,12 @@ void ListHeader::setTrailingInset(int pixels) {
     resizeEvent(&event);
 }
 void ListHeader::resizeEvent(QResizeEvent *) {
-    const int available = qMax(0, width() - 2 * m::list::inset - trailingInset);
+    const int available = qMax(0, width() - 2 * metrics::list::inset - trailingInset);
     const int side =
         right->text().isEmpty() ? 0 : qMin(available, interfaceTextWidth(right->text(), right->font()));
-    left->setGeometry(m::list::inset, 0, qMax(0, available - side - (side ? int(m::list::gap) : 0)),
-                      height() - m::control::border);
-    right->setGeometry(width() - m::list::inset - trailingInset - side, 0, side, height() - m::control::border);
+    left->setGeometry(metrics::list::inset, 0, qMax(0, available - side - (side ? int(metrics::list::gap) : 0)),
+                      height() - metrics::control::border);
+    right->setGeometry(width() - metrics::list::inset - trailingInset - side, 0, side, height() - metrics::control::border);
 }
 void ListHeader::setShaded(bool value) {
     if (shaded == value)
@@ -425,12 +424,12 @@ void ListHeader::paintEvent(QPaintEvent *) {
     // Styles can replace Midlight when a list creates headers after theme replay.
     const auto background = shaded ? sectionColor(this) : palette().color(QPalette::Window);
     painter.fillRect(rect(), background);
-    painter.fillRect(0, height() - m::control::border, width(), m::control::border, dividerColor(this));
+    painter.fillRect(0, height() - metrics::control::border, width(), metrics::control::border, dividerColor(this));
 }
 QHBoxLayout *horizontalRow() {
     auto *line = new QHBoxLayout;
     line->setContentsMargins(0, 0, 0, 0);
-    line->setSpacing(m::control::itemGap);
+    line->setSpacing(metrics::control::itemGap);
     return line;
 }
 namespace {
@@ -452,7 +451,7 @@ private:
 ControlRow::ControlRow(QWidget *parent) : QWidget(parent) {
     auto *grid = new ControlGrid(this);
     grid->setContentsMargins(0, 0, 0, 0);
-    grid->setSpacing(m::control::itemGap);
+    grid->setSpacing(metrics::control::itemGap);
     captionArea = new QWidget(this);
     controlArea = new QWidget(this);
     controlLayout = horizontalRow();
@@ -468,25 +467,25 @@ void ControlRow::setMarkerBand(int height) {
 }
 int ControlRow::heightForWidth(int width) const {
     const bool compact = stackedAt(width);
-    const int captionWidth = compact ? width : int(m::control::captionWidth);
+    const int captionWidth = compact ? width : int(metrics::control::captionWidth);
     const auto measure = [](QLayout *layout, int width) {
         return !layout ? 0 : layout->hasHeightForWidth() ? layout->totalHeightForWidth(qMax(1, width)) : layout->sizeHint().height();
     };
     const auto *captionLayout = captionArea->layout();
     const int captionHeight = measure(captionArea->layout(), captionWidth) -
         (captionLayout ? captionLayout->contentsMargins().top() : 0) + (compact ? 0 : markerBand);
-    const int controlsHeight = measure(controlLayout, compact ? width : width - captionWidth - m::control::itemGap);
-    return compact ? captionHeight + m::control::itemGap + controlsHeight : qMax(captionHeight, controlsHeight);
+    const int controlsHeight = measure(controlLayout, compact ? width : width - captionWidth - metrics::control::itemGap);
+    return compact ? captionHeight + metrics::control::itemGap + controlsHeight : qMax(captionHeight, controlsHeight);
 }
 QSize ControlRow::sizeHint() const {
-    const int width = m::control::captionWidth + px(480) + m::control::itemGap;
+    const int width = metrics::control::captionWidth + px(480) + metrics::control::itemGap;
     return {width, heightForWidth(width)};
 }
 QSize ControlRow::minimumSizeHint() const {
     return {0, heightForWidth(width())};
 }
 bool ControlRow::stackedAt(int width) {
-    return width < m::control::captionWidth + px(480) + m::control::itemGap;
+    return width < metrics::control::captionWidth + px(480) + metrics::control::itemGap;
 }
 void ControlRow::fitWidth(int width) {
     if (stackedAt(width) != stacked)
@@ -498,8 +497,8 @@ void ControlRow::arrange(int width) {
     setProperty("caption_stacked", stacked);
     if (stacked != wasStacked && stackedChanged)
         stackedChanged(stacked);
-    captionArea->setMinimumWidth(stacked ? 0 : int(m::control::captionWidth));
-    captionArea->setMaximumWidth(stacked ? QWIDGETSIZE_MAX : int(m::control::captionWidth));
+    captionArea->setMinimumWidth(stacked ? 0 : int(metrics::control::captionWidth));
+    captionArea->setMaximumWidth(stacked ? QWIDGETSIZE_MAX : int(metrics::control::captionWidth));
     if (auto *rows = captionArea->layout()) {
         auto margins = rows->contentsMargins();
         margins.setTop(stacked ? 0 : markerBand);
@@ -525,18 +524,18 @@ QHBoxLayout *labeledRow(QWidget *parent, QVBoxLayout *rows, const QString &label
     auto *row = new ControlRow(parent);
     rows->addWidget(row);
     auto *labels = new QVBoxLayout(row->caption());
-    labels->setContentsMargins(0, 0, m::control::captionRight, 0);
+    labels->setContentsMargins(0, 0, metrics::control::captionRight, 0);
     labels->setSpacing(px(2));
     auto *caption = new ui::InterfaceLabel(label, row->caption());
     caption->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     caption->setWordWrap(true);
-    readerStyle(caption, styles::font(m::text::secondary));
+    readerStyle(caption, styles::font(metrics::text::secondary));
     labels->addWidget(caption);
     if (!detail.isEmpty()) {
         auto *value = new InterfaceLabel(detail, row->caption());
         value->setObjectName(detailName);
         value->setWordWrap(true);
-        readerStyle(value, styles::font(m::control::captionValueText) + "color:palette(placeholder-text);");
+        readerStyle(value, styles::font(metrics::control::captionValueText) + "color:palette(placeholder-text);");
         labels->addWidget(value);
     }
     return row->controls();

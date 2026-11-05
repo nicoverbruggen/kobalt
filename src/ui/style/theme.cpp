@@ -10,7 +10,6 @@
 #endif
 
 namespace kobalt::ui {
-namespace m = metrics;
 const ThemeColors &themeColors(bool dark) {
     static const ThemeColors light = [] {
         ThemeColors colors;
@@ -117,11 +116,11 @@ void paintButtonShape(QPainter &painter, const QRect &rect, const QColor &paper,
     painter.fillRect(rect, paper);
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(border, m::control::border));
+    painter.setPen(QPen(border, metrics::control::border));
     painter.setBrush(fill);
-    const qreal inset = int(m::control::border) / 2.0;
+    const qreal inset = int(metrics::control::border) / 2.0;
     painter.drawRoundedRect(pixelAlignedRect(painter, rect).adjusted(inset, inset, -inset, -inset),
-                            m::control::buttonRadius, m::control::buttonRadius);
+                            metrics::control::buttonRadius, metrics::control::buttonRadius);
     painter.restore();
 }
 bool darkTheme(const QWidget *widget) {
@@ -142,9 +141,9 @@ QColor noteColor(const QWidget *widget) {
     return themeColors(widget).secondaryInk;
 }
 void paintHeaderRules(QPainter &painter, const QWidget *view) {
-    painter.fillRect(0, m::chrome::statusHeight - m::control::border, view->width(), m::control::border,
+    painter.fillRect(0, metrics::chrome::statusHeight - metrics::control::border, view->width(), metrics::control::border,
                      view->palette().color(QPalette::Mid));
-    painter.fillRect(0, m::chrome::headerHeight() - m::chrome::heavyRule, view->width(), m::chrome::heavyRule,
+    painter.fillRect(0, metrics::chrome::headerHeight() - metrics::chrome::heavyRule, view->width(), metrics::chrome::heavyRule,
                      view->palette().color(QPalette::WindowText));
 }
 void readerStyle(QWidget *widget, const QString &source) {
@@ -166,7 +165,7 @@ void readerStyle(QWidget *widget, const QString &source) {
         if (sheets.size() >= 512)
             sheets.clear();
         const auto &colors = themeColors(dark);
-        auto style = QString("QPushButton{border-radius:%1px;} ").arg(int(m::control::buttonRadius));
+        auto style = QString("QPushButton{border-radius:%1px;} ").arg(int(metrics::control::buttonRadius));
         style += source.contains('{') ? source : QString("*{%1}").arg(source);
         const auto escapedFamily = [](QString name) {
             name.replace('\\', "\\\\");

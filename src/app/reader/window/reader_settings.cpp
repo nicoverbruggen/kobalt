@@ -24,7 +24,7 @@
 namespace kobalt::reader {
 namespace strings = kobalt::strings;
 using namespace kobalt::storage;
-namespace m = kobalt::ui::metrics;
+namespace metrics = kobalt::ui::metrics;
 using kobalt::ui::readerStyle;
 using kobalt::ui::ControlIcon;
 using kobalt::ui::buttonIcon;
@@ -505,13 +505,13 @@ void Reader::renderStylingSamples(int requested) {
 }
 
 void Reader::fitSettings() {
-    const int top = navigation ? navigation->statusHeight() : int(m::panel::toolbarHeight - m::chrome::actionHeight);
+    const int top = navigation ? navigation->statusHeight() : int(metrics::panel::toolbarHeight - metrics::chrome::actionHeight);
     const int panelHeight = static_cast<SettingsPanel *>(general)->fitContent(QSize(width(), height() - top));
     general->setGeometry(0, top, width(), panelHeight);
 }
 
 void Reader::fitAppearance() {
-    const int top = navigation ? navigation->toolbarHeight() : int(m::panel::toolbarHeight);
+    const int top = navigation ? navigation->toolbarHeight() : int(metrics::panel::toolbarHeight);
     const int bottom = navigation ? navigation->contentBottom(size()) : height();
     const int height = menu->fitHeight(width(), bottom - top);
     menu->setGeometry(panelBounds(height));

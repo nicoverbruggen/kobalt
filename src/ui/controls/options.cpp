@@ -15,7 +15,6 @@
 #include <QPointer>
 
 namespace kobalt::ui {
-namespace m = metrics;
 void DescribedOption::mouseReleaseEvent(QMouseEvent *event) {
     // Batch Qt's released-state paint with the changes made by clicked.
     const bool enabled = updatesEnabled();
@@ -32,8 +31,8 @@ void DescribedOption::mouseReleaseEvent(QMouseEvent *event) {
         parent->update(oldGeometry);
 }
 DescribedOption::Presentation::Presentation()
-    : labelPixels(m::text::body), descriptionPixels(m::text::secondary),
-      indicatorSize(m::settings::toggleWidth, m::settings::toggleHeight) {}
+    : labelPixels(metrics::text::body), descriptionPixels(metrics::text::secondary),
+      indicatorSize(metrics::settings::toggleWidth, metrics::settings::toggleHeight) {}
 bool DescribedOption::Presentation::operator==(const Presentation &other) const {
     return indicator == other.indicator && dividers == other.dividers && horizontalInset == other.horizontalInset &&
            minimumRowHeight == other.minimumRowHeight && labelPixels == other.labelPixels &&
@@ -72,7 +71,7 @@ DescribedOption::DescribedOption(const QString &text, const QString &description
     auto policy = sizePolicy();
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
-    appearance.minimumRowHeight = description.isEmpty() ? m::control::stepSize : m::settings::optionHeight;
+    appearance.minimumRowHeight = description.isEmpty() ? metrics::control::stepSize : metrics::settings::optionHeight;
     setMinimumHeight(appearance.minimumRowHeight);
     setFocusPolicy(Qt::NoFocus);
 }
@@ -93,17 +92,17 @@ void DescribedOption::setLeadingIcon(ControlIcon icon) {
     update();
 }
 int DescribedOption::iconSpace() const {
-    return leadingIcon < 0 ? 0 : int(m::chrome::cellIcon) + px(20);
+    return leadingIcon < 0 ? 0 : int(metrics::chrome::cellIcon) + px(20);
 }
 int DescribedOption::labelHeight() const {
     // The line grows only by what large text adds, so standard text keeps
     // the checkbox's line.
     if (textScale() == 1)
-        return m::settings::checkboxSize;
+        return metrics::settings::checkboxSize;
     QFont labelFont = font(), standard = font();
     labelFont.setPixelSize(appearance.labelPixels);
     standard.setPixelSize(qRound(appearance.labelPixels / textScale()));
-    return m::settings::checkboxSize + qMax(0, interfaceLineHeight(labelFont) - interfaceLineHeight(standard));
+    return metrics::settings::checkboxSize + qMax(0, interfaceLineHeight(labelFont) - interfaceLineHeight(standard));
 }
 int DescribedOption::labelRaise(const QFont &labelFont) const {
     // Interface text is centered by its ink, which includes descenders, so
@@ -122,31 +121,31 @@ int DescribedOption::labelRaise(const QFont &labelFont) const {
     return qMax(0, qRound(capitalsBelowMiddle));
 }
 int DescribedOption::descriptionTop() const {
-    return m::settings::descriptionTop + labelHeight() - m::settings::checkboxSize;
+    return metrics::settings::descriptionTop + labelHeight() - metrics::settings::checkboxSize;
 }
 int DescribedOption::valueHeight() const {
     if (!appearance.valueBelowLabel || (value.isEmpty() && !valueStyle.battery)) return 0;
-    const auto font = valueStyle.sampleWeight >= 0 ? valueStyle.sampleFont : chromeFont(m::control::captionValueText);
+    const auto font = valueStyle.sampleWeight >= 0 ? valueStyle.sampleFont : chromeFont(metrics::control::captionValueText);
     return interfaceLineHeight(font) + px(8);
 }
 
 int DescribedOption::heightForWidth(int width) const {
     if (description.isEmpty() && !preview) {
         const int extra = valueHeight();
-        return extra ? qMax<int>(appearance.minimumRowHeight, qMax(int(m::control::stepSize) + extra,
-            m::settings::checkboxTop + labelHeight() + extra + m::settings::descriptionBottom))
-            : qMax<int>(appearance.minimumRowHeight, m::control::stepSize);
+        return extra ? qMax<int>(appearance.minimumRowHeight, qMax(int(metrics::control::stepSize) + extra,
+            metrics::settings::checkboxTop + labelHeight() + extra + metrics::settings::descriptionBottom))
+            : qMax<int>(appearance.minimumRowHeight, metrics::control::stepSize);
     }
     QFont descriptionFont = font();
     descriptionFont.setPixelSize(appearance.descriptionPixels);
     descriptionFont.setWeight(QFont::Normal);
     descriptionFont.setItalic(false);
-    const int textWidth = qMax(1, width - 2 * appearance.horizontalInset - m::settings::labelLeft -
-                                      appearance.indicatorSize.width() - m::settings::toggleGap - iconSpace() -
-                                      (preview ? previewSize.width() + m::settings::toggleGap : 0));
-    const int textHeight = description.isEmpty() ? int(m::control::stepSize) : descriptionTop() + valueHeight() +
+    const int textWidth = qMax(1, width - 2 * appearance.horizontalInset - metrics::settings::labelLeft -
+                                      appearance.indicatorSize.width() - metrics::settings::toggleGap - iconSpace() -
+                                      (preview ? previewSize.width() + metrics::settings::toggleGap : 0));
+    const int textHeight = description.isEmpty() ? int(metrics::control::stepSize) : descriptionTop() + valueHeight() +
                                                  wrappedInterfaceTextHeight(description, descriptionFont, textWidth) +
-                                                 m::settings::descriptionBottom;
+                                                 metrics::settings::descriptionBottom;
     return qMax(qMax(appearance.minimumRowHeight, textHeight), preview ? previewSize.height() + px(24) : 0);
 }
 void DescribedOption::resizeEvent(QResizeEvent *event) {
@@ -167,21 +166,21 @@ void DescribedOption::paintEvent(QPaintEvent *) {
     descriptionFont.setPixelSize(appearance.descriptionPixels);
     descriptionFont.setWeight(QFont::Normal);
     descriptionFont.setItalic(false);
-    const int textWidth = qMax(1, width() - 2 * appearance.horizontalInset - m::settings::labelLeft -
-                                      appearance.indicatorSize.width() - m::settings::toggleGap - iconSpace() -
-                                      (preview ? previewSize.width() + m::settings::toggleGap : 0));
+    const int textWidth = qMax(1, width() - 2 * appearance.horizontalInset - metrics::settings::labelLeft -
+                                      appearance.indicatorSize.width() - metrics::settings::toggleGap - iconSpace() -
+                                      (preview ? previewSize.width() + metrics::settings::toggleGap : 0));
     const int textBottom =
         description.isEmpty()
-            ? m::settings::checkboxTop + labelHeight()
+            ? metrics::settings::checkboxTop + labelHeight()
             : descriptionTop() + wrappedInterfaceTextHeight(description, descriptionFont, textWidth);
-    const int textOffset = (height() - (textBottom + valueHeight() - m::settings::checkboxTop)) / 2 - m::settings::checkboxTop;
+    const int textOffset = (height() - (textBottom + valueHeight() - metrics::settings::checkboxTop)) / 2 - metrics::settings::checkboxTop;
     const int boxTop = (height() - appearance.indicatorSize.height()) / 2;
     const int boxLeft = appearance.leadingIndicator
-                            ? appearance.horizontalInset + m::settings::labelLeft
+                            ? appearance.horizontalInset + metrics::settings::labelLeft
                             : width() - appearance.horizontalInset - appearance.indicatorSize.width();
     const QRect box(boxLeft, boxTop, appearance.indicatorSize.width(), appearance.indicatorSize.height());
-    const int textLeft = (appearance.leadingIndicator ? box.right() + 1 + m::settings::toggleGap
-                                                      : appearance.horizontalInset + m::settings::labelLeft) +
+    const int textLeft = (appearance.leadingIndicator ? box.right() + 1 + metrics::settings::toggleGap
+                                                      : appearance.horizontalInset + metrics::settings::labelLeft) +
                          iconSpace();
     const bool held = appearance.pressedFill && isEnabled() && isDown();
     // The pressed gray of list rows such as Chapters.
@@ -217,9 +216,9 @@ void DescribedOption::paintEvent(QPaintEvent *) {
             painter.drawPolyline(check);
         }
     } else {
-        painter.setPen(QPen(ink, m::control::border));
+        painter.setPen(QPen(ink, metrics::control::border));
         painter.setBrush(isChecked() ? ink : paper);
-        const qreal inset = int(m::control::border) / 2.0;
+        const qreal inset = int(metrics::control::border) / 2.0;
         const QRectF roundedTrack = QRectF(box).adjusted(inset, inset, -inset, -inset);
         painter.drawRoundedRect(roundedTrack, roundedTrack.height() / 2, roundedTrack.height() / 2);
         const int thumbInset = px(6), diameter = box.height() - 2 * thumbInset;
@@ -230,7 +229,7 @@ void DescribedOption::paintEvent(QPaintEvent *) {
     }
     if (leadingIcon >= 0) {
         // The same place as a list action row's icon, balancing its bearings.
-        const int size = m::chrome::cellIcon;
+        const int size = metrics::chrome::cellIcon;
         controlIcon(ControlIcon(leadingIcon), ink)
             .paint(&painter, QRect(textLeft - iconSpace() - px(7), (height() - size) / 2 + px(1), size, size));
     }
@@ -241,7 +240,7 @@ void DescribedOption::paintEvent(QPaintEvent *) {
     labelFont.setItalic(false);
     painter.setFont(labelFont);
     // Only the label is raised; a value on the same line keeps its place.
-    const QRect labelLine(textLeft, m::settings::checkboxTop + textOffset, textWidth, labelHeight());
+    const QRect labelLine(textLeft, metrics::settings::checkboxTop + textOffset, textWidth, labelHeight());
     QRect labelBounds = labelLine.translated(0, -labelRaise(labelFont));
     if (!value.isEmpty() || valueStyle.battery) {
         // The value keeps the right of the line; the label keeps at least three fifths.
@@ -250,9 +249,9 @@ void DescribedOption::paintEvent(QPaintEvent *) {
         const QRect valueLine = appearance.valueBelowLabel
             ? QRect(textLeft, labelLine.bottom() + 1 + px(8), textWidth, valueHeight() - px(8)) : labelLine;
         QFont valueFont =
-            valueStyle.sampleWeight >= 0 ? valueStyle.sampleFont : chromeFont(m::control::captionValueText);
+            valueStyle.sampleWeight >= 0 ? valueStyle.sampleFont : chromeFont(metrics::control::captionValueText);
         if (valueStyle.sampleWeight < 0)
-            valueFont.setLetterSpacing(QFont::AbsoluteSpacing, m::chrome::captionSpacing);
+            valueFont.setLetterSpacing(QFont::AbsoluteSpacing, metrics::chrome::captionSpacing);
         painter.save();
         // The battery keeps the right edge and the text ends before it.
         const qreal body = qRound(valueFont.pixelSize() * .75);
@@ -260,8 +259,8 @@ void DescribedOption::paintEvent(QPaintEvent *) {
             valueFont = batteryTextFont(valueFont, body, valueStyle.sampleWeight);
         painter.setFont(valueFont);
         const int icon = valueStyle.battery ? qCeil(batteryWidth(body)) : 0;
-        const int gap = valueStyle.battery && !value.isEmpty() ? int(m::reading::batteryGap) : 0;
-        const int room = qMax(0, valueLine.width() - labelWidth - m::settings::toggleGap - icon - gap);
+        const int gap = valueStyle.battery && !value.isEmpty() ? int(metrics::reading::batteryGap) : 0;
+        const int room = qMax(0, valueLine.width() - labelWidth - metrics::settings::toggleGap - icon - gap);
         const int textRight = valueLine.right() + 1 - icon - gap;
         const qreal halfSpaced = valueStyle.halfSpaces ? halfSpacedWidth(painter.font(), value) : 0;
         if (valueStyle.battery)
@@ -277,7 +276,7 @@ void DescribedOption::paintEvent(QPaintEvent *) {
                               Qt::AlignRight | Qt::AlignVCenter, valueStyle.sampleWeight);
         }
         if (valueStyle.battery) {
-            const qreal width = body * int(m::panel::batteryBodyWidth) / int(m::panel::batteryBodyHeight);
+            const qreal width = body * int(metrics::panel::batteryBodyWidth) / int(metrics::panel::batteryBodyHeight);
             paintBattery(
                 painter,
                 QRectF(valueLine.right() + 1 - icon, valueLine.y() + (valueLine.height() - body) / 2.0, width, body),
@@ -289,7 +288,7 @@ void DescribedOption::paintEvent(QPaintEvent *) {
     const auto label = interfaceTextWidth(text(), labelFont) > labelBounds.width()
                            ? elideInterfaceText(text(), labelFont, labelBounds.width())
                            : text();
-    if (drawFontPreview(painter, labelBounds, text(), fontPreview, m::choices::sampleInkHeight)) {
+    if (drawFontPreview(painter, labelBounds, text(), fontPreview, metrics::choices::sampleInkHeight)) {
         // The bitmap has already been aligned within the label bounds.
     } else if (appearance.opticalLabel)
         drawOpticalText(painter, labelBounds, text());
@@ -316,10 +315,10 @@ DescribedOption *RadioList::add(const QString &name, const QString &label, const
     option->setAutoExclusive(true);
     auto look = option->presentation();
     look.indicator = DescribedOption::Indicator::Radio;
-    look.horizontalInset = m::chrome::inset;
-    look.labelPixels = m::chrome::labelText;
-    look.descriptionPixels = m::chrome::descriptionText;
-    look.indicatorSize = {m::chrome::checkSize, m::chrome::checkSize};
+    look.horizontalInset = metrics::chrome::inset;
+    look.labelPixels = metrics::chrome::labelText;
+    look.descriptionPixels = metrics::chrome::descriptionText;
+    look.indicatorSize = {metrics::chrome::checkSize, metrics::chrome::checkSize};
     look.minimumRowHeight = minimum;
     look.pressedFill = true;
     look.leadingIndicator = true;

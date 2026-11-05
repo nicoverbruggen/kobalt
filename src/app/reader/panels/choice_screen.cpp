@@ -23,7 +23,7 @@
 #include "support/strings.h"
 
 namespace kobalt {
-namespace m = ui::metrics;
+namespace metrics = ui::metrics;
 namespace styles = ui::styles;
 using ui::readerStyle;
 using ui::fontSample;
@@ -37,7 +37,7 @@ public:
         detail->setAlignment(Qt::AlignCenter);
         detail->setWordWrap(true);
         hold.setSingleShot(true);
-        hold.setInterval(m::input::longPressMilliseconds);
+        hold.setInterval(metrics::input::longPressMilliseconds);
         connect(&hold, &QTimer::timeout, this, [this] { triggerHold(); });
     }
     QLabel *detail;
@@ -183,10 +183,10 @@ QJsonObject ChoiceScreen::fontSamples() const {
 ChoiceScreen::ChoiceScreen(QWidget *parent) : kobalt::ui::Panel(parent), navigation(this, "rrChoices") {
     setObjectName("rrChoices");
     fontHeader = new ui::Panel(this, ui::Edges(Qt::TopEdge));
-    fontHeader->setEdgeWidth(m::chrome::heavyRule);
+    fontHeader->setEdgeWidth(metrics::chrome::heavyRule);
     fontTitle = new ui::InterfaceLabel(strings::get("reader.font"), fontHeader);
     fontTitle->setObjectName("rrFontTitle");
-    readerStyle(fontTitle, styles::font(m::text::body, true) + "background:transparent;");
+    readerStyle(fontTitle, styles::font(metrics::text::body, true) + "background:transparent;");
     auto *close = new ui::CellButton(ui::ControlIcon::Close, fontHeader);
     close->setObjectName("rrFontClose");
     close->setAccessibleName(strings::get("reader.close_fonts"));
@@ -400,7 +400,7 @@ void ChoiceScreen::redraw() {
         auto *row = new ui::ListRow(this);
         row->setCheckable(true);
         sizeRows.append(row);
-        row->setTitlePixels(m::text::body);
+        row->setTitlePixels(metrics::text::body);
         connect(row, &QPushButton::clicked, this, [this, index] {
             if (index < items.size() && selected)
                 selected(items[index].value);
@@ -418,7 +418,7 @@ void ChoiceScreen::redraw() {
         row->setChecked(current);
         row->setAccessory(current ? ui::ListRow::Accessory{ui::ListRow::Check{}}
                                   : ui::ListRow::Accessory{ui::ListRow::None{}});
-        row->setGeometry(2, 2 + index * m::list::oneLine, width() - 4, m::list::oneLine);
+        row->setGeometry(2, 2 + index * metrics::list::oneLine, width() - 4, metrics::list::oneLine);
     }
     navigation.setPage(0, 1);
     navigation.setPagingVisible(false);
@@ -429,7 +429,7 @@ void ChoiceScreen::redraw() {
         changed();
 }
 int ChoiceScreen::fontPanelHeight() const {
-    return m::choices::pickerHeader + ui::px(42) + m::chrome::actionHeight + 4 * m::choices::pickerRow;
+    return metrics::choices::pickerHeader + ui::px(42) + metrics::chrome::actionHeight + 4 * metrics::choices::pickerRow;
 }
 void ChoiceScreen::redrawFonts() {
     contents->hide();
@@ -437,13 +437,13 @@ void ChoiceScreen::redrawFonts() {
     navigation.back->hide();
     navigation.setPagingVisible(false);
     page = qBound(0, page, pageCount() - 1);
-    const int header = m::choices::pickerHeader, sectionHeight = ui::px(42), pager = m::chrome::actionHeight;
+    const int header = metrics::choices::pickerHeader, sectionHeight = ui::px(42), pager = metrics::chrome::actionHeight;
     fontHeader->setGeometry(0, 0, width(), header);
-    const int cell = qMin(int(m::choices::pickerHeader), width() / 4);
-    fontTitle->setGeometry(m::chrome::inset, 1, qMax(0, width() - cell - m::chrome::inset), header - 2);
-    fontClose->setGeometry(width() - cell, m::chrome::heavyRule, cell, header - m::chrome::heavyRule);
+    const int cell = qMin(int(metrics::choices::pickerHeader), width() / 4);
+    fontTitle->setGeometry(metrics::chrome::inset, 1, qMax(0, width() - cell - metrics::chrome::inset), header - 2);
+    fontClose->setGeometry(width() - cell, metrics::chrome::heavyRule, cell, header - metrics::chrome::heavyRule);
     fontSectionBar->setGeometry(0, header, width(), sectionHeight);
-    fontSection->setGeometry(m::chrome::inset, 0, width() - 2 * m::chrome::inset, sectionHeight);
+    fontSection->setGeometry(metrics::chrome::inset, 0, width() - 2 * metrics::chrome::inset, sectionHeight);
     const int first = itemIndex(0);
     fontSection->setText(first < 0 ? QString() : items[first].section.toUpper());
     fontPager->setGeometry(0, height() - pager, width(), pager);
@@ -471,7 +471,7 @@ void ChoiceScreen::redrawFonts() {
     // Phone pages show six choices with room for the font name and captions.
     // Wider e-reader sheets retain twelve choices.
     const int columns = pageSize == 6 ? (width() > height() ? 3 : 2)
-        : body / 4 < int(m::choices::pickerRow) * 3 / 4 && width() >= 6 * ui::px(200) ? 6 : 3;
+        : body / 4 < int(metrics::choices::pickerRow) * 3 / 4 && width() >= 6 * ui::px(200) ? 6 : 3;
     const int rows = pageSize / columns;
     int used = header + sectionHeight;
     for (int row = 0; row < buttons.size(); ++row) {
@@ -512,8 +512,8 @@ void ChoiceScreen::redrawFonts() {
             QString(
                 "QPushButton{min-height:0;padding:0;border:0;border-right:%2px solid palette(light);border-bottom:%2px solid palette(light);background:%1;}")
                 .arg(selectedItem ? "palette(window-text)" : "palette(window)")
-                .arg(int(m::control::border)));
-        const QFont labelFont = ui::chromeFont(m::text::body);
+                .arg(int(metrics::control::border)));
+        const QFont labelFont = ui::chromeFont(metrics::text::body);
         const auto family = item.value.isEmpty() ? QStringLiteral("Libron") : item.value;
         label->setFont(labelFont);
         // The default slot draws its Aa with the private renderer.
@@ -568,7 +568,7 @@ void ChoiceScreen::redrawFonts() {
     for (auto *button : buttons)
         if (!button->isHidden())
             used = qMax(used, button->geometry().bottom() + 1);
-    fontPager->setBlankArea({m::chrome::inset, used, width() - 2 * m::chrome::inset, fontPager->y() - used});
+    fontPager->setBlankArea({metrics::chrome::inset, used, width() - 2 * metrics::chrome::inset, fontPager->y() - used});
     fontHeader->raise();
     fontSectionBar->raise();
     fontPager->raise();

@@ -167,7 +167,7 @@ protected:
     }
     void paintEvent(QPaintEvent *event) override {
         QDialog::paintEvent(event);
-        namespace m = ui::metrics::opening;
+        namespace opening = ui::metrics::opening;
         QPainter painter(this);
         // Nickel's Qt5 stylesheet paints dialogs white even with a dark palette.
         // Own the whole splash background, including the area behind the cover.
@@ -185,14 +185,14 @@ protected:
         const auto ink = palette().color(QPalette::WindowText);
         if (!fallback && !cover.isNull()) {
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
-            const auto size = QSizeF(cover.size()).scaled(m::cover.size(), Qt::KeepAspectRatio);
-            const QRectF bounds(m::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
+            const auto size = QSizeF(cover.size()).scaled(opening::cover.size(), Qt::KeepAspectRatio);
+            const QRectF bounds(opening::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
             painter.drawImage(bounds, cover);
         } else {
-            ui::paintBrandIcon(painter, fallback && !automatic ? m::failureBrandIcon : m::icon, ink);
+            ui::paintBrandIcon(painter, fallback && !automatic ? opening::failureBrandIcon : opening::icon, ink);
         }
         if (fallback) {
-            const QRectF bounds = automatic ? m::handoffIcon : m::failureIcon;
+            const QRectF bounds = automatic ? opening::handoffIcon : opening::failureIcon;
             ui::paintOpeningIcon(painter, protectedIcon ? ui::ControlIcon::Lock : ui::ControlIcon::FileWarning, bounds,
                                  ink);
         }
@@ -202,7 +202,7 @@ protected:
         layoutWidgets();
     }
     void layoutWidgets() {
-        namespace m = ui::metrics::opening;
+        namespace opening = ui::metrics::opening;
         const auto place = [this](QWidget *widget, const QRectF &rect) {
             const auto offset = origin();
             const auto factor = scale();
@@ -220,20 +220,20 @@ protected:
                     .arg(font.pixelSize())
                     .arg(italic ? "italic" : "normal"));
         };
-        textStyle(brand, m::brandText, false);
+        textStyle(brand, opening::brandText, false);
         const bool phone = isPhoneScreen(size(), ui::density());
         textStyle(label,
-                  !fallback   ? m::labelText
-                  : automatic ? m::handoffText
-                              : m::failureText,
+                  !fallback   ? opening::labelText
+                  : automatic ? opening::handoffText
+                              : opening::failureText,
                   !fallback || automatic, phone && !fallback ? int(ui::px(32)) : 1);
         // A caption in capitals, like the reader's other captions.
-        ui::captionLabel(hint, qMax(phone ? int(ui::px(22)) : 1, qRound(m::hintText * scale())));
-        place(hint, m::hint);
-        progress->setFixedHeight(qMax(1, qRound(m::progress.height() * scale())));
-        place(brand, fallback && !automatic ? m::failureBrand : m::brand);
-        place(label, !fallback ? m::label : automatic ? m::handoffLabel : m::failureLabel);
-        place(progress, m::progress);
+        ui::captionLabel(hint, qMax(phone ? int(ui::px(22)) : 1, qRound(opening::hintText * scale())));
+        place(hint, opening::hint);
+        progress->setFixedHeight(qMax(1, qRound(opening::progress.height() * scale())));
+        place(brand, fallback && !automatic ? opening::failureBrand : opening::brand);
+        place(label, !fallback ? opening::label : automatic ? opening::handoffLabel : opening::failureLabel);
+        place(progress, opening::progress);
         if (phone) {
             for (auto *text : {label, hint}) {
                 auto bounds = text->geometry();
@@ -245,19 +245,19 @@ protected:
         }
 
         if (fallback) {
-            const int pixels = qMax(1, qRound(m::detailText * scale()));
+            const int pixels = qMax(1, qRound(opening::detailText * scale()));
             detail->setFont(ui::interfaceFont(pixels));
             ui::readerStyle(
                 detail,
                 QString("background:palette(window);color:palette(window-text);font-size:%1px;font-family:'%2';")
                     .arg(pixels)
                     .arg(ui::interfaceFontFamily()));
-            place(detail, automatic ? m::handoffDetail : m::failureDetail);
+            place(detail, automatic ? opening::handoffDetail : opening::failureDetail);
             if (automatic)
-                place(hint, m::handoffHint);
+                place(hint, opening::handoffHint);
         }
-        namespace n = ui::metrics::navigation;
-        cancel->setGeometry(n::backLeft, n::headingTop, n::height, n::height);
+        namespace navigation = ui::metrics::navigation;
+        cancel->setGeometry(navigation::backLeft, navigation::headingTop, navigation::height, navigation::height);
         ui::readerStyle(
             cancel,
             "QPushButton{min-height:0;border:none;padding:0;background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}");

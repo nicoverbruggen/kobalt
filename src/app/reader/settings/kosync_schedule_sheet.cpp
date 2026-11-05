@@ -19,8 +19,8 @@
 #include <memory>
 
 namespace kobalt::reader {
-namespace m = ui::metrics;
-namespace c = m::chrome;
+namespace metrics = ui::metrics;
+namespace chrome = metrics::chrome;
 using ui::px;
 
 // A Wi-Fi choice drawn like a header and footer preset: a framed picture with
@@ -42,7 +42,7 @@ public:
     void pairWith(KosyncWifiTile *other) { partner = other; }
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth(int width) const override {
-        return pictureHeight(width) + int(m::headerFooter::nameGap) + int(m::headerFooter::nameHeight) + px(6) +
+        return pictureHeight(width) + int(metrics::headerFooter::nameGap) + int(metrics::headerFooter::nameHeight) + px(6) +
                outcomeHeight(width);
     }
     QSize sizeHint() const override { return {px(300), heightForWidth(px(300))}; }
@@ -56,10 +56,10 @@ protected:
         const auto ink = enabled ? colors.ink : colors.disabledInk;
         painter.fillRect(rect(), colors.paper);
         const QRect frame(0, 0, width(), pictureHeight(width()));
-        const int edge = selected ? int(m::headerFooter::selectedBorder) : int(m::control::border);
+        const int edge = selected ? int(metrics::headerFooter::selectedBorder) : int(metrics::control::border);
         ui::paintEdges(painter, frame, ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge,
                        selected && enabled ? ink : colors.divider, edge);
-        const int icon = c::cellIcon, arrow = m::choices::fontArrowSize, gap = px(10);
+        const int icon = chrome::cellIcon, arrow = metrics::choices::fontArrowSize, gap = px(10);
         int iconsWidth = 0;
         for (int index = 0; index < glyphs.size(); ++index)
             iconsWidth += icon + (index ? arrow + 2 * gap : 0);
@@ -79,34 +79,34 @@ protected:
             x += icon;
         }
         painter.setPen(ink);
-        painter.setFont(ui::interfaceFont(c::descriptionText));
+        painter.setFont(ui::interfaceFont(chrome::descriptionText));
         painter.drawText(frame.adjusted(px(16), iconTop + icon + px(14), -px(16), -px(12)),
                          Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, pictureText);
-        const QFont label = ui::interfaceFont(m::text::secondary);
+        const QFont label = ui::interfaceFont(metrics::text::secondary);
         painter.setFont(label);
-        const int padding = m::headerFooter::namePadding;
+        const int padding = metrics::headerFooter::namePadding;
         const int textWidth = qMin(ui::interfaceTextWidth(labelText, label), width() - 2 * padding);
-        const QRect block((width() - textWidth - 2 * padding) / 2, frame.bottom() + 1 + m::headerFooter::nameGap,
-                          textWidth + 2 * padding, m::headerFooter::nameHeight);
+        const QRect block((width() - textWidth - 2 * padding) / 2, frame.bottom() + 1 + metrics::headerFooter::nameGap,
+                          textWidth + 2 * padding, metrics::headerFooter::nameHeight);
         if (selected)
             painter.fillRect(block, ink);
         painter.setPen(selected ? colors.paper : ink);
         ui::drawInterfaceText(painter, block.adjusted(padding, 0, -padding, 0), labelText, Qt::AlignCenter);
         painter.setPen(enabled ? colors.secondaryInk : colors.disabledInk);
-        painter.setFont(ui::interfaceFont(m::control::captionValueText));
+        painter.setFont(ui::interfaceFont(metrics::control::captionValueText));
         painter.drawText(QRect(0, block.bottom() + 1 + px(6), width(), outcomeHeight(width())),
                          Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, outcomeText);
     }
 
 private:
     int ownPictureHeight(int width) const {
-        const QFontMetrics metrics(ui::interfaceFont(c::descriptionText));
+        const QFontMetrics metrics(ui::interfaceFont(chrome::descriptionText));
         const auto text = metrics.boundingRect(QRect(0, 0, qMax(1, width - px(32)), 10000),
                                                Qt::AlignHCenter | Qt::TextWordWrap, pictureText);
-        return px(28) + c::cellIcon + px(14) + text.height() + px(24);
+        return px(28) + chrome::cellIcon + px(14) + text.height() + px(24);
     }
     int ownOutcomeHeight(int width) const {
-        const QFontMetrics metrics(ui::interfaceFont(m::control::captionValueText));
+        const QFontMetrics metrics(ui::interfaceFont(metrics::control::captionValueText));
         return metrics.boundingRect(QRect(0, 0, qMax(1, width), 10000), Qt::AlignHCenter | Qt::TextWordWrap,
                                     outcomeText).height();
     }
@@ -130,9 +130,9 @@ public:
         setCheckable(true);
         setFocusPolicy(Qt::NoFocus);
         setAccessibleName(label);
-        setFixedSize(c::checkSize, c::checkSize);
+        setFixedSize(chrome::checkSize, chrome::checkSize);
     }
-    QSize sizeHint() const override { return {c::checkSize, c::checkSize}; }
+    QSize sizeHint() const override { return {chrome::checkSize, chrome::checkSize}; }
 
 protected:
     void paintEvent(QPaintEvent *) override {
@@ -158,7 +158,7 @@ namespace {
 class MomentIcon final : public QWidget {
 public:
     MomentIcon(ui::ControlIcon icon, QWidget *parent) : QWidget(parent), glyph(icon) {
-        setFixedSize(c::cellIcon, c::cellIcon);
+        setFixedSize(chrome::cellIcon, chrome::cellIcon);
     }
 
 protected:
@@ -188,7 +188,7 @@ public:
     bool hasHeightForWidth() const override { return true; }
     int heightForWidth(int width) const override {
         const auto margins = layout()->contentsMargins();
-        int room = width - margins.left() - margins.right() - c::cellIcon - layout()->spacing();
+        int room = width - margins.left() - margins.right() - chrome::cellIcon - layout()->spacing();
         if (trailing && !stacked) room -= trailing->width() + layout()->spacing();
         const auto height = [room](QLabel *label) {
             label->ensurePolished();
@@ -196,7 +196,7 @@ public:
         };
         int text = height(title) + px(2) + height(description);
         if (trailing && stacked) text += px(10) + trailing->sizeHint().height();
-        const int content = qMax(qMax(text, int(c::cellIcon)), trailing && !stacked ? trailing->sizeHint().height() : 0);
+        const int content = qMax(qMax(text, int(chrome::cellIcon)), trailing && !stacked ? trailing->sizeHint().height() : 0);
         return margins.top() + content + margins.bottom();
     }
     QSize sizeHint() const override { return {width(), heightForWidth(qMax(1, width()))}; }
@@ -228,7 +228,7 @@ QWidget *padded(QWidget *parent, QVBoxLayout *rows, const QMargins &margins, QVB
     return area;
 }
 int sheetWidth(const QWidget *parent) {
-    return qMax(1, qMin(int(px(1264)), parent->width() - 2 * int(m::notice::sideClearance)));
+    return qMax(1, qMin(int(px(1264)), parent->width() - 2 * int(metrics::notice::sideClearance)));
 }
 }
 
@@ -250,27 +250,27 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic, const 
     };
     auto *card = this->card();
     auto *rows = card->rows();
-    rows->setContentsMargins(m::control::border, m::control::border, m::control::border, m::control::border);
+    rows->setContentsMargins(metrics::control::border, metrics::control::border, metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
 
     // The same header as the styling sheets: a bold title and a close cell.
     auto *header = new ui::Panel(card, Qt::BottomEdge);
-    header->setFixedHeight(c::actionHeight);
+    header->setFixedHeight(chrome::actionHeight);
     auto *headerRow = new QHBoxLayout(header);
     // Children stop above the header's bottom rule, so the close cell's
     // divider meets it.
-    headerRow->setContentsMargins(0, 0, 0, m::control::border);
+    headerRow->setContentsMargins(0, 0, 0, metrics::control::border);
     headerRow->setSpacing(0);
     auto *title = new ui::InterfaceLabel(strings::get("kosync.automatic"), header);
     title->setObjectName("rrKosyncAutomaticTitle");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
-    ui::readerStyle(title, ui::styles::font(c::labelText, true));
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    ui::readerStyle(title, ui::styles::font(chrome::labelText, true));
     headerRow->addWidget(title, 1);
     auto *close = new ui::CellButton(ui::ControlIcon::Close, header);
     close->setObjectName("rrKosyncAutomaticClose");
     close->setAccessibleName(strings::get("settings.close"));
     close->setRule(Qt::LeftEdge);
-    close->setFixedSize(c::cellWidth, c::actionHeight - m::control::border);
+    close->setFixedSize(chrome::cellWidth, chrome::actionHeight - metrics::control::border);
     headerRow->addWidget(close);
     connect(close, &QPushButton::clicked, this, [this] {
         if (closed) closed();
@@ -285,7 +285,7 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic, const 
     // The segmented row keeps the sheet's side inset; the rule below spans the card.
     auto *choiceArea = new QWidget(mode);
     auto *choiceRows = new QVBoxLayout(choiceArea);
-    choiceRows->setContentsMargins(c::inset, 0, c::inset, 0);
+    choiceRows->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     choiceRows->setSpacing(0);
     modeRows->addWidget(choiceArea);
     ui::SegmentedRow modeChoice(choiceArea, choiceRows, "rrKosyncAutomaticMode", strings::get("kosync.automatic"));
@@ -305,27 +305,27 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic, const 
     });
     auto *modeRule = new ui::Panel(mode);
     modeRule->setDividers(Qt::BottomEdge);
-    modeRule->setFixedHeight(m::control::border);
+    modeRule->setFixedHeight(metrics::control::border);
     modeRows->addSpacing(px(24));
     modeRows->addWidget(modeRule);
 
     QVBoxLayout *headingRows = nullptr;
-    details_.append(padded(card, rows, {c::inset, px(32), c::inset, px(8)}, &headingRows));
+    details_.append(padded(card, rows, {chrome::inset, px(32), chrome::inset, px(8)}, &headingRows));
     headingRows->addWidget(sheetLabel(details_.last(), strings::get("kosync.when_heading"), "rrKosyncWhenHeading",
-                                      c::labelText, false));
+                                      chrome::labelText, false));
     // Each moment: an icon, what happens, and for reading its interval.
     const auto moment = [&](ui::ControlIcon icon, const char *name, const char *titleKey, const char *descriptionKey,
                             QWidget *trailing) {
         auto *row = new MomentRow(card);
         row->setObjectName(name);
         auto *line = new QHBoxLayout(row);
-        line->setContentsMargins(c::inset, px(16), c::inset, px(16));
+        line->setContentsMargins(chrome::inset, px(16), chrome::inset, px(16));
         line->setSpacing(px(20));
         line->addWidget(new MomentIcon(icon, row), 0, Qt::AlignTop);
         auto *texts = new QVBoxLayout;
         texts->setSpacing(px(2));
-        row->title = sheetLabel(row, strings::get(titleKey), "", m::text::secondary, false);
-        row->description = sheetLabel(row, strings::get(descriptionKey), "", m::control::captionValueText, true);
+        row->title = sheetLabel(row, strings::get(titleKey), "", metrics::text::secondary, false);
+        row->description = sheetLabel(row, strings::get(descriptionKey), "", metrics::control::captionValueText, true);
         texts->addWidget(row->title);
         texts->addWidget(row->description);
         // Extra row height, from a taller drop-down, goes below the text.
@@ -366,14 +366,14 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic, const 
     interval_->setObjectName("rrKosyncInterval");
     interval_->setFocusPolicy(Qt::NoFocus);
     const int dropdownHeight =
-        m::control::segmentHeight + 2 * int(m::control::segmentVerticalPadding) + 2 * int(m::control::border);
-    ui::readerStyle(interval_, QString("min-height:%1px;max-height:%1px;").arg(dropdownHeight - 2 * m::control::padding) +
-                                   ui::styles::font(m::text::secondary));
+        metrics::control::segmentHeight + 2 * int(metrics::control::segmentVerticalPadding) + 2 * int(metrics::control::border);
+    ui::readerStyle(interval_, QString("min-height:%1px;max-height:%1px;").arg(dropdownHeight - 2 * metrics::control::padding) +
+                                   ui::styles::font(metrics::text::secondary));
     int intervalWidth = 0;
     for (const int minutes : kosync::scheduleMinutes())
-        intervalWidth = qMax(intervalWidth, ui::interfaceTextWidth(intervalLabel(minutes), ui::interfaceFont(m::text::secondary)));
+        intervalWidth = qMax(intervalWidth, ui::interfaceTextWidth(intervalLabel(minutes), ui::interfaceFont(metrics::text::secondary)));
     // DropdownButton keeps fontButtonWidthReserve for its padding and arrow.
-    interval_->setFixedWidth(intervalWidth + int(m::choices::fontButtonWidthReserve) + px(8));
+    interval_->setFixedWidth(intervalWidth + int(metrics::choices::fontButtonWidthReserve) + px(8));
     connect(interval_, &QPushButton::clicked, this, [this] { showIntervals(); });
     moment(ui::ControlIcon::Clock, "rrKosyncWhenReading", "kosync.when_reading", "kosync.when_reading_description",
            interval_);
@@ -387,7 +387,7 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic, const 
                &kosync::Schedule::onClose);
     // The gap before the Wi-Fi divider belongs to the list, so a page that
     // starts with the Wi-Fi section has its divider right under the header.
-    details_.last()->layout()->setContentsMargins(c::inset, px(16), c::inset, features.wifi ? px(40) : px(32));
+    details_.last()->layout()->setContentsMargins(chrome::inset, px(16), chrome::inset, features.wifi ? px(40) : px(32));
 
     // Only a host that can turn on Wi-Fi for a sync offers the Wi-Fi choice.
     if (features.wifi) {
@@ -400,13 +400,13 @@ KosyncScheduleSheet::KosyncScheduleSheet(QWidget *parent, bool automatic, const 
         details_.append(wifi_);
         auto *divider = new ui::Panel(wifi_);
         divider->setDividers(Qt::TopEdge);
-        divider->setFixedHeight(m::control::border);
+        divider->setFixedHeight(metrics::control::border);
         wifiBlock->addWidget(divider);
         QVBoxLayout *wifiRows = nullptr;
-        padded(wifi_, wifiBlock, {c::inset, px(32), c::inset, px(36)}, &wifiRows);
+        padded(wifi_, wifiBlock, {chrome::inset, px(32), chrome::inset, px(36)}, &wifiRows);
         wifiRows->setSpacing(px(20));
         wifiRows->addWidget(sheetLabel(wifi_, strings::get("kosync.wifi_heading"), "rrKosyncWifiHeading",
-                                       c::labelText, false));
+                                       chrome::labelText, false));
         auto *tiles = new QHBoxLayout;
         tiles->setSpacing(px(32));
         wait_ = new KosyncWifiTile("rrKosyncWifiWait", {ui::ControlIcon::WifiDisconnected, ui::ControlIcon::Clock},
@@ -459,7 +459,7 @@ void KosyncScheduleSheet::present() {
 void KosyncScheduleSheet::fit() {
     auto *card = this->card();
     card->fitToWidth(sheetWidth(parentWidget()));
-    card->fitToHeight(parentWidget()->height() - 2 * int(m::notice::sideClearance));
+    card->fitToHeight(parentWidget()->height() - 2 * int(metrics::notice::sideClearance));
     centerCard();
 }
 
@@ -476,19 +476,19 @@ void KosyncScheduleSheet::showIntervals() {
     auto *card = list->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *heading = card->title(strings::get("kosync.when_reading"), "rrKosyncIntervalTitle");
-    heading->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::spacing::row);
+    heading->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::spacing::row);
     auto *hint = card->message(strings::get("kosync.interval_description"), "rrKosyncIntervalHint");
-    ui::readerStyle(hint, ui::styles::font(c::descriptionText));
-    hint->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, parentWidget()->width() - 2 * m::notice::sideClearance);
+    ui::readerStyle(hint, ui::styles::font(chrome::descriptionText));
+    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, parentWidget()->width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName("rrKosyncIntervalChoices");
     choices->setUniformRows(false);
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     const auto &values = kosync::scheduleMinutes();
     for (const int minutes : values)
@@ -506,12 +506,12 @@ void KosyncScheduleSheet::showIntervals() {
     choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
     card->fitToWidth(cardWidth);
     // A phone in landscape pages the rows, as Reader::openSleepChoice does.
-    const int available = parentWidget()->height() - 2 * m::notice::sideClearance;
+    const int available = parentWidget()->height() - 2 * metrics::notice::sideClearance;
     if (card->height() > available) {
         auto *pager = new ui::PagerBar(card, "rrKosyncIntervalPopup");
         card->rows()->addWidget(pager);
         const int fixed = card->height() - choices->height();
-        const int room = qMax(1, available - fixed - int(c::actionHeight));
+        const int room = qMax(1, available - fixed - int(chrome::actionHeight));
         QVector<int> starts{0};
         int used = 0;
         for (int row = 0; row < choices->options().size(); ++row) {

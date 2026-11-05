@@ -17,7 +17,6 @@
 #include <QResizeEvent>
 
 namespace kobalt::ui {
-namespace m = metrics;
 bool turnVisiblePageControl(QWidget *scope, int direction) {
     if (!scope || !scope->isVisible() || !scope->isEnabled() || (direction != -1 && direction != 1))
         return false;
@@ -108,7 +107,7 @@ protected:
         // including when queued input arrives before the hold timer fires.
         const quint32 duration = quint32(mouse->timestamp()) - timestamp;
         const bool held = receiver->property("reader_swipe_hold").toBool() &&
-                          (elapsed.elapsed() >= m::input::longPressMilliseconds || (timestamp && duration >= m::input::longPressMilliseconds));
+                          (elapsed.elapsed() >= metrics::input::longPressMilliseconds || (timestamp && duration >= metrics::input::longPressMilliseconds));
         if (mouse->button() != Qt::LeftButton || !swipe || !eligible(receiver))
             return false;
         QPointer<QWidget> alive = pager;
@@ -179,7 +178,7 @@ PagerBar::PagerBar(QWidget *parent, const QString &prefix) : QWidget(parent) {
     counter = new ui::InterfaceLabel(this);
     counter->setObjectName(prefix + "Page");
     counter->setAlignment(Qt::AlignCenter);
-    readerStyle(counter, styles::font(m::chrome::countText) + "background:transparent;");
+    readerStyle(counter, styles::font(metrics::chrome::countText) + "background:transparent;");
     previous = new CellButton(ControlIcon::Previous, this);
     previous->setObjectName(prefix + "Previous");
     next = new CellButton(ControlIcon::Next, this);
@@ -188,13 +187,13 @@ PagerBar::PagerBar(QWidget *parent, const QString &prefix) : QWidget(parent) {
     next->setAccessibleName(strings::get("common.next_page"));
     previous->setRule(Qt::RightEdge);
     next->setRule(Qt::LeftEdge);
-    setFixedHeight(m::chrome::actionHeight);
+    setFixedHeight(metrics::chrome::actionHeight);
     continuationHint = new ContinuationHint(strings::get("common.more_next_page"), parent ? parent : this);
     continuationHint->setObjectName(prefix + "ContinuationHint");
     continuationHint->setTextFormat(Qt::PlainText);
     continuationHint->setAlignment(Qt::AlignCenter);
     continuationHint->setAttribute(Qt::WA_TransparentForMouseEvents);
-    readerStyle(continuationHint, styles::font(m::chrome::descriptionText) +
+    readerStyle(continuationHint, styles::font(metrics::chrome::descriptionText) +
                                      "font-style:italic;color:palette(placeholder-text);background:transparent;");
     continuationHint->hide();
 }
@@ -221,7 +220,7 @@ void PagerBar::updateHint() {
     continuationHint->raise();
 }
 void PagerBar::resizeEvent(QResizeEvent *) {
-    const int top = m::control::border, cell = m::chrome::cellWidth;
+    const int top = metrics::control::border, cell = metrics::chrome::cellWidth;
     previous->setGeometry(0, top, cell, height() - top);
     next->setGeometry(width() - cell, top, cell, height() - top);
     counter->setGeometry(cell, top, qMax(1, width() - 2 * cell), height() - top);
@@ -229,7 +228,7 @@ void PagerBar::resizeEvent(QResizeEvent *) {
 void PagerBar::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.fillRect(rect(), palette().color(QPalette::Window));
-    painter.fillRect(0, 0, width(), m::control::border, dividerColor(this));
+    painter.fillRect(0, 0, width(), metrics::control::border, dividerColor(this));
 }
 void PagerBar::setPage(int page, int count, const QString &label, bool wrap) {
     count = qMax(1, count);
@@ -271,7 +270,7 @@ PageControls::PageControls(QWidget *parent, const QString &prefix, bool compact)
     iconAction(next, ControlIcon::Next, strings::get("common.next_page"));
     for (auto *button : {previous, next})
         button->setFocusPolicy(Qt::NoFocus);
-    setFixedHeight(m::navigation::height);
+    setFixedHeight(metrics::navigation::height);
 }
 void PageControls::setCompact(bool value) {
     compact = value;
@@ -281,9 +280,9 @@ void PageControls::resizeEvent(QResizeEvent *) {
     arrange();
 }
 void PageControls::arrange() {
-    const int margin = compact ? m::navigation::compactMargin : m::navigation::margin;
-    const int buttonWidth = compact ? m::navigation::compactButtonWidth : m::navigation::buttonWidth;
-    const int side = margin + buttonWidth + m::control::itemGap;
+    const int margin = compact ? metrics::navigation::compactMargin : metrics::navigation::margin;
+    const int buttonWidth = compact ? metrics::navigation::compactButtonWidth : metrics::navigation::buttonWidth;
+    const int side = margin + buttonWidth + metrics::control::itemGap;
     previous->setGeometry(margin, 0, buttonWidth, height());
     next->setGeometry(width() - margin - buttonWidth, 0, buttonWidth, height());
     counter->setGeometry(side, 0, qMax(1, width() - 2 * side), height());
@@ -300,7 +299,7 @@ PageNavigation::PageNavigation(QWidget *parent, const QString &prefix) {
     title->setObjectName(prefix + "Title");
     title->setAlignment(Qt::AlignCenter);
     title->setTextFormat(Qt::PlainText);
-    readerStyle(title, styles::font(m::text::pageHeading, true));
+    readerStyle(title, styles::font(metrics::text::pageHeading, true));
     back = new BackButton(strings::get("common.back"), parent);
     back->setObjectName(prefix + "Back");
     back->setFocusPolicy(Qt::NoFocus);
@@ -313,12 +312,12 @@ void PageNavigation::layout(const QSize &size, bool compact) {
     const int width = size.width(), height = size.height();
     title->setVisible(!compact);
     back->setVisible(!compact);
-    title->setGeometry(m::navigation::headingSide, m::navigation::headingTop,
-                       qMax(1, width - 2 * m::navigation::headingSide), m::navigation::height);
-    back->setGeometry(m::navigation::backLeft, m::navigation::headingTop, m::navigation::backWidth,
-                      m::navigation::height);
-    const int y = height - (compact ? m::navigation::compactBottom : m::navigation::bottom);
-    paging->setGeometry(0, y, width, m::navigation::height);
+    title->setGeometry(metrics::navigation::headingSide, metrics::navigation::headingTop,
+                       qMax(1, width - 2 * metrics::navigation::headingSide), metrics::navigation::height);
+    back->setGeometry(metrics::navigation::backLeft, metrics::navigation::headingTop, metrics::navigation::backWidth,
+                      metrics::navigation::height);
+    const int y = height - (compact ? metrics::navigation::compactBottom : metrics::navigation::bottom);
+    paging->setGeometry(0, y, width, metrics::navigation::height);
     paging->setCompact(compact);
 }
 void PageNavigation::setPage(int page, int count) {

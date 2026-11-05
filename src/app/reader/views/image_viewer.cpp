@@ -18,7 +18,7 @@
 #include <cmath>
 
 namespace kobalt {
-namespace m = ui::metrics::chrome;
+namespace chrome = ui::metrics::chrome;
 class ImageCanvas final : public QWidget {
 public:
     explicit ImageCanvas(QWidget *parent) : QWidget(parent) {
@@ -92,7 +92,7 @@ protected:
         painter.fillRect(rect(), palette().window());
         if (image.isNull()) {
             painter.setPen(palette().windowText().color());
-            painter.setFont(ui::interfaceFont(m::labelText));
+            painter.setFont(ui::interfaceFont(chrome::labelText));
             ui::drawInterfaceText(painter, rect(), strings::get(ready ? "image.unavailable" : "image.loading"),
                                   Qt::AlignCenter);
             return;
@@ -252,22 +252,22 @@ ImageViewer::ImageViewer(QWidget *parent) : Panel(parent) {
     auto *header = new ui::Panel(this, Qt::BottomEdge);
     header->setObjectName("rrImageHeader");
     const int rule = ui::metrics::control::border;
-    header->setFixedHeight(m::actionHeight + rule);
+    header->setFixedHeight(chrome::actionHeight + rule);
     auto *row = new QHBoxLayout(header);
     // Children paint opaque backgrounds. Keep the shared rule outside their cells.
     row->setContentsMargins(0, 0, 0, rule);
     row->setSpacing(0);
     auto *title = new ui::InterfaceLabel(strings::get("image.title"), header);
     title->setObjectName("rrImageTitle");
-    title->setFont(ui::brandFont(m::titleText));
-    ui::readerStyle(title, ui::styles::brand(m::titleText) + "background:transparent;");
+    title->setFont(ui::brandFont(chrome::titleText));
+    ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
     title->setAlignment(Qt::AlignCenter);
-    row->addSpacing(m::cellWidth);
+    row->addSpacing(chrome::cellWidth);
     row->addWidget(title, 1);
     auto *close = new ui::CellButton(ui::ControlIcon::Close, header);
     close->setObjectName("rrImageClose");
     close->setRule(Qt::LeftEdge);
-    close->setFixedSize(m::cellWidth, m::actionHeight);
+    close->setFixedSize(chrome::cellWidth, chrome::actionHeight);
     close->setAccessibleName(strings::get("image.close"));
     row->addWidget(close);
     connect(close, &QPushButton::clicked, this, [this] { closeImage(); });
@@ -279,7 +279,7 @@ ImageViewer::ImageViewer(QWidget *parent) : Panel(parent) {
     layout->addWidget(canvas, 1);
     auto *controls = new ui::Panel(this, Qt::TopEdge);
     controls->setObjectName("rrImageControls");
-    controls->setFixedHeight(m::actionHeight + rule);
+    controls->setFixedHeight(chrome::actionHeight + rule);
     auto *buttons = new QHBoxLayout(controls);
     buttons->setContentsMargins(0, rule, 0, 0);
     buttons->setSpacing(0);
@@ -287,18 +287,18 @@ ImageViewer::ImageViewer(QWidget *parent) : Panel(parent) {
     minus->setObjectName("rrImageZoomOut");
     minus->setAccessibleName(strings::get("image.zoom_out"));
     minus->setRule(Qt::LeftEdge);
-    minus->setFixedSize(m::cellWidth, m::actionHeight);
+    minus->setFixedSize(chrome::cellWidth, chrome::actionHeight);
     auto *fit = new ui::CellButton(ui::ControlIcon::FitImage, controls);
     fit->setObjectName("rrImageFit");
     fit->setAccessibleName(strings::get("image.fit"));
     fit->setToolTip(strings::get("image.fit"));
     fit->setRule(Qt::RightEdge);
-    fit->setFixedSize(m::cellWidth, m::actionHeight);
+    fit->setFixedSize(chrome::cellWidth, chrome::actionHeight);
     auto *plus = new ui::CellButton(ui::ControlIcon::Plus, controls);
     plus->setObjectName("rrImageZoomIn");
     plus->setAccessibleName(strings::get("image.zoom_in"));
     plus->setRule(Qt::LeftEdge);
-    plus->setFixedSize(m::cellWidth, m::actionHeight);
+    plus->setFixedSize(chrome::cellWidth, chrome::actionHeight);
     buttons->addWidget(fit);
     buttons->addStretch(1);
     buttons->addWidget(minus);

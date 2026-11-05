@@ -38,7 +38,7 @@ namespace kobalt::reader {
 namespace strings = kobalt::strings;
 using namespace kobalt::storage;
 namespace styles = kobalt::ui::styles;
-namespace m = kobalt::ui::metrics;
+namespace metrics = kobalt::ui::metrics;
 using kobalt::ui::readerStyle;
 using kobalt::ui::makeButton;
 using kobalt::ui::ControlIcon;
@@ -63,13 +63,13 @@ protected:
         for (const auto &buttons : columns) {
             QRect content;
             for (const auto &button : buttons) content |= button;
-            const qreal inset = int(m::control::border) / 2.0;
+            const qreal inset = int(metrics::control::border) / 2.0;
             const auto bounds = QRectF(content.adjusted(-padding, -2 * padding, padding, 2 * padding))
                 .adjusted(inset, inset, -inset, -inset);
-            painter.setPen(QPen(palette().color(QPalette::WindowText), m::control::border));
+            painter.setPen(QPen(palette().color(QPalette::WindowText), metrics::control::border));
             painter.setBrush(palette().color(QPalette::Window));
             painter.drawRoundedRect(bounds, bounds.width() / 2, bounds.width() / 2);
-            painter.setPen(QPen(ui::dividerColor(this), m::control::border));
+            painter.setPen(QPen(ui::dividerColor(this), metrics::control::border));
             const qreal dividerInset = bounds.width() / 4;
             for (int row = 1; row < buttons.size(); ++row) {
                 const qreal y = (buttons[row - 1].bottom() + 1 + buttons[row].top()) / 2.0;
@@ -87,7 +87,7 @@ protected:
     void paintEvent(QPaintEvent *) override {
         const auto *button = qobject_cast<QPushButton *>(parentWidget());
         // A large interface scale can leave the button only the arrow's cell.
-        if (button && button->width() <= int(m::chrome::cellWidth))
+        if (button && button->width() <= int(metrics::chrome::cellWidth))
             return;
         QPainter painter(this);
         painter.setFont(font());
@@ -97,7 +97,7 @@ protected:
                                                                             : QPalette::WindowText));
         const auto bounds = contentsRect().adjusted(margin(), margin(), -margin(), -margin());
         // Font line boxes include padding above and below the visible letters.
-        ui::drawOpticalText(painter, bounds.translated(0, m::chrome::returnTitleOffset), text(), true);
+        ui::drawOpticalText(painter, bounds.translated(0, metrics::chrome::returnTitleOffset), text(), true);
     }
 };
 class ReturnButton final : public ui::Button {
@@ -113,14 +113,14 @@ public:
                 if (qAlpha(mask.pixel(x, y))) arrowInk |= QRect(x, y, 1, 1);
     }
     int labelStart(const QFont &captionFont) const {
-        const int arrowLeft = (int(m::chrome::cellWidth) - glyph) / 2;
-        return arrowLeft + arrowInk.right() + 1 + int(m::chrome::returnLabelGap)
+        const int arrowLeft = (int(metrics::chrome::cellWidth) - glyph) / 2;
+        return arrowLeft + arrowInk.right() + 1 + int(metrics::chrome::returnLabelGap)
                - ui::interfaceInkBounds(text(), captionFont).left();
     }
     QSize sizeHint() const override {
         ensurePolished();
         const auto content = layout() ? layout()->sizeHint() : QSize();
-        return {content.width(), qMax(content.height(), int(m::chrome::actionHeight))};
+        return {content.width(), qMax(content.height(), int(metrics::chrome::actionHeight))};
     }
 
 protected:
@@ -130,7 +130,7 @@ protected:
         const auto paper = palette().color(QPalette::Window);
         const auto ink = palette().color(QPalette::WindowText);
         painter.fillRect(rect(), pressed ? ink : paper);
-        const QRect iconCell(0, 0, m::chrome::cellWidth, height());
+        const QRect iconCell(0, 0, metrics::chrome::cellWidth, height());
         if (property("reader_return_divider").toBool())
             ui::paintEdges(painter, rect(), Qt::RightEdge, palette().color(QPalette::Mid));
         if (!isEnabled()) painter.setOpacity(.45);
@@ -142,13 +142,13 @@ protected:
             letterOffset = (first.top() + first.bottom() - word.top() - word.bottom()) / 2.0;
         }
         const int top = qRound((height() - 1) / 2.0 + letterOffset - (arrowInk.top() + arrowInk.bottom()) / 2.0)
-                        + int(m::chrome::returnArrowOffset);
+                        + int(metrics::chrome::returnArrowOffset);
         ui::controlIcon(ControlIcon::Back, pressed ? paper : ink)
             .paint(&painter, QRect((iconCell.width() - glyph) / 2, top, glyph, glyph));
     }
 
 private:
-    const int glyph = m::chrome::backIcon;
+    const int glyph = metrics::chrome::backIcon;
     QRect arrowInk;
 };
 kobalt::ui::Button *iconButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &label,
@@ -157,7 +157,7 @@ kobalt::ui::Button *iconButton(QWidget *parent, QBoxLayout *layout, const char *
     button->setAccessibleName(label);
     button->setToolTip(label);
     kobalt::ui::iconAction(button, icon, label);
-    button->setFixedWidth(m::control::iconButtonWidth);
+    button->setFixedWidth(metrics::control::iconButtonWidth);
     return button;
 }
 }
@@ -457,7 +457,7 @@ void Reader::buildReadingPage() {
     linkReturn = new kobalt::ui::BackButton(strings::get("reader.return_to_passage"), this);
     linkReturn->setObjectName("rrLinkReturn");
     readerStyle(linkReturn, styles::outlined() + "QPushButton{min-height:0;padding:0;}");
-    linkReturn->setFixedSize(m::links::returnWidth, m::links::returnHeight);
+    linkReturn->setFixedSize(metrics::links::returnWidth, metrics::links::returnHeight);
     linkReturn->hide();
     connect(linkReturn, &QPushButton::clicked, this, [this] {
         if (this->session->busy() || linkHistory.isEmpty() || lifecycleHidden || closing || services.suspended()) {
@@ -615,28 +615,28 @@ void Reader::buildToolbar() {
     auto *toolbar = new QVBoxLayout(topControls);
     toolbarComposition.panel = topControls;
     toolbarComposition.rows = toolbar;
-    toolbar->setContentsMargins(m::panel::toolbarMargins);
-    toolbar->setSpacing(m::panel::statusGap);
+    toolbar->setContentsMargins(metrics::panel::toolbarMargins);
+    toolbar->setSpacing(metrics::panel::statusGap);
     auto *status = new QGridLayout;
-    status->setContentsMargins(m::panel::statusMargins);
+    status->setContentsMargins(metrics::panel::statusMargins);
     toolbar->addLayout(status);
     menuClock = new ui::InterfaceLabel(topControls);
     menuClock->setObjectName("rrMenuClock");
-    menuClock->setFixedHeight(m::panel::statusHeight);
+    menuClock->setFixedHeight(metrics::panel::statusHeight);
     menuClock->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    readerStyle(menuClock, styles::font(m::panel::statusText));
+    readerStyle(menuClock, styles::font(metrics::panel::statusText));
     status->addWidget(menuClock, 0, 0);
     menuSession = new ui::InterfaceLabel(topControls);
     menuSession->setObjectName("rrMenuSession");
-    menuSession->setFixedHeight(m::panel::statusHeight);
+    menuSession->setFixedHeight(metrics::panel::statusHeight);
     menuSession->setAlignment(Qt::AlignCenter);
-    readerStyle(menuSession, styles::brand(m::panel::sessionText));
+    readerStyle(menuSession, styles::brand(metrics::panel::sessionText));
     status->addWidget(menuSession, 0, 1);
     status->setColumnStretch(0, 1);
     status->setColumnStretch(2, 1);
     menuBattery = new kobalt::ui::BatteryIndicator(topControls);
     menuBattery->setObjectName("rrMenuBattery");
-    readerStyle(menuBattery, styles::font(m::panel::batteryText));
+    readerStyle(menuBattery, styles::font(metrics::panel::batteryText));
     status->addWidget(menuBattery, 0, 2, Qt::AlignRight);
     menuBluetooth = new kobalt::ui::BluetoothIndicator(topControls);
     menuBluetooth->setObjectName("rrMenuBluetooth");
@@ -646,7 +646,7 @@ void Reader::buildToolbar() {
     toolbarComposition.wifi = menuWifi;
     auto *top = new QHBoxLayout;
     toolbar->addLayout(top);
-    top->setSpacing(m::panel::toolbarGap);
+    top->setSpacing(metrics::panel::toolbarGap);
     updateMenuStatus();
     const auto returnLabel = services.backButtonLabel.isEmpty() ? strings::get("reader.exit") : services.backButtonLabel;
     auto *back = new ReturnButton(returnLabel, topControls);
@@ -662,8 +662,8 @@ void Reader::buildToolbar() {
     returnTitle->setObjectName("rrReturnTitle");
     returnTitle->setAttribute(Qt::WA_TransparentForMouseEvents);
     returnTitle->setAlignment(Qt::AlignCenter);
-    returnTitle->setContentsMargins(0, 0, m::chrome::inset, 0);
-    readerStyle(returnTitle, styles::brand(m::chrome::titleText) + "background:transparent;");
+    returnTitle->setContentsMargins(0, 0, metrics::chrome::inset, 0);
+    readerStyle(returnTitle, styles::brand(metrics::chrome::titleText) + "background:transparent;");
     returnTitle->ensurePolished();
     returnRow->addSpacing(back->labelStart(returnTitle->font()));
     returnRow->addWidget(returnTitle, 1);
@@ -705,16 +705,16 @@ void Reader::buildToolbar() {
     };
     lightPopup->availableHeight = [this] {
         return navigation ? navigation->contentBottom(size()) - navigation->toolbarHeight()
-                          : height() - 2 * int(m::panel::toolbarHeight);
+                          : height() - 2 * int(metrics::panel::toolbarHeight);
     };
     auto *typeButton = iconButton(topControls, top, "rrTypography", strings::get("reader.typography"),
                                   ControlIcon::Typography, [this] {
                                       selectPanel(0);
                                   });
-    typeButton->setFixedWidth(m::control::typographyButtonWidth);
+    typeButton->setFixedWidth(metrics::control::typographyButtonWidth);
     typeButton->setAccessibleName(strings::get("reader.typography"));
     typeButton->setToolTip(strings::get("reader.typography"));
-    readerStyle(typeButton, styles::font(m::text::typography));
+    readerStyle(typeButton, styles::font(metrics::text::typography));
     typeButton->setCheckable(true);
     iconButton(topControls, top, "rrLayout", strings::get("reader.page_layout"), ControlIcon::Layout, [this] {
         selectPanel(1);
@@ -776,9 +776,9 @@ void Reader::buildToolbar() {
             topActions.append(button);
         if (auto *action = dynamic_cast<kobalt::ui::Button *>(button))
             action->setPaintMode(kobalt::ui::ButtonPaintMode::ToolbarSquare);
-        button->setFixedSize(m::control::toolbarButtonSize, m::control::toolbarButtonSize);
+        button->setFixedSize(metrics::control::toolbarButtonSize, metrics::control::toolbarButtonSize);
         readerStyle(button, "QPushButton{border:none;padding:0;min-height:0;}" +
-                                (button == typeButton ? styles::font(m::text::typography) : QString()));
+                                (button == typeButton ? styles::font(metrics::text::typography) : QString()));
     }
 }
 
@@ -787,8 +787,8 @@ void Reader::buildBottomControls() {
     bottomControls->setObjectName("rrControlsBottom");
     bottomControls->setFrameStyle(QFrame::Box);
     auto *bottom = new QVBoxLayout(bottomControls);
-    bottom->setContentsMargins(m::panel::footerMargins);
-    bottom->setSpacing(m::panel::footerGap);
+    bottom->setContentsMargins(metrics::panel::footerMargins);
+    bottom->setSpacing(metrics::panel::footerGap);
     bottom->addWidget(linkReturn, 0, Qt::AlignLeft);
     pageScrubber = new kobalt::ui::PageScrubber(this);
     pageScrubber->setPreviewDismissible(false);
@@ -853,7 +853,7 @@ void Reader::buildBottomControls() {
     chapterButton->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     readerStyle(chapters, "text-align:left;");
     buttonIcon(chapters, ControlIcon::Chapters);
-    chapters->setIconSize(QSize(m::control::chapterIconSize, m::control::chapterIconSize));
+    chapters->setIconSize(QSize(metrics::control::chapterIconSize, metrics::control::chapterIconSize));
 }
 
 kobalt::reader::AppearanceLayout Reader::buildMenu() {
@@ -875,13 +875,13 @@ void Reader::buildOverlays() {
     linkIndicator->hide();
     linkDiscovery = new kobalt::ui::Panel(this);
     linkDiscovery->setObjectName("rrLinkDiscovery");
-    linkDiscovery->setEdgeWidth(m::chrome::heavyRule);
+    linkDiscovery->setEdgeWidth(metrics::chrome::heavyRule);
     auto *linkRow = new QHBoxLayout(linkDiscovery);
-    linkRow->setSpacing(m::links::hintGap);
+    linkRow->setSpacing(metrics::links::hintGap);
     linkDiscoveryIcon = new ui::InterfaceLabel(linkDiscovery);
     // The link glyph has more space around it than the undo icon in the return
     // row: a larger drawing in the same column matches its size.
-    linkDiscoveryIcon->setFixedSize(m::chrome::cellIcon, m::control::iconSize);
+    linkDiscoveryIcon->setFixedSize(metrics::chrome::cellIcon, metrics::control::iconSize);
     linkDiscoveryIcon->setAlignment(Qt::AlignCenter);
     linkRow->addWidget(linkDiscoveryIcon);
     linkDiscoveryHint = new ui::InterfaceLabel(strings::get("reader.long_press_link"), linkDiscovery);
@@ -910,7 +910,7 @@ void Reader::buildOverlays() {
     ui::readerStyle(pinnedBookmarks, "QFrame#rrPinnedBookmarks{background:transparent;}");
     pinnedBookmarks->hide();
     for (int i = 0; i < BookmarkStore::maxPins; ++i) {
-        auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks, qRound(1.2 * int(m::chrome::cellIcon)));
+        auto *button = new ui::CellButton(ui::ControlIcon::Star, pinnedBookmarks, qRound(1.2 * int(metrics::chrome::cellIcon)));
         button->setCircular(true);
         button->setObjectName(QString("rrPinnedBookmark%1").arg(i));
         pinnedButtons.append(button);
@@ -1258,7 +1258,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     syncChromeControls();
     // Every appearance page uses the same row gap.
     for (auto *rows : {typeRows, pageRows, layout.headerFooterRows}) {
-        rows->setSpacing(m::control::rowGap);
+        rows->setSpacing(metrics::control::rowGap);
         rows->addStretch();
     }
 }
@@ -1583,7 +1583,7 @@ void Reader::buildNotices() {
     connect(&renderNoticeTimer, &QTimer::timeout, this, [this] {
         refreshRenderNotice();
     });
-    busyNotice->card()->fitToWidth(m::notice::cardWidth);
+    busyNotice->card()->fitToWidth(metrics::notice::cardWidth);
     busyNotice->centerCard();
     brightnessNotice = new kobalt::ui::LightSwipeNotice(this);
     brightnessNotice->setObjectName("rrBrightnessNotice");
@@ -1591,20 +1591,20 @@ void Reader::buildNotices() {
     brightnessNotice->hide();
     brightnessHide.setObjectName("rrBrightnessHideTimer");
     brightnessHide.setSingleShot(true);
-    brightnessHide.setInterval(m::lightSwipe::hideMilliseconds);
+    brightnessHide.setInterval(metrics::lightSwipe::hideMilliseconds);
     connect(&brightnessHide, &QTimer::timeout, brightnessNotice, &QWidget::hide);
     annotationModeNotice = new ui::AnnotationModeNotice(this);
     annotationModeNotice->setObjectName("rrAnnotationModeNotice");
     annotationModeNotice->hide();
     annotationModeHide.setSingleShot(true);
-    annotationModeHide.setInterval(m::lightSwipe::hideMilliseconds);
+    annotationModeHide.setInterval(metrics::lightSwipe::hideMilliseconds);
     connect(&annotationModeHide, &QTimer::timeout, annotationModeNotice, &QWidget::hide);
 }
 
 void Reader::connectLightGestures() {
     lightFeedback.setObjectName("rrLightFeedbackTimer");
     lightFeedback.setSingleShot(true);
-    lightFeedback.setInterval(m::lightSwipe::feedbackMilliseconds);
+    lightFeedback.setInterval(metrics::lightSwipe::feedbackMilliseconds);
     connect(&lightFeedback, &QTimer::timeout, this, [this] {
         if (lightFeedbackLevel < 0 || !takesInput() || book->deviceTransition() || annotationMode ||
             session->busy() || general->isVisible() || topControls->isVisible() || appearanceEdit.panelOpen() ||

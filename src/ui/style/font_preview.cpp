@@ -9,7 +9,6 @@
 #include <QFileInfo>
 
 namespace kobalt::ui {
-namespace m = metrics;
 namespace {
 QString identity(const QStringList &files) {
     QString result;
@@ -32,8 +31,8 @@ FontPreviewSource fontPreviewSource(const QString &family, const QStringList &fi
 bool drawFontPreview(QPainter &painter, QRect area, const QString &text, const FontPreviewSource &source, int inkHeight,
                      int weight, bool boldReading, bool centered, bool wrap) {
     // The same size limits as the interface sample font.
-    const FontPreviewScale scale{inkHeight, m::choices::sampleBase, m::choices::sampleMinimum,
-                                 m::choices::sampleMaximum, px(5)};
+    const FontPreviewScale scale{inkHeight, metrics::choices::sampleBase, metrics::choices::sampleMinimum,
+                                 metrics::choices::sampleMaximum, px(5)};
     if (source.files.isEmpty() || source.identity.size() > 16384 || text.isEmpty() || text.size() > 256 ||
         area.width() <= 0 || area.height() <= 0 || area.width() > 2048 || area.height() > 512 ||
         qint64(area.width()) * area.height() > 256 * 1024) return false;

@@ -7,7 +7,7 @@
 #include <QTimer>
 
 namespace kobalt::ui {
-namespace m = metrics::loading;
+namespace loading = metrics::loading;
 LoadingIndicator::LoadingIndicator(Style value, QWidget *parent)
     : QWidget(parent), style(value), timer(new QTimer(this)) {
     setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -22,14 +22,14 @@ int LoadingIndicator::count() const {
     return style == Style::Dots ? 3 : 6;
 }
 int LoadingIndicator::interval() const {
-    return style == Style::Dots ? m::dotMilliseconds : m::segmentMilliseconds;
+    return style == Style::Dots ? loading::dotMilliseconds : loading::segmentMilliseconds;
 }
 QSize LoadingIndicator::sizeHint() const {
     if (style == Style::Logo) {
-        return {m::logoWidth, m::logoHeight};
+        return {loading::logoWidth, loading::logoHeight};
     }
-    const int side = style == Style::Dots ? int(m::dot) : int(m::square);
-    const int gap = style == Style::Dots ? int(m::dotGap) : int(m::squareGap);
+    const int side = style == Style::Dots ? int(loading::dot) : int(loading::square);
+    const int gap = style == Style::Dots ? int(loading::dotGap) : int(loading::squareGap);
     return {count() * side + (count() - 1) * gap, side};
 }
 void LoadingIndicator::restart() {
@@ -91,8 +91,8 @@ void LoadingIndicator::paintEvent(QPaintEvent *) {
                            (i == 5 ? metrics::opening::finalBarWidth : metrics::opening::icon.width()) * scale,
                            metrics::opening::iconBarHeight * scale);
         } else {
-            const int side = style == Style::Dots ? int(m::dot) : int(m::square);
-            const int gap = style == Style::Dots ? int(m::dotGap) : int(m::squareGap);
+            const int side = style == Style::Dots ? int(loading::dot) : int(loading::square);
+            const int gap = style == Style::Dots ? int(loading::dotGap) : int(loading::squareGap);
             shape = QRectF(i * (side + gap), 0, side, side);
         }
         shape.adjust(stroke / 2, stroke / 2, -stroke / 2, -stroke / 2);

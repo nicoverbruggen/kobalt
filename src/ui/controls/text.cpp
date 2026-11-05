@@ -25,7 +25,6 @@
 #include <algorithm>
 
 namespace kobalt::ui {
-namespace m = metrics;
 QString headerFooterText(const headerfooter::Content &content, const QFont &font, int width) {
     if (interfaceTextWidth(content.text, font) <= width)
         return content.text;
@@ -604,7 +603,7 @@ void SampleLabel::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     painter.setFont(font());
     painter.setPen(palette().color(QPalette::WindowText));
-    if (drawFontPreview(painter, rect(), text(), previewSource, m::choices::sampleInkHeight,
+    if (drawFontPreview(painter, rect(), text(), previewSource, metrics::choices::sampleInkHeight,
                         appearance.weight, appearance.bionic == "bold", alignment().testFlag(Qt::AlignHCenter), wordWrap()))
         return;
     if (needsPrivateText(text(), font())) {
@@ -718,8 +717,8 @@ QFont fontSample(const QString &face) {
             }
         }
         const int size =
-            last >= first ? qRound(128.0 * m::choices::sampleInkHeight / (last - first + 1)) : m::choices::sampleBase;
-        font.setPixelSize(qBound<int>(m::choices::sampleMinimum, size, m::choices::sampleMaximum));
+            last >= first ? qRound(128.0 * metrics::choices::sampleInkHeight / (last - first + 1)) : metrics::choices::sampleBase;
+        font.setPixelSize(qBound<int>(metrics::choices::sampleMinimum, size, metrics::choices::sampleMaximum));
         return font;
     }
     const auto resolved = QFontInfo(font).family();
@@ -743,8 +742,8 @@ QFont fontSample(const QString &face) {
                     break;
                 }
         const int size =
-            last >= first ? qRound(128.0 * m::choices::sampleInkHeight / (last - first + 1)) : m::choices::sampleBase;
-        found = sizes.insert(resolved, qBound<int>(m::choices::sampleMinimum, size, m::choices::sampleMaximum));
+            last >= first ? qRound(128.0 * metrics::choices::sampleInkHeight / (last - first + 1)) : metrics::choices::sampleBase;
+        found = sizes.insert(resolved, qBound<int>(metrics::choices::sampleMinimum, size, metrics::choices::sampleMaximum));
     }
     font.setPixelSize(*found);
     return font;

@@ -15,7 +15,7 @@
 
 namespace kobalt::reader {
 namespace {
-namespace m = ui::metrics::sleep;
+namespace sleepMetrics = ui::metrics::sleep;
 struct Content {
     SleepStatus status = SleepStatus::Sleeping;
     QString progress, remaining;
@@ -31,17 +31,17 @@ struct Battery {
     int width() const { return textWidth + gap + iconWidth; }
 };
 QFont detailFont() {
-    return ui::interfaceFont(m::detailText);
+    return ui::interfaceFont(sleepMetrics::detailText);
 }
 Battery sleepBattery(int percent) {
     Battery battery;
     const bool valid = percent >= 0 && percent <= 100;
     battery.text = valid ? strings::get("common.percent").arg(percent) : strings::get("components.battery_unknown");
-    battery.font = ui::chromeFont(m::batteryText);
+    battery.font = ui::chromeFont(sleepMetrics::batteryText);
     battery.body = qRound(detailFont().pixelSize() * .75);
     battery.textWidth = ui::interfaceTextWidth(battery.text, battery.font);
     battery.iconWidth = qCeil(ui::batteryWidth(battery.body));
-    battery.gap = m::batteryGap;
+    battery.gap = sleepMetrics::batteryGap;
     return battery;
 }
 // Paints the line from left, centered in a line of the given height.
@@ -102,13 +102,13 @@ void paintUprightBattery(QPainter &painter, const Battery &battery, int left, qr
     painter.setFont(previous);
 }
 void paintCard(QPainter &painter, const QRect &card, const Content &content, const QColor &ink, const QColor &paper) {
-    const int padding = qMin(int(m::padding), painter.device()->width() / 16);
-    const QFont title = ui::brandFont(m::titleText);
+    const int padding = qMin(int(sleepMetrics::padding), painter.device()->width() / 16);
+    const QFont title = ui::brandFont(sleepMetrics::titleText);
     const QFont detail = detailFont();
     const int titleHeight = ui::interfaceLineHeight(title);
     const int detailHeight = ui::interfaceLineHeight(detail);
     painter.fillRect(card, paper);
-    painter.setPen(QPen(ink, int(m::border)));
+    painter.setPen(QPen(ink, int(sleepMetrics::border)));
     painter.drawRect(card.adjusted(0, 0, -1, -1));
     const int left = card.left() + padding;
     const int width = card.width() - 2 * padding;
@@ -123,12 +123,12 @@ void paintCard(QPainter &painter, const QRect &card, const Content &content, con
     const int titleWidth = qMax(0, width - batterySpace);
     ui::drawInterfaceText(painter, QRect(left, top, titleWidth, titleHeight),
                           ui::elideInterfaceText(sleepStatusText(content.status), title, titleWidth));
-    top += titleHeight + int(m::gap);
+    top += titleHeight + int(sleepMetrics::gap);
     painter.setFont(detail);
     ui::drawInterfaceText(painter, QRect(left, top, width, detailHeight),
                           ui::elideInterfaceText(content.progress, detail, width));
     if (!content.remaining.isEmpty()) {
-        top += detailHeight + int(m::lineGap);
+        top += detailHeight + int(sleepMetrics::lineGap);
         ui::drawInterfaceText(painter, QRect(left, top, width, detailHeight),
                               ui::elideInterfaceText(content.remaining, detail, width));
     }
@@ -136,19 +136,19 @@ void paintCard(QPainter &painter, const QRect &card, const Content &content, con
 // A strip along the bottom edge. The read part of its top rule is thicker.
 void paintBand(QPainter &painter, const QRect &band, const Content &content, const QColor &ink, const QColor &paper) {
     painter.fillRect(band, paper);
-    painter.fillRect(QRect(band.left(), band.top(), band.width(), int(m::border)), ink);
+    painter.fillRect(QRect(band.left(), band.top(), band.width(), int(sleepMetrics::border)), ink);
     if (content.percent >= 0) {
-        painter.fillRect(QRect(band.left(), band.top(), band.width() * qMin(content.percent, 100) / 100, int(m::bandRule)),
+        painter.fillRect(QRect(band.left(), band.top(), band.width() * qMin(content.percent, 100) / 100, int(sleepMetrics::bandRule)),
                          ink);
     }
-    painter.setPen(QPen(ink, int(m::border)));
-    const int padding = qMin(int(m::bandPadding), band.width() / 16);
-    const int gap = m::bandGap;
-    const int top = band.top() + int(m::bandRule);
-    const int height = band.height() - int(m::bandRule);
+    painter.setPen(QPen(ink, int(sleepMetrics::border)));
+    const int padding = qMin(int(sleepMetrics::bandPadding), band.width() / 16);
+    const int gap = sleepMetrics::bandGap;
+    const int top = band.top() + int(sleepMetrics::bandRule);
+    const int height = band.height() - int(sleepMetrics::bandRule);
     const int left = band.left() + padding;
     const int width = band.width() - 2 * padding;
-    const QFont caption = ui::captionFont(m::captionText);
+    const QFont caption = ui::captionFont(sleepMetrics::captionText);
     QStringList lines{content.progress.toUpper()};
     if (!content.remaining.isEmpty())
         lines << content.remaining.toUpper();
@@ -162,13 +162,13 @@ void paintBand(QPainter &painter, const QRect &band, const Content &content, con
         captionWidth = qMax(captionWidth, qMin(captionLimit, ui::interfaceTextWidth(line, caption)));
     }
     painter.setFont(caption);
-    int y = top + (height - int(lines.size()) * captionHeight - int(lines.size() - 1) * int(m::lineGap)) / 2;
+    int y = top + (height - int(lines.size()) * captionHeight - int(lines.size() - 1) * int(sleepMetrics::lineGap)) / 2;
     for (const auto &line : lines) {
         ui::drawInterfaceText(painter, QRect(left + width - captionLimit, y, captionLimit, captionHeight), line,
                               Qt::AlignRight | Qt::AlignVCenter);
-        y += captionHeight + int(m::lineGap);
+        y += captionHeight + int(sleepMetrics::lineGap);
     }
-    const QFont title = ui::brandFont(m::bandTitleText);
+    const QFont title = ui::brandFont(sleepMetrics::bandTitleText);
     const int titleTop = top + (height - ui::interfaceLineHeight(title)) / 2;
     const int baseline = titleTop + ui::interfaceLineAscent(title);
     const auto statusText = sleepStatusText(content.status);
@@ -190,23 +190,23 @@ void paintBand(QPainter &painter, const QRect &band, const Content &content, con
 // The ribbon's lines from its top edge. The height never depends on the
 // status, so a battery update stays inside the same area.
 struct RibbonLines {
-    QFont caption = ui::captionFont(m::captionText), figure = ui::brandFont(m::ribbonPercentText),
-          detail = ui::interfaceFont(m::captionText), battery = ui::chromeFont(m::batteryText);
+    QFont caption = ui::captionFont(sleepMetrics::captionText), figure = ui::brandFont(sleepMetrics::ribbonPercentText),
+          detail = ui::interfaceFont(sleepMetrics::captionText), battery = ui::chromeFont(sleepMetrics::batteryText);
     int captionHeight = ui::interfaceLineHeight(caption), figureHeight = ui::interfaceLineHeight(figure),
         detailHeight = ui::interfaceLineHeight(detail), batteryHeight = ui::interfaceLineHeight(battery);
     int height() const {
-        return int(m::ribbonTop) + captionHeight + int(m::ribbonGap) + int(m::border) + int(m::ribbonGap) / 2 +
-               figureHeight + int(m::ribbonGap) / 2 + detailHeight + int(m::ribbonGap) + batteryHeight +
-               int(m::ribbonGap) + int(m::ribbonNotch);
+        return int(sleepMetrics::ribbonTop) + captionHeight + int(sleepMetrics::ribbonGap) + int(sleepMetrics::border) + int(sleepMetrics::ribbonGap) / 2 +
+               figureHeight + int(sleepMetrics::ribbonGap) / 2 + detailHeight + int(sleepMetrics::ribbonGap) + batteryHeight +
+               int(sleepMetrics::ribbonGap) + int(sleepMetrics::ribbonNotch);
     }
 };
 // A bookmark hanging from the top edge, with a notch cut into its end.
 void paintBookmark(QPainter &painter, const QRect &ribbon, const Content &content, const QColor &fill) {
     const QColor ink(Qt::white);
-    const qreal outline = int(m::ribbonOutline);
+    const qreal outline = int(sleepMetrics::ribbonOutline);
     const qreal left = ribbon.left(), right = ribbon.left() + ribbon.width(), top = ribbon.top();
     const qreal bottom = ribbon.top() + ribbon.height(), middle = (left + right) / 2, half = (right - left) / 2;
-    const qreal notch = qMin<qreal>(int(m::ribbonNotch), ribbon.height() / 4);
+    const qreal notch = qMin<qreal>(int(sleepMetrics::ribbonNotch), ribbon.height() / 4);
     // The edges stay unsmoothed so painting the ribbon again gives the same pixels.
     const qreal rise = outline * std::hypot(half, notch) / half;
     const qreal slope = notch / half;
@@ -224,7 +224,7 @@ void paintBookmark(QPainter &painter, const QRect &ribbon, const Content &conten
                                                  {left + outline, bottom - outline * slope - rise}}));
     painter.restore();
     const RibbonLines lines;
-    const int padding = qMin(int(m::ribbonPadding), ribbon.width() / 8);
+    const int padding = qMin(int(sleepMetrics::ribbonPadding), ribbon.width() / 8);
     const int textLeft = ribbon.left() + padding;
     const int width = ribbon.width() - 2 * padding;
     const auto centered = [&](const QString &text, const QFont &font, int y, int height) {
@@ -232,21 +232,21 @@ void paintBookmark(QPainter &painter, const QRect &ribbon, const Content &conten
         ui::drawInterfaceText(painter, QRect(textLeft, y, width, height), ui::elideInterfaceText(text, font, width),
                               Qt::AlignHCenter | Qt::AlignVCenter);
     };
-    painter.setPen(QPen(ink, int(m::border)));
-    int y = ribbon.top() + int(m::ribbonTop);
+    painter.setPen(QPen(ink, int(sleepMetrics::border)));
+    int y = ribbon.top() + int(sleepMetrics::ribbonTop);
     centered(sleepStatusText(content.status).toUpper(), lines.caption, y, lines.captionHeight);
-    y += lines.captionHeight + int(m::ribbonGap);
-    const int rule = qMin(int(m::ribbonRule), width);
-    painter.fillRect(QRect(ribbon.left() + (ribbon.width() - rule) / 2, y, rule, int(m::border)), ink);
-    y += int(m::border) + int(m::ribbonGap) / 2;
+    y += lines.captionHeight + int(sleepMetrics::ribbonGap);
+    const int rule = qMin(int(sleepMetrics::ribbonRule), width);
+    painter.fillRect(QRect(ribbon.left() + (ribbon.width() - rule) / 2, y, rule, int(sleepMetrics::border)), ink);
+    y += int(sleepMetrics::border) + int(sleepMetrics::ribbonGap) / 2;
     if (content.percent >= 0)
         centered(strings::get("common.percent").arg(qMin(content.percent, 100)), lines.figure, y, lines.figureHeight);
     else
         centered(content.progress, lines.detail, y, lines.figureHeight);
-    y += lines.figureHeight + int(m::ribbonGap) / 2;
+    y += lines.figureHeight + int(sleepMetrics::ribbonGap) / 2;
     if (!content.remaining.isEmpty())
         centered(content.remaining, lines.detail, y, lines.detailHeight);
-    y += lines.detailHeight + int(m::ribbonGap);
+    y += lines.detailHeight + int(sleepMetrics::ribbonGap);
     if (content.showsBattery()) {
         const auto battery = sleepBattery(content.batteryPercent);
         paintSleepBattery(painter, battery, ribbon.left() + (ribbon.width() - battery.width()) / 2, y,
@@ -286,24 +286,24 @@ QImage sleepCoverBackground(const QImage &cover, QSize size) {
 QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile) {
     switch (tile) {
     case sleep::Tile::Band: {
-        const int height = qMin(int(m::bandHeight), size.height() / 4);
+        const int height = qMin(int(sleepMetrics::bandHeight), size.height() / 4);
         return {0, size.height() - height, size.width(), height};
     }
     case sleep::Tile::Bookmark: {
-        const int width = qMin(int(m::ribbonWidth), size.width() / 3);
-        const int right = qMin(int(m::ribbonRight), size.width() / 10);
+        const int width = qMin(int(sleepMetrics::ribbonWidth), size.width() / 3);
+        const int right = qMin(int(sleepMetrics::ribbonRight), size.width() / 10);
         return {qMax(0, size.width() - right - width), 0, width, qMin(size.height(), RibbonLines().height())};
     }
     case sleep::Tile::Card:
         break;
     }
-    const int inset = qMin(int(m::inset), size.width() / 12);
-    const int padding = qMin(int(m::padding), size.width() / 16);
-    const int titleHeight = ui::interfaceLineHeight(ui::brandFont(m::titleText));
+    const int inset = qMin(int(sleepMetrics::inset), size.width() / 12);
+    const int padding = qMin(int(sleepMetrics::padding), size.width() / 16);
+    const int titleHeight = ui::interfaceLineHeight(ui::brandFont(sleepMetrics::titleText));
     const int detailHeight = ui::interfaceLineHeight(detailFont());
     const int height =
-        padding * 2 + titleHeight + int(m::gap) + detailHeight + (showRemaining ? detailHeight + int(m::lineGap) : 0);
-    return {inset, qMax(inset, size.height() - height - int(m::bottom)), qMin(int(m::width), size.width() - 2 * inset),
+        padding * 2 + titleHeight + int(sleepMetrics::gap) + detailHeight + (showRemaining ? detailHeight + int(sleepMetrics::lineGap) : 0);
+    return {inset, qMax(inset, size.height() - height - int(sleepMetrics::bottom)), qMin(int(sleepMetrics::width), size.width() - 2 * inset),
             height};
 }
 QImage sleepScreenImage(QImage page, const QString &progress, const QString &remaining, bool dark, int batteryPercent,

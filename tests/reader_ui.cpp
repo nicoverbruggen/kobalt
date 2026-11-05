@@ -3075,10 +3075,10 @@ private slots:
                 contents[slot] = content;
                 preview.setSlots(page.chrome, contents);
                 auto *cell = preview.cell(slot);
-                namespace hf = ui::metrics::headerFooter;
-                const int left = slot % 3 == 0 ? int(hf::mapSideInset) : hf::slotGap / 2;
-                const int right = slot % 3 == 2 ? int(hf::mapSideInset) : hf::slotGap / 2;
-                const int previewRoom = cell->width() - left - right - 2 * (ui::metrics::list::lineInset - hf::slotGap / 2);
+                namespace headerFooterMetrics = ui::metrics::headerFooter;
+                const int left = slot % 3 == 0 ? int(headerFooterMetrics::mapSideInset) : headerFooterMetrics::slotGap / 2;
+                const int right = slot % 3 == 2 ? int(headerFooterMetrics::mapSideInset) : headerFooterMetrics::slotGap / 2;
+                const int previewRoom = cell->width() - left - right - 2 * (ui::metrics::list::lineInset - headerFooterMetrics::slotGap / 2);
                 const auto previewImage = cell->grab().toImage();
                 contents[slot] = {};
                 contents[slot].text = ui::headerFooterText(content, font, previewRoom);

@@ -22,7 +22,7 @@
 namespace kobalt::reader {
 namespace strings = kobalt::strings;
 namespace styles = kobalt::ui::styles;
-namespace m = kobalt::ui::metrics;
+namespace metrics = kobalt::ui::metrics;
 using kobalt::ui::readerStyle;
 using kobalt::ui::makeButton;
 using kobalt::platform::textRefresh;
@@ -47,7 +47,7 @@ void Reader::confirmCustomReplace(const std::function<void()> &proceed, const st
     customReplaceDialog->setObjectName("rrReplaceCustom");
     auto *text = choice->descriptionLabel();
     text->setObjectName("rrReplaceCustomDetail");
-    readerStyle(text, styles::font(m::chrome::descriptionText) + "color:palette(placeholder-text);");
+    readerStyle(text, styles::font(metrics::chrome::descriptionText) + "color:palette(placeholder-text);");
     auto finish = [this, proceed, cancel](bool replace) {
         if (!customReplaceDialog)
             return;
@@ -70,7 +70,7 @@ void Reader::confirmCustomReplace(const std::function<void()> &proceed, const st
     choice->dismissed = [finish] {
         finish(false);
     };
-    choice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    choice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     customReplaceDialog->centerCard();
     for (auto *widget : customReplaceDialog->findChildren<QWidget *>())
         textRefresh(widget);
@@ -161,7 +161,7 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions) {
     for (auto *button : card->findChildren<QPushButton *>()) {
         button->setFocusPolicy(Qt::StrongFocus);
     }
-    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    card->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     dialog->centerCard();
     dialog->show();
     dialog->raise();
@@ -189,7 +189,7 @@ void Reader::showFormattingWarning() {
     };
     notice->dismissed = dismiss;
     connect(notice->primaryButton(), &QPushButton::clicked, this, dismiss);
-    notice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    notice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     notice->centerCard();
     notice->show();
     notice->raise();
@@ -312,7 +312,7 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
             save(false, true);
         });
     });
-    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    card->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     syncDialog->centerCard();
     for (auto *widget : syncDialog->findChildren<QWidget *>())
         textRefresh(widget);
@@ -387,7 +387,7 @@ void Reader::showProgressDebug() {
     done->setObjectName("rrDebugBack");
     rows->addWidget(done);
     connect(done, &QPushButton::clicked, dialog, dismiss);
-    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    card->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     dialog->centerCard();
     for (auto *widget : dialog->findChildren<QWidget *>())
         textRefresh(widget);
@@ -414,11 +414,11 @@ void Reader::showFinishChoice() {
     suppress->setObjectName("rrSuppressFinishPrompt");
     auto look = suppress->presentation();
     look.indicator = ui::DescribedOption::Indicator::Square;
-    look.indicatorSize = QSize(m::chrome::checkSize, m::chrome::checkSize);
-    look.labelPixels = m::chrome::labelText;
-    look.minimumRowHeight = m::chrome::actionHeight;
+    look.indicatorSize = QSize(metrics::chrome::checkSize, metrics::chrome::checkSize);
+    look.labelPixels = metrics::chrome::labelText;
+    look.minimumRowHeight = metrics::chrome::actionHeight;
     look.dividers = Qt::TopEdge;
-    look.horizontalInset = m::chrome::inset;
+    look.horizontalInset = metrics::chrome::inset;
     suppress->setPresentation(look);
     // Keep the checkbox above the connected confirmation footer.
     card->rows()->insertWidget(card->rows()->count() - 1, suppress);
@@ -446,7 +446,7 @@ void Reader::showFinishChoice() {
     connect(choice->primaryButton(), &QPushButton::clicked, this, [choose] {
         choose(true);
     });
-    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    card->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     finishDialog->centerCard();
     for (auto *widget : finishDialog->findChildren<QWidget *>())
         textRefresh(widget);
@@ -462,7 +462,7 @@ void Reader::guardExit() {
     exitGuardPressTime = lastPressTime;
     const int generation = ++exitGuardGeneration;
     kobalt::qt::later(0, this, [this, generation] {
-        kobalt::qt::later(m::contents::exitGuardMilliseconds, this, [this, generation] {
+        kobalt::qt::later(metrics::contents::exitGuardMilliseconds, this, [this, generation] {
             if (generation == exitGuardGeneration)
                 exitGuarded = false;
         });
@@ -476,7 +476,7 @@ bool Reader::exitGuardElapsed() const {
     if (!exitGuardPressTime || !lastPressTime)
         return false;
     const quint32 elapsed = lastPressTime - exitGuardPressTime;
-    return elapsed < 0x80000000u && elapsed >= quint32(m::contents::exitGuardMilliseconds);
+    return elapsed < 0x80000000u && elapsed >= quint32(metrics::contents::exitGuardMilliseconds);
 }
 
 void Reader::askRemoveBookmark(const QString &position) {
@@ -539,7 +539,7 @@ void Reader::askRemoveBookmark(const QString &position) {
     connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] {
         finish(true);
     });
-    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    card->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     removeDialog->centerCard();
     for (auto *widget : removeDialog->findChildren<QWidget *>())
         textRefresh(widget);
@@ -603,7 +603,7 @@ void Reader::showSettingsWriteError() {
     };
     notice->dismissed = dismiss;
     connect(notice->primaryButton(), &QPushButton::clicked, this, dismiss);
-    notice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    notice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     notice->centerCard();
     notice->show();
     notice->raise();
@@ -654,7 +654,7 @@ void Reader::showAnnotationError(const QString &message, const QString &title, c
     };
     notice->dismissed = dismiss;
     connect(notice->primaryButton(), &QPushButton::clicked, this, dismiss);
-    notice->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    notice->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     notice->centerCard();
     notice->show();
     notice->raise();
@@ -721,7 +721,7 @@ void Reader::syncPinnedBookmarks() {
         button->ensurePolished();
         minimumSide = qMax(minimumSide, qMax(button->minimumWidth(), button->minimumHeight()));
     }
-    const int cell = qMax<int>(m::chrome::actionHeight, minimumSide + 2 * padding);
+    const int cell = qMax<int>(metrics::chrome::actionHeight, minimumSide + 2 * padding);
     const int capacity = qBound(1, (room - 2 * padding) / cell, BookmarkStore::maxPins);
     const int used = (pins.size() + capacity - 1) / capacity;
     const int columnRows = (pins.size() + used - 1) / used;
@@ -800,7 +800,7 @@ void Reader::closeScreenRefresh() {
 void Reader::openScreenRefresh() {
     if (refreshPopup)
         return;
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     refreshPopup = new kobalt::ui::ModalOverlay(this);
     refreshPopup->setObjectName("rrScreenRefreshPopup");
     refreshPopup->setDimmed(true);
@@ -809,15 +809,15 @@ void Reader::openScreenRefresh() {
     auto *card = refreshPopup->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *title = card->title(strings::get("reader.refresh_the_screen"), "rrScreenRefreshTitle");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
     // The shared pick-one list: rows share the tallest height a choice needs.
     auto *choices = new kobalt::ui::RadioList(card);
     choices->setObjectName("rrScreenRefreshChoices");
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     for (const auto mode : kobalt::screenRefreshModes) {
         choices->add(QString("rrRefresh_" + kobalt::screenRefreshValue(mode)), refreshLabel(mode),
@@ -980,7 +980,7 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix, c
     if (sleepPopup) {
         return;
     }
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     sleepPopup = new ui::ModalOverlay(this);
     sleepPopup->setObjectName(name + "Popup");
     sleepPopup->setDimmed(true);
@@ -992,21 +992,21 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix, c
     auto *card = sleepPopup->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *title = card->title(heading, name + "Title");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     if (!description.isEmpty()) {
-        card->rows()->addSpacing(m::spacing::row);
+        card->rows()->addSpacing(metrics::spacing::row);
         auto *hint = card->message(description, name + "Hint");
-        readerStyle(hint, styles::font(c::descriptionText));
-        hint->setContentsMargins(c::inset, 0, c::inset, 0);
+        readerStyle(hint, styles::font(chrome::descriptionText));
+        hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     }
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName(name + "Choices");
     choices->setUniformRows(false);
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     for (const auto &option : options)
         choices->add(optionPrefix + option.value, option.label, option.explanation);
@@ -1018,12 +1018,12 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix, c
     card->rows()->addWidget(choices);
     choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
     card->fitToWidth(cardWidth);
-    const int available = height() - 2 * m::notice::sideClearance;
+    const int available = height() - 2 * metrics::notice::sideClearance;
     if (card->height() > available) {
         auto *pager = new ui::PagerBar(card, name);
         card->rows()->addWidget(pager);
         const int fixed = card->height() - choices->height();
-        const int room = qMax(1, available - fixed - int(c::actionHeight));
+        const int room = qMax(1, available - fixed - int(chrome::actionHeight));
         QVector<int> starts{0};
         int used = 0;
         for (int row = 0; row < choices->options().size(); ++row) {
@@ -1118,7 +1118,7 @@ void Reader::closeTapZones() {
 void Reader::openTapZones() {
     if (tapZonesPopup)
         return;
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     tapZonesPopup = new ui::ModalOverlay(this);
     tapZonesPopup->setObjectName("rrTapZonesPopup");
     tapZonesPopup->setDimmed(true);
@@ -1128,12 +1128,12 @@ void Reader::openTapZones() {
         closeTapZones();
     };
     auto *card = tapZonesPopup->card();
-    card->rows()->setContentsMargins(c::inset, m::notice::cardMargins.top(), c::inset, m::notice::cardMargins.bottom());
+    card->rows()->setContentsMargins(chrome::inset, metrics::notice::cardMargins.top(), chrome::inset, metrics::notice::cardMargins.bottom());
     card->title(strings::get("settings.tap_zones"), "rrTapZonesTitle");
     card->message(strings::get("settings.tap_zones_hint"), "rrTapZonesHint");
     auto *grid = new QGridLayout;
     grid->setContentsMargins(0, 0, 0, 0);
-    grid->setSpacing(m::control::itemGap);
+    grid->setSpacing(metrics::control::itemGap);
     card->rows()->addLayout(grid);
     auto *group = new QButtonGroup(card);
     const bool rtl = session->state().value("page_progression_rtl").toBool();
@@ -1166,7 +1166,7 @@ void Reader::openTapZones() {
         });
     }
     card->message(strings::get("settings.tap_one_handed_hint"), "rrTapZonesOneHandedHint");
-    card->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
+    card->fitToWidth(qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
     tapZonesPopup->centerCard();
     for (auto *widget : tapZonesPopup->findChildren<QWidget *>())
         textRefresh(widget);
@@ -1194,7 +1194,7 @@ void Reader::openPageNavigation() {
     if (pageNavigationPopup) {
         return;
     }
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     pageNavigationPopup = new ui::ModalOverlay(this);
     pageNavigationPopup->setObjectName("rrPageNavigationPopup");
     pageNavigationPopup->setDimmed(true);
@@ -1206,16 +1206,16 @@ void Reader::openPageNavigation() {
     auto *card = pageNavigationPopup->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *title = card->title(strings::get("settings.page_navigation"), "rrPageNavigationTitle");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     auto *hint = card->message(strings::get("settings.navigation_menu_hint"), "rrPageNavigationHint");
-    hint->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName("rrPageNavigationChoices");
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     for (const auto mode : pageNavigation::modes) {
         if (mode == pageNavigation::Mode::ButtonsOnly && !services.pageButtons()) {
@@ -1277,7 +1277,7 @@ void Reader::openNavigationBarButtons() {
     if (navigationBarPopup) {
         return;
     }
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     navigationBarPopup = new ui::ModalOverlay(this);
     navigationBarPopup->setObjectName("rrNavigationBarPopup");
     navigationBarPopup->setDimmed(true);
@@ -1289,16 +1289,16 @@ void Reader::openNavigationBarButtons() {
     auto *card = navigationBarPopup->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *title = card->title(strings::get("settings.navigation_bar_buttons"), "rrNavigationBarTitle");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     auto *hint = card->message(strings::get("settings.navigation_bar_hint"), "rrNavigationBarHint");
-    hint->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName("rrNavigationBarChoices");
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     for (const auto mode : pageNavigation::barButtonsModes) {
         choices->add("rrNavigationBar_" + pageNavigation::value(mode), barButtonsLabel(mode),
@@ -1380,7 +1380,7 @@ void Reader::openTappableLinks() {
     if (tappableLinksPopup) {
         return;
     }
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     tappableLinksPopup = new ui::ModalOverlay(this);
     tappableLinksPopup->setObjectName("rrTappableLinksPopup");
     tappableLinksPopup->setDimmed(true);
@@ -1392,18 +1392,18 @@ void Reader::openTappableLinks() {
     auto *card = tappableLinksPopup->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *title = card->title(strings::get("settings.tappable_links"), "rrTappableLinksTitle");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::spacing::row);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::spacing::row);
     auto *hint = card->message(strings::get("settings.tappable_links_description"), "rrTappableLinksHint");
-    readerStyle(hint, styles::font(c::descriptionText));
-    hint->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    readerStyle(hint, styles::font(chrome::descriptionText));
+    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName("rrTappableLinksChoices");
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     const QStringList modes{"footnotes", "all", "off"};
     const auto current = preferences.value("tappable_links").toString("footnotes");
@@ -1458,7 +1458,7 @@ void Reader::openMenuView() {
     if (menuViewPopup) {
         return;
     }
-    namespace c = m::chrome;
+    namespace chrome = metrics::chrome;
     menuViewPopup = new ui::ModalOverlay(this);
     menuViewPopup->setObjectName("rrMenuViewPopup");
     menuViewPopup->setDimmed(true);
@@ -1470,18 +1470,18 @@ void Reader::openMenuView() {
     auto *card = menuViewPopup->card();
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
-    card->rows()->addSpacing(m::notice::cardMargins.top());
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
     auto *title = card->title(strings::get("settings.default_menu_view"), "rrMenuViewTitle");
-    title->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::spacing::row);
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::spacing::row);
     auto *hint = card->message(strings::get("settings.default_menu_view_description"), "rrMenuViewHint");
-    readerStyle(hint, styles::font(c::descriptionText));
-    hint->setContentsMargins(c::inset, 0, c::inset, 0);
-    card->rows()->addSpacing(m::notice::cardMargins.bottom());
-    const int cardWidth = qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance);
+    readerStyle(hint, styles::font(chrome::descriptionText));
+    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth = qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName("rrMenuViewChoices");
-    choices->setMinimumRowHeight(c::listActionHeight);
+    choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     for (const auto mode : pageNavigation::menuViews) {
         const auto description =

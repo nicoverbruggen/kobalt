@@ -17,7 +17,7 @@
 #include <QApplication>
 
 namespace kobalt::reader {
-namespace m = ui::metrics;
+namespace metrics = ui::metrics;
 KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory keyboard)
     : QWidget(parent), overlayParent_(overlayParent), makeKeyboard_(std::move(keyboard)) {
     setObjectName("rrKosyncPage");
@@ -29,16 +29,16 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
     description_->setTextFormat(Qt::PlainText);
     description_->setWordWrap(true);
     ui::readerStyle(description_, QString("QLabel{background:palette(midlight);border-bottom:1px solid palette(light);padding:%1px %2px;")
-                                 .arg(int(m::spacing::row)).arg(int(m::chrome::inset)) +
-                                 ui::styles::font(m::chrome::descriptionText) + "}");
+                                 .arg(int(metrics::spacing::row)).arg(int(metrics::chrome::inset)) +
+                                 ui::styles::font(metrics::chrome::descriptionText) + "}");
     rows->addWidget(description_);
     sideloadGuidance_ = new ui::InterfaceLabel(strings::get("kosync.sideload_copy"), this);
     sideloadGuidance_->setObjectName("rrKosyncSideloadGuidance");
     sideloadGuidance_->setTextFormat(Qt::PlainText);
     sideloadGuidance_->setWordWrap(true);
     ui::readerStyle(sideloadGuidance_, "QLabel{border-bottom:1px solid palette(light);" +
-                                     ui::styles::font(m::chrome::descriptionText) + "}");
-    sideloadGuidance_->setMargin(m::chrome::inset);
+                                     ui::styles::font(metrics::chrome::descriptionText) + "}");
+    sideloadGuidance_->setMargin(metrics::chrome::inset);
     rows->addWidget(sideloadGuidance_);
     learnMore_ = ui::makeButton(this, rows, "rrKosyncLearnMore", strings::get("kosync.learn_more"), [this] { showSyncHelp(); });
     serverButton_ = ui::makeCaptionButton(this, rows, "rrKosyncServer", strings::get("kosync.server"), [this] { edit(0); });
@@ -60,35 +60,35 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
     const auto rowStyle = QString(
         "QPushButton{font-size:%1px;border:0;border-radius:0;text-align:left;padding:0 %2px;"
         "background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}")
-        .arg(int(m::chrome::labelText)).arg(int(m::chrome::inset));
+        .arg(int(metrics::chrome::labelText)).arg(int(metrics::chrome::inset));
     for (auto *field : {serverButton_, usernameButton_, passwordButton_, deviceNameButton_, matchingButton_, automaticButton_}) {
-        ui::readerStyle(field, rowStyle + QString("QPushButton{min-height:%1px;max-height:%1px;}").arg(int(m::chrome::actionHeight)));
+        ui::readerStyle(field, rowStyle + QString("QPushButton{min-height:%1px;max-height:%1px;}").arg(int(metrics::chrome::actionHeight)));
         field->setRule(Qt::BottomEdge);
         field->setIconVisible(false);
         field->setChevron(true);
         field->setValueCaption(true);
-        field->setFixedHeight(m::chrome::actionHeight);
+        field->setFixedHeight(metrics::chrome::actionHeight);
     }
     for (auto *action : {login_, sync_, logout_, learnMore_}) {
         static_cast<ui::Button *>(action)->setContentAlignment(Qt::AlignLeft);
-        ui::readerStyle(action, rowStyle + QString("QPushButton{min-height:%1px;max-height:%1px;border-bottom:1px solid palette(light);}").arg(int(m::chrome::actionHeight) - 1));
-        action->setFixedHeight(m::chrome::actionHeight);
+        ui::readerStyle(action, rowStyle + QString("QPushButton{min-height:%1px;max-height:%1px;border-bottom:1px solid palette(light);}").arg(int(metrics::chrome::actionHeight) - 1));
+        action->setFixedHeight(metrics::chrome::actionHeight);
     }
     syncInformation_ = new QWidget(this);
     auto *informationRows = new QVBoxLayout(syncInformation_);
-    informationRows->setContentsMargins(m::chrome::inset, m::spacing::row, m::chrome::inset, m::spacing::row);
+    informationRows->setContentsMargins(metrics::chrome::inset, metrics::spacing::row, metrics::chrome::inset, metrics::spacing::row);
     informationRows->setSpacing(ui::px(12));
     status_ = new ui::InterfaceLabel(syncInformation_);
     status_->setObjectName("rrKosyncStatus");
     status_->setTextFormat(Qt::PlainText);
     status_->setWordWrap(true);
-    ui::readerStyle(status_, "color:palette(placeholder-text);" + ui::styles::font(m::chrome::descriptionText));
+    ui::readerStyle(status_, "color:palette(placeholder-text);" + ui::styles::font(metrics::chrome::descriptionText));
     informationRows->addWidget(status_);
     lastSync_ = new ui::InterfaceLabel(syncInformation_);
     lastSync_->setObjectName("rrKosyncLastSync");
     lastSync_->setTextFormat(Qt::PlainText);
     lastSync_->setWordWrap(true);
-    ui::readerStyle(lastSync_, "color:palette(placeholder-text);" + ui::styles::font(m::chrome::descriptionText));
+    ui::readerStyle(lastSync_, "color:palette(placeholder-text);" + ui::styles::font(metrics::chrome::descriptionText));
     informationRows->addWidget(lastSync_);
     rows->addWidget(syncInformation_);
     setLastSync({});
@@ -252,19 +252,19 @@ void KosyncPage::edit(int field) {
     editor->setInputMethodHints(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase |
                                (field == 2 ? Qt::ImhSensitiveData : Qt::ImhNone));
     if (field == 2) editor->setEchoMode(QLineEdit::Password);
-    ui::readerStyle(editor, "QLineEdit{border:none;border-radius:0;padding:0;background:palette(window);color:palette(window-text);" + ui::styles::font(m::chrome::labelText) + "}");
-    editor->setTextMargins(m::notice::cardMargins.left(), 0, m::notice::cardMargins.right(), 0);
+    ui::readerStyle(editor, "QLineEdit{border:none;border-radius:0;padding:0;background:palette(window);color:palette(window-text);" + ui::styles::font(metrics::chrome::labelText) + "}");
+    editor->setTextMargins(metrics::notice::cardMargins.left(), 0, metrics::notice::cardMargins.right(), 0);
     if (field == 3) editor->setPlaceholderText(defaultDeviceName_);
-    editor->setMinimumHeight(m::chrome::actionHeight);
+    editor->setMinimumHeight(metrics::chrome::actionHeight);
     if (field == 2) {
         auto *row = new QWidget(card);
         auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(0, 0, m::notice::cardMargins.right(), 0);
+        layout->setContentsMargins(0, 0, metrics::notice::cardMargins.right(), 0);
         layout->setSpacing(0);
         layout->addWidget(editor, 1);
         auto *reveal = ui::makeButton(row, layout, "rrKosyncPasswordReveal", strings::get("kosync.show_password"), [] {});
         reveal->setCheckable(true);
-        ui::readerStyle(reveal, ui::styles::outlined() + "QPushButton{" + ui::styles::font(m::chrome::labelText) + "}");
+        ui::readerStyle(reveal, ui::styles::outlined() + "QPushButton{" + ui::styles::font(metrics::chrome::labelText) + "}");
         reveal->ensurePolished();
         const int showWidth = reveal->sizeHint().width();
         reveal->setText(strings::get("kosync.hide_password"));
@@ -344,7 +344,7 @@ void KosyncPage::showMatchingChoices() {
     dialog->setGeometry(overlayParent_->rect());
     auto *choices = new ui::RadioList(dialog->card());
     choices->setUniformRows(false);
-    choices->setMinimumRowHeight(m::chrome::listActionHeight);
+    choices->setMinimumRowHeight(metrics::chrome::listActionHeight);
     choices->add("rrKosyncBinary", strings::get("kosync.match_binary"), strings::get("kosync.match_binary_description"));
     choices->add("rrKosyncFilename", strings::get("kosync.match_filename"), strings::get("kosync.match_filename_description"));
     choices->setCurrent(filenameMatching_ ? 1 : 0);
@@ -353,8 +353,8 @@ void KosyncPage::showMatchingChoices() {
         if (filenameMatchingChanged) filenameMatchingChanged(index == 1);
     };
     dialog->card()->rows()->insertWidget(1, choices);
-    const int width = qMin<int>(m::notice::cardWidth, overlayParent_->width() - 2 * m::notice::sideClearance);
-    choices->setFixedHeight(choices->heightForWidth(width - 2 * m::control::border));
+    const int width = qMin<int>(metrics::notice::cardWidth, overlayParent_->width() - 2 * metrics::notice::sideClearance);
+    choices->setFixedHeight(choices->heightForWidth(width - 2 * metrics::control::border));
     connect(dialog->primaryButton(), &QPushButton::clicked, this, [this] { dismissMatchingChoices(); });
     dialog->dismissed = [this] { dismissMatchingChoices(); };
     dialog->show();

@@ -139,8 +139,8 @@ The Kobo target selects the suspend-inclusive boot clock for reading duration on
 The `qt5` and `qt6` presets consume prepared kobuild SDKs, including Sensors. Compiler, sysroot and Qt repairs belong in kobuild. Pull the selected SDK images before building:
 
 ```sh
-docker pull ghcr.io/nicoverbruggen/kobuild:qt5-v0.3.1
-docker pull ghcr.io/nicoverbruggen/kobuild:qt6-v0.2.2
+docker pull ghcr.io/nicoverbruggen/kobuild:qt5-v0.4.0
+docker pull ghcr.io/nicoverbruggen/kobuild:qt6-v0.4.0
 bash platforms/kobo/build.sh qt5
 bash platforms/kobo/build.sh qt6
 ```
@@ -162,7 +162,7 @@ Run `bash platforms/kobo/build.sh qt5-diagnostic` for firmware 4, or `qt6-diagno
 The Android project builds a signed debug APK through Qt's standard CMake `apk` target. It uses the prepared multi-architecture kobuild image; Docker selects its native host variant. Both variants target Android `arm64-v8a`.
 
 ```sh
-docker pull ghcr.io/nicoverbruggen/kobuild:android-v0.3.2
+docker pull ghcr.io/nicoverbruggen/kobuild:android-v0.4.0
 bash platforms/android/build.sh
 ```
 

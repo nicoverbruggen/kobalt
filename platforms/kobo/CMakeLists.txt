@@ -99,8 +99,7 @@ else()
     set_source_files_properties("${source}/storage/annotation_database.cpp" PROPERTIES
         COMPILE_DEFINITIONS KOBALT_SQLITE_ANNOTATIONS_DEFAULT=0)
 endif()
-target_include_directories(kobalt PRIVATE "${hooks}" "${CMAKE_CURRENT_BINARY_DIR}"
-    "${source}/ui/controls")
+target_include_directories(kobalt PRIVATE "${hooks}" "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kobalt SYSTEM PRIVATE "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
     "${prefix}/include" "${prefix}/include/harfbuzz" "${prefix}/include/freetype2" "${prefix}/include/fribidi")
 target_compile_options(kobalt PRIVATE -Wall -Wextra -Werror -Wno-missing-field-initializers -fvisibility=hidden

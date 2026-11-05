@@ -85,8 +85,7 @@ add_library(kobalt-core OBJECT ${shared} display.cpp
     "${source}/publication/image_policy.cpp" "${source}/publication/layout_compatibility.cpp"
     "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
     "${source}/publication/plain_archive.cpp")
-target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}"
-    "${source}/ui/controls")
+target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kobalt-core SYSTEM PUBLIC
     "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
     "${KOBALT_TEST_DEPENDENCIES}/include" "${KOBALT_TEST_DEPENDENCIES}/include/harfbuzz"
@@ -222,6 +221,14 @@ add_custom_target(kobo-checks
 add_executable(kobalt-eval-compare EXCLUDE_FROM_ALL "${KOBALT_ROOT}/platforms/eval/compare.cpp")
 target_link_libraries(kobalt-eval-compare PRIVATE Qt6::Gui)
 
+# Writes the checked-in icon geometry from the Phosphor SVGs; see doc/building.md.
+add_executable(kobalt-icon-geometry EXCLUDE_FROM_ALL icon-geometry.cpp)
+# Fused multiply-adds differ between CPUs; keep the output the same everywhere.
+target_compile_options(kobalt-icon-geometry PRIVATE -ffp-contract=off)
+add_custom_target(update-icon-geometry
+    COMMAND kobalt-icon-geometry "${KOBALT_ROOT}/assets/icons/phosphor" "${source}/ui/controls/phosphor_geometry.cpp"
+    VERBATIM)
+
 if(BUILD_TESTING)
     add_test(NAME build.cachePolicy COMMAND "${CMAKE_COMMAND}"
         "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cache-policy-test"
@@ -252,6 +259,12 @@ if(BUILD_TESTING)
         "-DCLEANUP=${KOBALT_ROOT}/platforms/cleanup.cmake"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/test-cleanup.cmake")
     set_tests_properties(build.cleanup PROPERTIES LABELS "fast;build" TIMEOUT 30)
+    add_test(NAME build.iconGeometry COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/icon-geometry-test"
+        "-DGENERATOR=$<TARGET_FILE:kobalt-icon-geometry>" "-DICONS=${KOBALT_ROOT}/assets/icons/phosphor"
+        "-DEXPECTED=${source}/ui/controls/phosphor_geometry.cpp"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/test-icon-geometry.cmake")
+    set_tests_properties(build.iconGeometry PROPERTIES LABELS "fast;build" TIMEOUT 30)
     find_program(KOBALT_TEST_ZIP zip REQUIRED)
     set(test_book "${KOBALT_ROOT}/tests/fixtures/trevelyans-type-tester.kepub.epub")
     file(SHA256 "${test_book}" test_book_hash)
@@ -334,7 +347,7 @@ if(BUILD_TESTING)
     add_library(kobalt-regression-runtime STATIC "${KOBALT_ROOT}/platforms/kobo/common/standby_diagnostics.cpp")
     set_target_properties(kobalt-regression-runtime PROPERTIES AUTOMOC OFF)
     target_link_libraries(kobalt-regression-runtime PUBLIC kobalt-core)
-    add_custom_target(kobalt-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare)
+    add_custom_target(kobalt-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare kobalt-icon-geometry)
     add_executable(kobalt-startup-recovery-tests "${KOBALT_ROOT}/tests/startup_recovery.c"
         "${KOBALT_ROOT}/platforms/kobo/common/startup_recovery.c")
     set_target_properties(kobalt-startup-recovery-tests PROPERTIES AUTOMOC OFF)
@@ -357,7 +370,7 @@ if(BUILD_TESTING)
         -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
     set_tests_properties(build.eval-device-outcomes PROPERTIES ENVIRONMENT "${headless_environment}"
         LABELS "build;fast" TIMEOUT 35)
-    add_custom_target(kobalt-fast-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare)
+    add_custom_target(kobalt-fast-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare kobalt-icon-geometry)
     add_executable(kobalt-reader-lifecycle-tests "${KOBALT_ROOT}/tests/reader_lifecycle.cpp"
         "${KOBALT_ROOT}/platforms/kobo/common/engine_positions.cpp")
     target_link_libraries(kobalt-reader-lifecycle-tests PRIVATE kobalt-desktop kobalt-core Qt6::Test)

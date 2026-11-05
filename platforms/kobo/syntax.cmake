@@ -336,8 +336,7 @@ set(kobalt_defines "-DKOBALT_CONFIG_DIR=\"/mnt/onboard/.adds/kobalt\"" "-DKOBALT
     -DKOBALT_PAGE_ANIMATIONS -DKOBALT_READER_HARDWARE
     "-DKOBALT_VERSION=\"syntax-check\"" "-DNH_VERSION=\"syntax-check\""
     ${qt_defines} -DQT_DBUS_LIB -DQT_NETWORK_LIB -DQT_SENSORS_LIB -DQT_SQL_LIB -Dkobalt_EXPORTS -DHAVE_OFF64_T=1)
-set(kobalt_includes "-iquote${root}" "-iquote${root}/src" "-I${hooks}" "-I${generated}" "-I${moc}"
-    "-I${root}/src/ui/controls")
+set(kobalt_includes "-iquote${root}" "-iquote${root}/src" "-I${hooks}" "-I${generated}" "-I${moc}")
 foreach(include IN LISTS dependency_includes)
     list(APPEND kobalt_includes -isystem "${include}")
 endforeach()

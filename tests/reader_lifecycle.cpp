@@ -6185,8 +6185,7 @@ private slots:
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QVERIFY(!expected.isEmpty());
         // Kobo gets the same page progress that Kobalt shows.
-        const double percent =
-                100.0 * pageProgressFraction(host.session()->page(), host.session()->pages());
+        const double percent = pageProgressPercent(host.session()->page(), host.session()->pages());
         if (outcome == "newer") {
             host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         }
@@ -7158,11 +7157,12 @@ private slots:
             QVERIFY(host.session()->go(target));
         QTRY_VERIFY(!host.session()->busy());
         QCOMPARE(host.session()->page(), target);
-        const int percent = qRound(100.0 * target / (host.session()->pages() - 1));
+        // Nickel's count: the page on screen is read, and the result rounds down.
+        const int percent = int(100 * (target + 1) / pages);
         auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);
         QTRY_COMPARE(page->slotContents[5].text, strings::get("common.percent").arg(percent));
-        QCOMPARE(qRound(page->progressFraction * 100), percent);
+        QCOMPARE(page->progressFraction, double(target + 1) / pages);
         page->tapped(page->rect().center());
         auto *stats = host.window()->findChild<QPushButton *>("rrNavStats");
         QVERIFY(stats);

@@ -2,18 +2,21 @@
 #include "reading_progress.h"
 
 namespace kobalt {
+// Nickel's reader counts the page on screen as read and rounds down: page 1
+// of 83 is 1%, page 82 is 98% and the last page is 100%. Kobalt uses the same
+// count, so Kobo's library shows the number that Kobalt shows.
 double pageProgressFraction(int page, int pages)
 {
     if (pages <= 0)
         return 0;
-    if (pages == 1)
-        return 1;
-    return double(qBound(0, page, pages - 1)) / (pages - 1);
+    return double(qBound(0, page, pages - 1) + 1) / pages;
 }
 
 int pageProgressPercent(int page, int pages)
 {
-    return qRound(100 * pageProgressFraction(page, pages));
+    if (pages <= 0)
+        return 0;
+    return int(100 * (qint64(qBound(0, page, pages - 1)) + 1) / pages);
 }
 
 bool ReadingProgress::samePosition(const ReadingProgress &other) const

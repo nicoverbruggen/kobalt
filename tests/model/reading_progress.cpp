@@ -19,10 +19,13 @@ int main(int argc, char **argv)
     };
 
     for (const auto &value :
-         { Display{ 0, 0, 0 }, Display{ 0, -1, 0 }, Display{ 0, 1, 100 }, Display{ 0, 2, 0 },
-           Display{ 1, 2, 100 }, Display{ 1, 3, 50 }, Display{ 1, 7, 17 }, Display{ 1, 9, 13 },
-           Display{ -10, 10, 0 }, Display{ 9, 10, 100 }, Display{ 20, 10, 100 },
-           Display{ std::numeric_limits<int>::max(), std::numeric_limits<int>::max(), 100 } }) {
+         { Display{ 0, 0, 0 }, Display{ 0, -1, 0 }, Display{ 0, 1, 100 }, Display{ 0, 2, 50 },
+           Display{ 1, 2, 100 }, Display{ 1, 3, 66 }, Display{ 1, 7, 28 }, Display{ 1, 9, 22 },
+           Display{ -10, 10, 10 }, Display{ 9, 10, 100 }, Display{ 20, 10, 100 },
+           Display{ std::numeric_limits<int>::max(), std::numeric_limits<int>::max(), 100 },
+           // Measured in Nickel's own reader on firmware 4 and 6: 83 pages.
+           Display{ 0, 83, 1 }, Display{ 1, 83, 2 }, Display{ 40, 83, 49 }, Display{ 81, 83, 98 },
+           Display{ 82, 83, 100 } }) {
         require(pageProgressPercent(value.page, value.pages) == value.percent,
                 "Incorrect displayed progress");
         require(pageProgressFraction(value.page, value.pages) >= 0

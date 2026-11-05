@@ -362,7 +362,8 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
             native.bookmark(&volume, native.serialized(&location),
                             original.value("adobe_location").toInt(), stamp, 0);
         native.status(&volume, finished ? 2 : 1);
-        native.percent(&volume, QVariant(finished ? 100.0 : qBound(0.0, percent, 99.0)));
+        // Firmware 6's own reader stores 100 on the last page while reading.
+        native.percent(&volume, QVariant(finished ? 100.0 : qBound(0.0, percent, 100.0)));
     }
     native.firstTime(&volume, QVariant(false));
     if (estimates && native.setBookEstimate && native.setChapterEstimate) {

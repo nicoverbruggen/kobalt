@@ -258,7 +258,7 @@ ReadingActivity ReadingBook::readingActivity() const
     return { session_->state().value("position").toString(),
              // Kobalt's page progress, kept below 100 like every native write of
              // an unfinished book, so the last page never reports a finished read.
-             qMin(99.0, 100.0 * pageProgressFraction(session_->page(), session_->pages())),
+             qMin(99.0, double(pageProgressPercent(session_->page(), session_->pages()))),
              session_->page(), session_->pages(), session_->turnDirection(), session_->totalWords(),
              session_->chapterGraph(), session_->graphSelection(),
              error.isEmpty() ? nativePosition : QString() };
@@ -732,10 +732,9 @@ bool ReadingBook::writeNative(const QString &location, const QString &mappingErr
             return false;
         if (reconciliation.mayWrite(current)) {
             ReadingProgress verified;
-            // The same page progress as Kobalt's own views; the bridge caps an
-            // unfinished book below 100, which Kobo reads as finished.
-            const double percent =
-                    100.0 * pageProgressFraction(session_->page(), session_->pages());
+            // The same whole percentage as Kobalt's own views. The firmware 4
+            // bridge keeps an unfinished book below 100, as Nickel's reader does.
+            const double percent = pageProgressPercent(session_->page(), session_->pages());
             const bool preserveFinished = finishedHere();
             diagnostic("native-save-start");
             if (bridge->write(current, timeOnly ? QString() : location, percent, preserveFinished,

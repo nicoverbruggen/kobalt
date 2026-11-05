@@ -271,9 +271,10 @@ int main()
             "Percentage-only battery layout did not round-trip");
     require(field(QStringLiteral("battery_percent")) == Field::BatteryPercent,
             "The existing battery percentage choice changed");
-    // The first page is 0%; the last page is 100%, with nearest-integer rounding.
+    // Nickel's count: the page on screen is read and the result rounds down,
+    // so page 6 of 20 is 30% and the last page is 100%.
     require(content(Field::ChapterPercent, values, false).text
-                    == strings::get("common.percent").arg(26),
+                    == strings::get("common.percent").arg(30),
             "Percent of chapter is wrong");
     require(content(Field::BookPercent, values, false).text
                     == strings::get("common.percent").arg(3),

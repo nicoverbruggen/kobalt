@@ -37,7 +37,7 @@ Your rules go into Kobalt's base stylesheet, after Kobalt's built-in styles and 
 
 1. Ordinary rules in your file rank below the book's own styles. They apply only where the publisher sets nothing.
 2. Rules marked `!important` rank above ordinary publisher styles. Use a selector that is at least as specific as the book's.
-3. Some Text and Layout settings are already `!important`: line spacing, page margins while Reduce publisher spacing is on, alignment when it is not Publisher, hyphenation when it is On or Off, and the font family when a reading font other than Publisher Fonts is chosen. To change those, your rule needs `!important` and enough specificity too. Alignment is set on marked text blocks with an attribute selector, so `p { text-align: left !important; }` is not specific enough; set Alignment to Publisher instead, or use a selector such as `p[data-kobalt-prose]`.
+3. Some Text and Layout settings are already `!important`: line spacing, page margins while Reduce publisher spacing is on, alignment when it is not Publisher, hyphenation when it is On or Off, and the font family when a reading font other than Publisher Fonts is chosen. Line spacing is set on each text block, including table cells and captions, so it follows that block's own text size. To change those, your rule needs `!important` and enough specificity too. Alignment is set on marked text blocks with an attribute selector, so `p { text-align: left !important; }` is not specific enough; set Alignment to Publisher instead, or use a selector such as `p[data-kobalt-prose]`.
 
 When a reading font is chosen, it replaces every font except code and MathML unless your CSS sets the font itself.
 

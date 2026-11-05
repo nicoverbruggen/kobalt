@@ -469,7 +469,7 @@ void EngineDocument::setDocumentCache(QString directory, QByteArray fingerprint,
     // Parsed pages from older density, image and double-scaled line-height
     // policies must not survive these renderer changes. The density is fixed by the host
     // before any document opens and is shared by the main reader and previews.
-    cachePolicy_ = std::move(policy) + ":css-density-leading-v1:page-layout-v2:line-height-v2:"
+    cachePolicy_ = std::move(policy) + ":css-density-leading-v1:page-layout-v2:line-height-v3:"
             + QByteArray::number(readingPpi.load());
     cacheBytes_ = bytes;
 }
@@ -1198,9 +1198,11 @@ void EngineDocument::applyStyleSheet()
                   "math, math * { font-family: math !important; }\n";
     }
     // Like Nickel's line-height override, leave inline spans and media alone.
-    // Relative font sizes remain publisher CSS.
+    // Relative font sizes remain publisher CSS. A percentage resolves against the
+    // font size of the element that sets it, and children inherit the result, so
+    // each block that holds text, table cells and captions included, sets its own.
     overrides +=
-            QString("body,p,div,section,article,blockquote,li,dt,dd,h1,h2,h3,h4,h5,h6 { line-height:%1% !important; }")
+            QString("body,p,div,section,article,blockquote,li,dt,dd,h1,h2,h3,h4,h5,h6,td,th,caption,figcaption { line-height:%1% !important; }")
                     .arg(spacing_);
     {
         const QString prose =

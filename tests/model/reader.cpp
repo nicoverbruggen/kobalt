@@ -2410,25 +2410,28 @@ int main(int argc, char **argv)
     const auto spacedBytes = spaced.finish(&error);
     // Identical glyphs on forced lines expose the actual rendered line pitch.
     // Measure pixels so applying the percentage twice cannot pass this check.
-    kobalt::Publication lineHeightFixture;
-    require(lineHeightFixture.inspect(bytes, &error), qPrintable(error));
-    for (const auto &name : lineHeightFixture.names()) {
-        auto resource =
-                source->OpenStream(Utf8ToUnicode(name.toUtf8().constData()).c_str(), LVOM_READ);
-        QByteArray content(int(resource->GetSize()), '\0');
-        lvsize_t read = 0;
-        require(resource->Read(content.data(), content.size(), &read) == LVERR_OK
-                        && read == lvsize_t(content.size()),
-                "Cannot read line-height fixture resource");
-        if (name.endsWith(".xhtml")) {
-            content =
-                    "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Line height</title>"
-                    "<style>p { margin:0; text-indent:0; }</style></head>"
-                    "<body><p>H<br/>H<br/>H<br/>H</p></body></html>";
+    auto lineHeightFixture = [&](const QByteArray &body) {
+        kobalt::Publication fixture;
+        require(fixture.inspect(bytes, &error), qPrintable(error));
+        for (const auto &name : fixture.names()) {
+            auto resource =
+                    source->OpenStream(Utf8ToUnicode(name.toUtf8().constData()).c_str(), LVOM_READ);
+            QByteArray content(int(resource->GetSize()), '\0');
+            lvsize_t read = 0;
+            require(resource->Read(content.data(), content.size(), &read) == LVERR_OK
+                            && read == lvsize_t(content.size()),
+                    "Cannot read line-height fixture resource");
+            if (name.endsWith(".xhtml")) {
+                content = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Line "
+                          "height</title>"
+                          "<style>p { margin:0; text-indent:0; }</style></head><body>"
+                        + body + "</body></html>";
+            }
+            require(fixture.append(name, content, &error), qPrintable(error));
         }
-        require(lineHeightFixture.append(name, content, &error), qPrintable(error));
-    }
-    const auto lineHeightBytes = lineHeightFixture.finish(&error);
+        return fixture.finish(&error);
+    };
+    const auto lineHeightBytes = lineHeightFixture("<p>H<br/>H<br/>H<br/>H</p>");
     auto linePitch = [](const QImage &image) {
         QVector<int> starts;
         bool previousInk = false;
@@ -2477,6 +2480,23 @@ int main(int argc, char **argv)
         require(preview.openPreview(height, height.viewport(), &error)
                         && linePitch(preview.image(0)) == 60,
                 "Preview multiplied or migrated line height again");
+        // Table cells, like paragraphs, space their lines by their own text size.
+        for (const QByteArray cell : { "td", "th" }) {
+            const auto table =
+                    lineHeightFixture("<table style=\"font-size:0.5em\"><tr><" + cell
+                                      + ">H<br/>H<br/>H<br/>H</" + cell + "></tr></table>");
+            kobalt::EngineDocument cells(kobalt::test::readerFonts());
+            require(cells.open(table, QSize(320, 720),
+                               kobalt::qt::object({ { "font_pixels", 40 },
+                                                    { "line_spacing", 150 },
+                                                    { "line_spacing_version", 1 },
+                                                    { "margin_pixels", 0 },
+                                                    { "top_margin_pixels", 0 },
+                                                    { "bottom_margin_pixels", 0 } }),
+                               &error)
+                            && linePitch(cells.image(0)) == 30,
+                    "Table cell line height ignored the cell's text size");
+        }
     }
     auto checkSpaces = [](const QImage &image) {
         QVector<QVector<int>> lines;

@@ -4,7 +4,7 @@
 #include <QWidget>
 #include <utility>
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 namespace {
 class SettingsPages : public QObject {
 public:

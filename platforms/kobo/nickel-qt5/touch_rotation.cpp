@@ -7,7 +7,7 @@
 
 #include <atomic>
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 QPoint (*nativeMapFromDevice)(const void *, const QPoint &);
 QPoint (*nativeTouchTransform)(const QTransform *, const QPoint &);
 namespace {
@@ -113,7 +113,7 @@ extern "C" __attribute__((visibility("default"))) QPoint kobalt_touch_transform(
 }
 }
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 void ownReaderTouchRotation(bool owned) {
     static bool initialized = false, supported = false, active = false;
     auto *screen = QGuiApplication::primaryScreen();

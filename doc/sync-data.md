@@ -2,7 +2,7 @@
 
 This document describes the reading data that Kobalt exchanges with Nickel on Kobo, what Nickel then sends to Kobo's servers or to a server that replaces them, such as BookOrbit or Grimmory, and how this compares with Nickel's own reader. It lists the mechanism for each item: the Nickel function that Kobalt calls, the source file, the moment and the conditions. Kobalt's own KOSync exchange is a separate mechanism, described in its own section at the end. Update this document in the same change as the code it describes.
 
-Firmware 4.x runs the Qt 5 package (`platforms/kobo/qt5/`). Firmware 5.x and 6.x run the Qt 6 package (`platforms/kobo/qt6/`). Shared Kobo code is in `platforms/kobo/common/`. Firmware details that come from a specific version name that version. Recheck them when a new firmware changes behavior.
+Firmware 4.x runs the Qt 5 package (`platforms/kobo/nickel-qt5/`). Firmware 5.x and 6.x run the Qt 6 package (`platforms/kobo/nickel-qt6/`). Shared Kobo code is in `platforms/kobo/common/`. Firmware details that come from a specific version name that version. Recheck them when a new firmware changes behavior.
 
 ## Overview
 
@@ -31,7 +31,7 @@ The page turn must never wait for storage. All writes to Nickel's database use N
 
 ## What Kobalt reads from Nickel
 
-`NativeProgress` (`platforms/kobo/common/native_progress.h`, `qt5/native_progress.cpp`, `qt6/native_progress.cpp`) reads the book row on a separate read-only SQLite connection with a 100 ms busy timeout: `ContentID`, `ChapterIDBookmarked`, `DateLastRead`, `ReadStatus`, `___PercentRead`, `ReadStateSynced`, `FirstTimeReading`, `RestOfBookEstimate`, `CurrentChapterEstimate`, `CurrentChapterProgress` and, on Qt 6, `___NumPages`.
+`NativeProgress` (`platforms/kobo/common/native_progress.h`, `nickel-qt5/native_progress.cpp`, `nickel-qt6/native_progress.cpp`) reads the book row on a separate read-only SQLite connection with a 100 ms busy timeout: `ContentID`, `ChapterIDBookmarked`, `DateLastRead`, `ReadStatus`, `___PercentRead`, `ReadStateSynced`, `FirstTimeReading`, `RestOfBookEstimate`, `CurrentChapterEstimate`, `CurrentChapterProgress` and, on Qt 6, `___NumPages`.
 
 It checks for a newer position after Nickel's signals: the sync manager's `finished()` and `userProfileUpdated()`, and USB `doneProcessing()` and unplug. A signal that arrives while the device sleeps is checked at wake. Only when these signals cannot be connected does a one-minute check repeat it, and Kobalt logs `native-progress-signals-unavailable`. If another device moved the position, the reader asks before it moves (see [Progress sync](reader/sync.md)).
 
@@ -46,7 +46,7 @@ It checks for a newer position after Nickel's signals: the sync manager's `finis
 `NativeProgress::write`, both packages. The sequence:
 
 1. Stop if a USB, power or progress transition is unresolved (`NativeLifecycle::nativeProgressSaveAllowed`).
-2. Convert the position to Nickel's format. Qt 5 uses `nickel4::stored` (`platforms/kobo/qt5/native_location.*`). Qt 6 uses `ContentLocation::create` and accepts it only when `ContentLocation::toTENGString` gives back the same position.
+2. Convert the position to Nickel's format. Qt 5 uses `nickel_qt5::stored` (`platforms/kobo/nickel-qt5/native_location.*`). Qt 6 uses `ContentLocation::create` and accepts it only when `ContentLocation::toTENGString` gives back the same position.
 3. Set the connection's busy timeout to 0 (`NativeDatabaseWait`), so a busy database fails at once instead of blocking. Begin Nickel's transaction. If either fails, keep the local position and report "Nickel database is busy".
 4. Compare the stored row with the progress Kobalt read before. If another writer changed it, stop.
 5. Load a fresh `Volume` with `VolumeManager::getById` and set the fields through Nickel's setters:
@@ -156,7 +156,7 @@ These tables compare what Nickel's own reader and Kobalt write and send for the 
 
 | Item | Qt 5 (firmware 4.x) | Qt 6 (firmware 5.x and 6.x) |
 | --- | --- | --- |
-| Position conversion | `nickel4::stored` and `nickel4::chapter` | `ContentLocation::create` and `toTENGString` |
+| Position conversion | `nickel_qt5::stored` and `nickel_qt5::chapter` | `ContentLocation::create` and `toTENGString` |
 | Stored position | `path#kobo.X.Y` | `path#kobo.X.Y:offset` |
 | `updateBookmark` | `VolumeManager::updateBookmark(Volume&, QString, int, QDateTime)` | The same with a page number, used for Tolino |
 | Tolino devices | Progress writeback refused | Writes the page count (`Content::setNumPages`) and checks Tolino's bookmark row |

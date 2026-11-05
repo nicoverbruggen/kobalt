@@ -1,4 +1,4 @@
-#include "platforms/kobo/qt5/session_calls.h"
+#include "platforms/kobo/nickel-qt5/session_calls.h"
 #include "check.h"
 
 #include <cstring>
@@ -55,7 +55,7 @@ void *lookup(const char *name) {
 int main() {
     for (exports = 0; exports < 16; ++exports) {
         calls = 0;
-        const kobalt::nickel4::SessionCalls<Volume, Position> api(lookup);
+        const kobalt::nickel_qt5::SessionCalls<Volume, Position> api(lookup);
         const bool modern = (exports & 3) == 3;
         const bool legacy = (exports & 12) == 12;
         require(api.ready() == (modern || legacy), "An incomplete session pair was accepted");

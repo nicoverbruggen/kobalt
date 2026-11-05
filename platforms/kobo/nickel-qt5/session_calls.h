@@ -3,7 +3,7 @@
 #include <QObject>
 #include <QVariantMap>
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 // Older firmware has no PluginState argument. Keep the two calling conventions
 // separate and require a complete pair before starting a native session.
 template <class Volume, class Position> class SessionCalls {

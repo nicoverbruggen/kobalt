@@ -60,7 +60,7 @@ struct Api {
     QSqlDatabase (*connection)(QString,
                                bool) = symbol<decltype(connection)>("_ZN15DatabaseAdapter12dbConnectionE7QStringb");
     QObject *(*engine)() = symbol<decltype(engine)>("_ZN11EventEngine14sharedInstanceEv");
-    nickel4::SessionCalls<Volume, SessionPosition> sessions{[](const char *name) {
+    nickel_qt5::SessionCalls<Volume, SessionPosition> sessions{[](const char *name) {
         return dlsym(RTLD_DEFAULT, name);
     }};
     void (*fire)(QObject *, const char *, const Volume &, const QVariantMap &) =
@@ -99,7 +99,7 @@ void prepareVolume(Volume &volume, const ReadingActivity &activity) {
     const auto original = api().values(&volume);
     nickel::prepareSessionVolume(volume, activity,
         [&original](Volume &value, const QString &position) {
-            const auto location = nickel4::stored(position);
+            const auto location = nickel_qt5::stored(position);
             if (!location.isEmpty())
                 api().bookmark(&value, location, original.value("adobe_location").toInt(), QDateTime::currentDateTimeUtc());
         },

@@ -31,7 +31,7 @@
 #endif
 
 namespace {
-using namespace kobalt::nickel5;
+using namespace kobalt::nickel_qt6;
 using kobalt::storage::readJson;
 using kobalt::storage::writeJson;
 using namespace kobalt::nickel;
@@ -451,7 +451,7 @@ int initialize() {
 }
 }
 
-namespace kobalt::nickel5 {
+namespace kobalt::nickel_qt6 {
 int initializeReader() {
     return initialize();
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 // A borrowed view of firmware 4's accepted showReader arguments. NativeOpening
 // copies their values before the hook returns; this is not a native ABI struct.
 struct OpeningContext {

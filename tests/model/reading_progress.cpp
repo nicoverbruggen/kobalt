@@ -2,7 +2,7 @@
 #include "reading/reading_progress.h"
 #include "platforms/kobo/common/native_location.h"
 #include "platforms/kobo/common/local_book_path.h"
-#include "platforms/kobo/qt5/native_location.h"
+#include "platforms/kobo/nickel-qt5/native_location.h"
 #include <QCoreApplication>
 #include "check.h"
 #include <limits>
@@ -53,9 +53,9 @@ int main(int argc, char **argv) {
         for (const auto &root : {QStringLiteral("/mnt/onboard/"), QStringLiteral("/mnt/sd/")}) {
             const auto path = root + name;
             const auto identity = QStringLiteral("file://") + path;
-            require(nickel4::localBookPath(identity) == path, "Sideloaded filename was decoded as a URL");
+            require(nickel_qt5::localBookPath(identity) == path, "Sideloaded filename was decoded as a URL");
             for (const auto &prefix : {identity, path}) {
-                require(nickel4::chapter(identity, prefix + "!OEBPS!chapter.xhtml#kobo.1.1") ==
+                require(nickel_qt5::chapter(identity, prefix + "!OEBPS!chapter.xhtml#kobo.1.1") ==
                             "OEBPS/chapter.xhtml#kobo.1.1",
                         "Literal sideloaded filename prevented legacy chapter decoding");
             }
@@ -64,14 +64,14 @@ int main(int argc, char **argv) {
     // A plain EPUB without IDs: firmware 4 stores Nickel's DOM point as is, and
     // the shared reader must see the same point, not a percent-encoded ID.
     const QString point = "OEBPS/text/chapter1.xhtml#point(/1/4/24/1:0)";
-    require(nickel4::stored(point) == point && nickel4::shared(point) == point,
+    require(nickel_qt5::stored(point) == point && nickel_qt5::shared(point) == point,
             "Firmware 4 changed a plain EPUB DOM point");
-    require(nickel4::stored("OEBPS/c.xhtml#kobo.8.1:7") == "OEBPS/c.xhtml#kobo.8.1" &&
-                nickel4::shared("OEBPS/c.xhtml#kobo.8.1") == "OEBPS/c.xhtml#kobo.8.1",
+    require(nickel_qt5::stored("OEBPS/c.xhtml#kobo.8.1:7") == "OEBPS/c.xhtml#kobo.8.1" &&
+                nickel_qt5::shared("OEBPS/c.xhtml#kobo.8.1") == "OEBPS/c.xhtml#kobo.8.1",
             "Firmware 4 element positions changed form");
-    require(nickel4::stored("OEBPS/c.xhtml#point(/1/4/x)").isEmpty(), "A malformed DOM point was stored");
-    require(nickel4::localBookPath("12345678-1234-1234-1234-123456789abc").isEmpty() &&
-                nickel4::localBookPath("https://example.org/book.epub").isEmpty(),
+    require(nickel_qt5::stored("OEBPS/c.xhtml#point(/1/4/x)").isEmpty(), "A malformed DOM point was stored");
+    require(nickel_qt5::localBookPath("12345678-1234-1234-1234-123456789abc").isEmpty() &&
+                nickel_qt5::localBookPath("https://example.org/book.epub").isEmpty(),
             "Nonlocal book identity became a sideloaded path");
     require(publicationLocation("book", "book!OEBPS!chapter.xhtml#kobo.1.1:7") == "OEBPS/chapter.xhtml#kobo.1.1:7",
             "Legacy bookmark lost its chapter or offset");
@@ -86,13 +86,13 @@ int main(int argc, char **argv) {
     // A downloaded book without a position yet has "#" in Nickel's database.
     for (const auto &raw : {QString(), QStringLiteral("#"), QStringLiteral("book!#")}) {
         require(unsetNativeLocation(publicationLocation("book", raw)) &&
-                    unsetNativeLocation(nickel4::chapter("book", raw)),
+                    unsetNativeLocation(nickel_qt5::chapter("book", raw)),
                 "A saved position without chapter or anchor was not read as the start");
     }
     for (const auto &raw : {QStringLiteral("OEBPS/chapter.xhtml#kobo.1.1"), QStringLiteral("chapter.xhtml"),
                             QStringLiteral("#kobo.1.1"), QStringLiteral("book!OEBPS!chapter.xhtml#")}) {
         require(!unsetNativeLocation(publicationLocation("book", raw)) &&
-                    !unsetNativeLocation(nickel4::chapter("book", raw)),
+                    !unsetNativeLocation(nickel_qt5::chapter("book", raw)),
                 "A real saved position was read as the start");
     }
     ReadingProgress first{"synthetic", "chapter.xhtml#p:4", 1000, 1, true};

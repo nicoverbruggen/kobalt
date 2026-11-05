@@ -9,7 +9,7 @@
 // optional ":offset". In a plain EPUB without IDs, Nickel stores a DOM point
 // with its own offset instead, for example
 // "OEBPS/chapter1.xhtml#point(/1/4/24/1:0)". Both sides keep that form as is.
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 inline bool domPoint(const QString &fragment) {
     static const QRegularExpression format(QStringLiteral("^point\\(/1(?:/[1-9][0-9]*)*(?::[0-9]+)?\\)$"));
     return format.match(fragment).hasMatch();

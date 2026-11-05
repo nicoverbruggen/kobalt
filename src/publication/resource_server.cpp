@@ -6,7 +6,7 @@
 #include "native_resources.h"
 #include "publication.h"
 #include "support/diagnostics.h"
-#include "loopback.h"
+#include "platform/api/loopback.h"
 #include "resource_cache.h"
 #include <cerrno>
 #include <QBuffer>
@@ -466,7 +466,7 @@ bool ResourceServer::open(const QString &path, const OpenArchive &openArchive) {
     // An addressed but down loopback can accept bind() while connections fail.
     // Check it before listening, rather than waiting for a bind failure.
     int loopbackError = 0;
-    const bool configured = nickel4::configureLoopback(&loopbackError);
+    const bool configured = platform::configureLoopback(&loopbackError);
     if (configured || (loopbackError && loopbackError != ENOTSUP)) {
         diagnostic("loopback-setup", {{"configured", configured}, {"error", loopbackError}});
     }

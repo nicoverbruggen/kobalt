@@ -86,7 +86,7 @@ file(GLOB_RECURSE shared CONFIGURE_DEPENDS "${source}/*.cpp" "${source}/*.h")
 # The scenario player is built only into evaluation packages.
 list(FILTER shared EXCLUDE REGEX "/src/scenario/")
 list(FILTER shared EXCLUDE REGEX "/(library|app/library)/")
-file(GLOB adapters CONFIGURE_DEPENDS "common/*.cpp" "common/*.h" "qt${KOBALT_QT_MAJOR}/*.cpp" "qt${KOBALT_QT_MAJOR}/*.h" "display/*.cpp")
+file(GLOB adapters CONFIGURE_DEPENDS "common/*.cpp" "common/*.h" "nickel-qt${KOBALT_QT_MAJOR}/*.cpp" "nickel-qt${KOBALT_QT_MAJOR}/*.h" "display/*.cpp")
 add_library(kobalt MODULE ${shared} ${adapters} common/install.c common/startup_recovery.c "${hooks}/nh.c" "${hooks}/resources.c"
     "${CMAKE_CURRENT_BINARY_DIR}/nhplugin.h")
 set_source_files_properties("${source}/reading/reading_timer.cpp" PROPERTIES
@@ -181,7 +181,7 @@ add_custom_target(check-package
 option(KOBALT_BUILD_DISPLAY_TESTS "Build focused Kobo display adapter checks" OFF)
 if(KOBALT_BUILD_DISPLAY_TESTS AND KOBALT_QT_MAJOR EQUAL 5)
     add_executable(kobalt-qt5-refresh-tests "${KOBALT_ROOT}/tests/model/qt5_refresh.cpp"
-        qt5/refresh.cpp display/page_animation.cpp)
+        nickel-qt5/refresh.cpp display/page_animation.cpp)
     target_include_directories(kobalt-qt5-refresh-tests PRIVATE "${KOBALT_ROOT}" "${source}"
         "${KOBALT_ROOT}/tests/support")
     target_compile_definitions(kobalt-qt5-refresh-tests PRIVATE KOBALT_PAGE_ANIMATIONS)

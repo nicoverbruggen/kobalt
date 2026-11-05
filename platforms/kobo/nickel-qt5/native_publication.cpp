@@ -70,7 +70,7 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
                     strings::get("error.native_publication_api_is_unavailable"));
     const auto &native = api();
     identity_ = native.identity(volume);
-    path_ = nickel4::localBookPath(identity_);
+    path_ = nickel_qt5::localBookPath(identity_);
     if (path_.isEmpty()) {
         // Firmware 4's getKepubPath returns the directory, not the book path.
         if (identity_.isEmpty() || identity_.contains('/') || identity_.contains('\\') || identity_ == "." ||
@@ -92,8 +92,8 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     if (bookmark && !native.bookmarkPath(bookmark).isEmpty())
         return fail("explicit_native_bookmark_is_unsupported",
                     strings::get("error.explicit_native_bookmark_is_unsupported"));
-    const auto saved = nickel4::chapter(identity_, native.values(volume).value("ChapterIDBookmarked").toString());
-    location_ = unsetNativeLocation(saved) ? QString() : nickel4::shared(saved);
+    const auto saved = nickel_qt5::chapter(identity_, native.values(volume).value("ChapterIDBookmarked").toString());
+    location_ = unsetNativeLocation(saved) ? QString() : nickel_qt5::shared(saved);
     source_ = native::publicationSource().open(volume, keys, path_, identity_, error);
     if (!source_)
         return fail("cannot_start_the_native_publication_service",

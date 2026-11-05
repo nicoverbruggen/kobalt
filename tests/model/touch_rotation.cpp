@@ -1,4 +1,4 @@
-#include "platforms/kobo/qt5/touch_rotation.h"
+#include "platforms/kobo/nickel-qt5/touch_rotation.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -23,7 +23,7 @@ QByteArray record(const char *model, const char *firmware = "4.45.23697") {
 }
 // Checks the Qt5 touch-rotation fix: which models and firmware get it, the mapping in each orientation, clamping and delegation.
 int main() {
-    using namespace kobalt::nickel4;
+    using namespace kobalt::nickel_qt5;
     require(reversedTouchForVersion(record("391")), "Clara BW must use corrected mapping");
     require(reversedTouchForVersion(record("395")), "Clara BW alternate ID must use corrected mapping");
     require(reversedTouchForVersion(record("393")), "Clara Colour must use corrected mapping");

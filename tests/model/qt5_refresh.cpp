@@ -1,4 +1,4 @@
-#include "platforms/kobo/qt5/refresh.h"
+#include "platforms/kobo/nickel-qt5/refresh.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "platform/api/kobo_refresh.h"
 #include "support/diagnostics.h"

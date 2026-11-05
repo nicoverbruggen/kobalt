@@ -588,7 +588,7 @@
       "id": "native-sync.page-turn",
       "kind": "e2e",
       "opt_in": true,
-      "paths": ["platforms/kobo/qt5/native_reading_session.cpp","platforms/kobo/qt6/native_reading_session.cpp","platforms/kobo/common/native_event_save.h"],
+      "paths": ["platforms/kobo/nickel-qt5/native_reading_session.cpp","platforms/kobo/nickel-qt6/native_reading_session.cpp","platforms/kobo/common/native_event_save.h"],
       "book": "benchmark",
       "needs": ["native-sync"],
       "repeat": 5,

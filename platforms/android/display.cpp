@@ -1,4 +1,5 @@
 #include "platform/api/kobo_refresh.h"
+#include "platform/api/loopback.h"
 #include <cerrno>
 #include <QWidget>
 #include <QVariant>
@@ -20,7 +21,7 @@ void pageRefresh(QWidget *widget, bool clean, bool partialText) {
 }
 void setReaderRefreshWindow(QWidget *) {}
 }
-namespace kobalt::nickel4 {
+namespace kobalt::platform {
 // Android provides loopback. Never attempt Kobo's privileged interface repair.
 bool configureLoopback(int *error) {
     if (error)

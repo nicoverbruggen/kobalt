@@ -2,7 +2,7 @@
 
 This document describes what Kobalt does on a Kobo that costs power: its timers, how it learns about changes, and when it turns Wi-Fi on or off. It also describes Nickel's own Wi-Fi rules, because Kobalt's choices depend on them. For a plain-language summary, see the [user guide](guide.md). Update this document in the same change as the code it describes.
 
-Firmware 4.x runs the Qt 5 package (`platforms/kobo/qt5/`). Firmware 5.x and 6.x run the Qt 6 package (`platforms/kobo/qt6/`). Shared Kobo code is in `platforms/kobo/common/`. Firmware details that come from a specific version name that version.
+Firmware 4.x runs the Qt 5 package (`platforms/kobo/nickel-qt5/`). Firmware 5.x and 6.x run the Qt 6 package (`platforms/kobo/nickel-qt6/`). Shared Kobo code is in `platforms/kobo/common/`. Firmware details that come from a specific version name that version.
 
 ## Principles
 
@@ -111,7 +111,7 @@ It then calls Nickel's `WirelessWorkflowManager::turnWifiOff()`, which also resp
 
 A few seconds after every wake, Nickel's wake routine in `Nickel3Application` calls `WirelessWorkflowManager::connectWirelessSilently()` and then reconnects Bluetooth devices. It does this whether or not Wi-Fi was on before sleep, also after the power saver turned it off, and it starts no sync. Firmware 4.46.23852 and 6.0.279225 both do this. Nickel also calls `connectWirelessSilently()` for image downloads, its browser and store, and after USB. Its store sync connects through `connectWireless` instead.
 
-Kobalt hooks `connectWirelessSilently()` for calls from libnickel (`kobalt_connect_wireless_silently` in `common/native_wifi_power.cpp`, registered in `qt5/hooks.cpp` and `qt6/hooks.cpp`). The hook is optional; without it, Nickel connects as before. The reader registers a hold through `ReaderHostServices::holdWifiOff` when it builds. The hook skips Nickel's call and logs `wifi-power-saver` with `moment` `nickel-connection` when all of these hold:
+Kobalt hooks `connectWirelessSilently()` for calls from libnickel (`kobalt_connect_wireless_silently` in `common/native_wifi_power.cpp`, registered in `nickel-qt5/hooks.cpp` and `nickel-qt6/hooks.cpp`). The hook is optional; without it, Nickel connects as before. The reader registers a hold through `ReaderHostServices::holdWifiOff` when it builds. The hook skips Nickel's call and logs `wifi-power-saver` with `moment` `nickel-connection` when all of these hold:
 
 - The call comes on the GUI thread.
 - The reader is still open and not closing, and `Reader::wifiPowerSaverApplies` answers yes: the setting is on, Kobalt's Bluetooth indicator is off, the book is not one that Nickel's sync carries, and KOSync is signed out or automatic sync is off.
@@ -178,7 +178,7 @@ While the reader sits idle, Kobalt writes nothing to its database or settings fi
 
 Kobalt can delay a suspend, never prevent it for long:
 
-- `PowerManager::canSuspend` (hooked in `qt5/hooks.cpp` and `qt6/hooks.cpp`, decided in `native_lifecycle.cpp`) answers false while a save, a USB transition, the sleep-view check or the last KOSync upload (at most 2 s) is still running. In evaluation packages it also answers false while the scenario player runs, unless the scenario allows standby (`NativeLifecycle::holdAwake`).
+- `PowerManager::canSuspend` (hooked in `nickel-qt5/hooks.cpp` and `nickel-qt6/hooks.cpp`, decided in `native_lifecycle.cpp`) answers false while a save, a USB transition, the sleep-view check or the last KOSync upload (at most 2 s) is still running. In evaluation packages it also answers false while the scenario player runs, unless the scenario allows standby (`NativeLifecycle::holdAwake`).
 - On firmware 4 only, just before Nickel writes `mem` to `/sys/power/state`, Kobalt checks for touch input that arrived during the preparation or in the last 200 ms (`common/standby_input.cpp`). If there is any, the attempt fails with `EAGAIN` and Nickel tries again later. A touch during an armed attempt takes a one-second kernel wake lock (`kobalt-input`).
 - On firmware 5 and 6 Kobalt only observes the suspend.
 

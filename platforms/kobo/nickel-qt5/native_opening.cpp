@@ -59,7 +59,7 @@ bool NativeOpening::retain(const void *volume, const void *context) {
     data_.reset();
     if (!available() || !volume || !context)
         return false;
-    const auto &request = *static_cast<const nickel4::OpeningContext *>(context);
+    const auto &request = *static_cast<const nickel_qt5::OpeningContext *>(context);
     if (!request.keys || !request.bookmark)
         return false;
     auto data = std::make_unique<Data>();
@@ -85,7 +85,7 @@ std::unique_ptr<NativeOpening> NativeOpening::copy() const {
     if (!data_)
         return nullptr;
     // A library controller that has gone away must not be retained again.
-    const nickel4::OpeningContext context{data_->keys, data_->library ? data_->libraryController : nullptr,
+    const nickel_qt5::OpeningContext context{data_->keys, data_->library ? data_->libraryController : nullptr,
                                           data_->bookmark};
     auto result = std::make_unique<NativeOpening>();
     return result->retain(data_->volume, &context) ? std::move(result) : nullptr;

@@ -1,5 +1,5 @@
 #include "platforms/kobo/common/native_session_volume.h"
-#include "platforms/kobo/qt5/native_location.h"
+#include "platforms/kobo/nickel-qt5/native_location.h"
 #include "check.h"
 #include <QVariantMap>
 
@@ -9,7 +9,7 @@ QVariantMap eventVolume(const QVariantMap &persisted, const kobalt::ReadingActiv
     auto volume = persisted;
     kobalt::nickel::prepareSessionVolume(volume, activity,
         [](QVariantMap &value, const QString &position) {
-            const auto location = kobalt::nickel4::stored(position);
+            const auto location = kobalt::nickel_qt5::stored(position);
             if (!location.isEmpty()) {
                 value["ChapterIDBookmarked"] = location;
                 // Nickel's bookmark setter can replace the percentage.

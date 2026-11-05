@@ -1,55 +1,66 @@
+#include "private_functions.h"
 #include "hooks.h"
+#include "touch_rotation.h"
 #include "platforms/kobo/common/book_menu.h"
 #include "refresh.h"
-#include "platforms/kobo/common/native_lifecycle.h"
-#include "platforms/kobo/common/standby_diagnostics.h"
-#include "platforms/kobo/common/standby_input.h"
-#include "platforms/kobo/common/native_authorization.h"
-#include "platforms/kobo/common/native_dictionary.h"
-#include "platforms/kobo/common/native_light.h"
-#include "platforms/kobo/common/native_wifi_power.h"
 #include "platforms/kobo/display/page_animation.h"
+#include "platforms/kobo/common/native_lifecycle.h"
+#include "platforms/kobo/common/standby_input.h"
+#include "platforms/kobo/common/standby_diagnostics.h"
+#include "platforms/kobo/common/native_authorization.h"
+#include "platforms/kobo/common/native_light.h"
+#include "platforms/kobo/common/native_dictionary.h"
+#include "platforms/kobo/common/native_wifi_power.h"
 #include <NickelHook.h>
-#include <QMetaType>
-#include <dlfcn.h>
+#include <QCryptographicHash>
+#include <QFile>
 
-namespace kobalt::nickel5 {
-void (*nativeHandleOpener)(void *, const void *, const void *);
+namespace kobalt::nickel_qt5 {
+void (*nativeShowReader)(void *, const void *, const void *, void *, const void *);
 void (*nativeFinishInitialization)(void *);
+bool (*nativeHomeKeyFilter)(void *, QObject *, QKeyEvent *);
 void (*nativeContinueUsing)(void *), (*nativeUnplugged)(void *);
-void (*settingsConstructor)(QWidget *, QWidget *);
-bool (*nativePrerenderAllowed)(const void *);
-// No firmware 5 build is named here. The adapters check every exported symbol
-// they call. Volume's registered size stands for the object layouts they rely
-// on; a release that changes it leaves Nickel's reader in place.
+// Adapters check their exported functions separately. The shared build only
+// needs the unexported orientation singleton, matched by its code signature.
 bool firmwareSupported() {
-    const auto *volume = static_cast<const QtPrivate::QMetaTypeInterface *>(
-        dlsym(RTLD_DEFAULT, "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE"));
-    return volume && QMetaType(volume).sizeOf() == 12;
+    return nickel_qt5::orientationService();
 }
 }
-using namespace kobalt::nickel5;
+
+using namespace kobalt::nickel_qt5;
 static nh_hook readerHooks[] = {
     {.sym = "read",
      .sym_new = "kobalt_touch_read",
-     .lib = "/usr/lib/plugins/generic/libqevdevtouchplugin.so",
+     .lib = "/usr/local/Kobo/generic/libkevdevtouch.so",
      .out = nh_symoutptr(kobalt::nativeTouchRead),
-     .desc = "Observe touch acquisition independently of coordinate mapping",
+     .desc = "Track touch acquisition and cancel reader standby on late input",
      .optional = true},
     {.sym = "write",
      .sym_new = "kobalt_power_write",
-     .lib = "libQt6Core.so.6",
+     .lib = "libQt5Core.so.5",
      .out = nh_symoutptr(kobalt::nativePowerWrite),
      .desc = "Observe native power writes when diagnostics are enabled",
      .optional = true},
-    {.sym = "_ZN6IOUtil12stringToFileERK7QStringS2_",
-     .sym_new = "kobalt_observe_power_string_to_file",
+    {.sym = "_ZN17HomePageKeyFilter6filterEP7QObjectP9QKeyEvent",
+     .sym_new = "kobalt_home_key_filter",
      .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(kobalt::nativeDiagnosticPowerStringToFile),
-     .desc = "Observe native power helpers without an input guard",
+     .out = nh_symoutptr(nativeHomeKeyFilter),
+     .desc = "Save and close Kobalt before Home navigation",
+     .optional = true},
+    {.sym = "_ZNK21QEvdevTouchScreenData13mapFromDeviceERK6QPoint",
+     .sym_new = "kobalt_touch_map_from_device",
+     .lib = "/usr/local/Kobo/generic/libkevdevtouch.so",
+     .out = nh_symoutptr(kobalt::nickel_qt5::nativeMapFromDevice),
+     .desc = "Scope the device touch orientation transform",
+     .optional = true},
+    {.sym = "_ZNK10QTransform3mapERK6QPoint",
+     .sym_new = "kobalt_touch_transform",
+     .lib = "/usr/local/Kobo/generic/libkevdevtouch.so",
+     .out = nh_symoutptr(kobalt::nickel_qt5::nativeTouchTransform),
+     .desc = "Correct Clara touch rotation while Kobalt owns the screen",
      .optional = true},
     {.sym =
-         "_ZN16ActionProxyMixin17setupBookListMenuEP28AbstractNickelMenuControllerRK6VolumeP15NickelTouchMenuRK7QStringS9_bRK3Tab",
+         "_ZN16ActionProxyMixin17setupBookListMenuEP28AbstractNickelMenuControllerRK6VolumeP15NickelTouchMenuRK7QStringS9_RK3Tab",
      .sym_new = "kobalt_book_menu",
      .lib = "libnickel.so.1.0.0",
      .out = nh_symoutptr(kobalt::nativeBookMenu),
@@ -115,6 +126,12 @@ static nh_hook readerHooks[] = {
      .out = nh_symoutptr(kobalt::nativeSuspendDeviceWithAlarm),
      .desc = "Trace native alarm standby calls when diagnostics are enabled",
      .optional = true},
+    {.sym = "_ZN6IOUtil12stringToFileERK7QStringS2_",
+     .sym_new = "kobalt_power_string_to_file",
+     .lib = "libnickel.so.1.0.0",
+     .out = nh_symoutptr(kobalt::nativePowerStringToFile),
+     .desc = "Defer reader standby if input arrives during preparation",
+     .optional = true},
     {.sym = "_ZN12PowerManager10canSuspendEv",
      .sym_new = "kobalt_can_suspend",
      .lib = "libnickel.so.1.0.0",
@@ -139,38 +156,6 @@ static nh_hook readerHooks[] = {
      .out = nh_symoutptr(kobalt::nativeUsbConnect),
      .desc = "Release Kobalt storage before USB connection",
      .optional = false},
-#ifndef KOBALT_READER_HARDWARE
-    {.sym = "ioctl",
-     .sym_new = "kobalt_light_test_ioctl",
-     .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(kobalt::lightTestIoctl),
-     .desc = "Test native brightness against simulated light hardware",
-     .optional = true},
-    {.sym = "_ZN11ReadingViewC1EP7QWidget",
-     .sym_new = "kobalt_dictionary_reading_view",
-     .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(kobalt::dictionaryTestNextReadingView),
-     .desc = "Count native reading views during dictionary tests",
-     .optional = true},
-    {.sym = "_ZN13WebEngineViewC2EP7QWidget",
-     .sym_new = "kobalt_dictionary_web_view",
-     .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(kobalt::dictionaryTestNextWebView),
-     .desc = "Count WebEngine views during dictionary tests",
-     .optional = true},
-#endif
-    {.sym = "_ZN13QBackingStore5flushERK7QRegionP7QWindowRK6QPointRK5QListISt4pairI5QRectyEE",
-     .sym_new = "kobalt_reader_flush",
-     .lib = "libQt6Widgets.so.6",
-     .out = nh_symoutptr(kobalt::platform::nativeFlush),
-     .desc = "Submit completed Kobalt paints together",
-     .optional = true},
-    {.sym = "_ZN13KoboScreenMTK15getFlagsForRectERyRK5QRect",
-     .sym_new = "kobalt_refresh_flags",
-     .lib = "/usr/local/Kobo/platforms/libkobo.so",
-     .out = nh_symoutptr(kobalt::platform::nativeRefreshFlags),
-     .desc = "Preserve Kobalt refresh policies for merged dirty regions",
-     .optional = true},
     {.sym = "_ZN19PlugWorkflowManager15onContinueUsingEv",
      .sym_new = "kobalt_continue_using",
      .lib = "libnickel.so.1.0.0",
@@ -189,23 +174,44 @@ static nh_hook readerHooks[] = {
      .out = nh_symoutptr(kobalt::nativeConnectWirelessSilently),
      .desc = "Keep Nickel's background connections off while the Wi-Fi power saver applies",
      .optional = true},
-    {.sym = "_ZNK25PrerenderToPersistManager25isAllowedToDoPrerenderingEv",
-     .sym_new = "kobalt_prerender_allowed",
+#ifndef KOBALT_READER_HARDWARE
+    {.sym = "_ZN11ReadingViewC1EP7QWidget",
+     .sym_new = "kobalt_dictionary_reading_view",
      .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(nativePrerenderAllowed),
-     .desc = "Suspend native background page rendering while Kobalt is selected",
-     .optional = false},
-    {.sym = "_ZN24AbstractReadingViewMixin12handleOpenerERK6VolumeRKN20AbstractReaderOpener7ContextE",
-     .sym_new = "kobalt_handle_opener",
+     .out = nh_symoutptr(kobalt::dictionaryTestNextReadingView),
+     .desc = "Count native reading views during dictionary tests",
+     .optional = true},
+    {.sym = "_ZN13CustomWebViewC1EP7QWidget",
+     .sym_new = "kobalt_dictionary_web_view",
      .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(nativeHandleOpener),
+     .out = nh_symoutptr(kobalt::dictionaryTestNextWebView),
+     .desc = "Count native web views during dictionary tests",
+     .optional = true},
+    {.sym = "ioctl",
+     .sym_new = "kobalt_light_test_ioctl",
+     .lib = "libnickel.so.1.0.0",
+     .out = nh_symoutptr(kobalt::lightTestIoctl),
+     .desc = "Test native brightness against simulated light hardware",
+     .optional = true},
+#endif
+    {.sym = "_ZN13QBackingStore5flushERK7QRegionP7QWindowRK6QPointRK5QListI5QPairI5QRectyEE",
+     .sym_new = "kobalt_reader_flush",
+     .lib = "libQt5Widgets.so.5",
+     .out = nh_symoutptr(kobalt::platform::nativeFlush),
+     .desc = "Submit completed Kobalt paints together",
+     .optional = true},
+    {.sym = "_ZN13QBackingStore5flushERK7QRegionP7QWindowRK6QPointRK5QListI5QPairI5QRectjEE",
+     .sym_new = "kobalt_reader_flush32",
+     .lib = "libQt5Widgets.so.5",
+     .out = nh_symoutptr(kobalt::platform::nativeFlush32),
+     .desc = "Submit completed Kobalt paints on older firmware",
+     .optional = true},
+    {.sym =
+         "_ZN24AbstractReadingViewMixin10showReaderERK6VolumeRK7QVectorI10ContentKeyEP25AbstractLibraryControllerIS0_ERK8Bookmark",
+     .sym_new = "kobalt_show_reader",
+     .lib = "libnickel.so.1.0.0",
+     .out = nh_symoutptr(nativeShowReader),
      .desc = "Open supported publications without creating the native reading view",
-     .optional = false},
-    {.sym = "_ZN21N3SettingsReadingViewC1EP7QWidget",
-     .sym_new = "kobalt_settings_constructor",
-     .lib = "libnickel.so.1.0.0",
-     .out = nh_symoutptr(settingsConstructor),
-     .desc = "Add the Kobalt preference to Reading Settings",
      .optional = false},
     {0},
 };

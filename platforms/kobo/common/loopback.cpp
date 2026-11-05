@@ -1,4 +1,4 @@
-#include "loopback.h"
+#include "platform/api/loopback.h"
 #include <cerrno>
 #include <cstring>
 #include <net/if.h>
@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-namespace kobalt::nickel4 {
+namespace kobalt::platform {
 bool configureLoopback(int *error) {
     *error = 0;
     const int fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);

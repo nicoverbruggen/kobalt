@@ -4,7 +4,7 @@
 #include <QPoint>
 #include <QTransform>
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 // Adapted from Nico Verbruggen's NickelRotate. See resources/notices/NickelRotate-MIT.
 void ownReaderTouchRotation(bool owned);
 bool reversedTouchForVersion(const QByteArray &record);

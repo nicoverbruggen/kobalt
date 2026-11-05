@@ -4,12 +4,13 @@
 #include <dlfcn.h>
 #include <link.h>
 
-// Firmware 4 adapters use this matcher for unexported libnickel functions. A firmware release moves them, so an address holds for one build only.
-// Each function is found by its first 24 Thumb halfwords instead. Branch
-// targets and literal-pool offsets are masked, because they move too. A
-// signature counts only if it matches exactly one place. The signatures were
-// taken from 4.46.23836 and each matches once in 4.38.23697 and 4.42.23303.
-namespace kobalt::nickel4 {
+// The firmware 5 orientation adapter calls one libnickel function that has no
+// exported name. A firmware release moves it, so an address holds for one
+// build only. It is found by its first 24 Thumb halfwords instead. Branch
+// targets and literal-pool offsets are masked, because they move too. The
+// signature counts only if it matches exactly one place. It was taken from
+// 5.18.270971 and also resolves on 6.0.274403.
+namespace kobalt::nickel_qt6 {
 struct Halfword {
     std::uint16_t value, mask;
 };
@@ -59,14 +60,13 @@ template <std::size_t N> void *find(const Halfword (&signature)[N]) {
     return match ? reinterpret_cast<void *>(reinterpret_cast<std::uintptr_t>(match) | 1) : nullptr;
 }
 }
-// The singleton getter of the 24-byte object that owns Nickel's orientation
-// sensor at offset 8. The allocation size is part of the signature.
+// The singleton getter of the object that owns Nickel's orientation sensor at offset 8.
 inline void *orientationService() {
     static constexpr Halfword signature[] = {
-        {0xb598, 0xffff}, {0xaf00, 0xffff}, {0x4c00, 0xff00}, {0x447c, 0xffff}, {0x4620, 0xffff}, {0xf000, 0xf800},
-        {0xc000, 0xd000}, {0x6863, 0xffff}, {0xb103, 0xfd07}, {0x4c00, 0xff00}, {0x447c, 0xffff}, {0x4620, 0xffff},
-        {0xf000, 0xf800}, {0xc000, 0xd000}, {0x6860, 0xffff}, {0xbd98, 0xffff}, {0x2018, 0xffff}, {0xf000, 0xf800},
-        {0xc000, 0xd000}, {0x4604, 0xffff}, {0xf000, 0xf800}, {0xd000, 0xd000}, {0x4b00, 0xff00}, {0x447b, 0xffff}};
+        {0xb510, 0xffff}, {0x4c00, 0xff00}, {0x447c, 0xffff}, {0x6ca3, 0xffff}, {0xf000, 0xf800}, {0x8000, 0xd000},
+        {0x07db, 0xffff}, {0xd500, 0xff00}, {0x4800, 0xff00}, {0x4478, 0xffff}, {0x304c, 0xffff}, {0xbd10, 0xffff},
+        {0xf104, 0xffff}, {0x0048, 0xffff}, {0xf000, 0xf800}, {0xc000, 0xd000}, {0x2800, 0xffff}, {0xd000, 0xff00},
+        {0xf104, 0xffff}, {0x004c, 0xffff}, {0xf000, 0xf800}, {0xd000, 0xd000}, {0x4c00, 0xff00}, {0x4a00, 0xff00}};
     static void *const found = detail::find(signature);
     return found;
 }

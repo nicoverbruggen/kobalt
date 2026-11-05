@@ -6,7 +6,7 @@
 #include <QTouchEvent>
 #include <QWidget>
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 namespace {
 // Kobalt names its top-level windows with an "rr" prefix. Its popups are
 // separate windows whose parent widgets lead back to the reader.

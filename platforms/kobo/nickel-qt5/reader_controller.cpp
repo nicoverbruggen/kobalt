@@ -34,7 +34,7 @@
 #endif
 
 namespace {
-using namespace kobalt::nickel4;
+using namespace kobalt::nickel_qt5;
 using kobalt::storage::readJson;
 using kobalt::storage::writeJson;
 using namespace kobalt::nickel;
@@ -50,7 +50,7 @@ extern "C" __attribute__((visibility("default"))) bool kobalt_home_key_filter(vo
     return nativeHomeKeyFilter(filter, watched, event);
 }
 
-std::function<bool(const void *, const kobalt::nickel4::OpeningContext &)> beginOpening;
+std::function<bool(const void *, const kobalt::nickel_qt5::OpeningContext &)> beginOpening;
 bool alternativeEnabled();
 bool nativeInitialized = false;
 bool nativeFinishing = false;
@@ -189,7 +189,7 @@ public:
             attempt(false);
         });
     }
-    bool open(const void *volume, const kobalt::nickel4::OpeningContext &context) {
+    bool open(const void *volume, const kobalt::nickel_qt5::OpeningContext &context) {
         kobalt::diagnostic("startup-opener",
                            kobalt::qt::object({{"native_initialized", nativeInitialized},
                                                {"controller_ready", bool(controller)},
@@ -293,7 +293,7 @@ public:
         CoordinatorBindings bindings{enabled};
         bindings.automaticBookOpening = alternativeEnabled;
         bindings.setAutomaticBookOpening = setAlternativeEnabled;
-        bindings.installInput = kobalt::nickel4::installTouchInput;
+        bindings.installInput = kobalt::nickel_qt5::installTouchInput;
         if (nativeHomeKeyFilter && dlsym(RTLD_DEFAULT, "_ZN20MainWindowController14sharedInstanceEv") &&
             dlsym(RTLD_DEFAULT, "_ZN20MainWindowController5clearEP18AbstractControllerb")) {
             bindings.goHome = [] {
@@ -418,7 +418,7 @@ int initialize() {
 #endif
 #endif
     auto *startup = new Startup(qApp);
-    beginOpening = [startup](const void *volume, const kobalt::nickel4::OpeningContext &context) {
+    beginOpening = [startup](const void *volume, const kobalt::nickel_qt5::OpeningContext &context) {
         return startup->open(volume, context);
     };
     nativeInitializationFinished = [startup] {
@@ -437,7 +437,7 @@ int initialize() {
 }
 }
 
-namespace kobalt::nickel4 {
+namespace kobalt::nickel_qt5 {
 int initializeReader() {
     return initialize();
 }

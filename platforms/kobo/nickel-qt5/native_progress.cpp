@@ -139,8 +139,8 @@ ReadingProgress snapshot(const QVariantMap &values) {
     // Nickel stores some library actions without a zone and reads them as
     // local time. Preserve that interpretation when comparing its cache.
     result.modified = date.isValid() ? date.toMSecsSinceEpoch() : 0;
-    const auto saved = nickel4::chapter(result.book, values.value("ChapterIDBookmarked").toString());
-    result.location = unsetNativeLocation(saved) ? QString() : nickel4::shared(saved);
+    const auto saved = nickel_qt5::chapter(result.book, values.value("ChapterIDBookmarked").toString());
+    result.location = unsetNativeLocation(saved) ? QString() : nickel_qt5::shared(saved);
     result.valid = !result.book.isEmpty();
     return result;
 }
@@ -246,7 +246,7 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     // the time, the reading status and the percentage. Nickel keeps its own
     // position, and the book still becomes the most recently read one.
     const bool timeOnly = position.isEmpty();
-    const auto location = timeOnly ? QString() : nickel4::stored(position);
+    const auto location = timeOnly ? QString() : nickel_qt5::stored(position);
     if (!timeOnly && location.isEmpty())
         return fail(strings::get("error.nickel_cannot_store_this_reading_position"));
     const auto db = native.dbName(native.device());
@@ -346,7 +346,7 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     const auto row = persisted(error);
     const auto actual = snapshot(row);
     const auto wanted = snapshot(after);
-    const bool matches = actual == wanted && (timeOnly || actual.location == nickel4::shared(location)) &&
+    const bool matches = actual == wanted && (timeOnly || actual.location == nickel_qt5::shared(location)) &&
                          row.value("___PercentRead").toDouble() == after.value("___PercentRead").toDouble()
                          // A time-only record leaves the sync flag alone: Kobo's cloud does not
                          // sync sideloaded EPUB files, and only the bookmark call clears it.
@@ -411,7 +411,7 @@ QJsonObject NativeProgress::testAction(const QJsonObject &command) {
                 active->endTransition();
             result["ok"] = true;
         } else if (action == "persist") {
-            const auto location = nickel4::stored(command.value("location").toString());
+            const auto location = nickel_qt5::stored(command.value("location").toString());
             if (!location.isEmpty() && native.begin(db)) {
                 const auto before = native.values(&volume);
                 native.bookmark(

@@ -305,7 +305,7 @@ void Reader::openSettings()
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     if (wifiPowerSaverOption)
-        wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(true));
+        wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(false));
     for (auto *face : { &settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace,
                         &settingsDictionaryFontFace })
         if (!session->fontFaces().contains(*face))

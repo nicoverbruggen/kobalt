@@ -5049,7 +5049,7 @@ private slots:
         QTest::newRow("automatic") << "default" << true << false << false;
         QTest::newRow("automatic-never-while-reading") << "never" << true << false << false;
         QTest::newRow("automatic-turn-on-wifi") << "wake" << true << false << false;
-        QTest::newRow("setting-off") << "none" << false << false << false;
+        QTest::newRow("setting-default") << "none" << false << false << false;
         QTest::newRow("bluetooth-on") << "none" << true << true << false;
     }
 
@@ -5065,9 +5065,10 @@ private slots:
         QTcpServer stalled;
         QVERIFY(stalled.listen(QHostAddress::LocalHost));
         auto paths = testPaths();
-        if (!enabled)
+        // The saver is off unless the reader turned it on.
+        if (enabled)
             QVERIFY(storage::writePreferences(paths.preferences(),
-                                              { { "turn_off_wifi_on_open", false } }));
+                                              { { "turn_off_wifi_on_open", true } }));
         if (account != "none") {
             QJsonObject saved{ { "schema", 1 },
                                { "server",
@@ -5412,7 +5413,7 @@ private slots:
     {
         QTest::addColumn<bool>("enabled");
         QTest::newRow("saver-on") << true;
-        QTest::newRow("saver-off") << false;
+        QTest::newRow("saver-default") << false;
     }
 
     // At sleep the power saver asks the host to turn Wi-Fi off as soon as the
@@ -5424,9 +5425,10 @@ private slots:
         QTcpServer stalled;
         QVERIFY(stalled.listen(QHostAddress::LocalHost));
         auto paths = testPaths();
-        if (!enabled)
+        // The saver is off unless the reader turned it on.
+        if (enabled)
             QVERIFY(storage::writePreferences(paths.preferences(),
-                                              { { "turn_off_wifi_on_open", false } }));
+                                              { { "turn_off_wifi_on_open", true } }));
         QVERIFY(storage::writeJson(
                 paths.syncAccount(),
                 { { "schema", 1 },

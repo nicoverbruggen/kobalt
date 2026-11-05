@@ -16,6 +16,10 @@
 
 namespace kobalt::nickel {
 namespace {
+// The Wi-Fi power saver ships in beta 7. Until then Kobo offers neither the
+// setting nor its Wi-Fi control, and the saved choice is kept as it is.
+constexpr bool wifiPowerSaverReleased = false;
+
 NativeWifiPowerBindings wifiPowerBindings()
 {
     const auto wireless = reinterpret_cast<QObject *(*)()>(
@@ -217,9 +221,9 @@ ReaderHostServices readerHostServices()
     result.syncNetwork = [] { return std::make_unique<NativeSyncNetwork>(); };
     result.kosyncSleepWake = result.kosyncWifiControl = true;
     // The hook is optional. Without it Nickel's background requests pass.
-    if (nativeConnectWirelessSilently)
+    if (wifiPowerSaverReleased && nativeConnectWirelessSilently)
         result.holdWifiOff = holdNativeWifiOff;
-    if (const auto bindings = wifiPowerBindings(); bindings.valid())
+    if (const auto bindings = wifiPowerBindings(); wifiPowerSaverReleased && bindings.valid())
         result.turnOffWifi = [bindings](QObject *context, const char *reason,
                                         std::function<void(bool)> done) {
             saveNativeWifiPower(context, bindings, reason, std::move(done));

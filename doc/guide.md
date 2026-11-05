@@ -86,7 +86,9 @@ Kobo's software turns Wi-Fi off:
 
 ### Smart Wi-Fi power saving
 
-To save battery, Kobalt can turn Wi-Fi off as soon as you open a book. With **Smart Wi-Fi power saving** on, Kobalt also turns Wi-Fi off at once when the device goes to sleep, after the sleep sync if KOSync syncs at sleep. Without it, Kobo's software does this about 20 seconds later. You find this setting under **Settings → System → Power management**. It is on by default.
+This setting comes in beta 7. Beta 6 does not show it and does not turn Wi-Fi off for it.
+
+To save battery, Kobalt can turn Wi-Fi off as soon as you open a book. With **Smart Wi-Fi power saving** on, Kobalt also turns Wi-Fi off at once when the device goes to sleep, after the sleep sync if KOSync syncs at sleep. Without it, Kobo's software does this about 20 seconds later. You find this setting under **Settings → System → Power management**. It is off by default.
 
 Kobalt turns Wi-Fi off only when nothing needs it:
 

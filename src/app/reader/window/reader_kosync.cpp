@@ -292,14 +292,13 @@ void Reader::prepareKosyncPresentation(std::function<void(bool)> finished)
 
 bool Reader::wifiPowerSaverVisible() const
 {
-    // E-reader previews show the Kobo row, as the Automatic sync sheet does.
-    return services.turnOffWifi
-            || (services.devicePreview && services.devicePreview() && !services.phoneLayout);
+    // E-reader previews leave the row out, as Kobo does until beta 7.
+    return bool(services.turnOffWifi);
 }
 
 bool Reader::wifiPowerSaverApplies(bool sleeping) const
 {
-    if (!services.turnOffWifi || !preferences.value(wifiPowerSaverKey).toBool(true)
+    if (!services.turnOffWifi || !preferences.value(wifiPowerSaverKey).toBool(false)
         || menuBluetooth->active())
         return false;
     // Nickel's own sync carries store books and books from services that

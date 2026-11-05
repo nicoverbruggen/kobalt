@@ -12,22 +12,28 @@
 
 namespace kobalt::android {
 namespace {
-bool write(const QString &path, const QByteArray &bytes) {
+bool write(const QString &path, const QByteArray &bytes)
+{
     if (!QDir().mkpath(QFileInfo(path).absolutePath()))
         return false;
     QSaveFile file(path);
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
 }
-void removeOldBundles(const QString &directory, const QString &current) {
+
+void removeOldBundles(const QString &directory, const QString &current)
+{
     if (QFileInfo(directory).isSymLink())
         return;
     const QRegularExpression digest(QStringLiteral("^[0-9a-f]{64}$"));
-    for (const auto &entry : QDir(directory).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks))
+    for (const auto &entry :
+         QDir(directory).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks))
         if (entry.fileName() != current && digest.match(entry.fileName()).hasMatch())
             QDir(entry.absoluteFilePath()).removeRecursively();
 }
-}
-std::unique_ptr<AssetBundle> installAssets(const QString &applicationData) {
+} // namespace
+
+std::unique_ptr<AssetBundle> installAssets(const QString &applicationData)
+{
     if (applicationData.isEmpty()) {
         return {};
     }
@@ -48,16 +54,16 @@ std::unique_ptr<AssetBundle> installAssets(const QString &applicationData) {
     for (const auto &value : entries) {
         const auto entry = value.toObject();
         const auto name = entry.value("path").toString();
-        if ((!name.startsWith("fonts/") && !name.startsWith("hyph/")) || name.contains('\\') ||
-            name.split('/').contains("..") || name.split('/').contains("."))
+        if ((!name.startsWith("fonts/") && !name.startsWith("hyph/")) || name.contains('\\')
+            || name.split('/').contains("..") || name.split('/').contains("."))
             return {};
         QFile source(":/android-assets/" + name);
         if (!source.open(QIODevice::ReadOnly))
             return {};
         const auto data = source.readAll();
-        if (QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex() !=
-                entry.value("sha256").toString().toLatin1() ||
-            !write(root + '/' + name, data))
+        if (QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex()
+                    != entry.value("sha256").toString().toLatin1()
+            || !write(root + '/' + name, data))
             return {};
     }
     if (!write(root + "/manifest.json", bytes) || !bundle->available())
@@ -65,4 +71,4 @@ std::unique_ptr<AssetBundle> installAssets(const QString &applicationData) {
     removeOldBundles(applicationData + "/assets", QString::fromLatin1(digest));
     return bundle;
 }
-}
+} // namespace kobalt::android

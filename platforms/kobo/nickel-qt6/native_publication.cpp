@@ -10,63 +10,91 @@
 
 namespace kobalt {
 namespace {
-template <class T> T symbol(const char *name) {
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
+
 // These native return values use caller-owned storage on ARM. Their native
 // destructors retain responsibility for their reference-counted contents.
-struct Location {
+struct Location
+{
     void *words[2];
     Location(const Location &) = delete;
-    ~Location() {
-        symbol<void (*)(void *)>("_ZN15ContentLocationD1Ev")(this);
-    }
+
+    ~Location() { symbol<void (*)(void *)>("_ZN15ContentLocationD1Ev")(this); }
 };
+
 static_assert(sizeof(Location) == 8);
-struct Api {
-    QString (*identity)(const void *, const QString &) = symbol<decltype(identity)>("_ZNK7Content5getIdERK7QString");
-    QString (*path)(const void *) = symbol<decltype(path)>("_ZN13VolumeManager17getVolumeFilePathERK6Volume");
-    QMap<QString, QVariant> (*values)(const void *) = symbol<decltype(values)>("_ZNK6Volume11getDbValuesEv");
-    const Location *(*bookmark)(const void *) = symbol<decltype(bookmark)>("_ZNK8Bookmark16getStartLocationEv");
-    Location (*location)(QString, QString) = symbol<decltype(location)>("_ZN15ContentLocation6createE7QStringS0_");
+
+struct Api
+{
+    QString (*identity)(const void *, const QString &) =
+            symbol<decltype(identity)>("_ZNK7Content5getIdERK7QString");
+    QString (*path)(const void *) =
+            symbol<decltype(path)>("_ZN13VolumeManager17getVolumeFilePathERK6Volume");
+    QMap<QString, QVariant> (*values)(const void *) =
+            symbol<decltype(values)>("_ZNK6Volume11getDbValuesEv");
+    const Location *(*bookmark)(const void *) =
+            symbol<decltype(bookmark)>("_ZNK8Bookmark16getStartLocationEv");
+    Location (*location)(QString, QString) =
+            symbol<decltype(location)>("_ZN15ContentLocation6createE7QStringS0_");
     QString (*locationString)(const Location *) =
-        symbol<decltype(locationString)>("_ZNK15ContentLocation12toTENGStringEv");
-    bool (*locationValid)(const Location *) = symbol<decltype(locationValid)>("_ZNK15ContentLocation7isValidEv");
+            symbol<decltype(locationString)>("_ZNK15ContentLocation12toTENGStringEv");
+    bool (*locationValid)(const Location *) =
+            symbol<decltype(locationValid)>("_ZNK15ContentLocation7isValidEv");
     bool (*lcp)(const void *) = symbol<decltype(lcp)>("_ZNK7Content9isLcpEpubEv");
-    bool valid() const {
-        return identity && path && values && bookmark && location && locationString && locationValid && lcp &&
-               symbol<void *>("_ZN15ContentLocationD1Ev");
+
+    bool valid() const
+    {
+        return identity && path && values && bookmark && location && locationString && locationValid
+                && lcp && symbol<void *>("_ZN15ContentLocationD1Ev");
     }
 };
-const Api &api() {
+
+const Api &api()
+{
     static const Api instance;
     return instance;
 }
-}
+} // namespace
 
-bool NativePublication::available() {
+bool NativePublication::available()
+{
     return api().valid() && native::publicationSource().available();
 }
+
 NativePublication::NativePublication() = default;
-bool NativePublication::active() const {
+
+bool NativePublication::active() const
+{
     return source_ && source_->active();
 }
-ResourceFactory NativePublication::resources(std::shared_ptr<SourceLease> lease) const {
+
+ResourceFactory NativePublication::resources(std::shared_ptr<SourceLease> lease) const
+{
     if (!source_) {
         return {};
     }
     auto direct = source_->resources(lease);
     return direct ? direct : nativeResourceFactory(path_, port_, std::move(lease));
 }
-NativePublication::~NativePublication() {
+
+NativePublication::~NativePublication()
+{
     close();
 }
-void NativePublication::close() {
+
+void NativePublication::close()
+{
     source_.reset();
     port_ = 0;
 }
 
-bool NativePublication::open(const void *volume, const void *bookmark, QString *error, const void *openingKeys) {
+bool NativePublication::open(const void *volume, const void *bookmark, QString *error,
+                             const void *openingKeys)
+{
     close();
     identity_.clear();
     path_.clear();
@@ -95,7 +123,8 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     }
     if (location_.isEmpty()) {
         // Read the native volume snapshot, without opening or changing its DB.
-        const auto saved = publicationLocation(identity_, native.values(volume).value("ChapterIDBookmarked").toString());
+        const auto saved = publicationLocation(
+                identity_, native.values(volume).value("ChapterIDBookmarked").toString());
         if (!unsetNativeLocation(saved)) {
             const auto location = native.location(saved, QString());
             if (!native.locationValid(&location))
@@ -117,4 +146,4 @@ bool NativePublication::open(const void *volume, const void *bookmark, QString *
     return true;
 }
 
-}
+} // namespace kobalt

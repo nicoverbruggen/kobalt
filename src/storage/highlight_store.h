@@ -6,7 +6,8 @@
 #include "annotation_database.h"
 
 namespace kobalt {
-struct Highlight {
+struct Highlight
+{
     QString id, start, end, text, chapter;
     QDateTime created;
     // Absent provenance in older files preserves their exact endpoint.
@@ -22,7 +23,12 @@ struct Highlight {
     // Bookmark-only metadata carried by the shared annotation transaction.
     QString bookmarkName = {}, bookmarkIcon = {};
 };
-struct HighlightExcerpt { QString id, text, chapter; };
+
+struct HighlightExcerpt
+{
+    QString id, text, chapter;
+};
+
 QJsonObject highlightJson(const Highlight &highlight);
 bool validHighlight(const Highlight &highlight);
 bool validHighlightMetadata(const Highlight &highlight);
@@ -31,8 +37,10 @@ bool isHighlightColor(const QString &color);
 QString highlightDisplayColor(const QString &color);
 bool isHighlightStyle(const QString &style);
 QString highlightDisplayStyle(const QString &style);
+
 // Separate passages keep their IDs even when their ranges overlap or reflow.
-class HighlightStore {
+class HighlightStore
+{
 public:
     static constexpr int maxHighlights = 2000;
     static constexpr int maxTextUnits = 256 * 1024;
@@ -40,31 +48,33 @@ public:
     static constexpr qint64 maxFileBytes = 8 * 1024 * 1024;
     // root contains legacy JSON; database selects the shared profile database.
     // An omitted database path uses kobalt.sqlite under root for standalone stores.
-    HighlightStore(QString root, QString identity, QByteArray fingerprint, QString title, QString database = {});
-    bool available() const {
-        return !key_.isEmpty();
-    }
+    HighlightStore(QString root, QString identity, QByteArray fingerprint, QString title,
+                   QString database = {});
+
+    bool available() const { return !key_.isEmpty(); }
+
     bool load(QString *error = nullptr);
     bool loadCompact(QString *error = nullptr);
     bool details(const QStringList &ids, QVector<Highlight> *rows, QString *error = nullptr) const;
-    bool excerpts(const QStringList &ids, QVector<HighlightExcerpt> *rows, QString *error = nullptr) const;
+    bool excerpts(const QStringList &ids, QVector<HighlightExcerpt> *rows,
+                  QString *error = nullptr) const;
     bool save(QString *error = nullptr);
     QString folder() const;
+
     // Metadata files read while looking for a changed sideloaded book's highlights.
-    int adoptionMetadataReads() const {
-        return adoptionMetadataReads_;
-    }
-    const QVector<Highlight> &highlights() const {
-        return highlights_;
-    }
-    void setHighlights(QVector<Highlight> highlights) {
-        highlights_ = std::move(highlights);
-    }
+    int adoptionMetadataReads() const { return adoptionMetadataReads_; }
+
+    const QVector<Highlight> &highlights() const { return highlights_; }
+
+    void setHighlights(QVector<Highlight> highlights) { highlights_ = std::move(highlights); }
+
     // A compact store keeps only rendering metadata for saved passages.
     void dropDetails();
+
     // Takes over what `saver`, a copy of this store, last wrote. Database reads
     // check the list revision, so they then match storage.
-    void adoptSaved(const HighlightStore &saver) {
+    void adoptSaved(const HighlightStore &saver)
+    {
         persistedHighlights_ = saver.persistedHighlights_;
         databaseState_ = saver.databaseState_;
     }
@@ -83,4 +93,4 @@ private:
     bool loadFailed_ = false;
     int adoptionMetadataReads_ = 0;
 };
-}
+} // namespace kobalt

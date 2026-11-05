@@ -8,16 +8,20 @@
 
 namespace kobalt {
 // A bookmark marks the page that starts at `position`, a CREngine XPointer.
-struct Bookmark {
+struct Bookmark
+{
     QString position;
-    QString chapter;   // The chapter title when the bookmark was made.
-    QString excerpt;   // The first words of the page.
+    QString chapter; // The chapter title when the bookmark was made.
+    QString excerpt; // The first words of the page.
     QDateTime created; // UTC.
     QString name = {}, icon = {};
+
     bool pinned() const { return !icon.isEmpty(); }
-    bool operator==(const Bookmark &other) const {
-        return position == other.position && chapter == other.chapter && excerpt == other.excerpt &&
-               created == other.created && name == other.name && icon == other.icon;
+
+    bool operator==(const Bookmark &other) const
+    {
+        return position == other.position && chapter == other.chapter && excerpt == other.excerpt
+                && created == other.created && name == other.name && icon == other.icon;
     }
 };
 
@@ -25,7 +29,8 @@ struct Bookmark {
 // folder per book under `root`. SQLite shares the supplied database file.
 // Purchased books use Kobo's stable book ID; sideloaded books use their
 // content fingerprint, which stays the same when the file moves.
-class BookmarkStore {
+class BookmarkStore
+{
 public:
     static constexpr int maxBookmarks = 2000;
     static constexpr int maxPins = 8;
@@ -35,29 +40,26 @@ public:
     static QString bookKey(const QString &identity, const QByteArray &fingerprint);
 
     // An omitted database path uses kobalt.sqlite under root for standalone stores.
-    BookmarkStore(QString root, QString identity, QByteArray fingerprint, QString title, QString database = {});
+    BookmarkStore(QString root, QString identity, QByteArray fingerprint, QString title,
+                  QString database = {});
     // Reads the book's folder. A sideloaded file that changed has a new
     // fingerprint; its bookmarks then come from the folder that last saw its
     // path, and the next save writes them to the new folder.
     bool load(QString *error = nullptr);
     bool save(QString *error = nullptr);
-    bool available() const {
-        return !key_.isEmpty();
-    }
+
+    bool available() const { return !key_.isEmpty(); }
+
     QString folder() const;
-    QString adoptedFrom() const {
-        return adoptedFrom_;
-    }
+
+    QString adoptedFrom() const { return adoptedFrom_; }
 
     // Metadata JSON files read during the last load, including index rebuilding.
     // Inventory validation still checks metadata file stats throughout the library.
-    int adoptionMetadataReads() const {
-        return adoptionMetadataReads_;
-    }
+    int adoptionMetadataReads() const { return adoptionMetadataReads_; }
 
-    const QVector<Bookmark> &bookmarks() const {
-        return bookmarks_;
-    }
+    const QVector<Bookmark> &bookmarks() const { return bookmarks_; }
+
     void setBookmarks(QVector<Bookmark> bookmarks);
 
     // One bookmark per page: bookmarks whose `page` is the same become one,
@@ -87,4 +89,4 @@ QString excerptAfterChapter(const QString &excerpt, const QString &chapter);
 
 QJsonObject bookmarkJson(const Bookmark &bookmark);
 bool bookmarkFromJson(const QJsonObject &object, Bookmark *bookmark);
-}
+} // namespace kobalt

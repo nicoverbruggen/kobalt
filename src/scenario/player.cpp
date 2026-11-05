@@ -23,7 +23,8 @@ namespace {
 // Polls every millisecond without sleeping, so a wait never adds to a measured
 // time. done() is called until it first holds and never again, because a check
 // that reads events consumes what it reads.
-bool waitUntil(const std::function<bool()> &done, int timeout) {
+bool waitUntil(const std::function<bool()> &done, int timeout)
+{
     if (done())
         return true;
     bool met = false;
@@ -42,37 +43,47 @@ bool waitUntil(const std::function<bool()> &done, int timeout) {
 }
 
 // Diagnostics events from any thread, in the order they were written.
-class Events {
+class Events
+{
 public:
-    Events() {
+    Events()
+    {
         setDiagnosticObserver([this](const QJsonObject &event) {
             QMutexLocker lock(&mutex);
             queue.push_back(event);
         });
     }
+
     ~Events() { setDiagnosticObserver({}); }
+
     // Passes over the events that arrived so far. A step that acts calls it,
     // so the next event step matches only what that action caused.
-    void skip() {
+    void skip()
+    {
         QMutexLocker lock(&mutex);
         passed.insert(passed.end(), queue.begin(), queue.end());
         queue.clear();
     }
+
     // Forgets the events that earlier steps passed over or left queued.
     // Called as each sample starts, so `earlier` sees this sample's only.
-    void begin() {
+    void begin()
+    {
         QMutexLocker lock(&mutex);
         passed.clear();
         queue.clear();
     }
+
     // Consumes events until one matches, and returns it. `where` lists
     // further fields the event must have, such as an operation name. With
     // `earlier`, the events that this sample's steps skipped or passed over
     // are searched first, for work that can end before or after the step.
-    QJsonObject next(const QString &name, const QString &panel, const QJsonObject &where, bool earlier, int timeout) {
+    QJsonObject next(const QString &name, const QString &panel, const QJsonObject &where,
+                     bool earlier, int timeout)
+    {
         const auto matches = [&](const QJsonObject &event) {
-            bool match = event.value("event").toString() == name &&
-                         (panel.isEmpty() || event.value("panel").toString() == panel);
+            bool match = event.value("event").toString() == name
+                    && (panel.isEmpty() || event.value("panel").toString() == panel);
             for (auto it = where.begin(); match && it != where.end(); ++it)
                 match = event.value(it.key()) == it.value();
             return match;
@@ -88,19 +99,21 @@ public:
                 }
             }
         }
-        waitUntil([&] {
-            QMutexLocker lock(&mutex);
-            while (!queue.empty()) {
-                const auto event = queue.front();
-                queue.pop_front();
-                if (matches(event)) {
-                    found = event;
-                    return true;
-                }
-                passed.push_back(event);
-            }
-            return false;
-        }, timeout);
+        waitUntil(
+                [&] {
+                    QMutexLocker lock(&mutex);
+                    while (!queue.empty()) {
+                        const auto event = queue.front();
+                        queue.pop_front();
+                        if (matches(event)) {
+                            found = event;
+                            return true;
+                        }
+                        passed.push_back(event);
+                    }
+                    return false;
+                },
+                timeout);
         return found;
     }
 
@@ -114,7 +127,8 @@ private:
 // A closed sheet keeps its names until its deferred deletion. Qt 5 runs that
 // only after the player's nested event loops end, so the next sheet of the
 // same kind exists beside it. Prefer a visible widget over a hidden one.
-QWidget *find(const Host &host, const QString &name) {
+QWidget *find(const Host &host, const QString &name)
+{
     QWidget *hidden = nullptr;
     const auto search = [&](QWidget *root) -> QWidget * {
         auto matches = root->findChildren<QWidget *>(name);
@@ -139,21 +153,27 @@ QWidget *find(const Host &host, const QString &name) {
     }
     return hidden;
 }
-bool visible(const Host &host, const QString &name) {
+
+bool visible(const Host &host, const QString &name)
+{
     const auto *widget = find(host, name);
     return widget && widget->isVisible();
 }
+
 // A scenario value that is a list of names or of points takes the entry for
 // this repetition, so samples can alternate between targets.
-QJsonValue pick(const QJsonValue &value, int repetition) {
+QJsonValue pick(const QJsonValue &value, int repetition)
+{
     const auto list = value.toArray();
     if (list.isEmpty() || !(list.first().isString() || list.first().isArray()))
         return value;
     return list.at(repetition % list.size());
 }
+
 // The point to press: the given fraction of the widget, or its centre. When a
 // panel covers the centre, try higher up, as a person would.
-bool pointIn(QWidget *target, const QJsonValue &at, QPoint &point) {
+bool pointIn(QWidget *target, const QJsonValue &at, QPoint &point)
+{
     auto *window = target->window();
     const auto hits = [&](const QPoint &candidate) {
         auto *hit = window->childAt(target->mapTo(window, candidate));
@@ -166,7 +186,7 @@ bool pointIn(QWidget *target, const QJsonValue &at, QPoint &point) {
         return hits(point);
     }
     const auto centre = target->rect().center();
-    for (const int y : {centre.y(), target->height() / 3, target->height() / 4}) {
+    for (const int y : { centre.y(), target->height() / 3, target->height() / 4 }) {
         point = QPoint(centre.x(), y);
         if (hits(point))
             return true;
@@ -174,12 +194,17 @@ bool pointIn(QWidget *target, const QJsonValue &at, QPoint &point) {
     return false;
 }
 
-class Runner {
+class Runner
+{
 public:
-    Runner(const Host &host, Events &events, QString open) : host(host), events(events), current(std::move(open)) {}
+    Runner(const Host &host, Events &events, QString open)
+        : host(host), events(events), current(std::move(open))
+    {
+    }
 
     // Runs one step for the given repetition. Returns an empty string or the reason it failed.
-    QString step(const QJsonObject &step, int repetition) {
+    QString step(const QJsonObject &step, int repetition)
+    {
         if (step.contains("sleep_persistence")) {
             if (!host.sleepPersistence) {
                 unsupported = true;
@@ -233,16 +258,22 @@ public:
         const int timeout = step.value("timeout").toInt(5000);
         if (step.contains("visible")) {
             const auto name = pick(step.value("visible"), repetition).toString();
-            return waitUntil([&] { return visible(host, name); }, timeout) ? QString() : name + " did not appear";
+            return waitUntil([&] { return visible(host, name); }, timeout)
+                    ? QString()
+                    : name + " did not appear";
         }
         if (step.contains("hidden")) {
             const auto name = step.value("hidden").toString();
-            return waitUntil([&] { return !visible(host, name); }, timeout) ? QString() : name + " did not close";
+            return waitUntil([&] { return !visible(host, name); }, timeout)
+                    ? QString()
+                    : name + " did not close";
         }
         if (step.contains("event")) {
-            const auto name = step.value("event").toString(), panel = step.value("panel").toString();
-            const auto event = events.next(name, panel, step.value("where").toObject(), step.value("earlier").toBool(),
-                                           step.value("timeout").toInt(10000));
+            const auto name = step.value("event").toString(),
+                       panel = step.value("panel").toString();
+            const auto event =
+                    events.next(name, panel, step.value("where").toObject(),
+                                step.value("earlier").toBool(), step.value("timeout").toInt(10000));
             if (event.isEmpty())
                 return "no " + name + " event";
             // `as` names the match, so a sample can keep several events of one kind.
@@ -256,8 +287,9 @@ public:
             return {};
         }
         if (step.contains("settle"))
-            return waitUntil([&] { return !host.busy(); }, step.value("timeout").toInt(10000)) ? QString()
-                                                                                                : "the reader stayed busy";
+            return waitUntil([&] { return !host.busy(); }, step.value("timeout").toInt(10000))
+                    ? QString()
+                    : "the reader stayed busy";
         if (step.contains("mark")) {
             mark.start();
             markEnd = -1;
@@ -315,8 +347,9 @@ public:
                 unsupported = true;
                 return "the host cannot start its own sync";
             }
-            if (host.nativeSyncing &&
-                !waitUntil([&] { return !host.nativeSyncing(); }, step.value("timeout").toInt(300000)))
+            if (host.nativeSyncing
+                && !waitUntil([&] { return !host.nativeSyncing(); },
+                              step.value("timeout").toInt(300000)))
                 return "the earlier sync did not end";
             return host.nativeSync();
         }
@@ -333,13 +366,16 @@ public:
                 return {};
             if (const auto error = host.wifiOff(); !error.isEmpty())
                 return error;
-            if (host.wifiUp && !waitUntil([&] { return !host.wifiUp(); }, step.value("timeout").toInt(15000)))
+            if (host.wifiUp
+                && !waitUntil([&] { return !host.wifiUp(); }, step.value("timeout").toInt(15000)))
                 return "Wi-Fi stayed on";
             return {};
         }
         return "unknown step";
     }
-    QString steps(const QJsonArray &list, int repetition) {
+
+    QString steps(const QJsonArray &list, int repetition)
+    {
         for (int index = 0; index < list.size(); ++index) {
             const auto failure = step(list.at(index).toObject(), repetition);
             if (!failure.isEmpty())
@@ -347,14 +383,18 @@ public:
         }
         return {};
     }
+
     // Opens the scenario's book unless it is the open one.
-    QString book(const QString &key) {
+    QString book(const QString &key)
+    {
         if (key.isEmpty() || (key == current && host.reader && host.reader()))
             return {};
         return open(key, false);
     }
+
     // Closes an open book first, as a person returns to the library.
-    QString open(const QString &key, bool fresh) {
+    QString open(const QString &key, bool fresh)
+    {
         if (!host.open || (host.opens && !host.opens(key))) {
             unsupported = true;
             return "the host cannot open " + key;
@@ -372,31 +412,33 @@ public:
             unsupported = true;
             return "the host cannot open " + key;
         }
-        const bool ready = waitUntil([&] {
-            auto *reader = host.reader();
-            return reader && reader->isVisible() && !host.busy();
-        }, 120000);
+        const bool ready = waitUntil(
+                [&] {
+                    auto *reader = host.reader();
+                    return reader && reader->isVisible() && !host.busy();
+                },
+                120000);
         if (!ready)
             return key + " did not open";
         current = key;
         return {};
     }
-    bool closed() {
-        return waitUntil([&] {
-            return !host.reader() && (!host.idle || host.idle());
-        }, 60000);
+
+    bool closed()
+    {
+        return waitUntil([&] { return !host.reader() && (!host.idle || host.idle()); }, 60000);
     }
+
     // Holds a word or a link, as a lookup or a link selection starts.
-    QString hold(const QJsonObject &target, int milliseconds, int repetition) {
+    QString hold(const QJsonObject &target, int milliseconds, int repetition)
+    {
         auto *reader = dynamic_cast<ReaderWindow *>(host.reader ? host.reader() : nullptr);
         auto *page = find(host, "rrPage");
         if (!reader || !page)
             return "no reader page";
         // The reply may come after a timeout, so it must not refer to this frame.
         auto located = std::make_shared<QPoint>(-2, -2);
-        const auto receive = [located](QPoint point) {
-            *located = point;
-        };
+        const auto receive = [located](QPoint point) { *located = point; };
         const auto text = pick(target.value("text"), repetition).toString();
         if (!text.isEmpty())
             reader->locateText(text, receive);
@@ -411,8 +453,10 @@ public:
         events.skip();
         return click(page, *located, milliseconds) ? QString() : "the page has no window";
     }
+
     // Presses, holds for `milliseconds` and releases.
-    bool click(QWidget *widget, const QPoint &point, int milliseconds) {
+    bool click(QWidget *widget, const QPoint &point, int milliseconds)
+    {
         if (host.press) {
             host.press(widget, point, true);
             if (milliseconds > 0)
@@ -429,15 +473,18 @@ public:
         qt::sendMouse(input.first, input.second, false);
         return true;
     }
+
     // The sample for one repetition, and its stages.
-    bool sample(const QJsonObject &spec, double &value, QJsonObject &stages) {
+    bool sample(const QJsonObject &spec, double &value, QJsonObject &stages)
+    {
         // Request memory explicitly; normal events do not sample the process.
         if (spec.contains("memory")) {
             auto sample = std::make_shared<QJsonObject>();
             sampleDiagnosticMemory([sample](QJsonObject fields) {
                 qt::invoke(qApp, [sample, fields] { *sample = fields; }, Qt::QueuedConnection);
             });
-            if (!waitUntil([sample] { return !sample->isEmpty(); }, 5000)) return false;
+            if (!waitUntil([sample] { return !sample->isEmpty(); }, 5000))
+                return false;
             const auto field = spec.value("memory").toString();
             value = sample->value(field).toDouble();
             return sample->value(field).isDouble();
@@ -449,7 +496,8 @@ public:
             const auto parts = spec.value("stages").toObject();
             for (auto it = parts.begin(); it != parts.end(); ++it) {
                 const auto source = it.value().toObject();
-                stages[it.key()] = matched.value(source.value("event").toString()).value(source.value("field").toString());
+                stages[it.key()] = matched.value(source.value("event").toString())
+                                           .value(source.value("field").toString());
             }
             return true;
         }
@@ -463,18 +511,22 @@ public:
         value = event.value(field).toDouble();
         if (spec.value("stages").toBool())
             for (auto it = event.begin(); it != event.end(); ++it)
-                if (it.key().endsWith("_ms") && it.key() != field && it.key() != "total_ms" &&
-                    it.key() != "monotonic_ms")
+                if (it.key().endsWith("_ms") && it.key() != field && it.key() != "total_ms"
+                    && it.key() != "monotonic_ms")
                     stages[it.key()] = it.value();
         return true;
     }
-    void reset() {
+
+    void reset()
+    {
         matched.clear();
         mark.invalidate();
         markEnd = -1;
         events.begin();
     }
+
     QJsonObject details() const { return matched.value("sleep-persistence"); }
+
     // Set when a step needed a book the host cannot open.
     bool unsupported = false;
 
@@ -488,19 +540,24 @@ private:
     // The key of the open book, if the player knows it.
     QString current;
 };
+
 // Qt 5.2's QJsonArray cannot search itself.
-bool needs(const QJsonObject &scenario, const QString &what) {
+bool needs(const QJsonObject &scenario, const QString &what)
+{
     for (const auto &value : scenario.value("needs").toArray())
         if (value.toString() == what)
             return true;
     return false;
 }
-bool wanted(const QString &id, const QString &filter) {
+
+bool wanted(const QString &id, const QString &filter)
+{
     return filter.isEmpty() || id.startsWith(filter) || filter.startsWith(id);
 }
-}
+} // namespace
 
-QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Options &options) {
+QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Options &options)
+{
     QVector<QJsonObject> results;
     // Keep normal warning/error and lifecycle syncs in the measurements.
     // Older baselines that disabled them are not directly comparable.
@@ -513,16 +570,21 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
     // and samples. A scenario that sets "standby" lets it suspend.
     if (host.keepAwake)
         host.keepAwake(true);
-    struct Restore {
+
+    struct Restore
+    {
         bool syncPaused;
         const Host &host;
-        ~Restore() {
+
+        ~Restore()
+        {
             kosync::overrideAccount({});
             kosync::pauseAutomatic(syncPaused);
             if (host.keepAwake)
                 host.keepAwake(false);
         }
-    } restore{syncPaused, host};
+    } restore{ syncPaused, host };
+
     Events events;
     Runner runner(host, events, options.openBook);
     for (const auto &value : file.value("scenarios").toArray()) {
@@ -534,23 +596,28 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             continue;
         if (options.started)
             options.started(id);
+
         // A scenario that measures with standby lets the device suspend until
         // it ends, however it ends.
-        struct Standby {
+        struct Standby
+        {
             const Host &host;
             bool allowed;
-            ~Standby() {
+
+            ~Standby()
+            {
                 if (allowed && host.keepAwake)
                     host.keepAwake(true);
             }
-        } standby{host, scenario.value("standby").toBool()};
+        } standby{ host, scenario.value("standby").toBool() };
+
         if (standby.allowed && host.keepAwake)
             host.keepAwake(false);
-        auto result = qt::object({{"id", id},
-                                  {"kind", scenario.value("kind")},
-                                  {"paths", scenario.value("paths")},
-                                  {"unit", scenario.value("unit").toString("ms")},
-                                  {"fixture", scenario.value("fixture").toObject()}});
+        auto result = qt::object({ { "id", id },
+                                   { "kind", scenario.value("kind") },
+                                   { "paths", scenario.value("paths") },
+                                   { "unit", scenario.value("unit").toString("ms") },
+                                   { "fixture", scenario.value("fixture").toObject() } });
         QJsonArray samples;
         QJsonArray details;
         QJsonObject stages;
@@ -562,12 +629,20 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             results.append(result);
             continue;
         }
+
         // Cleanup runs after failures too. Sleep overrides exist only in memory.
-        struct SleepCleanup {
+        struct SleepCleanup
+        {
             const Host &host;
             bool enabled;
-            ~SleepCleanup() { if (enabled) host.sleepPersistence({}); }
-        } sleepCleanup{host, needs(scenario, "sleep-persistence") && bool(host.sleepPersistence)};
+
+            ~SleepCleanup()
+            {
+                if (enabled)
+                    host.sleepPersistence({});
+            }
+        } sleepCleanup{ host, needs(scenario, "sleep-persistence") && bool(host.sleepPersistence) };
+
         if (needs(scenario, "native-sync") && !host.nativeSync) {
             result["status"] = QStringLiteral("skipped");
             result["reason"] = QStringLiteral("the host cannot start its own sync");
@@ -584,13 +659,17 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             results.append(result);
             continue;
         }
+
         // A scenario's KOSync account ends with it, also after a failure.
-        struct AccountCleanup {
-            ~AccountCleanup() {
+        struct AccountCleanup
+        {
+            ~AccountCleanup()
+            {
                 kosync::overrideAccount({});
                 kosync::pauseAutomatic(true);
             }
         } accountCleanup;
+
         if (needs(scenario, "dictionary") && host.dictionary && !host.dictionary()) {
             result["status"] = QStringLiteral("skipped");
             result["reason"] = QStringLiteral("no dictionary is installed");
@@ -612,7 +691,8 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             failure = runner.steps(scenario.value("steps").toArray(), index);
             double sample = 0;
             QJsonObject parts;
-            if (failure.isEmpty() && !runner.sample(scenario.value("sample").toObject(), sample, parts))
+            if (failure.isEmpty()
+                && !runner.sample(scenario.value("sample").toObject(), sample, parts))
                 failure = "no sample";
             if (failure.isEmpty())
                 failure = runner.steps(scenario.value("after").toArray(), index);
@@ -640,7 +720,9 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
         // Leave the reader as the next scenario expects it.
         if (failure.isEmpty())
             failure = runner.steps(scenario.value("teardown").toArray(), 0);
-        result["status"] = QString(failure.isEmpty() ? "completed" : runner.unsupported ? "skipped" : "failed");
+        result["status"] = QString(failure.isEmpty()            ? "completed"
+                                           : runner.unsupported ? "skipped"
+                                                                : "failed");
         if (!failure.isEmpty())
             result["reason"] = failure;
         result["samples"] = samples;
@@ -651,4 +733,4 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
     }
     return results;
 }
-}
+} // namespace kobalt::scenario

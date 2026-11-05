@@ -18,12 +18,15 @@
 #include <utility>
 
 namespace kobalt::ui {
-void Button::initStyleOption(QStyleOptionButton *option) const {
+void Button::initStyleOption(QStyleOptionButton *option) const
+{
     QPushButton::initStyleOption(option);
     // Keep keyboard focus without drawing Nickel's focus frame on reader buttons.
     option->state &= ~QStyle::State_HasFocus;
 }
-void Button::mouseReleaseEvent(QMouseEvent *event) {
+
+void Button::mouseReleaseEvent(QMouseEvent *event)
+{
     // Qt repaints the released button synchronously before emitting clicked.
     // Queue that paint with the panel changes made by the click handler.
     const bool enabled = updatesEnabled();
@@ -42,14 +45,16 @@ void Button::mouseReleaseEvent(QMouseEvent *event) {
         parent->update(oldGeometry);
 }
 
-void Button::setPaintMode(ButtonPaintMode value) {
+void Button::setPaintMode(ButtonPaintMode value)
+{
     if (mode == value)
         return;
     mode = value;
     update();
 }
 
-bool Button::event(QEvent *event) {
+bool Button::event(QEvent *event)
+{
     // Qt repaints a hover-tracking widget when a pointer enters or leaves it.
     // Reader buttons draw no hover state, so that repaint would only refresh
     // unchanged pixels, for example a toolbar button when a drag starts.
@@ -57,9 +62,12 @@ bool Button::event(QEvent *event) {
         return true;
     return QPushButton::event(event);
 }
-void Button::paintEvent(QPaintEvent *) {
+
+void Button::paintEvent(QPaintEvent *)
+{
     if (mode == ButtonPaintMode::Native) {
-        if (iconLabelGap || contentAlignment == Qt::AlignLeft || (!icon().isNull() && !text().isEmpty())) {
+        if (iconLabelGap || contentAlignment == Qt::AlignLeft
+            || (!icon().isNull() && !text().isEmpty())) {
             QStyleOptionButton option;
             initStyleOption(&option);
             option.text.clear();
@@ -70,33 +78,44 @@ void Button::paintEvent(QPaintEvent *) {
             // Ordinary actions use a gray pressed fill and keep their ink.
             // Checkable controls, keyboard keys and primary actions use inverted content.
             const bool invertPressed = isCheckable() || property("reader_invert_pressed").toBool();
-            const bool active = isEnabled() && (primary ? !isDown() : invertPressed && (isChecked() || isDown()));
+            const bool active = isEnabled()
+                    && (primary ? !isDown() : invertPressed && (isChecked() || isDown()));
             const auto colors = primary ? readerPalette(palette(), darkTheme(this)) : palette();
-            painter.setPen(colors.color(!isEnabled() ? QPalette::Mid
-                                           : active     ? QPalette::Window
-                                                        : QPalette::WindowText));
+            painter.setPen(colors.color(!isEnabled()     ? QPalette::Mid
+                                                : active ? QPalette::Window
+                                                         : QPalette::WindowText));
             painter.setFont(font());
             const int labelWidth = interfaceTextWidth(text(), font());
             const QSize glyph = icon().isNull() ? QSize(0, 0) : iconSize();
-            const int gap = text().isEmpty() || icon().isNull() ? 0 : (iconLabelGap ? iconLabelGap : px(12));
+            const int gap = text().isEmpty() || icon().isNull()
+                    ? 0
+                    : (iconLabelGap ? iconLabelGap : px(12));
             if (iconAboveLabel) {
                 // Capitals' height is the label's ink, so the icon and that
                 // ink centre as one group, as in the bottom tabs.
                 const int capital = interfaceInkBounds(QStringLiteral("H"), font()).height();
                 const int top = (height() - iconSize().height() - gap - capital) / 2;
-                const QRect area((width() - iconSize().width()) / 2, top, iconSize().width(), iconSize().height());
-                icon().paint(&painter, area, Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                const QRect area((width() - iconSize().width()) / 2, top, iconSize().width(),
+                                 iconSize().height());
+                icon().paint(&painter, area, Qt::AlignCenter,
+                             isEnabled() ? QIcon::Normal : QIcon::Disabled,
                              active ? QIcon::On : QIcon::Off);
-                drawOpticalText(painter, QRect(0, area.bottom() + 1 + gap, width(), capital), text(), true);
+                drawOpticalText(painter, QRect(0, area.bottom() + 1 + gap, width(), capital),
+                                text(), true);
                 return;
             }
             const int left = contentAlignment == Qt::AlignLeft
-                ? qMax(int(px(24)), style()->subElementRect(QStyle::SE_PushButtonContents, &option, this).left())
-                : (width() - glyph.width() - gap - labelWidth) / 2;
+                    ? qMax(int(px(24)),
+                           style()->subElementRect(QStyle::SE_PushButtonContents, &option, this)
+                                   .left())
+                    : (width() - glyph.width() - gap - labelWidth) / 2;
             icon().paint(
-                &painter, QRect(left, (height() - glyph.height()) / 2, glyph.width(), glyph.height()),
-                Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled, active ? QIcon::On : QIcon::Off);
-            drawOpticalText(painter, QRect(left + glyph.width() + gap, 0, labelWidth, height()), text(), true);
+                    &painter,
+                    QRect(left, (height() - glyph.height()) / 2, glyph.width(), glyph.height()),
+                    Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                    active ? QIcon::On : QIcon::Off);
+            drawOpticalText(painter, QRect(left + glyph.width() + gap, 0, labelWidth, height()),
+                            text(), true);
             return;
         }
         QStyleOptionButton option;
@@ -111,9 +130,11 @@ void Button::paintEvent(QPaintEvent *) {
             const bool primary = property("reader_primary_action").toBool();
             const bool segment = property("segment_first").isValid();
             const bool inverted = segment ? isChecked() || isDown() : primary && !isDown();
-            const auto colors = primary || segment ? readerPalette(palette(), darkTheme(this)) : palette();
-            painter.setPen(colors.color(!isEnabled() ? QPalette::Mid
-                                        : inverted ? QPalette::Window : QPalette::WindowText));
+            const auto colors =
+                    primary || segment ? readerPalette(palette(), darkTheme(this)) : palette();
+            painter.setPen(colors.color(!isEnabled()       ? QPalette::Mid
+                                                : inverted ? QPalette::Window
+                                                           : QPalette::WindowText));
             if (segment)
                 drawSegmentPrivateText(painter, rect(), elidePrivateText(text(), font(), width()));
             else
@@ -127,7 +148,8 @@ void Button::paintEvent(QPaintEvent *) {
     const bool active = isEnabled() && (isChecked() || isDown());
     const auto ink = palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid);
     const auto paper = fill == QPalette::Midlight ? sectionColor(this) : palette().color(fill);
-    const bool toolbar = mode == ButtonPaintMode::ToolbarSquare || mode == ButtonPaintMode::ToolbarCell;
+    const bool toolbar =
+            mode == ButtonPaintMode::ToolbarSquare || mode == ButtonPaintMode::ToolbarCell;
     if (toolbar) {
         painter.fillRect(rect(), paper);
         if (active) {
@@ -136,8 +158,9 @@ void Button::paintEvent(QPaintEvent *) {
             painter.setBrush(ink);
             const int diameter = qMin(width(), height());
             painter.drawRect(mode == ButtonPaintMode::ToolbarCell
-                                 ? QRectF(rect())
-                                 : QRectF((width() - diameter) / 2.0, (height() - diameter) / 2.0, diameter, diameter));
+                                     ? QRectF(rect())
+                                     : QRectF((width() - diameter) / 2.0,
+                                              (height() - diameter) / 2.0, diameter, diameter));
         }
     } else {
         paintButtonShape(painter, rect(), paper, active ? ink : paper,
@@ -147,28 +170,31 @@ void Button::paintEvent(QPaintEvent *) {
     painter.setPen(active ? paper : ink);
     if (!text().isEmpty()) {
         painter.setFont(font());
-        drawOpticalText(painter, toolbar ? rect() : rect().adjusted(px(8), px(4), -px(8), -px(4)), text(),
-                        contentAlignment != Qt::AlignLeft);
+        drawOpticalText(painter, toolbar ? rect() : rect().adjusted(px(8), px(4), -px(8), -px(4)),
+                        text(), contentAlignment != Qt::AlignLeft);
     } else {
         if (!isEnabled())
             painter.setOpacity(.4);
         // Toolbar cells keep their size; large text can enlarge their icons.
         const QSize glyph = toolbar ? iconSize() * detail::iconScale : iconSize();
         icon().paint(&painter,
-                     QRect((width() - glyph.width()) / 2, (height() - glyph.height()) / 2, glyph.width(),
-                           glyph.height()),
+                     QRect((width() - glyph.width()) / 2, (height() - glyph.height()) / 2,
+                           glyph.width(), glyph.height()),
                      Qt::AlignCenter, QIcon::Normal, active ? QIcon::On : QIcon::Off);
     }
 }
 
-QSize BackButton::sizeHint() const {
+QSize BackButton::sizeHint() const
+{
     ensurePolished();
     // Include the custom arrow and leave room for fractional font advances.
-    return QSize(metrics::navigation::labelLeft + qt::textWidth(fontMetrics(), text()) + metrics::navigation::labelRight +
-                     contentsMargins().right() + 2,
+    return QSize(metrics::navigation::labelLeft + qt::textWidth(fontMetrics(), text())
+                         + metrics::navigation::labelRight + contentsMargins().right() + 2,
                  Button::sizeHint().height());
 }
-void BackButton::paintEvent(QPaintEvent *) {
+
+void BackButton::paintEvent(QPaintEvent *)
+{
     QPainter painter(this);
     QStyleOptionButton option;
     initStyleOption(&option);
@@ -178,30 +204,42 @@ void BackButton::paintEvent(QPaintEvent *) {
     painter.setFont(font());
     painter.setRenderHint(QPainter::Antialiasing);
     const auto ink = palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid);
-    const QRect arrow(metrics::navigation::arrowLeft, (height() - metrics::navigation::arrowSize) / 2, metrics::navigation::arrowSize,
-                      metrics::navigation::arrowSize);
+    const QRect arrow(metrics::navigation::arrowLeft,
+                      (height() - metrics::navigation::arrowSize) / 2,
+                      metrics::navigation::arrowSize, metrics::navigation::arrowSize);
     controlIcon(ControlIcon::Back, ink).paint(&painter, arrow);
     // The arrow's top rounds down when the height and size differ by an odd
     // number, so center on the arrow itself, not on the button.
     const qreal center = arrow.top() + arrow.height() / 2.0;
-    const int available = qMax(0, width() - metrics::navigation::labelLeft - metrics::navigation::labelRight - contentsMargins().right());
+    const int available =
+            qMax(0,
+                 width() - metrics::navigation::labelLeft - metrics::navigation::labelRight
+                         - contentsMargins().right());
     const auto label = elideInterfaceText(text(), painter.font(), available);
     painter.setPen(ink);
-    drawOpticalText(painter, QRectF(metrics::navigation::labelLeft, center - height() / 2.0, available, height()), label);
-
+    drawOpticalText(
+            painter,
+            QRectF(metrics::navigation::labelLeft, center - height() / 2.0, available, height()),
+            label);
 }
+
 TapZoneButton::TapZoneButton(tapZones::Layout layout, bool rightToLeft, QWidget *parent)
-    : Button(parent), layout(layout), rightToLeft(rightToLeft) {
+    : Button(parent), layout(layout), rightToLeft(rightToLeft)
+{
     setCheckable(true);
     setFocusPolicy(Qt::NoFocus);
     readerStyle(this, "QPushButton{border:0;padding:0;min-width:0;min-height:0;}");
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFixedHeight(sizeHint().height());
 }
-QSize TapZoneButton::sizeHint() const {
-    return {px(200), px(288)};
+
+QSize TapZoneButton::sizeHint() const
+{
+    return { px(200), px(288) };
 }
-void TapZoneButton::paintEvent(QPaintEvent *) {
+
+void TapZoneButton::paintEvent(QPaintEvent *)
+{
     QPainter painter(this);
     const auto paper = palette().color(QPalette::Window);
     const auto ink = palette().color(QPalette::WindowText);
@@ -213,8 +251,9 @@ void TapZoneButton::paintEvent(QPaintEvent *) {
     painter.setPen(QPen(ink, px(2)));
     for (const auto &region : tapZones::regions(layout)) {
         const auto &r = region.bounds;
-        const QRectF area(diagram.x() + r.x() * diagram.width(), diagram.y() + r.y() * diagram.height(),
-                          r.width() * diagram.width(), r.height() * diagram.height());
+        const QRectF area(diagram.x() + r.x() * diagram.width(),
+                          diagram.y() + r.y() * diagram.height(), r.width() * diagram.width(),
+                          r.height() * diagram.height());
         painter.fillRect(area, region.action == tapZones::Action::Menu ? gray : paper);
         painter.drawRect(area);
     }
@@ -228,7 +267,9 @@ void TapZoneButton::paintEvent(QPaintEvent *) {
                                  QPointF(area.right(), center.y() + line * px(5)));
         } else {
             bool next = action == tapZones::Action::Next;
-            paintOpeningIcon(painter, next != rightToLeft ? ControlIcon::Next : ControlIcon::Previous, area, ink);
+            paintOpeningIcon(painter,
+                             next != rightToLeft ? ControlIcon::Next : ControlIcon::Previous, area,
+                             ink);
         }
     };
     if (layout == tapZones::Layout::OneHanded) {
@@ -245,8 +286,10 @@ void TapZoneButton::paintEvent(QPaintEvent *) {
     painter.setFont(interfaceFont(px(25)));
     drawInterfaceText(painter, QRect(0, px(232), width(), px(40)), text(), Qt::AlignCenter);
 }
+
 QPushButton *makeButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,
-                        std::function<void()> action) {
+                        std::function<void()> action)
+{
     auto *button = new Button(text, parent);
     button->setObjectName(name);
     button->setFocusPolicy(Qt::NoFocus);
@@ -255,7 +298,9 @@ QPushButton *makeButton(QWidget *parent, QBoxLayout *layout, const char *name, c
     QObject::connect(button, &QPushButton::clicked, parent, std::move(action));
     return button;
 }
-QSize ElidingButton::sizeHint() const {
+
+QSize ElidingButton::sizeHint() const
+{
     if (!needsPrivateText(text(), font())) {
         return Button::sizeHint();
     }
@@ -264,12 +309,16 @@ QSize ElidingButton::sizeHint() const {
     option.text.clear();
     option.icon = QIcon();
     const auto measured = measurePrivateTextSize(text(), font());
-    const int iconWidth = icon().isNull() ? 0 : iconSize().width() + metrics::control::elidingIconGap;
-    return style()->sizeFromContents(QStyle::CT_PushButton, &option,
-                                     QSize(measured.width() + iconWidth, qMax(measured.height(), iconSize().height())),
-                                     this);
+    const int iconWidth =
+            icon().isNull() ? 0 : iconSize().width() + metrics::control::elidingIconGap;
+    return style()->sizeFromContents(
+            QStyle::CT_PushButton, &option,
+            QSize(measured.width() + iconWidth, qMax(measured.height(), iconSize().height())),
+            this);
 }
-void ElidingButton::paintEvent(QPaintEvent *) {
+
+void ElidingButton::paintEvent(QPaintEvent *)
+{
     QStyleOptionButton option;
     initStyleOption(&option);
     option.text.clear();
@@ -278,56 +327,74 @@ void ElidingButton::paintEvent(QPaintEvent *) {
     style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
     auto contents = style()->subElementRect(QStyle::SE_PushButtonContents, &option, this);
     if (!icon().isNull()) {
-        const QRect target(contents.left(), contents.center().y() - iconSize().height() / 2, iconSize().width(),
-                           iconSize().height());
-        icon().paint(&painter, target, Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled);
+        const QRect target(contents.left(), contents.center().y() - iconSize().height() / 2,
+                           iconSize().width(), iconSize().height());
+        icon().paint(&painter, target, Qt::AlignCenter,
+                     isEnabled() ? QIcon::Normal : QIcon::Disabled);
         contents.setLeft(target.right() + 1 + metrics::control::elidingIconGap);
     }
     painter.setPen(palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid));
     painter.setFont(font());
-    drawInterfaceText(painter, contents, elideInterfaceText(text(), font(), qMax(0, contents.width())),
+    drawInterfaceText(painter, contents,
+                      elideInterfaceText(text(), font(), qMax(0, contents.width())),
                       Qt::AlignLeft | Qt::AlignVCenter);
 }
 
 StepButton::StepButton(ControlIcon icon, QWidget *parent)
-    : kobalt::ui::Button(parent), normal(controlIcon(icon)), pressed(controlIcon(icon, Qt::white)) {
+    : kobalt::ui::Button(parent), normal(controlIcon(icon)), pressed(controlIcon(icon, Qt::white))
+{
     // QSS minimum sizes are applied during polish, after setFixedSize(). Keep
     // both constraints identical so a label-only row cannot flatten the button.
     readerStyle(
-        this,
-        QString("QPushButton{min-width:%1px;max-width:%1px;min-height:%1px;max-height:%1px;padding:0;border:none;}")
-            .arg(int(metrics::control::stepSize)));
+            this,
+            QString("QPushButton{min-width:%1px;max-width:%1px;min-height:%1px;max-height:%1px;padding:0;border:none;}")
+                    .arg(int(metrics::control::stepSize)));
     setFixedSize(metrics::control::stepSize, metrics::control::stepSize);
 }
-bool StepButton::hitButton(const QPoint &point) const {
+
+bool StepButton::hitButton(const QPoint &point) const
+{
     return rect().contains(point);
 }
-void StepButton::paintEvent(QPaintEvent *) {
+
+void StepButton::paintEvent(QPaintEvent *)
+{
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(palette().color(isEnabled() ? QPalette::WindowText : QPalette::Midlight), metrics::control::border));
-    painter.setBrush(palette().color(isEnabled() && isDown() ? QPalette::WindowText : QPalette::Window));
+    painter.setPen(QPen(palette().color(isEnabled() ? QPalette::WindowText : QPalette::Midlight),
+                        metrics::control::border));
+    painter.setBrush(
+            palette().color(isEnabled() && isDown() ? QPalette::WindowText : QPalette::Window));
     const qreal inset = int(metrics::control::border) / 2.0;
     painter.drawRect(QRectF(rect()).adjusted(inset, inset, -inset, -inset));
     if (!isEnabled())
         painter.setOpacity(.4);
-    (((isEnabled() && isDown()) != (palette().color(QPalette::Window) == Qt::black)) ? pressed : normal)
-        .paint(&painter,
-               rect().adjusted(metrics::control::stepIconInset, metrics::control::stepIconInset, -metrics::control::stepIconInset,
-                               -metrics::control::stepIconInset),
-               Qt::AlignCenter, QIcon::Normal);
+    (((isEnabled() && isDown()) != (palette().color(QPalette::Window) == Qt::black)) ? pressed
+                                                                                     : normal)
+            .paint(&painter,
+                   rect().adjusted(metrics::control::stepIconInset, metrics::control::stepIconInset,
+                                   -metrics::control::stepIconInset,
+                                   -metrics::control::stepIconInset),
+                   Qt::AlignCenter, QIcon::Normal);
 }
 
-DropdownButton::DropdownButton(QWidget *parent) : Button(parent) {
-    readerStyle(this, QString("QPushButton{min-height:%1px;max-height:%1px;}")
-                          .arg(metrics::choices::fontButtonHeight - 2 * metrics::control::padding));
+DropdownButton::DropdownButton(QWidget *parent) : Button(parent)
+{
+    readerStyle(this,
+                QString("QPushButton{min-height:%1px;max-height:%1px;}")
+                        .arg(metrics::choices::fontButtonHeight - 2 * metrics::control::padding));
 }
-FontButton::FontButton(QWidget *parent) : DropdownButton(parent) {
+
+FontButton::FontButton(QWidget *parent) : DropdownButton(parent)
+{
     setProperty("opens_upward", true);
 }
-void FontButton::setFace(const QString &face) {
+
+void FontButton::setFace(const QString &face)
+{
     const auto next = fontSample(face);
-    const auto label = face.isEmpty() ? strings::get("controls.publisher_default") : fontDisplayName(face);
+    const auto label =
+            face.isEmpty() ? strings::get("controls.publisher_default") : fontDisplayName(face);
     if (sample == next && text() == label)
         return;
     sample = next;
@@ -335,10 +402,15 @@ void FontButton::setFace(const QString &face) {
     setAccessibleName(text());
     update();
 }
-QString FontButton::resolvedFace() const {
-    return needsPrivateText(QStringLiteral("Hox"), sample) ? sample.family() : QFontInfo(sample).family();
+
+QString FontButton::resolvedFace() const
+{
+    return needsPrivateText(QStringLiteral("Hox"), sample) ? sample.family()
+                                                           : QFontInfo(sample).family();
 }
-void DropdownButton::paintEvent(QPaintEvent *) {
+
+void DropdownButton::paintEvent(QPaintEvent *)
+{
     QPainter painter(this);
     const auto paper = palette().color(QPalette::Window);
     const auto ink = palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid);
@@ -358,64 +430,88 @@ void DropdownButton::paintEvent(QPaintEvent *) {
         drawInterfaceText(painter, label, elideInterfaceText(text(), painter.font(), label.width()),
                           Qt::AlignLeft | Qt::AlignVCenter);
     const int size = metrics::choices::fontArrowSize;
-    const auto arrow = forward                             ? ControlIcon::Next
-                       : property("opens_upward").toBool() ? ControlIcon::Up
-                                                           : ControlIcon::Down;
+    const auto arrow = forward                  ? ControlIcon::Next
+            : property("opens_upward").toBool() ? ControlIcon::Up
+                                                : ControlIcon::Down;
     controlIcon(arrow, ink)
-        .paint(&painter, QRect(width() - metrics::choices::fontArrowRight - size / 2, (height() - size) / 2, size, size));
+            .paint(&painter,
+                   QRect(width() - metrics::choices::fontArrowRight - size / 2,
+                         (height() - size) / 2, size, size));
 }
 
-CaptionButton::CaptionButton(ControlIcon icon, QWidget *parent) : CaptionButton(Presentation::Caption, parent) {
+CaptionButton::CaptionButton(ControlIcon icon, QWidget *parent)
+    : CaptionButton(Presentation::Caption, parent)
+{
     glyph = icon;
 }
+
 CaptionButton::CaptionButton(Presentation presentation, QWidget *parent)
-    : Button(parent), mode(presentation), chevron(presentation == Presentation::ListAction),
-      iconVisible(presentation == Presentation::Caption) {}
-void CaptionButton::setTypefacePreview(const QString &face) {
+    : Button(parent),
+      mode(presentation),
+      chevron(presentation == Presentation::ListAction),
+      iconVisible(presentation == Presentation::Caption)
+{
+}
+
+void CaptionButton::setTypefacePreview(const QString &face)
+{
     if (previewFace == face && previewDensity == density())
         return;
     previewFace = face;
     previewDensity = density();
     if (!face.isEmpty()) {
         previewFont = fontSample(face);
-        previewFont.setPixelSize(
-            qRound(previewFont.pixelSize() * qreal(metrics::chrome::cellIcon) / metrics::choices::sampleInkHeight));
+        previewFont.setPixelSize(qRound(previewFont.pixelSize() * qreal(metrics::chrome::cellIcon)
+                                        / metrics::choices::sampleInkHeight));
     }
     update();
 }
-QSize CaptionButton::sizeHint() const {
+
+QSize CaptionButton::sizeHint() const
+{
     if (!description.isEmpty()) {
         const auto size = Button::sizeHint();
-        return {size.width(), heightForWidth(size.width())};
+        return { size.width(), heightForWidth(size.width()) };
     }
     if (mode != Presentation::CompactAction) {
         return Button::sizeHint();
     }
     const int gap = text().isEmpty() ? 0 : px(16);
-    return {interfaceTextWidth(text(), interfaceFont(metrics::chrome::labelText)) + int(metrics::chrome::cellIcon) + gap + px(32) +
-                int(metrics::control::padding),
-            metrics::scrubber::actionHeight};
+    return { interfaceTextWidth(text(), interfaceFont(metrics::chrome::labelText))
+                     + int(metrics::chrome::cellIcon) + gap + px(32)
+                     + int(metrics::control::padding),
+             metrics::scrubber::actionHeight };
 }
-void CaptionButton::setDescription(const QString &text) {
+
+void CaptionButton::setDescription(const QString &text)
+{
     description = text;
     setAccessibleDescription(text);
     updateGeometry();
     update();
 }
-int CaptionButton::heightForWidth(int width) const {
+
+int CaptionButton::heightForWidth(int width) const
+{
     if (description.isEmpty())
         return Button::heightForWidth(width);
     namespace chrome = metrics::chrome;
-    const int iconSpace = mode == Presentation::ListAction && iconVisible ? int(chrome::cellIcon) + px(20) : 0;
+    const int iconSpace =
+            mode == Presentation::ListAction && iconVisible ? int(chrome::cellIcon) + px(20) : 0;
     const int available = qMax(1, width - chrome::inset - chrome::actionRight - iconSpace);
     const auto label = font(), noteFont = captionFont();
-    const int titleHeight = note.isEmpty() ? interfaceLineHeight(label)
-        : interfaceLineHeight(label) / 2 + px(40) + interfaceLineHeight(noteFont) / 2;
-    return qMax(int(chrome::listActionHeight), titleHeight + px(40) +
-        wrappedInterfaceTextHeight(description, interfaceFont(chrome::descriptionText), available));
+    const int titleHeight = note.isEmpty()
+            ? interfaceLineHeight(label)
+            : interfaceLineHeight(label) / 2 + px(40) + interfaceLineHeight(noteFont) / 2;
+    return qMax(int(chrome::listActionHeight),
+                titleHeight + px(40)
+                        + wrappedInterfaceTextHeight(
+                                description, interfaceFont(chrome::descriptionText), available));
 }
-CaptionButton *makeCaptionButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,
-                                 std::function<void()> action) {
+
+CaptionButton *makeCaptionButton(QWidget *parent, QBoxLayout *layout, const char *name,
+                                 const QString &text, std::function<void()> action)
+{
     auto *button = new CaptionButton(CaptionButton::Presentation::ListAction, parent);
     button->setText(text);
     button->setObjectName(name);
@@ -425,7 +521,9 @@ CaptionButton *makeCaptionButton(QWidget *parent, QBoxLayout *layout, const char
     QObject::connect(button, &QPushButton::clicked, parent, std::move(action));
     return button;
 }
-void CaptionButton::paintEvent(QPaintEvent *) {
+
+void CaptionButton::paintEvent(QPaintEvent *)
+{
     if (mode == Presentation::ToolbarAction || mode == Presentation::CompactAction) {
         QPainter painter(this);
         const auto ink = palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid);
@@ -439,21 +537,27 @@ void CaptionButton::paintEvent(QPaintEvent *) {
             const int iconSize = metrics::chrome::cellIcon, gap = px(8);
             const int labelHeight = interfaceLineHeight(font());
             const int top = (height() - iconSize - gap - labelHeight) / 2;
-            icon().paint(&painter, QRect((width() - iconSize) / 2, top, iconSize, iconSize), Qt::AlignCenter,
-                         isEnabled() ? QIcon::Normal : QIcon::Disabled, pressed ? QIcon::On : QIcon::Off);
-            const QRect labelArea(px(16), top + iconSize + gap, qMax(0, width() - 2 * px(16)), labelHeight);
-            drawInterfaceText(painter, labelArea, elideInterfaceText(text(), font(), labelArea.width()), Qt::AlignCenter);
+            icon().paint(&painter, QRect((width() - iconSize) / 2, top, iconSize, iconSize),
+                         Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                         pressed ? QIcon::On : QIcon::Off);
+            const QRect labelArea(px(16), top + iconSize + gap, qMax(0, width() - 2 * px(16)),
+                                  labelHeight);
+            drawInterfaceText(painter, labelArea,
+                              elideInterfaceText(text(), font(), labelArea.width()),
+                              Qt::AlignCenter);
             return;
         }
         painter.setFont(interfaceFont(metrics::chrome::labelText));
         const int iconSize = metrics::chrome::cellIcon, gap = text().isEmpty() ? 0 : px(16);
-        const int inset = mode == Presentation::CompactAction ? px(16) : int(metrics::chrome::inset);
+        const int inset =
+                mode == Presentation::CompactAction ? px(16) : int(metrics::chrome::inset);
         const int available = qMax(0, width() - 2 * inset - iconSize - gap);
         const auto label = elideInterfaceText(text(), painter.font(), available);
         const int labelWidth = interfaceTextWidth(label, painter.font());
         const int left = (width() - iconSize - gap - labelWidth) / 2;
-        icon().paint(&painter, QRect(left, (height() - iconSize) / 2, iconSize, iconSize), Qt::AlignCenter,
-                     isEnabled() ? QIcon::Normal : QIcon::Disabled, pressed ? QIcon::On : QIcon::Off);
+        icon().paint(&painter, QRect(left, (height() - iconSize) / 2, iconSize, iconSize),
+                     Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                     pressed ? QIcon::On : QIcon::Off);
         const QRect labelArea(left + iconSize + gap, 0, labelWidth, height());
         if (mode == Presentation::CompactAction) {
             drawOpticalPrivateText(painter, labelArea, label, Qt::AlignHCenter);
@@ -465,7 +569,9 @@ void CaptionButton::paintEvent(QPaintEvent *) {
     if (mode == Presentation::ListAction) {
         namespace chrome = metrics::chrome;
         QPainter painter(this);
-        painter.fillRect(rect(), isEnabled() && isDown() ? themeColors(this).pressedPaper : palette().color(QPalette::Window));
+        painter.fillRect(rect(),
+                         isEnabled() && isDown() ? themeColors(this).pressedPaper
+                                                 : palette().color(QPalette::Window));
         paintEdges(painter, rect(), rule, dividerColor(this));
         if (!isEnabled())
             painter.setOpacity(.45);
@@ -477,59 +583,83 @@ void CaptionButton::paintEvent(QPaintEvent *) {
         // Balance the visible icon-to-border and icon-to-label gaps, including the glyph bearings.
         if (actionIcon)
             icon().paint(&painter,
-                         QRect(chrome::inset - px(7), (height() - chrome::cellIcon) / 2 + px(1), chrome::cellIcon, chrome::cellIcon));
+                         QRect(chrome::inset - px(7), (height() - chrome::cellIcon) / 2 + px(1),
+                               chrome::cellIcon, chrome::cellIcon));
         const int previewWidth = previewFace.isEmpty() ? 0 : int(px(88));
-        const int textWidth = qMax(0, width() - left - chrome::actionRight - (previewWidth ? previewWidth + px(20) : 0));
+        const int textWidth = qMax(0,
+                                   width() - left - chrome::actionRight
+                                           - (previewWidth ? previewWidth + px(20) : 0));
         // The label and its note are one block, centred on its letters. Their
         // line boxes keep the same centre-to-centre distance as before.
-        const QFont noteFont = valueCaption ? interfaceFont(chrome::descriptionText) : captionFont();
-        const int labelHeight = interfaceLineHeight(label), noteHeight = interfaceLineHeight(noteFont);
+        const QFont noteFont =
+                valueCaption ? interfaceFont(chrome::descriptionText) : captionFont();
+        const int labelHeight = interfaceLineHeight(label),
+                  noteHeight = interfaceLineHeight(noteFont);
         const int pitch = px(40);
-        const int titleHeight = note.isEmpty() ? labelHeight : labelHeight / 2 + pitch + noteHeight / 2;
+        const int titleHeight =
+                note.isEmpty() ? labelHeight : labelHeight / 2 + pitch + noteHeight / 2;
         const auto descriptionFont = interfaceFont(chrome::descriptionText);
-        const int descriptionHeight = description.isEmpty() ? 0
-            : wrappedInterfaceTextHeight(description, descriptionFont, textWidth);
-        const int blockHeight = titleHeight + (description.isEmpty() ? 0 : px(12) + descriptionHeight);
-        const int top = (height() - blockHeight) / 2 - opticalCenterShift(label, note.isEmpty() ? label : noteFont);
+        const int descriptionHeight = description.isEmpty()
+                ? 0
+                : wrappedInterfaceTextHeight(description, descriptionFont, textWidth);
+        const int blockHeight =
+                titleHeight + (description.isEmpty() ? 0 : px(12) + descriptionHeight);
+        const int top = (height() - blockHeight) / 2
+                - opticalCenterShift(label, note.isEmpty() ? label : noteFont);
         drawInterfaceText(painter, QRect(left, top, textWidth, labelHeight),
-                          elideInterfaceText(text(), painter.font(), textWidth), Qt::AlignVCenter | Qt::AlignLeft);
+                          elideInterfaceText(text(), painter.font(), textWidth),
+                          Qt::AlignVCenter | Qt::AlignLeft);
         if (chevron) {
             const int size = px(28);
             controlIcon(ControlIcon::Next, palette().color(QPalette::WindowText))
-                .paint(&painter, QRect(width() - chrome::chevronRight - size / 2, (height() - size) / 2, size, size));
+                    .paint(&painter,
+                           QRect(width() - chrome::chevronRight - size / 2, (height() - size) / 2,
+                                 size, size));
         }
         if (!description.isEmpty()) {
             painter.setFont(descriptionFont);
             painter.setPen(noteColor(this));
-            drawWrappedInterfaceText(painter,
-                QRect(left, top + titleHeight + px(12), textWidth, descriptionHeight), description);
+            drawWrappedInterfaceText(
+                    painter, QRect(left, top + titleHeight + px(12), textWidth, descriptionHeight),
+                    description);
         }
         if (previewWidth) {
             painter.setFont(previewFont);
-            drawOpticalText(painter, QRect(width() - chrome::actionRight - previewWidth, 0, previewWidth, height()),
-                            QStringLiteral("Aa"), true, {});
+            drawOpticalText(
+                    painter,
+                    QRect(width() - chrome::actionRight - previewWidth, 0, previewWidth, height()),
+                    QStringLiteral("Aa"), true, {});
         }
         if (!note.isEmpty()) {
             painter.setFont(noteFont);
             painter.setPen(noteColor(this));
             drawInterfaceText(painter,
-                              QRect(left, top + labelHeight / 2 + pitch - noteHeight / 2, textWidth, noteHeight),
-                              elideInterfaceText(note, painter.font(), textWidth), Qt::AlignLeft | Qt::AlignVCenter);
+                              QRect(left, top + labelHeight / 2 + pitch - noteHeight / 2, textWidth,
+                                    noteHeight),
+                              elideInterfaceText(note, painter.font(), textWidth),
+                              Qt::AlignLeft | Qt::AlignVCenter);
         }
         return;
     }
     namespace chrome = metrics::chrome;
     QPainter painter(this);
-    painter.fillRect(rect(), isEnabled() && isDown() ? themeColors(this).pressedPaper : palette().color(QPalette::Window));
+    painter.fillRect(rect(),
+                     isEnabled() && isDown() ? themeColors(this).pressedPaper
+                                             : palette().color(QPalette::Window));
     paintEdges(painter, rect(), rule, dividerColor(this));
     const auto ink = palette().color(QPalette::WindowText);
-    controlIcon(glyph, ink).paint(&painter, QRect(chrome::inset, (height() - chrome::cellIcon) / 2, chrome::cellIcon, chrome::cellIcon));
-    const int left = chrome::inset + chrome::cellIcon + px(24), right = chevron ? int(chrome::actionRight) : int(chrome::inset);
+    controlIcon(glyph, ink)
+            .paint(&painter,
+                   QRect(chrome::inset, (height() - chrome::cellIcon) / 2, chrome::cellIcon,
+                         chrome::cellIcon));
+    const int left = chrome::inset + chrome::cellIcon + px(24),
+              right = chevron ? int(chrome::actionRight) : int(chrome::inset);
     const int available = qMax(0, width() - left - right);
     const auto labelFont = interfaceFont(chrome::labelText), noteFont = captionFont(px(20));
     const int labelHeight = interfaceLineHeight(labelFont),
               noteHeight = note.isEmpty() ? 0 : interfaceLineHeight(noteFont);
-    const int gap = note.isEmpty() ? 0 : px(2), top = (height() - labelHeight - gap - noteHeight) / 2;
+    const int gap = note.isEmpty() ? 0 : px(2),
+              top = (height() - labelHeight - gap - noteHeight) / 2;
     painter.setPen(ink);
     painter.setFont(labelFont);
     drawInterfaceText(painter, QRect(left, top, available, labelHeight),
@@ -543,10 +673,14 @@ void CaptionButton::paintEvent(QPaintEvent *) {
     if (chevron) {
         const int size = px(28);
         controlIcon(ControlIcon::Next, ink)
-            .paint(&painter, QRect(width() - chrome::chevronRight - size / 2, (height() - size) / 2, size, size));
+                .paint(&painter,
+                       QRect(width() - chrome::chevronRight - size / 2, (height() - size) / 2, size,
+                             size));
     }
 }
-void DismissButton::paintEvent(QPaintEvent *) {
+
+void DismissButton::paintEvent(QPaintEvent *)
+{
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     const auto ink = palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid);
@@ -555,43 +689,57 @@ void DismissButton::paintEvent(QPaintEvent *) {
     const int side = px(44);
     const QPoint center = contentsRect().center();
     painter.fillRect(contentsRect(), pressed ? ink : paper);
-    painter.fillRect(QRect(contentsRect().left(), contentsRect().top(), metrics::control::border, contentsRect().height()),
+    painter.fillRect(QRect(contentsRect().left(), contentsRect().top(), metrics::control::border,
+                           contentsRect().height()),
                      palette().color(QPalette::Mid));
     const QRect bounds(center.x() - side / 2, center.y() - side / 2, side, side);
     controlIcon(ControlIcon::Close, pressed ? paper : ink).paint(&painter, bounds);
 }
+
 namespace {
-QStringList cellLabelLines(const QString &text, const QFont &font, int available) {
-    return {elideInterfaceText(text, font, available)};
+QStringList cellLabelLines(const QString &text, const QFont &font, int available)
+{
+    return { elideInterfaceText(text, font, available) };
 }
-}
+} // namespace
+
 CellButton::CellButton(ControlIcon icon, QWidget *parent, int iconPixels)
-    : Button(parent), glyph(icon), iconPixels(iconPixels) {
+    : Button(parent), glyph(icon), iconPixels(iconPixels)
+{
     setFocusPolicy(Qt::NoFocus);
 }
-QSize CellButton::sizeHint() const {
+
+QSize CellButton::sizeHint() const
+{
     if (text().isEmpty())
-        return {metrics::chrome::cellWidth + (dropdownIndicator ? px(8) + int(metrics::chrome::selectorIcon) : 0),
-                metrics::chrome::actionHeight};
+        return { metrics::chrome::cellWidth
+                         + (dropdownIndicator ? px(8) + int(metrics::chrome::selectorIcon) : 0),
+                 metrics::chrome::actionHeight };
     // Paint with our own font; the reader's button style sets a larger size.
     QFont label = interfaceFont(metrics::chrome::countText);
     label.setCapitalization(QFont::AllUppercase);
-    return {metrics::chrome::inset + trailingInset + interfaceTextWidth(text().toUpper(), label) + metrics::chrome::selectorGap + iconPixels,
-            metrics::chrome::actionHeight};
+    return { metrics::chrome::inset + trailingInset + interfaceTextWidth(text().toUpper(), label)
+                     + metrics::chrome::selectorGap + iconPixels,
+             metrics::chrome::actionHeight };
 }
-int CellButton::widthForLabel(int maximumWidth) const {
+
+int CellButton::widthForLabel(int maximumWidth) const
+{
     if (text().isEmpty())
         return qMin(maximumWidth, sizeHint().width());
     QFont label = interfaceFont(metrics::chrome::countText);
     label.setCapitalization(QFont::AllUppercase);
-    const int reserve = metrics::chrome::inset + trailingInset + metrics::chrome::selectorGap + iconPixels;
+    const int reserve =
+            metrics::chrome::inset + trailingInset + metrics::chrome::selectorGap + iconPixels;
     const auto lines = cellLabelLines(text().toUpper(), label, qMax(0, maximumWidth - reserve));
     int width = 0;
     for (const auto &line : lines)
         width = qMax(width, interfaceTextWidth(line, label));
     return qMin(maximumWidth, reserve + width);
 }
-void CellButton::paintEvent(QPaintEvent *) {
+
+void CellButton::paintEvent(QPaintEvent *)
+{
     QPainter painter(this);
     const bool pressed = isEnabled() && isDown();
     const bool active = isEnabled() && (isChecked() || (pressed && !grayPress));
@@ -605,12 +753,18 @@ void CellButton::paintEvent(QPaintEvent *) {
             painter.setBrush(ink);
             painter.drawEllipse(QRectF(rect()).adjusted(inset, inset, -inset, -inset));
         }
-        if (!isEnabled()) painter.setOpacity(.45);
-        controlIcon(glyph, active ? paper : ink).paint(&painter,
-            QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels, iconPixels));
+        if (!isEnabled())
+            painter.setOpacity(.45);
+        controlIcon(glyph, active ? paper : ink)
+                .paint(&painter,
+                       QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels,
+                             iconPixels));
         return;
     }
-    painter.fillRect(rect(), active ? ink : pressed && grayPress ? themeColors(this).pressedPaper : paper);
+    painter.fillRect(rect(),
+                     active                         ? ink
+                             : pressed && grayPress ? themeColors(this).pressedPaper
+                                                    : paper);
     paintEdges(painter, rect(), rule, palette().color(QPalette::Mid));
     if (!isEnabled())
         painter.setOpacity(.45);
@@ -620,27 +774,34 @@ void CellButton::paintEvent(QPaintEvent *) {
         const int gap = dropdownIndicator ? px(8) : 0;
         const int left = (width() - iconPixels - gap - indicator) / 2;
         controlIcon(glyph, color)
-            .paint(&painter, QRect(left, (height() - iconPixels) / 2, iconPixels, iconPixels));
+                .paint(&painter, QRect(left, (height() - iconPixels) / 2, iconPixels, iconPixels));
         if (dropdownIndicator)
             controlIcon(ControlIcon::Down, color)
-                .paint(&painter, QRect(left + iconPixels + gap, (height() - indicator) / 2, indicator, indicator));
+                    .paint(&painter,
+                           QRect(left + iconPixels + gap, (height() - indicator) / 2, indicator,
+                                 indicator));
         return;
     }
     QFont label = interfaceFont(metrics::chrome::countText);
     label.setCapitalization(QFont::AllUppercase);
     painter.setFont(label);
     painter.setPen(color);
-    const int available = qMax(0, width() - metrics::chrome::inset - trailingInset - metrics::chrome::selectorGap - iconPixels);
+    const int available = qMax(0,
+                               width() - metrics::chrome::inset - trailingInset
+                                       - metrics::chrome::selectorGap - iconPixels);
     const auto lines = cellLabelLines(text().toUpper(), label, available);
     const int lineHeight = interfaceLineHeight(label);
     const int top = (height() - int(lines.size()) * lineHeight) / 2;
     int labelWidth = 0;
     for (int i = 0; i < lines.size(); ++i) {
-        drawOpticalText(painter, QRect(metrics::chrome::inset, top + i * lineHeight, available, lineHeight), lines[i]);
+        drawOpticalText(painter,
+                        QRect(metrics::chrome::inset, top + i * lineHeight, available, lineHeight),
+                        lines[i]);
         labelWidth = qMax(labelWidth, interfaceTextWidth(lines[i], label));
     }
     const int x = metrics::chrome::inset + labelWidth + metrics::chrome::selectorGap;
-    controlIcon(glyph, color).paint(&painter, QRect(x, (height() - iconPixels) / 2, iconPixels, iconPixels));
+    controlIcon(glyph, color)
+            .paint(&painter, QRect(x, (height() - iconPixels) / 2, iconPixels, iconPixels));
 }
 
-}
+} // namespace kobalt::ui

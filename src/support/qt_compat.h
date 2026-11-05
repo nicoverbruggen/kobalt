@@ -12,11 +12,12 @@ using qsizetype = qptrdiff;
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 5, 0)
 // Qt 5.2 has no informational message stream.
-#define qInfo qDebug
+#  define qInfo qDebug
 #endif
 
 namespace kobalt::qt {
-inline QString character(char32_t codepoint) {
+inline QString character(char32_t codepoint)
+{
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     return QString::fromUcs4(&codepoint, 1);
 #else
@@ -25,12 +26,14 @@ inline QString character(char32_t codepoint) {
 #endif
 }
 
-class SignalBlocker {
+class SignalBlocker
+{
 public:
-    explicit SignalBlocker(QObject *object) : object(object), blocked(object->blockSignals(true)) {}
-    ~SignalBlocker() {
-        object->blockSignals(blocked);
-    }
+    explicit SignalBlocker(QObject *object)
+        : object(object), blocked(object->blockSignals(true)) { }
+
+    ~SignalBlocker() { object->blockSignals(blocked); }
+
     SignalBlocker(const SignalBlocker &) = delete;
     SignalBlocker &operator=(const SignalBlocker &) = delete;
 
@@ -45,31 +48,48 @@ constexpr auto skipEmptyParts = QString::SkipEmptyParts;
 constexpr auto skipEmptyParts = Qt::SkipEmptyParts;
 #endif
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-inline QJsonValue jsonValue(qint64 value) {
+inline QJsonValue jsonValue(qint64 value)
+{
     return QJsonValue(double(value));
 }
-inline QJsonValue jsonValue(quint64 value) {
+
+inline QJsonValue jsonValue(quint64 value)
+{
     return QJsonValue(double(value));
 }
 #endif
-inline QJsonValue jsonValue(const char *value) {
+inline QJsonValue jsonValue(const char *value)
+{
     return QJsonValue(QString::fromUtf8(value));
 }
-template <class Value> QJsonValue jsonValue(const Value &value) {
+
+template <class Value>
+QJsonValue jsonValue(const Value &value)
+{
     return QJsonValue(value);
 }
-struct JsonField {
+
+struct JsonField
+{
     QString key;
     QJsonValue value;
-    template <class Value> JsonField(QString key, const Value &value) : key(std::move(key)), value(jsonValue(value)) {}
+
+    template <class Value>
+    JsonField(QString key, const Value &value) : key(std::move(key)), value(jsonValue(value))
+    {
+    }
 };
-inline QJsonObject object(std::initializer_list<JsonField> fields) {
+
+inline QJsonObject object(std::initializer_list<JsonField> fields)
+{
     QJsonObject result;
     for (const auto &field : fields)
         result.insert(field.key, field.value);
     return result;
 }
-inline QJsonArray array(std::initializer_list<QJsonValue> values) {
+
+inline QJsonArray array(std::initializer_list<QJsonValue> values)
+{
     QJsonArray result;
     for (const auto &value : values)
         result.append(value);
@@ -77,7 +97,8 @@ inline QJsonArray array(std::initializer_list<QJsonValue> values) {
 }
 
 template <class Function>
-bool invoke(QObject *context, Function function, Qt::ConnectionType type = Qt::AutoConnection) {
+bool invoke(QObject *context, Function function, Qt::ConnectionType type = Qt::AutoConnection)
+{
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
     return QMetaObject::invokeMethod(context, std::move(function), type);
 #else
@@ -90,7 +111,9 @@ bool invoke(QObject *context, Function function, Qt::ConnectionType type = Qt::A
 #endif
 }
 
-template <class Function> void later(int milliseconds, QObject *context, Function function) {
+template <class Function>
+void later(int milliseconds, QObject *context, Function function)
+{
 #if QT_VERSION >= QT_VERSION_CHECK(5, 4, 0)
     QTimer::singleShot(milliseconds, context, std::move(function));
 #else
@@ -101,4 +124,4 @@ template <class Function> void later(int milliseconds, QObject *context, Functio
     timer->start(milliseconds);
 #endif
 }
-}
+} // namespace kobalt::qt

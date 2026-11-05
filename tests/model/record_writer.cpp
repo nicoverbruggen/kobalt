@@ -12,19 +12,25 @@ using kobalt::storage::RecordWriter;
 
 namespace {
 // Holds the writer thread inside a write until the test opens it.
-class Gate {
+class Gate
+{
 public:
-    void wait() {
+    void wait()
+    {
         std::unique_lock<std::mutex> lock(mutex);
         entered = true;
         changed.notify_all();
         changed.wait(lock, [this] { return open; });
     }
-    void awaitEntered() {
+
+    void awaitEntered()
+    {
         std::unique_lock<std::mutex> lock(mutex);
         changed.wait(lock, [this] { return entered; });
     }
-    void release() {
+
+    void release()
+    {
         std::lock_guard<std::mutex> lock(mutex);
         open = true;
         changed.notify_all();
@@ -35,14 +41,19 @@ private:
     std::condition_variable changed;
     bool entered = false, open = false;
 };
+
 // Records the order in which writes run on the writer thread.
-class Log {
+class Log
+{
 public:
-    void add(const std::string &name) {
+    void add(const std::string &name)
+    {
         std::lock_guard<std::mutex> lock(mutex);
         entries += name + ' ';
     }
-    std::string text() {
+
+    std::string text()
+    {
         std::lock_guard<std::mutex> lock(mutex);
         return entries;
     }
@@ -51,16 +62,19 @@ private:
     std::mutex mutex;
     std::string entries;
 };
-RecordWriter::Write record(Log &log, const std::string &name, bool result = true) {
+
+RecordWriter::Write record(Log &log, const std::string &name, bool result = true)
+{
     return [&log, name, result] {
         log.add(name);
         return result;
     };
 }
-}
+} // namespace
 
 // Checks record writers: queue order, replaced waiting writes, synchronous writes, cancellation, destruction and time limits.
-int main() {
+int main()
+{
     {
         // Writers share one thread. Writes run in the order their writers
         // were queued; a writer posting again while it runs goes to the back.
@@ -68,12 +82,12 @@ int main() {
         Gate gate;
         RecordWriter first, second;
         first.post(
-            [&] {
-                gate.wait();
-                log.add("a1");
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    log.add("a1");
+                    return true;
+                },
+                {});
         gate.awaitEntered();
         second.post(record(log, "b1"), {});
         first.post(record(log, "a2"), {});
@@ -90,13 +104,13 @@ int main() {
         Gate gate;
         RecordWriter busy, saver;
         busy.post(
-            [&] {
-                gate.wait();
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    return true;
+                },
+                {});
         gate.awaitEntered();
-        std::atomic_int reports{0}, newestResult{-1};
+        std::atomic_int reports{ 0 }, newestResult{ -1 };
         saver.post(record(log, "old"), [&](bool) { ++reports; });
         saver.post(record(log, "new", false), [&](bool saved) {
             ++reports;
@@ -105,7 +119,8 @@ int main() {
         gate.release();
         saver.flush();
         require(log.text() == "new ", "A replaced write still ran");
-        require(reports == 1 && newestResult == 0, "The newest write did not report its own result");
+        require(reports == 1 && newestResult == 0,
+                "The newest write did not report its own result");
     }
     {
         // writeNow replaces a waiting write, runs on the writer thread and
@@ -114,11 +129,11 @@ int main() {
         Gate gate;
         RecordWriter busy, saver;
         busy.post(
-            [&] {
-                gate.wait();
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    return true;
+                },
+                {});
         gate.awaitEntered();
         saver.post(record(log, "queued"), {});
         std::thread release([&] {
@@ -141,14 +156,14 @@ int main() {
         Log log;
         Gate gate;
         RecordWriter saver;
-        std::atomic_bool finished{false};
+        std::atomic_bool finished{ false };
         saver.post(
-            [&] {
-                gate.wait();
-                finished = true;
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    finished = true;
+                    return true;
+                },
+                {});
         gate.awaitEntered();
         saver.post(record(log, "dropped"), {});
         std::thread release([&] {
@@ -168,11 +183,11 @@ int main() {
         Gate gate;
         auto busy = std::make_unique<RecordWriter>();
         busy->post(
-            [&] {
-                gate.wait();
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    return true;
+                },
+                {});
         gate.awaitEntered();
         auto cancelled = std::make_unique<RecordWriter>();
         cancelled->post(record(log, "cancelled"), {});
@@ -193,11 +208,12 @@ int main() {
         // A write that throws counts as failed and leaves the writer usable.
         Log log;
         RecordWriter saver;
-        std::atomic_int result{-1};
+        std::atomic_int result{ -1 };
         saver.post([]() -> bool { throw 1; }, [&](bool saved) { result = saved ? 1 : 0; });
         saver.flush();
         require(result == 0, "A throwing write did not report a failure");
-        require(saver.writeNow(record(log, "after")) && log.text() == "after ", "A throwing write stopped the writer");
+        require(saver.writeNow(record(log, "after")) && log.text() == "after ",
+                "A throwing write stopped the writer");
     }
     {
         // A call runs before waiting background writes, on the writer thread,
@@ -206,11 +222,11 @@ int main() {
         Gate gate;
         RecordWriter busy, saver;
         busy.post(
-            [&] {
-                gate.wait();
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    return true;
+                },
+                {});
         gate.awaitEntered();
         saver.post(record(log, "background"), {});
         std::thread release([&] {
@@ -227,7 +243,8 @@ int main() {
         require(nested, "A call made on the writer thread did not run at once");
         kobalt::storage::drainWriterThread();
         require(log.text() == "call background ", "A call did not run before the waiting write");
-        require(!kobalt::storage::onWriterThread(), "The test thread reported itself as the writer thread");
+        require(!kobalt::storage::onWriterThread(),
+                "The test thread reported itself as the writer thread");
     }
     {
         // An exception from a call reaches its caller.
@@ -245,11 +262,11 @@ int main() {
         Gate gate;
         RecordWriter busy, saver;
         busy.post(
-            [&] {
-                gate.wait();
-                return true;
-            },
-            {});
+                [&] {
+                    gate.wait();
+                    return true;
+                },
+                {});
         gate.awaitEntered();
         saver.post(record(log, "aged"), {});
         std::this_thread::sleep_for(std::chrono::milliseconds(2100));
@@ -262,5 +279,6 @@ int main() {
         kobalt::storage::drainWriterThread();
         require(log.text() == "aged call ", "A long-waiting write did not run before a new call");
     }
-    std::puts("PASS: record writers share one thread in queue order, keep the newest write, and drain on destruction");
+    std::puts(
+            "PASS: record writers share one thread in queue order, keep the newest write, and drain on destruction");
 }

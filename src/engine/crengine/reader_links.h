@@ -6,35 +6,46 @@
 
 namespace kobalt {
 enum class LinkKind { None, Passage, Footnote, Website, Unavailable };
-struct PageLink {
+
+struct PageLink
+{
     QString source;
     QVector<QRect> rectangles;
     LinkKind kind = LinkKind::None;
 
-    bool tappable(const QString &mode) const {
+    bool tappable(const QString &mode) const
+    {
         return mode == "all" || (mode == "footnotes" && kind == LinkKind::Footnote);
     }
 };
-struct LinkHit {
+
+struct LinkHit
+{
     int index = -1;
     QRect bounds;
 };
-inline bool narrowFootnote(const QRect &rect) {
+
+inline bool narrowFootnote(const QRect &rect)
+{
     return rect.width() < rect.height();
 }
-inline QRectF footnoteTarget(const QRect &rect, int highlightPadding) {
+
+inline QRectF footnoteTarget(const QRect &rect, int highlightPadding)
+{
     const qreal diameter = rect.height() + 2 * highlightPadding;
     const auto center = QRectF(rect).center();
     return QRectF(center.x() - diameter / 2, center.y() - diameter / 2, diameter, diameter);
 }
+
 // Exact text wins over expanded targets, including text of a disabled link.
 // Overlapping footnote circles select the nearest reference rectangle.
 inline LinkHit linkAtPoint(const QVector<PageLink> &links, QPoint point, const QString &mode,
-                           int highlightPadding, int ordinaryPadding = 0) {
+                           int highlightPadding, int ordinaryPadding = 0)
+{
     for (int i = 0; i < links.size(); ++i)
         for (const auto &rect : links[i].rectangles)
             if (rect.contains(point))
-                return links[i].tappable(mode) ? LinkHit{i, rect} : LinkHit{};
+                return links[i].tappable(mode) ? LinkHit{ i, rect } : LinkHit{};
     LinkHit hit;
     qreal nearest = std::numeric_limits<qreal>::max();
     for (int i = 0; i < links.size(); ++i) {
@@ -43,9 +54,11 @@ inline LinkHit linkAtPoint(const QVector<PageLink> &links, QPoint point, const Q
             continue;
         for (const auto &rect : link.rectangles) {
             if (link.kind != LinkKind::Footnote || !narrowFootnote(rect)) {
-                if (ordinaryPadding > 0 && rect.adjusted(-ordinaryPadding, -ordinaryPadding,
-                                                       ordinaryPadding, ordinaryPadding).contains(point))
-                    return {i, rect};
+                if (ordinaryPadding > 0
+                    && rect.adjusted(-ordinaryPadding, -ordinaryPadding, ordinaryPadding,
+                                     ordinaryPadding)
+                               .contains(point))
+                    return { i, rect };
                 continue;
             }
             const auto circle = footnoteTarget(rect, highlightPadding);
@@ -59,16 +72,18 @@ inline LinkHit linkAtPoint(const QVector<PageLink> &links, QPoint point, const Q
             const qreal distance = dx * dx + dy * dy;
             if (distance < nearest) {
                 nearest = distance;
-                hit = {i, rect};
+                hit = { i, rect };
             }
         }
     }
     return hit;
 }
-struct LinkDetails {
+
+struct LinkDetails
+{
     LinkKind kind = LinkKind::None;
     QString label, target, html, error;
     // The chapter that contains the target, for passages and notes.
     QString chapter;
 };
-}
+} // namespace kobalt

@@ -12,11 +12,13 @@ namespace kobalt {
 namespace {
 constexpr auto maximumFontBytes = 32 * 1024 * 1024;
 
-QByteArray decompressFont(const QByteArray &bytes) {
+QByteArray decompressFont(const QByteArray &bytes)
+{
     if (bytes.size() <= 7) {
         return {};
     }
-    const auto size = qFromBigEndian<quint32>(reinterpret_cast<const uchar *>(bytes.constData() + 3));
+    const auto size =
+            qFromBigEndian<quint32>(reinterpret_cast<const uchar *>(bytes.constData() + 3));
     if (!size || size > maximumFontBytes) {
         return {};
     }
@@ -29,19 +31,22 @@ QByteArray decompressFont(const QByteArray &bytes) {
     if (inflateInit(&stream) != Z_OK) {
         return {};
     }
-    const bool valid = inflate(&stream, Z_FINISH) == Z_STREAM_END && stream.total_out == size && !stream.avail_in;
+    const bool valid = inflate(&stream, Z_FINISH) == Z_STREAM_END && stream.total_out == size
+            && !stream.avail_in;
     inflateEnd(&stream);
     return valid ? result : QByteArray();
 }
-}
+} // namespace
 
-QStringList systemFontFiles(const QString &directory, FontCopies &copies) {
+QStringList systemFontFiles(const QString &directory, FontCopies &copies)
+{
     if (directory.isEmpty()) {
         return {};
     }
     QStringList result;
     const QDir source(directory);
-    for (const auto &name : source.entryList({"*.ttf", "*.otf", "*.ttc"}, QDir::Files, QDir::Name)) {
+    for (const auto &name :
+         source.entryList({ "*.ttf", "*.otf", "*.ttc" }, QDir::Files, QDir::Name)) {
         const auto path = source.filePath(name);
         QFile font(path);
         if (!font.open(QIODevice::ReadOnly) || font.size() <= 0 || font.size() > maximumFontBytes) {
@@ -66,4 +71,4 @@ QStringList systemFontFiles(const QString &directory, FontCopies &copies) {
     }
     return result;
 }
-}
+} // namespace kobalt

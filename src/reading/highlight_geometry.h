@@ -4,12 +4,15 @@
 #include <QVector>
 
 namespace kobalt {
-struct HighlightGeometry {
+struct HighlightGeometry
+{
     QVector<QRect> rectangles;
     QString color;
     QString style = QStringLiteral("shaded");
-    bool operator==(const HighlightGeometry &other) const {
+
+    bool operator==(const HighlightGeometry &other) const
+    {
         return rectangles == other.rectangles && color == other.color && style == other.style;
     }
 };
-}
+} // namespace kobalt

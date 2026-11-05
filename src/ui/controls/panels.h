@@ -7,20 +7,24 @@
 
 namespace kobalt::ui {
 void paintBrandIcon(QPainter &painter, const QRectF &bounds, const QColor &ink);
-class BrandIcon final : public QWidget {
+
+class BrandIcon final : public QWidget
+{
 public:
-    explicit BrandIcon(QWidget *parent) : QWidget(parent) {}
+    explicit BrandIcon(QWidget *parent) : QWidget(parent) { }
 
 protected:
     void paintEvent(QPaintEvent *) override;
 };
+
 // A percentage bar. Value changes queue only the changed fill for painting.
-class ProgressBar final : public QWidget {
+class ProgressBar final : public QWidget
+{
 public:
     explicit ProgressBar(QWidget *parent);
-    int value() const {
-        return percent;
-    }
+
+    int value() const { return percent; }
+
     void setValue(int value);
 
 protected:
@@ -30,29 +34,41 @@ private:
     int percent = 0;
     QRect fillRect(int value) const;
 };
-class Panel : public QFrame {
+
+class Panel : public QFrame
+{
 public:
     explicit Panel(QWidget *parent = nullptr, Edges separators = {});
-    void setEdges(Edges edges) {
+
+    void setEdges(Edges edges)
+    {
         separators = edges;
         update();
     }
-    void setEdgeWidth(int value) {
+
+    void setEdgeWidth(int value)
+    {
         edgeWidth = value;
         update();
     }
-    void setSoftEdges(bool value) {
+
+    void setSoftEdges(bool value)
+    {
         softEdges = value;
         update();
     }
+
     // Density-scaled rules in the divider color, drawn after the separators.
-    void setDividers(Edges edges) {
+    void setDividers(Edges edges)
+    {
         dividers = edges;
         update();
     }
+
     // The palette role of the panel's paper. The theme sets the palette on
     // every widget, so a style sheet background would not last.
-    void setFill(QPalette::ColorRole role) {
+    void setFill(QPalette::ColorRole role)
+    {
         fill = role;
         update();
     }
@@ -67,7 +83,8 @@ private:
     int edgeWidth = 0; // Zero follows the current density; positive values are explicit widths.
 };
 
-class LightSwipeNotice final : public Panel {
+class LightSwipeNotice final : public Panel
+{
 public:
     explicit LightSwipeNotice(QWidget *parent);
     void setLevel(bool warmth, int percentage);
@@ -83,7 +100,8 @@ private:
     bool warm = false;
 };
 
-class AnnotationModeNotice final : public Panel {
+class AnnotationModeNotice final : public Panel
+{
 public:
     explicit AnnotationModeNotice(QWidget *parent);
     void setModeEnabled(bool enabled);
@@ -100,16 +118,19 @@ private:
 
 // Draws a battery whose body fills `body`; the terminal sits outside it. A
 // negative percent draws an empty battery. Insets scale with the body height.
-void paintBattery(QPainter &painter, const QRectF &body, int percent, bool charging, const QColor &ink,
-                  const QColor &paper);
+void paintBattery(QPainter &painter, const QRectF &body, int percent, bool charging,
+                  const QColor &ink, const QColor &paper);
 // Draws the charging bolt upright around center, at the scale of a body
 // `scale` times the reference battery's height.
-void paintBatteryBolt(QPainter &painter, const QPointF &center, qreal scale, const QColor &ink, const QColor &paper);
+void paintBatteryBolt(QPainter &painter, const QPointF &center, qreal scale, const QColor &ink,
+                      const QColor &paper);
 // The width of the battery drawn for a body of this height, terminal included.
 qreal batteryWidth(qreal bodyHeight);
 // Fit a fixed percentage sample to the icon's body, independent of its value.
 QFont batteryTextFont(QFont font, qreal bodyHeight, int weight = -1);
-class BatteryIndicator : public InterfaceLabel {
+
+class BatteryIndicator : public InterfaceLabel
+{
 public:
     explicit BatteryIndicator(QWidget *parent);
     void setStatus(int percent, bool charging);
@@ -121,15 +142,15 @@ private:
     int percent = -2;
     bool charging = false;
 };
-class BluetoothIndicator final : public QWidget {
+
+class BluetoothIndicator final : public QWidget
+{
 public:
     explicit BluetoothIndicator(QWidget *parent);
-    bool active() const {
-        return enabled;
-    }
-    void setActive(bool value) {
-        enabled = value;
-    }
+
+    bool active() const { return enabled; }
+
+    void setActive(bool value) { enabled = value; }
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -137,15 +158,21 @@ protected:
 private:
     bool enabled = false;
 };
-class WifiIndicator final : public QWidget {
+
+class WifiIndicator final : public QWidget
+{
 public:
     explicit WifiIndicator(QWidget *parent);
+
     bool active() const { return enabled && connected && strength > 0; }
+
     bool setStatus(bool enabled, bool connected, int strength);
+
 protected:
     void paintEvent(QPaintEvent *) override;
+
 private:
     bool enabled = false, connected = false;
     int strength = -1;
 };
-}
+} // namespace kobalt::ui

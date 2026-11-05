@@ -8,7 +8,8 @@
 #include <dlfcn.h>
 
 namespace kobalt {
-void ownReaderRotation(bool owned) {
+void ownReaderRotation(bool owned)
+{
     nickel_qt5::ownReaderTouchRotation(owned);
     if (!owned) {
         // The borrowed sensor's native handler queues its orientation change.
@@ -16,10 +17,13 @@ void ownReaderRotation(bool owned) {
         QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
     }
 }
-QOrientationSensor *nativeOrientationSensor() {
-    const auto device = reinterpret_cast<const void *(*)()>(dlsym(RTLD_DEFAULT, "_ZN6Device16getCurrentDeviceEv"));
-    const auto capable =
-        reinterpret_cast<bool (*)(const void *)>(dlsym(RTLD_DEFAULT, "_ZNK6Device20hasOrientationSensorEv"));
+
+QOrientationSensor *nativeOrientationSensor()
+{
+    const auto device = reinterpret_cast<const void *(*)()>(
+            dlsym(RTLD_DEFAULT, "_ZN6Device16getCurrentDeviceEv"));
+    const auto capable = reinterpret_cast<bool (*)(const void *)>(
+            dlsym(RTLD_DEFAULT, "_ZNK6Device20hasOrientationSensorEv"));
     if (!device || !capable || !capable(device()))
         return nullptr;
     // An unexported singleton getter allocates a 24-byte QObject that owns its
@@ -31,7 +35,9 @@ QOrientationSensor *nativeOrientationSensor() {
     auto *sensor = reinterpret_cast<QOrientationSensor *>(reinterpret_cast<char *>(instance()) + 8);
     return sensor->inherits("QOrientationSensor") ? sensor : nullptr;
 }
-void turnReaderScreen(Qt::ScreenOrientation orientation) {
+
+void turnReaderScreen(Qt::ScreenOrientation orientation)
+{
     auto *screen = QGuiApplication::primaryScreen();
     if (!screen || screen->orientation() == orientation)
         return;
@@ -53,4 +59,4 @@ void turnReaderScreen(Qt::ScreenOrientation orientation) {
     if (!widened)
         screen->setOrientationUpdateMask(nickelMask);
 }
-}
+} // namespace kobalt

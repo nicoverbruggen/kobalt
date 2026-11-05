@@ -8,16 +8,20 @@
 #include <string>
 
 namespace {
-qint64 words(const char *text) {
+qint64 words(const char *text)
+{
     kobalt::LogicalWordCounter counter;
     for (const auto character : QString::fromUtf8(text).toUcs4()) {
         counter.append(char32_t(character));
     }
     return counter.words();
 }
-}
-int main() {
-    require(words("") == 0 && words(" . -- ' ’  😀 ") == 0, "Punctuation or symbols counted as words");
+} // namespace
+
+int main()
+{
+    require(words("") == 0 && words(" . -- ' ’  😀 ") == 0,
+            "Punctuation or symbols counted as words");
     require(words("rainbow don't Reader’s café café co­operation A𐐀word 123") == 8,
             "Latin, marks, internal apostrophes, soft hyphens or supplementary letters split");
     require(words("one--two one-two one‑two") == 4, "Repeated punctuation joined separate words");

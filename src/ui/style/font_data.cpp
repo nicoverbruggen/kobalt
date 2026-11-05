@@ -5,13 +5,16 @@
 
 namespace kobalt::ui {
 namespace {
-struct Point {
+struct Point
+{
     double x, y;
 };
+
 // FT_Outline_EmboldenXY in floating point, followed by the half-strength
 // translation that font_weight.cpp applies to book text. The translation
 // cancels FreeType's constant offset, so each point moves by its shift only.
-void embolden(QVector<Point> &points, const QVector<int> &ends, double strength) {
+void embolden(QVector<Point> &points, const QVector<int> &ends, double strength)
+{
     // The orientation of the whole outline, as FT_Outline_Get_Orientation.
     double area = 0;
     int first = 0;
@@ -30,20 +33,18 @@ void embolden(QVector<Point> &points, const QVector<int> &ends, double strength)
     const auto original = points;
     first = 0;
     for (const int last : ends) {
-        const auto next = [first, last](int index) {
-            return index < last ? index + 1 : first;
-        };
-        Point in{0, 0}, out{0, 0}, anchor{0, 0};
+        const auto next = [first, last](int index) { return index < last ? index + 1 : first; };
+        Point in{ 0, 0 }, out{ 0, 0 }, anchor{ 0, 0 };
         double inLength = 0, outLength = 0, anchorLength = 0;
         // j cycles through the points; i follows only when points move; k
         // marks the first moved point.
         for (int i = last, j = first, k = -1; j != i && i != k; j = next(j)) {
             if (j != k) {
-                out = {original[j].x - original[i].x, original[j].y - original[i].y};
+                out = { original[j].x - original[i].x, original[j].y - original[i].y };
                 outLength = std::hypot(out.x, out.y);
                 if (outLength == 0)
                     continue;
-                out = {out.x / outLength, out.y / outLength};
+                out = { out.x / outLength, out.y / outLength };
             } else {
                 out = anchor;
                 outLength = anchorLength;
@@ -54,12 +55,12 @@ void embolden(QVector<Point> &points, const QVector<int> &ends, double strength)
                     anchor = in;
                     anchorLength = inLength;
                 }
-                Point shift{0, 0};
+                Point shift{ 0, 0 };
                 const double turn = in.x * out.x + in.y * out.y;
                 // Shift only where the contour turns by less than about 160 degrees.
                 if (turn > -0.9375) {
                     const double d = turn + 1;
-                    shift = {in.y + out.y, in.x + out.x};
+                    shift = { in.y + out.y, in.x + out.x };
                     if (truetype)
                         shift.x = -shift.x;
                     else
@@ -70,10 +71,10 @@ void embolden(QVector<Point> &points, const QVector<int> &ends, double strength)
                     // Limit the shift where short segments would collapse.
                     const double limit = std::min(inLength, outLength);
                     const double scale = half * q <= limit * d ? half / d : limit / q;
-                    shift = {shift.x * scale, shift.y * scale};
+                    shift = { shift.x * scale, shift.y * scale };
                 }
                 for (; i != j; i = next(i))
-                    points[i] = {original[i].x + shift.x, original[i].y + shift.y};
+                    points[i] = { original[i].x + shift.x, original[i].y + shift.y };
             } else {
                 i = j;
             }
@@ -83,9 +84,10 @@ void embolden(QVector<Point> &points, const QVector<int> &ends, double strength)
         first = last + 1;
     }
 }
-}
+} // namespace
 
-QPainterPath weightedOutline(const QPainterPath &path, qreal strength) {
+QPainterPath weightedOutline(const QPainterPath &path, qreal strength)
+{
     if (strength <= 0 || path.isEmpty())
         return path;
     QVector<Point> points;
@@ -94,7 +96,7 @@ QPainterPath weightedOutline(const QPainterPath &path, qreal strength) {
         const auto element = path.elementAt(i);
         if (element.isMoveTo() && !points.isEmpty())
             ends.append(points.size() - 1);
-        points.append({element.x, element.y});
+        points.append({ element.x, element.y });
     }
     ends.append(points.size() - 1);
     embolden(points, ends, strength);
@@ -108,10 +110,11 @@ QPainterPath weightedOutline(const QPainterPath &path, qreal strength) {
         else if (element.isLineTo())
             result.lineTo(point.x, point.y);
         else if (element.type == QPainterPath::CurveToElement) {
-            result.cubicTo(point.x, point.y, points[i + 1].x, points[i + 1].y, points[i + 2].x, points[i + 2].y);
+            result.cubicTo(point.x, point.y, points[i + 1].x, points[i + 1].y, points[i + 2].x,
+                           points[i + 2].y);
             i += 2;
         }
     }
     return result;
 }
-}
+} // namespace kobalt::ui

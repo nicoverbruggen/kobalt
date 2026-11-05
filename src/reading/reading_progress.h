@@ -8,7 +8,8 @@ namespace kobalt {
 double pageProgressFraction(int page, int pages);
 int pageProgressPercent(int page, int pages);
 
-struct ReadingProgress {
+struct ReadingProgress
+{
     QString book, location;
     qint64 modified = 0;
     int status = 0;
@@ -21,23 +22,25 @@ struct ReadingProgress {
 
 // One reconciler belongs to one book opening. Only an explicit choice accepts
 // a different position. A choice about an older alert cannot accept a later one.
-class ProgressReconciler {
+class ProgressReconciler
+{
 public:
-    explicit ProgressReconciler(ReadingProgress initial) : latest(initial), acknowledged(initial) {}
+    explicit ProgressReconciler(ReadingProgress initial)
+        : latest(initial), acknowledged(initial) { }
+
     void observe(const ReadingProgress &incoming);
     void acknowledge(const ReadingProgress &shown);
-    bool pending() const {
-        return latest.valid && !(latest == acknowledged);
-    }
-    bool mayWrite(const ReadingProgress &current) const {
+
+    bool pending() const { return latest.valid && !(latest == acknowledged); }
+
+    bool mayWrite(const ReadingProgress &current) const
+    {
         return !pending() && current == acknowledged;
     }
-    const ReadingProgress &candidate() const {
-        return latest;
-    }
-    const ReadingProgress &baseline() const {
-        return acknowledged;
-    }
+
+    const ReadingProgress &candidate() const { return latest; }
+
+    const ReadingProgress &baseline() const { return acknowledged; }
 
 private:
     ReadingProgress latest, acknowledged;
@@ -49,4 +52,4 @@ bool preferNativeProgress(const ReadingProgress &current, const ReadingProgress 
 // Nickel can clear DateLastRead and the location when a book is marked unread.
 // Reset settings and progress only for a changed unread status, not a failed read.
 bool resetNativeUnread(QJsonObject &checkpoint, const ReadingProgress &current);
-}
+} // namespace kobalt

@@ -4,43 +4,41 @@
 #include <QVector>
 
 namespace {
-struct Dictionary {
+struct Dictionary
+{
     QString suffix, path, name;
     bool valid = true;
     bool installed = true;
     bool custom = false;
 };
-struct Api {
-    bool valid(const Dictionary *dictionary) const {
-        return dictionary->valid;
-    }
-    bool installed(const Dictionary *dictionary) const {
-        return dictionary->installed;
-    }
-    bool custom(const Dictionary *dictionary) const {
-        return dictionary->custom;
-    }
-    QString suffix(const Dictionary *dictionary) const {
-        return dictionary->suffix;
-    }
-    QString path(const Dictionary *dictionary) const {
-        return dictionary->path;
-    }
-    QString name(const Dictionary *dictionary) const {
-        return dictionary->name;
-    }
-    QString language(const Dictionary *) const {
-        return "es";
-    }
-};
-}
 
-int main() {
+struct Api
+{
+    bool valid(const Dictionary *dictionary) const { return dictionary->valid; }
+
+    bool installed(const Dictionary *dictionary) const { return dictionary->installed; }
+
+    bool custom(const Dictionary *dictionary) const { return dictionary->custom; }
+
+    QString suffix(const Dictionary *dictionary) const { return dictionary->suffix; }
+
+    QString path(const Dictionary *dictionary) const { return dictionary->path; }
+
+    QString name(const Dictionary *dictionary) const { return dictionary->name; }
+
+    QString language(const Dictionary *) const { return "es"; }
+};
+} // namespace
+
+int main()
+{
     const Api api;
-    const Dictionary standard{"-es-en", "/dict/dicthtml-es-en.zip", "Spanish - English", true, false};
-    const Dictionary custom{"-es-en", "/custom-dict/dicthtml-es-en.zip", "Spanish - English (Custom)", true, true,
-                            true};
-    QVector<Dictionary> dictionaries{standard, custom};
+    const Dictionary standard{ "-es-en", "/dict/dicthtml-es-en.zip", "Spanish - English", true,
+                               false };
+    const Dictionary custom{
+        "-es-en", "/custom-dict/dicthtml-es-en.zip", "Spanish - English (Custom)", true, true, true
+    };
+    QVector<Dictionary> dictionaries{ standard, custom };
     const auto customId = kobalt::nickel::dictionaryId(custom, api);
     const auto selected = [&](const QString &id) {
         return kobalt::nickel::installedDictionary(dictionaries, id, api);
@@ -48,7 +46,8 @@ int main() {
     auto choices = kobalt::nickel::dictionaryChoices(dictionaries, api);
     require(choices.size() == 1 && choices.first().id == customId,
             "An uninstalled standard dictionary must not hide an installed custom dictionary");
-    require(selected(customId) == &dictionaries.at(1), "A custom choice must resolve to that installed entry");
+    require(selected(customId) == &dictionaries.at(1),
+            "A custom choice must resolve to that installed entry");
     require(selected("-es-en") == &dictionaries.at(1),
             "A legacy suffix must resolve when only its custom entry is installed");
     require(selected("-fr-en") == nullptr, "A missing suffix must not select another language");
@@ -58,11 +57,14 @@ int main() {
             "Standard and custom dictionaries sharing a suffix need separate selector entries");
     require(choices.at(0).name == standard.name && choices.at(1).name == custom.name,
             "The selector must keep Nickel's standard and custom dictionary names");
-    require(choices.at(1).language == "es" && choices.at(1).fallback, "Custom choices must keep platform metadata");
-    require(selected("-es-en") == &dictionaries.at(0), "Saved standard suffixes must retain their original meaning");
+    require(choices.at(1).language == "es" && choices.at(1).fallback,
+            "Custom choices must keep platform metadata");
+    require(selected("-es-en") == &dictionaries.at(0),
+            "Saved standard suffixes must retain their original meaning");
     require(selected(customId) == &dictionaries.at(1),
             "Installing the standard dictionary must not redirect a custom choice");
-    dictionaries.append({"-es-en", "/custom-dict/dicthtml-es-en", "Another custom dictionary", true, true, true});
+    dictionaries.append({ "-es-en", "/custom-dict/dicthtml-es-en", "Another custom dictionary",
+                          true, true, true });
     const auto otherId = kobalt::nickel::dictionaryId(dictionaries.at(2), api);
     require(otherId != customId && selected(otherId) == &dictionaries.at(2),
             "Custom entries sharing a suffix need distinct path identities");

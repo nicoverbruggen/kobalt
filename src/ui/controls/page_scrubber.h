@@ -6,18 +6,21 @@
 
 class QLabel;
 class QPushButton;
+
 namespace kobalt::ui {
 class Panel;
 class CaptionButton;
 class PageThumbnail;
+
 // Receives page images and chapter positions from its owner. Scrubbing never
 // changes the book; only accepted reports a destination to the reader.
-class PageScrubber : public QWidget {
+class PageScrubber : public QWidget
+{
 public:
     explicit PageScrubber(QWidget *parent);
-    SettingSlider *slider() const {
-        return position;
-    }
+
+    SettingSlider *slider() const { return position; }
+
     void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize);
     void setChapterJumps(bool enabled);
     void setBookmarkedPages(const QVector<int> &pages);
@@ -25,26 +28,23 @@ public:
     void cancel();
     void showCurrentPage();
     void turnPreview(int direction);
-    void setPreviewDismissible(bool dismissible) {
-        previewDismissible = dismissible;
-    }
+
+    void setPreviewDismissible(bool dismissible) { previewDismissible = dismissible; }
+
     void setLinksAction(const QString &label);
     void setReturnAction(const QString &label, const QString &note);
     // Shows beside Return when both actions fit without shortening their labels.
     void setImageAction(const QString &label);
     void setBarVisible(bool visible);
-    bool hasActions() const {
-        return actionsHeight() > 0;
-    }
-    bool selecting() const {
-        return candidate >= 0;
-    }
-    int selectedPage() const {
-        return candidate;
-    }
-    bool previewReady() const {
-        return ready;
-    }
+
+    bool hasActions() const { return actionsHeight() > 0; }
+
+    bool selecting() const { return candidate >= 0; }
+
+    int selectedPage() const { return candidate; }
+
+    bool previewReady() const { return ready; }
+
     QRect previewBounds() const;
     QRect barBounds() const;
     QRect panelBounds() const;
@@ -87,7 +87,7 @@ private:
     int displayedPage = -1;
     bool ready = false;
     bool previewDismissible = true;
-    QSize pageSize{3, 4};
+    QSize pageSize{ 3, 4 };
     QRect linksFrame, returnFrame, imageFrame;
     QPoint pressPosition;
     bool pointerActive = false, pointerMoved = false;
@@ -117,4 +117,4 @@ private:
     int actionsHeight() const;
     void arrange();
 };
-}
+} // namespace kobalt::ui

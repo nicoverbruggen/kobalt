@@ -16,14 +16,19 @@
 
 namespace kobalt::nickel {
 namespace {
-bool nativeDialog(const QWidget *widget) {
-    return qobject_cast<const QDialog *>(widget) || widget->inherits("ConfirmationDialog") ||
-           widget->inherits("ProgressDialog") || widget->objectName() == QStringLiteral("N3Dialog");
+bool nativeDialog(const QWidget *widget)
+{
+    return qobject_cast<const QDialog *>(widget) || widget->inherits("ConfirmationDialog")
+            || widget->inherits("ProgressDialog")
+            || widget->objectName() == QStringLiteral("N3Dialog");
 }
-class SleepFrame final : public QWidget {
+
+class SleepFrame final : public QWidget
+{
 public:
     SleepFrame(QWidget *parent, QImage image, Qt::ScreenOrientation orientation)
-        : QWidget(parent), image(std::move(image)), orientation(orientation) {
+        : QWidget(parent), image(std::move(image)), orientation(orientation)
+    {
         setObjectName("rrSleepFrame");
         setAttribute(Qt::WA_OpaquePaintEvent);
         setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -31,7 +36,9 @@ public:
         setGeometry(parent->rect());
         parent->installEventFilter(this);
     }
-    void replaceImage(QImage next, const QRect &damage) {
+
+    void replaceImage(QImage next, const QRect &damage)
+    {
         image = std::move(next);
         const auto *screen = QGuiApplication::primaryScreen();
         const int angle = screen ? screen->angleBetween(orientation, screen->orientation()) : 0;
@@ -43,20 +50,24 @@ public:
     }
 
 protected:
-    bool eventFilter(QObject *object, QEvent *event) override {
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
         if (object == parentWidget() && event->type() == QEvent::Resize) {
             setGeometry(parentWidget()->rect());
         }
         return false;
     }
-    void paintEvent(QPaintEvent *) override {
+
+    void paintEvent(QPaintEvent *) override
+    {
         QPainter painter(this);
         const auto *screen = QGuiApplication::primaryScreen();
         const int angle = screen ? screen->angleBetween(orientation, screen->orientation()) : 0;
         const QSize target = angle % 180 ? QSize(height(), width()) : size();
         painter.translate(width() / 2.0, height() / 2.0);
         painter.rotate(angle);
-        painter.drawImage(QRectF(-target.width() / 2.0, -target.height() / 2.0, target.width(), target.height()),
+        painter.drawImage(QRectF(-target.width() / 2.0, -target.height() / 2.0, target.width(),
+                                 target.height()),
                           image);
     }
 
@@ -67,25 +78,33 @@ private:
     Qt::ScreenOrientation orientation;
 };
 
-class Presentation final : public QObject, public WindowPresentation {
+class Presentation final : public QObject, public WindowPresentation
+{
 public:
-    Presentation(QWidget *reader, bool sleepScreenSupported, std::function<void(const sleep::Snapshot &)> save)
-        : save(std::move(save)), reader(reader), sleepSupported(sleepScreenSupported) {
+    Presentation(QWidget *reader, bool sleepScreenSupported,
+                 std::function<void(const sleep::Snapshot &)> save)
+        : save(std::move(save)), reader(reader), sleepSupported(sleepScreenSupported)
+    {
         qApp->installEventFilter(this);
     }
-    void saveSleepScreen(const sleep::Snapshot &snapshot) override {
+
+    void saveSleepScreen(const sleep::Snapshot &snapshot) override
+    {
         if (save)
             save(snapshot);
     }
-    ~Presentation() override {
+
+    ~Presentation() override
+    {
         dialogs.clear();
         clearSleepScreen();
         resumeBackground();
     }
-    bool supportsSleepScreen() const override {
-        return sleepSupported;
-    }
-    bool presentSleepScreen(QImage image, Qt::ScreenOrientation orientation) override {
+
+    bool supportsSleepScreen() const override { return sleepSupported; }
+
+    bool presentSleepScreen(QImage image, Qt::ScreenOrientation orientation) override
+    {
         clearSleepScreen();
         if (!sleepSupported || image.isNull()) {
             return false;
@@ -94,8 +113,8 @@ public:
         for (auto *widget : QApplication::allWidgets()) {
             // Cover the native power view only. PIN and USB dialogs retain
             // their own windows and input, regardless of the sleep layout.
-            if (widget->inherits("AbstractPowerView") && widget->isVisible() &&
-                widget->window()->inherits("MainWindowView")) {
+            if (widget->inherits("AbstractPowerView") && widget->isVisible()
+                && widget->window()->inherits("MainWindowView")) {
                 if (powerView) {
                     return false;
                 }
@@ -110,17 +129,20 @@ public:
         sleepFrame->raise();
         return true;
     }
-    void clearSleepScreen() override {
-        delete sleepFrame.data();
-    }
-    bool updateSleepScreen(QImage image, const QRect &damage) override {
+
+    void clearSleepScreen() override { delete sleepFrame.data(); }
+
+    bool updateSleepScreen(QImage image, const QRect &damage) override
+    {
         if (!sleepFrame || !sleepFrame->isVisible() || image.isNull()) {
             return false;
         }
         sleepFrame->replaceImage(std::move(image), damage);
         return true;
     }
-    void pauseBackground(bool waking) override {
+
+    void pauseBackground(bool waking) override
+    {
         if (!reader)
             return;
         for (auto *window : QApplication::topLevelWidgets()) {
@@ -128,19 +150,24 @@ public:
             // PIN and USB windows must remain able to draw and respond.
             if (waking && !window->inherits("MainWindowView"))
                 continue;
-            if (window != reader && !reader->isAncestorOf(window) && window->isVisible() && window->updatesEnabled()) {
+            if (window != reader && !reader->isAncestorOf(window) && window->isVisible()
+                && window->updatesEnabled()) {
                 paused.append(window);
                 window->setUpdatesEnabled(false);
             }
         }
     }
-    void resumeBackground() override {
+
+    void resumeBackground() override
+    {
         for (const auto &window : paused)
             if (window)
                 window->setUpdatesEnabled(true);
         paused.clear();
     }
-    void resumeAndRepaintBackground() override {
+
+    void resumeAndRepaintBackground() override
+    {
         const auto windows = paused;
         resumeBackground();
         for (const auto &window : windows)
@@ -154,7 +181,9 @@ public:
                 window->repaint();
             }
     }
-    void acceptHandoff(QDialog &dialog, const std::function<void()> &accept) override {
+
+    void acceptHandoff(QDialog &dialog, const std::function<void()> &accept) override
+    {
         if (!dialog.parentWidget()) {
             accept();
             return;
@@ -176,7 +205,8 @@ public:
     }
 
 private:
-    bool eventFilter(QObject *object, QEvent *event) override {
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
         // An application-wide filter: check the event type first.
         if (event->type() != QEvent::Polish && event->type() != QEvent::Show)
             return false;
@@ -190,41 +220,56 @@ private:
             auto *widget = qobject_cast<QWidget *>(object);
             if (widget && nativeDialog(widget)) {
                 QPointer<QWidget> candidate(widget);
-                qt::later(0, this, [this, candidate] { if (candidate) presentDialog(candidate); });
+                qt::later(0, this, [this, candidate] {
+                    if (candidate)
+                        presentDialog(candidate);
+                });
             }
         }
         return false;
     }
-    bool ownedByReader(const QWidget *widget) const {
+
+    bool ownedByReader(const QWidget *widget) const
+    {
         for (auto *parent = widget; parent; parent = parent->parentWidget())
             if (parent == reader)
                 return true;
         return false;
     }
-    void presentDialog(QWidget *widget) {
-        if (!reader || !reader->isVisible() || !widget->isVisible()) return;
+
+    void presentDialog(QWidget *widget)
+    {
+        if (!reader || !reader->isVisible() || !widget->isVisible())
+            return;
         auto *dialog = widget;
         for (auto *parent = widget->parentWidget(); parent; parent = parent->parentWidget())
-            if (nativeDialog(parent)) dialog = parent;
+            if (nativeDialog(parent))
+                dialog = parent;
         // The reader can itself be a QDialog owned by Nickel's main window.
         // Never move it, or a dialog that contains it, into itself.
-        if (dialog == reader->window() || dialog->isAncestorOf(reader)) return;
+        if (dialog == reader->window() || dialog->isAncestorOf(reader))
+            return;
         // The browser retains its existing full-screen handoff and wake guard.
-        if (dialog->findChild<QWidget *>(QStringLiteral("N3BrowserView"))) return;
+        if (dialog->findChild<QWidget *>(QStringLiteral("N3BrowserView")))
+            return;
         dialogs.erase(std::remove_if(dialogs.begin(), dialogs.end(),
-            [](const auto &overlay) { return !overlay->active(); }), dialogs.end());
+                                     [](const auto &overlay) { return !overlay->active(); }),
+                      dialogs.end());
         for (const auto &overlay : dialogs)
-            if (overlay->contains(dialog)) return;
+            if (overlay->contains(dialog))
+                return;
         bool native = false;
         for (auto *parent = dialog->parentWidget(); parent; parent = parent->parentWidget())
             native = native || parent->inherits("MainWindowView");
         for (const auto &overlay : dialogs)
             native = native || overlay->contains(dialog->parentWidget());
-        if (!native) return;
+        if (!native)
+            return;
         auto overlay = std::make_unique<NativeDialogOverlay>();
         overlay->present(dialog, reader->window());
         dialogs.push_back(std::move(overlay));
     }
+
     std::function<void(const sleep::Snapshot &)> save;
     std::vector<std::unique_ptr<NativeDialogOverlay>> dialogs;
     QPointer<QWidget> reader;
@@ -232,9 +277,12 @@ private:
     QPointer<SleepFrame> sleepFrame;
     QVector<QPointer<QWidget>> paused;
 };
-}
-std::unique_ptr<WindowPresentation> makeWindowPresentation(QWidget *reader, bool sleepScreenSupported,
-    std::function<void(const sleep::Snapshot &)> save) {
+} // namespace
+
+std::unique_ptr<WindowPresentation>
+makeWindowPresentation(QWidget *reader, bool sleepScreenSupported,
+                       std::function<void(const sleep::Snapshot &)> save)
+{
     return std::make_unique<Presentation>(reader, sleepScreenSupported, std::move(save));
 }
-}
+} // namespace kobalt::nickel

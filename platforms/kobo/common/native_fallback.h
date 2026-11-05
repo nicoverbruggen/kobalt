@@ -9,5 +9,6 @@ namespace kobalt {
 QDialog *showMissingAssetsAlert(const QString &installedVersion, bool filesystemRecovery = false);
 
 // Close the opening view before invoking Nickel, so its dialogs stay visible.
-void bindReaderFallback(QObject *owner, QDialog *dialog, std::function<void()> openStock, int automaticDelay = -1);
-}
+void bindReaderFallback(QObject *owner, QDialog *dialog, std::function<void()> openStock,
+                        int automaticDelay = -1);
+} // namespace kobalt

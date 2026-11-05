@@ -9,7 +9,8 @@ namespace kobalt {
 extern int (*lightTestIoctl)(int, unsigned long, void *);
 #endif
 // Call only after firmwareSupported() accepts Nickel.
-class NativeLight : public QObject {
+class NativeLight : public QObject
+{
     Q_OBJECT
 public:
     explicit NativeLight(QWidget *anchor);
@@ -33,9 +34,8 @@ public:
     int setGestureLevel(int percent);
     void finishGesture(bool save);
     int brightness() const;
-    bool gesturing() const {
-        return gestureStart >= 0;
-    }
+
+    bool gesturing() const { return gestureStart >= 0; }
 
 private:
     QPointer<QWidget> anchor;
@@ -43,4 +43,4 @@ private:
     int gestureStart = -1;
     bool reportedGestureFailure = false, gestureAutomatic = false;
 };
-}
+} // namespace kobalt

@@ -9,7 +9,8 @@
 namespace kobalt::kosync {
 // Qt5's asynchronous resolver serializes each hostname across all managers.
 // A separate lookup can refresh its cache while an old lookup is still waiting.
-class HostLookup : public QObject {
+class HostLookup : public QObject
+{
 public:
     using Resolver = std::function<QHostInfo(const QString &)>;
     using Done = std::function<void(QHostInfo)>;
@@ -17,6 +18,7 @@ public:
     ~HostLookup() override;
     void start(const QString &host, int timeout, Done done);
     void cancel();
+
     bool busy() const { return bool(state_); }
 
 private:
@@ -29,4 +31,4 @@ private:
     QElapsedTimer elapsed_;
     int timeout_ = 0;
 };
-}
+} // namespace kobalt::kosync

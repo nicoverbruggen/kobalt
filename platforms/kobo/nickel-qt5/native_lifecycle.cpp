@@ -1,19 +1,23 @@
 #include "platforms/kobo/common/lifecycle_test.h"
 #ifndef KOBALT_READER_HARDWARE
-#include <QCoreApplication>
-#include <QGuiApplication>
-#include <QKeyEvent>
-#include <QWindow>
-#include <array>
-#include <dlfcn.h>
+#  include <QCoreApplication>
+#  include <QGuiApplication>
+#  include <QKeyEvent>
+#  include <QWindow>
+#  include <array>
+#  include <dlfcn.h>
 
 namespace kobalt::nickel {
 namespace {
-template <class T> T symbol(const char *name) {
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
-}
-void sendTestPageButton(const QJsonObject &command, bool blocked) {
+} // namespace
+
+void sendTestPageButton(const QJsonObject &command, bool blocked)
+{
     const int key = command.value("button").toString() == "upper" ? Qt::Key_F23 : Qt::Key_F24;
     const bool repeat = command.value("repeat").toBool();
     // Firmware 4.46.23836 uses a 28-byte Settings base with the
@@ -21,13 +25,15 @@ void sendTestPageButton(const QJsonObject &command, bool blocked) {
     // and file together for this test preference.
     std::array<void *, 7> settings{};
     const auto device = symbol<const void *(*)()>("_ZN6Device16getCurrentDeviceEv");
-    const auto construct = symbol<void (*)(void *, const void *, bool)>("_ZN8SettingsC2ERK6Deviceb");
+    const auto construct =
+            symbol<void (*)(void *, const void *, bool)>("_ZN8SettingsC2ERK6Deviceb");
     const auto destroy = symbol<void (*)(void *)>("_ZN8SettingsD2Ev");
     const auto vtable = symbol<void **>("_ZTV15ReadingSettings");
     const auto get = symbol<bool (*)(void *)>("_ZN15ReadingSettings21invertPageTurnButtonsEv");
-    const auto set = symbol<void (*)(void *, bool)>("_ZN15ReadingSettings24setInvertPageTurnButtonsEb");
-    const bool override =
-        command.contains("invert") && !blocked && device && construct && destroy && vtable && get && set;
+    const auto set =
+            symbol<void (*)(void *, bool)>("_ZN15ReadingSettings24setInvertPageTurnButtonsEb");
+    const bool override = command.contains("invert") && !blocked && device && construct && destroy
+            && vtable && get && set;
     bool saved = false;
     if (override) {
         construct(settings.data(), device(), false);
@@ -47,5 +53,5 @@ void sendTestPageButton(const QJsonObject &command, bool blocked) {
         destroy(settings.data());
     }
 }
-}
+} // namespace kobalt::nickel
 #endif

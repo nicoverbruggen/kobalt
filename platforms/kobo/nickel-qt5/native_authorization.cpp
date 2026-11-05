@@ -12,53 +12,68 @@
 #include <atomic>
 #include <dlfcn.h>
 #ifndef KOBALT_READER_HARDWARE
-#include <QFile>
-#include <QJsonDocument>
-#include <QSaveFile>
+#  include <QFile>
+#  include <QJsonDocument>
+#  include <QSaveFile>
 #endif
 
 namespace kobalt {
 namespace {
-template <class T> T symbol(const char *name) {
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
-struct Volume {
+
+struct Volume
+{
     void *words[2];
     Volume(const Volume &) = delete;
-    ~Volume() {
-        symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this);
-    }
+
+    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
 };
+
 static_assert(sizeof(Volume) == 8);
-struct Api {
-    Volume (*get)(const QString &, const QString &) = symbol<decltype(get)>("_ZN13VolumeManager7getByIdERK7QStringS2_");
+
+struct Api
+{
+    Volume (*get)(const QString &, const QString &) =
+            symbol<decltype(get)>("_ZN13VolumeManager7getByIdERK7QStringS2_");
     QString (*id)(const void *) = symbol<decltype(id)>("_ZNK7Content5getIdEv");
     void *(*device)() = symbol<decltype(device)>("_ZN6Device16getCurrentDeviceEv");
     const QString &(*dbName)(const void *) = symbol<decltype(dbName)>("_ZNK6Device9getDbNameEv");
-    QSqlDatabase (*connection)(QString,
-                               bool) = symbol<decltype(connection)>("_ZN15DatabaseAdapter12dbConnectionE7QStringb");
+    QSqlDatabase (*connection)(QString, bool) =
+            symbol<decltype(connection)>("_ZN15DatabaseAdapter12dbConnectionE7QStringb");
     QString (*warning)(const Volume &) =
-        symbol<decltype(warning)>("_ZN27SubscriptionWorkflowManager14getSyncWarningERK6Volume");
+            symbol<decltype(warning)>("_ZN27SubscriptionWorkflowManager14getSyncWarningERK6Volume");
     bool (*borrowed)(const void *) = symbol<decltype(borrowed)>("_ZNK6Volume10isBorrowedEv");
     bool (*openBorrowed)(const Volume &) =
-        symbol<decltype(openBorrowed)>("_ZN24OverDriveWorkflowManager8openBookERK6Volume");
+            symbol<decltype(openBorrowed)>("_ZN24OverDriveWorkflowManager8openBookERK6Volume");
     QObject *(*volumes)() = symbol<decltype(volumes)>("_ZN13VolumeManager14sharedInstanceEv");
     QObject *(*sync)() = symbol<decltype(sync)>("_ZN13N3SyncManager14sharedInstanceEv");
     // Require the selected resource adapter as well as the native Volume size
     // and exported authorization functions.
     bool archiveAvailable = native::publicationSource().available();
-    bool ready() const {
-        return archiveAvailable && QMetaType::sizeOf(QMetaType::type("Volume")) == int(sizeof(Volume)) && get && id &&
-               device && dbName && connection && warning && borrowed && openBorrowed && volumes && sync &&
-               symbol<void *>("_ZN6VolumeD1Ev") && nativeMaybeExitBook && nativeVolumeRemoved && nativeAccountSignOut;
+
+    bool ready() const
+    {
+        return archiveAvailable
+                && QMetaType::sizeOf(QMetaType::type("Volume")) == int(sizeof(Volume)) && get && id
+                && device && dbName && connection && warning && borrowed && openBorrowed && volumes
+                && sync && symbol<void *>("_ZN6VolumeD1Ev") && nativeMaybeExitBook
+                && nativeVolumeRemoved && nativeAccountSignOut;
     }
-    bool databaseOpen() const {
+
+    bool databaseOpen() const
+    {
         const auto db = connection(dbName(device()), false);
         return db.isValid() && db.isOpen();
     }
+
     // Firmware 4 exports no accessor for the signed-in user. Read its ID from
     // committed data. A signed-out device has no row and gives an empty ID.
-    QString account() const {
+    QString account() const
+    {
         QString result;
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", "kobalt-authorization-account");
@@ -75,51 +90,70 @@ struct Api {
         return result;
     }
 };
-const Api &api() {
+
+const Api &api()
+{
     static const Api value;
     return value;
 }
+
 QPointer<NativeAuthorization> active;
-std::atomic<quint64> activeGeneration{0};
-std::atomic_bool watching{false};
-QString identity(const void *volume) {
+std::atomic<quint64> activeGeneration{ 0 };
+std::atomic_bool watching{ false };
+
+QString identity(const void *volume)
+{
     if (!watching.load())
         return {};
     const auto getId = api().id;
     return getId && volume ? getId(volume) : QString();
 }
-}
+} // namespace
+
 void (*nativeMaybeExitBook)(void *, const void *);
 void (*nativeVolumeRemoved)(void *, const void *);
 void (*nativeAccountSignOut)(void *);
-extern "C" __attribute__((visibility("default"))) void kobalt_authorization_exit_book(void *manager,
-                                                                                      const void *volume) {
+
+extern "C" __attribute__((visibility("default"))) void
+kobalt_authorization_exit_book(void *manager, const void *volume)
+{
     NativeAuthorization::notify(NativeAuthorization::Reason::Subscription, identity(volume));
     nativeMaybeExitBook(manager, volume);
 }
-extern "C" __attribute__((visibility("default"))) void kobalt_authorization_volume_removed(void *manager,
-                                                                                           const void *volume) {
+
+extern "C" __attribute__((visibility("default"))) void
+kobalt_authorization_volume_removed(void *manager, const void *volume)
+{
     NativeAuthorization::notify(NativeAuthorization::Reason::Removed, identity(volume));
     nativeVolumeRemoved(manager, volume);
 }
-extern "C" __attribute__((visibility("default"))) void kobalt_authorization_sign_out(void *mixin) {
+
+extern "C" __attribute__((visibility("default"))) void kobalt_authorization_sign_out(void *mixin)
+{
     // This native method starts SignOutWorker after the user's confirmation.
     NativeAuthorization::notify(NativeAuthorization::Reason::Account);
     nativeAccountSignOut(mixin);
 }
-NativeAuthorization::NativeAuthorization(QObject *parent) : QObject(parent) {
+
+NativeAuthorization::NativeAuthorization(QObject *parent) : QObject(parent)
+{
     if (!api().ready())
         return;
     // Firmware 4 declares both sync signals in SyncManagerBase.
     const auto a = connect(api().sync(), SIGNAL(finished()), this, SLOT(requestCheck()));
     const auto b = connect(api().sync(), SIGNAL(userProfileUpdated()), this, SLOT(requestCheck()));
-    const auto c = connect(api().volumes(), SIGNAL(volumeChanged(Volume)), this, SLOT(requestCheck()));
+    const auto c =
+            connect(api().volumes(), SIGNAL(volumeChanged(Volume)), this, SLOT(requestCheck()));
     connected_ = a && b && c;
 }
-NativeAuthorization::~NativeAuthorization() {
+
+NativeAuthorization::~NativeAuthorization()
+{
     end();
 }
-bool NativeAuthorization::begin(const QString &book) {
+
+bool NativeAuthorization::begin(const QString &book)
+{
     end();
     if (!connected_ || book.isEmpty() || !api().databaseOpen())
         return false;
@@ -130,7 +164,9 @@ bool NativeAuthorization::begin(const QString &book) {
     watching.store(true);
     return true;
 }
-void NativeAuthorization::end() {
+
+void NativeAuthorization::end()
+{
     if (active == this) {
         watching.store(false);
         active.clear();
@@ -144,7 +180,9 @@ void NativeAuthorization::end() {
     testNextCheck = TestCheck::Native;
 #endif
 }
-const char *NativeAuthorization::name(Reason reason) {
+
+const char *NativeAuthorization::name(Reason reason)
+{
     switch (reason) {
     case Reason::Subscription:
         return "subscription";
@@ -157,12 +195,16 @@ const char *NativeAuthorization::name(Reason reason) {
     }
     return "unknown";
 }
-void NativeAuthorization::setBlocked(bool blocked) {
+
+void NativeAuthorization::setBlocked(bool blocked)
+{
     blocked_ = blocked;
     if (!blocked_ && pending_)
         requestCheck();
 }
-void NativeAuthorization::notify(Reason reason, const QString &book) {
+
+void NativeAuthorization::notify(Reason reason, const QString &book)
+{
     if (!watching.load())
         return;
     auto *app = QCoreApplication::instance();
@@ -178,20 +220,24 @@ void NativeAuthorization::notify(Reason reason, const QString &book) {
     else
         kobalt::qt::invoke(app, deliver, Qt::QueuedConnection);
 }
-void NativeAuthorization::consume(Reason reason, const QString &book, quint64 epoch) {
-    if (!generation_ || generation_ != epoch || invalidated_ || book_.isEmpty() ||
-        (reason != Reason::Account && book != book_))
+
+void NativeAuthorization::consume(Reason reason, const QString &book, quint64 epoch)
+{
+    if (!generation_ || generation_ != epoch || invalidated_ || book_.isEmpty()
+        || (reason != Reason::Account && book != book_))
         return;
     invalidated_ = true;
     pending_ = false;
-    diagnostic("authorization-invalidated", kobalt::qt::object({{"reason", name(reason)}}));
+    diagnostic("authorization-invalidated", kobalt::qt::object({ { "reason", name(reason) } }));
     // The owner must hide/cancel immediately, then drain and save locally.
     // In particular it must not write progress back to a revoked native Volume.
     const auto callback = revoked;
     if (callback)
         callback(reason);
 }
-void NativeAuthorization::requestCheck() {
+
+void NativeAuthorization::requestCheck()
+{
     if (book_.isEmpty() || invalidated_)
         return;
     pending_ = true;
@@ -200,21 +246,23 @@ void NativeAuthorization::requestCheck() {
     queued_ = true;
     const auto epoch = generation_;
     kobalt::qt::invoke(
-        this,
-        [this, epoch] {
-            if (epoch != generation_)
-                return;
-            queued_ = false;
-            if (blocked_ || invalidated_ || !pending_)
-                return;
-            pending_ = false;
-            checkNow();
-        },
-        Qt::QueuedConnection);
+            this,
+            [this, epoch] {
+                if (epoch != generation_)
+                    return;
+                queued_ = false;
+                if (blocked_ || invalidated_ || !pending_)
+                    return;
+                pending_ = false;
+                checkNow();
+            },
+            Qt::QueuedConnection);
 }
-bool NativeAuthorization::checkNow() {
-    if (QThread::currentThread() != thread() || blocked_ || invalidated_ || !generation_ || !connected_ ||
-        !api().ready() || book_.isEmpty() || checking_)
+
+bool NativeAuthorization::checkNow()
+{
+    if (QThread::currentThread() != thread() || blocked_ || invalidated_ || !generation_
+        || !connected_ || !api().ready() || book_.isEmpty() || checking_)
         return false;
     if (!api().databaseOpen()) {
         pending_ = true;
@@ -242,32 +290,39 @@ bool NativeAuthorization::checkNow() {
             // This runs Nickel's status, grace-period and warning logic. Its
             // maybeExitBook hook forwards the cancellation decision to Kobalt.
             native.warning(volume);
-            if (!invalidated_ && epoch == generation_ && native.borrowed(&volume) && !native.openBorrowed(volume))
+            if (!invalidated_ && epoch == generation_ && native.borrowed(&volume)
+                && !native.openBorrowed(volume))
                 consume(Reason::Borrowed, book_, epoch);
         } else
             consume(Reason::Removed, book_, epoch);
     }
     checking_ = false;
     const bool allowed = epoch == generation_ && !invalidated_ && !book_.isEmpty();
-    diagnostic("authorization-checked", kobalt::qt::object({{"allowed", allowed}}));
+    diagnostic("authorization-checked", kobalt::qt::object({ { "allowed", allowed } }));
     // Notifications produced by the check itself need no second check.
     pending_ = false;
     return allowed;
 }
 #ifndef KOBALT_READER_HARDWARE
-NativeAuthorization::NativeAuthorization(TestOnly, QObject *parent) : QObject(parent) {}
-void NativeAuthorization::testBegin(const QString &book) {
+NativeAuthorization::NativeAuthorization(TestOnly, QObject *parent) : QObject(parent) { }
+
+void NativeAuthorization::testBegin(const QString &book)
+{
     end();
     book_ = book;
     generation_ = ++activeGeneration;
     active = this;
     watching.store(true);
 }
-void NativeAuthorization::testNotify(Reason reason, const QString &book, quint64 epoch) {
+
+void NativeAuthorization::testNotify(Reason reason, const QString &book, quint64 epoch)
+{
     if (active)
         active->consume(reason, book, epoch);
 }
-void NativeAuthorization::testCommand() {
+
+void NativeAuthorization::testCommand()
+{
     QFile file("/instance/kobalt-authorization-command.json");
     if (!file.exists() || !file.open(QIODevice::ReadOnly))
         return;
@@ -276,22 +331,25 @@ void NativeAuthorization::testCommand() {
     file.remove();
     const auto event = command.value("event").toString();
     const auto epoch = activeGeneration.load();
-    QJsonObject result =
-        kobalt::qt::object({{"id", command.value("id")}, {"simulated", true}, {"active", bool(active)}});
+    QJsonObject result = kobalt::qt::object(
+            { { "id", command.value("id") }, { "simulated", true }, { "active", bool(active) } });
     if (active) {
-        const auto book = command.value("other_book").toBool() ? "kobalt-test-other" : active->book_;
+        const auto book =
+                command.value("other_book").toBool() ? "kobalt-test-other" : active->book_;
         const auto target = command.value("stale").toBool() ? epoch - 1 : epoch;
         if (event == "check") {
             result["allowed"] = active->checkNow();
             result["simulated"] = false;
         } else if (event == "deny-next-check" || event == "unavailable-next-check") {
-            active->testNextCheck = event == "deny-next-check" ? TestCheck::Deny : TestCheck::Unavailable;
+            active->testNextCheck =
+                    event == "deny-next-check" ? TestCheck::Deny : TestCheck::Unavailable;
             result["armed"] = true;
-        } else if (event == "removed" || event == "account" || event == "borrowed" || event == "subscription") {
-            Reason reason = event == "removed"    ? Reason::Removed
-                            : event == "account"  ? Reason::Account
-                            : event == "borrowed" ? Reason::Borrowed
-                                                  : Reason::Subscription;
+        } else if (event == "removed" || event == "account" || event == "borrowed"
+                   || event == "subscription") {
+            Reason reason = event == "removed" ? Reason::Removed
+                    : event == "account"       ? Reason::Account
+                    : event == "borrowed"      ? Reason::Borrowed
+                                               : Reason::Subscription;
             active->consume(reason, book, target);
         }
         result["invalidated"] = !active || active->invalidated_;
@@ -303,4 +361,4 @@ void NativeAuthorization::testCommand() {
     }
 }
 #endif
-}
+} // namespace kobalt

@@ -14,13 +14,18 @@
 #include <QTimer>
 
 using namespace kobalt;
+
 namespace {
-QByteArray pixels(const QImage &image) {
-    return QCryptographicHash::hash(QByteArray(reinterpret_cast<const char *>(image.constBits()), image.sizeInBytes()),
-                                    QCryptographicHash::Sha256);
+QByteArray pixels(const QImage &image)
+{
+    return QCryptographicHash::hash(
+            QByteArray(reinterpret_cast<const char *>(image.constBits()), image.sizeInBytes()),
+            QCryptographicHash::Sha256);
 }
-}
-int main(int argc, char **argv) {
+} // namespace
+
+int main(int argc, char **argv)
+{
     QGuiApplication app(argc, argv);
     require(argc == 3, "Expected local-cache and illustrated EPUB fixtures");
     QTemporaryDir directory;
@@ -33,7 +38,8 @@ int main(int argc, char **argv) {
         const auto stylePath = directory.path() + "/userstyle.css";
         auto writeStyle = [&](const QByteArray &css) {
             QFile file(stylePath);
-            require(file.open(QIODevice::WriteOnly) && file.write(css) == css.size(), "Cannot write user CSS");
+            require(file.open(QIODevice::WriteOnly) && file.write(css) == css.size(),
+                    "Cannot write user CSS");
         };
         QJsonObject retainedSettings;
         auto retainedHit = [&] {
@@ -80,22 +86,21 @@ int main(int argc, char **argv) {
             if (!session) {
                 session = std::make_unique<ReaderSession>(test::readerFonts(), "Libron");
             }
-            OpenRequest request{path,
-                                path,
-                                QSize(758, 900),
-                                retainedSettings,
-                                {},
-                                directory.path() + "/layout.json",
-                                lease,
-                                source->resources(lease)};
+            OpenRequest request{ path,
+                                 path,
+                                 QSize(758, 900),
+                                 retainedSettings,
+                                 {},
+                                 directory.path() + "/layout.json",
+                                 lease,
+                                 source->resources(lease) };
             request.documentCachePath = cache;
             request.userStyleSheetPath = stylePath;
             QEventLoop opened;
             QTimer timeout;
             timeout.setSingleShot(true);
-            QObject::connect(&timeout, &QTimer::timeout, &opened, [] {
-                require(false, "Local reader timed out");
-            });
+            QObject::connect(&timeout, &QTimer::timeout, &opened,
+                             [] { require(false, "Local reader timed out"); });
             timeout.start(15000);
             bool finished = false;
             OpeningResult outcome;
@@ -110,12 +115,13 @@ int main(int argc, char **argv) {
         };
         const auto path = QString::fromLocal8Bit(argv[1]);
         require(open(path).ready() && !session->image().isNull(), "Local EPUB did not render");
-        require(!session->resourceStats()["model_cache_hit"].toBool(), "Cold opening reused a document");
+        require(!session->resourceStats()["model_cache_hit"].toBool(),
+                "Cold opening reused a document");
         require(!QFile::exists(stylePath), "Opening created an unsolicited user stylesheet");
         const auto first = pixels(session->image());
         const auto pages = session->state()["pages"].toInt();
         release();
-        require(!QDir(cache).entryList({"*.cr3"}, QDir::Files).isEmpty(),
+        require(!QDir(cache).entryList({ "*.cr3" }, QDir::Files).isEmpty(),
                 "Local opening did not save a document cache");
         require(open(path).ready() && session->resourceStats()["model_cache_hit"].toBool(),
                 "Local EPUB did not reopen from its document cache");
@@ -129,18 +135,19 @@ int main(int argc, char **argv) {
         const auto styled = pixels(session->image());
         require(styled != first && session->state()["pages"].toInt() != pages,
                 "User CSS did not override text colour and the Text line-spacing setting");
-        require(!session->resourceStats()["model_cache_hit"].toBool(), "Changed CSS reused stale disk pages");
+        require(!session->resourceStats()["model_cache_hit"].toBool(),
+                "Changed CSS reused stale disk pages");
         release();
-        require(open(path).ready() && pixels(session->image()) == styled &&
-                    session->resourceStats()["model_cache_hit"].toBool(),
+        require(open(path).ready() && pixels(session->image()) == styled
+                        && session->resourceStats()["model_cache_hit"].toBool(),
                 "Unchanged CSS did not reuse matching cached pages");
         release(true);
         require(open(path).ready() && pixels(session->image()) == styled && retainedHit(),
                 "Unchanged CSS did not reuse matching retained pages");
         release(true);
         writeStyle("* { color: #aaaaaa !important; }");
-        require(open(path).ready() && pixels(session->image()) != styled && pixels(session->image()) != first &&
-                    !retainedHit(),
+        require(open(path).ready() && pixels(session->image()) != styled
+                        && pixels(session->image()) != first && !retainedHit(),
                 "Edited CSS reused the retained book's styles");
         release(true);
         require(QFile::remove(stylePath), "Cannot remove user CSS");
@@ -148,21 +155,27 @@ int main(int argc, char **argv) {
                 "Removing CSS did not restore default rendering on a retained book");
         release(true);
         writeStyle({});
-        require(open(path).ready() && pixels(session->image()) == first, "Empty CSS changed rendering");
+        require(open(path).ready() && pixels(session->image()) == first,
+                "Empty CSS changed rendering");
         release();
         QByteArray maximumStyle("* { color: #777777 !important; }");
         maximumStyle += QByteArray(256 * 1024 - maximumStyle.size(), ' ');
         writeStyle(maximumStyle);
-        require(open(path).ready() && pixels(session->image()) != first, "Maximum-size CSS was ignored");
+        require(open(path).ready() && pixels(session->image()) != first,
+                "Maximum-size CSS was ignored");
         release();
         writeStyle(QByteArray(256 * 1024 + 1, 'x'));
-        require(open(path).ready() && pixels(session->image()) == first, "Oversized CSS prevented normal rendering");
+        require(open(path).ready() && pixels(session->image()) == first,
+                "Oversized CSS prevented normal rendering");
         release();
         writeStyle(QByteArray("invalid\0CSS", 11));
-        require(open(path).ready() && pixels(session->image()) == first, "NUL-containing CSS changed rendering");
+        require(open(path).ready() && pixels(session->image()) == first,
+                "NUL-containing CSS changed rendering");
         release();
-        require(QFile::remove(stylePath) && QDir().mkdir(stylePath), "Cannot create unreadable CSS fixture");
-        require(open(path).ready() && pixels(session->image()) == first, "Unreadable CSS prevented normal rendering");
+        require(QFile::remove(stylePath) && QDir().mkdir(stylePath),
+                "Cannot create unreadable CSS fixture");
+        require(open(path).ready() && pixels(session->image()) == first,
+                "Unreadable CSS prevented normal rendering");
         release();
         require(QDir().rmdir(stylePath), "Cannot remove unreadable CSS fixture");
         writeStyle("/* an unfinished comment");
@@ -170,15 +183,15 @@ int main(int argc, char **argv) {
         release();
         require(QFile::remove(stylePath), "Cannot remove malformed CSS");
         const auto cancelled = open(path, true);
-        require(!cancelled.ready() && cancelled.failure()->kind == OpeningFailureKind::Cancelled &&
-                    session->image().isNull(),
+        require(!cancelled.ready() && cancelled.failure()->kind == OpeningFailureKind::Cancelled
+                        && session->image().isNull(),
                 "Cancelled local opening restored cached pages");
         release();
         require(open(QString::fromLocal8Bit(argv[2])).ready() && !session->image().isNull(),
                 "Illustrated EPUB did not render through local resources");
         release();
         std::puts(
-            "PASS: local EPUB rendering, parsed-cache reopening, user CSS edits, retained/disk cache invalidation, source budget and cancellation");
+                "PASS: local EPUB rendering, parsed-cache reopening, user CSS edits, retained/disk cache invalidation, source budget and cancellation");
         app.quit();
     });
     return app.exec();

@@ -50,7 +50,9 @@ QFont chromeFont(int pixels = -1);
 QFont brandFont(int pixels, bool italic = false);
 // Uppercase, spaced monospace for notes, counts and section captions.
 QFont captionFont(int pixels = metrics::chrome::captionText);
-inline QString interfaceFontFamily() {
+
+inline QString interfaceFontFamily()
+{
     return interfaceFont().family();
 }
 
@@ -68,4 +70,4 @@ void refreshInterfaceText(QWidget *root);
 // A copy of `font` that loads its faces again. Documents that keep a font
 // renew it when they receive QEvent::FontChange.
 QFont renewedFont(const QFont &font);
-}
+} // namespace kobalt::ui

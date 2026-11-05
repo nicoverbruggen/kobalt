@@ -16,7 +16,8 @@ inline constexpr ScreenRefresh screenRefreshModes[] = {
 };
 
 // The value saved in reader-settings.json.
-inline QString screenRefreshValue(ScreenRefresh mode) {
+inline QString screenRefreshValue(ScreenRefresh mode)
+{
     switch (mode) {
     case ScreenRefresh::Smart:
         return QStringLiteral("smart");
@@ -37,7 +38,8 @@ inline QString screenRefreshValue(ScreenRefresh mode) {
 }
 
 // A missing or unknown value is Smart, the default.
-inline ScreenRefresh screenRefresh(const QString &value) {
+inline ScreenRefresh screenRefresh(const QString &value)
+{
     for (const auto mode : screenRefreshModes)
         if (screenRefreshValue(mode) == value)
             return mode;
@@ -46,7 +48,8 @@ inline ScreenRefresh screenRefresh(const QString &value) {
 
 // turnsSinceFlash counts this turn. chapterStart is a forward turn onto the
 // first page of a chapter.
-inline bool refreshOnTurn(ScreenRefresh mode, int turnsSinceFlash, bool chapterStart) {
+inline bool refreshOnTurn(ScreenRefresh mode, int turnsSinceFlash, bool chapterStart)
+{
     switch (mode) {
     case ScreenRefresh::Smart:
         return chapterStart && turnsSinceFlash >= smartRefreshTurns;
@@ -65,4 +68,4 @@ inline bool refreshOnTurn(ScreenRefresh mode, int turnsSinceFlash, bool chapterS
     }
     return false;
 }
-}
+} // namespace kobalt

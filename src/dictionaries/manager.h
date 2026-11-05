@@ -8,25 +8,31 @@
 #include <algorithm>
 #include <QLocale>
 class QNetworkAccessManager;
+
 namespace kobalt {
-struct DownloadDictionary {
+struct DownloadDictionary
+{
     QString id, name, language, target, description, license, url;
     QByteArray sha256;
     qint64 size = 0;
 };
-struct DictionaryTransfer {
+
+struct DictionaryTransfer
+{
     QString id;
     qint64 received = 0, total = 0;
     bool installing = false;
 };
 class StarDict;
+
 // Downloads are asynchronous. Lookup remains synchronous and reads only the selected entry.
-class DictionaryManager final : public QObject, public DictionaryService {
+class DictionaryManager final : public QObject, public DictionaryService
+{
     Q_OBJECT
 public:
     // An injected network manager stays owned by the caller and must outlive this object.
-    DictionaryManager(QString directory, std::unique_ptr<DictionaryService> fallback, QObject *parent = nullptr,
-                      QNetworkAccessManager *network = nullptr);
+    DictionaryManager(QString directory, std::unique_ptr<DictionaryService> fallback,
+                      QObject *parent = nullptr, QNetworkAccessManager *network = nullptr);
     ~DictionaryManager() override;
     static QVector<DownloadDictionary> catalog();
     static QString normalizeLanguage(const QString &language);
@@ -47,8 +53,9 @@ public:
     void cancel();
     bool remove(const QString &id, QString *error);
     // Also used by offline installer tests; the ZIP must match the supplied digest.
-    static bool installArchive(const QString &directory, const DownloadDictionary &entry, const QString &zip,
-                               QString *error, const std::function<bool()> &cancelled = {});
+    static bool installArchive(const QString &directory, const DownloadDictionary &entry,
+                               const QString &zip, QString *error,
+                               const std::function<bool()> &cancelled = {});
 signals:
     void changed();
 
@@ -57,30 +64,41 @@ private:
     std::unique_ptr<Data> data;
 };
 
-inline QString DictionaryManager::normalizeLanguage(const QString &language) {
+inline QString DictionaryManager::normalizeLanguage(const QString &language)
+{
     return language.trimmed().toLower().section('-', 0, 0).section('_', 0, 0);
 }
-inline QString DictionaryManager::languageName(const QString &language) {
+
+inline QString DictionaryManager::languageName(const QString &language)
+{
     const auto code = normalizeLanguage(language);
     if (code.isEmpty())
         return {};
     const QLocale locale(code);
     return locale.language() == QLocale::C ? code : QLocale::languageToString(locale.language());
 }
-inline QVector<DownloadDictionary> DictionaryManager::orderedCatalog(QVector<DownloadDictionary> entries) {
-    std::sort(entries.begin(), entries.end(), [](const DownloadDictionary &left, const DownloadDictionary &right) {
-        const auto source =
-            QString::compare(languageName(left.language), languageName(right.language), Qt::CaseInsensitive);
-        if (source)
-            return source < 0;
-        const bool leftMono = normalizeLanguage(left.language) == normalizeLanguage(left.target);
-        const bool rightMono = normalizeLanguage(right.language) == normalizeLanguage(right.target);
-        if (leftMono != rightMono)
-            return leftMono;
-        const auto target =
-            QString::compare(languageName(left.target), languageName(right.target), Qt::CaseInsensitive);
-        return target ? target < 0 : left.id < right.id;
-    });
+
+inline QVector<DownloadDictionary>
+DictionaryManager::orderedCatalog(QVector<DownloadDictionary> entries)
+{
+    std::sort(entries.begin(), entries.end(),
+              [](const DownloadDictionary &left, const DownloadDictionary &right) {
+                  const auto source =
+                          QString::compare(languageName(left.language),
+                                           languageName(right.language), Qt::CaseInsensitive);
+                  if (source)
+                      return source < 0;
+                  const bool leftMono =
+                          normalizeLanguage(left.language) == normalizeLanguage(left.target);
+                  const bool rightMono =
+                          normalizeLanguage(right.language) == normalizeLanguage(right.target);
+                  if (leftMono != rightMono)
+                      return leftMono;
+                  const auto target =
+                          QString::compare(languageName(left.target), languageName(right.target),
+                                           Qt::CaseInsensitive);
+                  return target ? target < 0 : left.id < right.id;
+              });
     return entries;
 }
-}
+} // namespace kobalt

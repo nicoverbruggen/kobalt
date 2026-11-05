@@ -21,12 +21,16 @@
 namespace kobalt::standalone {
 // Qt caches each damaged rectangle, but its default proxy paints their bounding
 // rectangle. Pass the cache's clip region to QWidget to keep the work local.
-class RegionProxy final : public QGraphicsProxyWidget {
+class RegionProxy final : public QGraphicsProxyWidget
+{
 public:
-    explicit RegionProxy(bool nativePixels = false) : nativePixels(nativePixels) {
+    explicit RegionProxy(bool nativePixels = false) : nativePixels(nativePixels)
+    {
         setCacheMode(QGraphicsItem::DeviceCoordinateCache);
     }
-    void setNativePixels(bool value) {
+
+    void setNativePixels(bool value)
+    {
         if (nativePixels == value)
             return;
         nativePixels = value;
@@ -35,7 +39,9 @@ public:
         setCacheMode(QGraphicsItem::DeviceCoordinateCache);
         update();
     }
-    void setRasterScale(qreal value) {
+
+    void setRasterScale(qreal value)
+    {
         value = qBound(.1, value, 2.0);
         if (rasterScale == value)
             return;
@@ -45,17 +51,19 @@ public:
         setCacheMode(QGraphicsItem::DeviceCoordinateCache);
         update();
     }
-    QSize rasterSize() const {
-        return pixels.size();
-    }
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *) override {
+
+    QSize rasterSize() const { return pixels.size(); }
+
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *) override
+    {
         if (!widget() || !widget()->isVisible())
             return;
         // The cache clears a pixel-aligned margin outside exposedRect. Repaint
         // its entire clip, or that margin becomes a blank strip on hover.
         const QRegion region =
-            (painter->hasClipping() ? painter->clipRegion() : QRegion(option->exposedRect.toAlignedRect())) &
-            QRegion(rect().toAlignedRect());
+                (painter->hasClipping() ? painter->clipRegion()
+                                        : QRegion(option->exposedRect.toAlignedRect()))
+                & QRegion(rect().toAlignedRect());
         if (region.isEmpty())
             return;
         if (!nativePixels) {
@@ -72,8 +80,10 @@ public:
         const QSize screen = widget()->size();
         if (screen.isEmpty())
             return;
-        const qreal scale = qMin(rasterScale, qSqrt(maximumPixels / (qreal(screen.width()) * screen.height())));
-        QSize target(qMax(1, qRound(screen.width() * scale)), qMax(1, qRound(screen.height() * scale)));
+        const qreal scale =
+                qMin(rasterScale, qSqrt(maximumPixels / (qreal(screen.width()) * screen.height())));
+        QSize target(qMax(1, qRound(screen.width() * scale)),
+                     qMax(1, qRound(screen.height() * scale)));
         if (qreal(target.width()) * target.height() > maximumPixels)
             target.setHeight(qMax(1, int(maximumPixels / target.width())));
         QRegion damage = region;
@@ -87,7 +97,8 @@ public:
         {
             QPainter source(&pixels);
             source.setRenderHint(QPainter::SmoothPixmapTransform);
-            source.scale(qreal(target.width()) / screen.width(), qreal(target.height()) / screen.height());
+            source.scale(qreal(target.width()) / screen.width(),
+                         qreal(target.height()) / screen.height());
             widget()->render(&source, damage.boundingRect().topLeft(), damage);
         }
         painter->save();
@@ -101,12 +112,15 @@ private:
     qreal rasterScale = 1;
     QImage pixels;
 };
+
 // Keep the existing UI in physical pixels. Qt maps its damage rectangles to
 // the Android surface. Most controls receive mouse input through the proxy.
 // A widget that sets kobalt_native_touch receives mapped touch contacts instead.
-class WidgetCanvas : public QGraphicsView {
+class WidgetCanvas : public QGraphicsView
+{
 public:
-    explicit WidgetCanvas(QWidget *parent) : QGraphicsView(parent) {
+    explicit WidgetCanvas(QWidget *parent) : QGraphicsView(parent)
+    {
         viewport()->setAttribute(Qt::WA_AcceptTouchEvents);
         setFrameShape(QFrame::NoFrame);
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -116,29 +130,38 @@ public:
         setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
         setScene(new QGraphicsScene(this));
     }
-    void setContent(QWidget *widget, bool nativePixels = false, qreal rasterScale = 1) {
+
+    void setContent(QWidget *widget, bool nativePixels = false, qreal rasterScale = 1)
+    {
         content = widget;
         proxy = new RegionProxy(nativePixels);
         proxy->setRasterScale(rasterScale);
         scene()->addItem(proxy);
         proxy->setWidget(widget);
     }
-    void setNativePixels(bool value) {
+
+    void setNativePixels(bool value)
+    {
         if (proxy)
             proxy->setNativePixels(value);
     }
-    void setRasterScale(qreal value) {
+
+    void setRasterScale(qreal value)
+    {
         if (proxy)
             proxy->setRasterScale(value);
     }
-    QSize rasterSize() const {
-        return proxy ? proxy->rasterSize() : QSize();
-    }
-    QSize pixelSize() const {
+
+    QSize rasterSize() const { return proxy ? proxy->rasterSize() : QSize(); }
+
+    QSize pixelSize() const
+    {
         const auto dpr = devicePixelRatioF();
-        return {qRound(viewport()->width() * dpr), qRound(viewport()->height() * dpr)};
+        return { qRound(viewport()->width() * dpr), qRound(viewport()->height() * dpr) };
     }
-    void fitContent() {
+
+    void fitContent()
+    {
         const auto pixels = pixelSize();
         if (pixels.isEmpty())
             return;
@@ -148,6 +171,7 @@ public:
         setTransform(QTransform::fromScale(1.0 / dpr, 1.0 / dpr));
         setSceneRect(QRectF(QPointF(), pixels));
     }
+
     QPointer<QWidget> content;
     std::function<void()> cancelGesture;
     std::function<void()> viewportResized;
@@ -155,12 +179,15 @@ public:
     std::function<void(QRegion)> framePainted;
 
 protected:
-    void resizeEvent(QResizeEvent *event) override {
+    void resizeEvent(QResizeEvent *event) override
+    {
         QGraphicsView::resizeEvent(event);
         if (viewportResized)
             viewportResized();
     }
-    bool event(QEvent *event) override {
+
+    bool event(QEvent *event) override
+    {
         const auto type = event->type();
         const bool handled = QGraphicsView::event(event);
         bool scaleChanged = type == QEvent::ScreenChangeInternal;
@@ -169,13 +196,15 @@ protected:
 #endif
         if (scaleChanged && viewportResized)
             viewportResized();
-        if (scaleChanged || type == QEvent::InputMethodQuery || type == QEvent::FocusIn || type == QEvent::Move ||
-            type == QEvent::Resize) {
+        if (scaleChanged || type == QEvent::InputMethodQuery || type == QEvent::FocusIn
+            || type == QEvent::Move || type == QEvent::Resize) {
             updateInputGeometry();
         }
         return handled;
     }
-    bool viewportEvent(QEvent *event) override {
+
+    bool viewportEvent(QEvent *event) override
+    {
         const auto type = event->type();
         if (type == QEvent::Paint) {
             const auto region = static_cast<QPaintEvent *>(event)->region();
@@ -186,12 +215,13 @@ protected:
                 framePainted(region);
             return handled;
         }
-        if (type == QEvent::TouchBegin || type == QEvent::TouchUpdate || type == QEvent::TouchEnd ||
-            type == QEvent::TouchCancel) {
+        if (type == QEvent::TouchBegin || type == QEvent::TouchUpdate || type == QEvent::TouchEnd
+            || type == QEvent::TouchCancel) {
             const auto *touch = static_cast<QTouchEvent *>(event);
             // Trackpads already send pointer events. Their finger positions
             // are not screen coordinates and must not become a second mouse gesture.
-            if (touch->pointingDevice() && touch->pointingDevice()->type() == QInputDevice::DeviceType::TouchPad) {
+            if (touch->pointingDevice()
+                && touch->pointingDevice()->type() == QInputDevice::DeviceType::TouchPad) {
                 event->accept();
                 return true;
             }
@@ -205,16 +235,19 @@ protected:
             return QGraphicsView::viewportEvent(event);
         const auto *touch = static_cast<QTouchEvent *>(event);
         if (content && type == QEvent::TouchBegin && !touch->points().isEmpty()) {
-            const auto position = mapToScene(touch->points().first().position().toPoint()).toPoint();
+            const auto position =
+                    mapToScene(touch->points().first().position().toPoint()).toPoint();
             target = content->childAt(position);
-            if (!target) target = content;
+            if (!target)
+                target = content;
             nativeTouch = target->property("kobalt_native_touch").toBool();
         }
         if (nativeTouch && target && content) {
             QVector<ui::TouchContact> contacts;
             for (const auto &point : touch->points()) {
                 const auto scene = mapToScene(point.position().toPoint()).toPoint();
-                contacts.append({point.id(), target->mapFrom(content, scene), point.state() == QEventPoint::Released});
+                contacts.append({ point.id(), target->mapFrom(content, scene),
+                                  point.state() == QEventPoint::Released });
             }
             ui::MappedTouchEvent mapped(*touch, std::move(contacts));
             QApplication::sendEvent(target, &mapped);
@@ -239,7 +272,7 @@ protected:
         if (target) {
             const bool release = type == QEvent::TouchEnd;
             const auto mouseType = type == QEvent::TouchBegin ? QEvent::MouseButtonPress
-                                   : release                  ? QEvent::MouseButtonRelease
+                    : release                                 ? QEvent::MouseButtonRelease
                                                               : QEvent::MouseMove;
             const QPoint local = target->mapFrom(content, position);
             QMouseEvent mouse(mouseType, local, target->mapToGlobal(local),
@@ -259,10 +292,12 @@ private:
     QPointer<QWidget> target;
     bool nativeTouch = false;
     bool updatingInputGeometry = false;
-    void updateInputGeometry() {
+
+    void updateInputGeometry()
+    {
         auto *focus = QGuiApplication::focusObject();
-        if (updatingInputGeometry || (focus != this && focus != viewport()) || !proxy || !proxy->hasFocus() ||
-            !QGraphicsView::inputMethodQuery(Qt::ImEnabled).toBool()) {
+        if (updatingInputGeometry || (focus != this && focus != viewport()) || !proxy
+            || !proxy->hasFocus() || !QGraphicsView::inputMethodQuery(Qt::ImEnabled).toBool()) {
             return;
         }
         auto *editor = proxy && proxy->widget() ? proxy->widget()->focusWidget() : nullptr;
@@ -284,7 +319,9 @@ private:
         const QPoint offset = viewport()->mapTo(window(), QPoint());
         input->setInputItemTransform(QTransform::fromTranslate(offset.x(), offset.y()));
     }
-    void cancel() {
+
+    void cancel()
+    {
         // Cancellation handlers can delete the target or start another gesture.
         QPointer<QWidget> cancelled = target;
         target.clear();
@@ -300,4 +337,4 @@ private:
     }
 };
 
-}
+} // namespace kobalt::standalone

@@ -9,35 +9,48 @@
 
 namespace kobalt::nickel {
 namespace {
-QString qstring(const lString32 &s) {
+QString qstring(const lString32 &s)
+{
     return QString::fromUtf8(UnicodeToUtf8(s).c_str());
 }
-lString32 cre(const QString &s) {
+
+lString32 cre(const QString &s)
+{
     return Utf8ToUnicode(s.toUtf8().constData());
 }
+
 // A chapter's source XML as Nickel's point() locations see it: every child
 // counts, including text and comments. Text is in UTF-16 units.
-struct Source {
-    struct Node {
+struct Source
+{
+    struct Node
+    {
         QString id, name;
         QVector<int> children;
         int begin = 0, end = 0, parent = -1;
         bool text = false, cdata = false, element = false;
     };
+
     QVector<Node> nodes;
     QString text;
     int root = -1;
-    int body() const {
+
+    int body() const
+    {
         for (const int child : nodes[root].children)
             if (nodes[child].element && nodes[child].name == QLatin1String("body"))
                 return child;
         return -1;
     }
-    QString textOf(int node) const {
+
+    QString textOf(int node) const
+    {
         return text.mid(nodes[node].begin, nodes[node].end - nodes[node].begin);
     }
 };
-bool readSource(ldomDocument *doc, const QString &path, Source &source) {
+
+bool readSource(ldomDocument *doc, const QString &path, Source &source)
+{
     auto stream = doc->getContainer()->OpenStream(cre(path).c_str(), LVOM_READ);
     if (stream.isNull() || stream->GetSize() > 16 * 1024 * 1024)
         return false;
@@ -50,7 +63,7 @@ bool readSource(ldomDocument *doc, const QString &path, Source &source) {
     nodes = QVector<Source::Node>(1);
     text.clear();
     source.root = -1;
-    QVector<int> stack{0};
+    QVector<int> stack{ 0 };
     bool adjacentText = false;
     QXmlStreamReader parser(xml);
     while (!parser.atEnd()) {
@@ -60,9 +73,9 @@ bool readSource(ldomDocument *doc, const QString &path, Source &source) {
         if (parser.isStartElement() || parser.isCharacters() || parser.isComment()) {
             const int parent = stack.last();
             // Adjacent character tokens belong to one DOM text node.
-            if (parser.isCharacters() && adjacentText && !nodes[parent].children.isEmpty() &&
-                nodes[nodes[parent].children.last()].text && !parser.isCDATA() &&
-                !nodes[nodes[parent].children.last()].cdata) {
+            if (parser.isCharacters() && adjacentText && !nodes[parent].children.isEmpty()
+                && nodes[nodes[parent].children.last()].text && !parser.isCDATA()
+                && !nodes[nodes[parent].children.last()].cdata) {
                 text += parser.text();
                 nodes[nodes[parent].children.last()].end = text.size();
                 continue;
@@ -95,22 +108,29 @@ bool readSource(ldomDocument *doc, const QString &path, Source &source) {
     }
     return !parser.hasError() && source.root >= 0;
 }
+
 // CREngine wraps some content in its own elements while it lays out a
 // chapter. They are not in the source, so a path through one cannot match.
-bool engineWrapper(ldomNode *node) {
-    for (const char *name : {"autoBoxing", "tabularBox", "rubyBox", "mathBox", "floatBox", "inlineBox", "pseudoElem"})
+bool engineWrapper(ldomNode *node)
+{
+    for (const char *name : { "autoBoxing", "tabularBox", "rubyBox", "mathBox", "floatBox",
+                              "inlineBox", "pseudoElem" })
         if (node->isNodeName(name))
             return true;
     return false;
 }
+
 // Plain EPUB chapters often have no element IDs. An element is then found by
 // its index among its parent's elements, from <body>, which CREngine keeps
 // inside the chapter's DocFragment. Each step must have the same element name.
-struct ElementPath {
+struct ElementPath
+{
     QVector<int> indices;
     QStringList names;
 };
-ldomNode *engineBody(ldomNode *fragment) {
+
+ldomNode *engineBody(ldomNode *fragment)
+{
     ldomNode *body = nullptr;
     for (int i = 0; i < fragment->getChildCount(); ++i) {
         auto *child = fragment->getChildNode(i);
@@ -124,7 +144,9 @@ ldomNode *engineBody(ldomNode *fragment) {
     }
     return body;
 }
-bool engineElementPath(ldomNode *fragment, ldomNode *element, ElementPath &path) {
+
+bool engineElementPath(ldomNode *fragment, ldomNode *element, ElementPath &path)
+{
     auto *body = engineBody(fragment);
     if (!body)
         return false;
@@ -154,7 +176,9 @@ bool engineElementPath(ldomNode *fragment, ldomNode *element, ElementPath &path)
     }
     return true;
 }
-ldomNode *engineElement(ldomNode *fragment, const ElementPath &path) {
+
+ldomNode *engineElement(ldomNode *fragment, const ElementPath &path)
+{
     auto *node = engineBody(fragment);
     for (int step = 0; node && step < path.indices.size(); ++step) {
         ldomNode *next = nullptr;
@@ -170,13 +194,16 @@ ldomNode *engineElement(ldomNode *fragment, const ElementPath &path) {
                 break;
             }
         }
-        if (!next || qstring(next->getNodeName()).compare(path.names[step], Qt::CaseInsensitive) != 0)
+        if (!next
+            || qstring(next->getNodeName()).compare(path.names[step], Qt::CaseInsensitive) != 0)
             return nullptr;
         node = next;
     }
     return node;
 }
-int sourceElement(const Source &source, const ElementPath &path) {
+
+int sourceElement(const Source &source, const ElementPath &path)
+{
     int node = source.body();
     for (int step = 0; node >= 0 && step < path.indices.size(); ++step) {
         int next = -1, index = 0;
@@ -192,7 +219,9 @@ int sourceElement(const Source &source, const ElementPath &path) {
     }
     return node;
 }
-bool sourceElementPath(const Source &source, int element, ElementPath &path) {
+
+bool sourceElementPath(const Source &source, int element, ElementPath &path)
+{
     const int body = source.body();
     for (int node = element; node != body; node = source.nodes[node].parent) {
         if (node <= 0)
@@ -210,11 +239,13 @@ bool sourceElementPath(const Source &source, int element, ElementPath &path) {
     }
     return true;
 }
+
 // A native point() resolves to an element with an ID and an offset in it, or,
 // in a chapter without IDs, to an element path and an offset in that element.
 // The path, text and offset of the containing element are also kept when an
 // ancestor has an ID, so the decoder can use them if that ID's text changed.
-struct NativePoint {
+struct NativePoint
+{
     QString id;
     int offset = 0;
     ElementPath path;
@@ -222,11 +253,14 @@ struct NativePoint {
     int elementOffset = 0;
     bool located = false;
 };
+
 // Nickel point() locations count DOM children from the document element and
 // measure offsets in UTF-8 bytes. Resolve against the original XML before
 // checking that CREngine retained the identified element's exact text.
-bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, NativePoint &result) {
-    static const QRegularExpression format(QStringLiteral("^point\\((/1(?:/[1-9][0-9]*)*)(?::([0-9]+))?\\)$"));
+bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, NativePoint &result)
+{
+    static const QRegularExpression format(
+            QStringLiteral("^point\\((/1(?:/[1-9][0-9]*)*)(?::([0-9]+))?\\)$"));
     const auto match = format.match(point);
     if (!match.hasMatch())
         return false;
@@ -273,7 +307,8 @@ bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, N
     for (int node = target + 1; node < nodes.size(); ++node) {
         if (nodes[node].begin > position)
             break;
-        if (!nodes[node].id.isEmpty() && nodes[node].begin <= position && nodes[node].end >= position) {
+        if (!nodes[node].id.isEmpty() && nodes[node].begin <= position
+            && nodes[node].end >= position) {
             int ancestor = node;
             while (ancestor > 0 && ancestor != target)
                 ancestor = nodes[ancestor].parent;
@@ -289,9 +324,12 @@ bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, N
     result.offset = result.elementOffset;
     return true;
 }
+
 // The point() Nickel stores for `units` UTF-16 units into `element`, or an
 // empty string when the source does not have the same element and text.
-QString sourcePoint(ldomDocument *doc, const QString &path, ldomNode *fragment, ldomNode *element, int units) {
+QString sourcePoint(ldomDocument *doc, const QString &path, ldomNode *fragment, ldomNode *element,
+                    int units)
+{
     ElementPath elementPath;
     Source source;
     if (!engineElementPath(fragment, element, elementPath) || !readSource(doc, path, source))
@@ -304,27 +342,32 @@ QString sourcePoint(ldomDocument *doc, const QString &path, ldomNode *fragment, 
     // Nickel's own points end in a text node. Prefer the text node that starts
     // at the position; at the element's end, use the last one.
     int target = match;
-    for (int node = match + 1; node < nodes.size() && nodes[node].begin <= nodes[match].end; ++node) {
+    for (int node = match + 1; node < nodes.size() && nodes[node].begin <= nodes[match].end;
+         ++node) {
         int ancestor = node;
         while (ancestor > 0 && ancestor != match)
             ancestor = nodes[ancestor].parent;
-        if (ancestor != match || !nodes[node].text || nodes[node].begin > position || nodes[node].end < position)
+        if (ancestor != match || !nodes[node].text || nodes[node].begin > position
+            || nodes[node].end < position)
             continue;
         target = node;
         if (position < nodes[node].end)
             break;
     }
-    const int bytes = source.text.mid(nodes[target].begin, position - nodes[target].begin).toUtf8().size();
+    const int bytes =
+            source.text.mid(nodes[target].begin, position - nodes[target].begin).toUtf8().size();
     QStringList steps;
     for (int node = target; node != source.root; node = nodes[node].parent)
         steps.prepend(QString::number(nodes[nodes[node].parent].children.indexOf(node) + 1));
     steps.prepend(QStringLiteral("1"));
     return QStringLiteral("point(/") + steps.join('/') + ':' + QString::number(bytes) + ')';
 }
+
 // Counts the UTF-16 units of `element`'s text before `target` at `offset`.
-bool unitsBefore(ldomNode *element, ldomNode *target, int offset, int &units, QString *error) {
+bool unitsBefore(ldomNode *element, ldomNode *target, int offset, int &units, QString *error)
+{
     units = 0;
-    QVector<ldomNode *> pending{element};
+    QVector<ldomNode *> pending{ element };
     while (!pending.isEmpty()) {
         auto *node = pending.takeLast();
         if (node == target) {
@@ -359,8 +402,10 @@ bool unitsBefore(ldomNode *element, ldomNode *target, int offset, int &units, QS
         *error = strings::get("error.source_position_is_outside_its_anchor");
     return false;
 }
-bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomNode *element, QString &sourceText,
-                QString *error, bool *textChanged = nullptr) {
+
+bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomNode *element,
+                QString &sourceText, QString *error, bool *textChanged = nullptr)
+{
     if (textChanged) {
         *textChanged = false;
     }
@@ -395,23 +440,30 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
         }
     }
     if (parser.hasError() || matches != 1) {
-        return fail(strings::get("error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
+        return fail(strings::get(
+                "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     }
     if (sourceText != qstring(element->getText())) {
         if (textChanged) {
             *textChanged = true;
         }
-        return fail(strings::get("error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
+        return fail(strings::get(
+                "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     }
     return true;
 }
-}
-class NickelPositionCodec {
+} // namespace
+
+class NickelPositionCodec
+{
 public:
     static QString decode(const EngineDocument &engine, const QString &location, QString *error);
     static QString encode(const EngineDocument &engine, QString *error);
 };
-QString NickelPositionCodec::decode(const EngineDocument &engine, const QString &location, QString *error) {
+
+QString NickelPositionCodec::decode(const EngineDocument &engine, const QString &location,
+                                    QString *error)
+{
     auto fail = [error](const QString &message) {
         if (error)
             *error = message;
@@ -422,7 +474,8 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
     if (!engine.engine_ || location.isEmpty() || location.size() > 8192)
         return fail(strings::get("error.no_supported_native_reading_position"));
     const int hash = location.indexOf('#');
-    const auto path = QUrl::fromPercentEncoding(location.left(hash < 0 ? location.size() : hash).toUtf8());
+    const auto path =
+            QUrl::fromPercentEncoding(location.left(hash < 0 ? location.size() : hash).toUtf8());
     QString id = hash < 0 ? QString() : location.mid(hash + 1);
     int offset = 0;
     const int colon = id.lastIndexOf(':');
@@ -448,8 +501,8 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
     ldomNode *fragment = nullptr;
     for (int i = 0; i < body->getChildCount(); ++i) {
         auto *node = body->getChildNode(i);
-        if (node->isElement() && node->isNodeName("DocFragment") &&
-            qstring(node->getAttributeValue("Source")) == path) {
+        if (node->isElement() && node->isNodeName("DocFragment")
+            && qstring(node->getAttributeValue("Source")) == path) {
             if (fragment)
                 return fail(strings::get("error.ambiguous_native_chapter_path"));
             fragment = node;
@@ -471,7 +524,8 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
     if (structural && id.isEmpty()) {
         // A chapter without IDs.
         if (!byPath())
-            return fail(strings::get("error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
+            return fail(strings::get(
+                    "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     } else if (id.isEmpty()) {
         if (offset)
             return fail(strings::get("error.invalid_native_chapter_position"));
@@ -497,7 +551,7 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
     }
     if (offset > sourceText.size())
         return fail(strings::get("error.native_text_offset_exceeds_its_anchor"));
-    QVector<ldomNode *> pending{element};
+    QVector<ldomNode *> pending{ element };
     int remaining = offset;
     while (!pending.isEmpty()) {
         auto *node = pending.takeLast();
@@ -523,7 +577,9 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
         return qstring(ldomXPointer(element, 0).toString());
     return fail(strings::get("error.native_text_position_was_not_found"));
 }
-QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error) {
+
+QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error)
+{
     auto fail = [error](const QString &message) {
         if (error)
             *error = message;
@@ -554,8 +610,8 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
         }
         for (int i = 0; i < body->getChildCount(); ++i) {
             auto *node = body->getChildNode(i);
-            if (node != fragment && node->isElement() && node->isNodeName("DocFragment") &&
-                qstring(node->getAttributeValue("Source")) == path) {
+            if (node != fragment && node->isElement() && node->isNodeName("DocFragment")
+                && qstring(node->getAttributeValue("Source")) == path) {
                 return fail(strings::get("error.ambiguous_native_chapter_path"));
             }
         }
@@ -574,7 +630,8 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
     const auto structuralPoint = [&]() -> QString {
         auto *nearest = target->isText() ? target->getParentNode() : target;
         int units = 0;
-        if (!nearest || nearest == fragment || !unitsBefore(nearest, target, pointer.getOffset(), units, nullptr))
+        if (!nearest || nearest == fragment
+            || !unitsBefore(nearest, target, pointer.getOffset(), units, nullptr))
             return chapterFallback();
         const auto point = sourcePoint(doc, path, fragment, nearest, units);
         return point.isEmpty() ? chapterFallback() : encodedPath + '#' + point;
@@ -611,11 +668,15 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
     int units = 0;
     if (!unitsBefore(element, target, pointer.getOffset(), units, error))
         return {};
-    return encodedPath + '#' + QString::fromLatin1(QUrl::toPercentEncoding(id)) + ':' + QString::number(units);
+    return encodedPath + '#' + QString::fromLatin1(QUrl::toPercentEncoding(id)) + ':'
+            + QString::number(units);
 }
-PositionCodec positionCodec() {
-    return {NickelPositionCodec::decode, NickelPositionCodec::encode, [](const QString &location) {
-                return location.left(location.indexOf('#') < 0 ? location.size() : location.indexOf('#'));
-            }};
+
+PositionCodec positionCodec()
+{
+    return { NickelPositionCodec::decode, NickelPositionCodec::encode, [](const QString &location) {
+                return location.left(location.indexOf('#') < 0 ? location.size()
+                                                               : location.indexOf('#'));
+            } };
 }
-}
+} // namespace kobalt::nickel

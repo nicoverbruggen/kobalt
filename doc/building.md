@@ -170,6 +170,10 @@ The launcher pins the released image by digest. Set `KOBALT_ANDROID_IMAGE` only 
 
 The APK is `build/android-HOST/android-build/build/outputs/apk/debug/android-build-debug.apk`. It uses `com.nicoverbruggen.kobalt.debug`, the public debug key under `platforms/android/app/` and a version ending in `-debug`. Android 9 or later and ARM64 are required. Release signing uses the explicit mode described below. BOOX selects Qt's SurfaceView container before creating windows so firmware refresh metadata can reach the submitted buffers. Other Android devices keep Qt's default container. Library, book-opening and reader canvases share the BOOX frame transport. Returning to the Library retains a captured reader frame until its final system-bar insets are ready, then requests GC cleanup. The Android window follows the activity's laid-out bounds at startup and after rotation. Only the Library canvas draws rules below Android's status bar and above its navigation controls; the fullscreen reader has neither rule.
 
+## Code formatting
+
+First-party C and C++ code uses the Qt project style in `.clang-format`. Format changed files with clang-format 21 before you commit, for example `xcrun clang-format -i FILE` on the Mac. A newer major version can format untouched lines differently. The style keeps string literals and comment text as written. `.clang-format-ignore` excludes `dependencies/`, the vendored NickelHook files and the generated icon geometry.
+
 ## Dependencies and validation
 
 CREngine and its text/image libraries use the versions and patches recorded in this worktree. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. A change to their recipes, patches or source pins selects a new dependency set; application-only changes reuse it.

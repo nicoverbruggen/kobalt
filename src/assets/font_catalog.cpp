@@ -8,21 +8,33 @@
 #include FT_MULTIPLE_MASTERS_H
 
 namespace kobalt {
-QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts, const QStringList &selected) {
+QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts, const QStringList &selected)
+{
     const auto available = fonts;
-    fonts.erase(std::remove_if(fonts.begin(), fonts.end(), [&](const ReadingFont &font) {
-        if (!font.family.startsWith("KF ") || selected.contains(font.family, Qt::CaseInsensitive))
-            return false;
-        // ebook-fonts' Kobo preset replaces NV with KF. Its unprefixed
-        // families also gain KF. Match complete family names, not display
-        // labels or filenames, and require an available counterpart.
-        const auto base = font.family.mid(3);
-        const bool unprefixed = base == "Libron" || base == "Sourcerer" || base == "Cartisse" || base == "Readerly";
-        return std::any_of(available.cbegin(), available.cend(), [&](const ReadingFont &other) {
-            return other.family.compare("NV " + base, Qt::CaseInsensitive) == 0 ||
-                   (unprefixed && other.family.compare(base, Qt::CaseInsensitive) == 0);
-        });
-    }), fonts.end());
+    fonts.erase(std::remove_if(fonts.begin(), fonts.end(),
+                               [&](const ReadingFont &font) {
+                                   if (!font.family.startsWith("KF ")
+                                       || selected.contains(font.family, Qt::CaseInsensitive))
+                                       return false;
+                                   // ebook-fonts' Kobo preset replaces NV with KF. Its unprefixed
+                                   // families also gain KF. Match complete family names, not display
+                                   // labels or filenames, and require an available counterpart.
+                                   const auto base = font.family.mid(3);
+                                   const bool unprefixed = base == "Libron" || base == "Sourcerer"
+                                           || base == "Cartisse" || base == "Readerly";
+                                   return std::any_of(
+                                           available.cbegin(), available.cend(),
+                                           [&](const ReadingFont &other) {
+                                               return other.family.compare("NV " + base,
+                                                                           Qt::CaseInsensitive)
+                                                       == 0
+                                                       || (unprefixed
+                                                           && other.family.compare(
+                                                                      base, Qt::CaseInsensitive)
+                                                                   == 0);
+                                           });
+                               }),
+                fonts.end());
     std::stable_sort(fonts.begin(), fonts.end(), [](const auto &a, const auto &b) {
         if (a.origin != b.origin)
             return a.origin < b.origin;
@@ -32,14 +44,16 @@ QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts, const QStri
     });
     return fonts;
 }
+
 namespace {
 // Sideloaded families often keep their own folder, and downloaded families
 // often nest their files one level further, as in Family/static/. Hidden
 // entries, such as macOS `._` files and `.Trashes`, are skipped.
 constexpr int sideloadFolderDepth = 2;
 
-void collectSideloadedFonts(const QDir &directory, int depth, QStringList &result) {
-    for (const auto &name : directory.entryList({"*.ttf", "*.otf"}, QDir::Files, QDir::Name)) {
+void collectSideloadedFonts(const QDir &directory, int depth, QStringList &result)
+{
+    for (const auto &name : directory.entryList({ "*.ttf", "*.otf" }, QDir::Files, QDir::Name)) {
         const auto path = directory.filePath(name);
         QFile font(path);
         if (!font.open(QIODevice::ReadOnly)) {
@@ -60,8 +74,10 @@ void collectSideloadedFonts(const QDir &directory, int depth, QStringList &resul
         collectSideloadedFonts(QDir(directory.filePath(name)), depth + 1, result);
     }
 }
-}
-QStringList sideloadedFontFiles(const QString &directory) {
+} // namespace
+
+QStringList sideloadedFontFiles(const QString &directory)
+{
     if (directory.isEmpty()) {
         return {};
     }
@@ -69,41 +85,55 @@ QStringList sideloadedFontFiles(const QString &directory) {
     collectSideloadedFonts(QDir(directory), 0, result);
     return result;
 }
-bool FontSources::operator==(const FontSources &other) const {
-    return bundled == other.bundled && systemDirectory == other.systemDirectory &&
-           sideloadDirectory == other.sideloadDirectory && systemFiles == other.systemFiles;
+
+bool FontSources::operator==(const FontSources &other) const
+{
+    return bundled == other.bundled && systemDirectory == other.systemDirectory
+            && sideloadDirectory == other.sideloadDirectory && systemFiles == other.systemFiles;
 }
-bool EngineFontInputs::operator==(const EngineFontInputs &other) const {
-    return sources == other.sources && fallbackFiles == other.fallbackFiles &&
-           hyphenationDirectory == other.hyphenationDirectory;
+
+bool EngineFontInputs::operator==(const EngineFontInputs &other) const
+{
+    return sources == other.sources && fallbackFiles == other.fallbackFiles
+            && hyphenationDirectory == other.hyphenationDirectory;
 }
-QString fontFamilyKey(const QString &family) {
+
+QString fontFamilyKey(const QString &family)
+{
     auto key = family.normalized(QString::NormalizationForm_C).trimmed().toCaseFolded();
     // Earlier Kobalt builds shipped this family under its old collection name.
     if (key == "kf libron")
         key = "libron";
     return key;
 }
-FontWeightAxis fontWeightAxis(const QVector<ReadingFont> &fonts, const QString &family) {
+
+FontWeightAxis fontWeightAxis(const QVector<ReadingFont> &fonts, const QString &family)
+{
     for (const auto &font : fonts)
         if (fontFamilyKey(font.family) == fontFamilyKey(family))
             return font.weightAxis;
     return {};
 }
-double normalizedOpticalSize(const FontOpticalSizeAxis &axis, double points) {
+
+double normalizedOpticalSize(const FontOpticalSizeAxis &axis, double points)
+{
     if (!std::isfinite(points) || points <= 0)
         points = axis.defaultValue;
     if (!axis.available())
         return points > 0 ? std::round(points) : 0;
     return qBound(std::ceil(axis.minimum), std::round(points), std::floor(axis.maximum));
 }
-FontOpticalSizeAxis fontOpticalSizeAxis(const QVector<ReadingFont> &fonts, const QString &family) {
+
+FontOpticalSizeAxis fontOpticalSizeAxis(const QVector<ReadingFont> &fonts, const QString &family)
+{
     for (const auto &font : fonts)
         if (fontFamilyKey(font.family) == fontFamilyKey(family))
             return font.opticalSizeAxis;
     return {};
 }
-QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
+
+QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
+{
     FT_Library library = nullptr;
     if (FT_Init_FreeType(&library))
         return {};
@@ -121,9 +151,11 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
             for (FT_UInt i = 0; i < variations->num_axis; ++i) {
                 const auto &value = variations->axis[i];
                 if (value.tag == FT_MAKE_TAG('w', 'g', 'h', 't'))
-                    axis = {int(value.minimum / 65536), int(value.maximum / 65536), int(value.def / 65536)};
+                    axis = { int(value.minimum / 65536), int(value.maximum / 65536),
+                             int(value.def / 65536) };
                 if (value.tag == FT_MAKE_TAG('o', 'p', 's', 'z'))
-                    optical = {value.minimum / 65536.0, value.maximum / 65536.0, value.def / 65536.0};
+                    optical = { value.minimum / 65536.0, value.maximum / 65536.0,
+                                value.def / 65536.0 };
             }
             FT_Done_MM_Var(library, variations);
         }
@@ -141,7 +173,8 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
                     range.minimum = qMax(range.minimum, optical.minimum);
                     range.maximum = qMin(range.maximum, optical.maximum);
                     if (range.available())
-                        range.defaultValue = qBound(range.minimum, range.defaultValue, range.maximum);
+                        range.defaultValue =
+                                qBound(range.minimum, range.defaultValue, range.maximum);
                     else
                         range = {};
                 } else
@@ -151,7 +184,8 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
                     entry.weightAxis.maximum = qMin(entry.weightAxis.maximum, axis.maximum);
                     if (entry.weightAxis.available())
                         entry.weightAxis.defaultValue =
-                            qBound(entry.weightAxis.minimum, entry.weightAxis.defaultValue, entry.weightAxis.maximum);
+                                qBound(entry.weightAxis.minimum, entry.weightAxis.defaultValue,
+                                       entry.weightAxis.maximum);
                     else
                         entry.weightAxis = {};
                 } else {
@@ -161,7 +195,7 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
             return;
         }
         seen.insert(key, result.size());
-        result.append({family, {path}, origin, axis, optical});
+        result.append({ family, { path }, origin, axis, optical });
     };
     const auto core = [](const QString &path) {
         return path.contains("/ebook-core/") || path.contains("/ebook-core-");
@@ -174,7 +208,8 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
     }
     if (!sources.systemDirectory.isEmpty()) {
         const QDir directory(sources.systemDirectory);
-        for (const auto &name : directory.entryList({"*.ttf", "*.otf"}, QDir::Files, QDir::Name)) {
+        for (const auto &name :
+             directory.entryList({ "*.ttf", "*.otf" }, QDir::Files, QDir::Name)) {
             add(directory.filePath(name), FontOrigin::BuiltIn);
         }
     }
@@ -188,8 +223,9 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources) {
             add(path, FontOrigin::Interface);
     FT_Done_FreeType(library);
     std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) {
-        return a.origin == b.origin ? a.family.compare(b.family, Qt::CaseInsensitive) < 0 : a.origin < b.origin;
+        return a.origin == b.origin ? a.family.compare(b.family, Qt::CaseInsensitive) < 0
+                                    : a.origin < b.origin;
     });
     return result;
 }
-}
+} // namespace kobalt

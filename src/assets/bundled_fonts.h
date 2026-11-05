@@ -4,16 +4,24 @@
 #include "font_catalog.h"
 
 namespace kobalt {
-inline constexpr std::array<const char *, 4> serifFallbackFontFiles{"NotoSerif-Regular.ttf", "NotoSerif-Bold.ttf",
-                                                                    "NotoSerif-Italic.ttf", "NotoSerif-BoldItalic.ttf"};
+inline constexpr std::array<const char *, 4> serifFallbackFontFiles{ "NotoSerif-Regular.ttf",
+                                                                     "NotoSerif-Bold.ttf",
+                                                                     "NotoSerif-Italic.ttf",
+                                                                     "NotoSerif-BoldItalic.ttf" };
 inline constexpr std::array<const char *, 18> scriptFallbackFontFiles{
-    "NotoNaskhArabic-Regular.ttf",   "NotoNaskhArabic-Bold.ttf",      "NotoSerifHebrew-Regular.ttf",
-    "NotoSerifHebrew-Bold.ttf",      "NotoSerifArmenian-Regular.ttf", "NotoSerifArmenian-Bold.ttf",
-    "NotoSerifGeorgian-Regular.ttf", "NotoSerifGeorgian-Bold.ttf",    "NotoSerifDevanagari-Regular.ttf",
-    "NotoSerifDevanagari-Bold.ttf",  "NotoSerifBengali-Regular.ttf",  "NotoSerifBengali-Bold.ttf",
-    "NotoSerifTamil-Regular.ttf",    "NotoSerifTamil-Bold.ttf",       "NotoSerifTamil-Italic.ttf",
-    "NotoSerifTamil-BoldItalic.ttf", "NotoSerifThai-Regular.ttf",     "NotoSerifThai-Bold.ttf"};
-inline QString supplementalFontFamily(QString language) {
+    "NotoNaskhArabic-Regular.ttf",     "NotoNaskhArabic-Bold.ttf",
+    "NotoSerifHebrew-Regular.ttf",     "NotoSerifHebrew-Bold.ttf",
+    "NotoSerifArmenian-Regular.ttf",   "NotoSerifArmenian-Bold.ttf",
+    "NotoSerifGeorgian-Regular.ttf",   "NotoSerifGeorgian-Bold.ttf",
+    "NotoSerifDevanagari-Regular.ttf", "NotoSerifDevanagari-Bold.ttf",
+    "NotoSerifBengali-Regular.ttf",    "NotoSerifBengali-Bold.ttf",
+    "NotoSerifTamil-Regular.ttf",      "NotoSerifTamil-Bold.ttf",
+    "NotoSerifTamil-Italic.ttf",       "NotoSerifTamil-BoldItalic.ttf",
+    "NotoSerifThai-Regular.ttf",       "NotoSerifThai-Bold.ttf"
+};
+
+inline QString supplementalFontFamily(QString language)
+{
     language = language.toLower().replace('_', '-');
     const auto base = language.section('-', 0, 0);
     if (base == "ar" || base == "fa" || base == "ur")
@@ -43,14 +51,16 @@ inline QString supplementalFontFamily(QString language) {
             return "Noto Serif CJK TC";
         return "Noto Serif CJK SC";
     }
-    if (base == "el" || base == "ru" || base == "uk" || base == "bg" || base == "sr" || base == "mk" || base == "be")
+    if (base == "el" || base == "ru" || base == "uk" || base == "bg" || base == "sr" || base == "mk"
+        || base == "be")
         return "Noto Serif";
     return {};
 }
 class AssetBundle;
 class FontCopies;
 QStringList bundledFontFiles(const AssetBundle &assets);
-EngineFontInputs engineFontInputs(const AssetBundle &assets, QString systemDirectory, QString sideloadDirectory);
+EngineFontInputs engineFontInputs(const AssetBundle &assets, QString systemDirectory,
+                                  QString sideloadDirectory);
 // Call on the GUI thread. Keep copies alive for Qt's font registrations.
 QString placeholderFontFamily(const AssetBundle &assets, FontCopies &copies);
-}
+} // namespace kobalt

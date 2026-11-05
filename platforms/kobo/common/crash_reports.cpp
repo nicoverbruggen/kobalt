@@ -20,8 +20,8 @@
 #include <time.h>
 #include <unistd.h>
 #ifdef __linux__
-#include <sys/prctl.h>
-#include <sys/syscall.h>
+#  include <sys/prctl.h>
+#  include <sys/syscall.h>
 #endif
 
 // Everything that runs inside the signal handler uses only system calls and
@@ -31,10 +31,10 @@
 // or deadlock. Either way the previous handler still receives the crash.
 namespace kobalt {
 namespace {
-const int fatalSignals[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
+const int fatalSignals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT };
 constexpr int signalCount = sizeof(fatalSignals) / sizeof(fatalSignals[0]);
 struct sigaction previous[signalCount];
-std::atomic<bool> reporting{false};
+std::atomic<bool> reporting{ false };
 char directory[512], mountPoint[512], mountParent[512], oldest[1024];
 char header[2048];
 size_t headerSize = 0;
@@ -42,12 +42,15 @@ alignas(16) char alternateStack[64 * 1024];
 
 // The mappings are read at crash time, because libraries load after startup.
 char maps[192 * 1024];
-struct Region {
+
+struct Region
+{
     uintptr_t start, end, offset;
     const char *path;
     size_t pathSize;
     bool readable, executable;
 };
+
 Region regions[1024];
 int regionCount = 0;
 constexpr int candidateLimit = 64;
@@ -56,16 +59,19 @@ int candidateCount = 0;
 void *frames[64];
 int frameCount = 0;
 
-class Output {
+class Output
+{
 public:
-    void open(int descriptor) {
+    void open(int descriptor)
+    {
         fd = descriptor;
         used = 0;
     }
-    Output &operator<<(const char *text) {
-        return put(text, std::strlen(text));
-    }
-    Output &put(const char *text, size_t size) {
+
+    Output &operator<<(const char *text) { return put(text, std::strlen(text)); }
+
+    Output &put(const char *text, size_t size)
+    {
         while (size) {
             if (used == sizeof(buffer))
                 flush();
@@ -77,7 +83,9 @@ public:
         }
         return *this;
     }
-    Output &hex(uintptr_t value) {
+
+    Output &hex(uintptr_t value)
+    {
         char digits[2 + 2 * sizeof(uintptr_t)];
         size_t at = sizeof(digits);
         do {
@@ -88,11 +96,14 @@ public:
         digits[--at] = '0';
         return put(digits + at, sizeof(digits) - at);
     }
-    Output &dec(long long value) {
+
+    Output &dec(long long value)
+    {
         char digits[24];
         size_t at = sizeof(digits);
         const bool negative = value < 0;
-        unsigned long long magnitude = negative ? 0ULL - static_cast<unsigned long long>(value) : value;
+        unsigned long long magnitude =
+                negative ? 0ULL - static_cast<unsigned long long>(value) : value;
         do {
             digits[--at] = char('0' + magnitude % 10);
             magnitude /= 10;
@@ -101,7 +112,9 @@ public:
             digits[--at] = '-';
         return put(digits + at, sizeof(digits) - at);
     }
-    void flush() {
+
+    void flush()
+    {
         size_t written = 0;
         while (written < used) {
             const auto count = ::write(fd, buffer + written, used - written);
@@ -119,26 +132,37 @@ private:
     char buffer[4096];
     size_t used = 0;
 };
+
 Output out;
 
-const char *signalName(int signal) {
+const char *signalName(int signal)
+{
     switch (signal) {
-    case SIGSEGV: return "SIGSEGV";
-    case SIGBUS: return "SIGBUS";
-    case SIGILL: return "SIGILL";
-    case SIGFPE: return "SIGFPE";
-    case SIGABRT: return "SIGABRT";
-    default: return "signal";
+    case SIGSEGV:
+        return "SIGSEGV";
+    case SIGBUS:
+        return "SIGBUS";
+    case SIGILL:
+        return "SIGILL";
+    case SIGFPE:
+        return "SIGFPE";
+    case SIGABRT:
+        return "SIGABRT";
+    default:
+        return "signal";
     }
 }
 
-struct Clock {
+struct Clock
+{
     int year, month, day, hour, minute, second;
 };
+
 // Civil date from days since 1970, without the time zone or locale state of
 // gmtime. Kobo keeps local wall time in the system clock, so the result reads
 // as local time there.
-Clock clockFields(long long seconds) {
+Clock clockFields(long long seconds)
+{
     long long days = seconds / 86400, rest = seconds % 86400;
     if (rest < 0) {
         rest += 86400;
@@ -147,19 +171,28 @@ Clock clockFields(long long seconds) {
     days += 719468;
     const long long era = (days >= 0 ? days : days - 146096) / 146097;
     const auto dayOfEra = unsigned(days - era * 146097);
-    const unsigned yearOfEra = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365;
+    const unsigned yearOfEra =
+            (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365;
     const unsigned dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100);
     const unsigned shifted = (5 * dayOfYear + 2) / 153;
     const unsigned month = shifted < 10 ? shifted + 3 : shifted - 9;
-    return {int(yearOfEra + era * 400 + (month <= 2)), int(month), int(dayOfYear - (153 * shifted + 2) / 5 + 1),
-            int(rest / 3600), int(rest / 60 % 60), int(rest % 60)};
+    return { int(yearOfEra + era * 400 + (month <= 2)),
+             int(month),
+             int(dayOfYear - (153 * shifted + 2) / 5 + 1),
+             int(rest / 3600),
+             int(rest / 60 % 60),
+             int(rest % 60) };
 }
-char *digits(char *at, int value, int width) {
+
+char *digits(char *at, int value, int width)
+{
     for (int i = width - 1; i >= 0; --i, value /= 10)
         at[i] = char('0' + value % 10);
     return at + width;
 }
-bool append(char *target, size_t capacity, size_t &used, const char *text) {
+
+bool append(char *target, size_t capacity, size_t &used, const char *text)
+{
     const size_t size = std::strlen(text);
     if (used + size >= capacity)
         return false;
@@ -168,7 +201,8 @@ bool append(char *target, size_t capacity, size_t &used, const char *text) {
     return true;
 }
 
-uintptr_t parseHex(const char *&at, const char *end) {
+uintptr_t parseHex(const char *&at, const char *end)
+{
     uintptr_t value = 0;
     for (; at < end; ++at) {
         const char c = *at;
@@ -181,7 +215,9 @@ uintptr_t parseHex(const char *&at, const char *end) {
     }
     return value;
 }
-void readMappings() {
+
+void readMappings()
+{
     regionCount = 0;
     const int fd = ::open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
     if (fd < 0)
@@ -229,13 +265,17 @@ void readMappings() {
         at = lineEnd + 1;
     }
 }
-const Region *regionFor(uintptr_t address) {
+
+const Region *regionFor(uintptr_t address)
+{
     for (int i = 0; i < regionCount; ++i)
         if (address >= regions[i].start && address < regions[i].end)
             return &regions[i];
     return nullptr;
 }
-void describe(uintptr_t address) {
+
+void describe(uintptr_t address)
+{
     out.hex(address);
     const auto *region = regionFor(address);
     if (region && region->executable) {
@@ -250,27 +290,30 @@ void describe(uintptr_t address) {
     out << "\n";
 }
 
-struct Registers {
+struct Registers
+{
     uintptr_t pc = 0, lr = 0, sp = 0;
 };
-Registers writeRegisters(void *context) {
+
+Registers writeRegisters(void *context)
+{
     Registers result;
     if (!context)
         return result;
     out << "\nregisters:\n";
 #if defined(__linux__) && defined(__arm__)
     const auto &m = static_cast<ucontext_t *>(context)->uc_mcontext;
-    const unsigned long values[] = {m.arm_r0, m.arm_r1, m.arm_r2, m.arm_r3, m.arm_r4, m.arm_r5, m.arm_r6, m.arm_r7,
-                                    m.arm_r8, m.arm_r9, m.arm_r10, m.arm_fp, m.arm_ip, m.arm_sp, m.arm_lr, m.arm_pc,
-                                    m.arm_cpsr};
-    const char *names[] = {"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8",
-                           "r9", "r10", "fp", "ip", "sp", "lr", "pc", "cpsr"};
+    const unsigned long values[] = { m.arm_r0, m.arm_r1, m.arm_r2, m.arm_r3, m.arm_r4,  m.arm_r5,
+                                     m.arm_r6, m.arm_r7, m.arm_r8, m.arm_r9, m.arm_r10, m.arm_fp,
+                                     m.arm_ip, m.arm_sp, m.arm_lr, m.arm_pc, m.arm_cpsr };
+    const char *names[] = { "r0", "r1",  "r2", "r3", "r4", "r5", "r6", "r7",  "r8",
+                            "r9", "r10", "fp", "ip", "sp", "lr", "pc", "cpsr" };
     for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
         out << "  " << names[i] << " ";
         out.hex(values[i]);
         out << "\n";
     }
-    result = {m.arm_pc, m.arm_lr, m.arm_sp};
+    result = { m.arm_pc, m.arm_lr, m.arm_sp };
 #elif defined(__linux__) && defined(__aarch64__)
     const auto &m = static_cast<ucontext_t *>(context)->uc_mcontext;
     for (int i = 0; i < 31; ++i) {
@@ -285,11 +328,12 @@ Registers writeRegisters(void *context) {
     out << "\n  pc ";
     out.hex(m.pc);
     out << "\n";
-    result = {m.pc, m.regs[30], m.sp};
+    result = { m.pc, m.regs[30], m.sp };
 #elif defined(__APPLE__) && defined(__aarch64__)
     const auto &s = static_cast<ucontext_t *>(context)->uc_mcontext->__ss;
-    result = {uintptr_t(__darwin_arm_thread_state64_get_pc(s)), uintptr_t(__darwin_arm_thread_state64_get_lr(s)),
-              uintptr_t(__darwin_arm_thread_state64_get_sp(s))};
+    result = { uintptr_t(__darwin_arm_thread_state64_get_pc(s)),
+               uintptr_t(__darwin_arm_thread_state64_get_lr(s)),
+               uintptr_t(__darwin_arm_thread_state64_get_sp(s)) };
     out << "  sp ";
     out.hex(result.sp);
     out << "\n  lr ";
@@ -299,7 +343,7 @@ Registers writeRegisters(void *context) {
     out << "\n";
 #elif defined(__APPLE__) && defined(__x86_64__)
     const auto &s = static_cast<ucontext_t *>(context)->uc_mcontext->__ss;
-    result = {uintptr_t(s.__rip), 0, uintptr_t(s.__rsp)};
+    result = { uintptr_t(s.__rip), 0, uintptr_t(s.__rsp) };
     out << "  rsp ";
     out.hex(result.sp);
     out << "\n  rip ";
@@ -313,7 +357,8 @@ Registers writeRegisters(void *context) {
 
 // Words on the stack that point into executable mappings. Most are return
 // addresses, so they show the call chain where the unwinder cannot.
-void writeStack(uintptr_t sp) {
+void writeStack(uintptr_t sp)
+{
     candidateCount = 0;
     const auto *region = regionFor(sp);
     if (!region || !region->readable)
@@ -334,7 +379,8 @@ void writeStack(uintptr_t sp) {
     }
 }
 
-void writeSymbol(uintptr_t address) {
+void writeSymbol(uintptr_t address)
+{
     out << "  ";
     out.hex(address);
     Dl_info info{};
@@ -350,27 +396,33 @@ void writeSymbol(uintptr_t address) {
 }
 
 volatile sig_atomic_t crashSignal = 0;
-void restorePrevious(int signal) {
+
+void restorePrevious(int signal)
+{
     for (int i = 0; i < signalCount; ++i)
         if (fatalSignals[i] == signal)
             sigaction(signal, &previous[i], nullptr);
 }
-void timedOut(int) {
+
+void timedOut(int)
+{
     restorePrevious(crashSignal);
     raise(crashSignal);
 }
 
-void writeReport(int signal, siginfo_t *info, void *context) {
+void writeReport(int signal, siginfo_t *info, void *context)
+{
     if (mountPoint[0]) {
-        struct stat mounted {}, parent {};
-        if (::stat(mountPoint, &mounted) != 0 || ::stat(mountParent, &parent) != 0 || mounted.st_dev == parent.st_dev)
+        struct stat mounted{}, parent{};
+        if (::stat(mountPoint, &mounted) != 0 || ::stat(mountParent, &parent) != 0
+            || mounted.st_dev == parent.st_dev)
             return;
     }
     ::mkdir(directory, 0700);
     if (oldest[0])
         ::unlink(oldest);
 
-    struct timespec now {}, monotonic {};
+    struct timespec now{}, monotonic{};
     clock_gettime(CLOCK_REALTIME, &now);
     clock_gettime(CLOCK_MONOTONIC, &monotonic);
     const auto clock = clockFields(now.tv_sec);
@@ -385,14 +437,15 @@ void writeReport(int signal, siginfo_t *info, void *context) {
     *at = 0;
     char pid[16], *pidEnd = pid + sizeof(pid) - 1;
     *pidEnd = 0;
-    for (auto value = (unsigned long)getpid(); value || pidEnd == pid + sizeof(pid) - 1; value /= 10)
+    for (auto value = (unsigned long)getpid(); value || pidEnd == pid + sizeof(pid) - 1;
+         value /= 10)
         *--pidEnd = char('0' + value % 10);
     char path[1024];
     size_t used = 0;
     path[0] = 0;
-    if (!append(path, sizeof(path), used, directory) || !append(path, sizeof(path), used, "/crash-") ||
-        !append(path, sizeof(path), used, stamp) || !append(path, sizeof(path), used, "-") ||
-        !append(path, sizeof(path), used, pidEnd) || !append(path, sizeof(path), used, ".log"))
+    if (!append(path, sizeof(path), used, directory) || !append(path, sizeof(path), used, "/crash-")
+        || !append(path, sizeof(path), used, stamp) || !append(path, sizeof(path), used, "-")
+        || !append(path, sizeof(path), used, pidEnd) || !append(path, sizeof(path), used, ".log"))
         return;
     const int fd = ::open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (fd < 0)
@@ -469,7 +522,7 @@ void writeReport(int signal, siginfo_t *info, void *context) {
     // stack, and it and dladdr can wait for a loader lock that the crashed
     // code holds. A nested fault reaches the previous handler through
     // SA_NODEFER. The alarm hands a stuck lookup to it with the crash signal.
-    struct sigaction timeout {}, previousAlarm {};
+    struct sigaction timeout{}, previousAlarm{};
     timeout.sa_handler = timedOut;
     sigemptyset(&timeout.sa_mask);
     ::sigaction(SIGALRM, &timeout, &previousAlarm);
@@ -501,14 +554,17 @@ void writeReport(int signal, siginfo_t *info, void *context) {
 // A fault from the faulting instruction happens again once the handler
 // returns, now in the previous handler. A signal sent with kill, raise or
 // abort does not, so it is raised again for the previous handler.
-bool repeatsOnReturn(int signal, const siginfo_t *info) {
+bool repeatsOnReturn(int signal, const siginfo_t *info)
+{
     if (signal == SIGABRT || !info || info->si_code <= 0)
         return false;
     if (info->si_code == SI_USER || info->si_code == SI_QUEUE)
         return false;
     return true;
 }
-void handle(int signal, siginfo_t *info, void *context) {
+
+void handle(int signal, siginfo_t *info, void *context)
+{
     const int savedErrno = errno;
     // A second crash while writing, in this or another thread, only chains.
     if (!reporting.exchange(true)) {
@@ -529,40 +585,49 @@ void handle(int signal, siginfo_t *info, void *context) {
     errno = savedErrno;
 }
 
-bool copy(const QString &value, char *target, size_t capacity) {
+bool copy(const QString &value, char *target, size_t capacity)
+{
     const auto bytes = QFile::encodeName(value);
     if (size_t(bytes.size()) >= capacity)
         return false;
     std::memcpy(target, bytes.constData(), size_t(bytes.size()) + 1);
     return true;
 }
-void addHeader(const char *key, const QByteArray &value) {
+
+void addHeader(const char *key, const QByteArray &value)
+{
     const auto line = QByteArray(key) + ": " + value + '\n';
     if (headerSize + size_t(line.size()) >= sizeof(header))
         return;
     std::memcpy(header + headerSize, line.constData(), size_t(line.size()));
     headerSize += size_t(line.size());
 }
+
 // Keeps room for one new report: the handler removes the oldest of a full set.
-void prune(const QString &path) {
+void prune(const QString &path)
+{
     oldest[0] = 0;
     // Reports end in .log, so Nickel does not import them as TXT books. Earlier
     // builds wrote .txt; the same names sort by time, so both count here.
-    auto names = QDir(path).entryList({QStringLiteral("crash-*.log"), QStringLiteral("crash-*.txt")},
-                                      QDir::Files | QDir::NoSymLinks, QDir::Name);
+    auto names =
+            QDir(path).entryList({ QStringLiteral("crash-*.log"), QStringLiteral("crash-*.txt") },
+                                 QDir::Files | QDir::NoSymLinks, QDir::Name);
     while (names.size() > crashReportLimit)
         QFile::remove(path + '/' + names.takeFirst());
-    if (names.size() == crashReportLimit && !copy(path + '/' + names.first(), oldest, sizeof(oldest)))
+    if (names.size() == crashReportLimit
+        && !copy(path + '/' + names.first(), oldest, sizeof(oldest)))
         oldest[0] = 0;
 }
-}
+} // namespace
 
-void installCrashReports(const QString &path, const QString &mount) {
+void installCrashReports(const QString &path, const QString &mount)
+{
     static bool installed = false;
     if (installed)
         return;
-    if (!copy(path, directory, sizeof(directory)) || !copy(mount, mountPoint, sizeof(mountPoint)) ||
-        !copy(mount.isEmpty() ? QString() : QFileInfo(mount).absolutePath(), mountParent, sizeof(mountParent)))
+    if (!copy(path, directory, sizeof(directory)) || !copy(mount, mountPoint, sizeof(mountPoint))
+        || !copy(mount.isEmpty() ? QString() : QFileInfo(mount).absolutePath(), mountParent,
+                 sizeof(mountParent)))
         return;
     installed = true;
 #ifdef KOBALT_VERSION
@@ -587,11 +652,11 @@ void installCrashReports(const QString &path, const QString &mount) {
     stack.ss_sp = alternateStack;
     stack.ss_size = sizeof(alternateStack);
     sigaltstack(&stack, nullptr);
-    struct sigaction action {};
+    struct sigaction action{};
     action.sa_sigaction = handle;
     action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_NODEFER;
     sigemptyset(&action.sa_mask);
     for (int i = 0; i < signalCount; ++i)
         sigaction(fatalSignals[i], &action, &previous[i]);
 }
-}
+} // namespace kobalt

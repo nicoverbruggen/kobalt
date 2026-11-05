@@ -7,12 +7,15 @@
 #include <QHash>
 #include <QPointer>
 class QLabel;
+
 namespace kobalt::ui {
 class PagerBar;
 class ChoiceModal;
-}
+} // namespace kobalt::ui
+
 namespace kobalt::reader {
-class DictionariesPage final : public QWidget {
+class DictionariesPage final : public QWidget
+{
 public:
     explicit DictionariesPage(QWidget *parent);
     ~DictionariesPage() override;
@@ -20,7 +23,8 @@ public:
     void setLanguage(const QString &language);
     void setCatalog(const QVector<DownloadDictionary> &entries);
     void setState(const QSet<QString> &installed, bool busy, const QString &status);
-    void setStorage(const QHash<QString, qint64> &sizes, qint64 freeBytes, const QString &selectedId = {});
+    void setStorage(const QHash<QString, qint64> &sizes, qint64 freeBytes,
+                    const QString &selectedId = {});
     void setTransfer(const QString &id, qint64 received, qint64 total, bool installing);
     std::function<void(const QString &)> installRequested, removeRequested;
     std::function<void()> cancelRequested;
@@ -46,4 +50,4 @@ private:
     ui::PagerBar *pager;
     QPointer<ui::ChoiceModal> confirmation;
 };
-}
+} // namespace kobalt::reader

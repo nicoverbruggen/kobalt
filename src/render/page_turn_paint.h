@@ -5,13 +5,20 @@
 #include <QtMath>
 
 namespace kobalt::render {
-inline int pageSweepCount(QSize size) { return qMax(size.width(), size.height()) >= 1600 ? 12 : 10; }
-inline int pageSweepStep(qreal progress, QSize size) {
+inline int pageSweepCount(QSize size)
+{
+    return qMax(size.width(), size.height()) >= 1600 ? 12 : 10;
+}
+
+inline int pageSweepStep(qreal progress, QSize size)
+{
     const int count = pageSweepCount(size);
     return qBound(0, qCeil(progress * count), count);
 }
-inline void paintPageTurn(QPainter &painter, const QImage &outgoing, const QImage &incoming, qreal progress,
-                          int direction, pageTurn::Style style) {
+
+inline void paintPageTurn(QPainter &painter, const QImage &outgoing, const QImage &incoming,
+                          qreal progress, int direction, pageTurn::Style style)
+{
     if (style == pageTurn::Style::Off || progress >= 1) {
         painter.drawImage(QPoint(), incoming);
     } else {
@@ -30,4 +37,4 @@ inline void paintPageTurn(QPainter &painter, const QImage &outgoing, const QImag
     }
 }
 
-}
+} // namespace kobalt::render

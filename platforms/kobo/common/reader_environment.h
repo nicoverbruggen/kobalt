@@ -22,8 +22,10 @@ inline constexpr auto sessionReport = "/instance/artifacts/kobalt-session.json";
 
 // Nickel owns one environment for the loaded modification. Sessions receive
 // values from it; engine and UI code do not look up a platform environment.
-struct ReaderEnvironment {
-    ReaderEnvironment() {
+struct ReaderEnvironment
+{
+    ReaderEnvironment()
+    {
 #ifdef KOBALT_READER_HARDWARE
         if (!diagnosticsRequested(QString::fromLatin1(configDir))) {
             paths.stateReport.clear();
@@ -31,23 +33,29 @@ struct ReaderEnvironment {
         }
 #endif
     }
-    void reportSession(const QJsonObject &report) const {
+
+    void reportSession(const QJsonObject &report) const
+    {
         if (!paths.sessionReport.isEmpty())
-            sessionReports.post([path = paths.sessionReport, report] { return storage::writeJson(path, report); }, {});
+            sessionReports.post([path = paths.sessionReport,
+                                 report] { return storage::writeJson(path, report); },
+                                {});
     }
-    AssetBundle assets{QStringLiteral(KOBALT_CONFIG_DIR "/assets"), QStringLiteral(KOBALT_VERSION)};
+
+    AssetBundle assets{ QStringLiteral(KOBALT_CONFIG_DIR "/assets"),
+                        QStringLiteral(KOBALT_VERSION) };
     FontCopies fontCopies;
-    storage::Paths paths{QString::fromLatin1(configDir),
+    storage::Paths paths{ QString::fromLatin1(configDir),
 #ifdef KOBALT_READER_HARDWARE
-                         QString::fromLatin1(startupPath),
+                          QString::fromLatin1(startupPath),
 #else
         {},
 #endif
-                         QString::fromLatin1(activePath), QString::fromLatin1(stateReport),
-                         QString::fromLatin1(sessionReport)};
-    EngineFontInputs fonts() {
-        auto inputs =
-            engineFontInputs(assets, {}, QStringLiteral("/mnt/onboard/fonts"));
+                          QString::fromLatin1(activePath), QString::fromLatin1(stateReport),
+                          QString::fromLatin1(sessionReport) };
+    EngineFontInputs fonts()
+    {
+        auto inputs = engineFontInputs(assets, {}, QStringLiteral("/mnt/onboard/fonts"));
         if (inputs.sources.bundled.isEmpty()) {
             return inputs;
         }
@@ -58,7 +66,9 @@ struct ReaderEnvironment {
         inputs.sources.systemFiles = systemFonts;
         return inputs;
     }
-    QString placeholderFamily() {
+
+    QString placeholderFamily()
+    {
         if (placeholder.isEmpty())
             placeholder = placeholderFontFamily(assets, fontCopies);
         return placeholder;
@@ -70,4 +80,4 @@ private:
     QStringList systemFonts;
     bool systemFontsReady = false;
 };
-}
+} // namespace kobalt::nickel

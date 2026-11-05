@@ -5,7 +5,8 @@
 #include <QRectF>
 
 namespace kobalt::render {
-inline void paintBookmarkRibbon(QPainter &painter, const QRectF &rect, const QColor &ink) {
+inline void paintBookmarkRibbon(QPainter &painter, const QRectF &rect, const QColor &ink)
+{
     if (rect.isEmpty()) {
         return;
     }
@@ -19,4 +20,4 @@ inline void paintBookmarkRibbon(QPainter &painter, const QRectF &rect, const QCo
     painter.drawPolygon(ribbon);
     painter.restore();
 }
-}
+} // namespace kobalt::render

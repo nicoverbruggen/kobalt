@@ -8,16 +8,20 @@
 
 namespace kobalt {
 namespace {
-QSize readingViewport(QSize screen, const QJsonObject &preferences) {
+QSize readingViewport(QSize screen, const QJsonObject &preferences)
+{
     namespace reading = ui::metrics::reading;
-    const auto chrome = headerfooter::select(preferences, isPhoneScreen(screen, ui::density())).layout;
-    screen.rheight() -= (chrome.header() ? reading::stripHeight(chrome.headerSize) : 0) +
-                        (chrome.footer() ? reading::stripHeight(chrome.footerSize) : 0) +
-                        (chrome.progressBar ? reading::progressHeight : 0);
+    const auto chrome =
+            headerfooter::select(preferences, isPhoneScreen(screen, ui::density())).layout;
+    screen.rheight() -= (chrome.header() ? reading::stripHeight(chrome.headerSize) : 0)
+            + (chrome.footer() ? reading::stripHeight(chrome.footerSize) : 0)
+            + (chrome.progressBar ? reading::progressHeight : 0);
     return screen;
 }
-}
-const ReaderInterface &readerInterface() {
+} // namespace
+
+const ReaderInterface &readerInterface()
+{
     static const ReaderInterface implementation{
         createReaderWindow,
         [](QWidget *background, const QJsonObject &preferences,
@@ -26,7 +30,8 @@ const ReaderInterface &readerInterface() {
             ui::setInterfaceWeight(ui::heavierTextSteps);
             return createOpening(background, preferences, std::move(presentation));
         },
-        readingViewport, ui::setDensity, ui::setLargeText};
+        readingViewport, ui::setDensity, ui::setLargeText
+    };
     return implementation;
 }
-}
+} // namespace kobalt

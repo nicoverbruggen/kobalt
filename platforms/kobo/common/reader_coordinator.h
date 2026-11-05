@@ -24,29 +24,37 @@ class ReaderSession;
 class ReaderOrientation;
 class SourceLease;
 enum class ReaderBookRoute;
+
 namespace nickel {
 struct ReaderEnvironment;
 class HomeSleepScreen;
 // Every accepted native opening invalidates a closed reader snapshot.
 void forgetHomeSleepScreen();
-struct CoordinatorBindings {
+
+struct CoordinatorBindings
+{
     bool (*enabled)();
     void (*installInput)(QObject *) = nullptr;
     void (*goHome)() = nullptr;
     const void *(*publicationKeys)(const NativeOpening &) = nullptr;
-    void (*publicationMismatch)(const NativePublication &, const QString &, const QString &) = nullptr;
+    void (*publicationMismatch)(const NativePublication &, const QString &,
+                                const QString &) = nullptr;
     bool (*automaticBookOpening)() = nullptr;
     bool (*setAutomaticBookOpening)(bool) = nullptr;
 };
+
 // Called by Nickel's Home key filter before it clears native navigation.
 bool interceptHomeKey(QKeyEvent *event);
 
 // The retain callback runs synchronously after the coordinator's opening
 // checks. Neither the callback nor borrowed firmware arguments are retained.
 using RetainOpening = std::function<std::unique_ptr<NativeOpening>()>;
-class ReaderCoordinator : public QObject {
+
+class ReaderCoordinator : public QObject
+{
 public:
-    ReaderCoordinator(ReaderEnvironment &environment, CoordinatorBindings bindings, QObject *parent);
+    ReaderCoordinator(ReaderEnvironment &environment, CoordinatorBindings bindings,
+                      QObject *parent);
     ~ReaderCoordinator() override;
     bool available() const;
     bool idleForBenchmark() const;
@@ -70,11 +78,13 @@ private:
     kobalt::NativeAuthorization *authorization;
     QVector<std::function<void()>> cleanupCallbacks;
     QTimer timer;
+
     // These owners describe the current or last opening. After ordinary close,
     // session is the sole retained facade and identity/timings remain for reuse
     // and diagnostics. ReadingBook owns the session while its window is open.
     // Keep cleanup explicit: destroying this value never starts a drain.
-    struct ReadingRun {
+    struct ReadingRun
+    {
         ReadingRun();
         ~ReadingRun();
         QPointer<kobalt::ReaderWindow> reader;
@@ -98,6 +108,7 @@ private:
         int openingPercent = -1;
         qint64 progressPainted = -1000;
     } run;
+
     void updateOpening(kobalt::OpeningStage stage, int percent);
     unsigned generation = 0;
     bool busy = false;
@@ -116,7 +127,8 @@ private:
     void finishDisposal(const QString &finalStatus, bool nativeAllowed);
     void release(bool endAuthorization = true);
     void cancelOpening();
-    void fail(const QString &reason, kobalt::OpeningFallback state = kobalt::OpeningFallback::Failure,
+    void fail(const QString &reason,
+              kobalt::OpeningFallback state = kobalt::OpeningFallback::Failure,
               bool publicationRejected = false);
     bool sameBook() const;
     void poll();
@@ -131,5 +143,5 @@ private:
     std::unique_ptr<HomeSleepScreen> homeSleep;
 };
 
-}
-}
+} // namespace nickel
+} // namespace kobalt

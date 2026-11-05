@@ -9,7 +9,8 @@ namespace kobalt {
 enum class BookProtection { None, Kobo, Other, Unavailable };
 
 // Query presence and classification only. Key material stays in Nickel.
-inline BookProtection bookProtection(const QSqlDatabase &database, const QString &identity) {
+inline BookProtection bookProtection(const QSqlDatabase &database, const QString &identity)
+{
     if (!database.isValid() || !database.isOpen() || identity.isEmpty())
         return BookProtection::Unavailable;
     QSqlQuery schema(database);
@@ -23,12 +24,13 @@ inline BookProtection bookProtection(const QSqlDatabase &database, const QString
         return BookProtection::Unavailable;
     schema.finish();
     bool kobo = false;
-    for (const auto &table : {QStringLiteral("content_keys"), QStringLiteral("tolino_drmKeysKobo")}) {
+    for (const auto &table :
+         { QStringLiteral("content_keys"), QStringLiteral("tolino_drmKeysKobo") }) {
         if (!tables.contains(table))
             continue;
         QSqlQuery query(database);
-        if (!query.prepare("SELECT 1 FROM " + table + " WHERE " +
-                           (table == "content_keys" ? "volumeid" : "uuid") + " = ? LIMIT 1"))
+        if (!query.prepare("SELECT 1 FROM " + table + " WHERE "
+                           + (table == "content_keys" ? "volumeid" : "uuid") + " = ? LIMIT 1"))
             return BookProtection::Unavailable;
         query.addBindValue(identity);
         if (!query.exec())
@@ -58,4 +60,4 @@ inline BookProtection bookProtection(const QSqlDatabase &database, const QString
     }
     return kobo ? BookProtection::Kobo : BookProtection::None;
 }
-}
+} // namespace kobalt

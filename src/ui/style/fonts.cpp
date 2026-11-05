@@ -18,10 +18,13 @@
 
 namespace kobalt::ui {
 namespace {
-struct Face {
+struct Face
+{
     const char *file, *style;
 };
-struct Family {
+
+struct Family
+{
     const char *name;
     QVector<Face> faces;
 };
@@ -29,18 +32,25 @@ struct Family {
 // remaining controls, such as editable fields, in the regular weight. The
 // private renderer draws everything else and adds the interface weight itself.
 enum class FamilyIndex { Sans, Mono, Serif };
-const QVector<Family> &families() {
+
+const QVector<Family> &families()
+{
     static const QVector<Family> value{
-        {"IBM Plex Sans",
-         {{"IBMPlexSans-Regular.ttf", "Regular"},
-          {"IBMPlexSans-Bold.ttf", "Bold"},
-          {"IBMPlexSans-Italic.ttf", "Italic"}}},
-        {"IBM Plex Mono", {{"IBMPlexMono-Regular.ttf", "Regular"}, {"IBMPlexMono-Bold.ttf", "Bold"}}},
-        {"Instrument Serif", {{"InstrumentSerif-Regular.ttf", "Regular"}, {"InstrumentSerif-Italic.ttf", "Italic"}}},
+        { "IBM Plex Sans",
+          { { "IBMPlexSans-Regular.ttf", "Regular" },
+            { "IBMPlexSans-Bold.ttf", "Bold" },
+            { "IBMPlexSans-Italic.ttf", "Italic" } } },
+        { "IBM Plex Mono",
+          { { "IBMPlexMono-Regular.ttf", "Regular" }, { "IBMPlexMono-Bold.ttf", "Bold" } } },
+        { "Instrument Serif",
+          { { "InstrumentSerif-Regular.ttf", "Regular" },
+            { "InstrumentSerif-Italic.ttf", "Italic" } } },
     };
     return value;
 }
-struct Registration {
+
+struct Registration
+{
     bool registered = false;
     unsigned fallbackGeneration = 0;
     QVector<QVector<int>> ids;
@@ -52,26 +62,34 @@ struct Registration {
     // Faces read and checked ahead of the first opening.
     std::future<QMap<QString, QByteArray>> preparing;
 };
-Registration &registration() {
+
+Registration &registration()
+{
     static Registration value;
     return value;
 }
+
 int requestedSteps = 0;
 int stripAddedWeight = 2;
 QString selectedInterfaceFamily, selectedInterfaceMonoFamily, selectedHeaderFooterFamily;
-int faceCount(const QVector<QVector<int>> &ids) {
+
+int faceCount(const QVector<QVector<int>> &ids)
+{
     int count = 0;
     for (const auto &family : ids)
         count += family.size();
     return count;
 }
-void removeFaces(const QVector<QVector<int>> &ids) {
+
+void removeFaces(const QVector<QVector<int>> &ids)
+{
     for (const auto &family : ids)
         for (const int id : family)
             QFontDatabase::removeApplicationFont(id);
 }
 
-QVector<QVector<int>> addFaces() {
+QVector<QVector<int>> addFaces()
+{
     QVector<QVector<int>> ids;
     for (const auto &family : families()) {
         ids.append(QVector<int>());
@@ -79,27 +97,36 @@ QVector<QVector<int>> addFaces() {
         // and slant, so the regular face comes first.
         for (const auto &face : family.faces) {
             const auto source = registration().sources.value(face.file);
-            const int id = source.isEmpty() ? -1 : QFontDatabase::addApplicationFontFromData(source);
+            const int id =
+                    source.isEmpty() ? -1 : QFontDatabase::addApplicationFontFromData(source);
             if (id >= 0)
                 ids.last().append(id);
         }
     }
     return ids;
 }
+
 // The faces register on first use, so a reader that never draws with Qt
 // fonts never adds them.
-void registerFaces() {
+void registerFaces()
+{
     auto &current = registration();
     if (current.registered || current.sources.isEmpty())
         return;
     current.ids = addFaces();
     current.registered = true;
 }
-QString family(FamilyIndex index, const QString &missing = {}) {
+
+QString family(FamilyIndex index, const QString &missing = {})
+{
     registerFaces();
-    return registration().ids.value(int(index)).isEmpty() ? missing : QString::fromLatin1(families()[int(index)].name);
+    return registration().ids.value(int(index)).isEmpty()
+            ? missing
+            : QString::fromLatin1(families()[int(index)].name);
 }
-QFont sizedFont(const QString &family, int pixels) {
+
+QFont sizedFont(const QString &family, int pixels)
+{
     QFont font(family);
     // Draw unhinted, as the private FreeType path does, so both paths keep
     // the letters' shapes and widths. At 212 ppi and above, hinting distorts
@@ -116,11 +143,13 @@ QFont sizedFont(const QString &family, int pixels) {
         font.setPixelSize(pixels);
     return font;
 }
-}
+} // namespace
+
 namespace {
 // Replaces the registered faces when their bytes change. Keeps the faces in
 // use when the new set cannot be registered in full.
-bool replaceFaces(QMap<QString, QByteArray> sources, bool *changed) {
+bool replaceFaces(QMap<QString, QByteArray> sources, bool *changed)
+{
     auto &current = registration();
     if (current.sources == sources)
         return true;
@@ -143,12 +172,16 @@ bool replaceFaces(QMap<QString, QByteArray> sources, bool *changed) {
     *changed = true;
     return true;
 }
-QMap<QString, QByteArray> takePreparedFaces() {
+
+QMap<QString, QByteArray> takePreparedFaces()
+{
     auto &preparing = registration().preparing;
     return preparing.valid() ? preparing.get() : QMap<QString, QByteArray>();
 }
-}
-void prepareOpeningFonts(const AssetBundle &assets) {
+} // namespace
+
+void prepareOpeningFonts(const AssetBundle &assets)
+{
     auto &current = registration();
     if (!current.sources.isEmpty() || current.preparing.valid())
         return;
@@ -169,7 +202,9 @@ void prepareOpeningFonts(const AssetBundle &assets) {
         return sources;
     });
 }
-bool initializeOpeningFonts(const AssetBundle &assets) {
+
+bool initializeOpeningFonts(const AssetBundle &assets)
+{
     // A previous opening registered verified faces. The full check after the
     // first paint replaces them if the bundle changed.
     if (!registration().sources.isEmpty())
@@ -190,7 +225,9 @@ bool initializeOpeningFonts(const AssetBundle &assets) {
     bool changed = false;
     return replaceFaces(std::move(sources), &changed);
 }
-bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed) {
+
+bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed)
+{
     bool facesChanged = false;
     if (changed) {
         *changed = false;
@@ -217,11 +254,13 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed) {
                 return false;
             sources.insert(face.file, bytes);
         }
-    if (!assets.available()) return false;
+    if (!assets.available())
+        return false;
     // Native editors need only the scripts actually present in their text.
     // Private text has its own lazy fallback selection and byte budget.
     auto &current = registration();
-    for (const int id : current.scriptFallbackIds) QFontDatabase::removeApplicationFont(id);
+    for (const int id : current.scriptFallbackIds)
+        QFontDatabase::removeApplicationFont(id);
     current.scriptFallbackIds.clear();
     current.fallbackSources.clear();
     ++current.fallbackGeneration;
@@ -236,78 +275,121 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed) {
     }
     return true;
 }
+
 namespace {
-class EditorFallbacks : public QObject {
+class EditorFallbacks : public QObject
+{
 public:
-    explicit EditorFallbacks(QLineEdit *editor) : QObject(editor) { editor->installEventFilter(this); }
-    bool eventFilter(QObject *object, QEvent *event) override {
-        if (event->type() != QEvent::Paint || preparing) return false;
+    explicit EditorFallbacks(QLineEdit *editor) : QObject(editor)
+    {
+        editor->installEventFilter(this);
+    }
+
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
+        if (event->type() != QEvent::Paint || preparing)
+            return false;
         auto *editor = static_cast<QLineEdit *>(object);
         const auto text = editor->text().isEmpty() ? editor->placeholderText() : editor->text();
         const auto font = editor->font();
         auto &current = registration();
-        if (text == previousText && font == previousFont && generation == current.fallbackGeneration) return false;
+        if (text == previousText && font == previousFont
+            && generation == current.fallbackGeneration)
+            return false;
         preparing = true;
         const auto primary = QRawFont::fromFont(font);
         bool added = false;
         for (const auto character : text.toUcs4()) {
-            if (primary.isValid() && primary.supportsCharacter(character)) continue;
+            if (primary.isValid() && primary.supportsCharacter(character))
+                continue;
             QString stem;
             switch (QChar::script(character)) {
-            case QChar::Script_Arabic: stem = "NotoNaskhArabic"; break;
-            case QChar::Script_Hebrew: stem = "NotoSerifHebrew"; break;
-            case QChar::Script_Armenian: stem = "NotoSerifArmenian"; break;
-            case QChar::Script_Georgian: stem = "NotoSerifGeorgian"; break;
-            case QChar::Script_Devanagari: stem = "NotoSerifDevanagari"; break;
-            case QChar::Script_Bengali: stem = "NotoSerifBengali"; break;
-            case QChar::Script_Tamil: stem = "NotoSerifTamil"; break;
-            case QChar::Script_Thai: stem = "NotoSerifThai"; break;
-            default: continue;
+            case QChar::Script_Arabic:
+                stem = "NotoNaskhArabic";
+                break;
+            case QChar::Script_Hebrew:
+                stem = "NotoSerifHebrew";
+                break;
+            case QChar::Script_Armenian:
+                stem = "NotoSerifArmenian";
+                break;
+            case QChar::Script_Georgian:
+                stem = "NotoSerifGeorgian";
+                break;
+            case QChar::Script_Devanagari:
+                stem = "NotoSerifDevanagari";
+                break;
+            case QChar::Script_Bengali:
+                stem = "NotoSerifBengali";
+                break;
+            case QChar::Script_Tamil:
+                stem = "NotoSerifTamil";
+                break;
+            case QChar::Script_Thai:
+                stem = "NotoSerifThai";
+                break;
+            default:
+                continue;
             }
             const bool bold = font.weight() >= QFont::Bold;
             const bool italic = font.italic() && stem == "NotoSerifTamil";
-            const auto file = stem + (bold ? (italic ? "-BoldItalic.ttf" : "-Bold.ttf")
-                                          : (italic ? "-Italic.ttf" : "-Regular.ttf"));
-            if (current.fallbackSources.contains(file)) continue;
+            const auto file = stem
+                    + (bold ? (italic ? "-BoldItalic.ttf" : "-Bold.ttf")
+                            : (italic ? "-Italic.ttf" : "-Regular.ttf"));
+            if (current.fallbackSources.contains(file))
+                continue;
             const auto read = current.fallbackReaders.value(file);
             const auto bytes = read ? read() : QByteArray();
-            if (bytes.isEmpty()) continue;
+            if (bytes.isEmpty())
+                continue;
             const int id = QFontDatabase::addApplicationFontFromData(bytes);
-            if (id < 0) continue;
+            if (id < 0)
+                continue;
             added = true;
             current.scriptFallbackIds.append(id);
             current.fallbackSources.insert(file, bytes);
             qint64 retained = 0;
-            for (const auto &value : current.fallbackSources) retained += value.size();
+            for (const auto &value : current.fallbackSources)
+                retained += value.size();
             setDiagnosticNativeFontBytes(retained);
-            diagnostic("font-native-fallback-load", {{"file_bytes", bytes.size()}}, false);
+            diagnostic("font-native-fallback-load", { { "file_bytes", bytes.size() } }, false);
         }
-        if (added) editor->setFont(renewedFont(font));
+        if (added)
+            editor->setFont(renewedFont(font));
         generation = current.fallbackGeneration;
         previousText = text;
         previousFont = font;
         preparing = false;
         return false;
     }
+
 private:
     bool preparing = false;
     unsigned generation = 0;
     QString previousText;
     QFont previousFont;
 };
-}
-void prepareNativeEditor(QLineEdit *editor) {
+} // namespace
+
+void prepareNativeEditor(QLineEdit *editor)
+{
     new EditorFallbacks(editor);
 }
-bool setInterfaceWeight(int steps) {
+
+bool setInterfaceWeight(int steps)
+{
     const int previous = requestedSteps;
     requestedSteps = qMax(0, steps);
     return requestedSteps != previous;
 }
-int interfaceWeight() {
+
+int interfaceWeight()
+{
     return requestedSteps;
 }
-QFont renewedFont(const QFont &font) {
+
+QFont renewedFont(const QFont &font)
+{
     // A copy shares the loaded faces, so build a new font from the attributes.
     // Qt 5.2 cannot read back its own description once a font has a hinting
     // preference, so the description is not used.
@@ -330,7 +412,9 @@ QFont renewedFont(const QFont &font) {
     renewed.setHintingPreference(font.hintingPreference());
     return renewed;
 }
-void refreshInterfaceText(QWidget *root) {
+
+void refreshInterfaceText(QWidget *root)
+{
     // Qt keeps the faces that a font object has loaded. After a font database
     // change it drops them only for fonts in its cache, and only once, so
     // widgets need new font objects. Setting a style sheet again parses new
@@ -348,15 +432,20 @@ void refreshInterfaceText(QWidget *root) {
         widget->update();
     }
 }
+
 namespace {
-class UnhintedFonts final : public QObject {
+class UnhintedFonts final : public QObject
+{
 public:
-    explicit UnhintedFonts(QWidget *window) : QObject(window), window(window) {}
-    bool eventFilter(QObject *object, QEvent *event) override {
+    explicit UnhintedFonts(QWidget *window) : QObject(window), window(window) { }
+
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
         if (event->type() != QEvent::FontChange && event->type() != QEvent::Polish)
             return false;
         auto *widget = qobject_cast<QWidget *>(object);
-        if (!widget || widget->font().hintingPreference() == QFont::PreferNoHinting || widget->window() != window)
+        if (!widget || widget->font().hintingPreference() == QFont::PreferNoHinting
+            || widget->window() != window)
             return false;
         // Setting the font again sends another font change, which now matches.
         auto font = widget->font();
@@ -368,49 +457,81 @@ public:
 private:
     QWidget *window;
 };
-}
-int opticalCenterShift(const QFont &first, const QFont &last) {
+} // namespace
+
+int opticalCenterShift(const QFont &first, const QFont &last)
+{
     const int capitals = interfaceInkBounds(QStringLiteral("H"), first).height();
     const int descent = interfaceLineHeight(last) - interfaceLineAscent(last);
     return qRound((interfaceLineAscent(first) - capitals - descent) / 2.0);
 }
-void keepInterfaceUnhinted(QWidget *window) {
+
+void keepInterfaceUnhinted(QWidget *window)
+{
     QCoreApplication::instance()->installEventFilter(new UnhintedFonts(window));
 }
-void setInterfaceFontFamily(const QString &family) {
+
+void setInterfaceFontFamily(const QString &family)
+{
     selectedInterfaceFamily = family;
 }
-void setInterfaceMonoFontFamily(const QString &family) {
+
+void setInterfaceMonoFontFamily(const QString &family)
+{
     selectedInterfaceMonoFamily = family;
 }
-void setHeaderFooterAddedWeight(int steps) {
+
+void setHeaderFooterAddedWeight(int steps)
+{
     stripAddedWeight = steps >= 0 && steps <= 8 && steps % 2 == 0 ? steps : 2;
 }
-int headerFooterAddedWeight() {
+
+int headerFooterAddedWeight()
+{
     return stripAddedWeight;
 }
-int headerFooterTextWeight() {
+
+int headerFooterTextWeight()
+{
     return stripAddedWeight ? interfaceWeight() + stripAddedWeight : -1;
 }
-void setHeaderFooterFontFamily(const QString &family) {
+
+void setHeaderFooterFontFamily(const QString &family)
+{
     selectedHeaderFooterFamily = family;
 }
-QFont headerFooterFont(int pixels) {
-    return sizedFont(selectedHeaderFooterFamily.isEmpty() ? family(FamilyIndex::Mono) : selectedHeaderFooterFamily, pixels);
+
+QFont headerFooterFont(int pixels)
+{
+    return sizedFont(selectedHeaderFooterFamily.isEmpty() ? family(FamilyIndex::Mono)
+                                                          : selectedHeaderFooterFamily,
+                     pixels);
 }
-QFont interfaceFont(int pixels) {
-    return sizedFont(selectedInterfaceFamily.isEmpty() ? family(FamilyIndex::Sans) : selectedInterfaceFamily, pixels);
+
+QFont interfaceFont(int pixels)
+{
+    return sizedFont(selectedInterfaceFamily.isEmpty() ? family(FamilyIndex::Sans)
+                                                       : selectedInterfaceFamily,
+                     pixels);
 }
-QFont chromeFont(int pixels) {
-    return sizedFont(selectedInterfaceMonoFamily.isEmpty() ? family(FamilyIndex::Mono) : selectedInterfaceMonoFamily, pixels);
+
+QFont chromeFont(int pixels)
+{
+    return sizedFont(selectedInterfaceMonoFamily.isEmpty() ? family(FamilyIndex::Mono)
+                                                           : selectedInterfaceMonoFamily,
+                     pixels);
 }
-QFont captionFont(int pixels) {
+
+QFont captionFont(int pixels)
+{
     QFont font = chromeFont(pixels);
     font.setLetterSpacing(QFont::AbsoluteSpacing, metrics::chrome::captionSpacing);
     font.setCapitalization(QFont::AllUppercase);
     return font;
 }
-QFont brandFont(int pixels, bool italic) {
+
+QFont brandFont(int pixels, bool italic)
+{
     QFont font(family(FamilyIndex::Serif, "serif"));
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setPixelSize(pixels);
@@ -419,4 +540,4 @@ QFont brandFont(int pixels, bool italic) {
     return font;
 }
 
-}
+} // namespace kobalt::ui

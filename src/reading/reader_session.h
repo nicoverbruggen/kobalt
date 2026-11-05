@@ -10,24 +10,36 @@
 #include <memory>
 
 namespace kobalt {
-struct BookmarkLocations {
+struct BookmarkLocations
+{
     QVector<int> pages, order;
 };
-struct ReaderMarkupRange {
+
+struct ReaderMarkupRange
+{
     QString start, end, color;
     QString style = QStringLiteral("shaded");
-    bool operator==(const ReaderMarkupRange &other) const {
-        return start == other.start && end == other.end && color == other.color && style == other.style;
+
+    bool operator==(const ReaderMarkupRange &other) const
+    {
+        return start == other.start && end == other.end && color == other.color
+                && style == other.style;
     }
 };
-struct ReaderMarkupRequest {
+
+struct ReaderMarkupRequest
+{
     QVector<ReaderMarkupRange> saved;
     QString draftStart, draftEnd;
-    bool operator==(const ReaderMarkupRequest &other) const {
+
+    bool operator==(const ReaderMarkupRequest &other) const
+    {
         return saved == other.saved && draftStart == other.draftStart && draftEnd == other.draftEnd;
     }
 };
-struct ReaderMarkupFrame {
+
+struct ReaderMarkupFrame
+{
     // Geometry belongs to these exact raw pixels and this immutable request.
     // The request echo lets a closed draft discard only its own stale geometry.
     ReaderMarkupRequest request;
@@ -37,7 +49,9 @@ struct ReaderMarkupFrame {
     AnnotationGeometry draft;
     int resolvedRanges = 0;
 };
-struct ReaderFrame {
+
+struct ReaderFrame
+{
     quint64 renderId = 0;
     int turnDirection = 0;
     QImage image;
@@ -60,26 +74,30 @@ struct ReaderFrame {
 
 enum class RenderReason { Appearance, EnableBionic, DisableBionic, PageLayout };
 
-struct RenderProgress {
+struct RenderProgress
+{
     bool active = false;
     quint64 revision = 0;
     RenderReason reason = RenderReason::Appearance;
     OpeningStage stage = OpeningStage::Styles;
     int percent = 0;
     qint64 elapsedMilliseconds = 0;
+
     // Reflow styles and pagination share one bar; a phase change never empties it.
-    int overallPercent() const {
+    int overallPercent() const
+    {
         const int phase = qBound(0, int(stage) - int(OpeningStage::Styles), 2);
         return qMin(100, (phase * 100 + qBound(0, percent, 100)) / 2);
     }
 };
 
 // Where a platform position lies relative to the current page.
-struct PositionComparison {
+struct PositionComparison
+{
     enum class Status {
         Compared, // direction is valid
-        Failed,   // the position cannot be placed; error says why
-        Stale     // the book moved or changed layout while comparing
+        Failed, // the position cannot be placed; error says why
+        Stale // the book moved or changed layout while comparing
     };
     Status status = Status::Failed;
     // Compared only: negative before, zero at, positive after the current position.
@@ -87,7 +105,8 @@ struct PositionComparison {
     QString error;
 };
 
-struct SyncedPositionDescription {
+struct SyncedPositionDescription
+{
     PositionComparison comparison;
     QString chapter;
 };
@@ -95,37 +114,38 @@ struct SyncedPositionDescription {
 // GUI-side settings and immutable frame copies. The worker owns engine access.
 // After application shutdown joins that worker, remaining documents are released
 // synchronously by their GUI-side owners.
-class ReaderSession : public QObject {
+class ReaderSession : public QObject
+{
 public:
     ReaderSession(EngineFontInputs fonts, QString placeholderFamily);
-    const EngineFontInputs &fontInputs() const {
-        return fonts_;
-    }
-    const QString &placeholderFamily() const {
-        return placeholderFamily_;
-    }
+
+    const EngineFontInputs &fontInputs() const { return fonts_; }
+
+    const QString &placeholderFamily() const { return placeholderFamily_; }
+
     ~ReaderSession() override;
     // Call after deleting sessions and cancelling their resources.
     static void drain(std::function<void()> finished);
-    void open(OpenRequest request, std::function<void(OpeningResult)> finished, OpeningProgress progress = {},
-              std::function<void(QImage)> coverReady = {});
+    void open(OpenRequest request, std::function<void(OpeningResult)> finished,
+              OpeningProgress progress = {}, std::function<void(QImage)> coverReady = {});
     // A fresh facade prevents callbacks from the closed reader reaching a reopen.
     std::unique_ptr<ReaderSession> retained();
     void cancelSource();
     void revokeSource();
-    QByteArray sourceHash() const {
-        return fingerprint;
-    }
+
+    QByteArray sourceHash() const { return fingerprint; }
+
     QByteArray syncDigest() const { return syncDigest_; }
+
     QByteArray syncFilenameDigest() const { return syncFilenameDigest_; }
+
     // Whether the saved state passed to open belongs to this version of the book.
-    bool savedStateMatched() const {
-        return savedMatched;
-    }
-    QJsonObject resourceStats() const {
-        return frame.resources;
-    }
-    void openPreview(const ReaderSession &source, QSize size, std::function<void(QString)> finished);
+    bool savedStateMatched() const { return savedMatched; }
+
+    QJsonObject resourceStats() const { return frame.resources; }
+
+    void openPreview(const ReaderSession &source, QSize size,
+                     std::function<void(QString)> finished);
     void apply(const QJsonObject &settings, QSize size = {});
     std::function<void()> updated;
     RenderProgress renderProgress() const;
@@ -151,211 +171,209 @@ public:
     bool goToNative(const QString &location, std::function<void(QString)> finished);
     bool goToSyncedPosition(const QString &position, std::function<void(QString)> finished);
     // Resolves chapter and source order without navigating or rendering another page.
-    void describeSyncedPosition(const QString &position, std::function<void(SyncedPositionDescription)> finished);
+    void describeSyncedPosition(const QString &position,
+                                std::function<void(SyncedPositionDescription)> finished);
     void nativePosition(std::function<void(QString, QString)> finished);
-    void compareNativePosition(const QString &location, std::function<void(PositionComparison)> finished);
+    void compareNativePosition(const QString &location,
+                               std::function<void(PositionComparison)> finished);
+
     // Source and pagination generation. Navigation within the same layout keeps it.
     quint64 layoutRevision() const { return newestLayout->load(); }
+
     // Bookmark lookups on the engine thread. They report nothing when the
     // layout changed before they finished; the caller asks again.
     void bookmarkLocations(QStringList positions, std::function<void(BookmarkLocations)> finished,
                            bool rangeEndpoints = false, bool sourceOrder = true,
                            std::shared_ptr<std::atomic_bool> cancelled = {});
-    void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished, bool rangeEndpoints = false);
+    void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
+                       bool rangeEndpoints = false);
     void pageSummary(int page, std::function<void(QString position, QString excerpt)> finished);
     // Renders a bounded thumbnail with saved highlights without moving the reading position. Only
     // the latest request can finish; navigation, reflow and cancellation drop it.
     void previewPage(int page, QSize bounds, std::function<void(QImage)> finished);
     void cancelPagePreview();
     // One worker job resolves all eligible passages. Stale replies contain no indices.
-    void intersectingRanges(const QString &start, const QString &end, QVector<QPair<QString, QString>> ranges,
+    void intersectingRanges(const QString &start, const QString &end,
+                            QVector<QPair<QString, QString>> ranges,
                             std::function<void(QVector<int>)> finished);
     void annotationPageEdges(std::function<void(AnnotationPageEdges)> finished);
     void annotationTokenAt(QPoint point, std::function<void(AnnotationToken)> finished,
                            const QString &boundary = {}, bool start = false);
-    void annotationRange(const QString &startTokenStart, const QString &startTokenEnd, const QString &endTokenStart,
-                         const QString &endTokenEnd, std::function<void(TextRange)> finished,
-                         bool endTokenPolicy = false, bool startTokenPolicy = false);
-    void annotationRange(const QString &start, const QString &end, std::function<void(TextRange)> finished);
-    void textRange(const QString &start, const QString &end, std::function<void(TextRange)> finished);
+    void annotationRange(const QString &startTokenStart, const QString &startTokenEnd,
+                         const QString &endTokenStart, const QString &endTokenEnd,
+                         std::function<void(TextRange)> finished, bool endTokenPolicy = false,
+                         bool startTokenPolicy = false);
+    void annotationRange(const QString &start, const QString &end,
+                         std::function<void(TextRange)> finished);
+    void textRange(const QString &start, const QString &end,
+                   std::function<void(TextRange)> finished);
     void wordAt(QPoint point, std::function<void(WordSelection)> finished);
     void imageAt(QPoint point, std::function<void(QImage)> finished);
     void linkDetails(const QString &source, std::function<void(LinkDetails)> finished);
-    const QVector<PageLink> &pageLinks() const {
-        return frame.links;
-    }
+
+    const QVector<PageLink> &pageLinks() const { return frame.links; }
+
     // Layout changes restart an unfinished query. Its first batch replaces prior results.
     // Explicit cancellation or a new source discards both running and queued searches.
     void search(const QString &query, std::function<void(SearchBatch)> finished);
     void cancelSearch();
-    void annotationGeometry(const QString &start, const QString &end, std::function<void(AnnotationGeometry)> finished);
-    void rangeRects(const QString &start, const QString &end, std::function<void(QVector<QRect>)> finished);
-    void rangeRects(QVector<QPair<QString, QString>> ranges, std::function<void(QVector<QRect>)> finished);
+    void annotationGeometry(const QString &start, const QString &end,
+                            std::function<void(AnnotationGeometry)> finished);
+    void rangeRects(const QString &start, const QString &end,
+                    std::function<void(QVector<QRect>)> finished);
+    void rangeRects(QVector<QPair<QString, QString>> ranges,
+                    std::function<void(QVector<QRect>)> finished);
     // Stable groups for independently colored ranges, resolved in one worker job.
     void rangeRectGroups(QVector<QPair<QString, QString>> ranges,
                          std::function<void(QVector<QVector<QRect>>)> finished);
     void resize(QSize size);
+
     quint64 renderId() const { return frame.renderId; }
-    bool busy() const {
-        return running;
-    }
+
+    bool busy() const { return running; }
+
     // Whether the pages beside the current one are queued or being drawn,
     // after the session itself has reported its work done.
-    bool preparingNeighbours() const {
-        return *neighbourJobs > 0;
-    }
+    bool preparingNeighbours() const { return *neighbourJobs > 0; }
+
     // Preview and later reading-command errors. Initial opening failures are
     // delivered only through the typed completion result.
-    QString error() const {
-        return frame.error;
-    }
-    bool formattingWarning() const {
-        return formattingWarning_;
-    }
-    QString imageWarning() const {
-        return frame.resources.value("image_error").toString();
-    }
-    int turnDirection() const {
-        return frame.turnDirection;
-    }
-    QRect damage() const {
-        return frame.damage;
-    }
-    qint64 damageFrom() const {
-        return frame.damageFrom;
-    }
-    QImage image() const {
-        return frame.image;
-    }
+    QString error() const { return frame.error; }
+
+    bool formattingWarning() const { return formattingWarning_; }
+
+    QString imageWarning() const { return frame.resources.value("image_error").toString(); }
+
+    int turnDirection() const { return frame.turnDirection; }
+
+    QRect damage() const { return frame.damage; }
+
+    qint64 damageFrom() const { return frame.damageFrom; }
+
+    QImage image() const { return frame.image; }
+
     // Stores an immutable source snapshot without rendering or queuing work.
     // At most 2000 saved ranges and 4096 characters per anchor are accepted.
     // Invalid requests leave the prior snapshot and generation unchanged.
     quint64 setMarkup(ReaderMarkupRequest request);
-    quint64 markupGeneration() const {
-        return markupGeneration_;
-    }
-    const ReaderMarkupFrame &markup() const {
-        return frame.markup;
-    }
+
+    quint64 markupGeneration() const { return markupGeneration_; }
+
+    const ReaderMarkupFrame &markup() const { return frame.markup; }
+
     // Prepare markup for an already captured image without rendering it again.
     // Completion runs while this session lives, false on busy or stale work.
     // Empty requests complete immediately. No updated notification is emitted.
     void captureMarkup(std::function<void(bool)> finished);
-    QJsonObject state() const {
-        return frame.state;
-    }
+
+    QJsonObject state() const { return frame.state; }
+
     // The newest requested settings, including any whose frame is still rendering.
-    QJsonObject requestedState() const {
-        return desired;
-    }
-    bool temporaryTypography() const {
-        return !temporaryAppearance.isEmpty();
-    }
+    QJsonObject requestedState() const { return desired; }
+
+    bool temporaryTypography() const { return !temporaryAppearance.isEmpty(); }
+
     QJsonObject persistentState() const;
+
     // Captured with the displayed frame, so sleep never waits for the engine worker.
-    QString savedNativePosition(QString *error) const {
+    QString savedNativePosition(QString *error) const
+    {
         *error = frame.nativePositionError;
         return frame.nativePosition;
     }
-    int page() const {
-        return frame.state.value("page").toInt();
-    }
-    int pages() const {
-        return frame.state.value("pages").toInt();
-    }
+
+    int page() const { return frame.state.value("page").toInt(); }
+
+    int pages() const { return frame.state.value("pages").toInt(); }
+
     // The page a forward turn reaches, or page() on the last page of the text.
-    int nextPage() const {
-        return frame.state.value("next_page").toInt(page());
-    }
-    int cachedPages() const {
-        return frame.state.value("cached_pages").toInt();
-    }
-    int fontSize() const {
-        return desired.value("font_pixels").toInt();
-    }
-    int spacing() const {
-        return desired.value("line_spacing").toInt();
-    }
-    int margin() const {
-        return desired.value("margin_pixels").toInt();
-    }
-    int topMargin() const {
+    int nextPage() const { return frame.state.value("next_page").toInt(page()); }
+
+    int cachedPages() const { return frame.state.value("cached_pages").toInt(); }
+
+    int fontSize() const { return desired.value("font_pixels").toInt(); }
+
+    int spacing() const { return desired.value("line_spacing").toInt(); }
+
+    int margin() const { return desired.value("margin_pixels").toInt(); }
+
+    int topMargin() const
+    {
         return desired.value("top_margin_pixels").toInt(defaultVerticalMarginPixels(margin()));
     }
-    int bottomMargin() const {
+
+    int bottomMargin() const
+    {
         return desired.value("bottom_margin_pixels").toInt(defaultVerticalMarginPixels(margin()));
     }
+
     bool setVerticalMargins(int margin);
-    FontOpticalSizeAxis opticalSizeAxis() const {
+
+    FontOpticalSizeAxis opticalSizeAxis() const
+    {
         return fontOpticalSizeAxis(frame.fontCatalog, fontFace());
     }
-    double opticalSize() const {
-        return normalizedOpticalSize(opticalSizeAxis(), desired.value("font_optical_size").toDouble());
+
+    double opticalSize() const
+    {
+        return normalizedOpticalSize(opticalSizeAxis(),
+                                     desired.value("font_optical_size").toDouble());
     }
+
     bool setOpticalSize(double points);
-    FontWeightAxis weightAxis() const {
-        return fontWeightAxis(frame.fontCatalog, fontFace());
-    }
-    int thickness() const {
-        return desired.value("weight_steps").toInt();
-    }
-    int weight() const {
+
+    FontWeightAxis weightAxis() const { return fontWeightAxis(frame.fontCatalog, fontFace()); }
+
+    int thickness() const { return desired.value("weight_steps").toInt(); }
+
+    int weight() const
+    {
         const auto axis = weightAxis();
         return axis.available()
-                   ? qBound(axis.minimum, desired.value("font_weight").toInt(defaultVariableFontWeight), axis.maximum)
-                   : desired.value("weight_steps").toInt();
+                ? qBound(axis.minimum,
+                         desired.value("font_weight").toInt(defaultVariableFontWeight),
+                         axis.maximum)
+                : desired.value("weight_steps").toInt();
     }
-    QString fontFace() const {
-        return desired.value("font_face").toString();
-    }
-    QString hyphenation() const {
-        return desired.value("hyphenation").toString("off");
-    }
-    QString alignment() const {
-        return desired.value("text_alignment").toString();
-    }
-    QString title() const {
-        return frame.title;
-    }
-    QString author() const {
-        return documentAuthor;
-    }
-    QImage coverThumbnail() const {
-        return documentCover;
-    }
+
+    QString fontFace() const { return desired.value("font_face").toString(); }
+
+    QString hyphenation() const { return desired.value("hyphenation").toString("off"); }
+
+    QString alignment() const { return desired.value("text_alignment").toString(); }
+
+    QString title() const { return frame.title; }
+
+    QString author() const { return documentAuthor; }
+
+    QImage coverThumbnail() const { return documentCover; }
+
     // Decodes on the engine worker. A cancelled or replaced source returns no image.
-    void coverImage(QSize maximumSize, std::function<void(QImage)> finished, QString preferredPath = {});
-    void coverImage(QSize maximumSize, std::function<void(QImage, QFileInfo)> finished, QString preferredPath);
-    QString chapterTitle() const {
-        return frame.state.value("chapter_title").toString();
-    }
-    int chapterPage() const {
-        return frame.state.value("chapter_page").toInt();
-    }
-    int chapterPages() const {
-        return frame.state.value("chapter_pages").toInt();
-    }
-    QStringList fontFaces() const {
-        return frame.fonts;
-    }
-    QVector<ReadingFont> fontCatalog() const {
-        return frame.fontCatalog;
-    }
-    QVector<ChapterLink> chapters() const {
-        return frame.chapters;
-    }
-    QVector<ChapterLink> chapterGraph() const {
-        return frame.chapterGraph;
-    }
-    ChapterSelection contentsSelection() const {
-        return frame.contentsSelection;
-    }
-    ChapterSelection graphSelection() const {
-        return frame.graphSelection;
-    }
-    qint64 totalWords() const {
-        return frame.totalWords;
-    }
+    void coverImage(QSize maximumSize, std::function<void(QImage)> finished,
+                    QString preferredPath = {});
+    void coverImage(QSize maximumSize, std::function<void(QImage, QFileInfo)> finished,
+                    QString preferredPath);
+
+    QString chapterTitle() const { return frame.state.value("chapter_title").toString(); }
+
+    int chapterPage() const { return frame.state.value("chapter_page").toInt(); }
+
+    int chapterPages() const { return frame.state.value("chapter_pages").toInt(); }
+
+    QStringList fontFaces() const { return frame.fonts; }
+
+    QVector<ReadingFont> fontCatalog() const { return frame.fontCatalog; }
+
+    QVector<ChapterLink> chapters() const { return frame.chapters; }
+
+    QVector<ChapterLink> chapterGraph() const { return frame.chapterGraph; }
+
+    ChapterSelection contentsSelection() const { return frame.contentsSelection; }
+
+    ChapterSelection graphSelection() const { return frame.graphSelection; }
+
+    qint64 totalWords() const { return frame.totalWords; }
+
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);
 
 private:
@@ -366,7 +384,8 @@ private:
     QString placeholderFamily_;
     std::shared_ptr<EngineDocument> engine_;
     ReaderFrame frame;
-    void completeFrameMarkup(ReaderFrame result, quint64 job, const std::shared_ptr<SourceLease> &lease,
+    void completeFrameMarkup(ReaderFrame result, quint64 job,
+                             const std::shared_ptr<SourceLease> &lease,
                              std::function<void(ReaderFrame)> finished);
     ReaderMarkupRequest markupRequest_;
     quint64 markupGeneration_ = 0;
@@ -376,7 +395,8 @@ private:
     QByteArray fingerprint;
     QByteArray syncDigest_;
     QByteArray syncFilenameDigest_;
-    bool importPosition(const QString &location, bool native, std::function<void(QString)> finished);
+    bool importPosition(const QString &location, bool native,
+                        std::function<void(QString)> finished);
     bool savedMatched = false;
     std::shared_ptr<SourceLease> lease_;
     bool ownsLease_ = false;
@@ -413,9 +433,10 @@ private:
     std::function<void(SearchBatch)> searchFinished;
     void interruptSearch();
     void startPendingSearch();
-    void searchNext(QString query, int page, int count, quint64 job, std::shared_ptr<std::atomic_bool> cancelled,
+    void searchNext(QString query, int page, int count, quint64 job,
+                    std::shared_ptr<std::atomic_bool> cancelled,
                     std::function<void(SearchBatch)> finished, bool reset);
     void request(bool appearanceChange = false, RenderReason reason = RenderReason::Appearance);
     void dispatch(bool pageTurn = false);
 };
-}
+} // namespace kobalt

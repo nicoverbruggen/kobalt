@@ -21,24 +21,33 @@ class QTouchEvent;
 
 namespace kobalt {
 struct AnnotationGeometry;
-class ReadingPage : public QWidget {
+
+class ReadingPage : public QWidget
+{
 public:
     QImage image;
     int animationDirection = 0;
     void setPageAnimationStyle(pageTurn::Style style);
-    struct ReflowLayout {
+
+    struct ReflowLayout
+    {
         int fontPixels = 40, lineSpacing = 150;
         QMargins margins;
         int columns = 1, columnSpacing = 0;
     };
+
     ReflowLayout reflowLayout;
     // A short sample from the displayed page, prepared after its first paint.
     // Lengths are in Unicode characters; transition widths remain estimates.
     void setReflowText(const QString &text);
+
     const QVector<int> &reflowWordLengths() const { return wordLengths; }
+
     // Show estimated text lines while the replacement page is laid out.
     void setViewportTransition(bool active);
+
     bool viewportTransition() const { return changingViewport; }
+
     // What the header and footer show. `notice`, such as an error, replaces
     // the footer's slots while it is set. It never adds a footer, because
     // that would change the page height.
@@ -46,21 +55,23 @@ public:
     std::array<headerfooter::Content, headerfooter::slotCount> slotContents;
     QString notice;
     qreal progressFraction = 0;
-    bool showHeader() const {
-        return chrome.header();
-    }
-    bool showFooter() const {
-        return chrome.footer();
-    }
-    bool showProgress() const {
-        return chrome.progressBar;
-    }
-    int headerTextPixels() const {
+
+    bool showHeader() const { return chrome.header(); }
+
+    bool showFooter() const { return chrome.footer(); }
+
+    bool showProgress() const { return chrome.progressBar; }
+
+    int headerTextPixels() const
+    {
         return ui::metrics::reading::textPixels(chrome.headerSize, false);
     }
-    int footerTextPixels() const {
+
+    int footerTextPixels() const
+    {
         return ui::metrics::reading::textPixels(chrome.footerSize, true);
     }
+
     // The header's accessible text: its slots from left to right.
     QString headerText() const;
     void setPanelBelowHeader(bool visible);
@@ -83,10 +94,10 @@ public:
     std::function<bool(QPoint)> imageHeld;
     // Ends the current touch: no lookup, tap, swipe or light change follows.
     void cancelHold();
+
     // Stops only the lookup that a long hold would start. A tap or swipe still completes.
-    void stopHold() {
-        holdTimer.stop();
-    }
+    void stopHold() { holdTimer.stop(); }
+
     // A vertical drag along the left edge changes brightness and one along
     // the right edge changes warmth, when each edge is enabled. `lightStarted`
     // receives true for warmth and may refuse the drag.
@@ -103,22 +114,25 @@ public:
     std::function<bool(QPoint, int)> annotationDragStarted;
     std::function<void(QPoint)> annotationDragMoved;
     std::function<void(bool)> annotationDragFinished;
-    bool annotationContains(QPoint point) const {
-        return draftContour.contains(point);
-    }
-    void annotate(const QVector<QRect> &draft, const QVector<QRect> &saved, const QVector<QRect> &candidate = {},
-                  bool vertical = false);
+
+    bool annotationContains(QPoint point) const { return draftContour.contains(point); }
+
+    void annotate(const QVector<QRect> &draft, const QVector<QRect> &saved,
+                  const QVector<QRect> &candidate = {}, bool vertical = false);
     void setSavedHighlights(const QVector<HighlightGeometry> &groups);
     // Install destination markup without queuing a separate overlay paint.
     // refreshContent consumes its old and new damage with the page image.
-    void installAnnotationFrame(const QVector<QRect> &draft, const QVector<HighlightGeometry> &saved,
-                                bool vertical = false, const AnnotationGeometry *geometry = nullptr);
+    void installAnnotationFrame(const QVector<QRect> &draft,
+                                const QVector<HighlightGeometry> &saved, bool vertical = false,
+                                const AnnotationGeometry *geometry = nullptr);
     void mark(const QVector<QRect> &rectangles);
     void revealLinks(const QVector<QRect> &rectangles, const QVector<QRect> &footnotes = {});
     std::function<void(QPoint)> tapped;
     std::function<void(int)> swiped;
+
     // Available only while a completed input gesture calls tapped or swiped.
     quint32 gestureTimestamp() const { return gestureTime; }
+
     std::function<void()> annotationRequested;
     ReadingPage(QWidget *parent, std::function<void()> cancelAnimation);
     // Copy the cached page and chrome without widget layout or backing-store work.
@@ -149,13 +163,14 @@ private:
     int animationTurnDirection = 0, animationStep = -1;
     // Text weight and family changes draw the strips again.
     using Slots = std::array<headerfooter::Content, 3>;
-    using HeaderState =
-        std::tuple<Slots, std::array<headerfooter::Field, 3>, bool, bool, int, int, qint64, int, QString>;
-    using FooterState = std::tuple<Slots, std::array<headerfooter::Field, 3>, QString, bool, bool, qreal, int, int,
+    using HeaderState = std::tuple<Slots, std::array<headerfooter::Field, 3>, bool, bool, int, int,
                                    qint64, int, QString>;
+    using FooterState = std::tuple<Slots, std::array<headerfooter::Field, 3>, QString, bool, bool,
+                                   qreal, int, int, qint64, int, QString>;
     Slots stripSlots(bool footer) const;
     std::array<headerfooter::Field, 3> stripFields(bool footer) const;
-    void paintSlots(QPainter &painter, const QRect &bounds, bool footer, bool sleeping = false) const;
+    void paintSlots(QPainter &painter, const QRect &bounds, bool footer,
+                    bool sleeping = false) const;
     bool panelBelowHeader = false;
     int cornerTop = 0, cornerBottom = 0;
     HeaderState headerState;
@@ -175,13 +190,17 @@ private:
     QTimer viewportNoticeTimer;
     int headerRightWidth() const;
     ui::HoldTimer holdTimer;
-    QVector<QRect> selection, revealedLinks, draftAnnotations, savedAnnotations, candidateAnnotations;
+    QVector<QRect> selection, revealedLinks, draftAnnotations, savedAnnotations,
+            candidateAnnotations;
     QRegion draftContour, annotationColorRegion;
     QPainterPath draftOutline, candidateOutline;
-    struct AnnotationHandle {
+
+    struct AnnotationHandle
+    {
         QPoint center, target;
         bool visible = false;
     };
+
     std::array<AnnotationHandle, 2> annotationHandles;
     bool annotationInputEnabled = false, annotationDragging = false;
     QPoint annotationDragOffset;
@@ -192,7 +211,13 @@ private:
     QRegion annotationFrameDamage;
     void damageAnnotations(const QRegion &dirty);
     QVector<HighlightGeometry> annotationColorGroups;
-    struct PaintedHighlight { HighlightGeometry mark; QRegion visible; };
+
+    struct PaintedHighlight
+    {
+        HighlightGeometry mark;
+        QRegion visible;
+    };
+
     QVector<PaintedHighlight> annotationTints;
     QVector<QRect> revealedOutlines, revealedFootnotes;
     QVector<QPainterPath> revealedCircles;
@@ -212,4 +237,4 @@ private:
     quint32 pressTime = 0, gestureTime = 0;
 };
 
-}
+} // namespace kobalt

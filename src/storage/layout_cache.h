@@ -5,7 +5,8 @@
 namespace kobalt {
 // Only completed inspection verdicts survive an authorized reading session.
 // The caller supplies a freshly computed digest, never a filename or timestamp.
-class LayoutCache {
+class LayoutCache
+{
 public:
     // Cached books skip parsing, so keep their verdicts for as many books.
     static constexpr int maxEntries = 20, maxBytes = 8192;
@@ -19,4 +20,4 @@ private:
     QJsonArray entries_;
     bool save();
 };
-}
+} // namespace kobalt

@@ -8,7 +8,8 @@ namespace kobalt {
 // Prepared by the host after its eligibility and source-open checks. The
 // factory runs on the engine worker and owns values, never borrowed handles.
 // Path is a materialized local archive used for revision/legacy hash checks.
-struct OpenRequest {
+struct OpenRequest
+{
     QString identity, path;
     QSize size;
     QJsonObject saved;
@@ -33,4 +34,4 @@ struct OpenRequest {
     // The same optional host cover used by the sleep screen.
     QString coverImagePath{};
 };
-}
+} // namespace kobalt

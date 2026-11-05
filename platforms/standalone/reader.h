@@ -11,14 +11,16 @@
 namespace kobalt::standalone {
 // Own the publication until engine work has drained.
 // A newer document replaces a pending opening; closing always cancels it.
-class ReaderController : public QObject {
+class ReaderController : public QObject
+{
     Q_OBJECT
 public:
     ReaderController(storage::Paths paths, EngineFontInputs fonts, QString placeholder,
-                     std::function<ReaderHostServices()> services, std::function<void(Qt::ScreenOrientation)> rotate,
-                     QObject *parent = nullptr);
+                     std::function<ReaderHostServices()> services,
+                     std::function<void(Qt::ScreenOrientation)> rotate, QObject *parent = nullptr);
     ~ReaderController() override;
-    void open(const QString &path, QSize pixels, QString sourceKey = {}, bool restartAtStart = false);
+    void open(const QString &path, QSize pixels, QString sourceKey = {},
+              bool restartAtStart = false);
     void close();
     QJsonObject lastBook() const;
     // The state the reader saved for the book at this path.
@@ -27,15 +29,13 @@ public:
     bool resetBook(const QString &path);
     // Reader preferences such as dark mode, shared by every book.
     QJsonObject preferences() const;
-    ReaderWindow *window() const {
-        return window_;
-    }
-    bool idle() const {
-        return phase == Phase::Idle;
-    }
-    const QString &path() const {
-        return current;
-    }
+
+    ReaderWindow *window() const { return window_; }
+
+    bool idle() const { return phase == Phase::Idle; }
+
+    const QString &path() const { return current; }
+
 signals:
     void opened();
     void openingProgress(int percent);
@@ -75,4 +75,4 @@ private:
     void retire();
     void release();
 };
-}
+} // namespace kobalt::standalone

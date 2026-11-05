@@ -10,15 +10,20 @@
 
 namespace kobalt {
 namespace {
-QString qstring(const lString32 &s) {
+QString qstring(const lString32 &s)
+{
     return QString::fromUtf8(UnicodeToUtf8(s).c_str());
 }
-lString32 cre(const QString &s) {
+
+lString32 cre(const QString &s)
+{
     return Utf8ToUnicode(s.toUtf8().constData());
 }
+
 // Collapse whitespace in search context, but keep one space at an edge that
 // had one. The match joins its context without guessing at word boundaries.
-QString contextText(const QString &text) {
+QString contextText(const QString &text)
+{
     auto result = text.simplified();
     if (result.isEmpty())
         return result;
@@ -28,23 +33,38 @@ QString contextText(const QString &text) {
         result.append(' ');
     return result;
 }
-}
+} // namespace
+
 // Engine pointers belong to one document and one rendered DOM. Reflow can
 // change boxing nodes, so even source-only comparisons use the layout epoch.
-struct EngineDocument::SourceIndex {
-    struct Position {
+struct EngineDocument::SourceIndex
+{
+    struct Position
+    {
         ldomXPointerEx pointer;
-        int page[2] = {-2, -2}; // Normal anchor and exclusive passage end.
+        int page[2] = { -2, -2 }; // Normal anchor and exclusive passage end.
         int textEndpoint = -1;
-        bool selectable() {
+
+        bool selectable()
+        {
             if (textEndpoint < 0)
-                textEndpoint = !pointer.isNull() && pointer.isText() && pointer.getOffset() >= 0 &&
-                    pointer.getOffset() <= pointer.getNode()->getText().length() && pointer.isVisible();
+                textEndpoint = !pointer.isNull() && pointer.isText() && pointer.getOffset() >= 0
+                        && pointer.getOffset() <= pointer.getNode()->getText().length()
+                        && pointer.isVisible();
             return textEndpoint;
         }
     };
-    struct Range { int start, end, input; };
-    struct Node { int range, left = -1, right = -1, maximumEnd; };
+
+    struct Range
+    {
+        int start, end, input;
+    };
+
+    struct Node
+    {
+        int range, left = -1, right = -1, maximumEnd;
+    };
+
     quint64 layout = 0;
     qint64 retainedBytes = 0;
     QHash<QString, int> lookup;
@@ -55,22 +75,30 @@ struct EngineDocument::SourceIndex {
     bool ordered = true;
     int root = -1;
 
-    int buildTree(QVector<int> &order, int first, int last) {
+    int buildTree(QVector<int> &order, int first, int last)
+    {
         if (first == last)
             return -1;
         const int middle = first + (last - first) / 2;
         const int node = tree.size();
-        tree.append({order[middle], -1, -1, compiled[order[middle]].end});
-        const int left = buildTree(order, first, middle), right = buildTree(order, middle + 1, last);
+        tree.append({ order[middle], -1, -1, compiled[order[middle]].end });
+        const int left = buildTree(order, first, middle),
+                  right = buildTree(order, middle + 1, last);
         tree[node].left = left;
         tree[node].right = right;
-        for (const int child : {left, right}) {
-            if (child >= 0 && positions[tree[node].maximumEnd].pointer.compare(positions[tree[child].maximumEnd].pointer) < 0)
+        for (const int child : { left, right }) {
+            if (child >= 0
+                && positions[tree[node].maximumEnd].pointer.compare(
+                           positions[tree[child].maximumEnd].pointer)
+                        < 0)
                 tree[node].maximumEnd = tree[child].maximumEnd;
         }
         return node;
     }
-    void query(int node, const ldomXPointerEx &first, const ldomXPointerEx &last, QVector<int> &result) const {
+
+    void query(int node, const ldomXPointerEx &first, const ldomXPointerEx &last,
+               QVector<int> &result) const
+    {
         if (node < 0 || positions[tree[node].maximumEnd].pointer.compare(first) <= 0)
             return;
         const auto &entry = compiled[tree[node].range];
@@ -81,32 +109,38 @@ struct EngineDocument::SourceIndex {
             result.append(entry.input);
         query(tree[node].right, first, last, result);
     }
-    QVector<int> intersections(const ldomXPointerEx &first, const ldomXPointerEx &last) const {
+
+    QVector<int> intersections(const ldomXPointerEx &first, const ldomXPointerEx &last) const
+    {
         QVector<int> result;
-        if (ordered && !(first.isElement() && first.getOffset() > 0) && !(last.isElement() && last.getOffset() > 0)) {
+        if (ordered && !(first.isElement() && first.getOffset() > 0)
+            && !(last.isElement() && last.getOffset() > 0)) {
             query(root, first, last, result);
             std::sort(result.begin(), result.end());
         } else {
             for (const auto &range : compiled)
-                if (positions[range.start].pointer.compare(last) < 0 && first.compare(positions[range.end].pointer) < 0)
+                if (positions[range.start].pointer.compare(last) < 0
+                    && first.compare(positions[range.end].pointer) < 0)
                     result.append(range.input);
         }
         return result;
     }
 };
 
-QPair<int, qint64> EngineDocument::sourceIndexUsage() const {
+QPair<int, qint64> EngineDocument::sourceIndexUsage() const
+{
     if (!sourceIndex_)
         return {};
     const auto &index = *sourceIndex_;
-    return {int(index.positions.size()), index.retainedBytes +
-        qint64(index.ranges.capacity()) * sizeof(QPair<QString, QString>) +
-        qint64(index.compiled.capacity()) * sizeof(SourceIndex::Range) +
-        qint64(index.tree.capacity()) * sizeof(SourceIndex::Node)};
+    return { int(index.positions.size()),
+             index.retainedBytes + qint64(index.ranges.capacity()) * sizeof(QPair<QString, QString>)
+                     + qint64(index.compiled.capacity()) * sizeof(SourceIndex::Range)
+                     + qint64(index.tree.capacity()) * sizeof(SourceIndex::Node) };
 }
 
-std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceIndex(
-    const QStringList &anchors, const std::function<bool()> &current) const {
+std::shared_ptr<EngineDocument::SourceIndex>
+EngineDocument::sourceIndex(const QStringList &anchors, const std::function<bool()> &current) const
+{
     // Allow room for highlight endpoints, bookmarks and a changing draft.
     // The byte budget includes UTF-16 key payloads, pointer records and a
     // conservative hash allocation allowance. Range/tree arrays have their
@@ -130,15 +164,16 @@ std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceIndex(
                 return false;
             if (!index->lookup.contains(anchor) && !missing.contains(anchor)) {
                 missing.insert(anchor);
-                missingBytes += sizeof(SourceIndex::Position) + 96 + qint64(anchor.size()) * sizeof(QChar);
+                missingBytes +=
+                        sizeof(SourceIndex::Position) + 96 + qint64(anchor.size()) * sizeof(QChar);
             }
         }
         return true;
     };
     if (!collect())
         return {};
-    if (index->positions.size() + size_t(missing.size()) > maximumPositions ||
-        index->retainedBytes + missingBytes > maximumBytes) {
+    if (index->positions.size() + size_t(missing.size()) > maximumPositions
+        || index->retainedBytes + missingBytes > maximumBytes) {
         // Replace the whole cache, including its interval tree. Its integer
         // references must never survive eviction of their source positions.
         index = std::make_shared<SourceIndex>();
@@ -164,15 +199,18 @@ std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceIndex(
             entry.pointer = ldomXPointerEx(doc->createXPointer(cre(anchor)));
         // Do not keep a caller's oversized QString allocation alive when its
         // logical key is short. Range snapshots share these compact key copies.
-        index->lookup.insert(QString(anchor.constData(), anchor.size()), int(index->positions.size()));
+        index->lookup.insert(QString(anchor.constData(), anchor.size()),
+                             int(index->positions.size()));
         index->positions.push_back(std::move(entry));
-        index->retainedBytes += sizeof(SourceIndex::Position) + 96 + qint64(anchor.size()) * sizeof(QChar);
+        index->retainedBytes +=
+                sizeof(SourceIndex::Position) + 96 + qint64(anchor.size()) * sizeof(QChar);
     }
     return index;
 }
 
-QVector<int> EngineDocument::pagesOf(const QStringList &positions, bool rangeEndpoints, QVector<int> *sourceOrder,
-                                 std::function<bool()> current) const {
+QVector<int> EngineDocument::pagesOf(const QStringList &positions, bool rangeEndpoints,
+                                     QVector<int> *sourceOrder, std::function<bool()> current) const
+{
     QVector<int> pages;
     if (sourceOrder)
         sourceOrder->fill(-1, positions.size());
@@ -215,34 +253,41 @@ QVector<int> EngineDocument::pagesOf(const QStringList &positions, bool rangeEnd
             if (!index->positions[resolved[i]].pointer.isNull())
                 indices.append(i);
         std::stable_sort(indices.begin(), indices.end(), [&](int a, int b) {
-            return index->positions[resolved[a]].pointer.compare(index->positions[resolved[b]].pointer) < 0;
+            return index->positions[resolved[a]].pointer.compare(
+                           index->positions[resolved[b]].pointer)
+                    < 0;
         });
         for (int rank = 0; rank < indices.size(); ++rank)
             (*sourceOrder)[indices[rank]] = rank;
     }
     return current && !current() ? QVector<int>() : pages;
 }
-QString EngineDocument::pageStart(int page) const {
+
+QString EngineDocument::pageStart(int page) const
+{
     if (!engine_ || page < 0 || page >= pages())
         return {};
     return qstring(engine_->getPageBookmark(page).toString());
 }
-QString EngineDocument::pageExcerpt(int page) const {
+
+QString EngineDocument::pageExcerpt(int page) const
+{
     if (!engine_ || page < 0 || page >= pages())
         return {};
     return qstring(engine_->getPageText(false, page)).simplified().left(200);
 }
+
 namespace {
-AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, bool annotation = false) {
+AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit,
+                           bool annotation = false)
+{
     AnnotationToken result;
     if (hit.isNull() || !hit.isText() || !hit.isVisible()) {
         return result;
     }
     // Collect a bounded window in this rendered block, retaining a pointer for
     // every UTF-16 unit. Inline markup must not introduce word boundaries.
-    auto previous = [](ldomXPointerEx &p) {
-        return p.prevVisibleChar(true);
-    };
+    auto previous = [](ldomXPointerEx &p) { return p.prevVisibleChar(true); };
     auto next = [](ldomXPointerEx &p) {
         if (!p.nextVisibleChar(true))
             return false;
@@ -293,9 +338,7 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, b
         }
         return at;
     };
-    auto following = [&text](int at) {
-        return at + (text.at(at).isHighSurrogate() ? 2 : 1);
-    };
+    auto following = [&text](int at) { return at + (text.at(at).isHighSurrogate() ? 2 : 1); };
     auto wordBounds = [&] {
         QTextBoundaryFinder words(QTextBoundaryFinder::Word, text);
         words.setPosition(offset);
@@ -304,8 +347,8 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, b
         // follows these boundaries; it does not use a dictionary segmenter.
         const auto script = QChar::script(scalar(offset));
         const bool unflaggedScript = script == QChar::Script_Han || script == QChar::Script_Thai;
-        if (!(words.boundaryReasons() & QTextBoundaryFinder::StartOfItem) &&
-            !(unflaggedScript && words.isAtBoundary())) {
+        if (!(words.boundaryReasons() & QTextBoundaryFinder::StartOfItem)
+            && !(unflaggedScript && words.isAtBoundary())) {
             if (words.toPreviousBoundary() < 0) {
                 return qMakePair(-1, -1);
             }
@@ -314,8 +357,8 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, b
             return qMakePair(-1, -1);
         }
         const int begin = words.position(), end = words.toNextBoundary();
-        if (end <= offset || end - begin > 256 ||
-            (!(words.boundaryReasons() & QTextBoundaryFinder::EndOfItem) && !unflaggedScript)) {
+        if (end <= offset || end - begin > 256
+            || (!(words.boundaryReasons() & QTextBoundaryFinder::EndOfItem) && !unflaggedScript)) {
             return qMakePair(-1, -1);
         }
         return qMakePair(begin, end);
@@ -353,7 +396,8 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, b
         lvPoint top(r.left, r.top), bottom(r.right, r.bottom);
         if (!engine->docToWindowPoint(top) || !engine->docToWindowPoint(bottom, true))
             continue;
-        const QRect rect(qMin(top.x, bottom.x), qMin(top.y, bottom.y), qAbs(bottom.x - top.x), qAbs(bottom.y - top.y));
+        const QRect rect(qMin(top.x, bottom.x), qMin(top.y, bottom.y), qAbs(bottom.x - top.x),
+                         qAbs(bottom.y - top.y));
         const auto clipped = rect.intersected(QRect(QPoint(), size));
         if (clipped.isEmpty())
             continue;
@@ -367,14 +411,14 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, b
         auto opening = [&scalar](int at) {
             const auto c = scalar(at);
             const auto category = QChar::category(c);
-            return category == QChar::Punctuation_Open || category == QChar::Punctuation_InitialQuote || c == '\'' ||
-                   c == '"';
+            return category == QChar::Punctuation_Open
+                    || category == QChar::Punctuation_InitialQuote || c == '\'' || c == '"';
         };
         auto closing = [&scalar](int at) {
             const auto c = scalar(at);
             const auto category = QChar::category(c);
-            return QChar::isPunct(c) && category != QChar::Punctuation_Open &&
-                   category != QChar::Punctuation_InitialQuote;
+            return QChar::isPunct(c) && category != QChar::Punctuation_Open
+                    && category != QChar::Punctuation_InitialQuote;
         };
         int outerStart = begin, outerEnd = end;
         while (outerStart > 0 && opening(prior(outerStart))) {
@@ -395,11 +439,15 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit, b
     }
     return result;
 }
-bool sentenceTerminal(char32_t c) {
-    return c == '.' || c == '!' || c == '?' || c == 0x3002 || c == 0xff01 || c == 0xff1f || c == 0x061f ||
-           c == 0x06d4 || c == 0x0964 || c == 0x0965;
+
+bool sentenceTerminal(char32_t c)
+{
+    return c == '.' || c == '!' || c == '?' || c == 0x3002 || c == 0xff01 || c == 0xff1f
+            || c == 0x061f || c == 0x06d4 || c == 0x0964 || c == 0x0965;
 }
-bool ambiguousPeriod(const QString &text, int position) {
+
+bool ambiguousPeriod(const QString &text, int position)
+{
     if (position <= 0 || text[position] != '.') {
         return false;
     }
@@ -408,12 +456,15 @@ bool ambiguousPeriod(const QString &text, int position) {
         --begin;
     }
     const auto word = text.mid(begin, position - begin).toLower();
-    static const QSet<QString> abbreviations = {"mr", "mrs", "ms",  "dr", "prof", "st",  "sr", "jr",
-                                                "vs", "etc", "fig", "no", "inc",  "e.g", "i.e"};
-    return word.size() == 1 || word.contains('.') || abbreviations.contains(word) ||
-           (!word.isEmpty() && word.at(word.size() - 1).isDigit());
+    static const QSet<QString> abbreviations = { "mr",  "mrs", "ms",  "dr",  "prof",
+                                                 "st",  "sr",  "jr",  "vs",  "etc",
+                                                 "fig", "no",  "inc", "e.g", "i.e" };
+    return word.size() == 1 || word.contains('.') || abbreviations.contains(word)
+            || (!word.isEmpty() && word.at(word.size() - 1).isDigit());
 }
-QChar openingFor(QChar closing) {
+
+QChar openingFor(QChar closing)
+{
     switch (closing.unicode()) {
     case ')':
         return '(';
@@ -441,14 +492,18 @@ QChar openingFor(QChar closing) {
         return {};
     }
 }
-struct SentenceContext {
+
+struct SentenceContext
+{
     QString text;
     QVector<ldomXPointerEx> positions;
     int wordStart = -1, wordEnd = -1;
     bool blockStart = false, blockEnd = false;
 };
-SentenceContext sentenceContext(ColumnView *engine, const WordSelection &word, const std::function<bool()> &current,
-                                int followingLimit = 512) {
+
+SentenceContext sentenceContext(ColumnView *engine, const WordSelection &word,
+                                const std::function<bool()> &current, int followingLimit = 512)
+{
     SentenceContext result;
     auto *doc = engine->getDocument();
     ldomXPointerEx end(doc->createXPointer(cre(word.end)));
@@ -515,7 +570,8 @@ SentenceContext sentenceContext(ColumnView *engine, const WordSelection &word, c
             blockEnd = true;
             break;
         }
-        if (cursor.getOffset() == cursor.getNode()->getText().length() && !cursor.nextVisibleChar(true)) {
+        if (cursor.getOffset() == cursor.getNode()->getText().length()
+            && !cursor.nextVisibleChar(true)) {
             blockEnd = true;
             break;
         }
@@ -525,9 +581,13 @@ SentenceContext sentenceContext(ColumnView *engine, const WordSelection &word, c
     }
     return result;
 }
-QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range, const std::function<bool()> &current) {
+
+QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range,
+                       const std::function<bool()> &current)
+{
     auto *doc = engine->getDocument();
-    ldomXPointerEx start(doc->createXPointer(cre(range.start))), end(doc->createXPointer(cre(range.end)));
+    ldomXPointerEx start(doc->createXPointer(cre(range.start))),
+            end(doc->createXPointer(cre(range.end)));
     auto hit = end;
     if (!hit.prevVisibleChar(true)) {
         return {};
@@ -544,11 +604,12 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range, c
     if (wordStart < 0 || wordEnd < 0) {
         return {};
     }
-    const auto suffix =
-        qstring(ldomXRange(end, ldomXPointerEx(doc->createXPointer(cre(word.endAfterPunctuation)))).getRangeText());
+    const auto suffix = qstring(
+            ldomXRange(end, ldomXPointerEx(doc->createXPointer(cre(word.endAfterPunctuation))))
+                    .getRangeText());
     const auto marks = suffix.toUcs4();
-    if (marks.isEmpty() || !sentenceTerminal(marks.first()) || suffix.contains(QChar(0x2026)) ||
-        suffix.contains("..")) {
+    if (marks.isEmpty() || !sentenceTerminal(marks.first()) || suffix.contains(QChar(0x2026))
+        || suffix.contains("..")) {
         return {};
     }
     if (ambiguousPeriod(text, wordEnd)) {
@@ -562,7 +623,8 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range, c
     }
     // Do not mistake an abbreviation or an initial for the preceding sentence.
     int preceding = sentenceStart - 1;
-    while (preceding >= 0 && (text[preceding].isSpace() || text[preceding] == '"' || text[preceding] == '\'')) {
+    while (preceding >= 0
+           && (text[preceding].isSpace() || text[preceding] == '"' || text[preceding] == '\'')) {
         --preceding;
     }
     if (preceding >= 0 && ambiguousPeriod(text, preceding)) {
@@ -599,15 +661,16 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range, c
             continue;
         }
         const auto c = text[i];
-        if ((c == '\'' || c == QChar(0x2019)) && i > 0 && i + 1 < text.size() && text[i - 1].isLetterOrNumber() &&
-            text[i + 1].isLetterOrNumber()) {
+        if ((c == '\'' || c == QChar(0x2019)) && i > 0 && i + 1 < text.size()
+            && text[i - 1].isLetterOrNumber() && text[i + 1].isLetterOrNumber()) {
             continue;
         }
         const auto match = openingFor(c);
         if (!match.isNull() && !opened.isEmpty() && opened.back() == match) {
             opened.removeLast();
-        } else if (c == '(' || c == '[' || c == '{' || c == QChar(0x201c) || c == QChar(0x2018) || c == QChar(0x300c) ||
-                   c == QChar(0x300e) || c == QChar(0xff08) || c == QChar(0x00ab) || c == '"' || c == '\'') {
+        } else if (c == '(' || c == '[' || c == '{' || c == QChar(0x201c) || c == QChar(0x2018)
+                   || c == QChar(0x300c) || c == QChar(0x300e) || c == QChar(0xff08)
+                   || c == QChar(0x00ab) || c == '"' || c == '\'') {
             opened.append(c);
         }
     }
@@ -626,11 +689,14 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range, c
     return qstring(pointer.toString());
 }
 
-struct SentenceOpening {
+struct SentenceOpening
+{
     QString start, completeEnd;
 };
+
 SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange &range,
-                                const std::function<bool()> &current) {
+                                const std::function<bool()> &current)
+{
     auto *doc = engine->getDocument();
     const ldomXPointerEx start(doc->createXPointer(cre(range.start)));
     const auto word = sourceWord(engine, size, start, true);
@@ -643,12 +709,14 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
     }
     QTextBoundaryFinder sentences(QTextBoundaryFinder::Sentence, context.text);
     sentences.setPosition(context.wordStart);
-    const int beginning = sentences.isAtBoundary() ? context.wordStart : sentences.toPreviousBoundary();
+    const int beginning =
+            sentences.isAtBoundary() ? context.wordStart : sentences.toPreviousBoundary();
     if (beginning < 0 || (beginning == 0 && !context.blockStart)) {
         return {};
     }
     int firstWord = beginning;
-    while (firstWord < context.wordStart && (context.text[firstWord].isSpace() || context.text[firstWord].isPunct())) {
+    while (firstWord < context.wordStart
+           && (context.text[firstWord].isSpace() || context.text[firstWord].isPunct())) {
         ++firstWord;
     }
     if (firstWord != context.wordStart) {
@@ -660,16 +728,16 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
         return {};
     }
     int terminal = sentenceEnd - 1;
-    while (terminal >= context.wordEnd &&
-           (context.text[terminal].isSpace() || !openingFor(context.text[terminal]).isNull())) {
+    while (terminal >= context.wordEnd
+           && (context.text[terminal].isSpace() || !openingFor(context.text[terminal]).isNull())) {
         --terminal;
     }
     while (terminal >= context.wordEnd && sentenceTerminal(context.text[terminal].unicode())) {
         --terminal;
     }
     ++terminal;
-    if (terminal < context.wordEnd || terminal >= context.positions.size() ||
-        !sentenceTerminal(context.text[terminal].unicode())) {
+    if (terminal < context.wordEnd || terminal >= context.positions.size()
+        || !sentenceTerminal(context.text[terminal].unicode())) {
         return {};
     }
     auto lastHit = context.positions[terminal];
@@ -682,11 +750,12 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
     }
     const QString rawEnd = lastWord.end;
     const auto provisionalText =
-        qstring(ldomXRange(ldomXPointerEx(doc->createXPointer(cre(word.startBeforePunctuation))),
-                           ldomXPointerEx(doc->createXPointer(cre(rawEnd))))
-                    .getRangeText())
-            .simplified();
-    const TextRange provisional{word.startBeforePunctuation, rawEnd, provisionalText};
+            qstring(ldomXRange(
+                            ldomXPointerEx(doc->createXPointer(cre(word.startBeforePunctuation))),
+                            ldomXPointerEx(doc->createXPointer(cre(rawEnd))))
+                            .getRangeText())
+                    .simplified();
+    const TextRange provisional{ word.startBeforePunctuation, rawEnd, provisionalText };
     const auto complete = sentenceEnding(engine, size, provisional, current);
     if (complete.isEmpty()) {
         return {};
@@ -704,8 +773,8 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
             continue;
         }
         const auto c = context.text[i];
-        if ((c == '\'' || c == QChar(0x2019)) && i > 0 && i + 1 < context.text.size() &&
-            context.text[i - 1].isLetterOrNumber() && context.text[i + 1].isLetterOrNumber()) {
+        if ((c == '\'' || c == QChar(0x2019)) && i > 0 && i + 1 < context.text.size()
+            && context.text[i - 1].isLetterOrNumber() && context.text[i + 1].isLetterOrNumber()) {
             continue;
         }
         const auto match = openingFor(c);
@@ -715,24 +784,29 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
                 auto pairedEnd = context.positions[i];
                 pairedEnd.setOffset(pairedEnd.getOffset() + 1);
                 const ldomXPointerEx completeEnd(doc->createXPointer(cre(complete)));
-                return {word.startBeforePunctuation,
-                        pairedEnd.compare(completeEnd) > 0 ? qstring(pairedEnd.toString()) : complete};
+                return { word.startBeforePunctuation,
+                         pairedEnd.compare(completeEnd) > 0 ? qstring(pairedEnd.toString())
+                                                            : complete };
             }
-        } else if (c == '(' || c == '[' || c == '{' || c == QChar(0x201c) || c == QChar(0x2018) || c == QChar(0x300c) ||
-                   c == QChar(0x300e) || c == QChar(0xff08) || c == QChar(0x00ab) || c == '"' || c == '\'') {
+        } else if (c == '(' || c == '[' || c == '{' || c == QChar(0x201c) || c == QChar(0x2018)
+                   || c == QChar(0x300c) || c == QChar(0x300e) || c == QChar(0xff08)
+                   || c == QChar(0x00ab) || c == '"' || c == '\'') {
             opened.append(c);
         }
     }
     return {};
 }
 
-}
-WordSelection EngineDocument::wordAt(QPoint point) {
+} // namespace
+
+WordSelection EngineDocument::wordAt(QPoint point)
+{
     if (!engine_ || !QRect(QPoint(), size_).contains(point)) {
         return {};
     }
-    auto result =
-        sourceWord(engine_.get(), size_, ldomXPointerEx(engine_->getNodeByPoint(lvPoint(point.x(), point.y()), true)));
+    auto result = sourceWord(
+            engine_.get(), size_,
+            ldomXPointerEx(engine_->getNodeByPoint(lvPoint(point.x(), point.y()), true)));
     for (const auto &rect : result.rectangles) {
         if (rect.contains(point)) {
             return result;
@@ -740,15 +814,17 @@ WordSelection EngineDocument::wordAt(QPoint point) {
     }
     return {};
 }
-AnnotationPageEdges EngineDocument::annotationPageEdges() {
+
+AnnotationPageEdges EngineDocument::annotationPageEdges()
+{
     AnnotationPageEdges result;
     if (!engine_ || pages() <= 0)
         return result;
     auto *doc = engine_->getDocument();
     const ldomXPointerEx first(engine_->getPageBookmark(page()));
     const ldomXPointerEx last = page() + 1 < pages()
-        ? ldomXPointerEx(engine_->getPageBookmark(page() + 1))
-        : ldomXRange(doc->getRootNode(), true).getEnd();
+            ? ldomXPointerEx(engine_->getPageBookmark(page() + 1))
+            : ldomXRange(doc->getRootNode(), true).getEnd();
     if (first.isNull() || last.isNull())
         return result;
     result.columns = columns_;
@@ -800,14 +876,15 @@ AnnotationPageEdges EngineDocument::annotationPageEdges() {
         const auto sameSection = [&](ldomXPointerEx before, ldomXPointerEx after) {
             const auto section = [](ldomNode *node) {
                 for (; node; node = node->getParentNode())
-                    if (node->isNodeName("DocFragment") || node->isNodeName("section") || node->isNodeName("article"))
+                    if (node->isNodeName("DocFragment") || node->isNodeName("section")
+                        || node->isNodeName("article"))
                         return node;
                 return static_cast<ldomNode *>(nullptr);
             };
             if (section(before.getNode()) != section(after.getNode()))
                 return false;
             // A table-of-contents chapter can begin inside one spine document.
-            std::vector<LVTocItem *> pending{engine_->getToc()};
+            std::vector<LVTocItem *> pending{ engine_->getToc() };
             while (!pending.empty()) {
                 auto *item = pending.back();
                 pending.pop_back();
@@ -851,7 +928,8 @@ AnnotationPageEdges EngineDocument::annotationPageEdges() {
     return result;
 }
 
-AnnotationToken EngineDocument::annotationTokenAt(QPoint point) {
+AnnotationToken EngineDocument::annotationTokenAt(QPoint point)
+{
     if (!engine_ || !QRect(QPoint(), size_).contains(point)) {
         return {};
     }
@@ -892,7 +970,10 @@ AnnotationToken EngineDocument::annotationTokenAt(QPoint point) {
     }
     return {};
 }
-AnnotationToken EngineDocument::annotationDragTokenAt(QPoint point, const QString &boundary, bool start) {
+
+AnnotationToken EngineDocument::annotationDragTokenAt(QPoint point, const QString &boundary,
+                                                      bool start)
+{
     auto token = annotationTokenAt(point);
     if (boundary.isEmpty() || !engine_ || !QRect(QPoint(), size_).contains(point))
         return token;
@@ -904,9 +985,10 @@ AnnotationToken EngineDocument::annotationDragTokenAt(QPoint point, const QStrin
         const QPoint middle = (edge.first + edge.last) / 2;
         const QPoint delta = point - middle;
         const int beyond = QPoint::dotProduct(delta, edge.outward);
-        const bool onLine = edge.outward.x() != 0
-            ? point.y() >= qMin(edge.first.y(), edge.last.y()) && point.y() <= qMax(edge.first.y(), edge.last.y())
-            : point.x() >= qMin(edge.first.x(), edge.last.x()) && point.x() <= qMax(edge.first.x(), edge.last.x());
+        const bool onLine = edge.outward.x() != 0 ? point.y() >= qMin(edge.first.y(), edge.last.y())
+                        && point.y() <= qMax(edge.first.y(), edge.last.y())
+                                                  : point.x() >= qMin(edge.first.x(), edge.last.x())
+                        && point.x() <= qMax(edge.first.x(), edge.last.x());
         return edge.visible && beyond >= 0 && onLine;
     };
     if (token.text.isEmpty()) {
@@ -953,10 +1035,13 @@ AnnotationToken EngineDocument::annotationDragTokenAt(QPoint point, const QStrin
     for (int n = 0; n < 256 && adjacent.isText(); ++n) {
         const auto text = adjacent.getNode()->getText();
         const int offset = adjacent.getOffset();
-        if (offset >= 0 && offset < text.length() && !QChar::isSpace(text[offset]) && !QChar::isPunct(text[offset])) {
+        if (offset >= 0 && offset < text.length() && !QChar::isSpace(text[offset])
+            && !QChar::isPunct(text[offset])) {
             const auto complete = sourceWord(engine_.get(), size_, adjacent, true);
-            ldomXPointerEx completed(doc->createXPointer(cre(start ? complete.start : complete.end)));
-            if (!completed.isNull() && (start ? completed.compare(current) < 0 : completed.compare(current) > 0))
+            ldomXPointerEx completed(
+                    doc->createXPointer(cre(start ? complete.start : complete.end)));
+            if (!completed.isNull()
+                && (start ? completed.compare(current) < 0 : completed.compare(current) > 0))
                 return complete;
             return {};
         }
@@ -965,9 +1050,13 @@ AnnotationToken EngineDocument::annotationDragTokenAt(QPoint point, const QStrin
     }
     return {};
 }
-TextRange EngineDocument::annotationRange(const QString &startTokenStart, const QString &startTokenEnd,
-                                       const QString &endTokenStart, const QString &endTokenEnd, bool endTokenPolicy,
-                                       bool startTokenPolicy, std::function<bool()> current) {
+
+TextRange EngineDocument::annotationRange(const QString &startTokenStart,
+                                          const QString &startTokenEnd,
+                                          const QString &endTokenStart, const QString &endTokenEnd,
+                                          bool endTokenPolicy, bool startTokenPolicy,
+                                          std::function<bool()> current)
+{
     if (!engine_) {
         return {};
     }
@@ -980,30 +1069,32 @@ TextRange EngineDocument::annotationRange(const QString &startTokenStart, const 
             return TextRange();
         }
         ldomXPointerEx pointer(doc->createXPointer(cre(start)));
-        if (pointer.isNull() || !pointer.isText() || pointer.getOffset() < 0 ||
-            pointer.getOffset() > pointer.getNode()->getText().length()) {
+        if (pointer.isNull() || !pointer.isText() || pointer.getOffset() < 0
+            || pointer.getOffset() > pointer.getNode()->getText().length()) {
             return TextRange();
         }
         if (exclusiveEnd && !pointer.prevVisibleChar(true)) {
             return TextRange();
         }
         const auto word = sourceWord(engine_.get(), size_, pointer, true);
-        return TextRange{word.start, word.end, word.text};
+        return TextRange{ word.start, word.end, word.text };
     };
     const auto first = token(startTokenStart, startTokenEnd, false);
     const auto last = token(endTokenStart, endTokenEnd, true);
     if (first.text.isEmpty() || last.text.isEmpty()) {
         return {};
     }
-    ldomXPointerEx a(doc->createXPointer(cre(first.start))), b(doc->createXPointer(cre(last.start)));
+    ldomXPointerEx a(doc->createXPointer(cre(first.start))),
+            b(doc->createXPointer(cre(last.start)));
     const bool forward = a.compare(b) <= 0;
     auto result = forward ? textRange(first.start, last.end) : textRange(last.start, first.end);
     result.chosenStart = result.start;
     result.chosenEnd = result.end;
     result.sentenceStartPolicy = forward ? startTokenPolicy : endTokenPolicy;
     result.sentenceEndPolicy = forward ? endTokenPolicy : startTokenPolicy;
-    const auto opening =
-        result.sentenceStartPolicy ? sentenceOpening(engine_.get(), size_, result, current) : SentenceOpening();
+    const auto opening = result.sentenceStartPolicy
+            ? sentenceOpening(engine_.get(), size_, result, current)
+            : SentenceOpening();
     auto effective = result;
     if (!opening.start.isEmpty()) {
         effective.start = opening.start;
@@ -1016,7 +1107,7 @@ TextRange EngineDocument::annotationRange(const QString &startTokenStart, const 
     }
     if (!opening.start.isEmpty()) {
         const ldomXPointerEx required(doc->createXPointer(cre(opening.completeEnd))),
-            actual(doc->createXPointer(cre(effective.end)));
+                actual(doc->createXPointer(cre(effective.end)));
         if (required.compare(actual) > 0) {
             // Reject the provisional opener and recompute the end without it.
             effective.start = result.start;
@@ -1035,7 +1126,9 @@ TextRange EngineDocument::annotationRange(const QString &startTokenStart, const 
     result.text = text.text;
     return result;
 }
-TextRange EngineDocument::annotationRange(const QString &start, const QString &end) {
+
+TextRange EngineDocument::annotationRange(const QString &start, const QString &end)
+{
     if (!engine_ || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
         return {};
     }
@@ -1044,8 +1137,8 @@ TextRange EngineDocument::annotationRange(const QString &start, const QString &e
     if (a.isNull() || b.isNull() || !a.isText() || !b.isText()) {
         return {};
     }
-    if (a.getOffset() < 0 || a.getOffset() > a.getNode()->getText().length() || b.getOffset() < 0 ||
-        b.getOffset() > b.getNode()->getText().length()) {
+    if (a.getOffset() < 0 || a.getOffset() > a.getNode()->getText().length() || b.getOffset() < 0
+        || b.getOffset() > b.getNode()->getText().length()) {
         return {};
     }
     if (a.compare(b) < 0) {
@@ -1063,7 +1156,9 @@ TextRange EngineDocument::annotationRange(const QString &start, const QString &e
     }
     return textRange(first.start, last.end);
 }
-TextRange EngineDocument::textRange(const QString &start, const QString &end) {
+
+TextRange EngineDocument::textRange(const QString &start, const QString &end)
+{
     if (!engine_ || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
         return {};
     }
@@ -1072,8 +1167,8 @@ TextRange EngineDocument::textRange(const QString &start, const QString &end) {
     if (a.isNull() || b.isNull() || !a.isText() || !b.isText() || a == b) {
         return {};
     }
-    if (a.getOffset() < 0 || a.getOffset() > a.getNode()->getText().length() || b.getOffset() < 0 ||
-        b.getOffset() > b.getNode()->getText().length() || !a.isVisible() || !b.isVisible()) {
+    if (a.getOffset() < 0 || a.getOffset() > a.getNode()->getText().length() || b.getOffset() < 0
+        || b.getOffset() > b.getNode()->getText().length() || !a.isVisible() || !b.isVisible()) {
         return {};
     }
     if (a.compare(b) > 0) {
@@ -1084,10 +1179,13 @@ TextRange EngineDocument::textRange(const QString &start, const QString &end) {
     if (text.isEmpty() || text.size() > 256 * 1024) {
         return {};
     }
-    return {qstring(a.toString()), qstring(b.toString()), text};
+    return { qstring(a.toString()), qstring(b.toString()), text };
 }
-QVector<int> EngineDocument::intersectingRanges(const QString &start, const QString &end,
-                                             const QVector<QPair<QString, QString>> &ranges) const {
+
+QVector<int>
+EngineDocument::intersectingRanges(const QString &start, const QString &end,
+                                   const QVector<QPair<QString, QString>> &ranges) const
+{
     QVector<int> result;
     if (!engine_) {
         return result;
@@ -1099,8 +1197,9 @@ QVector<int> EngineDocument::intersectingRanges(const QString &start, const QStr
             return pointer;
         }
         pointer = ldomXPointerEx(doc->createXPointer(cre(anchor)));
-        if (pointer.isNull() || !pointer.isText() || pointer.getOffset() < 0 ||
-            pointer.getOffset() > pointer.getNode()->getText().length() || !pointer.isVisible()) {
+        if (pointer.isNull() || !pointer.isText() || pointer.getOffset() < 0
+            || pointer.getOffset() > pointer.getNode()->getText().length()
+            || !pointer.isVisible()) {
             return ldomXPointerEx();
         }
         return pointer;
@@ -1121,7 +1220,10 @@ QVector<int> EngineDocument::intersectingRanges(const QString &start, const QStr
     }
     return result;
 }
-std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceRanges(const QVector<QPair<QString, QString>> &ranges) const {
+
+std::shared_ptr<EngineDocument::SourceIndex>
+EngineDocument::sourceRanges(const QVector<QPair<QString, QString>> &ranges) const
+{
     auto index = sourceIndex_;
     if (!index || index->layout != layoutSignature() || index->ranges != ranges) {
         QStringList anchors;
@@ -1139,9 +1241,10 @@ std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceRanges(const 
         index->ranges.clear();
         index->ranges.reserve(ranges.size());
         for (const auto &range : ranges) {
-            const auto start = index->lookup.constFind(range.first), end = index->lookup.constFind(range.second);
-            index->ranges.append({start == index->lookup.cend() ? range.first : start.key(),
-                                  end == index->lookup.cend() ? range.second : end.key()});
+            const auto start = index->lookup.constFind(range.first),
+                       end = index->lookup.constFind(range.second);
+            index->ranges.append({ start == index->lookup.cend() ? range.first : start.key(),
+                                   end == index->lookup.cend() ? range.second : end.key() });
         }
         index->compiled.clear();
         index->compiled.reserve(ranges.size());
@@ -1152,7 +1255,8 @@ std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceRanges(const 
             if (i % 64 == 0)
                 engineActivity().checkpoint();
             const auto &range = ranges[i];
-            if (range.first.isEmpty() || range.second.isEmpty() || range.first.size() > 4096 || range.second.size() > 4096)
+            if (range.first.isEmpty() || range.second.isEmpty() || range.first.size() > 4096
+                || range.second.size() > 4096)
                 continue;
             int start = index->lookup.value(range.first), end = index->lookup.value(range.second);
             const auto &a = index->positions[start].pointer, &b = index->positions[end].pointer;
@@ -1169,7 +1273,7 @@ std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceRanges(const 
             // in CREngine. Preserve the original scan for these uncommon inputs.
             if ((a.isElement() && a.getOffset() > 0) || (b.isElement() && b.getOffset() > 0))
                 index->ordered = false;
-            index->compiled.append({start, end, i});
+            index->compiled.append({ start, end, i });
         }
         QVector<int> order;
         order.reserve(index->compiled.size());
@@ -1178,14 +1282,17 @@ std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceRanges(const 
         if (index->ordered) {
             std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
                 return index->positions[index->compiled[a].start].pointer.compare(
-                           index->positions[index->compiled[b].start].pointer) < 0;
+                               index->positions[index->compiled[b].start].pointer)
+                        < 0;
             });
             index->root = index->buildTree(order, 0, order.size());
         }
     }
     return index;
 }
-QVector<int> EngineDocument::visibleRanges(const QVector<QPair<QString, QString>> &ranges) const {
+
+QVector<int> EngineDocument::visibleRanges(const QVector<QPair<QString, QString>> &ranges) const
+{
     if (ranges.isEmpty() || ranges.size() > 2001 || !engine_ || pages() <= 0)
         return {};
     auto *doc = engine_->getDocument();
@@ -1193,14 +1300,18 @@ QVector<int> EngineDocument::visibleRanges(const QVector<QPair<QString, QString>
     // Page boundaries come from the current layout, never from stored page
     // numbers. A long passage remains visible on every intervening page.
     const ldomXPointerEx first(engine_->getPageBookmark(current));
-    const ldomXPointerEx last = current + 1 < pages() ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-                                                      : ldomXRange(doc->getRootNode(), true).getEnd();
+    const ldomXPointerEx last = current + 1 < pages()
+            ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
+            : ldomXRange(doc->getRootNode(), true).getEnd();
     if (first.isNull() || last.isNull())
         return {};
     return sourceRanges(ranges)->intersections(first, last);
 }
-bool EngineDocument::rangeVisible(const QString &start, const QString &end) const {
-    if (!engine_ || pages() <= 0 || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096)
+
+bool EngineDocument::rangeVisible(const QString &start, const QString &end) const
+{
+    if (!engine_ || pages() <= 0 || start.isEmpty() || end.isEmpty() || start.size() > 4096
+        || end.size() > 4096)
         return false;
     auto *doc = engine_->getDocument();
     ldomXPointerEx a(doc->createXPointer(cre(start))), b(doc->createXPointer(cre(end)));
@@ -1210,13 +1321,18 @@ bool EngineDocument::rangeVisible(const QString &start, const QString &end) cons
         std::swap(a, b);
     const int current = page();
     const ldomXPointerEx first(engine_->getPageBookmark(current));
-    const ldomXPointerEx last = current + 1 < pages() ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-                                                      : ldomXRange(doc->getRootNode(), true).getEnd();
-    return !first.isNull() && !last.isNull() && a.compare(b) < 0 && a.compare(last) < 0 && first.compare(b) < 0;
+    const ldomXPointerEx last = current + 1 < pages()
+            ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
+            : ldomXRange(doc->getRootNode(), true).getEnd();
+    return !first.isNull() && !last.isNull() && a.compare(b) < 0 && a.compare(last) < 0
+            && first.compare(b) < 0;
 }
-AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, const QString &end) {
+
+AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, const QString &end)
+{
     AnnotationGeometry result;
-    if (!engine_ || pages() <= 0 || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
+    if (!engine_ || pages() <= 0 || start.isEmpty() || end.isEmpty() || start.size() > 4096
+        || end.size() > 4096) {
         return result;
     }
     auto *doc = engine_->getDocument();
@@ -1233,15 +1349,17 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
     result.rectangles = rangeRects(qstring(a.toString()), qstring(b.toString()));
     const int current = page();
     auto *pageList = engine_->getPageList();
-    result.vertical = pageList->hasMixedWritingModes() ? css_wm_is_vertical((*pageList)[current * columns_]->writing_mode)
-                                                       : engine_->isVerticalText();
+    result.vertical = pageList->hasMixedWritingModes()
+            ? css_wm_is_vertical((*pageList)[current * columns_]->writing_mode)
+            : engine_->isVerticalText();
     ldomXPointerEx pageStart(engine_->getPageBookmark(current));
-    ldomXPointerEx pageEnd = current + 1 < pages() ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-                                                   : ldomXRange(doc->getRootNode(), true).getEnd();
+    ldomXPointerEx pageEnd = current + 1 < pages()
+            ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
+            : ldomXRange(doc->getRootNode(), true).getEnd();
     const auto endpoint = [&](ldomXPointerEx pointer, bool ending) {
         SelectionEndpoint edge;
-        if (!pointer.isText() || pointer.getOffset() < 0 ||
-            pointer.getOffset() > pointer.getNode()->getText().length()) {
+        if (!pointer.isText() || pointer.getOffset() < 0
+            || pointer.getOffset() > pointer.getNode()->getText().length()) {
             return edge;
         }
         if (ending) {
@@ -1255,8 +1373,8 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
         }
         // Compare source anchors before resolving caret geometry: remote ends must
         // not format another chapter merely to discover they are not visible here.
-        if (pageStart.isNull() || pageEnd.isNull() || pointer.compare(pageStart) < 0 || pointer.compare(pageEnd) >= 0 ||
-            !pointer.isVisible()) {
+        if (pageStart.isNull() || pageEnd.isNull() || pointer.compare(pageStart) < 0
+            || pointer.compare(pageEnd) >= 0 || !pointer.isVisible()) {
             return edge;
         }
         lvRect box;
@@ -1269,12 +1387,13 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
         const int x = right ? box.right : box.left;
         lvPoint first(x, box.top), last(x, box.bottom), middle(x, box.top + box.height() / 2);
         lvPoint inside(x + (right ? -1 : 1), middle.y);
-        if (!engine_->docToWindowPoint(first) || !engine_->docToWindowPoint(last, true) ||
-            !engine_->docToWindowPoint(middle) || !engine_->docToWindowPoint(inside)) {
+        if (!engine_->docToWindowPoint(first) || !engine_->docToWindowPoint(last, true)
+            || !engine_->docToWindowPoint(middle) || !engine_->docToWindowPoint(inside)) {
             return edge;
         }
         const auto onScreen = [&](const lvPoint &point) {
-            return point.x >= 0 && point.y >= 0 && point.x <= size_.width() && point.y <= size_.height();
+            return point.x >= 0 && point.y >= 0 && point.x <= size_.width()
+                    && point.y <= size_.height();
         };
         if (!onScreen(first) || !onScreen(last)) {
             return edge;
@@ -1293,21 +1412,29 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
     result.end = endpoint(b, true);
     return result;
 }
-QVector<QVector<QRect>> EngineDocument::pageRangeRects(int target, const QVector<QPair<QString, QString>> &ranges) {
+
+QVector<QVector<QRect>>
+EngineDocument::pageRangeRects(int target, const QVector<QPair<QString, QString>> &ranges)
+{
     QVector<QVector<QRect>> result;
     if (!engine_ || target < 0 || target >= pages() || ranges.isEmpty() || ranges.size() > 2000)
         return result;
     result.resize(ranges.size());
     const int current = engine_->getCurPage();
-    struct Restore {
+
+    struct Restore
+    {
         LVDocView &view;
         ldomXPointer bookmark;
         bool moved;
-        ~Restore() {
+
+        ~Restore()
+        {
             if (moved)
                 view.goToBookmark(bookmark);
         }
-    } restore{*engine_, engine_->getBookmark(), target != current};
+    } restore{ *engine_, engine_->getBookmark(), target != current };
+
     if (restore.moved)
         engine_->goToPage(target);
     int remaining = 65536;
@@ -1323,7 +1450,10 @@ QVector<QVector<QRect>> EngineDocument::pageRangeRects(int target, const QVector
     }
     return result;
 }
-QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &end, bool includeImages) {
+
+QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &end,
+                                          bool includeImages)
+{
     QVector<QRect> result;
     if (!engine_)
         return result;
@@ -1339,8 +1469,9 @@ QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &e
         }
         const int current = page();
         ldomXPointerEx first(engine_->getPageBookmark(current));
-        ldomXPointerEx last = current + 1 < pages() ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-                                                    : ldomXRange(doc->getRootNode(), true).getEnd();
+        ldomXPointerEx last = current + 1 < pages()
+                ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
+                : ldomXRange(doc->getRootNode(), true).getEnd();
         if (!first.isNull() && a.compare(first) < 0) {
             a = first;
         }
@@ -1359,18 +1490,21 @@ QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &e
         lvPoint top(r.left, r.top), bottom(r.right, r.bottom);
         if (!engine_->docToWindowPoint(top) || !engine_->docToWindowPoint(bottom, true))
             continue;
-        const auto clipped =
-            QRect(qMin(top.x, bottom.x), qMin(top.y, bottom.y), qAbs(bottom.x - top.x), qAbs(bottom.y - top.y))
-                .intersected(QRect(QPoint(), size_));
+        const auto clipped = QRect(qMin(top.x, bottom.x), qMin(top.y, bottom.y),
+                                   qAbs(bottom.x - top.x), qAbs(bottom.y - top.y))
+                                     .intersected(QRect(QPoint(), size_));
         if (!clipped.isEmpty())
             result.append(clipped);
     }
     return result;
 }
-SearchBatch EngineDocument::searchPage(const QString &query, int number) {
+
+SearchBatch EngineDocument::searchPage(const QString &query, int number)
+{
     SearchBatch result;
     result.nextPage = number + 1;
-    result.done = !engine_ || number < 0 || number + 1 >= pages() || query.isEmpty() || query.size() > 256;
+    result.done = !engine_ || number < 0 || number + 1 >= pages() || query.isEmpty()
+            || query.size() > 256;
     if (!engine_ || number < 0 || number >= pages() || query.isEmpty() || query.size() > 256)
         return result;
     auto *doc = engine_->getDocument();
@@ -1400,10 +1534,11 @@ SearchBatch EngineDocument::searchPage(const QString &query, int number) {
     // Compatibility normalization matches ligatures such as "ﬁ" to "fi". Folding
     // hyphens and skipping format controls matches "e‑mail" (a non-breaking
     // hyphen) and words split by zero-width characters as typed.
-    const auto flags = LDOM_FIND_TEXT_MATCH_ACROSS_TEXT_NODES | LDOM_FIND_TEXT_COLLAPSE_CONSECUTIVE_SPACES |
-                       LDOM_FIND_TEXT_NORMALIZE_CANONICAL | LDOM_FIND_TEXT_NORMALIZE_COMPATIBILITY |
-                       LDOM_FIND_TEXT_IGNORE_FORMAT_CONTROL_CHARS | LDOM_FIND_TEXT_FOLD_SPACES |
-                       LDOM_FIND_TEXT_FOLD_APOSTROPHES | LDOM_FIND_TEXT_FOLD_HYPHENS;
+    const auto flags = LDOM_FIND_TEXT_MATCH_ACROSS_TEXT_NODES
+            | LDOM_FIND_TEXT_COLLAPSE_CONSECUTIVE_SPACES | LDOM_FIND_TEXT_NORMALIZE_CANONICAL
+            | LDOM_FIND_TEXT_NORMALIZE_COMPATIBILITY | LDOM_FIND_TEXT_IGNORE_FORMAT_CONTROL_CHARS
+            | LDOM_FIND_TEXT_FOLD_SPACES | LDOM_FIND_TEXT_FOLD_APOSTROPHES
+            | LDOM_FIND_TEXT_FOLD_HYPHENS;
     range.findText(cre(query), true, false, matches, 101, 0, -1, false, false, flags);
     for (int i = 0; i < matches.length(); ++i) {
         auto &match = *matches[i];
@@ -1422,10 +1557,12 @@ SearchBatch EngineDocument::searchPage(const QString &query, int number) {
             if (!after.nextVisibleChar(true))
                 break;
         ldomXRange prefix(before, match.getStart()), suffix(match.getEnd(), after);
-        result.hits.append({qstring(match.getStart().toString()), qstring(match.getEnd().toString()),
-                            contextText(qstring(prefix.getRangeText())), qstring(match.getRangeText()).simplified(),
-                            contextText(qstring(suffix.getRangeText())), page});
+        result.hits.append({ qstring(match.getStart().toString()),
+                             qstring(match.getEnd().toString()),
+                             contextText(qstring(prefix.getRangeText())),
+                             qstring(match.getRangeText()).simplified(),
+                             contextText(qstring(suffix.getRangeText())), page });
     }
     return result;
 }
-}
+} // namespace kobalt

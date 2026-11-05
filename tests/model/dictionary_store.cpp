@@ -14,32 +14,45 @@
 #include <QtEndian>
 #include <zlib.h>
 using namespace kobalt;
+
 namespace {
-void require(bool ok, const char *message) {
+void require(bool ok, const char *message)
+{
     if (!ok)
         qFatal("%s", message);
 }
-void le16(QByteArray &b, quint16 v) {
+
+void le16(QByteArray &b, quint16 v)
+{
     v = qToLittleEndian(v);
     b.append(reinterpret_cast<char *>(&v), 2);
 }
-void le32(QByteArray &b, quint32 v) {
+
+void le32(QByteArray &b, quint32 v)
+{
     v = qToLittleEndian(v);
     b.append(reinterpret_cast<char *>(&v), 4);
 }
-void be32(QByteArray &b, quint32 v) {
+
+void be32(QByteArray &b, quint32 v)
+{
     v = qToBigEndian(v);
     b.append(reinterpret_cast<char *>(&v), 4);
 }
-void save(const QString &path, const QByteArray &bytes) {
+
+void save(const QString &path, const QByteArray &bytes)
+{
     QFile f(path);
     require(f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size(), "write fixture");
 }
-QByteArray dictzip(const QByteArray &body) {
+
+QByteArray dictzip(const QByteArray &body)
+{
     constexpr int chunk = 24;
     QVector<QByteArray> blocks;
     z_stream stream{};
-    require(deflateInit2(&stream, 6, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) == Z_OK, "deflate init");
+    require(deflateInit2(&stream, 6, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) == Z_OK,
+            "deflate init");
     for (int at = 0; at < body.size(); at += chunk) {
         QByteArray out(1024, '\0');
         stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(body.constData() + at));
@@ -76,30 +89,40 @@ QByteArray dictzip(const QByteArray &body) {
     le32(result, body.size());
     return result;
 }
-void replace16(QByteArray &bytes, int at, quint16 value) {
+
+void replace16(QByteArray &bytes, int at, quint16 value)
+{
     qToLittleEndian(value, reinterpret_cast<uchar *>(bytes.data() + at));
 }
-void replace32(QByteArray &bytes, int at, quint32 value) {
+
+void replace32(QByteArray &bytes, int at, quint32 value)
+{
     qToLittleEndian(value, reinterpret_cast<uchar *>(bytes.data() + at));
 }
-void checkDictzip(const QString &directory, const QByteArray &body) {
+
+void checkDictzip(const QString &directory, const QByteArray &body)
+{
     require(QDir().mkpath(directory), "make dictzip fixture directory");
     const auto prefix = directory + "/fixture";
     QByteArray index("word\0", 5);
     be32(index, 0);
     be32(index, body.size());
-    save(prefix + ".ifo", "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nidxfilesize=" +
-                              QByteArray::number(index.size()) + "\nsametypesequence=h\n");
+    save(prefix + ".ifo",
+         "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nidxfilesize="
+                 + QByteArray::number(index.size()) + "\nsametypesequence=h\n");
     save(prefix + ".idx", index);
     const auto valid = dictzip(body);
-    const int extraSize = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(valid.constData() + 10));
+    const int extraSize =
+            qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(valid.constData() + 10));
     const int payload = 12 + extraSize;
     const auto rejected = [&](const QByteArray &bytes, const char *message) {
         save(prefix + ".dict.dz", bytes);
         QString error;
         require(!StarDict::prepare(directory, "fixture", &error), message);
-        require(error == "Invalid dictzip data.", "invalid compression metadata reports its own failure");
-        require(!QFile::exists(prefix + ".idx.kobalt"), "invalid compression metadata creates no lookup index");
+        require(error == "Invalid dictzip data.",
+                "invalid compression metadata reports its own failure");
+        require(!QFile::exists(prefix + ".idx.kobalt"),
+                "invalid compression metadata creates no lookup index");
     };
     auto bytes = valid;
     bytes[0] = 0;
@@ -132,7 +155,9 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
     replace16(bytes, 20, 0);
     rejected(bytes, "zero chunk count rejected");
     bytes = valid;
-    replace16(bytes, 20, qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(valid.constData() + 20)) + 1);
+    replace16(bytes, 20,
+              qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(valid.constData() + 20))
+                      + 1);
     rejected(bytes, "chunk count must agree with the size table");
     bytes = valid;
     replace16(bytes, 22, 0);
@@ -140,7 +165,8 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
     bytes = valid;
     replace16(bytes, 22, 65535);
     rejected(bytes, "chunk table cannot overlap the gzip trailer");
-    const int chunks = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(valid.constData() + 20));
+    const int chunks =
+            qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(valid.constData() + 20));
     bytes = valid;
     replace32(bytes, bytes.size() - 4, (chunks - 1) * 24);
     rejected(bytes, "trailer length must include the last chunk");
@@ -168,7 +194,8 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
     {
         StarDict dictionary;
         require(dictionary.open(directory, "fixture", &error), qPrintable(error));
-        require(dictionary.lookup("word").html.toUtf8() == body, "optional gzip fields preserve dictionary lookup");
+        require(dictionary.lookup("word").html.toUtf8() == body,
+                "optional gzip fields preserve dictionary lookup");
     }
 
     // The header is internally consistent, but each inflated chunk has the wrong length.
@@ -180,7 +207,8 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
         StarDict dictionary;
         require(dictionary.open(directory, "fixture", &error), qPrintable(error));
         const auto result = dictionary.lookup("word");
-        require(result.received && result.html.isEmpty() && result.error == "Dictionary definition is damaged.",
+        require(result.received && result.html.isEmpty()
+                        && result.error == "Dictionary definition is damaged.",
                 "decompression length mismatch cannot return a partial definition");
     }
 
@@ -197,8 +225,9 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
                 "an installed index changed to an invalid body offset cannot return data");
     }
     save(prefix + ".idx", index);
-    save(prefix + ".ifo", "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nsynwordcount=1\nidxfilesize=" +
-                              QByteArray::number(index.size()) + "\nsametypesequence=h\n");
+    save(prefix + ".ifo",
+         "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nsynwordcount=1\nidxfilesize="
+                 + QByteArray::number(index.size()) + "\nsametypesequence=h\n");
     QByteArray synonym("alias\0", 6);
     be32(synonym, 0);
     save(prefix + ".syn", synonym);
@@ -206,7 +235,8 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
     {
         StarDict dictionary;
         require(dictionary.open(directory, "fixture", &error), qPrintable(error));
-        require(dictionary.lookup("alias").html.toUtf8() == body, "synonym resolves a prepared word number");
+        require(dictionary.lookup("alias").html.toUtf8() == body,
+                "synonym resolves a prepared word number");
     }
     qToBigEndian<quint32>(1, reinterpret_cast<uchar *>(synonym.data() + 6));
     save(prefix + ".syn", synonym);
@@ -218,7 +248,9 @@ void checkDictzip(const QString &directory, const QByteArray &body) {
                 "an installed synonym changed to an invalid word number cannot return data");
     }
 }
-QByteArray zip(const QMap<QByteArray, QByteArray> &files) {
+
+QByteArray zip(const QMap<QByteArray, QByteArray> &files)
+{
     QByteArray bytes, directory;
     for (auto it = files.begin(); it != files.end(); ++it) {
         const auto name = QByteArray("en-en/") + it.key();
@@ -267,31 +299,33 @@ QByteArray zip(const QMap<QByteArray, QByteArray> &files) {
     le16(bytes, 0);
     return bytes;
 }
-class Empty : public DictionaryService {
+
+class Empty : public DictionaryService
+{
 public:
-    QVector<DictionaryChoice> choices() const override {
-        return {};
-    }
-    bool select(const QString &, const QString &, QString *) override {
-        return false;
-    }
-    DictionaryResult lookup(const QString &, const QString &word) override {
+    QVector<DictionaryChoice> choices() const override { return {}; }
+
+    bool select(const QString &, const QString &, QString *) override { return false; }
+
+    DictionaryResult lookup(const QString &, const QString &word) override
+    {
         DictionaryResult result;
         result.word = word;
         result.error = "Empty";
         return result;
     }
 };
-}
-class NativeChoice final : public Empty {
+} // namespace
+
+class NativeChoice final : public Empty
+{
 public:
-    QVector<DictionaryChoice> choices() const override {
-        return {{"native", "Native"}};
-    }
-    bool select(const QString &, const QString &id, QString *) override {
-        return id == "native";
-    }
-    DictionaryResult lookup(const QString &, const QString &word) override {
+    QVector<DictionaryChoice> choices() const override { return { { "native", "Native" } }; }
+
+    bool select(const QString &, const QString &id, QString *) override { return id == "native"; }
+
+    DictionaryResult lookup(const QString &, const QString &word) override
+    {
         DictionaryResult result;
         result.word = word;
         result.dictionaryId = "native";
@@ -299,20 +333,26 @@ public:
         return result;
     }
 };
-class BufferedDownload final : public QNetworkReply {
+
+class BufferedDownload final : public QNetworkReply
+{
 public:
     qint64 remaining = 0;
     int readsAfterAbort = 0, aborts = 0;
-    explicit BufferedDownload(const QNetworkRequest &request, QObject *parent) : QNetworkReply(parent) {
+
+    explicit BufferedDownload(const QNetworkRequest &request, QObject *parent)
+        : QNetworkReply(parent)
+    {
         setRequest(request);
         setUrl(request.url());
         setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
         open(QIODevice::ReadOnly);
     }
-    qint64 bytesAvailable() const override {
-        return remaining + QNetworkReply::bytesAvailable();
-    }
-    void abort() override {
+
+    qint64 bytesAvailable() const override { return remaining + QNetworkReply::bytesAvailable(); }
+
+    void abort() override
+    {
         if (isFinished())
             return;
         ++aborts;
@@ -320,11 +360,15 @@ public:
         setFinished(true);
         emit finished();
     }
-    void deliver(qint64 size) {
+
+    void deliver(qint64 size)
+    {
         remaining = size;
         emit readyRead();
     }
-    void complete(int status = 200, const QUrl &redirect = {}, NetworkError error = NoError) {
+
+    void complete(int status = 200, const QUrl &redirect = {}, NetworkError error = NoError)
+    {
         setAttribute(QNetworkRequest::HttpStatusCodeAttribute, status);
         if (!redirect.isEmpty())
             setAttribute(QNetworkRequest::RedirectionTargetAttribute, redirect);
@@ -335,7 +379,8 @@ public:
     }
 
 protected:
-    qint64 readData(char *data, qint64 maximum) override {
+    qint64 readData(char *data, qint64 maximum) override
+    {
         if (aborts)
             ++readsAfterAbort;
         const auto size = qMin(maximum, remaining);
@@ -344,36 +389,43 @@ protected:
         return size;
     }
 };
-class DownloadNetwork final : public QNetworkAccessManager {
+
+class DownloadNetwork final : public QNetworkAccessManager
+{
 public:
     QPointer<BufferedDownload> reply;
     int requests = 0;
 
 protected:
-    QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *) override {
+    QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *) override
+    {
         ++requests;
         reply = new BufferedDownload(request, this);
         return reply;
     }
 };
+
 // Checks dictionary downloads, archive limits, source names, installation, lookup and removal, with controlled replies.
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QCoreApplication app(argc, argv);
     QTemporaryDir temp;
     require(temp.isValid(), "temporary directory");
     {
         const auto entries = DictionaryManager::catalog();
         require(!entries.isEmpty(), "download catalog has a test entry");
-        const auto entry = *std::min_element(entries.begin(), entries.end(), [](const auto &a, const auto &b) {
-            return a.size < b.size;
-        });
+        const auto entry =
+                *std::min_element(entries.begin(), entries.end(),
+                                  [](const auto &a, const auto &b) { return a.size < b.size; });
         DownloadNetwork network;
-        DictionaryManager manager(temp.path() + "/downloads", std::make_unique<Empty>(), nullptr, &network);
+        DictionaryManager manager(temp.path() + "/downloads", std::make_unique<Empty>(), nullptr,
+                                  &network);
         manager.download(entry.id);
         require(manager.busy() && network.reply, "controlled download starts");
         network.reply->deliver(entry.size + 3 * 65536);
         require(!manager.busy(), "oversized buffered reply finishes without a hang");
-        require(manager.status() == "Download size or storage error.", "abort preserves the local download failure");
+        require(manager.status() == "Download size or storage error.",
+                "abort preserves the local download failure");
         require(network.reply->aborts == 1 && network.reply->readsAfterAbort == 0,
                 "abort does not drain more buffered data");
         require(QDir(temp.path() + "/downloads").entryList(QDir::Files | QDir::Hidden).isEmpty(),
@@ -381,8 +433,9 @@ int main(int argc, char **argv) {
         manager.download(entry.id);
         require(manager.busy(), "download can restart after failure");
         manager.cancel();
-        require(!manager.busy() && manager.status() == "Download cancelled.", "user cancellation remains distinct");
-        for (const auto status : {404, 200}) {
+        require(!manager.busy() && manager.status() == "Download cancelled.",
+                "user cancellation remains distinct");
+        for (const auto status : { 404, 200 }) {
             manager.download(entry.id);
             network.reply->complete(status);
             require(!manager.busy(), "HTTP failure or truncated response releases the transfer");
@@ -393,12 +446,14 @@ int main(int argc, char **argv) {
         manager.download(entry.id);
         network.reply->deliver(entry.size);
         network.reply->complete();
-        require(!manager.busy() && !manager.installed(entry.id), "correct size with wrong checksum is rejected");
+        require(!manager.busy() && !manager.installed(entry.id),
+                "correct size with wrong checksum is rejected");
         require(manager.status() == "Dictionary checksum or size differs.",
                 "digest is checked after exact-size download");
         manager.download(entry.id);
         network.reply->complete(200, {}, QNetworkReply::ConnectionRefusedError);
-        require(!manager.busy() && manager.status() == "Fixture network failure", "network error survives cleanup");
+        require(!manager.busy() && manager.status() == "Fixture network failure",
+                "network error survives cleanup");
         manager.download(entry.id);
         const int beforeUnsafeRedirect = network.requests;
         network.reply->complete(302, QUrl("http://unsafe.example/dictionary.zip"));
@@ -411,8 +466,10 @@ int main(int argc, char **argv) {
             require(manager.busy(), "allowed redirect remains active");
             network.reply->complete(302, QUrl("/dictionary.zip"));
         }
-        require(network.requests == beforeRedirectLoop + 5, "redirect limit prevents an unbounded request loop");
-        require(!manager.busy() && manager.status() == "Unsafe download redirect.", "redirect limit ends the transfer");
+        require(network.requests == beforeRedirectLoop + 5,
+                "redirect limit prevents an unbounded request loop");
+        require(!manager.busy() && manager.status() == "Unsafe download redirect.",
+                "redirect limit ends the transfer");
         require(QDir(temp.path() + "/downloads").entryList(QDir::Files | QDir::Hidden).isEmpty(),
                 "all failed transfers remove temporary files");
         manager.download(entry.id);
@@ -422,17 +479,20 @@ int main(int argc, char **argv) {
         require(network.requests == beforeBusy, "busy downloader ignores new requests");
         manager.cancel();
         manager.download("../invalid");
-        require(!manager.busy() && network.requests == beforeBusy, "unknown dictionary starts no request");
+        require(!manager.busy() && network.requests == beforeBusy,
+                "unknown dictionary starts no request");
     }
     {
         DictionaryManager native(temp.path() + "/new-root", std::make_unique<NativeChoice>());
         QString error;
-        require(native.select("book", "native", &error), "native session choice works before any download");
+        require(native.select("book", "native", &error),
+                "native session choice works before any download");
     }
     const auto root = temp.path() + "/dictionaries";
     const auto archive = temp.path() + "/dictionary.zip";
-    const QByteArray first("<p>A domesticated animal with a definition crossing compressed chunks.</p>"),
-        second("<p>\xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8</p>");
+    const QByteArray first(
+            "<p>A domesticated animal with a definition crossing compressed chunks.</p>"),
+            second("<p>\xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8</p>");
     checkDictzip(temp.path() + "/dictzip-validation", first + second);
     {
         const auto folder = temp.path() + "/phrase";
@@ -443,15 +503,17 @@ int main(int argc, char **argv) {
         be32(index, definition.size());
         save(folder + "/phrase.idx", index);
         save(folder + "/phrase.dict.dz", dictzip(definition));
-        save(folder + "/phrase.ifo", "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nidxfilesize=" +
-                                        QByteArray::number(index.size()) + "\nsametypesequence=h\n");
+        save(folder + "/phrase.ifo",
+             "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nidxfilesize="
+                     + QByteArray::number(index.size()) + "\nsametypesequence=h\n");
         QString error;
         require(StarDict::prepare(folder, "phrase", &error), qPrintable(error));
         StarDict dictionary;
         require(dictionary.open(folder, "phrase", &error), qPrintable(error));
         require(dictionary.lookup("ice cream").html.toUtf8() == definition,
                 "Dictionary lookup did not resolve a complete phrase entry");
-        require(dictionary.lookup("ice").html.isEmpty(), "Phrase lookup silently used only its first word");
+        require(dictionary.lookup("ice").html.isEmpty(),
+                "Phrase lookup silently used only its first word");
     }
     QByteArray idx("CAT\0", 4);
     be32(idx, first.size());
@@ -465,18 +527,20 @@ int main(int argc, char **argv) {
     QByteArray syn("cats\0", 5);
     be32(syn, 1);
     QMap<QByteArray, QByteArray> files;
-    files["en-en.ifo"] = "StarDict's dict ifo file\nversion=2.4.2\nwordcount=3\nsynwordcount=1\nidxfilesize=" +
-                         QByteArray::number(idx.size()) + "\nsametypesequence=h\n";
+    files["en-en.ifo"] =
+            "StarDict's dict ifo file\nversion=2.4.2\nwordcount=3\nsynwordcount=1\nidxfilesize="
+            + QByteArray::number(idx.size()) + "\nsametypesequence=h\n";
     files["en-en.idx"] = idx;
     files["en-en.syn"] = syn;
     files["en-en.dict.dz"] = dictzip(first + second);
     files["LICENSE"] = "Fixture license";
-    files["ATTRIBUTION"] = "This dictionary is distributed under CC-BY-SA-4.0.\nhttps://license.example\n\n"
-                           "It is built from the following sources:\n\n"
-                           "  * pwn30: Princeton University WordNet 3.0\n"
-                           "  * wikt-en: English Wiktionary via kaikki.org (wiktextract)\n"
-                           "  * wikt-en-extra: English Wiktionary via kaikki.org (wiktextract)\n\n"
-                           "-- WordNet notice --\nFull license notice stays in this file.\n";
+    files["ATTRIBUTION"] =
+            "This dictionary is distributed under CC-BY-SA-4.0.\nhttps://license.example\n\n"
+            "It is built from the following sources:\n\n"
+            "  * pwn30: Princeton University WordNet 3.0\n"
+            "  * wikt-en: English Wiktionary via kaikki.org (wiktextract)\n"
+            "  * wikt-en-extra: English Wiktionary via kaikki.org (wiktextract)\n\n"
+            "-- WordNet notice --\nFull license notice stays in this file.\n";
     DownloadDictionary entry;
     entry.id = "en-en";
     entry.name = "Fixture";
@@ -491,17 +555,15 @@ int main(int argc, char **argv) {
     auto wrong = entry;
     wrong.sha256[0] = char(wrong.sha256.at(0) ^ 1);
     require(!DictionaryManager::installArchive(root, wrong, archive, &error), "checksum rejected");
-    require(!DictionaryManager::installArchive(root, entry, archive, &error,
-                                               [] {
-                                                   return true;
-                                               }),
+    require(!DictionaryManager::installArchive(root, entry, archive, &error, [] { return true; }),
             "cancel rejected");
     require(!QFile::exists(root + "/en-en"), "failed install invisible");
     require(DictionaryManager::installArchive(root, entry, archive, &error), qPrintable(error));
     StarDict dictionary;
     require(dictionary.open(root + "/en-en", "en-en", &error), qPrintable(error));
     require(dictionary.lookup("cat").html.toUtf8() == first, "cross-chunk definition");
-    require(dictionary.lookup("cat").source == QString::fromUtf8("WordNet 3.0 · English Wiktionary"),
+    require(dictionary.lookup("cat").source
+                    == QString::fromUtf8("WordNet 3.0 · English Wiktionary"),
             "Lookup source summary must name projects once and omit license and import details");
     require(dictionary.lookup("absent").source == dictionary.lookup("cat").source,
             "Missing definitions retain their dictionary source summary");
@@ -509,13 +571,15 @@ int main(int argc, char **argv) {
     require(attribution.open(QIODevice::ReadOnly) && attribution.readAll() == files["ATTRIBUTION"],
             "Compact source display must preserve the full attribution file");
     attribution.close();
-    save(root + "/en-en/ATTRIBUTION", "It is built from the following sources:\n  * custom: A <credit> & partner\n");
+    save(root + "/en-en/ATTRIBUTION",
+         "It is built from the following sources:\n  * custom: A <credit> & partner\n");
     StarDict escaped;
-    require(escaped.open(root + "/en-en", "en-en", &error) &&
-                escaped.lookup("cat").source == "A &lt;credit&gt; &amp; partner",
+    require(escaped.open(root + "/en-en", "en-en", &error)
+                    && escaped.lookup("cat").source == "A &lt;credit&gt; &amp; partner",
             "Source summaries must preserve unknown project names and escape markup");
     save(root + "/en-en/ATTRIBUTION", files["ATTRIBUTION"]);
-    require(dictionary.lookup("CAT").html.toUtf8() == second, "exact spelling beats folded acronym");
+    require(dictionary.lookup("CAT").html.toUtf8() == second,
+            "exact spelling beats folded acronym");
     require(dictionary.lookup("Cat").html.toUtf8() == second, "ASCII fold fallback");
     require(dictionary.lookup("cats").html.toUtf8() == first, "inflection index");
     require(dictionary.lookup("word").html.toUtf8() == second, "Unicode definition");
@@ -524,20 +588,22 @@ int main(int argc, char **argv) {
         DictionaryManager manager(root, std::make_unique<Empty>());
         require(manager.installed("en-en") && manager.choices().size() == 1, "installed catalog");
         qint64 installedBytes = 0;
-        for (const auto &file : QDir(root + "/en-en").entryInfoList(QDir::Files | QDir::NoDotAndDotDot))
+        for (const auto &file :
+             QDir(root + "/en-en").entryInfoList(QDir::Files | QDir::NoDotAndDotDot))
             installedBytes += file.size();
-        require(manager.installedSizes().value("en-en") == installedBytes && installedBytes > 0 &&
-                    installedBytes != entry.size,
+        require(manager.installedSizes().value("en-en") == installedBytes && installedBytes > 0
+                        && installedBytes != entry.size,
                 "installed storage includes extracted files and generated indexes, not ZIP bytes");
-        require(manager.availableBytes() >= 0, "free storage is available on the dictionary filesystem");
+        require(manager.availableBytes() >= 0,
+                "free storage is available on the dictionary filesystem");
         require(manager.selectedDictionary("book").isEmpty(), "no session choice before selection");
         manager.setLanguage("en-US");
-        require(manager.lookup("book", "cat").dictionaryId == "downloaded:en-en", "automatic book-language dictionary");
-        require(manager.selectedDictionary("book").isEmpty(), "automatic choice is not a session override");
+        require(manager.lookup("book", "cat").dictionaryId == "downloaded:en-en",
+                "automatic book-language dictionary");
+        require(manager.selectedDictionary("book").isEmpty(),
+                "automatic choice is not a session override");
         int updates = 0;
-        QObject::connect(&manager, &DictionaryManager::changed, [&] {
-            ++updates;
-        });
+        QObject::connect(&manager, &DictionaryManager::changed, [&] { ++updates; });
         require(manager.select("book", "downloaded:en-en", &error), "selection");
         require(manager.selectedDictionary("book") == "en-en" && updates == 1,
                 "explicit session choice emits a change");
@@ -556,7 +622,7 @@ int main(int argc, char **argv) {
     }
     {
         const auto orderedRoot = temp.path() + "/ordered";
-        const QStringList ids{"en-en", "en-fr", "en-ar", "ar-en", "ar-ar"};
+        const QStringList ids{ "en-en", "en-fr", "en-ar", "ar-en", "ar-ar" };
         for (const auto &id : ids) {
             require(QDir().mkpath(orderedRoot + "/" + id), "make installed marker directory");
             save(orderedRoot + "/" + id + "/installed.json", "{\"id\":\"" + id.toUtf8() + "\"}");
@@ -564,40 +630,51 @@ int main(int argc, char **argv) {
         DictionaryManager manager(orderedRoot, std::make_unique<NativeChoice>());
         manager.setLanguage(" EN_us ");
         const auto choices = manager.choices();
-        const QStringList expected{"downloaded:en-en", "downloaded:en-ar", "downloaded:en-fr",
-                                   "native",           "downloaded:ar-ar", "downloaded:ar-en"};
+        const QStringList expected{ "downloaded:en-en", "downloaded:en-ar", "downloaded:en-fr",
+                                    "native",           "downloaded:ar-ar", "downloaded:ar-en" };
         require(choices.size() == expected.size(), "all installed choices included once");
         for (int i = 0; i < choices.size(); ++i)
-            require(choices[i].id == expected[i], "book mono, translations, fallback, other languages");
-        require(choices[0].language == "en" && !choices[0].fallback && choices[3].fallback, "lookup grouping metadata");
+            require(choices[i].id == expected[i],
+                    "book mono, translations, fallback, other languages");
+        require(choices[0].language == "en" && !choices[0].fallback && choices[3].fallback,
+                "lookup grouping metadata");
         manager.setLanguage("zz");
-        require(manager.choices().first().id == "native", "unknown language prefers platform dictionary");
+        require(manager.choices().first().id == "native",
+                "unknown language prefers platform dictionary");
         manager.setLanguage(QString());
-        require(manager.choices().first().id == "native", "empty language prefers platform dictionary");
+        require(manager.choices().first().id == "native",
+                "empty language prefers platform dictionary");
         require(DictionaryManager::languageName("cs-CZ") == "Czech", "English language names");
-        require(DictionaryManager::languageName("zz") == "zz", "unknown language names keep their code");
+        require(DictionaryManager::languageName("zz") == "zz",
+                "unknown language names keep their code");
     }
-    require(DictionaryManager::installArchive(root, entry, archive, &error), "reinstall session fixture");
+    require(DictionaryManager::installArchive(root, entry, archive, &error),
+            "reinstall session fixture");
     {
         const QByteArray oldSelection("{\"book\":\"native\"}");
         save(root + "/selection.json", oldSelection);
         DictionaryManager manager(root, std::make_unique<NativeChoice>());
         manager.setLanguage("en");
-        require(manager.lookup("book", "cat").dictionaryId == "downloaded:en-en", "ignore legacy selection file");
+        require(manager.lookup("book", "cat").dictionaryId == "downloaded:en-en",
+                "ignore legacy selection file");
         require(manager.select("book", "native", &error), "select native session dictionary");
-        require(manager.lookup("book", "cat").dictionaryId == "native", "session selection overrides automatic rule");
-        require(manager.lookup("book", "cat").dictionaryId == "native", "session selection holds on later lookup");
+        require(manager.lookup("book", "cat").dictionaryId == "native",
+                "session selection overrides automatic rule");
+        require(manager.lookup("book", "cat").dictionaryId == "native",
+                "session selection holds on later lookup");
         require(manager.lookup("another-book", "cat").dictionaryId == "downloaded:en-en",
                 "other book has no session override");
         QFile oldFile(root + "/selection.json");
         require(oldFile.open(QIODevice::ReadOnly) && oldFile.readAll() == oldSelection,
                 "legacy selection file never written");
-        require(manager.select("book", "downloaded:en-en", &error), "select downloaded session dictionary");
+        require(manager.select("book", "downloaded:en-en", &error),
+                "select downloaded session dictionary");
         require(manager.remove("en-en", &error), "remove session dictionary");
         require(manager.lookup("book", "cat").dictionaryId == "native",
                 "removing session choice restores preference rule");
     }
-    require(DictionaryManager::installArchive(root, entry, archive, &error), "reinstall fresh-manager fixture");
+    require(DictionaryManager::installArchive(root, entry, archive, &error),
+            "reinstall fresh-manager fixture");
     {
         DictionaryManager manager(root, std::make_unique<NativeChoice>());
         manager.setLanguage("en");
@@ -605,29 +682,33 @@ int main(int argc, char **argv) {
                 "fresh manager discards session choice");
         require(manager.remove("en-en", &error), "remove fresh-manager fixture");
     }
-    require(!QFile::exists(temp.path() + "/new-root/selection.json"), "no selection file created for native choice");
+    require(!QFile::exists(temp.path() + "/new-root/selection.json"),
+            "no selection file created for native choice");
     files.remove("en-en.syn");
     write();
-    require(!DictionaryManager::installArchive(root, entry, archive, &error), "missing declared inflections rejected");
+    require(!DictionaryManager::installArchive(root, entry, archive, &error),
+            "missing declared inflections rejected");
     files["en-en.syn"] = syn;
     files["en-en.idx"] = idx;
     files["en-en.idx"][7] = char(0xff);
     write();
-    require(!DictionaryManager::installArchive(root, entry, archive, &error), "out of bounds index rejected");
+    require(!DictionaryManager::installArchive(root, entry, archive, &error),
+            "out of bounds index rejected");
     require(!QFile::exists(root + "/en-en"), "invalid dictionary invisible");
     if (argc == 2) {
         for (const auto &real : DictionaryManager::catalog())
             if (real.id == "ar-ar") {
-                require(DictionaryManager::installArchive(root, real, QString::fromLocal8Bit(argv[1]), &error),
+                require(DictionaryManager::installArchive(root, real,
+                                                          QString::fromLocal8Bit(argv[1]), &error),
                         qPrintable(error));
                 StarDict arabic;
                 require(arabic.open(root + "/ar-ar", "ar-ar", &error), qPrintable(error));
                 QFile index(root + "/ar-ar/ar-ar.idx");
                 require(index.open(QIODevice::ReadOnly), "Arabic index");
                 const auto head = index.read(264).split('\0').first();
-                require(!arabic.lookup(QString::fromUtf8(head)).html.isEmpty(), "real Arabic lookup");
+                require(!arabic.lookup(QString::fromUtf8(head)).html.isEmpty(),
+                        "real Arabic lookup");
             }
     }
-    qInfo(
-        "PASS: checksums, cancellation, atomic install, compressed lookup, inflections, Unicode, selection, removal, malformed indexes");
+    qInfo("PASS: checksums, cancellation, atomic install, compressed lookup, inflections, Unicode, selection, removal, malformed indexes");
 }

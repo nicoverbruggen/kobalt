@@ -9,15 +9,21 @@
 
 namespace kobalt::library {
 namespace {
-qint64 now() {
+qint64 now()
+{
     return QDateTime::currentMSecsSinceEpoch();
 }
-}
+} // namespace
+
 Store::Store(QString directory, std::shared_ptr<Source> source, QObject *parent)
-    : QObject(parent), directory(directory), coverDirectory(directory + "/library-covers"),
-      scanner(std::move(source), coverDirectory) {
+    : QObject(parent),
+      directory(directory),
+      coverDirectory(directory + "/library-covers"),
+      scanner(std::move(source), coverDirectory)
+{
     ready = data.loadDatabase(directory);
-    if (!ready) diagnostic("library-storage-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
+    if (!ready)
+        diagnostic("library-storage-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
     saving.setSingleShot(true);
     saving.setInterval(500);
     connect(&saving, &QTimer::timeout, this, &Store::save);
@@ -50,19 +56,28 @@ Store::Store(QString directory, std::shared_ptr<Source> source, QObject *parent)
             changed();
     };
 }
-Store::~Store() {
+
+Store::~Store()
+{
     scanner.cancel();
     if (saving.isActive())
         save();
 }
-QString Store::coverPath(const QString &name) const {
+
+QString Store::coverPath(const QString &name) const
+{
     return name.isEmpty() ? QString() : coverDirectory + '/' + name;
 }
-bool Store::scanning() const {
+
+bool Store::scanning() const
+{
     return scanner.running();
 }
-void Store::scan() {
-    if (!ready) return;
+
+void Store::scan()
+{
+    if (!ready)
+        return;
     if (scanner.running()) {
         // A folder added during a scan is listed by the next one.
         rescan = true;
@@ -93,20 +108,29 @@ void Store::scan() {
     if (changed)
         changed();
 }
-void Store::addFolder(const Folder &folder) {
-    if (!ready) return;
+
+void Store::addFolder(const Folder &folder)
+{
+    if (!ready)
+        return;
     data.addFolder(folder);
     touch();
     scan();
 }
-void Store::removeFolder(const QString &key) {
-    if (!ready) return;
+
+void Store::removeFolder(const QString &key)
+{
+    if (!ready)
+        return;
     for (const auto &cover : data.removeFolder(key))
         QFile::remove(coverPath(cover));
     touch();
 }
-bool Store::addBook(const QString &path) {
-    if (!ready) return false;
+
+bool Store::addBook(const QString &path)
+{
+    if (!ready)
+        return false;
     const QFileInfo info(path);
     const auto key = info.absoluteFilePath();
     QFile file(key);
@@ -132,17 +156,24 @@ bool Store::addBook(const QString &path) {
         book.added = now();
     QDir().mkpath(coverDirectory);
     const auto name = coverName(key);
-    book.cover = !metadata.cover.isNull() && metadata.cover.save(coverPath(name), "PNG") ? name : QString();
+    book.cover = !metadata.cover.isNull() && metadata.cover.save(coverPath(name), "PNG")
+            ? name
+            : QString();
     data.books.insert(key, book);
     touch();
     return true;
 }
-void Store::removeBook(const QString &key) {
-    if (!ready) return;
+
+void Store::removeBook(const QString &key)
+{
+    if (!ready)
+        return;
     QFile::remove(coverPath(data.removeBook(key)));
     touch();
 }
-void Store::setMark(const QString &key, Book::Mark mark) {
+
+void Store::setMark(const QString &key, Book::Mark mark)
+{
     if (!data.books.contains(key))
         return;
     auto &book = data.books[key];
@@ -154,7 +185,9 @@ void Store::setMark(const QString &key, Book::Mark mark) {
     }
     touch();
 }
-void Store::setOpened(const QString &key) {
+
+void Store::setOpened(const QString &key)
+{
     if (!data.books.contains(key))
         return;
     auto &book = data.books[key];
@@ -163,7 +196,9 @@ void Store::setOpened(const QString &key) {
     book.finished = false;
     touch();
 }
-void Store::setProgress(const QString &key, int percent, bool finished) {
+
+void Store::setProgress(const QString &key, int percent, bool finished)
+{
     if (!data.books.contains(key))
         return;
     auto &book = data.books[key];
@@ -171,24 +206,34 @@ void Store::setProgress(const QString &key, int percent, bool finished) {
     book.finished = finished;
     touch();
 }
-void Store::setSettings(const Settings &settings) {
+
+void Store::setSettings(const Settings &settings)
+{
     data.settings = settings;
     touch();
 }
-void Store::save() {
+
+void Store::save()
+{
     // Known exception: the Android and desktop library still saves on the
     // main thread, also while a book is open.
     mainthread::AllowBlocking allow("library save");
     saving.stop();
     QDir().mkpath(directory);
-    if (ready && !data.saveDatabase(directory)) diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
+    if (ready && !data.saveDatabase(directory))
+        diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
 }
-void Store::touch() {
+
+void Store::touch()
+{
     saving.start();
     if (changed)
         changed();
 }
-SavedProgress savedProgress(const QJsonObject &state) {
-    return {qBound(0, state.value("percent").toInt(), 100), !state.value("finished_position").toString().isEmpty()};
+
+SavedProgress savedProgress(const QJsonObject &state)
+{
+    return { qBound(0, state.value("percent").toInt(), 100),
+             !state.value("finished_position").toString().isEmpty() };
 }
-}
+} // namespace kobalt::library

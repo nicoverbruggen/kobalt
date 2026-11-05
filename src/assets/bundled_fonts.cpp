@@ -10,44 +10,54 @@
 #include <QFontDatabase>
 
 namespace {
-template <class File> QStringList fontFiles(File file) {
+template <class File>
+QStringList fontFiles(File file)
+{
     QFile manifest(file("fonts/ebook-core.json"));
     if (!manifest.open(QIODevice::ReadOnly))
         return {};
     QStringList result;
-    for (const auto &entry : QJsonDocument::fromJson(manifest.readAll()).object().value("files").toArray())
+    for (const auto &entry :
+         QJsonDocument::fromJson(manifest.readAll()).object().value("files").toArray())
         result.append(file("fonts/ebook-core/" + entry.toObject().value("file").toString()));
-    for (const auto *face : {"Regular", "Italic", "Bold"})
+    for (const auto *face : { "Regular", "Italic", "Bold" })
         result.append(file(QString("fonts/IBMPlexSans-%1.ttf").arg(face)));
     for (const auto *name : kobalt::scriptFallbackFontFiles)
         result.append(file(QString("fonts/") + QLatin1String(name)));
     return result;
 }
+} // namespace
+
+QStringList kobalt::bundledFontFiles(const AssetBundle &assets)
+{
+    return assets.available()
+            ? fontFiles([&assets](const QString &name) { return assets.file(name); })
+            : QStringList();
 }
-QStringList kobalt::bundledFontFiles(const AssetBundle &assets) {
-    return assets.available() ? fontFiles([&assets](const QString &name) {
-        return assets.file(name);
-    })
-                              : QStringList();
-}
-kobalt::EngineFontInputs kobalt::engineFontInputs(const AssetBundle &assets, QString systemDirectory,
-                                                  QString sideloadDirectory) {
+
+kobalt::EngineFontInputs kobalt::engineFontInputs(const AssetBundle &assets,
+                                                  QString systemDirectory,
+                                                  QString sideloadDirectory)
+{
     EngineFontInputs inputs;
     if (!assets.available())
         return inputs;
-    inputs.sources = {bundledFontFiles(assets), std::move(systemDirectory), std::move(sideloadDirectory)};
+    inputs.sources = { bundledFontFiles(assets), std::move(systemDirectory),
+                       std::move(sideloadDirectory) };
     for (const auto *name : serifFallbackFontFiles) {
         inputs.fallbackFiles.append(assets.file(QString("fonts/") + name));
     }
-    for (const auto *name :
-         {"IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf", "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc"})
+    for (const auto *name : { "IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf",
+                              "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc" })
         inputs.fallbackFiles.append(assets.file(QString("fonts/") + name));
     inputs.hyphenationDirectory = assets.file("hyph");
     return inputs;
 }
-QString kobalt::placeholderFontFamily(const AssetBundle &assets, FontCopies &copies) {
+
+QString kobalt::placeholderFontFamily(const AssetBundle &assets, FontCopies &copies)
+{
     QString selected;
-    for (const auto *face : {"Regular", "Italic", "Bold"}) {
+    for (const auto *face : { "Regular", "Italic", "Bold" }) {
         const auto name = QString("IBMPlexSans-%1.ttf").arg(face);
         const auto bytes = assets.fontData(name);
         const auto path = bytes.isEmpty() ? QString() : copies.file(name, bytes);

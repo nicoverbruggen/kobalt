@@ -7,10 +7,13 @@
 extern "C" void *nh_dlhook(void *handle, const char *symbol, void *target);
 
 namespace kobalt {
-AnimationPanel pageAnimationPanel() {
+AnimationPanel pageAnimationPanel()
+{
     return animationPanel(qgetenv("PRODUCT"), framebufferDriver());
 }
-PageAnimationSupport pageAnimationSupport() {
+
+PageAnimationSupport pageAnimationSupport()
+{
 #ifdef KOBALT_PAGE_ANIMATIONS
     return animationSupport(framebufferDriver(), true, nextAnimationIoctl != nullptr);
 #else
@@ -18,7 +21,8 @@ PageAnimationSupport pageAnimationSupport() {
 #endif
 }
 
-void installPageAnimationHook() {
+void installPageAnimationHook()
+{
 #ifdef KOBALT_PAGE_ANIMATIONS
     // Older NickelHook mods, including released NickelDissolve builds, replace
     // a GOT entry without keeping its previous hook. Installing during plugin
@@ -35,10 +39,10 @@ void installPageAnimationHook() {
     void *library = dlopen("/usr/local/Kobo/platforms/libkobo.so", RTLD_LAZY | RTLD_NOLOAD);
     if (library) {
         nextAnimationIoctl = reinterpret_cast<PageAnimation::Ioctl>(
-            nh_dlhook(library, "ioctl", reinterpret_cast<void *>(kobalt_animation_ioctl)));
+                nh_dlhook(library, "ioctl", reinterpret_cast<void *>(kobalt_animation_ioctl)));
         dlclose(library);
     }
-    diagnostic("animation-hook", {{"installed", bool(nextAnimationIoctl)}}, false);
+    diagnostic("animation-hook", { { "installed", bool(nextAnimationIoctl) } }, false);
 #endif
 }
-}
+} // namespace kobalt

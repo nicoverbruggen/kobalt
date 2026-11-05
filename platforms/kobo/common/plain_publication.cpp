@@ -6,11 +6,14 @@
 
 namespace kobalt::native {
 namespace {
-bool available() {
+bool available()
+{
     return qApp && QThread::currentThread() == qApp->thread();
 }
-std::unique_ptr<PublicationEndpoint> open(const void *, const void *, const QString &path, const QString &,
-                                          QString *error) {
+
+std::unique_ptr<PublicationEndpoint> open(const void *, const void *, const QString &path,
+                                          const QString &, QString *error)
+{
     auto publication = openLocalPublication(path, error);
     if (!publication) {
         if (error)
@@ -19,9 +22,11 @@ std::unique_ptr<PublicationEndpoint> open(const void *, const void *, const QStr
     }
     return publication;
 }
-}
-const PublicationSource &plainPublicationSource() {
-    static const PublicationSource source{available, open};
+} // namespace
+
+const PublicationSource &plainPublicationSource()
+{
+    static const PublicationSource source{ available, open };
     return source;
 }
-}
+} // namespace kobalt::native

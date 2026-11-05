@@ -6,15 +6,15 @@
 #include <QVariant>
 #include <QThread>
 #ifndef KOBALT_READER_HARDWARE
-#include <QTimer>
-#include <QTouchEvent>
-#include <QPointingDevice>
-#include <QFile>
-#include <QSaveFile>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <unistd.h>
-#include <cerrno>
+#  include <QTimer>
+#  include <QTouchEvent>
+#  include <QPointingDevice>
+#  include <QFile>
+#  include <QSaveFile>
+#  include <QJsonDocument>
+#  include <QJsonObject>
+#  include <unistd.h>
+#  include <cerrno>
 #endif
 #include <dlfcn.h>
 #include <new>
@@ -31,96 +31,128 @@ static bool observedLightDevice = false;
 static int lightDeviceError = 0;
 #endif
 namespace {
-template <class T> T symbol(const char *name) {
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
-struct Api {
+
+struct Api
+{
     const void *(*device)() = symbol<decltype(device)>("_ZN6Device16getCurrentDeviceEv");
     bool (*supports)(const void *) = symbol<decltype(supports)>("_ZNK6Device13supportsLightEv");
-    void (*constructLight)(void *, QObject *) = symbol<decltype(constructLight)>("_ZN10FrontLightC1EP7QObject");
-    int (*brightness)(const void *) = symbol<decltype(brightness)>("_ZNK10FrontLight10brightnessEv");
+    void (*constructLight)(void *, QObject *) =
+            symbol<decltype(constructLight)>("_ZN10FrontLightC1EP7QObject");
+    int (*brightness)(const void *) =
+            symbol<decltype(brightness)>("_ZNK10FrontLight10brightnessEv");
     int (*maximum)(const void *) = symbol<decltype(maximum)>("_ZNK10FrontLight13maxBrightnessEv");
-    void (*setBrightness)(const void *, int,
-                          int) = symbol<decltype(setBrightness)>("_ZNK10FrontLight13setBrightnessEii");
-    void (*cancelBrightnessChanging)(void *) =
-        symbol<decltype(cancelBrightnessChanging)>("_ZN10FrontLight24cancelBrightnessChangingEv");
-    void (*constructGesture)(void *, QObject *, void *) =
-        symbol<decltype(constructGesture)>("_ZN21BrightnessEventFilterC1EP7QObjectP23BrightnessEventDelegate");
-    void (*finishGesture)(void *) = symbol<decltype(finishGesture)>("_ZN21BrightnessEventFilter13finishGestureEv");
-    QMetaType lightType{symbol<const QtPrivate::QMetaTypeInterface *>(
-        "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI10FrontLightE8metaTypeE")};
-    QMetaType gestureType{symbol<const QtPrivate::QMetaTypeInterface *>(
-        "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI21BrightnessEventFilterE8metaTypeE")};
-    bool gestureValid() const {
-        return device && supports && constructLight && brightness && maximum && setBrightness &&
-               cancelBrightnessChanging && constructGesture && finishGesture && lightType.sizeOf() == 16 &&
-               lightType.alignOf() <= qsizetype(alignof(std::max_align_t)) && gestureType.sizeOf() == 72 &&
-               gestureType.alignOf() <= qsizetype(alignof(std::max_align_t));
+    void (*setBrightness)(const void *, int, int) =
+            symbol<decltype(setBrightness)>("_ZNK10FrontLight13setBrightnessEii");
+    void (*cancelBrightnessChanging)(void *) = symbol<decltype(cancelBrightnessChanging)>(
+            "_ZN10FrontLight24cancelBrightnessChangingEv");
+    void (*constructGesture)(void *, QObject *, void *) = symbol<decltype(constructGesture)>(
+            "_ZN21BrightnessEventFilterC1EP7QObjectP23BrightnessEventDelegate");
+    void (*finishGesture)(void *) =
+            symbol<decltype(finishGesture)>("_ZN21BrightnessEventFilter13finishGestureEv");
+    QMetaType lightType{ symbol<const QtPrivate::QMetaTypeInterface *>(
+            "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI10FrontLightE8metaTypeE") };
+    QMetaType gestureType{ symbol<const QtPrivate::QMetaTypeInterface *>(
+            "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI21BrightnessEventFilterE8metaTypeE") };
+
+    bool gestureValid() const
+    {
+        return device && supports && constructLight && brightness && maximum && setBrightness
+                && cancelBrightnessChanging && constructGesture && finishGesture
+                && lightType.sizeOf() == 16
+                && lightType.alignOf() <= qsizetype(alignof(std::max_align_t))
+                && gestureType.sizeOf() == 72
+                && gestureType.alignOf() <= qsizetype(alignof(std::max_align_t));
     }
-    bool valid() const {
-        return gestureValid();
-    }
+
+    bool valid() const { return gestureValid(); }
+
     bool (*sensor)(const void *) = symbol<decltype(sensor)>("_ZNK6Device21hasAmbientLightSensorEv");
     bool (*ambientEnabled)(void *) =
-        symbol<decltype(ambientEnabled)>("_ZN13PowerSettings28getAmbientLightSensorEnabledEv");
-    void (*setAmbientEnabled)(void *, bool) =
-        symbol<decltype(setAmbientEnabled)>("_ZN13PowerSettings28setAmbientLightSensorEnabledEb");
+            symbol<decltype(ambientEnabled)>("_ZN13PowerSettings28getAmbientLightSensorEnabledEv");
+    void (*setAmbientEnabled)(void *, bool) = symbol<decltype(setAmbientEnabled)>(
+            "_ZN13PowerSettings28setAmbientLightSensorEnabledEb");
     bool (*natural)(const void *) = symbol<decltype(natural)>("_ZNK6Device15hasNaturalLightEv");
-    int (*temperature)(const void *) = symbol<decltype(temperature)>("_ZNK10FrontLight11temperatureEv");
-    int (*minTemperature)(const void *) = symbol<decltype(minTemperature)>("_ZNK10FrontLight14minTemperatureEv");
-    int (*maxTemperature)(const void *) = symbol<decltype(maxTemperature)>("_ZNK10FrontLight14maxTemperatureEv");
-    int (*intervals)(const void *) = symbol<decltype(intervals)>("_ZNK10FrontLight23numTemperatureIntervalsEv");
-    void (*setTemperature)(void *, int, bool,
-                           int) = symbol<decltype(setTemperature)>("_ZN10FrontLight14setTemperatureEibi");
-    void (*constructSettings)(void *, const void *,
-                              bool) = symbol<decltype(constructSettings)>("_ZN8SettingsC2ERK6Deviceb");
+    int (*temperature)(const void *) =
+            symbol<decltype(temperature)>("_ZNK10FrontLight11temperatureEv");
+    int (*minTemperature)(const void *) =
+            symbol<decltype(minTemperature)>("_ZNK10FrontLight14minTemperatureEv");
+    int (*maxTemperature)(const void *) =
+            symbol<decltype(maxTemperature)>("_ZNK10FrontLight14maxTemperatureEv");
+    int (*intervals)(const void *) =
+            symbol<decltype(intervals)>("_ZNK10FrontLight23numTemperatureIntervalsEv");
+    void (*setTemperature)(void *, int, bool, int) =
+            symbol<decltype(setTemperature)>("_ZN10FrontLight14setTemperatureEibi");
+    void (*constructSettings)(void *, const void *, bool) =
+            symbol<decltype(constructSettings)>("_ZN8SettingsC2ERK6Deviceb");
     void (*destroySettings)(void *) = symbol<decltype(destroySettings)>("_ZN8SettingsD2Ev");
     void **powerVtable = symbol<void **>("_ZTV13PowerSettings");
-    bool (*automatic)(void *) = symbol<decltype(automatic)>("_ZN13PowerSettings16autoColorEnabledEv");
-    void (*setAutomatic)(void *, bool) = symbol<decltype(setAutomatic)>("_ZN13PowerSettings19setAutoColorEnabledEb");
+    bool (*automatic)(void *) =
+            symbol<decltype(automatic)>("_ZN13PowerSettings16autoColorEnabledEv");
+    void (*setAutomatic)(void *, bool) =
+            symbol<decltype(setAutomatic)>("_ZN13PowerSettings19setAutoColorEnabledEb");
     QTime (*bedtime)(void *) = symbol<decltype(bedtime)>("_ZN13PowerSettings7bedTimeEv");
-    void (*setBedtime)(void *, QTime) = symbol<decltype(setBedtime)>("_ZN13PowerSettings10setBedTimeE5QTime");
-    void (*saveTemperature)(void *, int) = symbol<decltype(saveTemperature)>("_ZN13PowerSettings15setColorSettingEi");
-    bool automaticBrightnessValid() const {
-        return valid() && sensor && ambientEnabled && setAmbientEnabled && constructSettings && destroySettings &&
-               powerVtable;
+    void (*setBedtime)(void *, QTime) =
+            symbol<decltype(setBedtime)>("_ZN13PowerSettings10setBedTimeE5QTime");
+    void (*saveTemperature)(void *, int) =
+            symbol<decltype(saveTemperature)>("_ZN13PowerSettings15setColorSettingEi");
+
+    bool automaticBrightnessValid() const
+    {
+        return valid() && sensor && ambientEnabled && setAmbientEnabled && constructSettings
+                && destroySettings && powerVtable;
     }
-    bool warmthValid() const {
-        return valid() && natural && temperature && minTemperature && maxTemperature && intervals && setTemperature &&
-               constructSettings && destroySettings && powerVtable && automatic && setAutomatic && bedtime &&
-               setBedtime && saveTemperature;
+
+    bool warmthValid() const
+    {
+        return valid() && natural && temperature && minTemperature && maxTemperature && intervals
+                && setTemperature && constructSettings && destroySettings && powerVtable
+                && automatic && setAutomatic && bedtime && setBedtime && saveTemperature;
     }
 };
-const Api &api() {
+
+const Api &api()
+{
     static const Api value;
     return value;
 }
+
 // PowerSettings uses a 44-byte Settings base and its derived vtable.
 // Keep it short-lived so changes use Nickel's cache, persistence and
 // SettingEvent delivery to BedtimeManager.
-struct PowerSettings {
+struct PowerSettings
+{
     std::array<void *, 11> storage{};
-    PowerSettings() {
+
+    PowerSettings()
+    {
         api().constructSettings(storage.data(), api().device(), false);
         storage[0] = api().powerVtable + 2;
     }
-    ~PowerSettings() {
-        api().destroySettings(storage.data());
-    }
-    void *get() {
-        return storage.data();
-    }
+
+    ~PowerSettings() { api().destroySettings(storage.data()); }
+
+    void *get() { return storage.data(); }
 };
-bool stored(const QString &key, const QVariant &expected) {
+
+bool stored(const QString &key, const QVariant &expected)
+{
     QSettings file("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf", QSettings::IniFormat);
     file.sync();
     const auto value = file.value("PowerOptions/" + key);
     // QSettings reads booleans and integers from an INI file as strings.
-    return file.status() == QSettings::NoError && value.isValid() && value.toString() == expected.toString();
+    return file.status() == QSettings::NoError && value.isValid()
+            && value.toString() == expected.toString();
 }
 
-}
-NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor) {
+} // namespace
+
+NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor)
+{
 #ifndef KOBALT_READER_HARDWARE
     if (!QFile::exists("/instance/enable-brightness-test"))
         return;
@@ -132,9 +164,10 @@ NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor) {
         const auto request = QJsonDocument::fromJson(input.read(4096)).object();
         input.close();
         input.remove();
-        QJsonObject result = kobalt::qt::object({{"id", request.value("id")},
-                                                 {"light_bytes", int(api().lightType.sizeOf())},
-                                                 {"gesture_bytes", int(api().gestureType.sizeOf())}});
+        QJsonObject result =
+                kobalt::qt::object({ { "id", request.value("id") },
+                                     { "light_bytes", int(api().lightType.sizeOf()) },
+                                     { "gesture_bytes", int(api().gestureType.sizeOf()) } });
         observedLightDevice = false;
         lightDeviceError = 0;
         if (request.value("action").toString() == "native-settings") {
@@ -148,8 +181,9 @@ NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor) {
                     if (request.contains("automatic"))
                         api().setAutomatic(settings.get(), request.value("automatic").toBool());
                     if (request.contains("bedtime"))
-                        api().setBedtime(settings.get(),
-                                         QTime::fromString(request.value("bedtime").toString(), "HH:mm"));
+                        api().setBedtime(
+                                settings.get(),
+                                QTime::fromString(request.value("bedtime").toString(), "HH:mm"));
                 }
                 result["automatic"] = automaticWarmth();
                 result["bedtime"] = bedtime().toString("HH:mm");
@@ -169,9 +203,12 @@ NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor) {
         if (request.value("action").toString() == "cancel-touch") {
             if (this->anchor && this->anchor->window()) {
                 const auto target = request.value("target").toString();
-                const char *name = target == "warmth" ? "rrWarmth" : target == "brightness" ? "rrBrightness" : "rrPage";
+                const char *name = target == "warmth" ? "rrWarmth"
+                        : target == "brightness"      ? "rrBrightness"
+                                                      : "rrPage";
                 if (auto *page = this->anchor->window()->findChild<QWidget *>(name)) {
-                    QTouchEvent cancel(QEvent::TouchCancel, QPointingDevice::primaryPointingDevice());
+                    QTouchEvent cancel(QEvent::TouchCancel,
+                                       QPointingDevice::primaryPointingDevice());
                     QApplication::sendEvent(page, &cancel);
                 }
             }
@@ -204,14 +241,20 @@ NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor) {
     test->start(100);
 #endif
 }
-NativeLight::~NativeLight() {
+
+NativeLight::~NativeLight()
+{
     finishGesture(false);
     delete frontLight.data();
 }
-bool NativeLight::available() {
+
+bool NativeLight::available()
+{
     return api().valid() && api().supports(api().device());
 }
-bool NativeLight::initialize() {
+
+bool NativeLight::initialize()
+{
     if (!qApp || QThread::currentThread() != qApp->thread() || !available())
         return false;
     if (!frontLight) {
@@ -221,7 +264,9 @@ bool NativeLight::initialize() {
     }
     return api().maximum(frontLight) == 100;
 }
-bool NativeLight::beginGesture() {
+
+bool NativeLight::beginGesture()
+{
     if (gesturing())
         return true;
     if (!initialize())
@@ -234,17 +279,23 @@ bool NativeLight::beginGesture() {
     reportedGestureFailure = false;
     return true;
 }
-bool NativeLight::hasAutomaticBrightness() const {
+
+bool NativeLight::hasAutomaticBrightness() const
+{
     return frontLight && api().automaticBrightnessValid() && api().sensor(api().device());
 }
-bool NativeLight::automaticBrightness() const {
+
+bool NativeLight::automaticBrightness() const
+{
     if (!hasAutomaticBrightness()) {
         return false;
     }
     PowerSettings settings;
     return api().ambientEnabled(settings.get());
 }
-bool NativeLight::setAutomaticBrightness(bool enabled) {
+
+bool NativeLight::setAutomaticBrightness(bool enabled)
+{
     if (!hasAutomaticBrightness()) {
         return false;
     }
@@ -252,54 +303,77 @@ bool NativeLight::setAutomaticBrightness(bool enabled) {
         PowerSettings settings;
         api().setAmbientEnabled(settings.get(), enabled);
     }
-    const bool saved = automaticBrightness() == enabled && stored("AmbientLightSensorEnabled", enabled);
+    const bool saved =
+            automaticBrightness() == enabled && stored("AmbientLightSensorEnabled", enabled);
     diagnostic(saved ? "automatic-brightness-saved" : "automatic-brightness-save-failed",
-               kobalt::qt::object({{"enabled", enabled}}));
+               kobalt::qt::object({ { "enabled", enabled } }));
     return saved;
 }
-bool NativeLight::hasWarmth() const {
-    return frontLight && api().warmthValid() && api().natural(api().device()) && warmthMaximum() > warmthMinimum();
+
+bool NativeLight::hasWarmth() const
+{
+    return frontLight && api().warmthValid() && api().natural(api().device())
+            && warmthMaximum() > warmthMinimum();
 }
-int NativeLight::warmth() const {
+
+int NativeLight::warmth() const
+{
     // Nickel stores color temperature: a lower value produces warmer light.
-    return frontLight && api().warmthValid() ? warmthMinimum() + warmthMaximum() - api().temperature(frontLight) : -1;
+    return frontLight && api().warmthValid()
+            ? warmthMinimum() + warmthMaximum() - api().temperature(frontLight)
+            : -1;
 }
-int NativeLight::warmthMinimum() const {
+
+int NativeLight::warmthMinimum() const
+{
     return frontLight && api().warmthValid() ? api().minTemperature(frontLight) : 0;
 }
-int NativeLight::warmthMaximum() const {
+
+int NativeLight::warmthMaximum() const
+{
     return frontLight && api().warmthValid() ? api().maxTemperature(frontLight) : 0;
 }
-int NativeLight::warmthStep() const {
+
+int NativeLight::warmthStep() const
+{
     if (!hasWarmth())
         return 1;
     const int intervals = api().intervals(frontLight);
     // Continuous hardware gets one-percent steps; stepped hardware keeps its intervals.
     return qMax(1, (warmthMaximum() - warmthMinimum()) / (intervals > 0 ? intervals : 100));
 }
-bool NativeLight::automaticWarmth() const {
+
+bool NativeLight::automaticWarmth() const
+{
     if (!hasWarmth())
         return false;
     PowerSettings settings;
     return api().automatic(settings.get());
 }
-QTime NativeLight::bedtime() const {
+
+QTime NativeLight::bedtime() const
+{
     if (!hasWarmth())
         return {};
     PowerSettings settings;
     return api().bedtime(settings.get());
 }
-int NativeLight::setWarmth(int value) {
+
+int NativeLight::setWarmth(int value)
+{
     if (!hasWarmth())
         return -1;
     // Nickel disables automatic warmth when the user moves this slider.
     if (automaticWarmth() && !setAutomaticWarmth(false))
         return -1;
-    const int temperature = warmthMinimum() + warmthMaximum() - qBound(warmthMinimum(), value, warmthMaximum());
+    const int temperature =
+            warmthMinimum() + warmthMaximum() - qBound(warmthMinimum(), value, warmthMaximum());
     api().setTemperature(frontLight, temperature, true, 0);
     return warmth();
 }
-bool NativeLight::saveWarmth() {
+
+bool NativeLight::saveWarmth()
+{
     if (!hasWarmth())
         return false;
     const int value = api().temperature(frontLight);
@@ -308,10 +382,12 @@ bool NativeLight::saveWarmth() {
         api().saveTemperature(settings.get(), value);
     }
     const bool saved = stored("ColorSetting", value);
-    diagnostic(saved ? "warmth-saved" : "warmth-save-failed", {{"value", value}});
+    diagnostic(saved ? "warmth-saved" : "warmth-save-failed", { { "value", value } });
     return saved;
 }
-bool NativeLight::setAutomaticWarmth(bool enabled) {
+
+bool NativeLight::setAutomaticWarmth(bool enabled)
+{
     if (!hasWarmth())
         return false;
     {
@@ -319,13 +395,18 @@ bool NativeLight::setAutomaticWarmth(bool enabled) {
         api().setAutomatic(settings.get(), enabled);
     }
     const bool saved = automaticWarmth() == enabled && stored("AutoColorEnabled", enabled);
-    diagnostic(saved ? "warmth-schedule-saved" : "warmth-schedule-save-failed", {{"automatic", enabled}});
+    diagnostic(saved ? "warmth-schedule-saved" : "warmth-schedule-save-failed",
+               { { "automatic", enabled } });
     return saved;
 }
-int NativeLight::brightness() const {
+
+int NativeLight::brightness() const
+{
     return frontLight ? api().brightness(frontLight) : -1;
 }
-int NativeLight::setGestureLevel(int percent) {
+
+int NativeLight::setGestureLevel(int percent)
+{
     if (!gesturing() || !frontLight)
         return -1;
     if (automaticBrightness() && !setAutomaticBrightness(false)) {
@@ -340,12 +421,16 @@ int NativeLight::setGestureLevel(int percent) {
         api().setBrightness(frontLight, next, 0);
     const int actual = brightness();
     if (actual != next && !reportedGestureFailure) {
-        diagnostic("brightness-gesture-device-failed", {{"requested", next}, {"actual", actual}}, kobalt::DiagnosticSeverity::Error);
+        diagnostic("brightness-gesture-device-failed",
+                   { { "requested", next }, { "actual", actual } },
+                   kobalt::DiagnosticSeverity::Error);
         reportedGestureFailure = true;
     }
     return actual;
 }
-void NativeLight::finishGesture(bool save) {
+
+void NativeLight::finishGesture(bool save)
+{
     if (!gesturing() || !frontLight)
         return;
     const int original = std::exchange(gestureStart, -1);
@@ -367,13 +452,14 @@ void NativeLight::finishGesture(bool save) {
     api().constructGesture(storage, nullptr, nullptr);
     api().finishGesture(storage);
     delete static_cast<QObject *>(storage);
-    diagnostic("brightness-gesture-save-requested", {{"percent", brightness()}});
+    diagnostic("brightness-gesture-save-requested", { { "percent", brightness() } });
 }
-}
+} // namespace kobalt
 
 #ifndef KOBALT_READER_HARDWARE
-extern "C" __attribute__((visibility("default"))) int kobalt_light_test_ioctl(int fd, unsigned long request,
-                                                                              void *argument) {
+extern "C" __attribute__((visibility("default"))) int
+kobalt_light_test_ioctl(int fd, unsigned long request, void *argument)
+{
     using namespace kobalt;
     if (!lightTestIoctl) {
         errno = ENOSYS;

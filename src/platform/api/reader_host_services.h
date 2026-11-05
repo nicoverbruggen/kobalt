@@ -20,17 +20,21 @@ class QWidget;
 class QObject;
 
 namespace kobalt {
-struct BatteryStatus {
+struct BatteryStatus
+{
     int percent = -1;
     bool charging = false;
     bool fullyCharged = false;
 };
-struct WifiStatus {
+
+struct WifiStatus
+{
     bool enabled = false;
     bool connected = false;
     // Nickel reports four signal levels. -1 means no quality report yet.
     int strength = -1;
 };
+
 // Constructed by the host and moved into one reader window. Queries stay live
 // across sleep and capability changes. Factories return independently owned
 // non-null controllers; they never return a borrowed native handle. Every
@@ -39,10 +43,13 @@ struct WifiStatus {
 // including unsupported hosts.
 // A notice in the reader's usual notice card. `name` is the card's object
 // name; its message and button add `Message` and `Confirm`.
-struct ReaderNotice {
+struct ReaderNotice
+{
     QString title, message, name;
 };
-struct ReaderHostServices {
+
+struct ReaderHostServices
+{
     // Human-readable model used for the default sync device name.
     QString deviceName;
     // Standalone hosts return to their Library; Kobo uses the default exit label.
@@ -127,7 +134,8 @@ struct ReaderHostServices {
     // calls done with whether it turned Wi-Fi off. Deleting the context drops
     // the request. Turning Wi-Fi off can wait for child processes on the main
     // thread; the host declares that wait with `reason`, a string literal.
-    std::function<void(QObject *context, const char *reason, std::function<void(bool)> done)> turnOffWifi;
+    std::function<void(QObject *context, const char *reason, std::function<void(bool)> done)>
+            turnOffWifi;
     // Optional: lets the reader keep the host's own background Wi-Fi requests,
     // such as the connection Nickel starts after every wake, from turning
     // Wi-Fi on. The host calls `holding` on the GUI thread before such a
@@ -144,11 +152,14 @@ struct ReaderHostServices {
     // Optional notice the reader shows once its first page has painted, for
     // example after profile preparation reset unusable saved data.
     ReaderNotice startupNotice;
-    bool complete() const {
-        return bool(automaticBookOpening) == bool(setAutomaticBookOpening) && clock && battery && pageButtons &&
-               reverseLandscapeButtons && pageButtonDirection && fontFamilies && uiFont && suspended &&
-               lightAvailable && animationSupport && cancelAnimation && light && dictionary && keyboard &&
-               presentation && browserAvailable && openBrowser;
+
+    bool complete() const
+    {
+        return bool(automaticBookOpening) == bool(setAutomaticBookOpening) && clock && battery
+                && pageButtons && reverseLandscapeButtons && pageButtonDirection && fontFamilies
+                && uiFont && suspended && lightAvailable && animationSupport && cancelAnimation
+                && light && dictionary && keyboard && presentation && browserAvailable
+                && openBrowser;
     }
 };
-}
+} // namespace kobalt

@@ -22,46 +22,63 @@
 namespace kobalt::platform {
 LookupRefreshFlags nativeRefreshFlags = nullptr;
 Flush nativeFlush = nullptr;
+
 namespace {
 QPointer<QWidget> readerWindow, pageWidget;
 bool previousDark = false;
 KeyboardRefreshCache keyboardPixels;
-constexpr quint64 bit(Qt::WidgetAttribute attribute) {
+
+constexpr quint64 bit(Qt::WidgetAttribute attribute)
+{
     return quint64(1) << (attribute - Qt::WA_KoboEpdFlagsStart);
 }
-quint64 ordinaryPolicy(bool dark) {
-    const auto mode = refreshBackend(readerWindow) == RefreshBackend::Imx   ? Qt::WA_KoboEpdUpdateModePartial
-                      : refreshBackend(readerWindow) == RefreshBackend::Mtk ? Qt::WA_KoboEpdUpdateModeFull
-                                                                            : Qt::WA_KoboEpdUpdateModeHeuristic;
-    return bit(Qt::WA_KoboEpdWfModeAutoText) | bit(mode) | (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0);
+
+quint64 ordinaryPolicy(bool dark)
+{
+    const auto mode = refreshBackend(readerWindow) == RefreshBackend::Imx
+            ? Qt::WA_KoboEpdUpdateModePartial
+            : refreshBackend(readerWindow) == RefreshBackend::Mtk
+            ? Qt::WA_KoboEpdUpdateModeFull
+            : Qt::WA_KoboEpdUpdateModeHeuristic;
+    return bit(Qt::WA_KoboEpdWfModeAutoText) | bit(mode)
+            | (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0);
 }
-quint64 repairPolicy(bool dark) {
-    return bit(Qt::WA_KoboEpdWfModeAutoImage) | bit(Qt::WA_KoboEpdUpdateModeFull) |
-           (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0);
+
+quint64 repairPolicy(bool dark)
+{
+    return bit(Qt::WA_KoboEpdWfModeAutoImage) | bit(Qt::WA_KoboEpdUpdateModeFull)
+            | (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0);
 }
+
 // Firmware 6 stores window pixels as RGBA bytes. Painting an RGB32 page into
 // that converts every pixel on the GUI thread, which costs several
 // milliseconds per page turn. Every Nickel window passes this hook, so the
 // first flush tells the engine which format it should draw before any book opens.
-void choosePageFormat(QBackingStore *store) {
+void choosePageFormat(QBackingStore *store)
+{
     static bool chosen = false;
     auto *device = store->paintDevice();
     if (chosen || !device || device->devType() != QInternal::Image)
         return;
     chosen = true;
     const auto format = static_cast<QImage *>(device)->format();
-    if (format == QImage::Format_RGBA8888 || format == QImage::Format_RGBX8888 ||
-        format == QImage::Format_RGBA8888_Premultiplied)
+    if (format == QImage::Format_RGBA8888 || format == QImage::Format_RGBX8888
+        || format == QImage::Format_RGBA8888_Premultiplied)
         EngineDocument::setPageFormat(QImage::Format_RGBX8888);
 }
-bool readerOwnsScreen() {
-    if (!qApp || QThread::currentThread() != qApp->thread() || !readerWindow || !readerWindow->isVisible())
+
+bool readerOwnsScreen()
+{
+    if (!qApp || QThread::currentThread() != qApp->thread() || !readerWindow
+        || !readerWindow->isVisible())
         return false;
     auto *active = QApplication::activeModalWidget();
     return active == readerWindow;
 }
-}
-void setReaderRefreshWindow(QWidget *widget) {
+} // namespace
+
+void setReaderRefreshWindow(QWidget *widget)
+{
 #ifdef KOBALT_PAGE_ANIMATIONS
     if (widget)
         installPageAnimationHook();
@@ -71,24 +88,26 @@ void setReaderRefreshWindow(QWidget *widget) {
     readerWindow = widget;
     previousDark = false;
 }
+
 void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, const QPoint &offset,
-                 const FlushFlags &flags) {
+                 const FlushFlags &flags)
+{
     cancelPageAnimation();
-    if (qApp && QThread::currentThread() == qApp->thread() && readerWindow &&
-        ((readerWindow->property("reader_preparing_handoff").toBool() &&
-          store->window() != readerWindow->windowHandle()) ||
-         (readerWindow->property("reader_preparing_wake").toBool() &&
-          store->window() == readerWindow->windowHandle())) &&
-        (!target || target == store->window()) && offset.isNull())
+    if (qApp && QThread::currentThread() == qApp->thread() && readerWindow
+        && ((readerWindow->property("reader_preparing_handoff").toBool()
+             && store->window() != readerWindow->windowHandle())
+            || (readerWindow->property("reader_preparing_wake").toBool()
+                && store->window() == readerWindow->windowHandle()))
+        && (!target || target == store->window()) && offset.isNull())
         return;
     if (!qApp || QThread::currentThread() != qApp->thread()) {
         nativeFlush(store, region, target, offset, flags);
         return;
     }
     choosePageFormat(store);
-    if (!readerOwnsScreen() || store->window() != readerWindow->windowHandle() ||
-        (target && target != store->window()) || !offset.isNull() || region.isEmpty() ||
-        !readerWindow->rect().contains(region.boundingRect())) {
+    if (!readerOwnsScreen() || store->window() != readerWindow->windowHandle()
+        || (target && target != store->window()) || !offset.isNull() || region.isEmpty()
+        || !readerWindow->rect().contains(region.boundingRect())) {
         keyboardPixels.clear();
         if (readerWindow)
             readerWindow->setProperty("reader_animation_direction", 0);
@@ -117,7 +136,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         readerWindow->setProperty("reader_palette_repairs", QVariant::fromValue(QRegion()));
         const QRect screen = readerWindow->rect();
         const auto clean = repairPolicy(dark);
-        nativeFlush(store, QRegion(screen), target, offset, {{screen, clean}});
+        nativeFlush(store, QRegion(screen), target, offset, { { screen, clean } });
         return;
     }
     previousDark = dark;
@@ -129,17 +148,20 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             // full-mode reading refresh, without a flash. Edits keep the cleanup.
             const QRect screen = readerWindow->rect();
             nativeFlush(store, QRegion(screen), target, offset,
-                        {{screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush)}});
+                        { { screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush) } });
             consumeAnnotationRepairs(readerWindow, QRegion(screen));
         } else {
-            nativeFlush(store, region, target, offset, {{region.boundingRect(), repairPolicy(dark)}});
+            nativeFlush(store, region, target, offset,
+                        { { region.boundingRect(), repairPolicy(dark) } });
             consumeAnnotationRepairs(readerWindow, region);
         }
         return;
     }
-    constexpr auto autoText = bit(Qt::WA_KoboEpdWfModeAutoText), gl16 = bit(Qt::WA_KoboEpdWfModeGL16),
-                   gck16 = bit(Qt::WA_KoboEpdWfModeGCK16), darkFlag = bit(Qt::WA_KoboEpdFlagDarkMode);
-    constexpr auto heuristic = bit(Qt::WA_KoboEpdUpdateModeHeuristic), full = bit(Qt::WA_KoboEpdUpdateModeFull),
+    constexpr auto autoText = bit(Qt::WA_KoboEpdWfModeAutoText),
+                   gl16 = bit(Qt::WA_KoboEpdWfModeGL16), gck16 = bit(Qt::WA_KoboEpdWfModeGCK16),
+                   darkFlag = bit(Qt::WA_KoboEpdFlagDarkMode);
+    constexpr auto heuristic = bit(Qt::WA_KoboEpdUpdateModeHeuristic),
+                   full = bit(Qt::WA_KoboEpdUpdateModeFull),
                    partialMode = bit(Qt::WA_KoboEpdUpdateModePartial);
     bool compatible = !flags.isEmpty();
     for (const auto &entry : flags) {
@@ -148,83 +170,92 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         // A dark cleanup must keep GCK16/full when Qt splits its damage.
         if (dark && waveform == gck16)
             compatible = false;
-        if ((entry.second & ~(autoText | gl16 | gck16 | heuristic | full | partialMode | darkFlag)) ||
-            (waveform != autoText && waveform != gl16 && waveform != gck16) ||
-            (mode != heuristic && mode != full && mode != partialMode) || bool(entry.second & darkFlag) != dark)
+        if ((entry.second & ~(autoText | gl16 | gck16 | heuristic | full | partialMode | darkFlag))
+            || (waveform != autoText && waveform != gl16 && waveform != gck16)
+            || (mode != heuristic && mode != full && mode != partialMode)
+            || bool(entry.second & darkFlag) != dark)
             compatible = false;
     }
     const bool ordinaryControls = std::all_of(flags.cbegin(), flags.cend(), [&](const auto &entry) {
-        return (entry.second & ~(heuristic | full | partialMode)) ==
-               (ordinaryPolicy(dark) & ~(heuristic | full | partialMode));
+        return (entry.second & ~(heuristic | full | partialMode))
+                == (ordinaryPolicy(dark) & ~(heuristic | full | partialMode));
     });
-    if (controlsOpening && compatible && ordinaryControls && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
+    if (controlsOpening && compatible && ordinaryControls
+        && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
         keyboardPixels.clear();
         const QRect screen = readerWindow->rect();
         auto policy = ordinaryPolicy(dark);
         if (!dark && readerWindow->property("reader_plain_controls").toBool())
             policy = (policy & ~(heuristic | full)) | partialMode;
-        nativeFlush(store, QRegion(screen), target, offset, {{screen, policy}});
+        nativeFlush(store, QRegion(screen), target, offset, { { screen, policy } });
         return;
     }
     const QRect keyboardBounds = readerWindow->property("reader_keyboard_bounds").toRect();
     const quint64 keyboardPolicy = compatible && ordinaryControls
-        ? commonKeyboardPolicy(flags, heuristic | full | partialMode, full, heuristic) : 0;
+            ? commonKeyboardPolicy(flags, heuristic | full | partialMode, full, heuristic)
+            : 0;
     if (keyboardPolicy) {
         const bool keyboardOnly = std::all_of(flags.cbegin(), flags.cend(), [&](const auto &entry) {
             return keyboardBounds.contains(entry.first);
         });
-        if (keyboardPixels.unchanged(dynamic_cast<QImage *>(store->paintDevice()), region, keyboardBounds,
-                                     keyboardPolicy, keyboardOnly))
+        if (keyboardPixels.unchanged(dynamic_cast<QImage *>(store->paintDevice()), region,
+                                     keyboardBounds, keyboardPolicy, keyboardOnly))
             return;
     } else {
         keyboardPixels.clear();
     }
-    const bool progressDamage = !progressUpdate.isEmpty() && progressUpdate.contains(region.boundingRect()) &&
-                                std::all_of(flags.cbegin(), flags.cend(), [&](const auto &entry) {
-                                    return progressUpdate.contains(entry.first);
-                                });
+    const bool progressDamage = !progressUpdate.isEmpty()
+            && progressUpdate.contains(region.boundingRect())
+            && std::all_of(flags.cbegin(), flags.cend(),
+                           [&](const auto &entry) { return progressUpdate.contains(entry.first); });
     auto completedFlush = [&](const QRegion &damage, const FlushFlags &policies) {
         cancelPageAnimation();
-        if (direction && compatible && policies.size() == 1 && policies[0].second == ordinaryPolicy(dark)) {
-            if (submitPageTransition(store, readerWindow, direction, dark, ordinaryPolicy(dark), repairPolicy(dark),
-                                     [&](const QRegion &parts, quint64 policy) {
-                                         FlushFlags selected;
-                                         // Submit now so the animation hook runs before the sweep is cancelled.
-                                         for (const auto &part : parts)
-                                             selected.append({part, policy | bit(Qt::WA_KoboEpdScreenFlush)});
-                                         nativeFlush(store, parts, target, offset, selected);
-                                     }))
+        if (direction && compatible && policies.size() == 1
+            && policies[0].second == ordinaryPolicy(dark)) {
+            if (submitPageTransition(
+                        store, readerWindow, direction, dark, ordinaryPolicy(dark),
+                        repairPolicy(dark), [&](const QRegion &parts, quint64 policy) {
+                            FlushFlags selected;
+                            // Submit now so the animation hook runs before the sweep is cancelled.
+                            for (const auto &part : parts)
+                                selected.append({ part, policy | bit(Qt::WA_KoboEpdScreenFlush) });
+                            nativeFlush(store, parts, target, offset, selected);
+                        }))
                 return;
         }
         if (pageTurn && compatible && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
             const bool color = pageAnimationPanel() == AnimationPanel::Color;
             const QRegion images =
-                readerWindow->property(color ? "reader_image_repairs" : "reader_mono_repairs").value<QRegion>() &
-                readerWindow->rect();
+                    readerWindow->property(color ? "reader_image_repairs" : "reader_mono_repairs")
+                            .value<QRegion>()
+                    & readerWindow->rect();
             // Large pictures and colour turn like Nickel: the reading waveform
             // over the whole screen in full mode, which drives every non-white
             // pixel without the GC16 flash. Other turns stay partial.
-            if (!images.isEmpty() || (color && readerWindow->property("reader_colour_regions").toBool())) {
+            if (!images.isEmpty()
+                || (color && readerWindow->property("reader_colour_regions").toBool())) {
                 const QRect screen = readerWindow->rect();
                 nativeFlush(store, QRegion(screen), target, offset,
-                            {{screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush)}});
+                            { { screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush) } });
                 return;
             }
         }
-        const bool plainControls = !dark && readerWindow->property("reader_plain_controls").toBool();
-        if (!dark && !pageTurn && !direction && progressDamage && refreshBackend(readerWindow) == RefreshBackend::Mtk &&
-            compatible && policies.size() == 1 &&
-            (policies[0].second == ordinaryPolicy(false) ||
-             policies[0].second == ((ordinaryPolicy(false) & ~full) | heuristic))) {
+        const bool plainControls =
+                !dark && readerWindow->property("reader_plain_controls").toBool();
+        if (!dark && !pageTurn && !direction && progressDamage
+            && refreshBackend(readerWindow) == RefreshBackend::Mtk && compatible
+            && policies.size() == 1
+            && (policies[0].second == ordinaryPolicy(false)
+                || policies[0].second == ((ordinaryPolicy(false) & ~full) | heuristic))) {
             const quint64 policy = (policies[0].second & ~(heuristic | full)) | partialMode;
-            nativeFlush(store, damage, target, offset, {{policies[0].first, policy}});
+            nativeFlush(store, damage, target, offset, { { policies[0].first, policy } });
             return;
         }
-        if ((pageTurn || plainControls) && !direction && compatible &&
-            refreshBackend(readerWindow) == RefreshBackend::Mtk && !policies.isEmpty() &&
-            std::all_of(policies.cbegin(), policies.cend(), [&](const auto &entry) {
-                return entry.second == ordinaryPolicy(dark);
-            })) {
+        if ((pageTurn || plainControls) && !direction && compatible
+            && refreshBackend(readerWindow) == RefreshBackend::Mtk && !policies.isEmpty()
+            && std::all_of(policies.cbegin(), policies.cend(), [&](const auto &entry) {
+                   return entry.second == ordinaryPolicy(dark);
+               })) {
             FlushFlags partial = policies;
             for (auto &entry : partial)
                 entry.second = (entry.second & ~(heuristic | full)) | partialMode;
@@ -236,13 +267,13 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         // of flashing the whole rectangle. Showing or hiding the whole panel,
         // and the page beside it, keep their policy.
         const QRect controls = readerWindow->property("reader_partial_controls").toRect();
-        if (!dark && !pageTurn && !direction && compatible && !controls.isEmpty() &&
-            refreshBackend(readerWindow) == RefreshBackend::Mtk) {
+        if (!dark && !pageTurn && !direction && compatible && !controls.isEmpty()
+            && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
             FlushFlags partial = policies;
             bool changed = false;
             for (auto &entry : partial) {
-                const bool text = entry.second == ordinaryPolicy(false) ||
-                                  entry.second == ((ordinaryPolicy(false) & ~full) | heuristic);
+                const bool text = entry.second == ordinaryPolicy(false)
+                        || entry.second == ((ordinaryPolicy(false) & ~full) | heuristic);
                 if (text && controls.contains(entry.first) && entry.first != controls) {
                     entry.second = (entry.second & ~(heuristic | full)) | partialMode;
                     changed = true;
@@ -253,11 +284,12 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                 return;
             }
         }
-        if (pageTurn && !direction && compatible && refreshBackend(readerWindow) != RefreshBackend::Mtk &&
-            policies.size() == 1 && policies[0].second == ordinaryPolicy(dark)) {
+        if (pageTurn && !direction && compatible
+            && refreshBackend(readerWindow) != RefreshBackend::Mtk && policies.size() == 1
+            && policies[0].second == ordinaryPolicy(dark)) {
             // Older and unknown backends keep their reading policy over the whole screen.
             const QRect screen = readerWindow->rect();
-            nativeFlush(store, QRegion(screen), target, offset, {{screen, policies[0].second}});
+            nativeFlush(store, QRegion(screen), target, offset, { { screen, policies[0].second } });
             return;
         }
         nativeFlush(store, damage, target, offset, policies);
@@ -267,8 +299,8 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
     const QRect bounds = region.boundingRect();
     if (uniform) {
         for (const auto &entry : flags) {
-            uniform =
-                uniform && entry.second == flags[0].second && !entry.first.isEmpty() && bounds.contains(entry.first);
+            uniform = uniform && entry.second == flags[0].second && !entry.first.isEmpty()
+                    && bounds.contains(entry.first);
             policyCoverage += entry.first;
         }
     }
@@ -285,28 +317,29 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         const bool keyboardDamage = !keyboard.isEmpty() && keyboard.contains(bounds);
         QRegion damage;
         FlushFlags selected;
-        if (pageTurn || direction || keyboardDamage || refreshBackend(readerWindow) != RefreshBackend::Mtk) {
+        if (pageTurn || direction || keyboardDamage
+            || refreshBackend(readerWindow) != RefreshBackend::Mtk) {
             damage = bounds;
-            selected.append({bounds, policy});
+            selected.append({ bounds, policy });
         } else {
             for (const auto &part : panelDamage(readerWindow, pageWidget, region)) {
                 damage += part;
-                selected.append({part, policy});
+                selected.append({ part, policy });
             }
         }
         completedFlush(damage, selected);
         return;
     }
-    if (compatible && !pageTurn && !direction && refreshBackend(readerWindow) == RefreshBackend::Mtk &&
-        region.rectCount() > 1 && region.subtracted(policyCoverage).isEmpty()) {
+    if (compatible && !pageTurn && !direction && refreshBackend(readerWindow) == RefreshBackend::Mtk
+        && region.rectCount() > 1 && region.subtracted(policyCoverage).isEmpty()) {
         // Qt can include a window-sized policy rectangle even when its damage
         // has a gap. Submit each panel's painted region with policies clipped to it.
         for (const auto &part : panelDamage(readerWindow, pageWidget, region)) {
             FlushFlags selected;
             for (const auto &entry : flags) {
                 const QRect clipped = entry.first.intersected(part);
-                if (!clipped.isEmpty() && !selected.contains({clipped, entry.second}))
-                    selected.append({clipped, entry.second});
+                if (!clipped.isEmpty() && !selected.contains({ clipped, entry.second }))
+                    selected.append({ clipped, entry.second });
             }
             completedFlush(QRegion(part), selected);
         }
@@ -314,25 +347,29 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
     }
     completedFlush(region, flags);
 }
-void lookupReaderRefreshFlags(void *screen, quint64 &flags, const QRect &rect) {
+
+void lookupReaderRefreshFlags(void *screen, quint64 &flags, const QRect &rect)
+{
     nativeRefreshFlags(screen, flags, rect);
     // MTK composes sleep during QWindow::hide(), before QWidget's visibility
     // changes. It can reuse the removed reader's dirty flags. Replace those
     // flags only after the native window has left the compositor's stack.
-    if (qApp && QThread::currentThread() == qApp->thread() && readerWindow && readerWindow->windowHandle() &&
-        !readerWindow->windowHandle()->isVisible() &&
-        (readerWindow->property("reader_sleep_clean_pending").toBool() ||
-         readerWindow->property("reader_exit_clean_pending").toBool()) &&
-        rect == readerWindow->rect()) {
+    if (qApp && QThread::currentThread() == qApp->thread() && readerWindow
+        && readerWindow->windowHandle() && !readerWindow->windowHandle()->isVisible()
+        && (readerWindow->property("reader_sleep_clean_pending").toBool()
+            || readerWindow->property("reader_exit_clean_pending").toBool())
+        && rect == readerWindow->rect()) {
         readerWindow->setProperty("reader_sleep_clean_pending", false);
         readerWindow->setProperty("reader_exit_clean_pending", false);
         flags = bit(Qt::WA_KoboEpdWfModeGC16) | bit(Qt::WA_KoboEpdUpdateModeFull);
         return;
     }
-    constexpr quint64 collide = quint64(1) << (Qt::WA_KoboEpdFlagCanCollide - Qt::WA_KoboEpdFlagsStart);
+    constexpr quint64 collide = quint64(1)
+            << (Qt::WA_KoboEpdFlagCanCollide - Qt::WA_KoboEpdFlagsStart);
     if (flags != 0 && flags != collide)
         return;
-    if (!qApp || QThread::currentThread() != qApp->thread() || !readerWindow || !readerWindow->isVisible())
+    if (!qApp || QThread::currentThread() != qApp->thread() || !readerWindow
+        || !readerWindow->isVisible())
         return;
     auto *active = QApplication::activeModalWidget();
     while (active && active != readerWindow)
@@ -342,45 +379,53 @@ void lookupReaderRefreshFlags(void *screen, quint64 &flags, const QRect &rect) {
     // Merged adjacent rectangles can miss Kobo's per-widget flag table. Only
     // repair that empty/default result while our modal reader owns the screen.
     // Explicit clean refreshes and every native window keep their own flags.
-    flags |= (quint64(1) << (Qt::WA_KoboEpdWfModeAutoText - Qt::WA_KoboEpdFlagsStart)) |
-             (quint64(1) << (Qt::WA_KoboEpdUpdateModeHeuristic - Qt::WA_KoboEpdFlagsStart));
+    flags |= (quint64(1) << (Qt::WA_KoboEpdWfModeAutoText - Qt::WA_KoboEpdFlagsStart))
+            | (quint64(1) << (Qt::WA_KoboEpdUpdateModeHeuristic - Qt::WA_KoboEpdFlagsStart));
     if (readerWindow->property("reader_dark").toBool())
         flags |= quint64(1) << (Qt::WA_KoboEpdFlagDarkMode - Qt::WA_KoboEpdFlagsStart);
 }
-void textRefresh(QWidget *widget) {
+
+void textRefresh(QWidget *widget)
+{
     if (qobject_cast<QPushButton *>(widget))
         widget->setFocusPolicy(Qt::NoFocus);
-    for (int attribute = Qt::WA_KoboEpdUpdateModeHeuristic; attribute <= Qt::WA_KoboEpdWfModeGLK16; ++attribute)
+    for (int attribute = Qt::WA_KoboEpdUpdateModeHeuristic; attribute <= Qt::WA_KoboEpdWfModeGLK16;
+         ++attribute)
         widget->setAttribute(static_cast<Qt::WidgetAttribute>(attribute), false);
     widget->setAttribute(Qt::WA_KoboEpdWfModeAutoImage, false);
     widget->setAttribute(Qt::WA_KoboEpdWfModeAutoText);
     widget->setAttribute(Qt::WA_KoboEpdUpdateModeHeuristic);
-    widget->setAttribute(Qt::WA_KoboEpdFlagDarkMode, widget->window()->property("reader_dark").toBool());
+    widget->setAttribute(Qt::WA_KoboEpdFlagDarkMode,
+                         widget->window()->property("reader_dark").toBool());
 }
 
-void pageRefresh(QWidget *widget, bool clean, bool) {
+void pageRefresh(QWidget *widget, bool clean, bool)
+{
     const bool dark = widget->window()->property("reader_dark").toBool();
     pageWidget = widget;
     const auto chosen = clean ? repairPolicy(dark) : ordinaryPolicy(dark);
-    for (int attribute = Qt::WA_KoboEpdUpdateModeHeuristic; attribute <= Qt::WA_KoboEpdWfModeGLK16; ++attribute)
+    for (int attribute = Qt::WA_KoboEpdUpdateModeHeuristic; attribute <= Qt::WA_KoboEpdWfModeGLK16;
+         ++attribute)
         widget->setAttribute(static_cast<Qt::WidgetAttribute>(attribute), false);
     widget->setAttribute(Qt::WA_KoboEpdWfModeAutoImage, clean);
     widget->setAttribute(Qt::WA_KoboEpdWfModeAutoText, !clean);
-    for (const auto mode :
-         {Qt::WA_KoboEpdUpdateModeHeuristic, Qt::WA_KoboEpdUpdateModePartial, Qt::WA_KoboEpdUpdateModeFull})
+    for (const auto mode : { Qt::WA_KoboEpdUpdateModeHeuristic, Qt::WA_KoboEpdUpdateModePartial,
+                             Qt::WA_KoboEpdUpdateModeFull })
         widget->setAttribute(mode, bool(chosen & bit(mode)));
     widget->setAttribute(Qt::WA_KoboEpdFlagDarkMode, dark);
 }
-}
+} // namespace kobalt::platform
 
-extern "C" __attribute__((visibility("default"))) void kobalt_refresh_flags(void *screen, quint64 &flags,
-                                                                            const QRect &rect) {
+extern "C" __attribute__((visibility("default"))) void
+kobalt_refresh_flags(void *screen, quint64 &flags, const QRect &rect)
+{
     kobalt::platform::lookupReaderRefreshFlags(screen, flags, rect);
 }
 
-extern "C" __attribute__((visibility("default"))) void kobalt_reader_flush(QBackingStore *store, const QRegion &region,
-                                                                           QWindow *target, const QPoint &offset,
-                                                                           const kobalt::platform::FlushFlags &flags) {
+extern "C" __attribute__((visibility("default"))) void
+kobalt_reader_flush(QBackingStore *store, const QRegion &region, QWindow *target,
+                    const QPoint &offset, const kobalt::platform::FlushFlags &flags)
+{
     kobalt::DiagnosticOperation operation("display-flush");
     kobalt::platform::flushReader(store, region, target, offset, flags);
 }

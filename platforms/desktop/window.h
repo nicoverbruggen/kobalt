@@ -13,28 +13,32 @@ class QActionGroup;
 class QAction;
 class QLabel;
 class QPushButton;
+
 namespace kobalt::standalone {
 class WidgetCanvas;
 class StartScreen;
-}
+} // namespace kobalt::standalone
+
 namespace kobalt::desktop {
 class DeviceFrame;
-class Window final : public QMainWindow {
+
+class Window final : public QMainWindow
+{
     Q_OBJECT
 public:
-    Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder, std::function<QString()> clock = {},
+    Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder,
+           std::function<QString()> clock = {},
            std::function<void(ReaderHostServices &)> configureServices = {});
     ~Window() override;
     void openBook(const QString &path);
     // Saves the visible preview without Mac chrome. Device surroundings remain transparent.
     // Returns the new PNG path, or an empty string and an error. Existing files are never replaced.
     QString saveScreenshot(const QString &directory, QString *error = nullptr);
-    ReaderWindow *readerWindow() const {
-        return controller.window();
-    }
-    bool idle() const {
-        return controller.idle();
-    }
+
+    ReaderWindow *readerWindow() const { return controller.window(); }
+
+    bool idle() const { return controller.idle(); }
+
 signals:
     void bookOpened();
     void bookFailed(QString error);
@@ -90,4 +94,4 @@ private:
     void recordProgress();
     void turnPage(int direction, bool hardware = false);
 };
-}
+} // namespace kobalt::desktop

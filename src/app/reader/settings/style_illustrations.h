@@ -4,4 +4,4 @@
 namespace kobalt::reader {
 // Draw the fixed page-break sample with private font faces on the GUI thread.
 StyleSample drawStyleIllustration(const StyleSampleRequest &request);
-}
+} // namespace kobalt::reader

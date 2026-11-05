@@ -9,8 +9,10 @@ namespace kobalt {
 namespace native {
 class PublicationEndpoint;
 }
+
 // Keeps the native request alive while Kobalt loads asynchronously.
-class NativeOpening {
+class NativeOpening
+{
 public:
     NativeOpening();
     ~NativeOpening();
@@ -33,7 +35,8 @@ private:
 
 // Called only after Nickel has accepted the opening request, on its GUI thread.
 // Use only after firmwareSupported() accepts Nickel.
-class NativePublication {
+class NativePublication
+{
 public:
     NativePublication();
     ~NativePublication();
@@ -42,21 +45,17 @@ public:
 
     static bool available();
     bool open(const void *volume, const void *bookmark, QString *error, const void *keys = nullptr);
-    QString identity() const {
-        return identity_;
-    }
-    QString path() const {
-        return path_;
-    }
-    QString location() const {
-        return location_;
-    }
-    QString coverPath() const {
-        return coverPath_;
-    }
-    int port() const {
-        return port_;
-    }
+
+    QString identity() const { return identity_; }
+
+    QString path() const { return path_; }
+
+    QString location() const { return location_; }
+
+    QString coverPath() const { return coverPath_; }
+
+    int port() const { return port_; }
+
     bool active() const;
     ResourceFactory resources(std::shared_ptr<SourceLease> lease) const;
 
@@ -66,4 +65,4 @@ private:
     int port_ = 0;
     void close();
 };
-}
+} // namespace kobalt

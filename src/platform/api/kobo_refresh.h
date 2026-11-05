@@ -6,4 +6,4 @@ namespace kobalt::platform {
 void textRefresh(QWidget *widget);
 void pageRefresh(QWidget *widget, bool clean, bool partialText = false);
 void setReaderRefreshWindow(QWidget *widget);
-}
+} // namespace kobalt::platform

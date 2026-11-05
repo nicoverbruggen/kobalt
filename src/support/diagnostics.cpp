@@ -38,14 +38,14 @@
 #include <time.h>
 #include <unistd.h>
 #ifdef __APPLE__
-#include <mach/mach.h>
-#include <sys/resource.h>
+#  include <mach/mach.h>
+#  include <sys/resource.h>
 #endif
 
 namespace kobalt {
 namespace {
 QMutex mutex;
-std::atomic<int> retainedFontBytes{0}, nativeFontBytes{0}, previewBytes{0};
+std::atomic<int> retainedFontBytes{ 0 }, nativeFontBytes{ 0 }, previewBytes{ 0 };
 QString logPath;
 bool paused = false, detailed = true;
 bool syncing = true;
@@ -60,11 +60,16 @@ constexpr qint64 quietMilliseconds = 1000, maximumDelay = 5000;
 // log every few seconds. Warnings, errors, verbose mode and forced flushes at
 // sleep, close, USB and power-off keep the short delay.
 constexpr qint64 routineQuietMilliseconds = 30000, routineMaximumDelay = 60000;
-qint64 monotonicMilliseconds() {
+
+qint64 monotonicMilliseconds()
+{
     return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
 }
-struct Entry {
+
+struct Entry
+{
     QString path;
     QByteArray event;
     QJsonObject fields;
@@ -79,31 +84,42 @@ struct Entry {
     std::function<void(QJsonObject)> memorySample = {};
     std::function<void()> sample = {};
 };
+
 // The worker lives until process exit. The fatal handler never accesses it.
 std::deque<Entry> &queue = *new std::deque<Entry>;
 QWaitCondition &wake = *new QWaitCondition, &idle = *new QWaitCondition;
 bool writerStarted = false, writing = false, forceFlush = false;
 qint64 firstPending = 0, lastInput = 0;
 void addMemory(QJsonObject &fields);
-QJsonObject record(const Entry &entry) {
+
+QJsonObject record(const Entry &entry)
+{
     auto fields = entry.fields;
     fields["event"] = QString::fromLatin1(entry.event);
-    fields["severity"] = QString::fromLatin1(entry.severity == DiagnosticSeverity::Error ? "error" :
-                         entry.severity == DiagnosticSeverity::Warning ? "warning" : "activity");
+    fields["severity"] = QString::fromLatin1(entry.severity == DiagnosticSeverity::Error ? "error"
+                                                     : entry.severity == DiagnosticSeverity::Warning
+                                                     ? "warning"
+                                                     : "activity");
     fields["monotonic_ms"] = double(entry.monotonic);
-    fields["utc"] = QDateTime::fromMSecsSinceEpoch(entry.utc).toUTC().toString("yyyy-MM-ddTHH:mm:ss.zzz") + 'Z';
+    fields["utc"] =
+            QDateTime::fromMSecsSinceEpoch(entry.utc).toUTC().toString("yyyy-MM-ddTHH:mm:ss.zzz")
+            + 'Z';
     fields["pid"] = int(getpid());
-    if (entry.boot >= 0) fields["boot_ms"] = double(entry.boot);
+    if (entry.boot >= 0)
+        fields["boot_ms"] = double(entry.boot);
     fields["thread"] = QString::number(entry.thread, 16);
     fields["main_thread"] = entry.mainThread;
     return fields;
 }
+
 // One descriptor held in reserve: with none left, listing them or opening the
 // log would fail. Whoever needs the slot closes the reserve, uses the slot and
 // takes the reserve back at once.
-std::atomic<int> descriptorReserve{-1};
-std::atomic<qint64> descriptorReported{-1};
-void takeDescriptorReserve() {
+std::atomic<int> descriptorReserve{ -1 };
+std::atomic<qint64> descriptorReported{ -1 };
+
+void takeDescriptorReserve()
+{
     if (descriptorReserve.load() >= 0)
         return;
     int reserve = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
@@ -117,37 +133,45 @@ void takeDescriptorReserve() {
     if (reserve >= 0 && !descriptorReserve.compare_exchange_strong(expected, reserve))
         ::close(reserve);
 }
-bool releaseDescriptorReserve() {
+
+bool releaseDescriptorReserve()
+{
     const int reserve = descriptorReserve.exchange(-1);
     if (reserve < 0)
         return false;
     ::close(reserve);
     return true;
 }
-void append(const QString &name, const QByteArray &bytes, bool sync, qint64 fileLimit, int history) {
+
+void append(const QString &name, const QByteArray &bytes, bool sync, qint64 fileLimit, int history)
+{
     const auto path = QFile::encodeName(name);
     const int flags = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC;
     int fd = ::open(path.constData(), flags, 0600);
     // Out of descriptors, the log uses the reserve's slot.
     if (fd < 0 && (errno == EMFILE || errno == ENFILE) && releaseDescriptorReserve())
         fd = ::open(path.constData(), flags, 0600);
-    struct stat info {};
+    struct stat info{};
     if (fd >= 0 && fstat(fd, &info) == 0 && S_ISREG(info.st_mode)) {
         if (info.st_size + bytes.size() > fileLimit) {
             ::close(fd);
             fd = -1;
             const auto previous = [&path](int generation) {
-                return path + ".previous" + (generation == 1 ? QByteArray() : '.' + QByteArray::number(generation));
+                return path + ".previous"
+                        + (generation == 1 ? QByteArray() : '.' + QByteArray::number(generation));
             };
             bool shifted = true;
             for (int generation = history; generation > 1; --generation) {
-                if (::rename(previous(generation - 1).constData(), previous(generation).constData()) < 0 && errno != ENOENT) {
+                if (::rename(previous(generation - 1).constData(), previous(generation).constData())
+                            < 0
+                    && errno != ENOENT) {
                     shifted = false;
                     break;
                 }
             }
             if (shifted && ::rename(path.constData(), previous(1).constData()) == 0)
-                fd = ::open(path.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+                fd = ::open(path.constData(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                            0600);
         }
         if (fd >= 0) {
             qint64 written = 0;
@@ -167,15 +191,19 @@ void append(const QString &name, const QByteArray &bytes, bool sync, qint64 file
         ::close(fd);
     takeDescriptorReserve();
 }
-void enqueue(Entry entry) {
+
+void enqueue(Entry entry)
+{
     if (queue.size() >= queueLimit)
         return;
     if (queue.empty())
         firstPending = monotonicMilliseconds();
     queue.push_back(std::move(entry));
 }
+
 // Called with the mutex held. No formatting, sampling or I/O holds it.
-void startWriter() {
+void startWriter()
+{
     if (writerStarted)
         return;
     writerStarted = true;
@@ -188,12 +216,15 @@ void startWriter() {
             while (queue.empty())
                 wake.wait(&mutex);
             const auto now = monotonicMilliseconds();
-            const bool urgent = detailed || std::any_of(queue.begin(), queue.end(), [](const Entry &entry) {
-                return entry.severity != DiagnosticSeverity::Activity;
-            });
+            const bool urgent =
+                    detailed || std::any_of(queue.begin(), queue.end(), [](const Entry &entry) {
+                        return entry.severity != DiagnosticSeverity::Activity;
+                    });
             const auto quiet = urgent ? quietMilliseconds : routineQuietMilliseconds;
             const auto longest = urgent ? maximumDelay : routineMaximumDelay;
-            const auto delay = std::min(firstPending + longest, std::max(firstPending, lastInput) + quiet) - now;
+            const auto delay =
+                    std::min(firstPending + longest, std::max(firstPending, lastInput) + quiet)
+                    - now;
             const bool sampling = std::any_of(queue.begin(), queue.end(), [](const Entry &entry) {
                 return bool(entry.memorySample) || bool(entry.sample);
             });
@@ -203,9 +234,11 @@ void startWriter() {
             }
             std::deque<Entry> batch;
             batch.swap(queue);
-            const bool sync = syncing && (forceFlush || std::any_of(batch.begin(), batch.end(), [](const Entry &entry) {
-                return entry.severity != DiagnosticSeverity::Activity;
-            }));
+            const bool sync = syncing
+                    && (forceFlush
+                        || std::any_of(batch.begin(), batch.end(), [](const Entry &entry) {
+                               return entry.severity != DiagnosticSeverity::Activity;
+                           }));
             const bool sample = now - lastMemory >= 1000;
             const bool writeSample = detailed;
             writing = true;
@@ -250,9 +283,11 @@ void startWriter() {
                 }
                 // Keep build and power capabilities independently of event rotation.
                 // Driver inventory also survives rotation. All context writes run here.
-                if (entry.keepContext && (entry.event == "startup" || entry.event == "power-observer" ||
-                                          entry.event == "standby-input-device" || entry.event == "standby-diagnostic-capabilities" ||
-                                          entry.event == "standby-kernel-capabilities")) {
+                if (entry.keepContext
+                    && (entry.event == "startup" || entry.event == "power-observer"
+                        || entry.event == "standby-input-device"
+                        || entry.event == "standby-diagnostic-capabilities"
+                        || entry.event == "standby-kernel-capabilities")) {
                     if (contextPath != entry.path || entry.event == "startup") {
                         contextPath = entry.path;
                         context = {};
@@ -262,12 +297,14 @@ void startWriter() {
                         devices[fields.value("event_device").toString()] = fields;
                         context["input_devices"] = devices;
                     } else {
-                        const auto key = entry.event == "startup" ? "startup" :
-                            entry.event == "standby-kernel-capabilities" ? "standby_kernel" :
-                            entry.event == "power-observer" ? "power_observer" : "standby_diagnostics";
+                        const auto key = entry.event == "startup"              ? "startup"
+                                : entry.event == "standby-kernel-capabilities" ? "standby_kernel"
+                                : entry.event == "power-observer"              ? "power_observer"
+                                                                  : "standby_diagnostics";
                         context[key] = fields;
                     }
-                    QSaveFile snapshot(QFileInfo(entry.path).dir().filePath("session-context.json"));
+                    QSaveFile snapshot(
+                            QFileInfo(entry.path).dir().filePath("session-context.json"));
                     const auto data = QJsonDocument(context).toJson();
                     if (snapshot.open(QIODevice::WriteOnly) && snapshot.write(data) == data.size())
                         snapshot.commit();
@@ -275,7 +312,9 @@ void startWriter() {
                 const auto line = QJsonDocument(fields).toJson(QJsonDocument::Compact) + '\n';
                 if (line.size() > 4096)
                     continue;
-                if (!bytes.isEmpty() && (path != entry.path || fileLimit != entry.fileLimit || history != entry.history || bytes.size() + line.size() > batchLimit)) {
+                if (!bytes.isEmpty()
+                    && (path != entry.path || fileLimit != entry.fileLimit
+                        || history != entry.history || bytes.size() + line.size() > batchLimit)) {
                     append(path, bytes, sync, fileLimit, history);
                     bytes.clear();
                 }
@@ -295,12 +334,18 @@ void startWriter() {
         }
     }).detach();
 }
-bool drain(int milliseconds) {
+
+bool drain(int milliseconds)
+{
     // A queued boundary also syncs bytes from earlier unsynced batches when
     // the queue is empty. All file access remains on the writer thread.
     if (!logPath.isEmpty()) {
-        Entry boundary{logPath, {}, {}, DiagnosticSeverity::Activity,
-                       monotonicMilliseconds(), QDateTime::currentMSecsSinceEpoch()};
+        Entry boundary{ logPath,
+                        {},
+                        {},
+                        DiagnosticSeverity::Activity,
+                        monotonicMilliseconds(),
+                        QDateTime::currentMSecsSinceEpoch() };
         boundary.fileLimit = detailed ? verboseLimit : normalLimit;
         boundary.history = detailed ? verboseHistory : 1;
         enqueue(std::move(boundary));
@@ -322,15 +367,20 @@ bool drain(int milliseconds) {
     forceFlush = false;
     return true;
 }
+
 // Resident memory when the first book began to open, in KiB, or -1.
-std::atomic<qint64> memoryBase{-1};
+std::atomic<qint64> memoryBase{ -1 };
+
 // Resident and peak resident memory in KiB, or -1 where unknown, and the
 // part above the base once it is known.
-void addMemory(QJsonObject &fields) {
+void addMemory(QJsonObject &fields)
+{
 #ifdef __APPLE__
     mach_task_basic_info_data_t info{};
     mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS)
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info),
+                  &count)
+        == KERN_SUCCESS)
         fields["rss_kib"] = double(info.resident_size / 1024);
     rusage usage{};
     // The Mac reports the peak in bytes, Linux in KiB.
@@ -343,20 +393,25 @@ void addMemory(QJsonObject &fields) {
     if (frequency.open(QIODevice::ReadOnly)) {
         bool ok = false;
         const auto khz = frequency.read(64).trimmed().toLongLong(&ok);
-        if (ok && khz > 0) fields["cpu_khz"] = double(khz);
+        if (ok && khz > 0)
+            fields["cpu_khz"] = double(khz);
     }
     QFile memory("/proc/self/status");
     if (memory.open(QIODevice::ReadOnly)) {
         for (const auto &line : memory.readAll().split('\n')) {
-            if (line.startsWith("VmSize:") || line.startsWith("VmData:") || line.startsWith("Threads:")) {
+            if (line.startsWith("VmSize:") || line.startsWith("VmData:")
+                || line.startsWith("Threads:")) {
                 const auto parts = line.simplified().split(' ');
                 if (parts.size() >= 2)
-                    fields[line.startsWith("VmSize:") ? "virtual_kib" : line.startsWith("VmData:") ? "data_kib" : "threads"] = parts[1].toDouble();
+                    fields[line.startsWith("VmSize:")           ? "virtual_kib"
+                                   : line.startsWith("VmData:") ? "data_kib"
+                                                                : "threads"] = parts[1].toDouble();
             }
             if (line.startsWith("VmRSS:") || line.startsWith("VmHWM:")) {
                 const auto parts = line.simplified().split(' ');
                 if (parts.size() >= 2)
-                    fields[line.startsWith("VmRSS:") ? "rss_kib" : "peak_rss_kib"] = parts[1].toDouble();
+                    fields[line.startsWith("VmRSS:") ? "rss_kib" : "peak_rss_kib"] =
+                            parts[1].toDouble();
             }
         }
     }
@@ -370,9 +425,12 @@ void addMemory(QJsonObject &fields) {
     if (systemMemory.open(QIODevice::ReadOnly)) {
         for (const auto &line : systemMemory.readAll().split('\n')) {
             const auto parts = line.simplified().split(' ');
-            if (parts.size() < 2) continue;
-            if (parts[0] == "MemAvailable:") fields["available_kib"] = parts[1].toDouble();
-            if (parts[0] == "MemFree:") fields["free_kib"] = parts[1].toDouble();
+            if (parts.size() < 2)
+                continue;
+            if (parts[0] == "MemAvailable:")
+                fields["available_kib"] = parts[1].toDouble();
+            if (parts[0] == "MemFree:")
+                fields["free_kib"] = parts[1].toDouble();
         }
     }
     // Do not count the sampler's own proc/sysfs handles as application usage.
@@ -384,7 +442,8 @@ void addMemory(QJsonObject &fields) {
         while (const auto *entry = readdir(directory)) {
             char *end = nullptr;
             const long fd = std::strtol(entry->d_name, &end, 10);
-            if (!entry->d_name[0] || *end || fd < 0 || fd == dirfd(directory)) continue;
+            if (!entry->d_name[0] || *end || fd < 0 || fd == dirfd(directory))
+                continue;
             ++count;
             highest = qMax(highest, int(fd));
         }
@@ -400,18 +459,25 @@ void addMemory(QJsonObject &fields) {
     }
     // Keep pressure evidence even in release logs. The available value is not
     // interchangeable with MemFree; old kernels may provide only the latter.
-    const bool low = fields.contains("available_kib") && fields.value("available_kib").toDouble() < 16 * 1024;
-    if (fields.contains("available_kib")) fields["memory_pressure"] = low;
+    const bool low = fields.contains("available_kib")
+            && fields.value("available_kib").toDouble() < 16 * 1024;
+    if (fields.contains("available_kib"))
+        fields["memory_pressure"] = low;
     static qint64 lastWarning = -60000;
     const auto now = monotonicMilliseconds();
     if (low && now - lastWarning >= 60000) {
         lastWarning = now;
-        diagnostic("memory-pressure", {{"available_kib", fields.value("available_kib")}}, DiagnosticSeverity::Warning);
+        diagnostic("memory-pressure", { { "available_kib", fields.value("available_kib") } },
+                   DiagnosticSeverity::Warning);
     }
     QJsonObject resources;
-    for (const auto *key : {"resource_sample_monotonic_ms", "rss_kib", "peak_rss_kib", "virtual_kib", "data_kib",
-                           "available_kib", "free_kib", "threads", "fd_count", "fd_highest", "fd_soft_limit", "fd_hard_limit", "memory_pressure", "private_font_bytes", "native_fallback_font_bytes", "font_preview_bitmap_bytes"})
-        if (fields.contains(key)) resources[key] = fields.value(key);
+    for (const auto *key :
+         { "resource_sample_monotonic_ms", "rss_kib", "peak_rss_kib", "virtual_kib", "data_kib",
+           "available_kib", "free_kib", "threads", "fd_count", "fd_highest", "fd_soft_limit",
+           "fd_hard_limit", "memory_pressure", "private_font_bytes", "native_fallback_font_bytes",
+           "font_preview_bitmap_bytes" })
+        if (fields.contains(key))
+            resources[key] = fields.value(key);
     const auto snapshot = QJsonDocument(resources).toJson(QJsonDocument::Compact) + '\n';
     crashContext::resources.store(snapshot.constData(), std::size_t(snapshot.size()));
     const qint64 base = memoryBase;
@@ -422,19 +488,37 @@ void addMemory(QJsonObject &fields) {
     if (fields.value("peak_rss_kib").isDouble())
         fields["kobalt_peak_kib"] = fields.value("peak_rss_kib").toDouble() - double(base);
 }
+} // namespace
+
+void setDiagnosticFontBytes(qint64 bytes)
+{
+    retainedFontBytes.store(int(bytes));
 }
-void setDiagnosticFontBytes(qint64 bytes) { retainedFontBytes.store(int(bytes)); }
-void setDiagnosticPreviewBytes(int bytes) { previewBytes.store(bytes); }
-void setDiagnosticNativeFontBytes(qint64 bytes) { nativeFontBytes.store(int(bytes)); }
-void setDiagnosticsSync(bool enabled) {
+
+void setDiagnosticPreviewBytes(int bytes)
+{
+    previewBytes.store(bytes);
+}
+
+void setDiagnosticNativeFontBytes(qint64 bytes)
+{
+    nativeFontBytes.store(int(bytes));
+}
+
+void setDiagnosticsSync(bool enabled)
+{
     QMutexLocker lock(&mutex);
     syncing = enabled;
 }
-void setDiagnosticObserver(std::function<void(const QJsonObject &)> value) {
+
+void setDiagnosticObserver(std::function<void(const QJsonObject &)> value)
+{
     QMutexLocker lock(&mutex);
     observer = std::move(value);
 }
-QJsonObject diagnosticDeviceFields(const QByteArray &version) {
+
+QJsonObject diagnosticDeviceFields(const QByteArray &version)
+{
     const auto fields = version.trimmed().split(',');
     if (fields.size() != 6) {
         return {};
@@ -444,7 +528,8 @@ QJsonObject diagnosticDeviceFields(const QByteArray &version) {
     const auto hardware = QString::fromLatin1(fields[5].trimmed());
     // Persist only model and firmware fields. The first field is the serial.
     static const QRegularExpression firmwarePattern(QStringLiteral("^[0-9]+(?:\\.[0-9]+){2,}$"));
-    static const QRegularExpression hardwarePattern(QStringLiteral("^00000000-0000-0000-0000-[0-9]{12}$"));
+    static const QRegularExpression hardwarePattern(
+            QStringLiteral("^00000000-0000-0000-0000-[0-9]{12}$"));
     if (firmwarePattern.match(firmware).hasMatch()) {
         result["firmware"] = firmware;
     }
@@ -453,7 +538,9 @@ QJsonObject diagnosticDeviceFields(const QByteArray &version) {
     }
     return result;
 }
-QString diagnosticErrorCode(const QString &reason) {
+
+QString diagnosticErrorCode(const QString &reason)
+{
     if (reason.isEmpty())
         return {};
     int count = 0;
@@ -461,13 +548,15 @@ QString diagnosticErrorCode(const QString &reason) {
     // Never persist arbitrary error text: it may contain a private file path.
     for (int i = 0; i < count; ++i) {
         const auto &entry = entries[i];
-        if (std::strncmp(entry.key, "error.", 6) == 0 &&
-            (reason == QString::fromUtf8(entry.value) || reason == QLatin1String(entry.key)))
+        if (std::strncmp(entry.key, "error.", 6) == 0
+            && (reason == QString::fromUtf8(entry.value) || reason == QLatin1String(entry.key)))
             return QString::fromLatin1(entry.key);
     }
     return QStringLiteral("unknown");
 }
-void pauseDiagnostics(bool value) {
+
+void pauseDiagnostics(bool value)
+{
     // Storage can be exported next. Finish the queued events first.
     if (value)
         mainthread::blocking("diagnostic-log-flush");
@@ -476,19 +565,25 @@ void pauseDiagnostics(bool value) {
     if (value)
         drain(-1);
 }
-bool diagnosticsActive() {
+
+bool diagnosticsActive()
+{
     QMutexLocker lock(&mutex);
     return !paused && (detailed || bool(observer)) && !logPath.isEmpty();
 }
-bool diagnosticsRequested(const QString &profile) {
-    #ifdef KOBALT_VERBOSE_DIAGNOSTICS
+
+bool diagnosticsRequested(const QString &profile)
+{
+#ifdef KOBALT_VERBOSE_DIAGNOSTICS
     Q_UNUSED(profile);
     return true;
 #else
     return qgetenv("KOBALT_DIAGNOSTICS") == "1" || QFile::exists(profile + "/diagnostics-enabled");
 #endif
 }
-void initializeDiagnostics(const QString &directory, bool verbose) {
+
+void initializeDiagnostics(const QString &directory, bool verbose)
+{
     {
         QMutexLocker lock(&mutex);
         if (!QDir().mkpath(directory))
@@ -498,7 +593,7 @@ void initializeDiagnostics(const QString &directory, bool verbose) {
         takeDescriptorReserve();
         lastInput = monotonicMilliseconds();
     }
-    auto fields = kobalt::qt::object({{"build", __DATE__ " " __TIME__}, {"qt", qVersion()}});
+    auto fields = kobalt::qt::object({ { "build", __DATE__ " " __TIME__ }, { "qt", qVersion() } });
 #ifdef KOBALT_VERSION
     fields["version"] = QString::fromLatin1(KOBALT_VERSION);
 #endif
@@ -518,28 +613,65 @@ void initializeDiagnostics(const QString &directory, bool verbose) {
     fields["log_history_files"] = verbose ? verboseHistory : 1;
     diagnostic("startup", fields);
 }
-void diagnosticInput() {
+
+void diagnosticInput()
+{
     QMutexLocker lock(&mutex);
     lastInput = monotonicMilliseconds();
 }
-void sampleDiagnosticMemory(std::function<void(QJsonObject)> done) {
+
+void sampleDiagnosticMemory(std::function<void(QJsonObject)> done)
+{
     QMutexLocker lock(&mutex);
-    if (!done || queue.size() >= queueLimit) return;
-    if (queue.empty()) firstPending = monotonicMilliseconds();
-    queue.push_front({{}, {}, {}, DiagnosticSeverity::Activity, 0, 0, -1, 0, false, normalLimit, false, 1, std::move(done)});
+    if (!done || queue.size() >= queueLimit)
+        return;
+    if (queue.empty())
+        firstPending = monotonicMilliseconds();
+    queue.push_front({ {},
+                       {},
+                       {},
+                       DiagnosticSeverity::Activity,
+                       0,
+                       0,
+                       -1,
+                       0,
+                       false,
+                       normalLimit,
+                       false,
+                       1,
+                       std::move(done) });
     startWriter();
     wake.wakeAll();
 }
-bool sampleDiagnostics(std::function<void()> sample) {
+
+bool sampleDiagnostics(std::function<void()> sample)
+{
     QMutexLocker lock(&mutex);
-    if (!sample || paused || (!detailed && !observer) || logPath.isEmpty() || queue.size() >= queueLimit) return false;
-    enqueue({{}, {}, {}, DiagnosticSeverity::Activity, 0, 0, -1, 0, false, normalLimit, false, 1, {}, std::move(sample)});
+    if (!sample || paused || (!detailed && !observer) || logPath.isEmpty()
+        || queue.size() >= queueLimit)
+        return false;
+    enqueue({ {},
+              {},
+              {},
+              DiagnosticSeverity::Activity,
+              0,
+              0,
+              -1,
+              0,
+              false,
+              normalLimit,
+              false,
+              1,
+              {},
+              std::move(sample) });
     startWriter();
     wake.wakeAll();
     return true;
 }
-void markMemoryBase() {
-    static std::atomic_bool marked{false};
+
+void markMemoryBase()
+{
+    static std::atomic_bool marked{ false };
     if (marked.exchange(true))
         return;
     sampleDiagnosticMemory([](QJsonObject fields) {
@@ -553,34 +685,43 @@ void markMemoryBase() {
         diagnostic("memory-base", base, DiagnosticSeverity::Activity);
     });
 }
-void diagnostic(const char *event, QJsonObject fields, bool) {
+
+void diagnostic(const char *event, QJsonObject fields, bool)
+{
     diagnostic(event, std::move(fields), DiagnosticSeverity::Activity);
 }
-void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severity) {
+
+void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severity)
+{
     const int savedErrno = errno;
     // Record only event names and resource counters, never arbitrary paths,
     // book identifiers or user text. This survives an unflushed event queue.
     char recent[1024];
     int used = std::snprintf(recent, sizeof(recent), "event=%.*s monotonic_ms=%lld", 96, event,
                              static_cast<long long>(monotonicMilliseconds()));
-    for (const auto *key : {"file_bytes", "retained_bytes", "budget_bytes", "released_bytes", "id"}) {
-        if (!fields.contains(key) || used < 0 || used >= int(sizeof(recent)) - 2) continue;
-        const int n = std::snprintf(recent + used, sizeof(recent) - std::size_t(used), " %s=%.0f", key, fields.value(key).toDouble());
-        if (n > 0) used = qMin(int(sizeof(recent)) - 2, used + n);
+    for (const auto *key :
+         { "file_bytes", "retained_bytes", "budget_bytes", "released_bytes", "id" }) {
+        if (!fields.contains(key) || used < 0 || used >= int(sizeof(recent)) - 2)
+            continue;
+        const int n = std::snprintf(recent + used, sizeof(recent) - std::size_t(used), " %s=%.0f",
+                                    key, fields.value(key).toDouble());
+        if (n > 0)
+            used = qMin(int(sizeof(recent)) - 2, used + n);
     }
     if (used > 0 && used < int(sizeof(recent)) - 1) {
         recent[used++] = '\n';
         crashContext::event(recent, std::size_t(used));
     }
-    Entry entry{{}, QByteArray(event), std::move(fields), severity,
-                monotonicMilliseconds(), QDateTime::currentMSecsSinceEpoch()};
+    Entry entry{ {},       QByteArray(event),       std::move(fields),
+                 severity, monotonicMilliseconds(), QDateTime::currentMSecsSinceEpoch() };
 #ifdef __linux__
     timespec boot{};
     if (clock_gettime(CLOCK_BOOTTIME, &boot) == 0)
         entry.boot = qint64(boot.tv_sec) * 1000 + boot.tv_nsec / 1000000;
 #endif
     entry.thread = reinterpret_cast<quintptr>(QThread::currentThreadId());
-    entry.mainThread = QCoreApplication::instance() && QThread::currentThread() == QCoreApplication::instance()->thread();
+    entry.mainThread = QCoreApplication::instance()
+            && QThread::currentThread() == QCoreApplication::instance()->thread();
     std::function<void(const QJsonObject &)> notify;
     {
         QMutexLocker lock(&mutex);
@@ -600,32 +741,47 @@ void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severi
         notify(record(entry));
     errno = savedErrno;
 }
-DiagnosticOperation::DiagnosticOperation(const char *name) : operation(name) {
-    if (!name || !diagnosticsActive()) return;
-    static std::atomic<quint64> sequence{0};
+
+DiagnosticOperation::DiagnosticOperation(const char *name) : operation(name)
+{
+    if (!name || !diagnosticsActive())
+        return;
+    static std::atomic<quint64> sequence{ 0 };
     id = ++sequence;
     elapsed.start();
-    diagnostic("operation-start", {{"operation", QString::fromLatin1(operation)}, {"operation_id", double(id)}}, false);
+    diagnostic("operation-start",
+               { { "operation", QString::fromLatin1(operation) }, { "operation_id", double(id) } },
+               false);
 }
-DiagnosticOperation::~DiagnosticOperation() {
-    if (!id) return;
-    diagnostic("operation-end", {{"operation", QString::fromLatin1(operation)}, {"operation_id", double(id)},
-                                  {"elapsed_ms", elapsed.nsecsElapsed() / 1e6}}, false);
+
+DiagnosticOperation::~DiagnosticOperation()
+{
+    if (!id)
+        return;
+    diagnostic("operation-end",
+               { { "operation", QString::fromLatin1(operation) },
+                 { "operation_id", double(id) },
+                 { "elapsed_ms", elapsed.nsecsElapsed() / 1e6 } },
+               false);
 }
-bool flushDiagnostics(int milliseconds) {
+
+bool flushDiagnostics(int milliseconds)
+{
     mainthread::blocking("diagnostic-log-flush");
     QMutexLocker lock(&mutex);
     return drain(milliseconds);
 }
+
 namespace {
 // Event logs never carry book paths. System files, Kobalt's and other mods'
 // folders and the files directly in Nickel's .kobo folder keep their path. Its
 // subfolders name store books by their IDs, and other platforms keep imported
 // books beside the profile, so those and any other file are named only by
 // their extension.
-QString descriptorTarget(const QString &path) {
-    static const char *const kept[] = {"/dev/", "/proc/", "/sys/", "/usr/", "/lib/", "/etc/", "/bin/",
-                                       "/mnt/onboard/.adds/"};
+QString descriptorTarget(const QString &path)
+{
+    static const char *const kept[] = { "/dev/", "/proc/", "/sys/", "/usr/",
+                                        "/lib/", "/etc/",  "/bin/", "/mnt/onboard/.adds/" };
     for (const auto *prefix : kept)
         if (path.startsWith(QLatin1String(prefix)))
             return path;
@@ -638,14 +794,17 @@ QString descriptorTarget(const QString &path) {
     return plain.match(suffix).hasMatch() ? QStringLiteral("other file .") + suffix.toLower()
                                           : QStringLiteral("other file");
 }
-}
-void reportDescriptorExhaustion(const char *context, int error) {
+} // namespace
+
+void reportDescriptorExhaustion(const char *context, int error)
+{
     if (error != EMFILE && error != ENFILE)
         return;
     const int savedError = errno;
     const auto now = monotonicMilliseconds();
     auto last = descriptorReported.load();
-    if ((last >= 0 && now - last < 60000) || !descriptorReported.compare_exchange_strong(last, now)) {
+    if ((last >= 0 && now - last < 60000)
+        || !descriptorReported.compare_exchange_strong(last, now)) {
         errno = savedError;
         return;
     }
@@ -695,18 +854,26 @@ void reportDescriptorExhaustion(const char *context, int error) {
         named[descriptorTarget(it.key())] += it.value();
     QVector<QPair<int, QString>> ranked;
     for (auto it = named.cbegin(); it != named.cend(); ++it)
-        ranked.append({it.value(), it.key()});
-    std::sort(ranked.begin(), ranked.end(), [](const QPair<int, QString> &a, const QPair<int, QString> &b) {
-        return a.first != b.first ? a.first > b.first : a.second < b.second;
-    });
+        ranked.append({ it.value(), it.key() });
+    std::sort(ranked.begin(), ranked.end(),
+              [](const QPair<int, QString> &a, const QPair<int, QString> &b) {
+                  return a.first != b.first ? a.first > b.first : a.second < b.second;
+              });
     QJsonArray top;
     for (int i = 0; i < ranked.size() && i < 5; ++i)
-        top.append(qt::object({{"path", ranked[i].second}, {"count", ranked[i].first}}));
+        top.append(qt::object({ { "path", ranked[i].second }, { "count", ranked[i].first } }));
     diagnostic("descriptor-exhaustion",
-               qt::object({{"context", QString::fromLatin1(context)}, {"errno", error}, {"listed", listed},
-                           {"open", total}, {"files", files}, {"sockets", sockets}, {"pipes", pipes},
-                           {"inotify", inotify}, {"other", other}, {"most_opened", top}}),
+               qt::object({ { "context", QString::fromLatin1(context) },
+                            { "errno", error },
+                            { "listed", listed },
+                            { "open", total },
+                            { "files", files },
+                            { "sockets", sockets },
+                            { "pipes", pipes },
+                            { "inotify", inotify },
+                            { "other", other },
+                            { "most_opened", top } }),
                DiagnosticSeverity::Error);
     errno = savedError;
 }
-}
+} // namespace kobalt

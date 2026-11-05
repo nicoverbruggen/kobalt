@@ -24,13 +24,19 @@
 namespace kobalt {
 namespace metrics = ui::metrics;
 namespace chrome = ui::metrics::chrome;
+
 namespace {
-class DictionaryChoiceRow final : public ui::ListRow {
+class DictionaryChoiceRow final : public ui::ListRow
+{
 public:
-    DictionaryChoiceRow(QWidget *parent, bool columnDivider) : ui::ListRow(parent), columnDivider(columnDivider) {}
+    DictionaryChoiceRow(QWidget *parent, bool columnDivider)
+        : ui::ListRow(parent), columnDivider(columnDivider)
+    {
+    }
 
 protected:
-    void paintEvent(QPaintEvent *event) override {
+    void paintEvent(QPaintEvent *event) override
+    {
         ui::ListRow::paintEvent(event);
         if (columnDivider) {
             QPainter painter(this);
@@ -41,8 +47,11 @@ protected:
 private:
     bool columnDivider;
 };
-}
-DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Panel(parent, Qt::TopEdge) {
+} // namespace
+
+DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
+    : ui::Panel(parent, Qt::TopEdge)
+{
     setEdgeWidth(chrome::heavyRule);
     setObjectName("rrDictionary");
     dictionary = new ui::CellButton(ui::ControlIcon::Dictionaries, this);
@@ -65,13 +74,16 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard) 
     query->setAccessibleName(strings::get("dictionary_panel.lookup_word"));
     query->setInputMethodHints(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
     query->setTextMargins(chrome::inset, 0, chrome::inset, 0);
-    ui::readerStyle(query, "QLineEdit{border:none;padding:0;background:palette(window);" +
-                               ui::styles::font(chrome::titleText) + "}");
+    ui::readerStyle(query,
+                    "QLineEdit{border:none;padding:0;background:palette(window);"
+                            + ui::styles::font(chrome::titleText) + "}");
     query->hide();
     editHint = new ui::InterfaceLabel(strings::get("dictionary_panel.edit_hint"), this);
     editHint->setObjectName("rrDictionaryEditHint");
     editHint->setWordWrap(true);
-    ui::readerStyle(editHint, ui::styles::font(chrome::descriptionText) + "background:transparent;color:palette(placeholder-text);");
+    ui::readerStyle(editHint,
+                    ui::styles::font(chrome::descriptionText)
+                            + "background:transparent;color:palette(placeholder-text);");
     editHint->hide();
     submit = new ui::CellButton(ui::ControlIcon::Check, this);
     submit->setObjectName("rrDictionarySubmit");
@@ -80,9 +92,8 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard) 
     submit->hide();
     connect(submit, &QPushButton::clicked, this, [this] { submitQuery(); });
     connect(query, &QLineEdit::returnPressed, this, [this] { submitQuery(); });
-    connect(query, &QLineEdit::textChanged, this, [this](const QString &value) {
-        submit->setEnabled(!value.simplified().isEmpty());
-    });
+    connect(query, &QLineEdit::textChanged, this,
+            [this](const QString &value) { submit->setEnabled(!value.simplified().isEmpty()); });
     if (makeKeyboard) {
         // The keyboard stays at the bottom of the reader while the dictionary
         // remains a compact sheet above it. Separate parents also keep key and
@@ -151,13 +162,19 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard) 
     dropdown->hide();
     hide();
 }
-int DictionaryPanel::rowTop() const {
+
+int DictionaryPanel::rowTop() const
+{
     return lower ? chrome::heavyRule : 0;
 }
-int DictionaryPanel::contentBottom() const {
+
+int DictionaryPanel::contentBottom() const
+{
     return height() - (lower ? 0 : chrome::heavyRule);
 }
-void DictionaryPanel::place(const QRect &selection) {
+
+void DictionaryPanel::place(const QRect &selection)
+{
     this->selection = selection;
     const auto size = parentWidget()->size();
     int h = size.height() * metrics::lookup::heightPercent / 100;
@@ -166,12 +183,15 @@ void DictionaryPanel::place(const QRect &selection) {
     if (!editing && isShortHeight(size.height(), ui::density())) {
         const bool below = selection.center().y() < size.height() / 2;
         const int room = below ? size.height() - selection.bottom() - 1 : selection.top();
-        h = qBound(h, room - int(metrics::lookup::moveTolerance), size.height() * metrics::lookup::shortHeightPercent / 100);
+        h = qBound(h, room - int(metrics::lookup::moveTolerance),
+                   size.height() * metrics::lookup::shortHeightPercent / 100);
     }
     if (editing) {
-        const auto keyboardBounds = parentWidget()->window()->property("reader_keyboard_bounds").toRect();
+        const auto keyboardBounds =
+                parentWidget()->window()->property("reader_keyboard_bounds").toRect();
         if (!keyboardBounds.isEmpty()) {
-            const int keyboardTop = parentWidget()->mapFrom(parentWidget()->window(), keyboardBounds.topLeft()).y();
+            const int keyboardTop =
+                    parentWidget()->mapFrom(parentWidget()->window(), keyboardBounds.topLeft()).y();
             h = qMin(h, keyboardTop);
         }
     }
@@ -183,7 +203,9 @@ void DictionaryPanel::place(const QRect &selection) {
     setGeometry(0, lower ? size.height() - h : safeTop, size.width(), h);
     arrange();
 }
-QString DictionaryPanel::formatDefinition(const QString &html) {
+
+QString DictionaryPanel::formatDefinition(const QString &html)
+{
     const QRegularExpression boundary("</w\\s*>", QRegularExpression::CaseInsensitiveOption);
     if (!html.contains(boundary))
         return html;
@@ -193,17 +215,25 @@ QString DictionaryPanel::formatDefinition(const QString &html) {
     for (auto entry : html.split(boundary)) {
         if (entry.trimmed().isEmpty())
             continue;
-        entry.remove(
-            QRegularExpression("<var\\b[^>]*>.*?</var\\s*>", QRegularExpression::CaseInsensitiveOption |
-                                                                 QRegularExpression::DotMatchesEverythingOption));
-        entry.replace(QRegularExpression("<a([^>]*)/>", QRegularExpression::CaseInsensitiveOption), "<a\\1></a>");
-        entry.replace(QRegularExpression("<p>\\s*(<(?:ol|ul)\\b)", QRegularExpression::CaseInsensitiveOption), "\\1");
-        entry.replace(QRegularExpression("(</(?:ol|ul)>)\\s*</p>", QRegularExpression::CaseInsensitiveOption), "\\1");
+        entry.remove(QRegularExpression("<var\\b[^>]*>.*?</var\\s*>",
+                                        QRegularExpression::CaseInsensitiveOption
+                                                | QRegularExpression::DotMatchesEverythingOption));
+        entry.replace(QRegularExpression("<a([^>]*)/>", QRegularExpression::CaseInsensitiveOption),
+                      "<a\\1></a>");
+        entry.replace(QRegularExpression("<p>\\s*(<(?:ol|ul)\\b)",
+                                         QRegularExpression::CaseInsensitiveOption),
+                      "\\1");
+        entry.replace(QRegularExpression("(</(?:ol|ul)>)\\s*</p>",
+                                         QRegularExpression::CaseInsensitiveOption),
+                      "\\1");
         entries.append("<p>" + entry);
     }
     return entries.join(QString());
 }
-void DictionaryPanel::open(const QString &word, const DictionaryResult &result, const QRect &selection) {
+
+void DictionaryPanel::open(const QString &word, const DictionaryResult &result,
+                           const QRect &selection)
+{
     finishEditing(false);
     setAccessibleName(strings::get("dictionary_panel.definition_for").arg(word));
     this->word = word.simplified();
@@ -217,41 +247,49 @@ void DictionaryPanel::open(const QString &word, const DictionaryResult &result, 
         if (covered && !bookRaw.supportsCharacter(character))
             covered = false;
     headwordFont = covered ? book : ui::interfaceFont(chrome::titleText);
-    ui::readerStyle(headword, (covered ? QString("font-family:'%1';font-weight:400;font-style:normal;").arg(bookFamily)
-                                       : QString()) +
-                                  ui::styles::font(chrome::titleText) + "background:transparent;");
+    ui::readerStyle(headword,
+                    (covered ? QString("font-family:'%1';font-weight:400;font-style:normal;")
+                                       .arg(bookFamily)
+                             : QString())
+                            + ui::styles::font(chrome::titleText) + "background:transparent;");
     query->setFont(headwordFont);
-    ui::readerStyle(query, headword->property("reader_style").toString() +
-                              "border:none;padding:0;background:palette(window);");
-    const auto dictionaryName = result.dictionary.isEmpty() ? strings::get("dictionary_panel.dictionary_unavailable")
-                                                           : result.dictionary;
+    ui::readerStyle(query,
+                    headword->property("reader_style").toString()
+                            + "border:none;padding:0;background:palette(window);");
+    const auto dictionaryName = result.dictionary.isEmpty()
+            ? strings::get("dictionary_panel.dictionary_unavailable")
+            : result.dictionary;
     dictionary->setAccessibleDescription(dictionaryName);
     dictionary->setToolTip(dictionaryName);
     currentId = result.dictionaryId;
     dropdown->hide();
-    const auto note = QString("font-size:%1px;color:%2;").arg(int(chrome::descriptionText)).arg(ui::noteColor(this).name());
+    const auto note = QString("font-size:%1px;color:%2;")
+                              .arg(int(chrome::descriptionText))
+                              .arg(ui::noteColor(this).name());
     QString html = formatDefinition(result.html);
     // The adapter reports a word without an entry as an error. Name the word instead.
     const bool missing = result.received && result.restored && html.trimmed().isEmpty();
     if (!result.error.isEmpty() && !missing)
         html = "<p>" + result.error.toHtmlEscaped() + "</p>";
     else if (!result.received || html.trimmed().isEmpty())
-        html = "<p>" + strings::get("dictionary_panel.no_definition_for").arg(word).toHtmlEscaped() +
-               "</p><p style=\"" + note + "\">" +
-               (options.size() > 1 ? strings::get("dictionary_panel.try_another_dictionary")
-                                   : strings::get("dictionary_panel.try_another_word"))
-                   .toHtmlEscaped() +
-               "</p>";
+        html = "<p>" + strings::get("dictionary_panel.no_definition_for").arg(word).toHtmlEscaped()
+                + "</p><p style=\"" + note + "\">"
+                + (options.size() > 1 ? strings::get("dictionary_panel.try_another_dictionary")
+                                      : strings::get("dictionary_panel.try_another_word"))
+                          .toHtmlEscaped()
+                + "</p>";
     const bool downloaded = result.dictionaryId.startsWith("downloaded:");
     sourceText = downloaded && !result.source.isEmpty()
-        ? strings::get("dictionary_panel.dictionary_sources").arg(QTextDocumentFragment::fromHtml(result.source).toPlainText())
-        : QString();
+            ? strings::get("dictionary_panel.dictionary_sources")
+                      .arg(QTextDocumentFragment::fromHtml(result.source).toPlainText())
+            : QString();
     if (!downloaded && !result.source.isEmpty())
         html += QString("<hr><p style=\"font-family:'%1';font-size:%2px;color:%3;\">%4</p><p style=\"%5\">%6</p>")
-                    .arg(ui::chromeFont().family())
-                    .arg(int(chrome::captionText))
-                    .arg(ui::noteColor(this).name())
-                    .arg(strings::get("dictionary_panel.source").toUpper().toHtmlEscaped(), note, result.source);
+                        .arg(ui::chromeFont().family())
+                        .arg(int(chrome::captionText))
+                        .arg(ui::noteColor(this).name())
+                        .arg(strings::get("dictionary_panel.source").toUpper().toHtmlEscaped(),
+                             note, result.source);
     definitionHtml = html;
     renderedHtml.clear();
     text->setPage(0);
@@ -260,7 +298,9 @@ void DictionaryPanel::open(const QString &word, const DictionaryResult &result, 
     raise();
     arrange();
 }
-QFont DictionaryPanel::bookFont(int pixels) const {
+
+QFont DictionaryPanel::bookFont(int pixels) const
+{
     QFont font = bookFamily.isEmpty() ? ui::interfaceFont(pixels) : QFont(bookFamily);
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setWeight(QFont::Normal);
@@ -268,45 +308,63 @@ QFont DictionaryPanel::bookFont(int pixels) const {
     font.setPixelSize(pixels);
     return font;
 }
-void DictionaryPanel::setBookFont(const QString &family) {
+
+void DictionaryPanel::setBookFont(const QString &family)
+{
     if (bookFamily == family)
         return;
     bookFamily = family;
     if (definitionFamily.isEmpty())
         setDefinitionFont({}, definitionPercent);
 }
-QFont DictionaryPanel::definitionFont(const QString &family, int percent) {
+
+QFont DictionaryPanel::definitionFont(const QString &family, int percent)
+{
     QFont font = ui::interfaceFont(qMax(1, qRound(int(chrome::labelText) * percent / 100.0)));
     if (!family.isEmpty())
         font.setFamily(family);
     return font;
 }
-void DictionaryPanel::setDefinitionFont(const QString &family, int percent) {
+
+void DictionaryPanel::setDefinitionFont(const QString &family, int percent)
+{
     definitionFamily = family;
     definitionPercent = percent;
     text->setTextFont(definitionFont(family.isEmpty() ? bookFamily : family, percent));
     text->setMinimumLineHeight(definitionLineHeight(percent, !family.isEmpty()));
     arrange();
 }
-int DictionaryPanel::definitionLineHeight(int percent, bool customFont) {
+
+int DictionaryPanel::definitionLineHeight(int percent, bool customFont)
+{
     const int height = 100 + qMax(0, percent - 100) / 2;
     return customFont ? (height * 120 + 50) / 100 : (height > 100 ? height : 0);
 }
-void DictionaryPanel::setLanguage(const QString &value) {
+
+void DictionaryPanel::setLanguage(const QString &value)
+{
     language = DictionaryManager::normalizeLanguage(value);
 }
-void DictionaryPanel::setChoices(QVector<DictionaryChoice> values) {
+
+void DictionaryPanel::setChoices(QVector<DictionaryChoice> values)
+{
     options = std::move(values);
     dictionary->setEnabled(!editing && options.size() > 1);
 }
-void DictionaryPanel::resizeEvent(QResizeEvent *) {
+
+void DictionaryPanel::resizeEvent(QResizeEvent *)
+{
     arrange();
 }
-void DictionaryPanel::hideEvent(QHideEvent *event) {
+
+void DictionaryPanel::hideEvent(QHideEvent *event)
+{
     finishEditing(false);
     ui::Panel::hideEvent(event);
 }
-void DictionaryPanel::keyPressEvent(QKeyEvent *event) {
+
+void DictionaryPanel::keyPressEvent(QKeyEvent *event)
+{
     if (editing && event->key() == Qt::Key_Escape) {
         finishEditing();
         event->accept();
@@ -314,7 +372,9 @@ void DictionaryPanel::keyPressEvent(QKeyEvent *event) {
     }
     ui::Panel::keyPressEvent(event);
 }
-void DictionaryPanel::editQuery() {
+
+void DictionaryPanel::editQuery()
+{
     if (!keyboard || editing)
         return;
     dropdown->hide();
@@ -328,7 +388,9 @@ void DictionaryPanel::editQuery() {
     keyboard->show();
     place(selection);
 }
-void DictionaryPanel::finishEditing(bool restore) {
+
+void DictionaryPanel::finishEditing(bool restore)
+{
     if (!editing)
         return;
     editing = false;
@@ -343,7 +405,9 @@ void DictionaryPanel::finishEditing(bool restore) {
         submit->hide();
     }
 }
-void DictionaryPanel::submitQuery() {
+
+void DictionaryPanel::submitQuery()
+{
     if (!editing)
         return;
     const auto value = query->text().simplified();
@@ -353,14 +417,18 @@ void DictionaryPanel::submitQuery() {
     if (requested)
         requested(value);
 }
-void DictionaryPanel::updateDefinition() {
+
+void DictionaryPanel::updateDefinition()
+{
     QString html = definitionHtml;
     if (!sourceText.isEmpty()) {
         const auto font = ui::interfaceFont(chrome::descriptionText);
-        const auto source = ui::elideInterfaceText(sourceText, font, qMax(1, width() - 2 * chrome::inset));
+        const auto source =
+                ui::elideInterfaceText(sourceText, font, qMax(1, width() - 2 * chrome::inset));
         html += QString("<hr><p style=\"font-family:'%1';font-size:%2px;color:%3;\">%4</p>")
-                    .arg(font.family().toHtmlEscaped()).arg(int(chrome::descriptionText))
-                    .arg(ui::noteColor(this).name(), source.toHtmlEscaped());
+                        .arg(font.family().toHtmlEscaped())
+                        .arg(int(chrome::descriptionText))
+                        .arg(ui::noteColor(this).name(), source.toHtmlEscaped());
     }
     if (html == renderedHtml)
         return;
@@ -369,20 +437,24 @@ void DictionaryPanel::updateDefinition() {
     text->setHtml(html);
     text->setPage(page);
 }
-void DictionaryPanel::arrange() {
+
+void DictionaryPanel::arrange()
+{
     headword->setVisible(!editing);
     edit->setVisible(!editing);
     query->setVisible(editing);
     editHint->setVisible(editing);
     submit->setVisible(editing);
     search->setVisible(!editing);
-    close->setAccessibleName(strings::get(editing ? "dictionary_panel.cancel_edit" : "dictionary_panel.close_definition"));
+    close->setAccessibleName(strings::get(editing ? "dictionary_panel.cancel_edit"
+                                                  : "dictionary_panel.close_definition"));
     dictionary->setEnabled(!editing && options.size() > 1);
     const int top = rowTop(), bottom = contentBottom();
     // The word leads the row, like a printed entry. The dictionary sits beside close.
     // On a narrow panel the actions use compact cells, and the dictionary's name
     // wraps or shortens before the word does, so a word of ordinary length stays whole.
-    const int cell = isNarrowWidth(width(), ui::density()) ? int(chrome::compactCellWidth) : int(chrome::cellWidth);
+    const int cell = isNarrowWidth(width(), ui::density()) ? int(chrome::compactCellWidth)
+                                                           : int(chrome::cellWidth);
     int selectorWidth = dictionary->sizeHint().width();
     const int actionCells = editing ? 2 : 3;
     const int wordRoom = width() - actionCells * cell - 2 * int(chrome::inset);
@@ -421,13 +493,17 @@ void DictionaryPanel::arrange() {
     if (dropdown->isVisible())
         redrawChoices();
 }
-void DictionaryPanel::paintEvent(QPaintEvent *event) {
+
+void DictionaryPanel::paintEvent(QPaintEvent *event)
+{
     ui::Panel::paintEvent(event);
     QPainter painter(this);
     painter.fillRect(0, rowTop() + chrome::actionHeight, width(), metrics::control::border,
                      palette().color(QPalette::Mid));
 }
-void DictionaryPanel::redrawChoices(bool atCurrent) {
+
+void DictionaryPanel::redrawChoices(bool atCurrent)
+{
     for (auto *button : optionButtons) {
         button->hide();
         button->setObjectName({});
@@ -439,22 +515,28 @@ void DictionaryPanel::redrawChoices(bool atCurrent) {
             header->hide();
             header->deleteLater();
         }
-    struct Page {
+
+    struct Page
+    {
         QVector<int> indices;
     };
+
     QVector<Page> pages(1);
     const int columns = width() >= ui::px(900) ? 2 : 1;
     const int rowHeight = metrics::lookup::choiceHeight;
     int used = 0, column = 0;
     QString previous;
-    const int available = contentBottom() - rowTop() - chrome::actionHeight - 2 * metrics::control::border;
-    const int usable = qMax(int(metrics::list::headerHeight) + rowHeight, available - chrome::actionHeight);
+    const int available =
+            contentBottom() - rowTop() - chrome::actionHeight - 2 * metrics::control::border;
+    const int usable =
+            qMax(int(metrics::list::headerHeight) + rowHeight, available - chrome::actionHeight);
     const auto heading = [this](const DictionaryChoice &choice) {
         if (language.isEmpty() || QLocale(language).language() == QLocale::C)
             return strings::get("dictionaries.section_installed");
         if (!choice.fallback && !choice.language.isEmpty() && choice.language != language)
             return strings::get("dictionaries.installed_other");
-        return strings::get("dictionary_panel.for_language").arg(DictionaryManager::languageName(language));
+        return strings::get("dictionary_panel.for_language")
+                .arg(DictionaryManager::languageName(language));
     };
     for (int i = 0; i < options.size(); ++i) {
         const QString caption = heading(options[i]);
@@ -521,14 +603,17 @@ void DictionaryPanel::redrawChoices(bool atCurrent) {
     choicesPaging->setPage(optionsPage, pages.size(), {}, true);
     choicesPaging->setGeometry(0, y, width(), chrome::actionHeight);
     dropdown->setGeometry(0, rowTop() + chrome::actionHeight + metrics::control::border, width(),
-                          y + (pages.size() > 1 ? chrome::actionHeight : 0) + metrics::control::border);
+                          y + (pages.size() > 1 ? chrome::actionHeight : 0)
+                                  + metrics::control::border);
     // The selector covers the definition without changing its pagination.
     dropdown->raise();
 }
-void DictionaryPanel::refresh() {
+
+void DictionaryPanel::refresh()
+{
     // Counting the pages lays the text out and clamps its page first.
     const int count = text->pages();
     pages->setPage(text->page(), count);
     pages->setVisible(!dropdown->isVisible() && count > 1);
 }
-}
+} // namespace kobalt

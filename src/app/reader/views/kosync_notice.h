@@ -3,11 +3,14 @@
 #include <QTimer>
 
 namespace kobalt::reader {
-class KosyncNotice final : public ui::NoticeModal {
+class KosyncNotice final : public ui::NoticeModal
+{
 public:
     explicit KosyncNotice(QWidget *parent);
     void complete();
+
     bool completing() const { return successTimer.isActive(); }
+
     std::function<void()> completed;
 
 protected:
@@ -17,4 +20,4 @@ private:
     QLabel *heading, *statusIcon;
     QTimer successTimer;
 };
-}
+} // namespace kobalt::reader

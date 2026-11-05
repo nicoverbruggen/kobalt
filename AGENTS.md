@@ -78,6 +78,8 @@ Remove run outputs and scratch state with `cmake -DPATHS="<path1>;<path2>" -P pl
 
 ## Repository practice
 
+Format first-party C and C++ code with the checked-in `.clang-format` (Qt project style) before committing. See [Code formatting](doc/building.md#code-formatting).
+
 Read [Storage compatibility](doc/storage.md) before changing settings, book state, bookmarks, annotations or rendering caches. This also applies to backup tools and test database inspection: follow the backup contract and never open the live exclusive profile through an external SQLite connection. Keep saved reading data separate from disposable caches. App releases must not reset either format merely because the release version changed. Compatible optional data fields keep the current format version and must load older records with explicit defaults. Preserve supported optional fields when editing records. An incompatible saved-data change requires a format-version bump, a migration that preserves existing user data, and regression tests before it ships. Never overwrite or delete the original files of unsupported or damaged saved data. Profile preparation moves them into `backups/` and starts from defaults; other reads reject them and leave them in place. Do not assume older builds preserve unknown fields or can safely write newer schemas.
 
 Bump the format version in `documentCacheChecksum` when parser or preprocessing changes make parsed-book caches incompatible. Bump the inspection-cache format separately when verdict rules change incompatibly. Cache invalidation must rebuild disposable data only; it must never clear settings, bookmarks or annotations.

@@ -19,9 +19,12 @@
 
 namespace kobalt {
 namespace chrome = ui::metrics::chrome;
-class ImageCanvas final : public QWidget {
+
+class ImageCanvas final : public QWidget
+{
 public:
-    explicit ImageCanvas(QWidget *parent) : QWidget(parent) {
+    explicit ImageCanvas(QWidget *parent) : QWidget(parent)
+    {
         setObjectName("rrImageCanvas");
         setProperty("kobalt_native_touch", true);
         setAttribute(Qt::WA_AcceptTouchEvents);
@@ -36,29 +39,39 @@ public:
             present(true);
         });
     }
+
     std::function<void(QJsonObject)> rememberView;
     std::function<void(bool, qreal)> controlsChanged;
-    QJsonObject view() const {
-        if (image.isNull()) return {};
+
+    QJsonObject view() const
+    {
+        if (image.isNull())
+            return {};
         const auto shown = image.size() * scale(zoom);
-        return qt::object({{"zoom", zoom}, {"x", .5 - offset.x() / shown.width()}, {"y", .5 - offset.y() / shown.height()}});
+        return qt::object({ { "zoom", zoom },
+                            { "x", .5 - offset.x() / shown.width() },
+                            { "y", .5 - offset.y() / shown.height() } });
     }
-    void setImage(QImage value, const QJsonObject &view) {
+
+    void setImage(QImage value, const QJsonObject &view)
+    {
         image = std::move(value);
         ready = true;
         zoom = 1;
         offset = {};
         const qreal level = view.value("zoom").toDouble(1);
         const qreal x = view.value("x").toDouble(.5), y = view.value("y").toDouble(.5);
-        if (!image.isNull() && std::isfinite(level) && level >= 1 && level <= 8 &&
-            std::isfinite(x) && x >= 0 && x <= 1 && std::isfinite(y) && y >= 0 && y <= 1) {
+        if (!image.isNull() && std::isfinite(level) && level >= 1 && level <= 8 && std::isfinite(x)
+            && x >= 0 && x <= 1 && std::isfinite(y) && y >= 0 && y <= 1) {
             zoom = level;
             const auto shown = image.size() * scale(zoom);
             offset = QPointF((.5 - x) * shown.width(), (.5 - y) * shown.height());
         }
         changed();
     }
-    void clear() {
+
+    void clear()
+    {
         previewTimer.stop();
         wheelTimer.stop();
         previewClock.invalidate();
@@ -71,72 +84,100 @@ public:
         lastTap.invalidate();
         fit();
     }
-    void fit() {
+
+    void fit()
+    {
         zoom = 1;
         offset = {};
         changed();
     }
-    void zoomBy(qreal factor, QPointF anchor) {
-        if (image.isNull()) return;
+
+    void zoomBy(qreal factor, QPointF anchor)
+    {
+        if (image.isNull())
+            return;
         const qreal next = qBound(qreal(1), zoom * factor, qreal(8));
         const QPointF center = QRectF(rect()).center();
         offset = anchor - center - (anchor - center - offset) * (next / zoom);
         zoom = next;
         changed();
     }
+
     void zoomBy(qreal factor) { zoomBy(factor, QRectF(rect()).center()); }
 
 protected:
-    void paintEvent(QPaintEvent *) override {
+    void paintEvent(QPaintEvent *) override
+    {
         QPainter painter(this);
         painter.fillRect(rect(), palette().window());
         if (image.isNull()) {
             painter.setPen(palette().windowText().color());
             painter.setFont(ui::interfaceFont(chrome::labelText));
-            ui::drawInterfaceText(painter, rect(), strings::get(ready ? "image.unavailable" : "image.loading"),
+            ui::drawInterfaceText(painter, rect(),
+                                  strings::get(ready ? "image.unavailable" : "image.loading"),
                                   Qt::AlignCenter);
             return;
         }
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
         const QSizeF shown = image.size() * scale(presentedZoom);
-        const QPointF top = QRectF(rect()).center() + presentedOffset - QPointF(shown.width(), shown.height()) / 2;
+        const QPointF top = QRectF(rect()).center() + presentedOffset
+                - QPointF(shown.width(), shown.height()) / 2;
         painter.drawImage(QRectF(top, shown), image);
     }
+
     void resizeEvent(QResizeEvent *) override { changed(); }
-    void mousePressEvent(QMouseEvent *event) override {
-        if (!ui::isPointerMouse(event) || event->button() != Qt::LeftButton) return;
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (!ui::isPointerMouse(event) || event->button() != Qt::LeftButton)
+            return;
         mouseDown = true;
         platform::pageRefresh(this, false);
         lastMouse = ui::mousePosition(event);
         event->accept();
     }
-    void mouseMoveEvent(QMouseEvent *event) override {
-        if (!mouseDown || !ui::isPointerMouse(event)) return;
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (!mouseDown || !ui::isPointerMouse(event))
+            return;
         const auto point = ui::mousePosition(event);
         offset += point - lastMouse;
         lastMouse = point;
         changed();
         event->accept();
     }
-    void mouseReleaseEvent(QMouseEvent *event) override {
-        if (!ui::isPointerMouse(event)) return;
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (!ui::isPointerMouse(event))
+            return;
         mouseDown = false;
         present(true);
         event->accept();
     }
-    void mouseDoubleClickEvent(QMouseEvent *event) override {
-        if (!ui::isPointerMouse(event) || event->button() != Qt::LeftButton) return;
-        if (zoom > 1) fit();
-        else zoomBy(2, ui::mousePosition(event));
+
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
+        if (!ui::isPointerMouse(event) || event->button() != Qt::LeftButton)
+            return;
+        if (zoom > 1)
+            fit();
+        else
+            zoomBy(2, ui::mousePosition(event));
         event->accept();
     }
-    void wheelEvent(QWheelEvent *event) override {
+
+    void wheelEvent(QWheelEvent *event) override
+    {
         wheelActive = true;
         zoomBy(event->angleDelta().y() > 0 ? 1.25 : .8);
         wheelTimer.start();
         event->accept();
     }
-    bool event(QEvent *event) override {
+
+    bool event(QEvent *event) override
+    {
         if (event->type() == QEvent::TouchCancel) {
             contacts.clear();
             tapPossible = false;
@@ -145,7 +186,8 @@ protected:
             event->accept();
             return true;
         }
-        if (event->type() == QEvent::TouchBegin || event->type() == QEvent::TouchUpdate || event->type() == QEvent::TouchEnd) {
+        if (event->type() == QEvent::TouchBegin || event->type() == QEvent::TouchUpdate
+            || event->type() == QEvent::TouchEnd) {
             const auto points = ui::touchContacts(static_cast<QTouchEvent *>(event));
             if (event->type() == QEvent::TouchBegin) {
                 platform::pageRefresh(this, false);
@@ -155,12 +197,15 @@ protected:
             }
             QMap<int, QPointF> next;
             for (const auto &contact : points) {
-                if (points.size() != 1 || (contact.position - tapOrigin).manhattanLength() > ui::metrics::lookup::moveTolerance)
+                if (points.size() != 1
+                    || (contact.position - tapOrigin).manhattanLength()
+                            > ui::metrics::lookup::moveTolerance)
                     tapPossible = false;
                 if (!contact.released || event->type() == QEvent::TouchEnd)
                     next.insert(contact.id, contact.position);
             }
-            if (next.size() == 1 && contacts.size() == 1 && next.firstKey() == contacts.firstKey()) {
+            if (next.size() == 1 && contacts.size() == 1
+                && next.firstKey() == contacts.firstKey()) {
                 offset += next.first() - contacts.first();
                 changed();
             } else if (next.size() == 2 && contacts.size() == 2 && next.keys() == contacts.keys()) {
@@ -169,7 +214,8 @@ protected:
                 const qreal after = QLineF(newPoints[0], newPoints[1]).length();
                 const auto oldCenter = (oldPoints[0] + oldPoints[1]) / 2;
                 const auto newCenter = (newPoints[0] + newPoints[1]) / 2;
-                if (before > 1 && after > 1) zoomBy(after / before, oldCenter);
+                if (before > 1 && after > 1)
+                    zoomBy(after / before, oldCenter);
                 offset += newCenter - oldCenter;
                 changed();
             }
@@ -177,16 +223,20 @@ protected:
             if (event->type() == QEvent::TouchEnd) {
                 contacts.clear();
                 if (tapPossible && touchTime.elapsed() < 300) {
-                    if (lastTap.isValid() && lastTap.elapsed() < 350 &&
-                        (tapOrigin - previousTap).manhattanLength() < ui::metrics::lookup::moveTolerance * 2) {
-                        if (zoom > 1) fit();
-                        else zoomBy(2, tapOrigin);
+                    if (lastTap.isValid() && lastTap.elapsed() < 350
+                        && (tapOrigin - previousTap).manhattanLength()
+                                < ui::metrics::lookup::moveTolerance * 2) {
+                        if (zoom > 1)
+                            fit();
+                        else
+                            zoomBy(2, tapOrigin);
                         lastTap.invalidate();
                     } else {
                         lastTap.start();
                         previousTap = tapOrigin;
                     }
-                } else lastTap.invalidate();
+                } else
+                    lastTap.invalidate();
                 present(true);
             }
             event->accept();
@@ -196,10 +246,15 @@ protected:
     }
 
 private:
-    qreal scale(qreal factor) const {
-        return image.isNull() ? 1 : qMin(qreal(width()) / image.width(), qreal(height()) / image.height()) * factor;
+    qreal scale(qreal factor) const
+    {
+        return image.isNull()
+                ? 1
+                : qMin(qreal(width()) / image.width(), qreal(height()) / image.height()) * factor;
     }
-    void changed() {
+
+    void changed()
+    {
         const QSizeF shown = image.size() * scale(zoom);
         const qreal x = qMax(qreal(0), (shown.width() - width()) / 2);
         const qreal y = qMax(qreal(0), (shown.height() - height()) / 2);
@@ -209,7 +264,8 @@ private:
         setProperty("imageOffset", offset);
         setProperty("imageReady", !image.isNull());
         setProperty("imageSize", image.size());
-        if (controlsChanged) controlsChanged(!image.isNull(), zoom);
+        if (controlsChanged)
+            controlsChanged(!image.isNull(), zoom);
         if (!mouseDown && contacts.isEmpty() && !wheelActive) {
             present(true);
         } else if (!previewClock.isValid() || previewClock.elapsed() >= previewMilliseconds) {
@@ -218,17 +274,22 @@ private:
             previewTimer.start(qMax(1, int(previewMilliseconds - previewClock.elapsed())));
         }
     }
-    void present(bool clean) {
+
+    void present(bool clean)
+    {
         previewTimer.stop();
         presentedZoom = zoom;
         presentedOffset = offset;
         setProperty("imagePreviewZoom", presentedZoom);
         setProperty("imagePreviewOffset", presentedOffset);
         previewClock.start();
-        if (isVisible()) platform::pageRefresh(this, clean);
+        if (isVisible())
+            platform::pageRefresh(this, clean);
         update();
-        if (clean && rememberView && !image.isNull()) rememberView(view());
+        if (clean && rememberView && !image.isNull())
+            rememberView(view());
     }
+
     // Keep the latest input, but resample the image at most ten times a second
     // during a gesture. Other paints must also use this last presented state.
     static constexpr int previewMilliseconds = 100;
@@ -243,7 +304,8 @@ private:
     bool ready = false, mouseDown = false, tapPossible = false, wheelActive = false;
 };
 
-ImageViewer::ImageViewer(QWidget *parent) : Panel(parent) {
+ImageViewer::ImageViewer(QWidget *parent) : Panel(parent)
+{
     setObjectName("rrImageViewer");
     setFocusPolicy(Qt::StrongFocus);
     auto *layout = new QVBoxLayout(this);
@@ -274,7 +336,8 @@ ImageViewer::ImageViewer(QWidget *parent) : Panel(parent) {
     layout->addWidget(header);
     canvas = new ImageCanvas(this);
     canvas->rememberView = [this](QJsonObject view) {
-        if (!imageId.isEmpty() && rememberView) rememberView(imageId, std::move(view));
+        if (!imageId.isEmpty() && rememberView)
+            rememberView(imageId, std::move(view));
     };
     layout->addWidget(canvas, 1);
     auto *controls = new ui::Panel(this, Qt::TopEdge);
@@ -316,29 +379,43 @@ ImageViewer::ImageViewer(QWidget *parent) : Panel(parent) {
     platform::pageRefresh(this, true);
     hide();
 }
-void ImageViewer::open() {
+
+void ImageViewer::open()
+{
     imageId.clear();
     canvas->clear();
     show();
     raise();
     setFocus();
 }
-void ImageViewer::setImage(QImage image, const QJsonObject &view) {
+
+void ImageViewer::setImage(QImage image, const QJsonObject &view)
+{
     imageId = image.text("kobalt.image_id");
     canvas->setImage(std::move(image), view);
 }
-void ImageViewer::closeImage() {
-    if (!imageId.isEmpty() && rememberView) rememberView(imageId, canvas->view());
+
+void ImageViewer::closeImage()
+{
+    if (!imageId.isEmpty() && rememberView)
+        rememberView(imageId, canvas->view());
     imageId.clear();
     hide();
     canvas->clear();
-    if (dismissed) dismissed();
+    if (dismissed)
+        dismissed();
 }
-void ImageViewer::keyPressEvent(QKeyEvent *event) {
-    if (event->key() == Qt::Key_Escape || event->key() == Qt::Key_Back) closeImage();
-    else if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal) canvas->zoomBy(1.25);
-    else if (event->key() == Qt::Key_Minus) canvas->zoomBy(.8);
-    else if (event->key() == Qt::Key_0) canvas->fit();
+
+void ImageViewer::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape || event->key() == Qt::Key_Back)
+        closeImage();
+    else if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal)
+        canvas->zoomBy(1.25);
+    else if (event->key() == Qt::Key_Minus)
+        canvas->zoomBy(.8);
+    else if (event->key() == Qt::Key_0)
+        canvas->fit();
     event->accept();
 }
-}
+} // namespace kobalt

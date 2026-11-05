@@ -10,7 +10,8 @@
 
 namespace kobalt {
 // `page` is the zero-based page a chapter starts on, or -1 when it is unknown.
-struct Choice {
+struct Choice
+{
     QString label, value, name;
     QString section = {};
     int depth = 0;
@@ -22,14 +23,15 @@ struct Choice {
 
 // The chapter list covers the header's action row with its own Chapters bar.
 // Its close cell and the Chapters tab both close it.
-class ChapterContents : public ui::Panel {
+class ChapterContents : public ui::Panel
+{
 public:
     explicit ChapterContents(QWidget *parent);
     void showChapters(const QString &title, QVector<Choice> choices, const QString &current);
     void setPosition(const QString &text);
-    int currentPage() const {
-        return page;
-    }
+
+    int currentPage() const { return page; }
+
     std::function<void(const QString &)> selected;
     std::function<void()> back, changed;
 
@@ -52,7 +54,8 @@ private:
     int page = 0, rows = 1;
 };
 
-class ChoiceScreen : public kobalt::ui::Panel {
+class ChoiceScreen : public kobalt::ui::Panel
+{
 public:
     enum class Mode { Chapters, Fonts, Sizes };
     std::function<void(const QString &)> selected;
@@ -68,9 +71,9 @@ public:
     void selectValue(const QString &value);
     int chapterPage() const;
     int fontPanelHeight() const;
-    bool isFontPicker() const {
-        return mode == Mode::Fonts;
-    }
+
+    bool isFontPicker() const { return mode == Mode::Fonts; }
+
     void setFontGeometry(const QRect &bounds);
 
 protected:
@@ -102,4 +105,4 @@ private:
     ui::PagerBar *fontPager;
 };
 
-}
+} // namespace kobalt

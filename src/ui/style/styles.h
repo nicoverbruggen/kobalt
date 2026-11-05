@@ -5,82 +5,95 @@
 
 namespace kobalt::ui::styles {
 // QSS dimensions use the same measurements as widget and painter geometry.
-inline QString font(int size, bool bold = false) {
+inline QString font(int size, bool bold = false)
+{
     return QString("font-size:%1px;").arg(size) + (bold ? "font-weight:bold;" : "");
 }
-inline QString brand(int pixels, bool italic = false) {
+
+inline QString brand(int pixels, bool italic = false)
+{
     const auto face = brandFont(pixels, italic);
     return QString("font-family:'%1';font-size:%2px;font-weight:400;font-style:%3;")
-        .arg(face.family())
-        .arg(pixels)
-        .arg(italic ? "italic" : "normal");
+            .arg(face.family())
+            .arg(pixels)
+            .arg(italic ? "italic" : "normal");
 }
+
 // Caption labels also need captionFont() for their spacing and capitals.
-inline QString caption(int pixels = metrics::chrome::captionText) {
-    return QString(
-               "font-family:'%1';font-size:%2px;font-weight:400;background:transparent;border:none;color:palette(placeholder-text);")
-        .arg(QStringLiteral("@ui-caption-family@"))
-        .arg(pixels);
+inline QString caption(int pixels = metrics::chrome::captionText)
+{
+    return QString("font-family:'%1';font-size:%2px;font-weight:400;background:transparent;border:none;color:palette(placeholder-text);")
+            .arg(QStringLiteral("@ui-caption-family@"))
+            .arg(pixels);
 }
-inline QString reader() {
-    return QString(
-               "QWidget{font-weight:400;font-family:\"%4\";background:palette(window);color:palette(window-text);} QPushButton{font-size:%1px;min-height:%2px;border:none;padding:%3px;} "
-               "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);} QLabel{font-size:%1px;} "
-               "QFrame#rrControlsTop,QFrame#rrControlsBottom,QFrame#rrMenu,QFrame#rrGeneralSettings{border:none;} "
-               "QPushButton#rrReturn,QPushButton#rrChapters{font-weight:bold;} "
-               "QPushButton#rrLight:checked,QPushButton#rrTypography:checked,QPushButton#rrLayout:checked,QPushButton#rrSettings:checked,QPushButton#rrGraph:checked{background:palette(window-text);color:palette(window);}")
-        .arg(int(metrics::text::body))
-        .arg(int(metrics::control::minimumHeight))
-        .arg(int(metrics::control::padding))
-        .arg(QStringLiteral("@ui-font-family@"));
+
+inline QString reader()
+{
+    return QString("QWidget{font-weight:400;font-family:\"%4\";background:palette(window);color:palette(window-text);} QPushButton{font-size:%1px;min-height:%2px;border:none;padding:%3px;} "
+                   "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);} QLabel{font-size:%1px;} "
+                   "QFrame#rrControlsTop,QFrame#rrControlsBottom,QFrame#rrMenu,QFrame#rrGeneralSettings{border:none;} "
+                   "QPushButton#rrReturn,QPushButton#rrChapters{font-weight:bold;} "
+                   "QPushButton#rrLight:checked,QPushButton#rrTypography:checked,QPushButton#rrLayout:checked,QPushButton#rrSettings:checked,QPushButton#rrGraph:checked{background:palette(window-text);color:palette(window);}")
+            .arg(int(metrics::text::body))
+            .arg(int(metrics::control::minimumHeight))
+            .arg(int(metrics::control::padding))
+            .arg(QStringLiteral("@ui-font-family@"));
 }
-inline QString segment() {
-    return QString(
-               "QPushButton{border-radius:0;min-height:%1px;max-height:%1px;padding:%2px %3px;border:%4px solid palette(window-text);border-left:none;background:palette(window);color:palette(window-text);} QPushButton[segment_first=\"true\"]{border-left:%4px solid palette(window-text);} QPushButton:checked{background:palette(window-text);color:palette(window);} QPushButton:pressed{background:palette(window-text);color:palette(window);}")
-               .arg(int(metrics::control::segmentHeight))
-               .arg(int(metrics::control::segmentVerticalPadding))
-               .arg(int(metrics::control::segmentHorizontalPadding))
-               .arg(int(metrics::control::border)) +
-           "QPushButton{" + font(metrics::text::secondary) + "}";
+
+inline QString segment()
+{
+    return QString("QPushButton{border-radius:0;min-height:%1px;max-height:%1px;padding:%2px %3px;border:%4px solid palette(window-text);border-left:none;background:palette(window);color:palette(window-text);} QPushButton[segment_first=\"true\"]{border-left:%4px solid palette(window-text);} QPushButton:checked{background:palette(window-text);color:palette(window);} QPushButton:pressed{background:palette(window-text);color:palette(window);}")
+                   .arg(int(metrics::control::segmentHeight))
+                   .arg(int(metrics::control::segmentVerticalPadding))
+                   .arg(int(metrics::control::segmentHorizontalPadding))
+                   .arg(int(metrics::control::border))
+            + "QPushButton{" + font(metrics::text::secondary) + "}";
 }
-inline QString outlined() {
-    return QString(
-               "QPushButton{min-height:%1px;padding:%2px %3px;border:%4px solid palette(dark);} QPushButton:disabled{color:palette(mid);} QPushButton:pressed{background:palette(midlight);}")
-        .arg(int(metrics::control::outlinedHeight))
-        .arg(int(metrics::control::outlinedVerticalPadding))
-        .arg(int(metrics::control::outlinedHorizontalPadding))
-        .arg(int(metrics::control::border));
+
+inline QString outlined()
+{
+    return QString("QPushButton{min-height:%1px;padding:%2px %3px;border:%4px solid palette(dark);} QPushButton:disabled{color:palette(mid);} QPushButton:pressed{background:palette(midlight);}")
+            .arg(int(metrics::control::outlinedHeight))
+            .arg(int(metrics::control::outlinedVerticalPadding))
+            .arg(int(metrics::control::outlinedHorizontalPadding))
+            .arg(int(metrics::control::border));
 }
-inline QString primary() {
-    return outlined() +
-           "QPushButton{background:palette(window-text);color:palette(window);} QPushButton:pressed{background:palette(midlight);color:palette(window-text);} QPushButton:disabled{background:palette(mid);color:palette(window);}";
+
+inline QString primary()
+{
+    return outlined()
+            + "QPushButton{background:palette(window-text);color:palette(window);} QPushButton:pressed{background:palette(midlight);color:palette(window-text);} QPushButton:disabled{background:palette(mid);color:palette(window);}";
 }
-inline QString textAction() {
-    return font(metrics::text::secondary) +
-           QString("border:none;color:%1;text-decoration:underline;padding:%3px %4px;min-height:%2px;max-height:%2px;")
-               .arg("palette(placeholder-text)")
-               .arg(metrics::about::actionHeight - px(8))
-               .arg(px(4))
-               .arg(px(12));
+
+inline QString textAction()
+{
+    return font(metrics::text::secondary)
+            + QString("border:none;color:%1;text-decoration:underline;padding:%3px %4px;min-height:%2px;max-height:%2px;")
+                      .arg("palette(placeholder-text)")
+                      .arg(metrics::about::actionHeight - px(8))
+                      .arg(px(4))
+                      .arg(px(12));
 }
-inline QString tab(bool first) {
-    return QString(
-               "QPushButton{border-radius:0;min-height:%1px;padding:%2px %3px;border:%4px solid palette(mid);border-left-width:%5px;background:palette(midlight);} QPushButton:checked{background:palette(window-text);color:palette(window);padding-bottom:%2px;} QPushButton[kobalt_selected=\"true\"]{font-weight:normal;} QPushButton:pressed{background:palette(mid);}")
-        .arg(int(metrics::settings::tabHeight))
-        .arg(int(metrics::settings::tabVerticalPadding))
-        .arg(int(metrics::settings::tabHorizontalPadding))
-        .arg(int(metrics::settings::tabBorder))
-        .arg(first ? metrics::settings::tabBorder : 0);
+
+inline QString tab(bool first)
+{
+    return QString("QPushButton{border-radius:0;min-height:%1px;padding:%2px %3px;border:%4px solid palette(mid);border-left-width:%5px;background:palette(midlight);} QPushButton:checked{background:palette(window-text);color:palette(window);padding-bottom:%2px;} QPushButton[kobalt_selected=\"true\"]{font-weight:normal;} QPushButton:pressed{background:palette(mid);}")
+            .arg(int(metrics::settings::tabHeight))
+            .arg(int(metrics::settings::tabVerticalPadding))
+            .arg(int(metrics::settings::tabHorizontalPadding))
+            .arg(int(metrics::settings::tabBorder))
+            .arg(first ? metrics::settings::tabBorder : 0);
 }
-inline QString popup() {
-    return QString(
-               "QLabel{background:palette(window);color:palette(window-text);border:none;font-size:%1px;} "
-               "QPushButton{background:palette(window);color:palette(window-text);font-size:%1px;padding:%2px %5px;min-height:%3px;border:%4px solid palette(dark);} "
-               "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);}")
-        .arg(int(metrics::chrome::labelText))
-        .arg(int(metrics::control::outlinedVerticalPadding))
-        .arg(int(metrics::control::outlinedHeight))
-        .arg(int(metrics::control::border))
-        .arg(int(metrics::control::outlinedHorizontalPadding));
+
+inline QString popup()
+{
+    return QString("QLabel{background:palette(window);color:palette(window-text);border:none;font-size:%1px;} "
+                   "QPushButton{background:palette(window);color:palette(window-text);font-size:%1px;padding:%2px %5px;min-height:%3px;border:%4px solid palette(dark);} "
+                   "QPushButton:pressed{background:palette(midlight);} QPushButton:disabled{color:palette(mid);}")
+            .arg(int(metrics::chrome::labelText))
+            .arg(int(metrics::control::outlinedVerticalPadding))
+            .arg(int(metrics::control::outlinedHeight))
+            .arg(int(metrics::control::border))
+            .arg(int(metrics::control::outlinedHorizontalPadding));
 }
-}
+} // namespace kobalt::ui::styles

@@ -9,10 +9,11 @@
 #include <QUrl>
 
 namespace kobalt {
-void EngineDocument::markKoboLinkDecorations() {
+void EngineDocument::markKoboLinkDecorations()
+{
     auto *document = engine_->getDocument();
     const auto attribute = document->getAttrNameIndex("data-kobalt-kobo-link");
-    QVector<ldomNode *> pending{document->getRootNode()};
+    QVector<ldomNode *> pending{ document->getRootNode() };
     while (!pending.isEmpty()) {
         auto *node = pending.takeLast();
         if (!node || !node->isElement())
@@ -24,11 +25,16 @@ void EngineDocument::markKoboLinkDecorations() {
             for (int i = 0; i < node->getChildCount(); ++i) {
                 auto *child = node->getChildNode(i);
                 if (child->isText()) {
-                    otherContent |= !QString::fromUtf8(UnicodeToUtf8(child->getText()).c_str()).trimmed().isEmpty();
+                    otherContent |= !QString::fromUtf8(UnicodeToUtf8(child->getText()).c_str())
+                                             .trimmed()
+                                             .isEmpty();
                 } else {
-                    const auto classes = QString::fromUtf8(UnicodeToUtf8(child->getAttributeValue("class")).c_str())
-                                             .split(QRegularExpression("\\s+"), qt::skipEmptyParts);
-                    const bool wrapper = child->isNodeName("se-span") && classes.contains("kobo-link");
+                    const auto classes =
+                            QString::fromUtf8(
+                                    UnicodeToUtf8(child->getAttributeValue("class")).c_str())
+                                    .split(QRegularExpression("\\s+"), qt::skipEmptyParts);
+                    const bool wrapper =
+                            child->isNodeName("se-span") && classes.contains("kobo-link");
                     wrapped |= wrapper;
                     otherContent |= !wrapper;
                 }
@@ -43,39 +49,48 @@ void EngineDocument::markKoboLinkDecorations() {
             pending.append(node->getChildNode(i));
     }
 }
+
 namespace {
 constexpr int noteNodeLimit = 8192;
 constexpr int noteDepthLimit = 64;
 constexpr int noteHtmlLimit = 128 * 1024;
 constexpr int inferredNoteTextLimit = 10000;
 
-QString text(const lString32 &value) {
+QString text(const lString32 &value)
+{
     return QString::fromUtf8(UnicodeToUtf8(value).c_str());
 }
-lString32 domText(const QString &value) {
+
+lString32 domText(const QString &value)
+{
     return Utf8ToUnicode(value.toUtf8().constData());
 }
-bool token(ldomNode *node, const char *name, const char *value, bool anyNamespace = false) {
-    const auto attribute =
-        anyNamespace
+
+bool token(ldomNode *node, const char *name, const char *value, bool anyNamespace = false)
+{
+    const auto attribute = anyNamespace
             ? node->getAttributeValue(LXML_NS_ANY,
-                                      node->getDocument()->getAttrNameIndex(domText(QString::fromLatin1(name)).c_str()))
+                                      node->getDocument()->getAttrNameIndex(
+                                              domText(QString::fromLatin1(name)).c_str()))
             : node->getAttributeValue(name);
     return text(attribute)
-        .split(QRegularExpression("\\s+"), kobalt::qt::skipEmptyParts)
-        .contains(value, Qt::CaseInsensitive);
+            .split(QRegularExpression("\\s+"), kobalt::qt::skipEmptyParts)
+            .contains(value, Qt::CaseInsensitive);
 }
-bool noteElement(ldomNode *node) {
-    return token(node, "type", "footnote", true) || token(node, "type", "endnote", true) ||
-           token(node, "type", "note", true) || token(node, "type", "rearnote", true) ||
-           token(node, "role", "doc-footnote") || token(node, "role", "doc-endnote") ||
-           token(node, "role", "doc-note") || token(node, "role", "doc-rearnote") || token(node, "class", "footnote") ||
-           token(node, "class", "endnote");
+
+bool noteElement(ldomNode *node)
+{
+    return token(node, "type", "footnote", true) || token(node, "type", "endnote", true)
+            || token(node, "type", "note", true) || token(node, "type", "rearnote", true)
+            || token(node, "role", "doc-footnote") || token(node, "role", "doc-endnote")
+            || token(node, "role", "doc-note") || token(node, "role", "doc-rearnote")
+            || token(node, "class", "footnote") || token(node, "class", "endnote");
 }
 
 enum class NoteMatch { Unmarked, Explicit, Passage };
 
-NoteMatch noteReference(ldomNode *node) {
+NoteMatch noteReference(ldomNode *node)
+{
     const auto style = node->getStyle();
     if (!style.isNull()) {
         if (STYLE_HAS_CR_HINT(style, NOTEREF)) {
@@ -85,8 +100,8 @@ NoteMatch noteReference(ldomNode *node) {
             return NoteMatch::Passage;
         }
     }
-    if (token(node, "type", "noteref", true) || token(node, "role", "doc-noteref") || token(node, "rel", "footnote") ||
-        token(node, "type", "note")) {
+    if (token(node, "type", "noteref", true) || token(node, "role", "doc-noteref")
+        || token(node, "rel", "footnote") || token(node, "type", "note")) {
         return NoteMatch::Explicit;
     }
     if (token(node, "type", "link", true) || token(node, "role", "doc-link")) {
@@ -95,14 +110,16 @@ NoteMatch noteReference(ldomNode *node) {
     return NoteMatch::Unmarked;
 }
 
-bool heading(ldomNode *node) {
+bool heading(ldomNode *node)
+{
     const auto name = node->getNodeName();
     return name.length() == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6';
 }
 
 // The same reference shapes as KOReader's normal popup detector. This is an
 // independent implementation; the upstream rules and revision are in development.md.
-bool noteMarker(const lString32 &label) {
+bool noteMarker(const lString32 &label)
+{
     int digits = 0, letters = 0, romans = 0;
     for (int i = 0; i < label.length(); ++i) {
         const auto c = label[i];
@@ -114,21 +131,25 @@ bool noteMarker(const lString32 &label) {
             ++digits;
         } else if (properties & CH_PROP_ALPHA) {
             ++letters;
-            if (c == 'i' || c == 'v' || c == 'x' || c == 'l' || c == 'c' || c == 'd' || c == 'm' || c == 'I' ||
-                c == 'V' || c == 'X' || c == 'L' || c == 'C' || c == 'D' || c == 'M') {
+            if (c == 'i' || c == 'v' || c == 'x' || c == 'l' || c == 'c' || c == 'd' || c == 'm'
+                || c == 'I' || c == 'V' || c == 'X' || c == 'L' || c == 'C' || c == 'D'
+                || c == 'M') {
                 ++romans;
             }
         } else {
             return false;
         }
     }
-    return (digits >= 1 && digits <= 3 && letters == 0) || (letters >= 1 && letters <= 2 && digits <= 2) ||
-           (romans >= 1 && romans <= 10 && romans == letters && digits == 0);
+    return (digits >= 1 && digits <= 3 && letters == 0)
+            || (letters >= 1 && letters <= 2 && digits <= 2)
+            || (romans >= 1 && romans <= 10 && romans == letters && digits == 0);
 }
 
 // Read only enough text to compare the link with its containing paragraph.
 // A traversal that reaches the node or depth limit cannot establish a match.
-bool plainText(ldomNode *node, lString32 &value, int limit, int &visited, int depth = 0, bool replaceImages = false) {
+bool plainText(ldomNode *node, lString32 &value, int limit, int &visited, int depth = 0,
+               bool replaceImages = false)
+{
     engineActivity().checkpoint();
     if (++visited > noteNodeLimit || depth > noteDepthLimit) {
         visited = noteNodeLimit + 1;
@@ -157,7 +178,8 @@ bool plainText(ldomNode *node, lString32 &value, int limit, int &visited, int de
     return true;
 }
 
-bool shiftedReference(ldomNode *source, ldomNode *block) {
+bool shiftedReference(ldomNode *source, ldomNode *block)
+{
     auto *parent = source->getParentNode();
     for (int i = 0; parent && i < 2; ++i, parent = parent->getParentNode()) {
         if (parent->isNodeName("sup") || parent->isNodeName("sub")) {
@@ -203,8 +225,8 @@ bool shiftedReference(ldomNode *source, ldomNode *block) {
             if (!style.isNull()) {
                 const auto alignment = style->vertical_align;
                 shifted = alignment.type == css_val_unspecified
-                              ? alignment.value != css_va_inherit && alignment.value != css_va_baseline
-                              : alignment.value != 0;
+                        ? alignment.value != css_va_inherit && alignment.value != css_va_baseline
+                        : alignment.value != 0;
                 if (shifted) {
                     break;
                 }
@@ -220,7 +242,8 @@ bool shiftedReference(ldomNode *source, ldomNode *block) {
     return seen;
 }
 
-bool chapterTarget(LVTocItem *root, ldomNode *target) {
+bool chapterTarget(LVTocItem *root, ldomNode *target)
+{
     auto *item = root;
     int visited = 0;
     while (item) {
@@ -243,10 +266,11 @@ bool chapterTarget(LVTocItem *root, ldomNode *target) {
     return false;
 }
 
-bool inferredNote(ldomNode *source, ldomNode *target, LVTocItem *toc) {
+bool inferredNote(ldomNode *source, ldomNode *target, LVTocItem *toc)
+{
     const ldomXPointerEx reference(source, 0), destination(target, 0);
-    if (target->isNodeName("DocFragment") || target->isNodeName("body") || target->isNodeName("html") ||
-        reference.compare(destination) > 0) {
+    if (target->isNodeName("DocFragment") || target->isNodeName("body")
+        || target->isNodeName("html") || reference.compare(destination) > 0) {
         return false;
     }
     lString32 label, paragraph;
@@ -260,7 +284,8 @@ bool inferredNote(ldomNode *source, ldomNode *target, LVTocItem *toc) {
         // the paragraph check, but needs superscript/subscript evidence.
         label.clear();
         visited = 0;
-        if (!plainText(source, label, inferredNoteTextLimit, visited, 0, true) || text(label).trimmed().isEmpty()) {
+        if (!plainText(source, label, inferredNoteTextLimit, visited, 0, true)
+            || text(label).trimmed().isEmpty()) {
             return false;
         }
     }
@@ -274,7 +299,8 @@ bool inferredNote(ldomNode *source, ldomNode *target, LVTocItem *toc) {
     }
     // Most internal links are words or chapter titles. Check the reference
     // first so those links need no TOC or target-subtree scan.
-    if ((!(hasText && noteMarker(label)) && !shiftedReference(source, block)) || chapterTarget(toc, target)) {
+    if ((!(hasText && noteMarker(label)) && !shiftedReference(source, block))
+        || chapterTarget(toc, target)) {
         return false;
     }
     int ancestors = 0;
@@ -299,22 +325,25 @@ bool inferredNote(ldomNode *source, ldomNode *target, LVTocItem *toc) {
     return true;
 }
 
-bool pageBreak(css_page_break_t value) {
+bool pageBreak(css_page_break_t value)
+{
     return value == css_pb_always || value == css_pb_left || value == css_pb_right;
 }
 
 // A block that starts another note or a new section.
-bool endsNote(ldomNode *node, int &visited, int depth = 0, bool descendants = true) {
+bool endsNote(ldomNode *node, int &visited, int depth = 0, bool descendants = true)
+{
     engineActivity().checkpoint();
     if (++visited > noteNodeLimit || depth > noteDepthLimit) {
         visited = noteNodeLimit + 1;
         return true;
     }
     const auto tag = text(node->getNodeName()).toLower();
-    if (tag == "section" || tag == "aside" || tag == "hr" ||
-        (tag.size() == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6') ||
-        !node->getAttributeValue("id").empty() || (node->isNodeName("a") && !node->getAttributeValue("name").empty()) ||
-        noteElement(node)) {
+    if (tag == "section" || tag == "aside" || tag == "hr"
+        || (tag.size() == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6')
+        || !node->getAttributeValue("id").empty()
+        || (node->isNodeName("a") && !node->getAttributeValue("name").empty())
+        || noteElement(node)) {
         return true;
     }
     const auto style = node->getStyle();
@@ -330,7 +359,8 @@ bool endsNote(ldomNode *node, int &visited, int depth = 0, bool descendants = tr
     return false;
 }
 
-QVector<ldomNode *> noteParts(ldomNode *target, bool contained) {
+QVector<ldomNode *> noteParts(ldomNode *target, bool contained)
+{
     auto *note = target;
     if (!contained) {
         auto *block = ldomXPointerEx(target, 0).getFinalNode();
@@ -339,7 +369,8 @@ QVector<ldomNode *> noteParts(ldomNode *target, bool contained) {
         }
     }
     QVector<ldomNode *> parts;
-    if (!note->isNodeName("body") && !note->isNodeName("DocFragment") && !note->isNodeName("html")) {
+    if (!note->isNodeName("body") && !note->isNodeName("DocFragment")
+        && !note->isNodeName("html")) {
         parts.append(note);
     }
     if (contained || (note->getChildCount() && !ldomXPointerEx(note, 0).isFinalNode())) {
@@ -358,8 +389,8 @@ QVector<ldomNode *> noteParts(ldomNode *target, bool contained) {
         if (++visited > noteNodeLimit) {
             return {};
         }
-        if ((!stop.isNull() && current.compare(stop) >= 0) || node->isNodeName("DocFragment") ||
-            node->isNodeName("body")) {
+        if ((!stop.isNull() && current.compare(stop) >= 0) || node->isNodeName("DocFragment")
+            || node->isNodeName("body")) {
             break;
         }
         // Inspect a block before adding it, so an ID inside it starts the next
@@ -373,7 +404,8 @@ QVector<ldomNode *> noteParts(ldomNode *target, bool contained) {
         if (current.isFinalNode()) {
             parts.append(node);
             const auto nextStyle = node->getStyle();
-            if ((!nextStyle.isNull() && pageBreak(nextStyle->page_break_after)) || !current.nextOuterElement()) {
+            if ((!nextStyle.isNull() && pageBreak(nextStyle->page_break_after))
+                || !current.nextOuterElement()) {
                 break;
             }
         } else {
@@ -392,7 +424,8 @@ QVector<ldomNode *> noteParts(ldomNode *target, bool contained) {
     return parts;
 }
 
-struct NoteBudget {
+struct NoteBudget
+{
     int nodes = 0, characters = 0;
     int textLimit = noteHtmlLimit;
     bool hasText = false;
@@ -400,9 +433,11 @@ struct NoteBudget {
 
 // Copy note text and basic structure only. Publisher styles, scripts and
 // resources must not reach the popup's QTextDocument or start external I/O.
-bool noteHtml(ldomNode *node, QString &html, NoteBudget &budget, int depth = 0) {
+bool noteHtml(ldomNode *node, QString &html, NoteBudget &budget, int depth = 0)
+{
     engineActivity().checkpoint();
-    if (!node || ++budget.nodes > noteNodeLimit || depth > noteDepthLimit || html.size() > noteHtmlLimit) {
+    if (!node || ++budget.nodes > noteNodeLimit || depth > noteDepthLimit
+        || html.size() > noteHtmlLimit) {
         return false;
     }
     if (node->isText()) {
@@ -420,16 +455,20 @@ bool noteHtml(ldomNode *node, QString &html, NoteBudget &budget, int depth = 0) 
         return true;
     if (tag == "img" || tag == "svg") {
         const auto alt = text(node->getAttributeValue("alt")).left(1024);
-        html += "[" + (alt.isEmpty() ? strings::get("common.image").toHtmlEscaped() : alt.toHtmlEscaped()) + "]";
+        html += "["
+                + (alt.isEmpty() ? strings::get("common.image").toHtmlEscaped()
+                                 : alt.toHtmlEscaped())
+                + "]";
         return html.size() <= noteHtmlLimit;
     }
-    static const QSet<QString> allowed{"p",          "div",   "span", "b",     "strong", "i",  "em", "u",
-                                       "s",          "sub",   "sup",  "br",    "hr",     "ul", "ol", "li",
-                                       "blockquote", "pre",   "code", "table", "tr",     "td", "th", "thead",
-                                       "tbody",      "tfoot", "dl",   "dt",    "dd"};
-    const auto output =
-        allowed.contains(tag) ? tag
-        : tag == "aside" || tag == "section" || (tag.size() == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6')
+    static const QSet<QString> allowed{ "p",     "div",   "span", "b",   "strong",     "i",
+                                        "em",    "u",     "s",    "sub", "sup",        "br",
+                                        "hr",    "ul",    "ol",   "li",  "blockquote", "pre",
+                                        "code",  "table", "tr",   "td",  "th",         "thead",
+                                        "tbody", "tfoot", "dl",   "dt",  "dd" };
+    const auto output = allowed.contains(tag) ? tag
+            : tag == "aside" || tag == "section"
+                    || (tag.size() == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6')
             ? QStringLiteral("div")
             : QString();
     if (!output.isEmpty())
@@ -441,8 +480,10 @@ bool noteHtml(ldomNode *node, QString &html, NoteBudget &budget, int depth = 0) 
         html += "</" + output + ">";
     return html.size() <= noteHtmlLimit;
 }
-}
-QVector<PageLink> EngineDocument::pageLinks() {
+} // namespace
+
+QVector<PageLink> EngineDocument::pageLinks()
+{
     QVector<PageLink> result;
     if (!engine_)
         return result;
@@ -454,13 +495,17 @@ QVector<PageLink> EngineDocument::pageLinks() {
         ldomXPointer source;
         if (range->getHRef(source).empty() || source.isNull())
             continue;
-        const auto rectangles = rangeRects(text(range->getStart().toString()), text(range->getEnd().toString()), true);
+        const auto rectangles = rangeRects(text(range->getStart().toString()),
+                                           text(range->getEnd().toString()), true);
         if (!rectangles.isEmpty())
-            result.append({text(source.toString()), rectangles, linkDetails(text(source.toString()), false).kind});
+            result.append({ text(source.toString()), rectangles,
+                            linkDetails(text(source.toString()), false).kind });
     }
     return result;
 }
-LinkDetails EngineDocument::linkDetails(const QString &source, bool preview) {
+
+LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
+{
     LinkDetails result;
     if (!engine_)
         return result;
@@ -477,7 +522,8 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview) {
     result.error = strings::get("error.this_passage_is_unavailable");
     if (href[0] != '#') {
         const QUrl url(text(href));
-        if (url.isValid() && !url.host().isEmpty() && (url.scheme() == "https" || url.scheme() == "http")) {
+        if (url.isValid() && !url.host().isEmpty()
+            && (url.scheme() == "https" || url.scheme() == "http")) {
             result.kind = LinkKind::Website;
             result.target = url.toString();
             result.error.clear();
@@ -499,7 +545,8 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview) {
     }
     bool contained = false;
     int ancestors = 0;
-    for (auto *parent = target; match != NoteMatch::Passage && parent && !parent->isNodeName("DocFragment");
+    for (auto *parent = target;
+         match != NoteMatch::Passage && parent && !parent->isNodeName("DocFragment");
          parent = parent->getParentNode()) {
         engineActivity().checkpoint();
         if (++ancestors > noteDepthLimit) {
@@ -523,7 +570,8 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview) {
         result.kind = LinkKind::Passage;
         result.error.clear();
     }
-    const bool inferred = match == NoteMatch::Unmarked && inferredNote(node, target, engine_->getToc());
+    const bool inferred =
+            match == NoteMatch::Unmarked && inferredNote(node, target, engine_->getToc());
     if (match != NoteMatch::Explicit && !inferred) {
         return result;
     }
@@ -558,4 +606,4 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview) {
     }
     return result;
 }
-}
+} // namespace kobalt

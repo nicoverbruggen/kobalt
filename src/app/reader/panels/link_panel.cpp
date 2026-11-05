@@ -15,7 +15,9 @@
 namespace kobalt {
 namespace metrics = ui::metrics;
 namespace chrome = ui::metrics::chrome;
-LinkPanel::LinkPanel(QWidget *parent) : Panel(parent, Qt::TopEdge) {
+
+LinkPanel::LinkPanel(QWidget *parent) : Panel(parent, Qt::TopEdge)
+{
     setEdgeWidth(chrome::heavyRule);
     setObjectName("rrLinkPanel");
     heading = new ui::PrivateTextLabel(this);
@@ -60,10 +62,14 @@ LinkPanel::LinkPanel(QWidget *parent) : Panel(parent, Qt::TopEdge) {
     });
     hide();
 }
-int LinkPanel::rowTop() const {
+
+int LinkPanel::rowTop() const
+{
     return lower ? chrome::heavyRule : 0;
 }
-void LinkPanel::open(const LinkDetails &details, const QRect &reference, const QRect &readingArea) {
+
+void LinkPanel::open(const LinkDetails &details, const QRect &reference, const QRect &readingArea)
+{
     destination = details.target;
     heading->setText(details.kind == LinkKind::Footnote ? strings::get("link_panel.footnote")
                                                         : strings::get("link_panel.link"));
@@ -76,10 +82,13 @@ void LinkPanel::open(const LinkDetails &details, const QRect &reference, const Q
     QString chapter = details.chapter.trimmed();
     while (chapter.endsWith(':') || chapter.endsWith('.'))
         chapter.chop(1);
-    passage->setCaption(chapter.isEmpty() ? QString() : strings::get("link_panel.in_chapter").arg(chapter));
-    passage->setAccessibleName(passage->text() + (chapter.isEmpty() ? QString() : " " + passage->caption()));
+    passage->setCaption(chapter.isEmpty() ? QString()
+                                          : strings::get("link_panel.in_chapter").arg(chapter));
+    passage->setAccessibleName(passage->text()
+                               + (chapter.isEmpty() ? QString() : " " + passage->caption()));
     const auto area = readingArea.isEmpty() ? parentWidget()->rect() : readingArea;
-    const int h = qMin(parentWidget()->height() * metrics::lookup::heightPercent / 100, area.height());
+    const int h =
+            qMin(parentWidget()->height() * metrics::lookup::heightPercent / 100, area.height());
     // Like the dictionary, the sheet takes the half without the reference.
     lower = reference.center().y() < area.center().y();
     setEdges(lower ? Qt::TopEdge : Qt::BottomEdge);
@@ -89,12 +98,18 @@ void LinkPanel::open(const LinkDetails &details, const QRect &reference, const Q
     raise();
     arrange();
 }
-void LinkPanel::resizeEvent(QResizeEvent *) {
+
+void LinkPanel::resizeEvent(QResizeEvent *)
+{
     arrange();
 }
-void LinkPanel::arrange() {
+
+void LinkPanel::arrange()
+{
     const int top = rowTop(), bottom = height() - (lower ? 0 : chrome::heavyRule);
-    heading->setGeometry(chrome::inset, top, qMax(1, width() - chrome::cellWidth - 2 * chrome::inset), chrome::actionHeight);
+    heading->setGeometry(chrome::inset, top,
+                         qMax(1, width() - chrome::cellWidth - 2 * chrome::inset),
+                         chrome::actionHeight);
     close->setGeometry(width() - chrome::cellWidth, top, chrome::cellWidth, chrome::actionHeight);
     const int textTop = top + chrome::actionHeight + metrics::control::border;
     int textBottom = bottom;
@@ -114,38 +129,47 @@ void LinkPanel::arrange() {
     text->setPage(wanted);
     // A lower sheet has no edge where it meets the footer strip, so the row
     // closes it. The pager and an upper sheet's heavy rule have their own.
-    passage->setRule(lower && text->pages() <= 1 ? ui::Edges(Qt::TopEdge) | Qt::BottomEdge : ui::Edges(Qt::TopEdge));
+    passage->setRule(lower && text->pages() <= 1 ? ui::Edges(Qt::TopEdge) | Qt::BottomEdge
+                                                 : ui::Edges(Qt::TopEdge));
     pages->setGeometry(0, bottom - chrome::actionHeight, width(), chrome::actionHeight);
     refresh();
 }
-void LinkPanel::paintEvent(QPaintEvent *event) {
+
+void LinkPanel::paintEvent(QPaintEvent *event)
+{
     ui::Panel::paintEvent(event);
     QPainter painter(this);
-    painter.fillRect(0, rowTop() + chrome::actionHeight, width(), metrics::control::border, palette().color(QPalette::Mid));
+    painter.fillRect(0, rowTop() + chrome::actionHeight, width(), metrics::control::border,
+                     palette().color(QPalette::Mid));
 }
-void LinkPanel::refresh() {
+
+void LinkPanel::refresh()
+{
     // Counting the pages lays the text out and clamps its page first.
     const int count = text->pages();
     pages->setPage(text->page(), count);
 }
 
 namespace {
-class WebsiteAddressScrollArea final : public QScrollArea {
+class WebsiteAddressScrollArea final : public QScrollArea
+{
 public:
-    explicit WebsiteAddressScrollArea(QWidget *parent) : QScrollArea(parent) {}
+    explicit WebsiteAddressScrollArea(QWidget *parent) : QScrollArea(parent) { }
 
-    QSize minimumSizeHint() const override {
+    QSize minimumSizeHint() const override
+    {
         // The dialog supplies the viewport size. Keep native scrollbar hints
         // out of the card's minimum-size calculation.
         return QSize(0, 0);
     }
 };
-}
+} // namespace
 
 WebsiteDialog::WebsiteDialog(QWidget *parent)
-    : ui::ChoiceModal(parent, {" ", strings::get("link_panel.browser_confirmation"), {}},
-                      {strings::get("common.cancel"), "rrLinkNo"},
-                      {strings::get("link_panel.open_browser"), "rrLinkOpen"}) {
+    : ui::ChoiceModal(parent, { " ", strings::get("link_panel.browser_confirmation"), {} },
+                      { strings::get("common.cancel"), "rrLinkNo" },
+                      { strings::get("link_panel.open_browser"), "rrLinkOpen" })
+{
     setObjectName("rrBrowserConfirmation");
     auto *content = card();
     content->findChild<QLabel *>("rrModalTitle")->setObjectName("rrBrowserPrompt");
@@ -180,7 +204,8 @@ WebsiteDialog::WebsiteDialog(QWidget *parent)
     confirm = primaryButton();
     connect(confirm, &QPushButton::clicked, this, [this] {
         const QUrl url(destination, QUrl::StrictMode);
-        if (!url.isValid() || url.host().isEmpty() || (url.scheme() != "http" && url.scheme() != "https"))
+        if (!url.isValid() || url.host().isEmpty()
+            || (url.scheme() != "http" && url.scheme() != "https"))
             return;
         if (browserAvailable && browserAvailable() && openBrowser && openBrowser(url)) {
             if (dismissed)
@@ -191,13 +216,15 @@ WebsiteDialog::WebsiteDialog(QWidget *parent)
         }
     });
 }
-void WebsiteDialog::open(const QString &target) {
+
+void WebsiteDialog::open(const QString &target)
+{
     destination = target;
     address->setText(target);
     const QUrl url(target, QUrl::StrictMode);
-    const bool available = url.isValid() && !url.host().isEmpty() &&
-                           (url.scheme() == "http" || url.scheme() == "https") && browserAvailable &&
-                           browserAvailable();
+    const bool available = url.isValid() && !url.host().isEmpty()
+            && (url.scheme() == "http" || url.scheme() == "https") && browserAvailable
+            && browserAvailable();
     confirm->setEnabled(available);
     error->setVisible(!available);
     arrange();
@@ -205,8 +232,11 @@ void WebsiteDialog::open(const QString &target) {
     raise();
     confirm->setFocus();
 }
-void WebsiteDialog::arrange() {
-    const int width = qMin<int>(metrics::notice::cardWidth, parentWidget()->width() - 2 * metrics::notice::sideClearance);
+
+void WebsiteDialog::arrange()
+{
+    const int width = qMin<int>(metrics::notice::cardWidth,
+                                parentWidget()->width() - 2 * metrics::notice::sideClearance);
     const auto margins = card()->rows()->contentsMargins();
     const int textWidth = qMax(1, width - margins.left() - margins.right());
     address->ensurePolished();
@@ -214,15 +244,18 @@ void WebsiteDialog::arrange() {
     // only for an address taller than the box.
     const int needed = qMax<int>(ui::px(60), address->heightForWidth(textWidth));
     const int most = qMax<int>(chrome::actionHeight, height() / 3);
-    scroll->setVerticalScrollBarPolicy(needed > most ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(needed > most ? Qt::ScrollBarAsNeeded
+                                                     : Qt::ScrollBarAlwaysOff);
     scroll->setFixedHeight(qMin(most, needed));
     card()->fitToWidth(width);
     centerCard();
 }
-void WebsiteDialog::resizeEvent(QResizeEvent *event) {
+
+void WebsiteDialog::resizeEvent(QResizeEvent *event)
+{
     ui::ModalOverlay::resizeEvent(event);
     if (scroll)
         arrange();
 }
 
-}
+} // namespace kobalt

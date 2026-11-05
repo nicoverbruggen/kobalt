@@ -7,7 +7,9 @@
 namespace kobalt {
 // What the reader tells the user after profile preparation reset unusable
 // saved data. `folder` is the backups folder as the user can find it.
-inline ReaderNotice profileRecoveryNotice(const storage::ProfileRecovery &recovery, const QString &folder) {
+inline ReaderNotice profileRecoveryNotice(const storage::ProfileRecovery &recovery,
+                                          const QString &folder)
+{
     QStringList parts;
     if (recovery.settings)
         parts.append(strings::get("recovery.settings"));
@@ -16,6 +18,7 @@ inline ReaderNotice profileRecoveryNotice(const storage::ProfileRecovery &recove
     if (recovery.database)
         parts.append(strings::get("recovery.database"));
     parts.append(strings::get("recovery.backups").arg(folder));
-    return {strings::get("recovery.title"), parts.join(QStringLiteral("\n\n")), QStringLiteral("rrRecoveryNotice")};
+    return { strings::get("recovery.title"), parts.join(QStringLiteral("\n\n")),
+             QStringLiteral("rrRecoveryNotice") };
 }
-}
+} // namespace kobalt

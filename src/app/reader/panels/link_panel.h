@@ -10,7 +10,8 @@
 
 namespace kobalt {
 // The same sheet as the dictionary, fixed to an edge of the reading area.
-class LinkPanel : public ui::Panel {
+class LinkPanel : public ui::Panel
+{
 public:
     explicit LinkPanel(QWidget *parent);
     void open(const LinkDetails &details, const QRect &reference, const QRect &readingArea = {});
@@ -33,7 +34,9 @@ private:
     void arrange();
     void refresh();
 };
-class WebsiteDialog : public ui::ChoiceModal {
+
+class WebsiteDialog : public ui::ChoiceModal
+{
 public:
     explicit WebsiteDialog(QWidget *parent);
     void open(const QString &target);
@@ -50,4 +53,4 @@ private:
     QPushButton *confirm;
     void arrange();
 };
-}
+} // namespace kobalt

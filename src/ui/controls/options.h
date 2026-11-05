@@ -8,14 +8,23 @@
 
 namespace kobalt::ui {
 enum class ControlIcon;
-class DescribedOption : public QCheckBox {
+
+class DescribedOption : public QCheckBox
+{
 public:
     DescribedOption(const QString &text, const QString &description, QWidget *parent);
     int heightForWidth(int width) const override;
     void setDescription(const QString &text);
-    void setFontPreviewSource(const FontPreviewSource &value) { fontPreview = value; update(); }
+
+    void setFontPreviewSource(const FontPreviewSource &value)
+    {
+        fontPreview = value;
+        update();
+    }
     enum class Indicator { Toggle, Square, Radio };
-    struct Presentation {
+
+    struct Presentation
+    {
         Presentation();
         Indicator indicator = Indicator::Toggle;
         Edges dividers;
@@ -32,25 +41,30 @@ public:
         bool valueBelowLabel = false;
         bool operator==(const Presentation &other) const;
     };
+
     void setPresentation(const Presentation &value);
-    const Presentation &presentation() const {
-        return appearance;
-    }
+
+    const Presentation &presentation() const { return appearance; }
+
     // A short value on the right of the label line, before the indicator.
     // It can end with a battery and keep half-width spaces, as the strips do.
-    struct ValueStyle {
+    struct ValueStyle
+    {
         bool battery = false;
         int percent = -1;
         bool charging = false;
         bool halfSpaces = false;
         QFont sampleFont;
         int sampleWeight = -1;
-        bool operator==(const ValueStyle &other) const {
-            return battery == other.battery && percent == other.percent && charging == other.charging &&
-                   halfSpaces == other.halfSpaces && sampleFont == other.sampleFont &&
-                   sampleWeight == other.sampleWeight;
+
+        bool operator==(const ValueStyle &other) const
+        {
+            return battery == other.battery && percent == other.percent
+                    && charging == other.charging && halfSpaces == other.halfSpaces
+                    && sampleFont == other.sampleFont && sampleWeight == other.sampleWeight;
         }
     };
+
     void setValue(const QString &value);
     void setValue(const QString &value, const ValueStyle &style);
     // A non-interactive thumbnail shares the row's click target.
@@ -88,13 +102,15 @@ private:
 // tallest any row needs and at least the minimum; otherwise each row is as
 // tall as it needs. Dividers sit between rows. A held row shows the pressed
 // gray. Owners that page the list show a range of rows.
-class RadioList : public QWidget {
+class RadioList : public QWidget
+{
 public:
     explicit RadioList(QWidget *parent);
-    DescribedOption *add(const QString &name, const QString &label, const QString &description = {});
-    const QVector<DescribedOption *> &options() const {
-        return rows;
-    }
+    DescribedOption *add(const QString &name, const QString &label,
+                         const QString &description = {});
+
+    const QVector<DescribedOption *> &options() const { return rows; }
+
     void setCurrent(int index);
     void setMinimumRowHeight(int pixels);
     void setTopDivider(bool shown);
@@ -104,9 +120,9 @@ public:
     int rowHeight(int index, int width) const;
     // Shows `count` rows from `first`, one under the other.
     void showRows(int first, int count);
-    bool hasHeightForWidth() const override {
-        return true;
-    }
+
+    bool hasHeightForWidth() const override { return true; }
+
     int heightForWidth(int width) const override;
     QSize sizeHint() const override;
     std::function<void(int)> chosen;
@@ -120,4 +136,4 @@ private:
     bool topDivider = false, uniformRows = true;
     void arrange();
 };
-}
+} // namespace kobalt::ui

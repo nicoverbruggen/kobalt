@@ -4,7 +4,8 @@
 #include <QThread>
 
 namespace kobalt {
-const std::shared_ptr<EngineWorker> &engineWorkerState() {
+const std::shared_ptr<EngineWorker> &engineWorkerState()
+{
     static const auto state = [] {
         auto state = std::make_shared<EngineWorker>();
         auto *thread = state->thread = new QThread(qApp);
@@ -22,7 +23,9 @@ const std::shared_ptr<EngineWorker> &engineWorkerState() {
     }();
     return state;
 }
-QObject *engineWorker() {
+
+QObject *engineWorker()
+{
     return engineWorkerState()->object;
 }
-}
+} // namespace kobalt

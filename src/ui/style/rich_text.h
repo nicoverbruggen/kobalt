@@ -10,7 +10,8 @@ class QPainter;
 namespace kobalt::ui {
 // Qt parses HTML and styles. FreeType, HarfBuzz and FriBidi own text metrics,
 // line breaks, pagination and glyphs, including fonts unavailable to Qt.
-class PrivateRichText {
+class PrivateRichText
+{
 public:
     PrivateRichText();
     ~PrivateRichText();
@@ -29,4 +30,4 @@ private:
     struct Data;
     std::unique_ptr<Data> data;
 };
-}
+} // namespace kobalt::ui

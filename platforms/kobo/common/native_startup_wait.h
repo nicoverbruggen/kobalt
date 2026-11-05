@@ -5,11 +5,13 @@
 namespace kobalt::nickel {
 // Stop polling a stalled Nickel startup without rejecting a later completion.
 // The caller can retry from the completion callback or a book-opening hook.
-class NativeStartupWait {
+class NativeStartupWait
+{
 public:
     enum class Result { Waiting, TimedOut, Ready, Recovered };
 
-    Result update(bool ready, std::int64_t elapsedMilliseconds) {
+    Result update(bool ready, std::int64_t elapsedMilliseconds)
+    {
         if (ready) {
             const bool recovered = timedOut;
             timedOut = false;
@@ -25,4 +27,4 @@ public:
 private:
     bool timedOut = false;
 };
-}
+} // namespace kobalt::nickel

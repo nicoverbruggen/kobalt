@@ -19,7 +19,8 @@ extern void (*nativeReboot)(void *);
 
 // Construct only after firmwareSupported() accepts Nickel. Nickel owns power and storage;
 // this adapter prepares Kobalt before those native transitions continue.
-class NativeLifecycle : public QObject {
+class NativeLifecycle : public QObject
+{
     Q_OBJECT
 public:
     enum class Shutdown { PowerOff, BatteryLow, Reboot };
@@ -36,19 +37,20 @@ public:
     // GUI-thread permission for progress writes, including a held shutdown
     // while Nickel's sleep or PIN screen is still visible.
     static bool nativeProgressSaveAllowed();
-    bool connected() const {
-        return connected_;
-    }
-    bool blocked() const {
+
+    bool connected() const { return connected_; }
+
+    bool blocked() const
+    {
         return asleep || usbPending || exported || poweringOff || removalPending;
     }
+
     bool batteryLowShutdown() const { return poweringOff && batteryLow_; }
-    bool shuttingDown() const {
-        return poweringOff;
-    }
-    bool storageBlocked() const {
-        return usbPending || exported;
-    }
+
+    bool shuttingDown() const { return poweringOff; }
+
+    bool storageBlocked() const { return usbPending || exported; }
+
     bool draining = false;
     std::function<void(Shutdown)> preparePowerScreen;
     std::function<void()> sleep, sleepViewReady, wake, beforeWake, cancelWake, usbPrompt;
@@ -92,7 +94,8 @@ private:
     QTimer sleepViewCheck;
     bool savingBeforeSleep = false;
     bool batteryLow_ = false;
-    bool connected_ = false, asleep = false, usbPending = false, exported = false, poweringOff = false;
+    bool connected_ = false, asleep = false, usbPending = false, exported = false,
+         poweringOff = false;
     bool storageReady = false, remounting = false;
     QPointer<QObject> pendingGadget, pendingWorkflow;
     void finishUsb();
@@ -103,4 +106,4 @@ private:
     bool removalPending = false;
     bool restartAfterRemoval();
 };
-}
+} // namespace kobalt

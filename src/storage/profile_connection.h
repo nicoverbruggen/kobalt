@@ -9,13 +9,18 @@
 // its connection to the stores that keep tables in it.
 namespace kobalt::storage::profile {
 // A failed step. Its code is the error that the public operation reports.
-struct Failure { QString code; };
+struct Failure
+{
+    QString code;
+};
+
 // Throws Failure{code} when `ok` is false.
 void check(bool ok, const char *code);
 
 // An operation's view of the profile connection. It never closes it; a
 // transaction left open by a failure is rolled back.
-class Connection {
+class Connection
+{
 public:
     ~Connection();
     void open(const QString &root, const QString &database);
@@ -35,4 +40,4 @@ private:
 // It keeps the caller's choice of routine writes. A Failure becomes `error`
 // and a false result.
 bool guarded(QString *error, const std::function<void()> &operation);
-}
+} // namespace kobalt::storage::profile

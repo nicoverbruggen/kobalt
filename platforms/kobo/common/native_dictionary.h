@@ -11,7 +11,8 @@ extern void (*dictionaryTestNextWebView)(void *, QWidget *);
 #endif
 // GUI-thread adapter. Use only after firmwareSupported() accepts Nickel.
 // No native view is needed, and no native objects leave this adapter.
-class NativeDictionary : public QObject {
+class NativeDictionary : public QObject
+{
     Q_OBJECT
 public:
     NativeDictionary();
@@ -31,4 +32,4 @@ private:
     std::unique_ptr<Data> data;
     DictionaryResult *pending = nullptr;
 };
-}
+} // namespace kobalt

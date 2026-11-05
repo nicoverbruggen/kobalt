@@ -22,6 +22,7 @@ QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile = sle
 // releases the completed frame to the host before the device suspends.
 // percent is the reading progress for tiles that draw it; -1 leaves it out.
 QImage sleepScreenImage(QImage page, const QString &progress, const QString &remaining, bool dark,
-                        int batteryPercent = -1, SleepStatus status = SleepStatus::Sleeping, bool dimPage = true,
-                        sleep::Tile tile = sleep::Tile::Card, int percent = -1);
-}
+                        int batteryPercent = -1, SleepStatus status = SleepStatus::Sleeping,
+                        bool dimPage = true, sleep::Tile tile = sleep::Tile::Card,
+                        int percent = -1);
+} // namespace kobalt::reader

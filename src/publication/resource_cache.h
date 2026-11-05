@@ -15,7 +15,8 @@
 namespace kobalt {
 // Streams keep names and offsets, never pointers into cache storage. Evicting a
 // resource therefore releases its bytes even while the engine retains a stream.
-class ResourceCache {
+class ResourceCache
+{
 public:
     enum class Failure { None, Transfer, Limit, Cancelled, Changed };
     static constexpr qint64 blockBytes = 64 * 1024;
@@ -24,12 +25,15 @@ public:
     using Loader = std::function<bool(const QString &, const Sink &, QString *)>;
     using ImageProbe = std::function<QSize(const QString &)>;
     using Statistics = std::function<QJsonObject()>;
-    struct Access {
+
+    struct Access
+    {
         Loader loader;
         std::function<bool()> cancelled;
         Statistics statistics;
         ImageProbe imageProbe;
     };
+
     ResourceCache(QStringList names, Access access);
     // Worker-only, after the previous opening has drained. Existing streams
     // retain this cache object; all access callbacks must change together.
@@ -41,35 +45,35 @@ public:
     bool loadNextImage();
     // Keep dimensions and integrity checks, but no encoded resource bytes.
     void releaseBytes();
-    quint64 imageRevision() const {
-        return imageRevision_;
-    }
-    bool contains(const QString &name) const {
-        return names_.contains(name);
-    }
-    const QStringList &names() const {
-        return names_;
-    }
+
+    quint64 imageRevision() const { return imageRevision_; }
+
+    bool contains(const QString &name) const { return names_.contains(name); }
+
+    const QStringList &names() const { return names_; }
+
     QByteArray readBounded(const QString &name, qint64 limit);
     // After advisory inspection, let the engine retry with its normal resource
     // budget. Transfer, cancellation and changed-byte failures remain fatal.
     bool resumeAfterInspection();
     qint64 size(const QString &name);
     qint64 read(const QString &name, qint64 offset, void *buffer, qint64 count);
-    QString error() const {
-        return error_;
-    }
-    Failure failure() const {
-        return failure_;
-    }
+
+    QString error() const { return error_; }
+
+    Failure failure() const { return failure_; }
+
     QJsonObject statistics() const;
 
 private:
     using Block = std::array<char, blockBytes>;
-    struct Entry {
+
+    struct Entry
+    {
         qint64 size = 0;
         std::vector<std::unique_ptr<Block>> blocks;
     };
+
     QStringList names_;
     Loader loader_;
     Statistics transferStatistics_;
@@ -91,4 +95,4 @@ private:
     Entry *ensure(const QString &name, qint64 limit = budgetBytes);
     void evict();
 };
-}
+} // namespace kobalt

@@ -5,14 +5,17 @@
 
 namespace kobalt {
 namespace {
-class BatteryNotifications final : public QObject {
+class BatteryNotifications final : public QObject
+{
     Q_OBJECT
 public:
     BatteryNotifications(QObject *context, std::function<void()> changed)
-        : QObject(context), changed(std::move(changed)) {
-        const auto hardware =
-            reinterpret_cast<QObject *(*)()>(dlsym(RTLD_DEFAULT, "_ZN15HardwareFactory14sharedInstanceEv"));
-        const auto plug = reinterpret_cast<QObject *(*)()>(dlsym(RTLD_DEFAULT, "_ZN11PlugManager14sharedInstanceEv"));
+        : QObject(context), changed(std::move(changed))
+    {
+        const auto hardware = reinterpret_cast<QObject *(*)()>(
+                dlsym(RTLD_DEFAULT, "_ZN15HardwareFactory14sharedInstanceEv"));
+        const auto plug = reinterpret_cast<QObject *(*)()>(
+                dlsym(RTLD_DEFAULT, "_ZN11PlugManager14sharedInstanceEv"));
         // Queue notifications until Nickel has finished updating its state.
         // These signals also run while the native charging screen is visible.
         if (auto *object = hardware ? hardware() : nullptr) {
@@ -26,19 +29,22 @@ public:
             connect(object, SIGNAL(ac_unplugged()), this, SLOT(notify()), Qt::QueuedConnection);
         }
     }
+
 private slots:
-    void notify() {
-        changed();
-    }
+
+    void notify() { changed(); }
 
 private:
     std::function<void()> changed;
 };
-}
-void observeNativeBattery(QObject *context, std::function<void()> changed) {
+} // namespace
+
+void observeNativeBattery(QObject *context, std::function<void()> changed)
+{
     if (context && changed) {
         new BatteryNotifications(context, std::move(changed));
     }
 }
-}
+} // namespace kobalt
+
 #include "native_battery.moc"

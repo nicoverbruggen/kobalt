@@ -12,7 +12,8 @@ namespace kobalt::storage {
 // `directory`. Shared profile tables use the same ownership, version and
 // durability checks. A false result rolls the transaction back. The handle
 // must not escape.
-bool profileTransaction(const QString &directory, const std::function<bool(QSqlDatabase &)> &operation,
+bool profileTransaction(const QString &directory,
+                        const std::function<bool(QSqlDatabase &)> &operation,
                         QString *error = nullptr);
 
 // Waits for waiting writes, then folds the log into the main file, returns it
@@ -39,10 +40,12 @@ bool profileHasUnsyncedWrites();
 // Starts a checkpoint on the writer thread without waiting for it.
 void requestProfileCheckpoint();
 bool profileCheckpointPending();
+
 // Use WAL NORMAL for transactions started in this scope. There is no extra
 // per-commit sync; automatic checkpoints and the rollback-journal fallback
 // can still sync. A lifecycle checkpoint makes prior commits durable.
-class RoutineWrites {
+class RoutineWrites
+{
 public:
     RoutineWrites();
     ~RoutineWrites();
@@ -52,4 +55,4 @@ public:
 private:
     bool previous;
 };
-}
+} // namespace kobalt::storage

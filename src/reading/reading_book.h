@@ -20,49 +20,59 @@ class ReaderSession;
 // when to present a conflict; this object decides which progress may be saved.
 // Like Nickel, a book opens as reading: it is saved as finished only after it
 // is finished again or a finished position from sync is accepted.
-class ReadingBook {
+class ReadingBook
+{
 public:
-    ReadingBook(std::unique_ptr<ReaderSession> session, QString statePath, storage::Paths paths, QString identity,
-                QByteArray digest, std::unique_ptr<ReadingBridge> bridge, ReadingProgress baseline,
-                ReadingProgress diskBaseline, QString sourceKey = {}, ReadingHistory::UtcClock utc = {});
+    ReadingBook(std::unique_ptr<ReaderSession> session, QString statePath, storage::Paths paths,
+                QString identity, QByteArray digest, std::unique_ptr<ReadingBridge> bridge,
+                ReadingProgress baseline, ReadingProgress diskBaseline, QString sourceKey = {},
+                ReadingHistory::UtcClock utc = {});
     ~ReadingBook();
+
     void discardPendingSaves() { discardSaves = true; }
-    ReaderSession *session() const {
-        return session_.get();
-    }
-    const QString &identity() const {
-        return identity_;
-    }
-    const storage::Paths &paths() const {
-        return paths_;
-    }
-    const QByteArray &fingerprint() const {
-        return digest;
-    }
+
+    ReaderSession *session() const { return session_.get(); }
+
+    const QString &identity() const { return identity_; }
+
+    const storage::Paths &paths() const { return paths_; }
+
+    const QByteArray &fingerprint() const { return digest; }
+
     bool deviceTransition() const;
     bool canWriteNative() const;
+
     bool hasNativeProgress() const { return bool(bridge); }
+
     // Downloaded native-library titles use that platform's cloud sync.
     // Sideloaded file identities keep native local progress and use KOsync.
     bool usesNativeCloudSync() const { return nativeCloudSync; }
+
     // A sideloaded EPUB file that is not a kepub.
-    bool plainEpub() const {
-        return identity_.startsWith("file://") && identity_.endsWith(".epub", Qt::CaseInsensitive) &&
-               !identity_.endsWith(".kepub.epub", Qt::CaseInsensitive);
+    bool plainEpub() const
+    {
+        return identity_.startsWith("file://") && identity_.endsWith(".epub", Qt::CaseInsensitive)
+                && !identity_.endsWith(".kepub.epub", Qt::CaseInsensitive);
     }
+
     // Revocation abandons native work but keeps local data available to save.
     void releaseNative(bool save = true);
     void observeReading(bool learnPace = true);
+
     // Once a minute while the reader is visible and awake.
-    void minuteTick() {
+    void minuteTick()
+    {
         if (bridge && !released)
             bridge->minuteTick();
     }
+
     // After the final native write at close.
-    void markRecent() {
+    void markRecent()
+    {
         if (bridge && !released && bridge->writable())
             bridge->markRecent();
     }
+
     void stopReading(bool background = false, bool nativeAllowed = true);
     void sleepReading(const QJsonObject &preferences);
     void finishReading(std::function<void(bool)> done);
@@ -76,55 +86,64 @@ public:
     void saveReadingActivity(bool durable = false);
     void rememberAppearance();
     void retryAppearanceSave();
+
     bool tracksReadingHistory() const { return bool(history); }
-    bool usesLocalPace() const {
-        return bool(speed);
-    }
-    void pauseLocalPace() {
+
+    bool usesLocalPace() const { return bool(speed); }
+
+    void pauseLocalPace()
+    {
         if (speed) {
             speed->pause();
         }
     }
+
     // Active time for this opening, excluding sleep and hidden reader time.
     qint64 readingMilliseconds() const;
+
     qint64 sessionReadingMilliseconds() const { return readingMilliseconds() - sessionBaseline; }
-    bool readingActive() const {
-        return activeReading.isValid();
-    }
+
+    bool readingActive() const { return activeReading.isValid(); }
+
     ReadingEstimates estimates() const;
-    void onEstimatesChanged(std::function<void()> changed) {
+
+    void onEstimatesChanged(std::function<void()> changed)
+    {
         if (bridge) {
             bridge->estimatesChanged = std::move(changed);
         }
     }
+
     // Session fallback for native bridges without a reading estimate.
-    ReadingPace &pace() {
-        return pace_;
-    }
+    ReadingPace &pace() { return pace_; }
+
     bool offerFinish() const;
     void markFinished();
+
     void suppressFinishPrompt() { finishPromptSuppressed = true; }
+
     void pollProgress();
+
     // Makes the next check read, for a bridge without change signals. A
     // signalled bridge reads only after a signal or a failed read.
-    void invalidateProgress() {
-        progressPoll.invalidate();
-    }
+    void invalidateProgress() { progressPoll.invalidate(); }
+
     ReadingProgress readProgress() const;
     void observeProgress();
-    bool pendingProgress() const {
-        return reconciliation.pending();
-    }
-    ReadingProgress candidate() const {
-        return reconciliation.candidate();
-    }
+
+    bool pendingProgress() const { return reconciliation.pending(); }
+
+    ReadingProgress candidate() const { return reconciliation.candidate(); }
+
     void acknowledge(const ReadingProgress &shown, bool moved);
     void markNativeReading();
     // False leaves a sync conflict pending for the window to resolve.
     bool writeNative(const QString &location, const QString &mappingError);
     enum class NativeSave { Saved, LocalOnly, Conflict, Failed };
     NativeSave nativeSaveResult() const;
+
     const QString &nativeSaveError() const { return nativeWritebackError; }
+
     // A background checkpoint is queued on the book's writer thread and
     // returns at once; a failure is reported through onCheckpointFailed. A
     // synchronous checkpoint first drops a queued one and waits for a running
@@ -135,17 +154,15 @@ public:
     void checkpointForClose(std::function<void(bool)> done);
     QJsonObject checkpointState() const;
     bool savesPending() const;
+
     // Called after a failed background checkpoint, which is already logged.
     // The reader does not notify the user; tests observe failures here.
-    void onCheckpointFailed(std::function<void()> failed) {
-        checkpointFailed = std::move(failed);
-    }
-    const QJsonObject &layoutPreferences() const {
-        return layoutPreferences_;
-    }
-    const QString &dictionaryChoice() const {
-        return dictionaryChoice_;
-    }
+    void onCheckpointFailed(std::function<void()> failed) { checkpointFailed = std::move(failed); }
+
+    const QJsonObject &layoutPreferences() const { return layoutPreferences_; }
+
+    const QString &dictionaryChoice() const { return dictionaryChoice_; }
+
     bool saveDictionaryChoice(const QString &id);
     QJsonObject imageView(const QString &id) const;
     // Memory only. The caller can queue the existing background checkpoint.
@@ -172,7 +189,8 @@ private:
     quint64 nativeFinishGeneration = 0;
     QVector<std::function<void(bool)>> nativeFinishCallbacks;
     QJsonObject persistedCheckpoint(const QJsonObject &state) const;
-    void finishCloseCheckpoint(const QJsonObject &checkpoint, bool saved, std::function<void(bool)> done);
+    void finishCloseCheckpoint(const QJsonObject &checkpoint, bool saved,
+                               std::function<void(bool)> done);
     bool closeCheckpointPending = false;
     ReadingActivity readingActivity() const;
     // `background` queues the write instead of waiting for it.
@@ -216,4 +234,4 @@ private:
     std::shared_ptr<ReadingBook *> alive = std::make_shared<ReadingBook *>(this);
     QString dictionaryChoice_;
 };
-}
+} // namespace kobalt

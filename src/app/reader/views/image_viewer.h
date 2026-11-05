@@ -6,7 +6,9 @@
 
 namespace kobalt {
 class ImageCanvas;
-class ImageViewer final : public ui::Panel {
+
+class ImageViewer final : public ui::Panel
+{
 public:
     explicit ImageViewer(QWidget *parent);
     void open();
@@ -22,4 +24,4 @@ private:
     ImageCanvas *canvas;
     QString imageId;
 };
-}
+} // namespace kobalt

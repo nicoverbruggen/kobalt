@@ -24,45 +24,64 @@
 
 namespace kobalt {
 namespace {
-template <class T> T symbol(const char *name) {
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
-QString bookIdentity(const void *volume) {
+
+QString bookIdentity(const void *volume)
+{
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     static const auto get = symbol<QString (*)(const void *)>("_ZNK7Content5getIdEv");
     return get ? get(volume) : QString();
 #else
-    static const auto get = symbol<QString (*)(const void *, const QString &)>("_ZNK7Content5getIdERK7QString");
+    static const auto get =
+            symbol<QString (*)(const void *, const QString &)>("_ZNK7Content5getIdERK7QString");
     return get ? get(volume, QString()) : QString();
 #endif
 }
-struct NativeBook {
+
+struct NativeBook
+{
     QString path;
     qint64 size;
     QDateTime modified;
     ReaderBookRoute route;
 };
+
 // Process-local only. A file replacement invalidates its remembered route.
 QHash<QString, NativeBook> nativeBooks;
-struct MenuCallbacks {
+
+struct MenuCallbacks
+{
     std::function<bool()> ready, defaultReader;
 };
-MenuCallbacks &menuCallbacks() {
+
+MenuCallbacks &menuCallbacks()
+{
     // NickelHook can initialize the reader before this file's global constructors.
     // Construct these callbacks on first use so later initialization cannot erase them.
     static MenuCallbacks callbacks;
     return callbacks;
 }
+
 void addReaderChoice(void *controller, const void *volume, QMenu *menu);
-struct Choice {
+
+struct Choice
+{
     QString identity;
     bool kobalt;
 };
+
 std::unique_ptr<Choice> pendingChoice;
+
 // A new user action abandons any opening that never reached Nickel's reader
 // handoff. The release which selected the action has already been delivered.
-class ChoiceLifetime final : public QObject {
-    bool eventFilter(QObject *, QEvent *event) override {
+class ChoiceLifetime final : public QObject
+{
+    bool eventFilter(QObject *, QEvent *event) override
+    {
         switch (event->type()) {
         case QEvent::TouchBegin:
         case QEvent::MouseButtonPress:
@@ -76,10 +95,12 @@ class ChoiceLifetime final : public QObject {
     }
 
 public:
-    explicit ChoiceLifetime(QObject *parent) : QObject(parent) {}
+    explicit ChoiceLifetime(QObject *parent) : QObject(parent) { }
 };
-}
-bool previewBook(const void *volume) {
+} // namespace
+
+bool previewBook(const void *volume)
+{
     static const auto preview = symbol<bool (*)(const void *)>("_ZNK6Volume9isPreviewEv");
     if (!volume)
         return false;
@@ -89,14 +110,21 @@ bool previewBook(const void *volume) {
     static const auto values = symbol<QVariantMap (*)(const void *)>("_ZNK6Volume11getDbValuesEv");
     return values && values(volume).value("Accessibility").toInt() == 6;
 }
-void rememberNativeBook(const QString &identity, const QString &path, bool protectedBook) {
+
+void rememberNativeBook(const QString &identity, const QString &path, bool protectedBook)
+{
     const QFileInfo file(path);
     if (identity.isEmpty() || path.isEmpty() || !file.isFile())
         return;
-    nativeBooks.insert(identity, {path, file.size(), file.lastModified(),
-                                  protectedBook ? ReaderBookRoute::Protected : ReaderBookRoute::Remembered});
+    nativeBooks.insert(
+            identity,
+            { path, file.size(), file.lastModified(),
+              protectedBook ? ReaderBookRoute::Protected : ReaderBookRoute::Remembered });
 }
-static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString *path, bool inspectPublication) {
+
+static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString *path,
+                                 bool inspectPublication)
+{
     using Route = ReaderBookRoute;
     if (previewBook(volume))
         return Route::Unsupported;
@@ -138,12 +166,15 @@ static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString 
     static const auto device = symbol<void *(*)()>("_ZN6Device16getCurrentDeviceEv");
     static const auto dbName = symbol<const QString &(*)(const void *)>("_ZNK6Device9getDbNameEv");
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    static const auto connection = symbol<QSqlDatabase (*)(QString, bool)>("_ZN15DatabaseAdapter12dbConnectionE7QStringb");
+    static const auto connection =
+            symbol<QSqlDatabase (*)(QString, bool)>("_ZN15DatabaseAdapter12dbConnectionE7QStringb");
 #else
-    static const auto connection = symbol<QSqlDatabase (*)(const QString &, bool)>("_ZN15DatabaseAdapter12dbConnectionERK7QStringb");
+    static const auto connection = symbol<QSqlDatabase (*)(const QString &, bool)>(
+            "_ZN15DatabaseAdapter12dbConnectionERK7QStringb");
 #endif
     const auto current = device ? device() : nullptr;
-    const auto database = current && dbName && connection ? connection(dbName(current), false) : QSqlDatabase();
+    const auto database =
+            current && dbName && connection ? connection(dbName(current), false) : QSqlDatabase();
     const auto protection = bookProtection(database, id);
     if (protection == BookProtection::Unavailable)
         return Route::Unsupported;
@@ -152,7 +183,8 @@ static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString 
     const QFileInfo fileInfo(filename);
     const auto cached = nativeBooks.constFind(id);
     if (cached != nativeBooks.constEnd()) {
-        if (cached->path == filename && cached->size == fileInfo.size() && cached->modified == fileInfo.lastModified())
+        if (cached->path == filename && cached->size == fileInfo.size()
+            && cached->modified == fileInfo.lastModified())
             return cached->route;
         nativeBooks.remove(id);
     }
@@ -165,7 +197,9 @@ static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString 
         return Route::Failed;
     if (!publication.inspect(file, &error)) {
         diagnostic("native-resource-failed",
-                   {{"stage", "publication-inspection"}, {"error_code", diagnosticErrorCode(error)}}, kobalt::DiagnosticSeverity::Error);
+                   { { "stage", "publication-inspection" },
+                     { "error_code", diagnosticErrorCode(error) } },
+                   kobalt::DiagnosticSeverity::Error);
         if (publication.protectedBook()) {
             rememberNativeBook(id, filename, true);
             return Route::Protected;
@@ -174,56 +208,72 @@ static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString 
     }
     return Route::Direct;
 }
-ReaderBookRoute readerBookRoute(const void *volume, QString *identity, QString *path) {
+
+ReaderBookRoute readerBookRoute(const void *volume, QString *identity, QString *path)
+{
     return bookRoute(volume, identity, path, true);
 }
-ReaderBookRoute readerBookCandidateRoute(const void *volume, QString *identity, QString *path) {
+
+ReaderBookRoute readerBookCandidateRoute(const void *volume, QString *identity, QString *path)
+{
     return bookRoute(volume, identity, path, false);
 }
-void configureBookMenu(std::function<bool()> available, std::function<bool()> preferred) {
+
+void configureBookMenu(std::function<bool()> available, std::function<bool()> preferred)
+{
     auto &callbacks = menuCallbacks();
     callbacks.ready = std::move(available);
     callbacks.defaultReader = std::move(preferred);
     static auto *lifetime = new ChoiceLifetime(qApp);
     qApp->installEventFilter(lifetime);
 }
-bool readerChoice(const void *volume, bool preferred) {
+
+bool readerChoice(const void *volume, bool preferred)
+{
     auto choice = std::move(pendingChoice);
     if (!choice || choice->identity != bookIdentity(volume))
         return preferred;
-    diagnostic("reader-choice-consumed", {{"kobalt", choice->kobalt}});
+    diagnostic("reader-choice-consumed", { { "kobalt", choice->kobalt } });
     return choice->kobalt;
 }
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-void (*nativeBookMenu)(void *, void *, const void *, QMenu *, const QString &, const QString &, const void *);
-extern "C" __attribute__((visibility("default"))) void kobalt_book_menu(void *self, void *controller,
-                                                                        const void *volume, QMenu *menu,
-                                                                        const QString &page, const QString &location,
-                                                                        const void *tab) {
+void (*nativeBookMenu)(void *, void *, const void *, QMenu *, const QString &, const QString &,
+                       const void *);
+
+extern "C" __attribute__((visibility("default"))) void
+kobalt_book_menu(void *self, void *controller, const void *volume, QMenu *menu, const QString &page,
+                 const QString &location, const void *tab)
+{
     nativeBookMenu(self, controller, volume, menu, page, location, tab);
     addReaderChoice(controller, volume, menu);
 }
 #else
-void (*nativeBookMenu)(void *, void *, const void *, QMenu *, const QString &, const QString &, bool, const void *);
-extern "C" __attribute__((visibility("default"))) void kobalt_book_menu(void *self, void *controller,
-                                                                        const void *volume, QMenu *menu,
-                                                                        const QString &page, const QString &location,
-                                                                        bool flag, const void *tab) {
+void (*nativeBookMenu)(void *, void *, const void *, QMenu *, const QString &, const QString &,
+                       bool, const void *);
+
+extern "C" __attribute__((visibility("default"))) void
+kobalt_book_menu(void *self, void *controller, const void *volume, QMenu *menu, const QString &page,
+                 const QString &location, bool flag, const void *tab)
+{
     nativeBookMenu(self, controller, volume, menu, page, location, flag, tab);
     addReaderChoice(controller, volume, menu);
 }
 #endif
 namespace {
-void addReaderChoice(void *controller, const void *volume, QMenu *menu) {
+void addReaderChoice(void *controller, const void *volume, QMenu *menu)
+{
     const auto &callbacks = menuCallbacks();
-    if (!menu || !callbacks.ready || !callbacks.ready() || !callbacks.defaultReader || !nativeBookMenu)
+    if (!menu || !callbacks.ready || !callbacks.ready() || !callbacks.defaultReader
+        || !nativeBookMenu)
         return;
     const bool useKobalt = !callbacks.defaultReader();
     QString identity;
     // Only a Kobalt choice needs proof that Kobalt can read the publication.
     // Nickel must remain available for protected books and remembered fallbacks.
-    const auto route = useKobalt ? readerBookRoute(volume, &identity) : readerBookCandidateRoute(volume, &identity);
-    if (identity.isEmpty() || (useKobalt ? route != ReaderBookRoute::Direct : route == ReaderBookRoute::Unsupported))
+    const auto route = useKobalt ? readerBookRoute(volume, &identity)
+                                 : readerBookCandidateRoute(volume, &identity);
+    if (identity.isEmpty()
+        || (useKobalt ? route != ReaderBookRoute::Direct : route == ReaderBookRoute::Unsupported))
         return;
     QPointer<QAction> original;
     const auto readNow = QCoreApplication::translate("ReadBookActionProxy", "Read now");
@@ -242,17 +292,18 @@ void addReaderChoice(void *controller, const void *volume, QMenu *menu) {
     }
     if (!original || !original->isEnabled())
         return;
-    static const auto item = symbol<QWidget *(*)(void *, QMenu *, const QString &, bool, bool, const QString &)>(
-        "_ZN28AbstractNickelMenuController18createMenuTextItemEP5QMenuRK7QStringbbS4_");
+    static const auto item =
+            symbol<QWidget *(*)(void *, QMenu *, const QString &, bool, bool, const QString &)>(
+                    "_ZN28AbstractNickelMenuController18createMenuTextItemEP5QMenuRK7QStringbbS4_");
     static const auto action = symbol<QAction *(*)(void *, QMenu *, QWidget *, bool, bool, bool)>(
-        "_ZN22AbstractMenuController12createActionEP5QMenuP7QWidgetbbb");
+            "_ZN22AbstractMenuController12createActionEP5QMenuP7QWidgetbbb");
     if (!item || !action)
         return;
-    const Choice choice{identity, useKobalt};
-    auto *widget =
-        item(controller, menu,
-             (choice.kobalt ? strings::get("native_ui.read_with_kobalt") : strings::get("native_ui.read_with_nickel")),
-             false, false, "rrAlternativeReaderAction");
+    const Choice choice{ identity, useKobalt };
+    auto *widget = item(controller, menu,
+                        (choice.kobalt ? strings::get("native_ui.read_with_kobalt")
+                                       : strings::get("native_ui.read_with_nickel")),
+                        false, false, "rrAlternativeReaderAction");
     if (!widget)
         return;
     widget->setObjectName("rrAlternativeReaderAction");
@@ -278,5 +329,5 @@ void addReaderChoice(void *controller, const void *volume, QMenu *menu) {
         original->trigger();
     });
 }
-}
-}
+} // namespace
+} // namespace kobalt

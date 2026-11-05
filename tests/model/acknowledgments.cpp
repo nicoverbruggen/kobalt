@@ -14,24 +14,29 @@
 #include <cstdlib>
 #include "check.h"
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QApplication app(argc, argv);
-    require(kobalt::test::readerAssets().available(), "Component assets failed manifest verification");
-    require(kobalt::ui::initializeInterfaceFonts(kobalt::test::readerAssets()), "Cannot load verified UI font bytes");
-    require(QFontInfo(kobalt::ui::interfaceFont()).family() == "IBM Plex Sans" &&
-                QFontInfo(kobalt::ui::chromeFont()).family() == "IBM Plex Mono" &&
-                QFontInfo(kobalt::ui::brandFont(32)).family() == "Instrument Serif",
+    require(kobalt::test::readerAssets().available(),
+            "Component assets failed manifest verification");
+    require(kobalt::ui::initializeInterfaceFonts(kobalt::test::readerAssets()),
+            "Cannot load verified UI font bytes");
+    require(QFontInfo(kobalt::ui::interfaceFont()).family() == "IBM Plex Sans"
+                    && QFontInfo(kobalt::ui::chromeFont()).family() == "IBM Plex Mono"
+                    && QFontInfo(kobalt::ui::brandFont(32)).family() == "Instrument Serif",
             "Component font substitution");
     QFile manifest(":/kobalt/acknowledgments.json");
     require(manifest.open(QIODevice::ReadOnly), "Embedded credits are missing");
     QJsonParseError error;
     const auto entries = QJsonDocument::fromJson(manifest.readAll(), &error).array();
-    require(error.error == QJsonParseError::NoError && !entries.isEmpty(), "Invalid credits manifest");
+    require(error.error == QJsonParseError::NoError && !entries.isEmpty(),
+            "Invalid credits manifest");
     // Groups are contiguous blocks, and the author's own projects form their own group.
     QStringList groups, author;
     for (const auto &entry : entries) {
         const auto group = entry.toObject().value("group").toString();
-        require(QStringList({"kobalt", "engine", "nickel", "fonts", "icons", "author"}).contains(group),
+        require(QStringList({ "kobalt", "engine", "nickel", "fonts", "icons", "author" })
+                        .contains(group),
                 "Project has no known group");
         if (groups.isEmpty() || groups.last() != group) {
             require(!groups.contains(group), "A group is split across the list");
@@ -40,14 +45,15 @@ int main(int argc, char **argv) {
         if (group == "author")
             author.append(entry.toObject().value("name").toString());
     }
-    require(author == QStringList({"NickelRotate", "NickelDissolve", "eBook Fonts"}),
+    require(author == QStringList({ "NickelRotate", "NickelDissolve", "eBook Fonts" }),
             "The author's projects are not grouped");
     // Kobalt's own license terms come first, with both license texts.
     const auto kobalt = entries.first().toObject();
     const auto licenses = kobalt.value("notices").toArray();
-    require(kobalt.value("group").toString() == "kobalt" && kobalt.value("name").toString() == "Kobalt" &&
-                licenses.size() == 2 && licenses.at(0).toString() == "Kobalt-MIT" &&
-                licenses.at(1).toString() == "AGPL-3",
+    require(kobalt.value("group").toString() == "kobalt"
+                    && kobalt.value("name").toString() == "Kobalt" && licenses.size() == 2
+                    && licenses.at(0).toString() == "Kobalt-MIT"
+                    && licenses.at(1).toString() == "AGPL-3",
             "Kobalt's own license is not listed first");
     for (const auto &entry : entries) {
         const auto notices = entry.toObject().value("notices").toArray();
@@ -73,21 +79,23 @@ int main(int argc, char **argv) {
     };
     auto *counter = panel.findChild<QLabel *>("rrAcknowledgmentsPage");
     auto *heading = panel.findChild<QLabel *>("rrAcknowledgmentsGroup_kobalt");
-    require(heading && heading->isVisibleTo(&panel) &&
-                heading->text() == kobalt::strings::get("acknowledgments.group_kobalt"),
+    require(heading && heading->isVisibleTo(&panel)
+                    && heading->text() == kobalt::strings::get("acknowledgments.group_kobalt"),
             "The first page does not start with the Kobalt heading");
     auto *engine = panel.findChild<QLabel *>("rrAcknowledgmentsGroup_engine");
     require(engine, "The engine heading is missing");
     bool statement = false;
     for (auto *label : panel.findChildren<QLabel *>())
-        statement |= label->isVisibleTo(&panel) &&
-                     label->text().startsWith(kobalt::strings::get(
-                         "acknowledgments.kobalt_is_distributed_under_the_gnu_agpl_v3_without_any_warranty"));
+        statement |= label->isVisibleTo(&panel)
+                && label->text().startsWith(kobalt::strings::get(
+                        "acknowledgments.kobalt_is_distributed_under_the_gnu_agpl_v3_without_any_warranty"));
     require(statement, "The license and warranty statement is not shown");
-    require(button("rrAcknowledgmentsPrevious")->isEnabled(), "Previous cannot wrap on first list page");
+    require(button("rrAcknowledgmentsPrevious")->isEnabled(),
+            "Previous cannot wrap on first list page");
     click("rrAcknowledgmentsPrevious");
     const auto finalListPage = counter->text().split(" of ");
-    require(finalListPage.first() == finalListPage.last(), "Acknowledgments did not wrap backwards");
+    require(finalListPage.first() == finalListPage.last(),
+            "Acknowledgments did not wrap backwards");
     click("rrAcknowledgmentsNext");
     require(counter->text().startsWith("1 of"), "Acknowledgments did not wrap forwards");
     click("rrAcknowledgmentsNext");
@@ -103,7 +111,8 @@ int main(int argc, char **argv) {
         const auto paper = text->palette().color(QPalette::Window);
         for (int y = image.height() - 4; y < image.height(); ++y)
             for (int x = 0; x < image.width(); ++x)
-                require(QColor::fromRgba(image.pixel(x, y)) == paper, "License line reaches the screen cut-off");
+                require(QColor::fromRgba(image.pixel(x, y)) == paper,
+                        "License line reaches the screen cut-off");
     };
     checkBottom();
     click("rrAcknowledgmentsNext");
@@ -130,9 +139,9 @@ int main(int argc, char **argv) {
             index = i;
     require(index >= 0, "The short xxHash notice is missing");
     const auto name = QString("rrAcknowledgment%1").arg(index).toUtf8();
-    for (int turns = 0; !(panel.findChild<QPushButton *>(name.constData()) &&
-                          panel.findChild<QPushButton *>(name.constData())->isVisible()) &&
-                        turns < 10;
+    for (int turns = 0; !(panel.findChild<QPushButton *>(name.constData())
+                          && panel.findChild<QPushButton *>(name.constData())->isVisible())
+         && turns < 10;
          ++turns)
         click("rrAcknowledgmentsNext");
     click(name.constData());
@@ -140,9 +149,7 @@ int main(int argc, char **argv) {
             "A one-page notice shows a pager");
     click("rrAcknowledgmentsBack");
     bool finished = false;
-    panel.finished = [&] {
-        finished = true;
-    };
+    panel.finished = [&] { finished = true; };
     click("rrAcknowledgmentsBack");
     require(finished, "Back did not return to settings");
     std::puts("PASS: embedded notices, project and license paging, rotation and back navigation");

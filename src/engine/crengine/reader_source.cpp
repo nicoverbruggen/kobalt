@@ -24,51 +24,72 @@
 
 namespace kobalt {
 namespace {
-QString qstring(const lString32 &s) {
+QString qstring(const lString32 &s)
+{
     return QString::fromUtf8(UnicodeToUtf8(s).c_str());
 }
-lString32 cre(const QString &s) {
+
+lString32 cre(const QString &s)
+{
     return Utf8ToUnicode(s.toUtf8().constData());
 }
+
 constexpr int maxBook = 64 * 1024 * 1024;
-class ResourceStream : public LVNamedStream {
+
+class ResourceStream : public LVNamedStream
+{
 public:
-    ResourceStream(std::shared_ptr<ResourceCache> resources, QString name, qint64 length, QSize dimensions = {})
-        : resources(std::move(resources)), name(std::move(name)), length(length), dimensions(dimensions) {
+    ResourceStream(std::shared_ptr<ResourceCache> resources, QString name, qint64 length,
+                   QSize dimensions = {})
+        : resources(std::move(resources)),
+          name(std::move(name)),
+          length(length),
+          dimensions(dimensions)
+    {
         SetName(cre(this->name).c_str());
     }
-    lvopen_mode_t GetMode() override {
-        return LVOM_READ;
-    }
+
+    lvopen_mode_t GetMode() override { return LVOM_READ; }
+
     LVImageSource *CreateImageSource(ldomDocument *doc, ldomNode *node) override;
-    lvsize_t GetSize() override {
+
+    lvsize_t GetSize() override
+    {
         resolveLength();
         return lvsize_t(qMax(qint64(0), length));
     }
-    lverror_t GetSize(lvsize_t *size) override {
+
+    lverror_t GetSize(lvsize_t *size) override
+    {
         if (!resolveLength())
             return LVERR_FAIL;
         *size = lvsize_t(length);
         return LVERR_OK;
     }
-    lverror_t Seek(lvoffset_t offset, lvseek_origin_t origin, lvpos_t *result) override {
+
+    lverror_t Seek(lvoffset_t offset, lvseek_origin_t origin, lvpos_t *result) override
+    {
         if (!resolveLength())
             return LVERR_FAIL;
         const qint64 base = origin == LVSEEK_SET ? 0 : origin == LVSEEK_CUR ? position : length;
         const qint64 next = base + offset;
-        if ((origin != LVSEEK_SET && origin != LVSEEK_CUR && origin != LVSEEK_END) || next < 0 || next > length)
+        if ((origin != LVSEEK_SET && origin != LVSEEK_CUR && origin != LVSEEK_END) || next < 0
+            || next > length)
             return LVERR_FAIL;
         position = next;
         if (result)
             *result = lvpos_t(next);
         return LVERR_OK;
     }
-    lverror_t Read(void *buffer, lvsize_t count, lvsize_t *read) override {
+
+    lverror_t Read(void *buffer, lvsize_t count, lvsize_t *read) override
+    {
         if (read)
             *read = 0;
         if (!resolveLength())
             return LVERR_FAIL;
-        const auto result = resources->read(name, position, buffer, qMin(qint64(count), length - position));
+        const auto result =
+                resources->read(name, position, buffer, qMin(qint64(count), length - position));
         if (result < 0)
             return LVERR_FAIL;
         position += result;
@@ -76,50 +97,55 @@ public:
             *read = lvsize_t(result);
         return LVERR_OK;
     }
-    lverror_t SetSize(lvsize_t) override {
-        return LVERR_FAIL;
-    }
-    lverror_t Write(const void *, lvsize_t, lvsize_t *written) override {
+
+    lverror_t SetSize(lvsize_t) override { return LVERR_FAIL; }
+
+    lverror_t Write(const void *, lvsize_t, lvsize_t *written) override
+    {
         if (written)
             *written = 0;
         return LVERR_FAIL;
     }
-    bool Eof() override {
-        return !resolveLength() || position == length;
-    }
+
+    bool Eof() override { return !resolveLength() || position == length; }
 
 private:
     std::shared_ptr<ResourceCache> resources;
     QString name;
     qint64 length, position = 0;
     QSize dimensions;
-    bool resolveLength() {
+
+    bool resolveLength()
+    {
         if (length < 0)
             length = resources->size(name);
         return length >= 0;
     }
 };
-class DeferredImage : public LVImageSource {
+
+class DeferredImage : public LVImageSource
+{
 public:
-    DeferredImage(std::shared_ptr<ResourceCache> resources, QString name, QSize size, ldomDocument *doc, ldomNode *node)
-        : resources(std::move(resources)), name(std::move(name)), size(size), doc(doc), node(node) {}
-    ldomDocument *GetSourceDocument() override {
-        return doc;
+    DeferredImage(std::shared_ptr<ResourceCache> resources, QString name, QSize size,
+                  ldomDocument *doc, ldomNode *node)
+        : resources(std::move(resources)), name(std::move(name)), size(size), doc(doc), node(node)
+    {
     }
-    ldomNode *GetSourceNode() override {
-        return node;
-    }
-    LVStream *GetSourceStream() override {
-        return nullptr;
-    }
-    void Compact() override {}
-    int GetWidth() const override {
-        return size.width();
-    }
-    int GetHeight() const override {
-        return size.height();
-    }
-    bool Decode(LVImageDecoderCallback *callback) override {
+
+    ldomDocument *GetSourceDocument() override { return doc; }
+
+    ldomNode *GetSourceNode() override { return node; }
+
+    LVStream *GetSourceStream() override { return nullptr; }
+
+    void Compact() override { }
+
+    int GetWidth() const override { return size.width(); }
+
+    int GetHeight() const override { return size.height(); }
+
+    bool Decode(LVImageDecoderCallback *callback) override
+    {
         // Layout asks for dimensions with no callback. Only a paint requests
         // the pixels, so images on unread pages remain deferred.
         if (!callback)
@@ -128,9 +154,12 @@ public:
             const auto length = resources->size(name);
             if (length < 0)
                 return false;
-            auto image = LVCreateStreamImageSource(LVStreamRef(new ResourceStream(resources, name, length)), doc, node);
-            if (image.isNull() || image->GetWidth() != size.width() || image->GetHeight() != size.height())
-                return LVCreateDummyImageSource(node, size.width(), size.height())->Decode(callback);
+            auto image = LVCreateStreamImageSource(
+                    LVStreamRef(new ResourceStream(resources, name, length)), doc, node);
+            if (image.isNull() || image->GetWidth() != size.width()
+                || image->GetHeight() != size.height())
+                return LVCreateDummyImageSource(node, size.width(), size.height())
+                        ->Decode(callback);
             return image->Decode(callback);
         }
         // A neutral rectangle keeps the final image's dimensions. One row is
@@ -150,13 +179,19 @@ private:
     ldomDocument *doc;
     ldomNode *node;
 };
-LVImageSource *ResourceStream::CreateImageSource(ldomDocument *doc, ldomNode *node) {
-    return dimensions.isValid() ? new DeferredImage(resources, name, dimensions, doc, node) : nullptr;
+
+LVImageSource *ResourceStream::CreateImageSource(ldomDocument *doc, ldomNode *node)
+{
+    return dimensions.isValid() ? new DeferredImage(resources, name, dimensions, doc, node)
+                                : nullptr;
 }
-class ResourceContainer : public LVNamedContainer {
+
+class ResourceContainer : public LVNamedContainer
+{
 public:
     ResourceContainer(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes)
-        : resources(std::move(resources)) {
+        : resources(std::move(resources))
+    {
         SetName(U"publication.epub");
         for (const auto &name : this->resources->names()) {
             auto *item = new LVCommonContainerItemInfo;
@@ -164,14 +199,17 @@ public:
             Add(item);
         }
     }
-    LVContainer *GetParentContainer() override {
-        return nullptr;
-    }
-    lverror_t GetSize(lvsize_t *size) override {
+
+    LVContainer *GetParentContainer() override { return nullptr; }
+
+    lverror_t GetSize(lvsize_t *size) override
+    {
         *size = GetObjectCount();
         return LVERR_OK;
     }
-    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override {
+
+    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
+    {
         const auto key = qstring(lString32(name));
         if (mode != LVOM_READ || !resources->contains(key))
             return {};
@@ -185,43 +223,48 @@ public:
 private:
     std::shared_ptr<ResourceCache> resources;
 };
-class ContentContainer : public LVContainer {
+
+class ContentContainer : public LVContainer
+{
 public:
-    explicit ContentContainer(LVContainerRef source) : source(source) {}
-    bool IsContainer() override {
-        return true;
-    }
-    const lChar32 *GetName() override {
-        return source->GetName();
-    }
-    LVContainer *GetParentContainer() override {
-        return source->GetParentContainer();
-    }
-    lverror_t GetSize(lvsize_t *size) override {
-        return source->GetSize(size);
-    }
-    int GetObjectCount() const override {
-        return source->GetObjectCount();
-    }
-    const LVContainerItemInfo *GetObjectInfo(int index) override {
+    explicit ContentContainer(LVContainerRef source) : source(source) { }
+
+    bool IsContainer() override { return true; }
+
+    const lChar32 *GetName() override { return source->GetName(); }
+
+    LVContainer *GetParentContainer() override { return source->GetParentContainer(); }
+
+    lverror_t GetSize(lvsize_t *size) override { return source->GetSize(size); }
+
+    int GetObjectCount() const override { return source->GetObjectCount(); }
+
+    const LVContainerItemInfo *GetObjectInfo(int index) override
+    {
         return source->GetObjectInfo(index);
     }
-    const LVContainerItemInfo *GetObjectInfo(lString32 name) override {
+
+    const LVContainerItemInfo *GetObjectInfo(lString32 name) override
+    {
         return source->GetObjectInfo(name);
     }
-    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override {
+
+    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
+    {
         auto stream = source->OpenStream(name, mode);
         const auto suffix = QFileInfo(qstring(lString32(name))).suffix().toLower();
         // Bound the temporary chapter copy; leave large or non-text resources streamed.
         constexpr lvsize_t limit = 2 * 1024 * 1024;
-        if (stream.isNull() || mode != LVOM_READ ||
-            !(suffix.isEmpty() || suffix == "html" || suffix == "xhtml" || suffix == "htm" || suffix == "xml") ||
-            stream->GetSize() > limit) {
+        if (stream.isNull() || mode != LVOM_READ
+            || !(suffix.isEmpty() || suffix == "html" || suffix == "xhtml" || suffix == "htm"
+                 || suffix == "xml")
+            || stream->GetSize() > limit) {
             return stream;
         }
         QByteArray bytes(int(stream->GetSize()), '\0');
         lvsize_t read = 0;
-        if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK || read != lvsize_t(bytes.size())) {
+        if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK
+            || read != lvsize_t(bytes.size())) {
             stream->SetPos(0);
             return stream;
         }
@@ -236,20 +279,29 @@ public:
 protected:
     LVContainerRef source;
 };
-class SectionContainer : public ContentContainer {
+
+class SectionContainer : public ContentContainer
+{
 public:
     SectionContainer(LVContainerRef source, lString32 packagePath, QByteArray package)
-        : ContentContainer(source), packagePath(packagePath), package(std::move(package)) {
+        : ContentContainer(source), packagePath(packagePath), package(std::move(package))
+    {
         packageInfo.SetItemInfo(packagePath, this->package.size(), 0);
     }
-    const LVContainerItemInfo *GetObjectInfo(int index) override {
+
+    const LVContainerItemInfo *GetObjectInfo(int index) override
+    {
         const auto *item = source->GetObjectInfo(index);
         return item && lString32(item->GetName()) == packagePath ? &packageInfo : item;
     }
-    const LVContainerItemInfo *GetObjectInfo(lString32 name) override {
+
+    const LVContainerItemInfo *GetObjectInfo(lString32 name) override
+    {
         return name == packagePath ? &packageInfo : source->GetObjectInfo(name);
     }
-    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override {
+
+    LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
+    {
         if (mode != LVOM_READ) {
             return {};
         }
@@ -265,8 +317,10 @@ private:
     LVCommonContainerItemInfo packageInfo;
 };
 
-}
-bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error) {
+} // namespace
+
+bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error)
+{
     auto fail = [error](const QString &message) {
         *error = message;
         return false;
@@ -321,49 +375,67 @@ bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error) {
 }
 
 bool EngineDocument::open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,
-                       OpeningProgress progress) {
+                          OpeningProgress progress)
+{
     if (!supportedArchive(bytes, error))
         return false;
     auto source = std::make_shared<ReaderSource>();
     source->bytes = std::move(bytes);
-    source->container =
-        LVOpenArchieve(LVCreateMemoryStream(source->bytes.data(), source->bytes.size(), false, LVOM_READ));
+    source->container = LVOpenArchieve(
+            LVCreateMemoryStream(source->bytes.data(), source->bytes.size(), false, LVOM_READ));
     if (source->container.isNull()) {
         *error = strings::get("error.the_reading_engine_could_not_open_this_epub");
         return false;
     }
     return openSource(std::move(source), size, saved, error, std::move(progress));
 }
-bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes,
-                                QSize size, const QJsonObject &saved, QString *error, OpeningProgress progress,
-                                OpeningResult *result, std::function<void()> coverReady) {
+
+bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources,
+                                   const QMap<QString, qint64> &sizes, QSize size,
+                                   const QJsonObject &saved, QString *error,
+                                   OpeningProgress progress, OpeningResult *result,
+                                   std::function<void()> coverReady)
+{
     auto source = std::make_shared<ReaderSource>();
     source->resources = std::move(resources);
     source->sizes = sizes;
     source->container = LVContainerRef(new ResourceContainer(source->resources, sizes));
-    return openSource(std::move(source), size, saved, error, std::move(progress), result, std::move(coverReady));
+    return openSource(std::move(source), size, saved, error, std::move(progress), result,
+                      std::move(coverReady));
 }
-bool EngineDocument::rebindResources(const std::shared_ptr<ResourceCache> &resources, const QMap<QString, qint64> &sizes) {
+
+bool EngineDocument::rebindResources(const std::shared_ptr<ResourceCache> &resources,
+                                     const QMap<QString, qint64> &sizes)
+{
     // Previews retain ReaderSource as their parent. Do not change their access
     // underneath them, even if the main reader itself has already closed.
-    if (!source_ || source_.use_count() != 1 || !source_->resources || source_->sizes != sizes || !resources)
+    if (!source_ || source_.use_count() != 1 || !source_->resources || source_->sizes != sizes
+        || !resources)
         return false;
     return source_->resources->rebind(*resources);
 }
-QString EngineDocument::resourceError() const {
+
+QString EngineDocument::resourceError() const
+{
     return source_ && source_->resources ? source_->resources->error() : QString();
 }
-QJsonObject EngineDocument::resourceStats() const {
+
+QJsonObject EngineDocument::resourceStats() const
+{
     auto result = source_ && source_->resources ? source_->resources->statistics() : QJsonObject();
     for (auto at = openingTimes_.begin(); at != openingTimes_.end(); ++at)
         result.insert(at.key(), at.value());
     return result;
 }
-bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved, QString *error,
-                             OpeningProgress progress, OpeningResult *result, std::function<void()> coverReady) {
+
+bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size,
+                                const QJsonObject &saved, QString *error, OpeningProgress progress,
+                                OpeningResult *result, std::function<void()> coverReady)
+{
     if (result)
         *result = {};
-    const auto fail = [error, result](OpeningFailureKind kind, const char *reason, const QString &detail = QString()) {
+    const auto fail = [error, result](OpeningFailureKind kind, const char *reason,
+                                      const QString &detail = QString()) {
         if (result)
             *result = OpeningResult::failed(kind, reason, detail);
         // Old direct-engine/preview callers still receive their original text.
@@ -380,15 +452,18 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     auto mime = source->container->OpenStream(U"mimetype", LVOM_READ);
     QByteArray mediaType(expectedType.size(), '\0');
     lvsize_t read = 0;
-    if (mime.isNull() || mime->GetSize() != lvsize_t(mediaType.size()) ||
-        mime->Read(mediaType.data(), mediaType.size(), &read) != LVERR_OK || read != lvsize_t(mediaType.size()) ||
-        mediaType != expectedType) {
+    if (mime.isNull() || mime->GetSize() != lvsize_t(mediaType.size())
+        || mime->Read(mediaType.data(), mediaType.size(), &read) != LVERR_OK
+        || read != lvsize_t(mediaType.size()) || mediaType != expectedType) {
         if (source->resources && !source->resources->error().isEmpty())
-            return fail(OpeningFailureKind::Io, "opening.resource-read", source->resources->error());
-        return fail(OpeningFailureKind::Unsupported, strings::key("error.the_publication_is_not_an_epub"));
+            return fail(OpeningFailureKind::Io, "opening.resource-read",
+                        source->resources->error());
+        return fail(OpeningFailureKind::Unsupported,
+                    strings::key("error.the_publication_is_not_an_epub"));
     }
     if (!initializeFonts())
-        return fail(OpeningFailureKind::HostUnavailable, strings::key("error.the_reading_font_is_unavailable"));
+        return fail(OpeningFailureKind::HostUnavailable,
+                    strings::key("error.the_reading_font_is_unavailable"));
     configure(size, saved);
     openedFromCache_ = false;
     // Stream loading does not set a filename. CREngine uses its presence to
@@ -398,14 +473,17 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     auto properties = engine_->getDocProps();
     const bool keyed = !cacheDirectory_.isEmpty() && !cacheFingerprint_.isEmpty();
     if (keyed) {
-        properties->setString(DOC_PROP_FILE_NAME,
-                              Utf8ToUnicode(lString8(documentCacheName(cacheFingerprint_).toUtf8().constData())));
+        properties->setString(
+                DOC_PROP_FILE_NAME,
+                Utf8ToUnicode(lString8(documentCacheName(cacheFingerprint_).toUtf8().constData())));
         properties->setHex(
-            DOC_PROP_FILE_CRC32,
-            documentCacheChecksum(documentCachePolicy() + ":bionic-v3:" + bionic_.toUtf8(), domVersion_));
-        properties->setString(DOC_PROP_FILE_SIZE, lString32::itoa(int(cacheBytes_ < 0         ? 0
-                                                                      : cacheBytes_ > INT_MAX ? INT_MAX
-                                                                                              : cacheBytes_)));
+                DOC_PROP_FILE_CRC32,
+                documentCacheChecksum(documentCachePolicy() + ":bionic-v3:" + bionic_.toUtf8(),
+                                      domVersion_));
+        properties->setString(DOC_PROP_FILE_SIZE,
+                              lString32::itoa(int(cacheBytes_ < 0                 ? 0
+                                                          : cacheBytes_ > INT_MAX ? INT_MAX
+                                                                                  : cacheBytes_)));
     } else
         properties->setString(DOC_PROP_FILE_NAME, lString32(U"publication.epub"));
     if (!source->parent) {
@@ -426,9 +504,10 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     if (!loaded) {
         const auto resourceFailure = resourceError();
         engine_.reset();
-        return resourceFailure.isEmpty() ? fail(OpeningFailureKind::InvalidContent,
-                                                strings::key("error.the_reading_engine_could_not_open_this_epub"))
-                                         : fail(OpeningFailureKind::Io, "opening.resource-read", resourceFailure);
+        return resourceFailure.isEmpty()
+                ? fail(OpeningFailureKind::InvalidContent,
+                       strings::key("error.the_reading_engine_could_not_open_this_epub"))
+                : fail(OpeningFailureKind::Io, "opening.resource-read", resourceFailure);
     }
     if (coverReady)
         coverReady();
@@ -474,18 +553,22 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     }
     if (!pages()) {
         engine_.reset();
-        return fail(OpeningFailureKind::InvalidContent, strings::key("error.the_publication_has_no_pages"));
+        return fail(OpeningFailureKind::InvalidContent,
+                    strings::key("error.the_publication_has_no_pages"));
     }
     engine_->getCurPage();
     anchor_ = qstring(engine_->getBookmark().toString());
     const auto bookmark = saved.value("position").toString();
     if (!bookmark.isEmpty() && !goTo(bookmark)) {
         engine_.reset();
-        return fail(OpeningFailureKind::InvalidContent, strings::key("error.saved_reading_position_no_longer_exists"));
+        return fail(OpeningFailureKind::InvalidContent,
+                    strings::key("error.saved_reading_position_no_longer_exists"));
     }
     return true;
 }
-bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *error) {
+
+bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *error)
+{
     auto fail = [error](const QString &message) {
         *error = message;
         return false;
@@ -515,7 +598,8 @@ bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *er
         }
         QByteArray data(int(stream->GetSize()), '\0');
         lvsize_t count = 0;
-        if (stream->Read(data.data(), data.size(), &count) != LVERR_OK || count != lvsize_t(data.size())) {
+        if (stream->Read(data.data(), data.size(), &count) != LVERR_OK
+            || count != lvsize_t(data.size())) {
             resourceError = true;
             return {};
         }
@@ -538,7 +622,8 @@ bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *er
     while (!manifest.atEnd()) {
         manifest.readNext();
         if (manifest.isStartElement() && manifest.name() == QStringLiteral("item")) {
-            const auto href = QUrl::fromPercentEncoding(manifest.attributes().value("href").toUtf8());
+            const auto href =
+                    QUrl::fromPercentEncoding(manifest.attributes().value("href").toUtf8());
             if (QDir::cleanPath(QFileInfo(packagePath).path() + '/' + href) == section)
                 sectionId = manifest.attributes().value("id").toString();
         }
@@ -561,17 +646,23 @@ bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *er
             selected = true;
         }
         const bool spine = input.isStartElement() && input.name() == QStringLiteral("spine");
-        const bool navigation = input.isStartElement() && input.name() == QStringLiteral("item") &&
-                                input.attributes().value("properties").toString()
-                                    .split(QRegularExpression("\\s+"), qt::skipEmptyParts).contains("nav");
+        const bool navigation = input.isStartElement() && input.name() == QStringLiteral("item")
+                && input.attributes()
+                           .value("properties")
+                           .toString()
+                           .split(QRegularExpression("\\s+"), qt::skipEmptyParts)
+                           .contains("nav");
         if (spine || navigation) {
             // This package has one section. Whole-book navigation otherwise
             // points at absent fragments and adds warnings to every preview.
             output.writeStartElement(input.qualifiedName().toString());
             for (const auto &declaration : input.namespaceDeclarations())
-                output.writeNamespace(declaration.namespaceUri().toString(), declaration.prefix().toString());
+                output.writeNamespace(declaration.namespaceUri().toString(),
+                                      declaration.prefix().toString());
             for (const auto &attribute : input.attributes()) {
-                if (spine && (attribute.name() == QStringLiteral("toc") || attribute.name() == QStringLiteral("page-map")))
+                if (spine
+                    && (attribute.name() == QStringLiteral("toc")
+                        || attribute.name() == QStringLiteral("page-map")))
                     continue;
                 auto value = attribute.value().toString();
                 if (navigation && attribute.name() == QStringLiteral("properties")) {
@@ -596,7 +687,8 @@ bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *er
     auto preview = std::make_shared<ReaderSource>();
     preview->parent = source.source_;
     preview->resources = source.source_->resources;
-    preview->container = LVContainerRef(new SectionContainer(container, cre(packagePath), std::move(previewPackage)));
+    preview->container = LVContainerRef(
+            new SectionContainer(container, cre(packagePath), std::move(previewPackage)));
     auto settings = source.state();
     QString anchor = source.position();
     anchor.replace(QRegularExpression("/DocFragment(?:\\[\\d+\\])?"), "/DocFragment[1]");
@@ -604,4 +696,4 @@ bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *er
     userStyleSheet_ = source.userStyleSheet_;
     return openSource(std::move(preview), size, settings, error);
 }
-}
+} // namespace kobalt

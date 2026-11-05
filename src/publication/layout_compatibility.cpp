@@ -9,7 +9,8 @@
 #include <QTextStream>
 
 namespace kobalt {
-const char *LayoutCompatibility::reasonKey() const {
+const char *LayoutCompatibility::reasonKey() const
+{
     switch (verdict) {
     case Supported:
         return "";
@@ -22,13 +23,18 @@ const char *LayoutCompatibility::reasonKey() const {
     }
     return strings::key("error.publication_layout_inspection_is_incomplete");
 }
-QString LayoutCompatibility::reason() const {
+
+QString LayoutCompatibility::reason() const
+{
     return verdict == Supported ? QString() : strings::get(reasonKey());
 }
+
 namespace {
 constexpr qint64 resourceLimit = 2 * 1024 * 1024, totalLimit = 8 * 1024 * 1024;
 constexpr int resourceCount = 512, timeLimit = 15000;
-QString xmlSource(QByteArray bytes) {
+
+QString xmlSource(QByteArray bytes)
+{
     // Match XML's UTF-16 detection even when the document has no BOM.
     if (bytes.startsWith(QByteArray::fromHex("003c"))) {
         bytes.prepend(QByteArray::fromHex("feff"));
@@ -36,7 +42,8 @@ QString xmlSource(QByteArray bytes) {
         bytes.prepend(QByteArray::fromHex("fffe"));
     }
     QTextStream stream(&bytes, QIODevice::ReadOnly);
-    static const QRegularExpression declaration(QStringLiteral("^<\\?xml\\s[^>]*encoding\\s*=\\s*['\"]([^'\"]+)['\"]"));
+    static const QRegularExpression declaration(
+            QStringLiteral("^<\\?xml\\s[^>]*encoding\\s*=\\s*['\"]([^'\"]+)['\"]"));
     const auto encoding = declaration.match(QString::fromLatin1(bytes.left(512))).captured(1);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     stream.setCodec(encoding.isEmpty() ? "UTF-8" : encoding.toLatin1().constData());
@@ -47,24 +54,31 @@ QString xmlSource(QByteArray bytes) {
 #endif
     return stream.readAll();
 }
-QString boundedDiagnostic(QString text, int limit) {
+
+QString boundedDiagnostic(QString text, int limit)
+{
     text.truncate(limit);
     for (int i = 0; i < text.size(); ++i) {
         const auto character = text.at(i);
-        if (character.category() == QChar::Other_Control && character != '\n' && character != '\t') {
+        if (character.category() == QChar::Other_Control && character != '\n'
+            && character != '\t') {
             text[i] = QChar(0xfffd);
         }
     }
     return text;
 }
-struct Token {
+
+struct Token
+{
     QString value;
     int offset = 0;
     bool identifier = false, string = false;
 };
+
 // Preserve strings and comments as tokens so examples in generated content do
 // not look like declarations. CSS escapes also apply to property names/URLs.
-bool tokenize(const QString &css, QVector<Token> &tokens, int &i, QString &error) {
+bool tokenize(const QString &css, QVector<Token> &tokens, int &i, QString &error)
+{
     i = 0;
     auto escape = [&](QString &out) {
         if (++i >= css.size()) {
@@ -75,7 +89,9 @@ bool tokenize(const QString &css, QVector<Token> &tokens, int &i, QString &error
         int digits = 0;
         while (i < css.size() && digits < 6) {
             const auto c = css[i].toLower().unicode();
-            const int hex = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+            const int hex = c >= '0' && c <= '9' ? c - '0'
+                    : c >= 'a' && c <= 'f'       ? c - 'a' + 10
+                                                 : -1;
             if (hex < 0)
                 break;
             code = code * 16 + uint(hex);
@@ -130,7 +146,9 @@ bool tokenize(const QString &css, QVector<Token> &tokens, int &i, QString &error
             ++i;
         } else if (css[i].isLetterOrNumber() || css[i] == '-' || css[i] == '_' || css[i] == '\\') {
             token.identifier = true;
-            while (i < css.size() && (css[i].isLetterOrNumber() || css[i] == '-' || css[i] == '_' || css[i] == '\\')) {
+            while (i < css.size()
+                   && (css[i].isLetterOrNumber() || css[i] == '-' || css[i] == '_'
+                       || css[i] == '\\')) {
                 if (css[i] == '\\') {
                     if (!escape(token.value))
                         return false;
@@ -143,7 +161,9 @@ bool tokenize(const QString &css, QVector<Token> &tokens, int &i, QString &error
     }
     return true;
 }
-class Inspection {
+
+class Inspection
+{
 public:
     ResourceCache &cache;
     const QMap<QString, qint64> &sizes;
@@ -155,10 +175,15 @@ public:
     qint64 currentOffset = 0, hintOffset = 0;
     QString hintResource, hintSource;
     bool vertical = false, verticalHint = false, verticalStyle = false, complete = true;
-    Inspection(ResourceCache &cache, const QMap<QString, qint64> &sizes) : cache(cache), sizes(sizes) {
+
+    Inspection(ResourceCache &cache, const QMap<QString, qint64> &sizes)
+        : cache(cache), sizes(sizes)
+    {
         clock.start();
     }
-    void issue(const QString &message) {
+
+    void issue(const QString &message)
+    {
         if (!result.issue.isEmpty()) {
             return;
         }
@@ -173,11 +198,15 @@ public:
             result.column = offset - preceding.lastIndexOf('\n');
         }
     }
-    void fail(const QString &message) {
+
+    void fail(const QString &message)
+    {
         issue(message);
         complete = false;
     }
-    void xmlError(const QXmlStreamReader &xml) {
+
+    void xmlError(const QXmlStreamReader &xml)
+    {
         if (!xml.hasError()) {
             return;
         }
@@ -189,10 +218,12 @@ public:
             result.column = xml.columnNumber();
         }
     }
-    QString resolve(const QString &base, const QString &reference) {
+
+    QString resolve(const QString &base, const QString &reference)
+    {
         const QUrl relative(reference);
-        if (reference.isEmpty() || !relative.isValid() || !relative.scheme().isEmpty() ||
-            !relative.authority().isEmpty() || relative.hasQuery() || reference.contains('\\')) {
+        if (reference.isEmpty() || !relative.isValid() || !relative.scheme().isEmpty()
+            || !relative.authority().isEmpty() || relative.hasQuery() || reference.contains('\\')) {
             fail(QStringLiteral("Invalid resource reference: %1").arg(reference));
             return {};
         }
@@ -208,7 +239,9 @@ public:
         }
         return name;
     }
-    QByteArray read(const QString &name) {
+
+    QByteArray read(const QString &name)
+    {
         QString limit;
         if (name.isEmpty() || sizes.value(name, -1) < 0) {
             limit = QStringLiteral("Resource is absent from the publication directory");
@@ -217,10 +250,12 @@ public:
         } else if (result.resources >= resourceCount) {
             limit = QStringLiteral("Inspection exceeded its 512 resource limit");
         } else if (sizes.value(name) > resourceLimit) {
-            limit = QStringLiteral("Resource exceeds the 2 MiB inspection limit: %1 bytes").arg(sizes.value(name));
+            limit = QStringLiteral("Resource exceeds the 2 MiB inspection limit: %1 bytes")
+                            .arg(sizes.value(name));
         } else if (sizes.value(name) > totalLimit - result.bytes || result.bytes >= totalLimit) {
-            limit = QStringLiteral("Resource exceeds the remaining 8 MiB inspection budget: %1 bytes remaining")
-                        .arg(totalLimit - result.bytes);
+            limit = QStringLiteral(
+                            "Resource exceeds the remaining 8 MiB inspection budget: %1 bytes remaining")
+                            .arg(totalLimit - result.bytes);
         }
         if (!limit.isEmpty()) {
             currentResource = name;
@@ -254,7 +289,9 @@ public:
         result.bytes += data.size();
         return data;
     }
-    void queue(const QString &base, const QString &href, bool css) {
+
+    void queue(const QString &base, const QString &href, bool css)
+    {
         const auto name = resolve(base, href);
         if (name.isEmpty() || seen.contains(name))
             return;
@@ -263,9 +300,11 @@ public:
             return;
         }
         seen.insert(name);
-        pending.append({name, css});
+        pending.append({ name, css });
     }
-    void mode(QString value, bool metadata = false, bool supportedProperty = true) {
+
+    void mode(QString value, bool metadata = false, bool supportedProperty = true)
+    {
         value = value.trimmed().toLower();
         if (value == "vertical-rl" && (metadata || supportedProperty)) {
             if (metadata) {
@@ -278,18 +317,21 @@ public:
             }
             return;
         }
-        if (QStringList{"vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr", "tb", "tb-rl", "tb-lr"}.contains(
-                value)) {
+        if (QStringList{ "vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr", "tb", "tb-rl",
+                         "tb-lr" }
+                    .contains(value)) {
             vertical = true;
             issue(QStringLiteral("Unsupported writing mode: %1").arg(value));
         } else if (metadata && value == "horizontal-rl")
             fail(QStringLiteral("Unsupported metadata writing mode: %1").arg(value));
-        else if (!QStringList{"horizontal-tb", "horizontal-lr", "lr", "lr-tb", "rl", "rl-tb", "initial", "inherit",
-                              "unset", "revert", "revert-layer"}
-                      .contains(value))
+        else if (!QStringList{ "horizontal-tb", "horizontal-lr", "lr", "lr-tb", "rl", "rl-tb",
+                               "initial", "inherit", "unset", "revert", "revert-layer" }
+                          .contains(value))
             fail(QStringLiteral("Unknown writing mode: %1").arg(value));
     }
-    void css(const QString &base, const QString &source) {
+
+    void css(const QString &base, const QString &source)
+    {
         const auto savedResource = currentResource;
         const auto savedSource = currentSource;
         const auto savedOffset = currentOffset;
@@ -307,16 +349,18 @@ public:
             const auto &token = tokens[i];
             currentOffset = token.offset;
             const QString name = token.value.toLower();
-            if (token.identifier &&
-                (name == "writing-mode" || name == "-epub-writing-mode" || name == "-webkit-writing-mode" ||
-                 name == "-ms-writing-mode" || name == "-moz-writing-mode" || name == "-o-writing-mode") &&
-                i + 2 < tokens.size() && tokens[i + 1].value == ":") {
+            if (token.identifier
+                && (name == "writing-mode" || name == "-epub-writing-mode"
+                    || name == "-webkit-writing-mode" || name == "-ms-writing-mode"
+                    || name == "-moz-writing-mode" || name == "-o-writing-mode")
+                && i + 2 < tokens.size() && tokens[i + 1].value == ":") {
                 const auto &value = tokens[i + 2];
                 if (!value.identifier || (i + 3 < tokens.size() && tokens[i + 3].value == "("))
                     fail(QStringLiteral("Writing mode cannot be resolved statically"));
                 else
                     mode(value.value, false,
-                         name == "writing-mode" || name == "-epub-writing-mode" || name == "-webkit-writing-mode");
+                         name == "writing-mode" || name == "-epub-writing-mode"
+                                 || name == "-webkit-writing-mode");
             }
             // text-orientation (including prefixed forms) only changes glyphs
             // in vertical writing. It does not make horizontal text vertical.
@@ -324,14 +368,16 @@ public:
                 continue;
             const auto rule = tokens[i + 1].value.toLower();
             if (rule == "charset") {
-                if (i + 2 >= tokens.size() || tokens[i + 2].value.compare("utf-8", Qt::CaseInsensitive))
+                if (i + 2 >= tokens.size()
+                    || tokens[i + 2].value.compare("utf-8", Qt::CaseInsensitive))
                     fail(QStringLiteral("Stylesheet charset is not UTF-8"));
             } else if (rule == "import") {
                 int at = i + 2;
                 if (at < tokens.size() && tokens[at].string)
                     queue(base, tokens[at].value, true);
-                else if (at + 2 < tokens.size() && tokens[at].value.compare("url", Qt::CaseInsensitive) == 0 &&
-                         tokens[at + 1].value == "(") {
+                else if (at + 2 < tokens.size()
+                         && tokens[at].value.compare("url", Qt::CaseInsensitive) == 0
+                         && tokens[at + 1].value == "(") {
                     at += 2;
                     QString url;
                     while (at < tokens.size() && tokens[at].value != ")")
@@ -348,7 +394,9 @@ public:
         currentSource = savedSource;
         currentOffset = savedOffset;
     }
-    void document(const QString &path) {
+
+    void document(const QString &path)
+    {
         currentResource = path;
         const auto bytes = read(path);
         currentSource = xmlSource(bytes);
@@ -357,7 +405,8 @@ public:
         while (!xml.atEnd() && complete && !vertical) {
             xml.readNext();
             currentOffset = xml.characterOffset();
-            if (xml.isProcessingInstruction() && xml.processingInstructionTarget().toString() == "xml-stylesheet")
+            if (xml.isProcessingInstruction()
+                && xml.processingInstructionTarget().toString() == "xml-stylesheet")
                 fail(QStringLiteral("XML stylesheet processing instruction is not supported"));
             if (!xml.isStartElement())
                 continue;
@@ -369,7 +418,8 @@ public:
                 xml.skipCurrentElement();
                 continue;
             }
-            if (attrs.hasAttribute("http://www.w3.org/XML/1998/namespace", "base") || name == "base")
+            if (attrs.hasAttribute("http://www.w3.org/XML/1998/namespace", "base")
+                || name == "base")
                 fail(QStringLiteral("XML base changes resource resolution"));
             if (attrs.hasAttribute("style"))
                 css(path, attrs.value("style").toString());
@@ -382,18 +432,20 @@ public:
             // CREngine loads CSS links only. Adobe page templates and other
             // explicitly declared types cannot affect its layout.
             const auto stylesheetType = attrs.value("type").toString().toLower();
-            if (name == "link" && (stylesheetType.isEmpty() || stylesheetType == "text/css") &&
-                attrs.value("rel")
-                    .toString()
-                    .toLower()
-                    .split(QRegularExpression("\\s+"), kobalt::qt::skipEmptyParts)
-                    .contains("stylesheet")) {
+            if (name == "link" && (stylesheetType.isEmpty() || stylesheetType == "text/css")
+                && attrs.value("rel")
+                           .toString()
+                           .toLower()
+                           .split(QRegularExpression("\\s+"), kobalt::qt::skipEmptyParts)
+                           .contains("stylesheet")) {
                 queue(path, attrs.value("href").toString(), true);
             }
         }
         xmlError(xml);
     }
-    LayoutCompatibility run() {
+
+    LayoutCompatibility run()
+    {
         currentResource = QStringLiteral("META-INF/container.xml");
         const auto containerBytes = read(currentResource);
         currentSource = xmlSource(containerBytes);
@@ -431,17 +483,19 @@ public:
             if (a.hasAttribute("http://www.w3.org/XML/1998/namespace", "base"))
                 fail(QStringLiteral("XML base changes package resource resolution"));
             if (name == "meta") {
-                const auto key =
-                    a.value("name").isEmpty() ? a.value("property").toString() : a.value("name").toString();
+                const auto key = a.value("name").isEmpty() ? a.value("property").toString()
+                                                           : a.value("name").toString();
                 if (key.contains("writing-mode", Qt::CaseInsensitive))
-                    mode(a.hasAttribute("content") ? a.value("content").toString() : opf.readElementText(), true);
+                    mode(a.hasAttribute("content") ? a.value("content").toString()
+                                                   : opf.readElementText(),
+                         true);
             } else if (name == "item") {
                 const auto id = a.value("id").toString();
                 const auto media = a.value("media-type").toString();
                 QMap<QString, QString> attributes;
                 for (const auto &attribute : a) {
-                    attributes[attribute.namespaceUri().toString() + QChar(0) + attribute.name().toString()] =
-                        attribute.value().toString();
+                    attributes[attribute.namespaceUri().toString() + QChar(0)
+                               + attribute.name().toString()] = attribute.value().toString();
                 }
                 if (id.isEmpty()) {
                     fail(QStringLiteral("Manifest item has no ID"));
@@ -464,7 +518,8 @@ public:
                     queue(package, manifest[id], false);
             } else if (name == "spine") {
                 const auto direction = a.value("page-progression-direction").toString();
-                if (!direction.isEmpty() && direction != "rtl" && direction != "ltr" && direction != "default")
+                if (!direction.isEmpty() && direction != "rtl" && direction != "ltr"
+                    && direction != "default")
                     fail(QStringLiteral("Unknown page progression: %1").arg(direction));
             } else if (name == "itemref")
                 spine.append(a.value("idref").toString());
@@ -499,13 +554,14 @@ public:
             } else
                 document(entry.first);
         }
-        result.transientFailure = clock.elapsed() > timeLimit ||
-                                  (!cache.error().isEmpty() && cache.failure() != ResourceCache::Failure::Limit);
+        result.transientFailure = clock.elapsed() > timeLimit
+                || (!cache.error().isEmpty() && cache.failure() != ResourceCache::Failure::Limit);
         if (result.transientFailure)
             fail(QStringLiteral("Inspection interrupted or resource transport failed"));
-        result.verdict = (vertical || (verticalHint && !verticalStyle)) ? LayoutCompatibility::VerticalWriting
-                         : complete                                     ? LayoutCompatibility::Supported
-                                                                        : LayoutCompatibility::Incomplete;
+        result.verdict = (vertical || (verticalHint && !verticalStyle))
+                ? LayoutCompatibility::VerticalWriting
+                : complete ? LayoutCompatibility::Supported
+                           : LayoutCompatibility::Incomplete;
         if (result.verdict == LayoutCompatibility::VerticalWriting && result.issue.isEmpty()) {
             currentResource = hintResource;
             currentSource = hintSource;
@@ -521,8 +577,10 @@ public:
         return result;
     }
 };
-}
-LayoutCompatibility inspectLayout(ResourceCache &resources, const QMap<QString, qint64> &sizes) {
+} // namespace
+
+LayoutCompatibility inspectLayout(ResourceCache &resources, const QMap<QString, qint64> &sizes)
+{
     return Inspection(resources, sizes).run();
 }
-}
+} // namespace kobalt

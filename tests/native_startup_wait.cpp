@@ -2,10 +2,17 @@
 #include <cstdio>
 #include <initializer_list>
 
-#define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "line %d: %s\n", __LINE__, #value); return 1; } } while (0)
+#define CHECK(value)                                                 \
+    do {                                                             \
+        if (!(value)) {                                              \
+            std::fprintf(stderr, "line %d: %s\n", __LINE__, #value); \
+            return 1;                                                \
+        }                                                            \
+    } while (0)
 
 // Checks the shared Qt5 and Qt6 startup wait: ready before 30 seconds, one timeout at 30 seconds and later recovery, with no sleeping.
-int main() {
+int main()
+{
     using kobalt::nickel::NativeStartupWait;
     using Result = NativeStartupWait::Result;
     NativeStartupWait normal;
@@ -19,7 +26,7 @@ int main() {
     CHECK(boundary.update(true, 31066) == Result::Ready);
 
     // Both captured slow starts completed about 31.3 seconds into this wait.
-    for (const auto completion : {31305, 31284}) {
+    for (const auto completion : { 31305, 31284 }) {
         NativeStartupWait slow;
         CHECK(slow.update(false, 29999) == Result::Waiting);
         CHECK(slow.update(false, 30000) == Result::TimedOut);

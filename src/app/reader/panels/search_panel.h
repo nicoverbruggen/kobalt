@@ -10,7 +10,8 @@
 #include <QTimer>
 
 namespace kobalt {
-class SearchPanel : public ui::Panel {
+class SearchPanel : public ui::Panel
+{
 public:
     SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard);
     std::function<void(QString)> requested;
@@ -59,4 +60,4 @@ private:
     void run();
     void redraw();
 };
-}
+} // namespace kobalt

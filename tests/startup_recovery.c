@@ -5,17 +5,25 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define CHECK(value) do { if (!(value)) { fprintf(stderr, "line %d: %s\n", __LINE__, #value); return 1; } } while (0)
+#define CHECK(value)                                            \
+    do {                                                        \
+        if (!(value)) {                                         \
+            fprintf(stderr, "line %d: %s\n", __LINE__, #value); \
+            return 1;                                           \
+        }                                                       \
+    } while (0)
 
 // Checks the startup marker: removal after two unfinished starts, the removal notice, streak resets, old and invalid markers and unusable paths.
-int main(void) {
+int main(void)
+{
     char directory[4096], path[4096], link[4096], notice[4096];
     const char *tmp = getenv("TMPDIR");
     snprintf(directory, sizeof(directory), "%s/kobalt-startup.XXXXXX", tmp ? tmp : "/tmp");
     CHECK(mkdtemp(directory));
     CHECK(snprintf(path, sizeof(path), "%s/startup-session", directory) < (int)sizeof(path));
     CHECK(snprintf(link, sizeof(link), "%s/link", directory) < (int)sizeof(link));
-    CHECK(snprintf(notice, sizeof(notice), "%s/startup-removed.txt", directory) < (int)sizeof(notice));
+    CHECK(snprintf(notice, sizeof(notice), "%s/startup-removed.txt", directory)
+          < (int)sizeof(notice));
     CHECK(!kobalt_startup_remove(path));
     CHECK(kobalt_startup_begin(path));
     CHECK(!kobalt_startup_remove(path)); // One crash is insufficient.
@@ -24,7 +32,7 @@ int main(void) {
     CHECK(!kobalt_startup_begin(path));
     CHECK(kobalt_startup_removed(notice));
     FILE *explanation = fopen(notice, "r");
-    char message[256] = {0};
+    char message[256] = { 0 };
     CHECK(explanation && fread(message, 1, sizeof(message) - 1, explanation) > 0);
     CHECK(fclose(explanation) == 0);
     CHECK(strstr(message, "two startups in a row did not finish"));
@@ -65,8 +73,8 @@ int main(void) {
 
     // Migrate the exact old marker and preserve timestamped counts regardless
     // of clock changes or time spent waiting before restarting a hung device.
-    const char *old[] = {"Kobalt startup did not complete.\n", "kobalt-startup-v1 1 1\n",
-        "kobalt-startup-v1 1 9999999999\n"};
+    const char *old[] = { "Kobalt startup did not complete.\n", "kobalt-startup-v1 1 1\n",
+                          "kobalt-startup-v1 1 9999999999\n" };
     for (unsigned i = 0; i < sizeof(old) / sizeof(*old); ++i) {
         FILE *file = fopen(path, "w");
         CHECK(file && fputs(old[i], file) >= 0 && fclose(file) == 0);
@@ -76,7 +84,7 @@ int main(void) {
         CHECK(kobalt_startup_complete(path));
     }
 
-    const char *twice[] = {"kobalt-startup-v1 2 1\n", "kobalt-startup-v1 2 9999999999\n"};
+    const char *twice[] = { "kobalt-startup-v1 2 1\n", "kobalt-startup-v1 2 9999999999\n" };
     for (unsigned i = 0; i < sizeof(twice) / sizeof(*twice); ++i) {
         FILE *previous = fopen(path, "w");
         CHECK(previous && fputs(twice[i], previous) >= 0 && fclose(previous) == 0);
@@ -84,10 +92,18 @@ int main(void) {
         CHECK(kobalt_startup_complete(path));
     }
 
-    const char *invalid[] = {"", "Kobalt startup did not complete.", "Kobalt startup did not complete.\nextra", "kobalt-startup-v2 3\n", "kobalt-startup-v1 3 1800000000\n",
-        "kobalt-startup-v1 2 +1\n", "kobalt-startup-v1 2  1\n", "kobalt-startup-v1 2 \n1\n", "kobalt-startup-v1 2 01\n",
-        "kobalt-startup-v1 2 1800000000 garbage", "kobalt-startup-v1 2 -1\n",
-        "kobalt-startup-v1 2 999999999999999999999999999999999999\n"};
+    const char *invalid[] = { "",
+                              "Kobalt startup did not complete.",
+                              "Kobalt startup did not complete.\nextra",
+                              "kobalt-startup-v2 3\n",
+                              "kobalt-startup-v1 3 1800000000\n",
+                              "kobalt-startup-v1 2 +1\n",
+                              "kobalt-startup-v1 2  1\n",
+                              "kobalt-startup-v1 2 \n1\n",
+                              "kobalt-startup-v1 2 01\n",
+                              "kobalt-startup-v1 2 1800000000 garbage",
+                              "kobalt-startup-v1 2 -1\n",
+                              "kobalt-startup-v1 2 999999999999999999999999999999999999\n" };
     for (unsigned i = 0; i < sizeof(invalid) / sizeof(*invalid); ++i) {
         FILE *file = fopen(path, "w");
         CHECK(file);
@@ -108,7 +124,8 @@ int main(void) {
     CHECK(kobalt_startup_complete(path));
     FILE *oversized = fopen(path, "w");
     CHECK(oversized);
-    for (int i = 0; i < 80; ++i) CHECK(fputc('x', oversized) != EOF);
+    for (int i = 0; i < 80; ++i)
+        CHECK(fputc('x', oversized) != EOF);
     CHECK(fclose(oversized) == 0);
     CHECK(!kobalt_startup_begin(path));
     CHECK(!kobalt_startup_remove(path));

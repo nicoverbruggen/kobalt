@@ -12,6 +12,7 @@ ResourceFactory localResourceFactory(QString path, std::shared_ptr<SourceLease> 
 namespace native {
 // Inspect the unencrypted archive before accepting the opening. The endpoint
 // owns no socket or open file; its resources use the existing cache contract.
-std::unique_ptr<PublicationEndpoint> openLocalPublication(const QString &path, QString *error = nullptr);
-}
-}
+std::unique_ptr<PublicationEndpoint> openLocalPublication(const QString &path,
+                                                          QString *error = nullptr);
+} // namespace native
+} // namespace kobalt

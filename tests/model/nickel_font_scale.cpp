@@ -6,28 +6,36 @@
 #include <QWidget>
 
 namespace {
-class Polishes final : public QProxyStyle {
+class Polishes final : public QProxyStyle
+{
 public:
-    void polish(QWidget *widget) override {
+    void polish(QWidget *widget) override
+    {
         polished.insert(widget);
         QProxyStyle::polish(widget);
     }
+
     using QProxyStyle::polish;
     QSet<QWidget *> polished;
 };
-bool scaled() {
+
+bool scaled()
+{
     return qApp->property("fontScale").isValid();
 }
-}
+} // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QApplication app(argc, argv);
     using kobalt::nickel::ignoreNativeFontScale;
     using kobalt::nickel::NativeFontScaleScope;
 
     using kobalt::nickel::nativeFontScale;
 
-    { NativeFontScaleScope building; }
+    {
+        NativeFontScaleScope building;
+    }
     require(!scaled(), "a scope without Large Print must not add the property");
     require(nativeFontScale() == 1, "the interface keeps its size without Large Print");
 
@@ -39,7 +47,9 @@ int main(int argc, char **argv) {
         NativeFontScaleScope building;
         require(!scaled(), "Kobalt windows must be built without Nickel's font scale");
         require(nativeFontScale() == 1.25, "the scale must stay readable while it is held");
-        { NativeFontScaleScope nested; }
+        {
+            NativeFontScaleScope nested;
+        }
         require(!scaled(), "a nested scope must not restore the scale early");
     }
     require(app.property("fontScale").toFloat() == 1.25f, "the scope must restore Nickel's value");
@@ -64,7 +74,8 @@ int main(int argc, char **argv) {
     require(scaled(), "destroying the last visible Kobalt window must restore the scale");
     opening->show();
     delete opening;
-    require(app.property("fontScale").toFloat() == 1.25f, "the restored value must be Nickel's value");
+    require(app.property("fontScale").toFloat() == 1.25f,
+            "the restored value must be Nickel's value");
 
     // Nickel widgets restyled without the scale must be styled again with it.
     Polishes style;
@@ -85,12 +96,14 @@ int main(int argc, char **argv) {
     }
     reading->hide();
     QCoreApplication::processEvents();
-    require(style.polished.contains(&library), "a Nickel widget restyled during the hold must be polished again");
+    require(style.polished.contains(&library),
+            "a Nickel widget restyled during the hold must be polished again");
     require(!style.polished.contains(panel), "a Kobalt widget must not be polished again");
     style.polished.clear();
     delete reading;
     QCoreApplication::processEvents();
-    require(style.polished.isEmpty(), "a widget restyled outside a hold must not be polished again");
+    require(style.polished.isEmpty(),
+            "a widget restyled outside a hold must not be polished again");
 
     // A Nickel dialog over Kobalt keeps Nickel's scale until it hides.
     using kobalt::nickel::allowNativeFontScale;
@@ -117,7 +130,8 @@ int main(int argc, char **argv) {
     dialog.hide();
     require(!scaled(), "the host keeps the scale out again once the dialog hides");
     QCoreApplication::processEvents();
-    require(style.polished.contains(hostPanel), "a Kobalt widget restyled under the dialog's scale is polished again");
+    require(style.polished.contains(hostPanel),
+            "a Kobalt widget restyled under the dialog's scale is polished again");
     QWidget early;
     auto *child = new QWidget(&early);
     child->setStyle(&style);
@@ -139,5 +153,6 @@ int main(int argc, char **argv) {
     ignoreNativeFontScale(closing);
     app.setProperty("fontScale", 1.5f);
     delete closing;
-    require(app.property("fontScale").toFloat() == 1.5f, "a newer Nickel value must not be replaced");
+    require(app.property("fontScale").toFloat() == 1.5f,
+            "a newer Nickel value must not be replaced");
 }

@@ -25,9 +25,9 @@
 #include <dlfcn.h>
 #include <utility>
 #ifdef KOBALT_READER_HARDWARE
-#include <cerrno>
-#include <fcntl.h>
-#include <unistd.h>
+#  include <cerrno>
+#  include <fcntl.h>
+#  include <unistd.h>
 #endif
 
 namespace {
@@ -35,19 +35,28 @@ using namespace kobalt::nickel_qt6;
 using kobalt::storage::readJson;
 using kobalt::storage::writeJson;
 using namespace kobalt::nickel;
-ReaderEnvironment &environment() {
+
+ReaderEnvironment &environment()
+{
     static ReaderEnvironment value;
     return value;
 }
-template <class T> T symbol(const char *name) {
+
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
+
 std::function<bool(const void *, const void *)> beginOpening;
 bool alternativeEnabled();
 bool nativeInitialized = false;
 bool nativeFinishing = false;
 std::function<void()> nativeInitializationFinished;
-extern "C" __attribute__((visibility("default"))) void kobalt_finish_initialization(void *application) {
+
+extern "C" __attribute__((visibility("default"))) void
+kobalt_finish_initialization(void *application)
+{
     kobalt::diagnostic("native-initialization-enter");
     nativeFinishing = true;
     nativeFinishInitialization(application);
@@ -59,26 +68,32 @@ extern "C" __attribute__((visibility("default"))) void kobalt_finish_initializat
     if (nativeInitializationFinished)
         nativeInitializationFinished();
 }
-extern "C" __attribute__((visibility("default"))) void kobalt_handle_opener(void *mixin, const void *volume,
-                                                                            const void *context) {
+
+extern "C" __attribute__((visibility("default"))) void
+kobalt_handle_opener(void *mixin, const void *volume, const void *context)
+{
     kobalt::nickel::forgetHomeSleepScreen();
-    if (kobalt::readerChoice(volume, alternativeEnabled()) && beginOpening && beginOpening(volume, context))
+    if (kobalt::readerChoice(volume, alternativeEnabled()) && beginOpening
+        && beginOpening(volume, context))
         return;
     nativeHandleOpener(mixin, volume, context);
 }
+
 void updatePrerendering();
-extern "C" __attribute__((visibility("default"))) void kobalt_continue_using(void *manager) {
+
+extern "C" __attribute__((visibility("default"))) void kobalt_continue_using(void *manager)
+{
     kobalt::diagnostic("usb-declined");
     nativeContinueUsing(manager);
     kobalt::NativeProgress::disconnected();
     kobalt::NativeLifecycle::disconnected();
     updatePrerendering();
 }
-extern "C"
-    __attribute__((visibility("default")))
-    // USB can change config.json, so read the reader choice again after it.
-    void
-    kobalt_unplugged(void *manager) {
+
+extern "C" __attribute__((visibility("default")))
+// USB can change config.json, so read the reader choice again after it.
+void kobalt_unplugged(void *manager)
+{
     kobalt::diagnostic("usb-unplugged");
     nativeUnplugged(manager);
     kobalt::NativeProgress::disconnected();
@@ -86,33 +101,43 @@ extern "C"
     updatePrerendering();
 }
 
-bool enabled() {
+bool enabled()
+{
 #ifdef KOBALT_READER_HARDWARE
     return QFile::exists(KOBALT_CONFIG_DIR "/uninstall");
 #else
     return QFile::exists("/instance/kobalt-enabled");
 #endif
 }
+
 // A reader preference is independent of the installation and recovery markers.
-bool alternativeEnabled() {
+bool alternativeEnabled()
+{
     if (!QFile::exists(selectionPath))
         return true;
     return readJson(selectionPath).value("enabled").toBool(false);
 }
+
 bool settingsReady = false;
 void *(*prerenderManager)();
 void (*stopPrerendering)(void *);
 
 bool prerenderSuppressed = false;
-bool suppressPrerendering() {
+
+bool suppressPrerendering()
+{
     return prerenderSuppressed;
 }
-extern "C" __attribute__((visibility("default"))) bool kobalt_prerender_allowed(const void *manager) {
+
+extern "C" __attribute__((visibility("default"))) bool kobalt_prerender_allowed(const void *manager)
+{
     // Both new-volume and sleep scheduling ask this before creating tasks.
     // Keep native ownership and completion paths intact by denying new work.
     return !suppressPrerendering() && nativePrerenderAllowed(manager);
 }
-void updatePrerendering() {
+
+void updatePrerendering()
+{
     const bool next = settingsReady && enabled() && alternativeEnabled();
     if (next == prerenderSuppressed)
         return;
@@ -125,7 +150,8 @@ void updatePrerendering() {
     nh_log("reader: background prerendering %s", next ? "suppressed" : "returned to native policy");
 }
 
-bool setAlternativeEnabled(bool on) {
+bool setAlternativeEnabled(bool on)
+{
     auto config = readJson(selectionPath);
     config["enabled"] = on;
     if (!writeJson(selectionPath, config))
@@ -134,15 +160,18 @@ bool setAlternativeEnabled(bool on) {
     return true;
 }
 
-extern "C" __attribute__((visibility("default"))) void kobalt_settings_constructor(QWidget *view, QWidget *parent) {
+extern "C" __attribute__((visibility("default"))) void kobalt_settings_constructor(QWidget *view,
+                                                                                   QWidget *parent)
+{
     settingsConstructor(view, parent);
     if (!settingsReady)
         return;
     kobalt::installNativeReaderSetting(view, alternativeEnabled, setAlternativeEnabled);
 }
 #ifdef KOBALT_READER_HARDWARE
-#ifdef KOBALT_READER_TEMPORARY
-bool armFlag(const char *path, const QByteArray &message) {
+#  ifdef KOBALT_READER_TEMPORARY
+bool armFlag(const char *path, const QByteArray &message)
+{
     const int fd = ::open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644);
     if (fd < 0)
         return false;
@@ -160,8 +189,9 @@ bool armFlag(const char *path, const QByteArray &message) {
         ok = false;
     return ok;
 }
-#endif
-bool supportedFirmware() {
+#  endif
+bool supportedFirmware()
+{
     QFile version("/mnt/onboard/.kobo/version");
     if (!version.open(QIODevice::ReadOnly))
         return false;
@@ -173,12 +203,12 @@ bool supportedFirmware() {
     const int major = release.value(0).toInt(&majorOk), minor = release.value(1).toInt(&minorOk);
     return majorOk && minorOk && ((major == 5 && minor >= 18) || major == 6);
 }
-bool uninstall() {
+
+bool uninstall()
+{
     // The absent uninstall flag is NickelHook's normal removal trigger.
     // unlink also preserves real errors without resolving an absent path.
-    const auto remove = [](const char *path) {
-        return ::unlink(path) == 0 || errno == ENOENT;
-    };
+    const auto remove = [](const char *path) { return ::unlink(path) == 0 || errno == ENOENT; };
     const bool active = remove(activePath);
     const bool startup = remove(startupPath);
     return remove(KOBALT_CONFIG_DIR "/uninstall") && active && startup;
@@ -186,9 +216,11 @@ bool uninstall() {
 #endif
 // Startup owns no book request. An opener retries on its original stack, so
 // Volume and Context references never survive the native call that supplied them.
-class Startup : public QObject {
+class Startup : public QObject
+{
 public:
-    explicit Startup(QObject *parent) : QObject(parent) {
+    explicit Startup(QObject *parent) : QObject(parent)
+    {
         elapsed.start();
 #ifndef KOBALT_READER_HARDWARE
         test = readJson("/instance/kobalt-startup-test.json");
@@ -199,34 +231,40 @@ public:
             attempt(false);
             if (!controller && !rejected && ticks % 20 == 0) {
                 kobalt::diagnostic(
-                    "startup-state",
-                    kobalt::qt::object(
-                        {{"native_initialized", nativeInitialized},
-                         {"native_finishing", nativeFinishing},
-                         {"power_guard_known", kobalt::nickel::startup_detail::constructionGuard() != nullptr},
-                         {"power_constructed", kobalt::nickel::startup_detail::existingPower() != nullptr},
-                         {"native_state_ready", kobalt::nickel::nativeStartupReady()},
-                         {"reason", lastWait},
-                         {"ticks", ticks},
-                         {"elapsed_ms", double(elapsed.elapsed())}}),
-                    false);
+                        "startup-state",
+                        kobalt::qt::object(
+                                { { "native_initialized", nativeInitialized },
+                                  { "native_finishing", nativeFinishing },
+                                  { "power_guard_known",
+                                    kobalt::nickel::startup_detail::constructionGuard()
+                                            != nullptr },
+                                  { "power_constructed",
+                                    kobalt::nickel::startup_detail::existingPower() != nullptr },
+                                  { "native_state_ready", kobalt::nickel::nativeStartupReady() },
+                                  { "reason", lastWait },
+                                  { "ticks", ticks },
+                                  { "elapsed_ms", double(elapsed.elapsed()) } }),
+                        false);
             }
             if (ticks >= 120 && nativeInitialized && !controller && !rejected)
-                kobalt::diagnostic("startup-deferred", kobalt::qt::object({{"reason", lastWait}}));
+                kobalt::diagnostic("startup-deferred",
+                                   kobalt::qt::object({ { "reason", lastWait } }));
         });
         retry.setInterval(250);
     }
-    void start() {
+
+    void start()
+    {
         retry.start();
-        kobalt::qt::later(0, this, [this] {
-            attempt(false);
-        });
+        kobalt::qt::later(0, this, [this] { attempt(false); });
     }
-    bool open(const void *volume, const void *context) {
+
+    bool open(const void *volume, const void *context)
+    {
         kobalt::diagnostic("startup-opener",
-                           kobalt::qt::object({{"native_initialized", nativeInitialized},
-                                               {"controller_ready", bool(controller)},
-                                               {"rejected", rejected}}),
+                           kobalt::qt::object({ { "native_initialized", nativeInitialized },
+                                                { "controller_ready", bool(controller) },
+                                                { "rejected", rejected } }),
                            false);
         if (initializing) {
             reentered = true;
@@ -240,23 +278,30 @@ public:
             return request;
         });
     }
-    void attempt(bool fromOpener) {
+
+    void attempt(bool fromOpener)
+    {
         if (controller || rejected || initializing)
             return;
         if (!nativeInitialized && !nativeFinishing && kobalt::nickel::nativeStartupReady()) {
             nativeInitialized = true;
-            kobalt::diagnostic("startup-recovered", kobalt::qt::object({{"reason", "native-state"},
-                                                                        {"elapsed_ms", double(elapsed.elapsed())}}));
+            kobalt::diagnostic("startup-recovered",
+                               kobalt::qt::object({ { "reason", "native-state" },
+                                                    { "elapsed_ms", double(elapsed.elapsed()) } }));
         }
-        const auto nativeWaitResult = nativeWait.update(nativeInitialized && !nativeFinishing, elapsed.elapsed());
+        const auto nativeWaitResult =
+                nativeWait.update(nativeInitialized && !nativeFinishing, elapsed.elapsed());
         using WaitResult = kobalt::nickel::NativeStartupWait::Result;
         if (nativeWaitResult == WaitResult::Waiting || nativeWaitResult == WaitResult::TimedOut) {
             if (nativeWaitResult == WaitResult::TimedOut) {
                 retry.stop();
                 environment().reportSession(
-                          kobalt::qt::object({{"status", "stock"}, {"reason", "Waiting for native initialization"}}));
-                kobalt::diagnostic("startup-deferred", kobalt::qt::object({{"reason", "native-initialization"},
-                                                                         {"elapsed_ms", double(elapsed.elapsed())}}));
+                        kobalt::qt::object({ { "status", "stock" },
+                                             { "reason", "Waiting for native initialization" } }));
+                kobalt::diagnostic(
+                        "startup-deferred",
+                        kobalt::qt::object({ { "reason", "native-initialization" },
+                                             { "elapsed_ms", double(elapsed.elapsed()) } }));
             }
             waiting("native-initialization");
             return;
@@ -265,8 +310,9 @@ public:
             // Resume bounded retries if the screen or native services need more time.
             ticks = 0;
             retry.start();
-            kobalt::diagnostic("startup-recovered", kobalt::qt::object({{"reason", "late-native-initialization"},
-                                                                      {"elapsed_ms", double(elapsed.elapsed())}}));
+            kobalt::diagnostic("startup-recovered",
+                               kobalt::qt::object({ { "reason", "late-native-initialization" },
+                                                    { "elapsed_ms", double(elapsed.elapsed()) } }));
         }
         auto *screen = QGuiApplication::primaryScreen();
         if (!screen || screen->size().isEmpty()) {
@@ -309,7 +355,9 @@ public:
         reentered = false;
         const auto finish = [this]([[maybe_unused]] bool deferred = true) {
 #ifdef KOBALT_READER_HARDWARE
-            if (deferred && !kobalt_startup_recovered(startupPath, KOBALT_CONFIG_DIR "/startup-removed.txt")) {
+            if (deferred
+                && !kobalt_startup_recovered(startupPath,
+                                             KOBALT_CONFIG_DIR "/startup-removed.txt")) {
                 rejected = true;
                 retry.stop();
                 kobalt::diagnostic("startup-disarm-failed", {}, kobalt::DiagnosticSeverity::Error);
@@ -317,13 +365,14 @@ public:
 #endif
             initializing = false;
         };
-        if (!QDir().mkpath(QString::fromLatin1(configDir)) ||
-            (!QFile::exists(selectionPath) && !writeJson(selectionPath, {{"enabled", true}}))) {
+        if (!QDir().mkpath(QString::fromLatin1(configDir))
+            || (!QFile::exists(selectionPath)
+                && !writeJson(selectionPath, { { "enabled", true } }))) {
             waiting("preferences");
             finish();
             return;
         }
-        CoordinatorBindings bindings{enabled};
+        CoordinatorBindings bindings{ enabled };
         bindings.automaticBookOpening = alternativeEnabled;
         bindings.setAutomaticBookOpening = setAlternativeEnabled;
         auto *candidate = new ReaderCoordinator(environment(), bindings, qApp);
@@ -356,8 +405,9 @@ public:
         controller = candidate;
         retry.stop();
         finish(false);
-        environment().reportSession({{"status", "ready"}});
-        kobalt::diagnostic("ready", {{"startup_ms", double(elapsed.elapsed())}, {"opener", fromOpener}});
+        environment().reportSession({ { "status", "ready" } });
+        kobalt::diagnostic(
+                "ready", { { "startup_ms", double(elapsed.elapsed()) }, { "opener", fromOpener } });
         nh_log("reader: native controller ready");
     }
 
@@ -372,30 +422,38 @@ private:
 #ifndef KOBALT_READER_HARDWARE
     QJsonObject test;
 #endif
-    void waiting(const QString &reason) {
+    void waiting(const QString &reason)
+    {
         if (lastWait == reason)
             return;
         lastWait = reason;
-        kobalt::diagnostic("startup-wait", {{"reason", reason}, {"elapsed_ms", double(elapsed.elapsed())}});
+        kobalt::diagnostic("startup-wait",
+                           { { "reason", reason }, { "elapsed_ms", double(elapsed.elapsed()) } });
     }
 };
 
-int initialize() {
+int initialize()
+{
 #ifdef KOBALT_READER_HARDWARE
-    kobalt::installCrashReports(QString::fromLatin1(configDir) + "/crash-reporting", QStringLiteral("/mnt/onboard"));
+    kobalt::installCrashReports(QString::fromLatin1(configDir) + "/crash-reporting",
+                                QStringLiteral("/mnt/onboard"));
 #endif
     kobalt::initializeDiagnostics(QString::fromLatin1(configDir) + "/diagnostics",
                                   kobalt::diagnosticsRequested(QString::fromLatin1(configDir)));
     kobalt::initializeStandbyDiagnostics();
-    kobalt::diagnostic("startup-hooks",
-                       kobalt::qt::object({{"finish_hook_available", bool(nativeFinishInitialization)},
-                                           {"finish_next_is_stock",
-                                            reinterpret_cast<void *>(nativeFinishInitialization) ==
-                                                dlsym(RTLD_DEFAULT, "_ZN18Nickel3Application20finishInitializationEv")},
-                                           {"native_initialized", nativeInitialized},
-                                           {"application_available", bool(qApp)}}));
+    kobalt::diagnostic(
+            "startup-hooks",
+            kobalt::qt::object(
+                    { { "finish_hook_available", bool(nativeFinishInitialization) },
+                      { "finish_next_is_stock",
+                        reinterpret_cast<void *>(nativeFinishInitialization)
+                                == dlsym(RTLD_DEFAULT,
+                                         "_ZN18Nickel3Application20finishInitializationEv") },
+                      { "native_initialized", nativeInitialized },
+                      { "application_available", bool(qApp) } }));
 #ifdef KOBALT_READER_TEMPORARY
-    if (!armFlag(KOBALT_CONFIG_DIR "/uninstall-now", "Temporary reader: remove on the next Nickel start.\n")) {
+    if (!armFlag(KOBALT_CONFIG_DIR "/uninstall-now",
+                 "Temporary reader: remove on the next Nickel start.\n")) {
         kobalt::diagnostic("removal-arm-failed", {}, kobalt::DiagnosticSeverity::Error);
         nh_log("reader: cannot arm removal; disabling library");
         nh_delete_file("/usr/local/Kobo/libkobalt.so.failsafe");
@@ -410,11 +468,13 @@ int initialize() {
         kobalt::diagnostic("firmware-rejected", {}, kobalt::DiagnosticSeverity::Warning);
         return 0;
     }
-    prerenderManager = symbol<decltype(prerenderManager)>("_ZN26IPrerenderToPersistManager8instanceEv");
-    stopPrerendering = symbol<decltype(stopPrerendering)>("_ZThn8_N25PrerenderToPersistManager16stopPrerenderingEv");
-    if (!kobalt::NativeOpening::available() || !kobalt::NativePublication::available() ||
-        !kobalt::NativeProgress::available() || !kobalt::NativeLifecycle::powerAvailable() || !prerenderManager ||
-        !stopPrerendering) {
+    prerenderManager =
+            symbol<decltype(prerenderManager)>("_ZN26IPrerenderToPersistManager8instanceEv");
+    stopPrerendering = symbol<decltype(stopPrerendering)>(
+            "_ZThn8_N25PrerenderToPersistManager16stopPrerenderingEv");
+    if (!kobalt::NativeOpening::available() || !kobalt::NativePublication::available()
+        || !kobalt::NativeProgress::available() || !kobalt::NativeLifecycle::powerAvailable()
+        || !prerenderManager || !stopPrerendering) {
         kobalt::diagnostic("native-api-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
         return 0;
     }
@@ -422,42 +482,40 @@ int initialize() {
 #ifdef KOBALT_READER_HARDWARE
     if (!supportedFirmware()) {
         kobalt::diagnostic("hardware-rejected", {}, kobalt::DiagnosticSeverity::Warning);
-        environment().reportSession({{"status", "stock"}, {"reason", "Requires firmware 5.18 or later 5.x, or 6.x"}});
+        environment().reportSession(
+                { { "status", "stock" },
+                  { "reason", "Requires firmware 5.18 or later 5.x, or 6.x" } });
         return 0;
     }
-#ifdef KOBALT_READER_TEMPORARY
-    kobalt::diagnostic("installation", {{"temporary", true}});
-#else
-    kobalt::diagnostic("installation", {{"temporary", false}});
-#endif
+#  ifdef KOBALT_READER_TEMPORARY
+    kobalt::diagnostic("installation", { { "temporary", true } });
+#  else
+    kobalt::diagnostic("installation", { { "temporary", false } });
+#  endif
 #endif
     auto *startup = new Startup(qApp);
     beginOpening = [startup](const void *volume, const void *context) {
         return startup->open(volume, context);
     };
     nativeInitializationFinished = [startup] {
-        kobalt::qt::later(0, startup, [startup] {
-            startup->attempt(false);
-        });
+        kobalt::qt::later(0, startup, [startup] { startup->attempt(false); });
     };
-    kobalt::configureBookMenu(
-        [] {
-            return enabled() && bool(beginOpening);
-        },
-        alternativeEnabled);
+    kobalt::configureBookMenu([] { return enabled() && bool(beginOpening); }, alternativeEnabled);
     startup->start();
     kobalt::diagnostic("startup-listening");
     return 0;
 }
-}
+} // namespace
 
 namespace kobalt::nickel_qt6 {
-int initializeReader() {
+int initializeReader()
+{
     return initialize();
 }
 #ifdef KOBALT_READER_HARDWARE
-bool uninstallReader() {
+bool uninstallReader()
+{
     return uninstall();
 }
 #endif
-}
+} // namespace kobalt::nickel_qt6

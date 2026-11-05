@@ -15,4 +15,4 @@ extern void (*nativeShowReader)(void *, const void *, const void *, void *, cons
 extern void (*nativeFinishInitialization)(void *);
 extern bool (*nativeHomeKeyFilter)(void *, QObject *, QKeyEvent *);
 extern void (*nativeContinueUsing)(void *), (*nativeUnplugged)(void *);
-}
+} // namespace kobalt::nickel_qt5

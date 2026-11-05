@@ -11,9 +11,11 @@
 
 namespace kobalt::reader {
 KosyncNotice::KosyncNotice(QWidget *parent)
-    : ui::NoticeModal(parent,
-        {strings::get("kosync.opening_description"), strings::get("kosync.opening"), {}},
-        {strings::get("kosync.cancel_sync"), "rrKosyncCancel"}) {
+    : ui::NoticeModal(
+              parent,
+              { strings::get("kosync.opening_description"), strings::get("kosync.opening"), {} },
+              { strings::get("kosync.cancel_sync"), "rrKosyncCancel" })
+{
     auto *content = card();
     heading = content->findChild<QLabel *>("rrModalTitle");
     const int index = content->rows()->indexOf(heading);
@@ -29,7 +31,10 @@ KosyncNotice::KosyncNotice(QWidget *parent)
     statusIcon->setObjectName("rrKosyncStatusIcon");
     const int size = ui::px(48);
     statusIcon->setFixedSize(size, size);
-    statusIcon->setPixmap(ui::controlIcon(ui::ControlIcon::Sync, ui::darkTheme(this) ? QColor(Qt::white) : QColor(Qt::black)).pixmap(size, size));
+    statusIcon->setPixmap(
+            ui::controlIcon(ui::ControlIcon::Sync,
+                            ui::darkTheme(this) ? QColor(Qt::white) : QColor(Qt::black))
+                    .pixmap(size, size));
     row->addWidget(statusIcon, 0, Qt::AlignVCenter);
     // The heading and description share one content block above the action.
     heading->setProperty("reader_modal_content", false);
@@ -43,28 +48,40 @@ KosyncNotice::KosyncNotice(QWidget *parent)
     content->rows()->insertWidget(index, headingRow);
     auto *cancel = primaryButton();
     cancel->setProperty("reader_primary_action", false);
-    ui::readerStyle(cancel, "QPushButton{border:none;padding:0;min-height:0;font-weight:400;" +
-                            ui::styles::font(ui::metrics::chrome::labelText) + "}");
+    ui::readerStyle(cancel,
+                    "QPushButton{border:none;padding:0;min-height:0;font-weight:400;"
+                            + ui::styles::font(ui::metrics::chrome::labelText) + "}");
     // The member timer belongs to the notice, so a check of its children finds it.
     successTimer.setParent(this);
     successTimer.setObjectName("rrKosyncSuccessTimer");
     successTimer.setSingleShot(true);
     successTimer.setTimerType(Qt::PreciseTimer);
-    connect(&successTimer, &QTimer::timeout, this, [this] { if (completed) completed(); });
+    connect(&successTimer, &QTimer::timeout, this, [this] {
+        if (completed)
+            completed();
+    });
 }
-void KosyncNotice::complete() {
-    if (successTimer.isActive()) return;
+
+void KosyncNotice::complete()
+{
+    if (successTimer.isActive())
+        return;
     heading->setText(strings::get("kosync.completed"));
     descriptionLabel()->setText(strings::get("kosync.up_to_date"));
     const int size = statusIcon->width();
-    statusIcon->setPixmap(ui::controlIcon(ui::ControlIcon::Check, ui::darkTheme(this) ? QColor(Qt::white) : QColor(Qt::black)).pixmap(size, size));
+    statusIcon->setPixmap(
+            ui::controlIcon(ui::ControlIcon::Check,
+                            ui::darkTheme(this) ? QColor(Qt::white) : QColor(Qt::black))
+                    .pixmap(size, size));
     primaryButton()->hide();
     dismissed = {};
     fitCard();
     successTimer.start(1500);
 }
-void KosyncNotice::hideEvent(QHideEvent *event) {
+
+void KosyncNotice::hideEvent(QHideEvent *event)
+{
     successTimer.stop();
     ui::NoticeModal::hideEvent(event);
 }
-}
+} // namespace kobalt::reader

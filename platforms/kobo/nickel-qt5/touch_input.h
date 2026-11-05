@@ -7,4 +7,4 @@ namespace kobalt::nickel_qt5 {
 // Nickel uses its own touch widgets. This adapter gives Kobalt's windows the
 // mouse press, move and release that Qt6 synthesizes on firmware 5.
 void installTouchInput(QObject *owner);
-}
+} // namespace kobalt::nickel_qt5

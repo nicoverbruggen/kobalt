@@ -1,9 +1,9 @@
 #pragma once
 #include <QJsonObject>
 #ifndef KOBALT_NO_SENSORS
-#include <QOrientationSensor>
+#  include <QOrientationSensor>
 #else
-#include <QObject>
+#  include <QObject>
 class QOrientationSensor;
 #endif
 #include <QPointer>
@@ -22,7 +22,8 @@ Qt::ScreenOrientation shownOrientation(const QScreen *screen);
 
 class ReaderOrientation : public QObject
 #ifndef KOBALT_NO_SENSORS
-    , private QOrientationFilter
+    ,
+                          private QOrientationFilter
 #endif
 {
 public:
@@ -55,18 +56,16 @@ public:
     void rotate();
     bool setAutomatic(bool enabled);
     void setBlocked(bool blocked);
-    bool automaticAvailable() const {
-        return sensor != nullptr;
-    }
+
+    bool automaticAvailable() const { return sensor != nullptr; }
+
     // Auto permits every sensor orientation. With Auto off, sensor devices
     // still follow both orientations matching manual(), normalized to an axis.
     // Devices without a sensor keep the exact manual orientation.
-    bool automatic() const {
-        return automaticRotation;
-    }
-    Qt::ScreenOrientation manual() const {
-        return manualOrientation;
-    }
+    bool automatic() const { return automaticRotation; }
+
+    Qt::ScreenOrientation manual() const { return manualOrientation; }
+
     QJsonObject settings() const;
 
 private:
@@ -90,7 +89,8 @@ private:
 #endif
     quint64 latestTimestamp = 0;
     bool frozen = false;
-    bool active = false, sleeping = false, blocked = false, automaticRotation = false, startedSensor = false;
+    bool active = false, sleeping = false, blocked = false, automaticRotation = false,
+         startedSensor = false;
 #ifndef KOBALT_NO_SENSORS
     bool filter(QOrientationReading *reading) override;
 #endif
@@ -98,9 +98,11 @@ private:
     bool permits(Qt::ScreenOrientation orientation) const;
     void follow();
     void deliver();
-    void apply(Qt::ScreenOrientation value) {
+
+    void apply(Qt::ScreenOrientation value)
+    {
         currentOrientation = value;
         turn(value);
     }
 };
-}
+} // namespace kobalt

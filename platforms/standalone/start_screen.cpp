@@ -11,16 +11,24 @@
 #include <QVBoxLayout>
 
 namespace kobalt::standalone {
-StartScreen::StartScreen(PresentationFactory presentation, library::Store &store, std::function<qreal()> textScale,
-                         QWidget *parent)
-    : QStackedWidget(parent), presentation(std::move(presentation)), store(store), textScale(std::move(textScale)) {
+StartScreen::StartScreen(PresentationFactory presentation, library::Store &store,
+                         std::function<qreal()> textScale, QWidget *parent)
+    : QStackedWidget(parent),
+      presentation(std::move(presentation)),
+      store(store),
+      textScale(std::move(textScale))
+{
     setObjectName("androidStart");
     showLibrary();
 }
-bool StartScreen::dismissModal() {
+
+bool StartScreen::dismissModal()
+{
     return libraryShown() && view->dismiss();
 }
-void StartScreen::buildLibrary() {
+
+void StartScreen::buildLibrary()
+{
     if (view)
         return;
     // The library uses the reader's controls, which are sized in device
@@ -29,36 +37,21 @@ void StartScreen::buildLibrary() {
         canvas = new WidgetCanvas(this);
         canvas->setObjectName("androidLibraryCanvas");
         canvas->setStyleSheet("QGraphicsView{border:0;}");
-        canvas->viewportResized = [this] {
-            fitLibrary();
-        };
+        canvas->viewportResized = [this] { fitLibrary(); };
         addWidget(canvas);
     }
     // Views read sizes while they are built; see applyTextSize.
     builtTextScale = ui::textScale();
-    view = new library::LibraryView(store.index(), [this](const QString &name) {
-        return store.coverPath(name);
-    });
+    view = new library::LibraryView(store.index(),
+                                    [this](const QString &name) { return store.coverPath(name); });
     // Complete the subtree before embedding it; proxy resize can disable new children.
     canvas->setContent(view);
-    view->openBook = [this](const QString &key) {
-        emit bookRequested(key);
-    };
-    view->addFolder = [this] {
-        emit addFolderRequested();
-    };
-    view->openFile = [this] {
-        emit libraryOpenRequested();
-    };
-    view->rescan = [this] {
-        store.scan();
-    };
-    view->removeFolder = [this](const QString &key) {
-        emit removeFolderRequested(key);
-    };
-    view->removeBook = [this](const QString &key) {
-        emit removeBookRequested(key);
-    };
+    view->openBook = [this](const QString &key) { emit bookRequested(key); };
+    view->addFolder = [this] { emit addFolderRequested(); };
+    view->openFile = [this] { emit libraryOpenRequested(); };
+    view->rescan = [this] { store.scan(); };
+    view->removeFolder = [this](const QString &key) { emit removeFolderRequested(key); };
+    view->removeBook = [this](const QString &key) { emit removeBookRequested(key); };
     view->markBook = [this](const QString &key, library::Book::Mark mark) {
         if (mark == library::Book::Mark::Unread)
             emit markUnreadRequested(key);
@@ -77,11 +70,14 @@ void StartScreen::buildLibrary() {
     view->setDark(dark);
     view->show();
     if (hostScaled)
-        setLibraryScale(scale.pixels, scale.scale, scale.nativePixels, scale.rasterScale, scale.topInset);
+        setLibraryScale(scale.pixels, scale.scale, scale.nativePixels, scale.rasterScale,
+                        scale.topInset);
     else
         fitLibrary();
 }
-void StartScreen::applyTextSize() {
+
+void StartScreen::applyTextSize()
+{
     ui::setLargeText(textScale ? textScale() : 1);
     if (!view || ui::textScale() == builtTextScale)
         return;
@@ -98,25 +94,40 @@ void StartScreen::applyTextSize() {
     view = nullptr;
     buildLibrary();
 }
-void StartScreen::setKeyboardFactory(KeyboardFactory factory) {
+
+void StartScreen::setKeyboardFactory(KeyboardFactory factory)
+{
     keyboard = std::move(factory);
     if (view)
         view->setKeyboardFactory(keyboard);
 }
-library::LibraryView *StartScreen::library() {
+
+library::LibraryView *StartScreen::library()
+{
     buildLibrary();
     return view;
 }
-WidgetCanvas *StartScreen::libraryCanvas() {
+
+WidgetCanvas *StartScreen::libraryCanvas()
+{
     buildLibrary();
     return canvas;
 }
-void StartScreen::setLibrarySystemBarBorders(bool visible) {
-    const int width = visible ? qMax(1, qRound(int(ui::metrics::control::border) / canvas->devicePixelRatioF())) : 0;
-    ui::readerStyle(canvas, QString("QGraphicsView{border:0;border-top:%1px solid palette(mid);border-bottom:%1px solid palette(mid);}").arg(width));
+
+void StartScreen::setLibrarySystemBarBorders(bool visible)
+{
+    const int width = visible
+            ? qMax(1, qRound(int(ui::metrics::control::border) / canvas->devicePixelRatioF()))
+            : 0;
+    ui::readerStyle(
+            canvas,
+            QString("QGraphicsView{border:0;border-top:%1px solid palette(mid);border-bottom:%1px solid palette(mid);}")
+                    .arg(width));
     ui::applyReaderPalette(canvas, view->palette());
 }
-void StartScreen::showLibrary() {
+
+void StartScreen::showLibrary()
+{
     // The setting can change while a book is open or the app is in the
     // background. The first library is built at the current setting too.
     applyTextSize();
@@ -126,21 +137,30 @@ void StartScreen::showLibrary() {
     view->setScanning(store.scanning(), store.found());
     view->refresh();
     if (!store.available())
-        view->showNotice(strings::get("library.open_failed"), strings::get("error.saved_data_unavailable"));
+        view->showNotice(strings::get("library.open_failed"),
+                         strings::get("error.saved_data_unavailable"));
 }
-void StartScreen::showLibraryError(const QString &error) {
+
+void StartScreen::showLibraryError(const QString &error)
+{
     showLibrary();
     view->showNotice(strings::get("library.open_failed"), error);
 }
-void StartScreen::setSingleBooksAreCopies(bool value) {
+
+void StartScreen::setSingleBooksAreCopies(bool value)
+{
     singleBooksAreCopies = value;
     if (view)
         view->singleBooksAreCopies = value;
 }
-bool StartScreen::libraryShown() const {
+
+bool StartScreen::libraryShown() const
+{
     return canvas && currentWidget() == canvas;
 }
-void StartScreen::setDark(bool value) {
+
+void StartScreen::setDark(bool value)
+{
     dark = value;
     setProperty("reader_dark", dark);
     ui::applyReaderPalette(this, ui::readerPalette(palette(), dark));
@@ -151,13 +171,18 @@ void StartScreen::setDark(bool value) {
         ui::applyReaderPalette(canvas, view->palette());
     }
 }
-void StartScreen::fitLibrary() {
+
+void StartScreen::fitLibrary()
+{
     if (canvas && !hostScaled)
         canvas->fitContent();
 }
-void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels, qreal rasterScale, int topInset) {
+
+void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels, qreal rasterScale,
+                                  int topInset)
+{
     hostScaled = true;
-    scale = {pixels, factor, rasterScale, nativePixels, topInset};
+    scale = { pixels, factor, rasterScale, nativePixels, topInset };
     if (!view)
         return;
     view->setGeometry(0, topInset, pixels.width(), pixels.height() - topInset);
@@ -166,16 +191,22 @@ void StartScreen::setLibraryScale(QSize pixels, qreal factor, bool nativePixels,
     canvas->setTransform(QTransform::fromScale(factor, factor));
     canvas->setSceneRect(QRectF(QPointF(), pixels));
 }
-void StartScreen::resizeEvent(QResizeEvent *event) {
+
+void StartScreen::resizeEvent(QResizeEvent *event)
+{
     QStackedWidget::resizeEvent(event);
     fitLibrary();
     if (openingSurface)
         openingSurface->fitContent();
 }
-StartScreen::~StartScreen() {
+
+StartScreen::~StartScreen()
+{
     store.changed = {};
 }
-void StartScreen::showOpening() {
+
+void StartScreen::showOpening()
+{
     // Recreate the view to reset progress and the delayed hint for each book.
     if (openingSurface) {
         removeWidget(openingSurface);
@@ -199,12 +230,16 @@ void StartScreen::showOpening() {
     setCurrentWidget(openingSurface);
     openingSurface->fitContent();
 }
-void StartScreen::setCover(QImage cover) {
+
+void StartScreen::setCover(QImage cover)
+{
     if (opening && currentWidget() == openingSurface)
         opening->setCover(std::move(cover));
 }
-void StartScreen::setProgress(int percent) {
+
+void StartScreen::setProgress(int percent)
+{
     if (opening && currentWidget() == openingSurface)
         opening->setProgress(percent);
 }
-}
+} // namespace kobalt::standalone

@@ -11,7 +11,8 @@
 #include <utility>
 
 // Checks the event flush against a competing SQLite writer: kept buffers, bounded recovery, timeout and rollback.
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QCoreApplication app(argc, argv);
     QTemporaryDir directory;
     require(directory.isValid(), "Event-save fixture directory");
@@ -20,21 +21,25 @@ int main(int argc, char **argv) {
     connection.setDatabaseName(path);
     require(connection.open(), "Open event-save database");
     QSqlQuery query(connection);
-    require(query.exec("CREATE TABLE events (id INTEGER PRIMARY KEY)"), "Create event-save fixture");
+    require(query.exec("CREATE TABLE events (id INTEGER PRIMARY KEY)"),
+            "Create event-save fixture");
     require(query.exec("PRAGMA busy_timeout=17"), "Set fixture timeout");
     int buffered = 1, flushes = 0, ends = 0;
     const auto save = [&](int timeout) {
         kobalt::NativeDatabaseWait wait(connection, timeout);
         require(wait.ready(), "Set bounded event wait");
         return kobalt::nickel::saveNativeEvents(
-            [&] { return query.exec("BEGIN IMMEDIATE"); },
-            [&] {
-                ++flushes;
-                // Match Nickel's destructive buffer consumption, including on failure.
-                const int pending = std::exchange(buffered, 0);
-                return !pending || query.exec("INSERT INTO events VALUES (1)");
-            },
-            [&](bool commit) { ++ends; return query.exec(commit ? "COMMIT" : "ROLLBACK"); });
+                [&] { return query.exec("BEGIN IMMEDIATE"); },
+                [&] {
+                    ++flushes;
+                    // Match Nickel's destructive buffer consumption, including on failure.
+                    const int pending = std::exchange(buffered, 0);
+                    return !pending || query.exec("INSERT INTO events VALUES (1)");
+                },
+                [&](bool commit) {
+                    ++ends;
+                    return query.exec(commit ? "COMMIT" : "ROLLBACK");
+                });
     };
     QSemaphore locked, release;
     std::thread writer([&] {
@@ -54,9 +59,13 @@ int main(int argc, char **argv) {
     require(!save(0), "A locked event transaction unexpectedly began");
     require(buffered == 1 && flushes == 0 && ends == 0,
             "Busy save consumed pending events or ended another writer's transaction");
-    std::thread unlock([&] { QThread::msleep(100); release.release(); });
+    std::thread unlock([&] {
+        QThread::msleep(100);
+        release.release();
+    });
     require(save(2000), "Bounded worker wait did not recover from transient contention");
-    unlock.join(); writer.join();
+    unlock.join();
+    writer.join();
     require(buffered == 0 && flushes == 1 && ends == 1, "Event save was lost or repeated");
     require(query.exec("PRAGMA busy_timeout") && query.next() && query.value(0).toInt() == 17,
             "Event wait changed Nickel's connection timeout");
@@ -66,11 +75,16 @@ int main(int argc, char **argv) {
     require(!save(0) && flushes == 1 && ends == 1,
             "Event save joined or committed a transaction it did not own");
     require(query.exec("ROLLBACK"), "Existing transaction lost ownership");
-    require(query.exec("SELECT COUNT(*) FROM events") && query.next() && query.value(0).toInt() == 1,
+    require(query.exec("SELECT COUNT(*) FROM events") && query.next()
+                    && query.value(0).toInt() == 1,
             "Failed transaction ownership changed saved events");
     query.finish();
     bool rolledBack = false;
     require(!kobalt::nickel::saveNativeEvents([] { return true; }, [] { return false; },
-            [&](bool commit) { rolledBack = !commit; return true; }) && rolledBack,
+                                              [&](bool commit) {
+                                                  rolledBack = !commit;
+                                                  return true;
+                                              })
+                    && rolledBack,
             "Failed event flush was committed");
 }

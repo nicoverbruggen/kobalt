@@ -8,19 +8,22 @@
 #include <unistd.h>
 
 namespace kobalt::platform {
-bool configureLoopback(int *error) {
+bool configureLoopback(int *error)
+{
     *error = 0;
     const int fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (fd < 0) {
         *error = errno;
         return false;
     }
-    struct Close {
+
+    struct Close
+    {
         int fd;
-        ~Close() {
-            close(fd);
-        }
-    } closeSocket{fd};
+
+        ~Close() { close(fd); }
+    } closeSocket{ fd };
+
     ifreq interface{};
     std::strcpy(interface.ifr_name, "lo");
     if (ioctl(fd, SIOCGIFFLAGS, &interface) < 0) {
@@ -70,4 +73,4 @@ bool configureLoopback(int *error) {
     ioctl(fd, SIOCSIFFLAGS, &interface);
     return false;
 }
-}
+} // namespace kobalt::platform

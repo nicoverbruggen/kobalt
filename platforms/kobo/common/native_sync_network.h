@@ -8,7 +8,8 @@
 namespace kobalt {
 // Native operations remain behind this boundary so connection sequencing can
 // be checked without a radio or a native networking dialog.
-struct NativeSyncNetworkBindings {
+struct NativeSyncNetworkBindings
+{
     QObject *workflow = nullptr;
     std::function<bool()> ready, disabled, connecting;
     // Optional: whether the radio is on, connected or not. Without it, only a
@@ -19,9 +20,12 @@ struct NativeSyncNetworkBindings {
     std::function<void()> cancel;
     // Optional. Without it, Nickel's own idle timeout turns Wi-Fi off.
     std::function<void()> turnOff;
+
     bool valid() const { return workflow && ready && disabled && connecting && request && cancel; }
 };
-class NativeSyncNetwork final : public QObject, public SyncNetwork {
+
+class NativeSyncNetwork final : public QObject, public SyncNetwork
+{
     Q_OBJECT
 public:
     NativeSyncNetwork();
@@ -59,4 +63,4 @@ private:
     // Kobalt's to turn off, whether the connection came up or not.
     bool turnedOn = false;
 };
-}
+} // namespace kobalt

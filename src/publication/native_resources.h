@@ -11,10 +11,10 @@ void releaseResourceConnections(std::function<void()> finished);
 // Construct and use resources on the engine worker. The host keeps its GUI
 // endpoint alive through the drain barrier. Each opening gets a fresh lease;
 // neither its port nor its cancellation state can be reused for another open.
-std::shared_ptr<ResourceCache> nativeResources(QMap<QString, qint64> sizes, const QString &path, int port,
-                                               std::shared_ptr<SourceLease> lease,
-                                               const QString &systemFont = "sans-serif",
-                                               std::shared_ptr<std::atomic_bool> contentRejected = {});
+std::shared_ptr<ResourceCache>
+nativeResources(QMap<QString, qint64> sizes, const QString &path, int port,
+                std::shared_ptr<SourceLease> lease, const QString &systemFont = "sans-serif",
+                std::shared_ptr<std::atomic_bool> contentRejected = {});
 // Prepare on the GUI thread, after constructing the engine session.
 ResourceFactory nativeResourceFactory(QString path, int port, std::shared_ptr<SourceLease> lease);
 
@@ -25,4 +25,4 @@ ResourceFactory nativeResourceFactory(QString path, int port, std::shared_ptr<So
 inline constexpr auto resourceSecretHeader = "x-kobalt-secret";
 QByteArray resourceSecret();
 bool resourceSecretMatches(const QByteArray &candidate);
-}
+} // namespace kobalt

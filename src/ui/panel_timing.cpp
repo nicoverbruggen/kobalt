@@ -8,29 +8,34 @@
 namespace kobalt::ui {
 namespace {
 const char *const watchName = "kobaltPanelTiming";
+
 // A queued call runs after the widget's paint returns, so the time includes
 // the layout that painting can trigger. A hidden widget never reports.
-class PaintWatch final : public QObject {
+class PaintWatch final : public QObject
+{
 public:
-    PaintWatch(QWidget *widget, std::function<void()> painted) : QObject(widget), painted(std::move(painted)) {
+    PaintWatch(QWidget *widget, std::function<void()> painted)
+        : QObject(widget), painted(std::move(painted))
+    {
         setObjectName(QString::fromLatin1(watchName));
         widget->installEventFilter(this);
     }
 
 protected:
-    bool eventFilter(QObject *, QEvent *event) override {
+    bool eventFilter(QObject *, QEvent *event) override
+    {
         if (event->type() == QEvent::Paint && !seen) {
             seen = true;
             QPointer<PaintWatch> guard(this);
             qt::invoke(
-                this,
-                [guard] {
-                    if (guard) {
-                        guard->painted();
-                        guard->deleteLater();
-                    }
-                },
-                Qt::QueuedConnection);
+                    this,
+                    [guard] {
+                        if (guard) {
+                            guard->painted();
+                            guard->deleteLater();
+                        }
+                    },
+                    Qt::QueuedConnection);
         } else if (event->type() == QEvent::Hide && !seen) {
             deleteLater();
         }
@@ -41,34 +46,45 @@ private:
     std::function<void()> painted;
     bool seen = false;
 };
-}
-void afterNextPaint(QWidget *widget, std::function<void()> painted) {
+} // namespace
+
+void afterNextPaint(QWidget *widget, std::function<void()> painted)
+{
     new PaintWatch(widget, std::move(painted));
 }
-PanelTiming::PanelTiming(const QString &panel) : active(diagnosticsActive()) {
+
+PanelTiming::PanelTiming(const QString &panel) : active(diagnosticsActive())
+{
     if (!active)
         return;
     total.start();
     step.start();
     fields["panel"] = panel;
 }
-void PanelTiming::stage(const char *name) {
+
+void PanelTiming::stage(const char *name)
+{
     if (!active)
         return;
     fields[QString::fromLatin1(name) + "_ms"] = step.nsecsElapsed() / 1e6;
     step.restart();
 }
-void PanelTiming::field(const char *name, double value) {
+
+void PanelTiming::field(const char *name, double value)
+{
     if (active)
         fields[QString::fromLatin1(name)] = value;
 }
-void PanelTiming::finish(QWidget *widget) {
+
+void PanelTiming::finish(QWidget *widget)
+{
     // A hidden panel never paints, so a watch would report a later, unrelated paint.
     if (!active || !widget || !widget->isVisible())
         return;
     stage("open");
     // A newer opening replaces a watch that never saw its paint.
-    for (auto *old : widget->findChildren<QObject *>(QString::fromLatin1(watchName), Qt::FindDirectChildrenOnly))
+    for (auto *old : widget->findChildren<QObject *>(QString::fromLatin1(watchName),
+                                                     Qt::FindDirectChildrenOnly))
         delete old;
     new PaintWatch(widget, [total = total, step = step, fields = fields]() mutable {
         fields["paint_ms"] = step.nsecsElapsed() / 1e6;
@@ -76,4 +92,4 @@ void PanelTiming::finish(QWidget *widget) {
         diagnostic("panel-open", fields, false);
     });
 }
-}
+} // namespace kobalt::ui

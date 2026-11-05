@@ -16,8 +16,19 @@
 
 namespace kobalt::reader {
 // Settings tabs, in the order of the stacked pages.
-enum class SettingsPage { Display, Controls, Defaults, Styling, Dictionaries, System, About, Kosync };
-struct SettingsPanelInputs {
+enum class SettingsPage {
+    Display,
+    Controls,
+    Defaults,
+    Styling,
+    Dictionaries,
+    System,
+    About,
+    Kosync
+};
+
+struct SettingsPanelInputs
+{
     KeyboardFactory keyboard;
     QString release, commit;
     int qtMajor = 0;
@@ -31,23 +42,36 @@ struct SettingsPanelInputs {
     // The host can turn Wi-Fi off when a book opens, or previews a host that can.
     bool wifiPowerSaverSupported = false;
 };
+
 // Qt parents own every widget. Reader installs policy callbacks after construction.
-class SettingsPanel final : public ui::Panel {
+class SettingsPanel final : public ui::Panel
+{
 public:
     SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs);
     ~SettingsPanel() override;
     void dismissRestore();
-    void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts, const QString &current,
-                         const QString &emptyLabel, std::function<void(const QString &)> chosen);
+    void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
+                         const QString &current, const QString &emptyLabel,
+                         std::function<void(const QString &)> chosen);
     void dismissFontChoices();
-    void showHeaderFooterWeights(int current, const QFont &sampleFont, std::function<void(int)> chosen);
-    void showDictionaryFontSizes(int current, const QString &family, bool customFont, std::function<void(int)> chosen);
+    void showHeaderFooterWeights(int current, const QFont &sampleFont,
+                                 std::function<void(int)> chosen);
+    void showDictionaryFontSizes(int current, const QString &family, bool customFont,
+                                 std::function<void(int)> chosen);
     static QString dictionaryFontSizeLabel(int percent);
-    void showTimeRemainingFormats(const QString &current, std::function<void(const QString &)> chosen);
+    void showTimeRemainingFormats(const QString &current,
+                                  std::function<void(const QString &)> chosen);
     static QString timeRemainingFormatLabel(const QString &format);
     void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
     static QString columnSpacingLabel(int percent);
-    enum class AdvancedText { WordSpacing, Tracking, HangingPunctuation, Pagination, VerticalSpacing, ParagraphSpacing };
+    enum class AdvancedText {
+        WordSpacing,
+        Tracking,
+        HangingPunctuation,
+        Pagination,
+        VerticalSpacing,
+        ParagraphSpacing
+    };
     static QString paragraphSpacingLabel(int percent);
     void showBeautifier(const QJsonObject &current, std::function<void(QJsonObject)> chosen);
     void showPageSpacingChoices(int mode, int scope, std::function<void(int, int)> chosen);
@@ -85,22 +109,28 @@ public:
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
     ui::DescribedOption *lightDarkModeOption = nullptr;
-    ui::DescribedOption *darkOption = nullptr, *inheritTextLayoutOption = nullptr, *animationOption = nullptr;
-    ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr, *denseGraphOption = nullptr;
+    ui::DescribedOption *darkOption = nullptr, *inheritTextLayoutOption = nullptr,
+                        *animationOption = nullptr;
+    ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,
+                        *denseGraphOption = nullptr;
     ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
     ui::DescribedOption *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr;
-    ui::CaptionButton *defaultFontButton = nullptr, *uiFontButton = nullptr, *uiMonoFontButton = nullptr,
-                      *headerFooterFontButton = nullptr, *headerFooterWeightButton = nullptr;
-    ui::CaptionButton *serifFontButton = nullptr, *sansFontButton = nullptr, *monoFontButton = nullptr;
+    ui::CaptionButton *defaultFontButton = nullptr, *uiFontButton = nullptr,
+                      *uiMonoFontButton = nullptr, *headerFooterFontButton = nullptr,
+                      *headerFooterWeightButton = nullptr;
+    ui::CaptionButton *serifFontButton = nullptr, *sansFontButton = nullptr,
+                      *monoFontButton = nullptr;
     ui::CaptionButton *dictionaryFontButton = nullptr, *dictionaryFontSizeButton = nullptr;
     ui::DescribedOption *landscapeColumnsOption = nullptr;
     ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr;
-    ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr, *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;
+    ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr,
+                      *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;
     ui::CaptionButton *paragraphSpacingButton = nullptr, *beautifierButton = nullptr;
-    ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr, *sleepTileButton = nullptr, *menuViewButton = nullptr;
-    ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr, *navigationBarButton = nullptr,
-                      *tappableLinksButton = nullptr;
+    ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr,
+                      *sleepTileButton = nullptr, *menuViewButton = nullptr;
+    ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
+                      *navigationBarButton = nullptr, *tappableLinksButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;
@@ -115,7 +145,8 @@ protected:
 
 private:
     void showStylingChoices(AdvancedText feature, int current, std::function<void(int)> chosen,
-                            const QString &alignment, int secondary, std::function<void(int, int)> pairChosen);
+                            const QString &alignment, int secondary,
+                            std::function<void(int, int)> pairChosen);
     QWidget *tabRail = nullptr, *optionsColumn = nullptr;
     QLabel *settingsTitle = nullptr;
     ui::CellButton *backButton = nullptr;
@@ -143,4 +174,4 @@ private:
     void showStylingPreview();
     void fitStylingCard();
 };
-}
+} // namespace kobalt::reader

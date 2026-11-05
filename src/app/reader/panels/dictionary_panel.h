@@ -11,7 +11,8 @@
 
 namespace kobalt {
 // A sheet across the full width, fixed to the screen edge away from the word.
-class DictionaryPanel : public ui::Panel {
+class DictionaryPanel : public ui::Panel
+{
 public:
     explicit DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard = {});
     std::function<void()> dismissed;
@@ -66,4 +67,4 @@ private:
     void finishEditing(bool restore = true);
     void submitQuery();
 };
-}
+} // namespace kobalt

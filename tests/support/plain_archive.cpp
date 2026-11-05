@@ -12,12 +12,16 @@
 
 namespace kobalt::native {
 namespace {
-bool guiThread() {
+bool guiThread()
+{
     return qApp && QThread::currentThread() == qApp->thread();
 }
-class Reply : public QNetworkReply {
+
+class Reply : public QNetworkReply
+{
 public:
-    Reply(QByteArray bytes, bool ok) : bytes_(std::move(bytes)) {
+    Reply(QByteArray bytes, bool ok) : bytes_(std::move(bytes))
+    {
         open(QIODevice::ReadOnly);
         setHeader(QNetworkRequest::ContentLengthHeader, bytes_.size());
         if (!ok)
@@ -27,15 +31,17 @@ public:
             emit finished();
         });
     }
-    void abort() override {
-        close();
-    }
-    qint64 bytesAvailable() const override {
+
+    void abort() override { close(); }
+
+    qint64 bytesAvailable() const override
+    {
         return bytes_.size() - offset_ + QNetworkReply::bytesAvailable();
     }
 
 protected:
-    qint64 readData(char *out, qint64 count) override {
+    qint64 readData(char *out, qint64 count) override
+    {
         count = qMin(count, qint64(bytes_.size()) - offset_);
         std::memcpy(out, bytes_.constData() + offset_, size_t(count));
         offset_ += count;
@@ -46,9 +52,11 @@ private:
     QByteArray bytes_;
     qint64 offset_ = 0;
 };
-}
+} // namespace
+
 namespace {
-class PlainArchive final : public ResourceArchive {
+class PlainArchive final : public ResourceArchive
+{
 public:
     PlainArchive();
     ~PlainArchive() override;
@@ -62,21 +70,30 @@ private:
     struct Data;
     std::unique_ptr<Data> data_;
 };
-struct PlainArchive::Data {
+
+struct PlainArchive::Data
+{
     QString path;
     QMap<QString, qint64> sizes;
     // Requests are restricted to the GUI thread.
     ZipResourceIndex index;
 };
+
 PlainArchive::PlainArchive() = default;
 PlainArchive::~PlainArchive() = default;
-bool PlainArchive::available() {
+
+bool PlainArchive::available()
+{
     return guiThread();
 }
-void PlainArchive::close() {
+
+void PlainArchive::close()
+{
     data_.reset();
 }
-bool PlainArchive::open(const QString &path) {
+
+bool PlainArchive::open(const QString &path)
+{
     close();
     if (!available())
         return false;
@@ -95,7 +112,9 @@ bool PlainArchive::open(const QString &path) {
     data_ = std::move(data);
     return true;
 }
-QNetworkReply *PlainArchive::request(const QString &name) {
+
+QNetworkReply *PlainArchive::request(const QString &name)
+{
     if (!guiThread() || !data_)
         return nullptr;
     if (!data_->sizes.contains(name))
@@ -103,7 +122,8 @@ QNetworkReply *PlainArchive::request(const QString &name) {
     // Never ask Nickel to decode a resource. CREngine reads the original
     // bytes even when the advisory formatting inspection is incomplete.
     ZipResource stream;
-    if (data_->sizes.value(name) > ResourceCache::budgetBytes || !stream.open(data_->path, name, data_->index))
+    if (data_->sizes.value(name) > ResourceCache::budgetBytes
+        || !stream.open(data_->path, name, data_->index))
         return new Reply({}, false);
     QByteArray bytes;
     while (stream.valid() && !stream.finished())
@@ -111,15 +131,19 @@ QNetworkReply *PlainArchive::request(const QString &name) {
     const bool ok = stream.valid() && stream.finished();
     return new Reply(ok ? bytes : QByteArray(), ok);
 }
-bool PlainArchive::canStreamPlainImage(const QString &name) const {
+
+bool PlainArchive::canStreamPlainImage(const QString &name) const
+{
     return guiThread() && data_ && data_->sizes.contains(name);
 }
-}
-std::unique_ptr<ResourceArchive> openPlainArchive(const QString &path) {
+} // namespace
+
+std::unique_ptr<ResourceArchive> openPlainArchive(const QString &path)
+{
     auto archive = std::make_unique<PlainArchive>();
     if (!archive->open(path))
         return {};
     return archive;
 }
 
-}
+} // namespace kobalt::native

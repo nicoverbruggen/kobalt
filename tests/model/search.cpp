@@ -5,14 +5,16 @@
 #include <QSet>
 #include <cstdio>
 #include "check.h"
-int main(int argc, char **argv) {
+
+int main(int argc, char **argv)
+{
     QGuiApplication app(argc, argv);
     require(argc == 2, "Pass the synthetic dictionary EPUB");
     QFile file(QString::fromLocal8Bit(argv[1]));
     require(file.open(QIODevice::ReadOnly), "Missing fixture");
     kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
-    require(model.open(file.readAll(), {360, 700}, {}, &error), qPrintable(error));
+    require(model.open(file.readAll(), { 360, 700 }, {}, &error), qPrintable(error));
     const auto origin = model.position();
     auto search = [&](QString query) {
         QVector<kobalt::SearchHit> hits;
@@ -22,14 +24,16 @@ int main(int argc, char **argv) {
             for (const auto &hit : batch.hits) {
                 require(!starts.contains(hit.start), "Duplicate boundary match");
                 starts.insert(hit.start);
-                require(!hit.start.isEmpty() && !hit.end.isEmpty() && hit.page == page, "Invalid source anchor");
+                require(!hit.start.isEmpty() && !hit.end.isEmpty() && hit.page == page,
+                        "Invalid source anchor");
             }
             hits += batch.hits;
         }
         require(model.position() == origin, "Search changed the reading position");
         return hits;
     };
-    for (const auto *word : {"rainbow", "cooperation", "extraordinary", "A𐐀word", "Reader's", "日本語", "中文"}) {
+    for (const auto *word :
+         { "rainbow", "cooperation", "extraordinary", "A𐐀word", "Reader's", "日本語", "中文" }) {
         const auto hits = search(QString::fromUtf8(word));
         if (hits.size() != 1) {
             fprintf(stderr, "%s: %d matches\n", word, int(hits.size()));
@@ -53,7 +57,7 @@ int main(int argc, char **argv) {
     const auto hits = search("Chapter boundary");
     require(hits.size() == 1, "Last chapter missing");
     require(model.goTo(hits.first().start), "Search result cannot be opened");
-    require(!model.rangeRects(hits.first().start, hits.first().end).isEmpty(), "Search match geometry missing");
-    puts(
-        "PASS: Unicode, inline markup, soft hyphens, page and chapter boundaries, exact navigation and unchanged reading position");
+    require(!model.rangeRects(hits.first().start, hits.first().end).isEmpty(),
+            "Search match geometry missing");
+    puts("PASS: Unicode, inline markup, soft hyphens, page and chapter boundaries, exact navigation and unchanged reading position");
 }

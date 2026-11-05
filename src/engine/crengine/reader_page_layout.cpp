@@ -5,10 +5,11 @@
 
 namespace kobalt {
 namespace {
-ldomNode *leadingImage(ldomNode *root) {
+ldomNode *leadingImage(ldomNode *root)
+{
     if (!root)
         return nullptr;
-    std::vector<ldomNode *> pending{root};
+    std::vector<ldomNode *> pending{ root };
     while (!pending.empty()) {
         auto *node = pending.back();
         pending.pop_back();
@@ -30,9 +31,11 @@ ldomNode *leadingImage(ldomNode *root) {
     }
     return nullptr;
 }
+
 // A full-page wrapper must own all visible content in its spine body.
 // Inline images and tables next to prose keep their ordinary percentage sizing.
-ldomNode *onlyContentChild(ldomNode *parent) {
+ldomNode *onlyContentChild(ldomNode *parent)
+{
     ldomNode *result = nullptr;
     for (int i = 0; i < parent->getChildCount(); ++i) {
         auto *node = parent->getChildNode(i);
@@ -42,8 +45,9 @@ ldomNode *onlyContentChild(ldomNode *parent) {
             }
             continue;
         }
-        if (!node->isElement() || node->isNodeName("head") || node->isNodeName("style") || node->isNodeName("script") ||
-            (!node->getStyle().isNull() && node->getStyle()->display == css_d_none)) {
+        if (!node->isElement() || node->isNodeName("head") || node->isNodeName("style")
+            || node->isNodeName("script")
+            || (!node->getStyle().isNull() && node->getStyle()->display == css_d_none)) {
             continue;
         }
         if (result) {
@@ -53,16 +57,21 @@ ldomNode *onlyContentChild(ldomNode *parent) {
     }
     return result;
 }
-bool fullExtent(ldomNode *node, const char *attribute, const css_length_t &length) {
+
+bool fullExtent(ldomNode *node, const char *attribute, const css_length_t &length)
+{
     if (length.type == css_val_percent) {
         return length.value == 100 * 256;
     }
     if (length.type != css_val_unspecified) {
         return false;
     }
-    return QString::fromUtf8(UnicodeToUtf8(node->getAttributeValue(attribute)).c_str()).trimmed() == "100%";
+    return QString::fromUtf8(UnicodeToUtf8(node->getAttributeValue(attribute)).c_str()).trimmed()
+            == "100%";
 }
-void markFullPage(ldomNode *body, lUInt16 attribute) {
+
+void markFullPage(ldomNode *body, lUInt16 attribute)
+{
     // The outer engine body contains fragments, not one EPUB page.
     auto *parent = body->getParentNode();
     if (!parent || !parent->isNodeName("DocFragment")) {
@@ -74,7 +83,8 @@ void markFullPage(ldomNode *body, lUInt16 attribute) {
             return;
         }
         if (node->isNodeName("svg")) {
-            if (fullExtent(node, "width", style->width) && fullExtent(node, "height", style->height)) {
+            if (fullExtent(node, "width", style->width)
+                && fullExtent(node, "height", style->height)) {
                 node->setAttributeValue(0, attribute, U"1");
             }
             return;
@@ -90,7 +100,9 @@ void markFullPage(ldomNode *body, lUInt16 attribute) {
         }
     }
 }
-void mark(ldomNode *root, lUInt16 attribute) {
+
+void mark(ldomNode *root, lUInt16 attribute)
+{
     auto *image = leadingImage(root);
     if (!image)
         return;
@@ -107,14 +119,16 @@ void mark(ldomNode *root, lUInt16 attribute) {
             break;
     }
 }
-}
-void markChapterLeadingImages(LVDocView *view) {
+} // namespace
+
+void markChapterLeadingImages(LVDocView *view)
+{
     if (!view || !view->getDocument())
         return;
     auto *document = view->getDocument();
     const auto attribute = document->getAttrNameIndex("data-kobalt-leading-image");
     const auto fullPageAttribute = document->getAttrNameIndex("data-kobalt-fullpage");
-    std::vector<ldomNode *> pending{document->getRootNode()}, bodies;
+    std::vector<ldomNode *> pending{ document->getRootNode() }, bodies;
     while (!pending.empty()) {
         auto *node = pending.back();
         pending.pop_back();
@@ -138,7 +152,7 @@ void markChapterLeadingImages(LVDocView *view) {
     }
     // A contents entry can start a chapter partway through a spine file.
     // The view accessor paginates; inspect source anchors before initial layout.
-    std::vector<LVTocItem *> chapters{document->getToc()};
+    std::vector<LVTocItem *> chapters{ document->getToc() };
     while (!chapters.empty()) {
         auto *chapter = chapters.back();
         chapters.pop_back();
@@ -149,4 +163,4 @@ void markChapterLeadingImages(LVDocView *view) {
             chapters.push_back(chapter->getChild(i));
     }
 }
-}
+} // namespace kobalt

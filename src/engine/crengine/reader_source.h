@@ -4,7 +4,8 @@
 
 namespace kobalt {
 // Private backing storage shared only by engine documents and their previews.
-struct ReaderSource {
+struct ReaderSource
+{
     // A preview retains the publication storage even if its source document closes.
     // Containers must die before the buffers backing their streams.
     std::shared_ptr<ReaderSource> parent;
@@ -15,4 +16,4 @@ struct ReaderSource {
     QMap<QString, qint64> sizes;
     LVContainerRef container;
 };
-}
+} // namespace kobalt

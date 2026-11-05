@@ -8,70 +8,61 @@
 #include <QPointer>
 #include <QTime>
 #ifdef Q_OS_MACOS
-#include <sys/sysctl.h>
+#  include <sys/sysctl.h>
 #else
-#include <QSysInfo>
+#  include <QSysInfo>
 #endif
 
 namespace kobalt::desktop {
 namespace {
-class Light final : public LightControls {
+class Light final : public LightControls
+{
 public:
-    bool initialize() override {
-        return false;
-    }
-    bool hasWarmth() const override {
-        return false;
-    }
-    int warmth() const override {
-        return 0;
-    }
-    int warmthMinimum() const override {
-        return 0;
-    }
-    int warmthMaximum() const override {
-        return 0;
-    }
-    int warmthStep() const override {
-        return 1;
-    }
-    bool automaticWarmth() const override {
-        return false;
-    }
-    int setWarmth(int) override {
-        return 0;
-    }
-    bool saveWarmth() override {
-        return false;
-    }
-    bool setAutomaticWarmth(bool) override {
-        return false;
-    }
-    bool beginGesture() override {
-        return false;
-    }
-    int setGestureLevel(int) override {
-        return 0;
-    }
-    void finishGesture(bool) override {}
-    int brightness() const override {
-        return 0;
-    }
-    bool gesturing() const override {
-        return false;
-    }
+    bool initialize() override { return false; }
+
+    bool hasWarmth() const override { return false; }
+
+    int warmth() const override { return 0; }
+
+    int warmthMinimum() const override { return 0; }
+
+    int warmthMaximum() const override { return 0; }
+
+    int warmthStep() const override { return 1; }
+
+    bool automaticWarmth() const override { return false; }
+
+    int setWarmth(int) override { return 0; }
+
+    bool saveWarmth() override { return false; }
+
+    bool setAutomaticWarmth(bool) override { return false; }
+
+    bool beginGesture() override { return false; }
+
+    int setGestureLevel(int) override { return 0; }
+
+    void finishGesture(bool) override { }
+
+    int brightness() const override { return 0; }
+
+    bool gesturing() const override { return false; }
 };
-class Dictionary final : public DictionaryService {
+
+class Dictionary final : public DictionaryService
+{
 public:
-    QVector<DictionaryChoice> choices() const override {
-        return {};
-    }
-    bool select(const QString &, const QString &, QString *error) override {
+    QVector<DictionaryChoice> choices() const override { return {}; }
+
+    bool select(const QString &, const QString &, QString *error) override
+    {
         if (error)
             *error = QStringLiteral("No dictionary installed.");
         return false;
     }
-    DictionaryResult lookup(const QString &, const QString &word) override {
+
+    DictionaryResult lookup(const QString &, const QString &word) override
+    {
         DictionaryResult result;
         result.word = word;
         result.error = QStringLiteral("No dictionary installed.");
@@ -79,17 +70,21 @@ public:
     }
 };
 
-class Presentation final : public WindowPresentation {
+class Presentation final : public WindowPresentation
+{
 public:
-    void pauseBackground(bool) override {}
-    void resumeBackground() override {}
-    void resumeAndRepaintBackground() override {}
-    void acceptHandoff(QDialog &, const std::function<void()> &accept) override {
-        accept();
-    }
+    void pauseBackground(bool) override { }
+
+    void resumeBackground() override { }
+
+    void resumeAndRepaintBackground() override { }
+
+    void acceptHandoff(QDialog &, const std::function<void()> &accept) override { accept(); }
 };
-}
-ReaderHostServices readerHostServices() {
+} // namespace
+
+ReaderHostServices readerHostServices()
+{
     ReaderHostServices result;
 #ifdef Q_OS_MACOS
     result.deviceName = QStringLiteral("Mac");
@@ -100,28 +95,17 @@ ReaderHostServices readerHostServices() {
 #else
     result.deviceName = QSysInfo::prettyProductName();
 #endif
-    result.colorDisplay = [] {
-        return true;
-    };
-    result.browserAvailable = [] {
-        return true;
-    };
+    result.colorDisplay = [] { return true; };
+    result.browserAvailable = [] { return true; };
     result.openBrowser = [](const QUrl &url, QWidget *) {
-        return url.isValid() && !url.host().isEmpty() && (url.scheme() == "http" || url.scheme() == "https") &&
-               QDesktopServices::openUrl(url);
+        return url.isValid() && !url.host().isEmpty()
+                && (url.scheme() == "http" || url.scheme() == "https")
+                && QDesktopServices::openUrl(url);
     };
-    result.clock = [] {
-        return QTime::currentTime().toString("HH:mm");
-    };
-    result.battery = [] {
-        return BatteryStatus{};
-    };
-    result.pageButtons = [] {
-        return false;
-    };
-    result.reverseLandscapeButtons = [] {
-        return false;
-    };
+    result.clock = [] { return QTime::currentTime().toString("HH:mm"); };
+    result.battery = [] { return BatteryStatus{}; };
+    result.pageButtons = [] { return false; };
+    result.reverseLandscapeButtons = [] { return false; };
     result.pageButtonDirection = [](QKeyEvent *event) {
         switch (event->key()) {
         case Qt::Key_VolumeDown:
@@ -134,33 +118,17 @@ ReaderHostServices readerHostServices() {
             return 0;
         }
     };
-    result.fontFamilies = [] {
-        return QStringList{};
-    };
-    result.uiFont = [] {
-        return ui::interfaceFont();
-    };
-    result.suspended = [] {
-        return QGuiApplication::applicationState() != Qt::ApplicationActive;
-    };
-    result.lightAvailable = [] {
-        return false;
-    };
+    result.fontFamilies = [] { return QStringList{}; };
+    result.uiFont = [] { return ui::interfaceFont(); };
+    result.suspended = [] { return QGuiApplication::applicationState() != Qt::ApplicationActive; };
+    result.lightAvailable = [] { return false; };
     result.desktopUi = true;
-    result.animationSupport = [] {
-        return PageAnimationSupport::Unavailable;
-    };
-    result.cancelAnimation = [] {};
-    result.light = [](QWidget *) {
-        return std::make_unique<Light>();
-    };
-    result.dictionary = [] {
-        return std::make_unique<Dictionary>();
-    };
+    result.animationSupport = [] { return PageAnimationSupport::Unavailable; };
+    result.cancelAnimation = [] { };
+    result.light = [](QWidget *) { return std::make_unique<Light>(); };
+    result.dictionary = [] { return std::make_unique<Dictionary>(); };
     result.keyboard = ui::makeWidgetKeyboard;
-    result.presentation = [](QWidget *) {
-        return std::make_unique<Presentation>();
-    };
+    result.presentation = [](QWidget *) { return std::make_unique<Presentation>(); };
     return result;
 }
-}
+} // namespace kobalt::desktop

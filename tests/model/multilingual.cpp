@@ -15,16 +15,22 @@
 #include <QTextDocumentFragment>
 
 using namespace kobalt;
+
 namespace {
-QByteArray read(const QString &path) {
+QByteArray read(const QString &path)
+{
     QFile file(path);
     require(file.open(QIODevice::ReadOnly), qPrintable("Cannot read " + path));
     return file.readAll();
 }
-QByteArray escaped(const QJsonValue &value) {
+
+QByteArray escaped(const QJsonValue &value)
+{
     return value.toString().toHtmlEscaped().toUtf8();
 }
-QVector<SearchHit> search(EngineDocument &model, const QString &query) {
+
+QVector<SearchHit> search(EngineDocument &model, const QString &query)
+{
     QVector<SearchHit> hits;
     QSet<QString> starts;
     for (int page = 0; page < model.pages(); ++page)
@@ -37,7 +43,9 @@ QVector<SearchHit> search(EngineDocument &model, const QString &query) {
         }
     return hits;
 }
-QString prose(const QJsonArray &paragraphs, const QString &title) {
+
+QString prose(const QJsonArray &paragraphs, const QString &title)
+{
     QString best;
     for (const auto &value : paragraphs) {
         // Ruby annotations split logical prose. Select one original contiguous run.
@@ -50,20 +58,28 @@ QString prose(const QJsonArray &paragraphs, const QString &title) {
     }
     return best.left(24);
 }
-void checkBook(const QJsonObject &entry, const QString &directory) {
+
+void checkBook(const QJsonObject &entry, const QString &directory)
+{
     const auto language = entry["language"].toString();
     const auto bytes = read(QStringLiteral(KOBALT_TEST_CORPUS) + '/' + entry["file"].toString());
-    require(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex() == entry["sha256"].toString().toLatin1(),
+    require(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()
+                    == entry["sha256"].toString().toLatin1(),
             "Literary source checksum differs from the original fixture");
     const auto book = QJsonDocument::fromJson(bytes).object();
     require(book["language"].toString() == language && !book["license"].toString().isEmpty(),
             "Literary source identity or license is missing");
     const QString fontName = language == "ar" ? "NotoNaskhArabic-Regular.ttf"
-                           : language == "he" ? "NotoSerifHebrew-Regular.ttf"
-                           : language == "hi" ? "NotoSerifDevanagari-Regular.ttf" : "NotoSerifCJK-Regular.ttc";
+            : language == "he"                ? "NotoSerifHebrew-Regular.ttf"
+            : language == "hi"                ? "NotoSerifDevanagari-Regular.ttf"
+                                              : "NotoSerifCJK-Regular.ttc";
     const QRawFont scriptFont(test::readerAssets().fontData(fontName), 36, QFont::PreferNoHinting);
-    const char32_t letter = language == "ar" ? U'م' : language == "he" ? U'א' : language == "hi" ? U'क' : U'日';
-    require(scriptFont.isValid() && scriptFont.supportsCharacter(letter), "Bundled script font has no probe glyph");
+    const char32_t letter = language == "ar" ? U'م'
+            : language == "he"               ? U'א'
+            : language == "hi"               ? U'क'
+                                             : U'日';
+    require(scriptFont.isValid() && scriptFont.supportsCharacter(letter),
+            "Bundled script font has no probe glyph");
     const bool rtl = language == "ar" || language == "he";
     const QByteArray direction = rtl ? "rtl" : "ltr";
     test::BookFiles files;
@@ -77,8 +93,9 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
         QByteArray original;
         for (const auto &paragraph : paragraphs)
             original += paragraph.toString().toUtf8() + '\n';
-        require(QCryptographicHash::hash(original, QCryptographicHash::Sha256).toHex() ==
-                    chapter["sha256"].toString().toLatin1(), "Original literary chapter checksum differs");
+        require(QCryptographicHash::hash(original, QCryptographicHash::Sha256).toHex()
+                        == chapter["sha256"].toString().toLatin1(),
+                "Original literary chapter checksum differs");
         // Eight unmodified paragraphs per chapter bound routine corpus work.
         QJsonArray excerpt;
         QByteArray body;
@@ -92,31 +109,41 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
         require(!probes.last().isEmpty(), "Literary excerpt has no searchable prose");
         const auto name = "c" + QByteArray::number(index) + ".xhtml";
         files[QString::fromLatin1(name)] =
-            "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"" + language.toUtf8() + "\" lang=\"" + language.toUtf8() +
-            "\"><head><title>" + escaped(chapter["title"]) + "</title></head><body dir=\"" + direction + "\"><h1>" +
-            escaped(chapter["title"]) + "</h1>" + body + "</body></html>";
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"" + language.toUtf8()
+                + "\" lang=\"" + language.toUtf8() + "\"><head><title>" + escaped(chapter["title"])
+                + "</title></head><body dir=\"" + direction + "\"><h1>" + escaped(chapter["title"])
+                + "</h1>" + body + "</body></html>";
         spine += "<itemref idref=\"" + name + "\"/>";
         contents += "<li><a href=\"" + name + "\">" + escaped(chapter["title"]) + "</a></li>";
         sources += "<dc:source>" + escaped(chapter["source"]) + "</dc:source>";
     }
-    files["nav.xhtml"] = "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">"
-        "<head><title>Contents</title></head><body><nav epub:type=\"toc\"><ol>" + contents + "</ol></nav></body></html>";
+    files["nav.xhtml"] =
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">"
+            "<head><title>Contents</title></head><body><nav epub:type=\"toc\"><ol>"
+            + contents + "</ol></nav></body></html>";
     files = test::publisherPackage(language.toUtf8(), escaped(book["title"]), files, spine);
     auto &opf = files["book.opf"];
     opf.replace("<spine>", "<spine page-progression-direction=\"" + direction + "\">");
     opf.replace("<item id=\"nav.xhtml\"", "<item properties=\"nav\" id=\"nav.xhtml\"");
-    opf.replace("</metadata>", "<dc:creator>" + escaped(book["author"]) + "</dc:creator>"
-        "<dc:contributor>Wikisource contributors</dc:contributor><dc:rights>" + escaped(book["rights"]) + "; " +
-        escaped(book["license"]) + "</dc:rights>" + sources + "</metadata>");
-    opf.replace("</manifest>", "<item id=\"credits\" href=\"sources.json\" media-type=\"application/json\"/></manifest>");
+    opf.replace("</metadata>",
+                "<dc:creator>" + escaped(book["author"])
+                        + "</dc:creator>"
+                          "<dc:contributor>Wikisource contributors</dc:contributor><dc:rights>"
+                        + escaped(book["rights"]) + "; " + escaped(book["license"]) + "</dc:rights>"
+                        + sources + "</metadata>");
+    opf.replace(
+            "</manifest>",
+            "<item id=\"credits\" href=\"sources.json\" media-type=\"application/json\"/></manifest>");
     files["sources.json"] = bytes;
     const auto name = language + ".epub";
     require(test::writeBook(directory, name, files), "Cannot generate literary EPUB");
     EngineDocument model(test::readerFonts());
     QString error;
-    require(model.open(read(directory + '/' + name), {1264, 1680}, {}, &error), qPrintable(error));
+    require(model.open(read(directory + '/' + name), { 1264, 1680 }, {}, &error),
+            qPrintable(error));
     require(model.pages() > 1, "Literary chapters did not paginate");
-    require(model.state()["page_progression_rtl"].toBool() == rtl, "Literary book has the wrong page direction");
+    require(model.state()["page_progression_rtl"].toBool() == rtl,
+            "Literary book has the wrong page direction");
     const auto links = model.chapters();
     for (int chapter = 0; chapter < 2; ++chapter) {
         bool visited = false;
@@ -129,7 +156,8 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
             }
         require(visited, "Literary TOC lost an original chapter title");
         const auto hits = search(model, probes[chapter]);
-        require(!hits.isEmpty(), qPrintable("Original literary prose is not searchable: " + probes[chapter]));
+        require(!hits.isEmpty(),
+                qPrintable("Original literary prose is not searchable: " + probes[chapter]));
         const auto anchor = hits.first().start;
         require(model.goTo(anchor), "Literary search anchor did not resolve");
         const auto rectangles = model.rangeRects(hits.first().start, hits.first().end);
@@ -148,8 +176,9 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
         for (const auto &rectangle : rectangles) {
             const auto area = rectangle.intersected(page.rect());
             for (int x = area.left(); x <= area.right() && selected.text.isEmpty(); x += 2) {
-                const auto candidate = model.wordAt({x, area.center().y()});
-                if (!candidate.text.isEmpty() && probe.contains(candidate.text.normalized(QString::NormalizationForm_C)))
+                const auto candidate = model.wordAt({ x, area.center().y() });
+                if (!candidate.text.isEmpty()
+                    && probe.contains(candidate.text.normalized(QString::NormalizationForm_C)))
                     selected = candidate;
             }
         }
@@ -162,15 +191,21 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
     }
     const auto checkpoint = model.state();
     EngineDocument reopened(test::readerFonts());
-    require(reopened.open(read(directory + '/' + name), {1264, 1680}, checkpoint, &error), qPrintable(error));
+    require(reopened.open(read(directory + '/' + name), { 1264, 1680 }, checkpoint, &error),
+            qPrintable(error));
     require(reopened.position() == model.position(), "Literary reopen lost its source position");
-    std::printf("PASS: %s literary excerpts, native TOC, search, selection, reflow and reopen\n", qPrintable(language));
+    std::printf("PASS: %s literary excerpts, native TOC, search, selection, reflow and reopen\n",
+                qPrintable(language));
 }
-}
+} // namespace
+
 // Checks Arabic, Hebrew, Hindi and Japanese excerpts: chapter titles, script glyphs, direction, search, selection and reflow.
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QGuiApplication app(argc, argv);
-    const auto entries = QJsonDocument::fromJson(read(QStringLiteral(KOBALT_TEST_CORPUS) + "/catalog.json")).array();
+    const auto entries =
+            QJsonDocument::fromJson(read(QStringLiteral(KOBALT_TEST_CORPUS) + "/catalog.json"))
+                    .array();
     require(entries.size() == 4, "Representative literary inventory must contain four languages");
     QTemporaryDir directory;
     require(directory.isValid(), "Cannot create literary fixture directory");
@@ -181,5 +216,6 @@ int main(int argc, char **argv) {
         found.insert(language);
         checkBook(entry.toObject(), directory.path());
     }
-    require(found == QSet<QString>({"ar", "he", "hi", "ja"}), "Representative literary selection changed");
+    require(found == QSet<QString>({ "ar", "he", "hi", "ja" }),
+            "Representative literary selection changed");
 }

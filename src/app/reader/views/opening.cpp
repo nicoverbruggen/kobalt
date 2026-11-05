@@ -25,11 +25,15 @@
 
 namespace kobalt {
 namespace {
-class OpeningDialog final : public QDialog {
+class OpeningDialog final : public QDialog
+{
 public:
-    OpeningDialog(QWidget *background, bool dark, PresentationFactory makePresentation, bool embedded = false)
+    OpeningDialog(QWidget *background, bool dark, PresentationFactory makePresentation,
+                  bool embedded = false)
         : QDialog(background, embedded ? Qt::SubWindow : Qt::Dialog | Qt::FramelessWindowHint),
-          presentation(makePresentation(this)), embedded(embedded) {
+          presentation(makePresentation(this)),
+          embedded(embedded)
+    {
         Q_ASSERT(presentation);
         // Start as a child. Creating a dialog under an embedded reader first
         // leaves a separate graphics proxy even after clearing its window flag.
@@ -55,11 +59,12 @@ public:
         progress->setValue(0);
         progress->setTextVisible(false);
         ui::readerStyle(
-            progress,
-            "QProgressBar{border:0;padding:0;margin:0;min-height:0;background:palette(midlight);} QProgressBar::chunk{background:palette(window-text);}");
+                progress,
+                "QProgressBar{border:0;padding:0;margin:0;min-height:0;background:palette(midlight);} QProgressBar::chunk{background:palette(window-text);}");
         // Font capitalization does not reach this dialog's labels, so set the
         // caption's capitals in the text itself.
-        hint = new ui::InterfaceLabel(QLocale().toUpper(strings::get("opening.may_take_a_while")), this);
+        hint = new ui::InterfaceLabel(QLocale().toUpper(strings::get("opening.may_take_a_while")),
+                                      this);
         hint->setObjectName("rrOpeningHint");
         hint->setAlignment(Qt::AlignCenter);
         hint->hide();
@@ -83,14 +88,18 @@ public:
             platform::textRefresh(widget);
         platform::textRefresh(this);
     }
-    void setCover(QImage image) {
+
+    void setCover(QImage image)
+    {
         if (fallback)
             return;
         cover = std::move(image);
         brand->setVisible(cover.isNull());
         update();
     }
-    void showFallback(OpeningFallback state) {
+
+    void showFallback(OpeningFallback state)
+    {
         fallback = true;
         automatic = state == OpeningFallback::Protected || state == OpeningFallback::Remembered;
         storageFailure = state == OpeningFallback::Storage;
@@ -100,9 +109,9 @@ public:
         progress->hide();
         cancel->hide();
         label->setText(automatic ? strings::get("opening.native") : strings::get("opening.failed"));
-        detail->setText(protectedBook ? strings::get("opening.protected")
-                        : automatic   ? strings::get("opening.remembered")
-                                      : strings::get("opening.failed_detail"));
+        detail->setText(protectedBook       ? strings::get("opening.protected")
+                                : automatic ? strings::get("opening.remembered")
+                                            : strings::get("opening.failed_detail"));
         detail->show();
         hint->setText(QLocale().toUpper(strings::get("opening.continuing")));
         hint->setVisible(automatic);
@@ -122,50 +131,62 @@ public:
         layoutWidgets();
         update();
     }
-    void afterFirstPaint(std::function<void()> callback) {
+
+    void afterFirstPaint(std::function<void()> callback)
+    {
         if (painted) {
             scheduleAfterPaint(std::move(callback));
         } else {
             firstPaint = std::move(callback);
         }
     }
-    void refreshFonts() {
+
+    void refreshFonts()
+    {
         setFont(ui::interfaceFont());
         ui::readerStyle(this, ui::styles::reader());
         layoutWidgets();
         ui::refreshInterfaceText(this);
     }
-    void reject() override {
+
+    void reject() override
+    {
         if (embedded)
             emit rejected();
         else
             QDialog::reject();
     }
-    void accept() override {
+
+    void accept() override
+    {
         if (!fallback || !parentWidget()) {
             QDialog::accept();
             return;
         }
-        presentation->acceptHandoff(*this, [this] {
-            QDialog::accept();
-        });
+        presentation->acceptHandoff(*this, [this] { QDialog::accept(); });
     }
+
     QProgressBar *progress;
 
 protected:
-    void showEvent(QShowEvent *event) override {
+    void showEvent(QShowEvent *event) override
+    {
         QDialog::showEvent(event);
         if (!fallback) {
             hint->hide();
             hintTimer.start(ui::metrics::opening::hintDelayMilliseconds);
         }
     }
-    void hideEvent(QHideEvent *event) override {
+
+    void hideEvent(QHideEvent *event) override
+    {
         hintTimer.stop();
         hint->hide();
         QDialog::hideEvent(event);
     }
-    void paintEvent(QPaintEvent *event) override {
+
+    void paintEvent(QPaintEvent *event) override
+    {
         QDialog::paintEvent(event);
         namespace opening = ui::metrics::opening;
         QPainter painter(this);
@@ -185,57 +206,70 @@ protected:
         const auto ink = palette().color(QPalette::WindowText);
         if (!fallback && !cover.isNull()) {
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
-            const auto size = QSizeF(cover.size()).scaled(opening::cover.size(), Qt::KeepAspectRatio);
-            const QRectF bounds(opening::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
+            const auto size =
+                    QSizeF(cover.size()).scaled(opening::cover.size(), Qt::KeepAspectRatio);
+            const QRectF bounds(
+                    opening::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
             painter.drawImage(bounds, cover);
         } else {
-            ui::paintBrandIcon(painter, fallback && !automatic ? opening::failureBrandIcon : opening::icon, ink);
+            ui::paintBrandIcon(painter,
+                               fallback && !automatic ? opening::failureBrandIcon : opening::icon,
+                               ink);
         }
         if (fallback) {
             const QRectF bounds = automatic ? opening::handoffIcon : opening::failureIcon;
-            ui::paintOpeningIcon(painter, protectedIcon ? ui::ControlIcon::Lock : ui::ControlIcon::FileWarning, bounds,
-                                 ink);
+            ui::paintOpeningIcon(
+                    painter, protectedIcon ? ui::ControlIcon::Lock : ui::ControlIcon::FileWarning,
+                    bounds, ink);
         }
     }
-    void resizeEvent(QResizeEvent *event) override {
+
+    void resizeEvent(QResizeEvent *event) override
+    {
         QDialog::resizeEvent(event);
         layoutWidgets();
     }
-    void layoutWidgets() {
+
+    void layoutWidgets()
+    {
         namespace opening = ui::metrics::opening;
         const auto place = [this](QWidget *widget, const QRectF &rect) {
             const auto offset = origin();
             const auto factor = scale();
-            widget->setGeometry(qRound(offset.x() + rect.x() * factor), qRound(offset.y() + rect.y() * factor),
+            widget->setGeometry(qRound(offset.x() + rect.x() * factor),
+                                qRound(offset.y() + rect.y() * factor),
                                 qRound(rect.width() * factor), qRound(rect.height() * factor));
         };
         const auto textStyle = [this](QLabel *widget, qreal pixels, bool italic, int minimum = 1) {
             const auto font = ui::brandFont(qMax(minimum, qRound(pixels * scale())), italic);
             widget->setFont(font);
             ui::readerStyle(
-                widget,
-                QString(
-                    "background:palette(window);color:palette(window-text);font-family:'%1';font-size:%2px;font-weight:400;font-style:%3;")
-                    .arg(font.family())
-                    .arg(font.pixelSize())
-                    .arg(italic ? "italic" : "normal"));
+                    widget,
+                    QString("background:palette(window);color:palette(window-text);font-family:'%1';font-size:%2px;font-weight:400;font-style:%3;")
+                            .arg(font.family())
+                            .arg(font.pixelSize())
+                            .arg(italic ? "italic" : "normal"));
         };
         textStyle(brand, opening::brandText, false);
         const bool phone = isPhoneScreen(size(), ui::density());
         textStyle(label,
-                  !fallback   ? opening::labelText
-                  : automatic ? opening::handoffText
-                              : opening::failureText,
+                  !fallback           ? opening::labelText
+                          : automatic ? opening::handoffText
+                                      : opening::failureText,
                   !fallback || automatic, phone && !fallback ? int(ui::px(32)) : 1);
         // A caption in capitals, like the reader's other captions.
-        ui::captionLabel(hint, qMax(phone ? int(ui::px(22)) : 1, qRound(opening::hintText * scale())));
+        ui::captionLabel(hint,
+                         qMax(phone ? int(ui::px(22)) : 1, qRound(opening::hintText * scale())));
         place(hint, opening::hint);
         progress->setFixedHeight(qMax(1, qRound(opening::progress.height() * scale())));
         place(brand, fallback && !automatic ? opening::failureBrand : opening::brand);
-        place(label, !fallback ? opening::label : automatic ? opening::handoffLabel : opening::failureLabel);
+        place(label,
+              !fallback           ? opening::label
+                      : automatic ? opening::handoffLabel
+                                  : opening::failureLabel);
         place(progress, opening::progress);
         if (phone) {
-            for (auto *text : {label, hint}) {
+            for (auto *text : { label, hint }) {
                 auto bounds = text->geometry();
                 const int height = qMax(bounds.height(), ui::interfaceLineHeight(text->font()));
                 bounds.setTop(bounds.center().y() - height / 2);
@@ -248,35 +282,38 @@ protected:
             const int pixels = qMax(1, qRound(opening::detailText * scale()));
             detail->setFont(ui::interfaceFont(pixels));
             ui::readerStyle(
-                detail,
-                QString("background:palette(window);color:palette(window-text);font-size:%1px;font-family:'%2';")
-                    .arg(pixels)
-                    .arg(ui::interfaceFontFamily()));
+                    detail,
+                    QString("background:palette(window);color:palette(window-text);font-size:%1px;font-family:'%2';")
+                            .arg(pixels)
+                            .arg(ui::interfaceFontFamily()));
             place(detail, automatic ? opening::handoffDetail : opening::failureDetail);
             if (automatic)
                 place(hint, opening::handoffHint);
         }
         namespace navigation = ui::metrics::navigation;
-        cancel->setGeometry(navigation::backLeft, navigation::headingTop, navigation::height, navigation::height);
+        cancel->setGeometry(navigation::backLeft, navigation::headingTop, navigation::height,
+                            navigation::height);
         ui::readerStyle(
-            cancel,
-            "QPushButton{min-height:0;border:none;padding:0;background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}");
+                cancel,
+                "QPushButton{min-height:0;border:none;padding:0;background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}");
     }
 
 private:
     // Most openings never fail. Laying out this card's text before the first
     // paint delayed every loading screen, so it is built on first use.
-    ui::ChoiceModal *failure() {
+    ui::ChoiceModal *failure()
+    {
         if (failureDialog)
             return failureDialog;
         failureDialog =
-            new ui::ChoiceModal(this,
-                                {storageFailure ? strings::get("opening.storage_failed_detail")
-                                                : strings::get("opening.failed_detail"),
-                                 storageFailure ? strings::get("opening.storage_failed") : strings::get("opening.failed"),
-                                 {}},
-                                {strings::get("opening.go_back"), "rrOpeningBack"},
-                                {strings::get("opening.try_native"), "rrOpeningNative"});
+                new ui::ChoiceModal(this,
+                                    { storageFailure ? strings::get("opening.storage_failed_detail")
+                                                     : strings::get("opening.failed_detail"),
+                                      storageFailure ? strings::get("opening.storage_failed")
+                                                     : strings::get("opening.failed"),
+                                      {} },
+                                    { strings::get("opening.go_back"), "rrOpeningBack" },
+                                    { strings::get("opening.try_native"), "rrOpeningNative" });
         failureDialog->setObjectName("rrOpeningFailure");
         connect(failureDialog->primaryButton(), &QPushButton::clicked, this, &QDialog::accept);
         connect(failureDialog->secondaryButton(), &QPushButton::clicked, this, &QDialog::reject);
@@ -285,20 +322,28 @@ private:
         platform::textRefresh(failureDialog);
         return failureDialog;
     }
-    void scheduleAfterPaint(std::function<void()> callback) {
+
+    void scheduleAfterPaint(std::function<void()> callback)
+    {
         kobalt::qt::later(0, this, [this, callback = std::move(callback)] {
             if (isVisible()) {
                 callback();
             }
         });
     }
-    qreal scale() const {
-        return qMin(width() / ui::metrics::opening::referenceWidth, height() / ui::metrics::opening::referenceHeight);
+
+    qreal scale() const
+    {
+        return qMin(width() / ui::metrics::opening::referenceWidth,
+                    height() / ui::metrics::opening::referenceHeight);
     }
-    QPointF origin() const {
-        return {(width() - ui::metrics::opening::referenceWidth * scale()) / 2,
-                (height() - ui::metrics::opening::referenceHeight * scale()) / 2};
+
+    QPointF origin() const
+    {
+        return { (width() - ui::metrics::opening::referenceWidth * scale()) / 2,
+                 (height() - ui::metrics::opening::referenceHeight * scale()) / 2 };
     }
+
     QImage cover;
     QLabel *brand, *label, *hint, *detail;
     ui::ChoiceModal *failureDialog = nullptr;
@@ -312,39 +357,49 @@ private:
     std::function<void()> firstPaint;
 };
 
-class OpeningView final : public ReaderOpeningView {
+class OpeningView final : public ReaderOpeningView
+{
 public:
-    OpeningView(QWidget *background, const QJsonObject &preferences, PresentationFactory presentation,
-                bool embedded = false)
-        : dialog(new OpeningDialog(background, preferences.value("dark_mode").toBool(false), std::move(presentation),
-                                   embedded)) {
+    OpeningView(QWidget *background, const QJsonObject &preferences,
+                PresentationFactory presentation, bool embedded = false)
+        : dialog(new OpeningDialog(background, preferences.value("dark_mode").toBool(false),
+                                   std::move(presentation), embedded))
+    {
         if (embedded)
             return;
         auto *screen = QGuiApplication::primaryScreen();
         dialog->setGeometry(screen->geometry());
-        QObject::connect(screen, &QScreen::geometryChanged, dialog, [window = dialog](const QRect &geometry) {
-            if (window)
-                window->setGeometry(geometry);
-        });
+        QObject::connect(screen, &QScreen::geometryChanged, dialog,
+                         [window = dialog](const QRect &geometry) {
+                             if (window)
+                                 window->setGeometry(geometry);
+                         });
     }
-    ~OpeningView() override {
+
+    ~OpeningView() override
+    {
         if (dialog) {
             dialog->hide();
             dialog->deleteLater();
         }
     }
-    QDialog *window() const override {
-        return dialog;
-    }
-    void showFallback(OpeningFallback state) override {
+
+    QDialog *window() const override { return dialog; }
+
+    void showFallback(OpeningFallback state) override
+    {
         if (dialog)
             dialog->showFallback(state);
     }
-    void setCover(QImage cover) override {
+
+    void setCover(QImage cover) override
+    {
         if (dialog)
             dialog->setCover(std::move(cover));
     }
-    void setProgress(int percent) override {
+
+    void setProgress(int percent) override
+    {
         if (!dialog)
             return;
         auto *bar = dialog->progress;
@@ -360,12 +415,16 @@ public:
         if (updates)
             bar->setUpdatesEnabled(true);
     }
-    void afterFirstPaint(std::function<void()> callback) override {
+
+    void afterFirstPaint(std::function<void()> callback) override
+    {
         if (dialog) {
             dialog->afterFirstPaint(std::move(callback));
         }
     }
-    void refreshFonts() override {
+
+    void refreshFonts() override
+    {
         if (dialog) {
             dialog->refreshFonts();
         }
@@ -374,34 +433,46 @@ public:
 private:
     QPointer<OpeningDialog> dialog;
 };
-}
-std::unique_ptr<ReaderOpeningView> createOpening(QWidget *background, const QJsonObject &preferences,
-                                                 PresentationFactory presentation) {
+} // namespace
+
+std::unique_ptr<ReaderOpeningView>
+createOpening(QWidget *background, const QJsonObject &preferences, PresentationFactory presentation)
+{
     return std::make_unique<OpeningView>(background, preferences, std::move(presentation));
 }
-std::unique_ptr<ReaderOpeningView> createEmbeddedOpening(QWidget *parent, PresentationFactory presentation) {
+
+std::unique_ptr<ReaderOpeningView> createEmbeddedOpening(QWidget *parent,
+                                                         PresentationFactory presentation)
+{
     QJsonObject preferences;
     preferences["dark_mode"] = ui::darkTheme(parent);
     return std::make_unique<OpeningView>(parent, preferences, std::move(presentation), true);
 }
+
 SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried)
-    : ui::ChoiceModal(parent,
-          {strings::get("closing.failed_detail") +
-               (error.isEmpty() ? QString() : "\n\n" + error) +
-               (retried ? "\n\n" + strings::get("closing.quit_warning") : QString()),
-           strings::get("closing.failed"), {}},
-          {strings::get("closing.return"), "rrCloseSaveReturn"},
-          {strings::get("closing.retry"), "rrCloseSaveRetry"}) {
+    : ui::ChoiceModal(
+              parent,
+              { strings::get("closing.failed_detail")
+                        + (error.isEmpty() ? QString() : "\n\n" + error)
+                        + (retried ? "\n\n" + strings::get("closing.quit_warning") : QString()),
+                strings::get("closing.failed"),
+                {} },
+              { strings::get("closing.return"), "rrCloseSaveReturn" },
+              { strings::get("closing.retry"), "rrCloseSaveRetry" })
+{
     setObjectName("rrCloseSaveError");
     if (retried) {
-        quit = ui::makeModalButton(card(), {strings::get("closing.quit"), "rrCloseSaveQuit"}, false);
+        quit = ui::makeModalButton(card(), { strings::get("closing.quit"), "rrCloseSaveQuit" },
+                                   false);
         quit->ensurePolished();
         quit->setFixedHeight(ui::metrics::chrome::actionHeight);
         card()->rows()->addWidget(quit);
     }
     fitCard();
 }
-SavingView::SavingView(QWidget *parent) : ui::ModalOverlay(parent) {
+
+SavingView::SavingView(QWidget *parent) : ui::ModalOverlay(parent)
+{
     setObjectName("rrSaving");
     setProperty("reader_standard_modal", true);
     card()->title(strings::get("closing.saving"), "rrSavingTitle");
@@ -414,7 +485,9 @@ SavingView::SavingView(QWidget *parent) : ui::ModalOverlay(parent) {
         platform::textRefresh(widget);
     platform::textRefresh(this);
 }
-void SavingView::setProgress(int percent) {
+
+void SavingView::setProgress(int percent)
+{
     progress->setValue(qBound(0, percent, 100));
 }
-}
+} // namespace kobalt

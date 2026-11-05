@@ -7,19 +7,21 @@
 namespace kobalt::library {
 class LibraryView;
 class Store;
-}
+} // namespace kobalt::library
 
 namespace kobalt::standalone {
 class WidgetCanvas;
+
 // Qt-only library and book-opening UI. The host supplies document and folder
 // picking, file access and exit.
-class StartScreen final : public QStackedWidget {
+class StartScreen final : public QStackedWidget
+{
     Q_OBJECT
 public:
     // `textScale` reports the platform's text size setting, where 1 is
     // standard. The library takes it when it is built and whenever it is shown.
-    StartScreen(PresentationFactory presentation, library::Store &store, std::function<qreal()> textScale = {},
-                QWidget *parent = nullptr);
+    StartScreen(PresentationFactory presentation, library::Store &store,
+                std::function<qreal()> textScale = {}, QWidget *parent = nullptr);
     ~StartScreen() override;
     void showOpening();
     void setProgress(int percent);
@@ -37,7 +39,9 @@ public:
     void setDark(bool dark);
     library::LibraryView *library();
     WidgetCanvas *libraryCanvas();
+
     WidgetCanvas *openingCanvas() const { return openingSurface; }
+
     // Separate the library from Android's system bars; the reader stays fullscreen.
     void setLibrarySystemBarBorders(bool visible);
     // By default the library fills its canvas at the display's pixel ratio,
@@ -45,7 +49,8 @@ public:
     // app, gives the library the same reader size and scale.
     // `topInset` keeps the library below a band the host shows instead, such
     // as a simulated status bar.
-    void setLibraryScale(QSize pixels, qreal scale, bool nativePixels, qreal rasterScale, int topInset = 0);
+    void setLibraryScale(QSize pixels, qreal scale, bool nativePixels, qreal rasterScale,
+                         int topInset = 0);
     // An opening error for a book chosen in the library, shown over the library.
     void showLibraryError(const QString &error);
     // On Android a book opened from the library on its own is Kobalt's copy,
@@ -76,13 +81,16 @@ private:
     // The text scale the library was built with.
     qreal builtTextScale = 1;
     bool dark = false, hostScaled = false, singleBooksAreCopies = false;
-    struct Scale {
+
+    struct Scale
+    {
         QSize pixels;
         qreal scale = 1, rasterScale = 1;
         bool nativePixels = false;
         int topInset = 0;
     } scale;
+
     void buildLibrary();
     void fitLibrary();
 };
-}
+} // namespace kobalt::standalone

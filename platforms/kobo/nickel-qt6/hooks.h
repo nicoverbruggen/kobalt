@@ -14,4 +14,4 @@ extern void (*nativeFinishInitialization)(void *);
 extern void (*nativeContinueUsing)(void *), (*nativeUnplugged)(void *);
 extern void (*settingsConstructor)(QWidget *, QWidget *);
 extern bool (*nativePrerenderAllowed)(const void *);
-}
+} // namespace kobalt::nickel_qt6

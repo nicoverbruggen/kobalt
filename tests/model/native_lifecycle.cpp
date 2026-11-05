@@ -12,7 +12,8 @@
 #include <atomic>
 
 // Nickel's exported managers and signals, resolved by the production adapter.
-class N3PowerWorkflowManager : public QObject {
+class N3PowerWorkflowManager : public QObject
+{
     Q_OBJECT
 public:
     bool asleep = false, visible = false, pin = false;
@@ -25,16 +26,32 @@ signals:
     void resumingFromSleep();
     void resumedFromSleep();
 };
-N3PowerWorkflowManager *N3PowerWorkflowManager::sharedInstance() {
+
+N3PowerWorkflowManager *N3PowerWorkflowManager::sharedInstance()
+{
     static N3PowerWorkflowManager manager;
     return &manager;
 }
-bool N3PowerWorkflowManager::sleeping() const { return asleep; }
-bool N3PowerWorkflowManager::sleepViewVisible() const { return visible; }
-bool N3PowerWorkflowManager::pinCodeInputDialogVisible() const { return pin; }
+
+bool N3PowerWorkflowManager::sleeping() const
+{
+    return asleep;
+}
+
+bool N3PowerWorkflowManager::sleepViewVisible() const
+{
+    return visible;
+}
+
+bool N3PowerWorkflowManager::pinCodeInputDialogVisible() const
+{
+    return pin;
+}
 
 class PermissionRequest;
-class PowerManager : public QObject {
+
+class PowerManager : public QObject
+{
     Q_OBJECT
 public:
     static PowerManager *sharedInstance();
@@ -42,19 +59,25 @@ signals:
     void aboutToSuspend(PermissionRequest *);
     void resumed();
 };
-PowerManager *PowerManager::sharedInstance() {
+
+PowerManager *PowerManager::sharedInstance()
+{
     static PowerManager manager;
     return &manager;
 }
+
 extern "C" void kobalt_suspend_device(void *, const QString &);
 extern "C" void kobalt_suspend_device_with_alarm(void *, const QString &);
-class AbstractPowerView : public QObject {
+
+class AbstractPowerView : public QObject
+{
     Q_OBJECT
 };
 
 extern "C" void kobalt_show_sleep_view(void *);
 
-class PlugWorkflowManager : public QObject {
+class PlugWorkflowManager : public QObject
+{
     Q_OBJECT
 public:
     static PlugWorkflowManager *sharedInstance();
@@ -64,34 +87,53 @@ signals:
     void aboutToUnplug();
     void doneProcessing();
 };
-PlugWorkflowManager *PlugWorkflowManager::sharedInstance() {
+
+PlugWorkflowManager *PlugWorkflowManager::sharedInstance()
+{
     static PlugWorkflowManager manager;
     return &manager;
 }
-bool PlugWorkflowManager::pluggedInViewVisible() const { return false; }
+
+bool PlugWorkflowManager::pluggedInViewVisible() const
+{
+    return false;
+}
 
 namespace {
 QString profile;
 int handoffs = 0, workflows = 0, shutdowns = 0;
-bool available() {
+
+bool available()
+{
     return kobalt::storage::profileTransaction(profile, [](QSqlDatabase &) { return true; });
 }
-void unused(void *) {}
-void handoff(void *) {
+
+void unused(void *) { }
+
+void handoff(void *)
+{
     require(!available(), "USB handoff left the profile writable");
-    require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(), "USB handoff allowed a late native session write");
+    require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "USB handoff allowed a late native session write");
     ++handoffs;
 }
-void workflow(void *manager) {
+
+void workflow(void *manager)
+{
     require(!available(), "USB workflow resumed before the profile was blocked");
     ++workflows;
     kobalt::NativeLifecycle::interceptUsb(static_cast<QObject *>(manager));
 }
-void poweredOff(void *, bool) { ++shutdowns; }
+
+void poweredOff(void *, bool)
+{
+    ++shutdowns;
 }
+} // namespace
 
 // Checks the Kobo lifecycle adapter with controlled Nickel signals: sleep-view handoff, PIN rotation, USB entry and power-off.
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QCoreApplication app(argc, argv);
     QTemporaryDir root;
     profile = root.path();
@@ -110,24 +152,34 @@ int main(int argc, char **argv) {
     int requested = 0, resumed = 0, suspendStarts = 0, suspendEnds = 0;
     kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
         const auto name = event.value("event").toString();
-        if (name == "power-observer") observedPower = event;
-        if (name == "standby-request") ++requested;
-        if (name == "standby-resumed") ++resumed;
+        if (name == "power-observer")
+            observedPower = event;
+        if (name == "standby-request")
+            ++requested;
+        if (name == "standby-resumed")
+            ++resumed;
         if (event.value("operation").toString().startsWith("nickel-suspend-device")) {
-            if (name == "operation-start") ++suspendStarts;
-            if (name == "operation-end") ++suspendEnds;
+            if (name == "operation-start")
+                ++suspendStarts;
+            if (name == "operation-end")
+                ++suspendEnds;
         }
     });
     auto *standby = PowerManager::sharedInstance();
-    kobalt::nativeSuspendDevice = kobalt::nativeSuspendDeviceWithAlarm = [](void *manager, const QString &wakeupCount) {
-        require(manager == PowerManager::sharedInstance() && wakeupCount == "123", "Suspend hook changed its native arguments");
-    };
+    kobalt::nativeSuspendDevice =
+            kobalt::nativeSuspendDeviceWithAlarm = [](void *manager, const QString &wakeupCount) {
+                require(manager == PowerManager::sharedInstance() && wakeupCount == "123",
+                        "Suspend hook changed its native arguments");
+            };
     kobalt::NativeLifecycle lifecycle(nullptr);
     require(lifecycle.connected(), "Mock Nickel managers did not connect");
-    require(!kobalt::NativeLifecycle::protectStandbyInput(), "Reader input guard activated without a reader");
+    require(!kobalt::NativeLifecycle::protectStandbyInput(),
+            "Reader input guard activated without a reader");
     lifecycle.readerInputActive = [] { return true; };
-    require(kobalt::NativeLifecycle::protectStandbyInput(), "Active reader did not enable the input guard");
-    require(observedPower.value("standby_request").toBool() && observedPower.value("standby_resume").toBool(),
+    require(kobalt::NativeLifecycle::protectStandbyInput(),
+            "Active reader did not enable the input guard");
+    require(observedPower.value("standby_request").toBool()
+                    && observedPower.value("standby_resume").toBool(),
             "Standby signal capabilities were not recorded");
     emit standby->aboutToSuspend(nullptr);
     kobalt_suspend_device(standby, QStringLiteral("123"));
@@ -150,29 +202,36 @@ int main(int argc, char **argv) {
         power->asleep = power->visible = true;
         power->pin = false;
         emit power->aboutToSleep();
-        require(!kobalt::NativeLifecycle::pinScreenActive(), "Sleep screen permits native PIN rotation");
+        require(!kobalt::NativeLifecycle::pinScreenActive(),
+                "Sleep screen permits native PIN rotation");
         power->pin = true;
-        require(!kobalt::NativeLifecycle::pinScreenActive(), "Sleeping device permits native PIN rotation");
+        require(!kobalt::NativeLifecycle::pinScreenActive(),
+                "Sleeping device permits native PIN rotation");
         power->asleep = false;
         emit power->resumingFromSleep();
         QCoreApplication::processEvents();
-        require(kobalt::NativeLifecycle::pinScreenActive(), "Awake PIN did not permit native rotation");
-        require(lifecycle.blocked() && kobalt::NativeLifecycle::suspended(), "PIN entry resumed the reader");
+        require(kobalt::NativeLifecycle::pinScreenActive(),
+                "Awake PIN did not permit native rotation");
+        require(lifecycle.blocked() && kobalt::NativeLifecycle::suspended(),
+                "PIN entry resumed the reader");
         power->visible = false;
-        require(kobalt::NativeLifecycle::pinScreenActive(), "PIN rotation depends on the underlying sleep view");
+        require(kobalt::NativeLifecycle::pinScreenActive(),
+                "PIN rotation depends on the underlying sleep view");
         power->asleep = true;
-        require(!kobalt::NativeLifecycle::pinScreenActive(), "Returning to sleep retained PIN rotation");
+        require(!kobalt::NativeLifecycle::pinScreenActive(),
+                "Returning to sleep retained PIN rotation");
         wake();
         require(!kobalt::NativeLifecycle::pinScreenActive(), "Unlock retained PIN rotation");
     }
     sleepHandoffs = 0;
     // An old NickelHook user can overwrite our showSleepView hook. Both
     // paths must hand off exactly once after the native sleep view is ready.
-    for (bool bypassHook : {true, false}) {
+    for (bool bypassHook : { true, false }) {
         const int before = sleepHandoffs;
         power->asleep = true;
         emit power->aboutToSleep();
-        require(!kobalt::NativeLifecycle::protectStandbyInput(), "Sleep-screen suspension kept the reading input guard");
+        require(!kobalt::NativeLifecycle::protectStandbyInput(),
+                "Sleep-screen suspension kept the reading input guard");
         power->visible = true;
         if (!bypassHook)
             kobalt_show_sleep_view(power);
@@ -189,7 +248,8 @@ int main(int argc, char **argv) {
     require(!kobalt::NativeLifecycle::canSuspend(), "Suspend raced the queued handoff check");
     QCoreApplication::processEvents();
     require(sleepHandoffs == 2, "Handed off before a native sleep view existed");
-    require(kobalt::NativeLifecycle::canSuspend(), "Missing sleep view blocked suspend indefinitely");
+    require(kobalt::NativeLifecycle::canSuspend(),
+            "Missing sleep view blocked suspend indefinitely");
     power->visible = power->pin = true;
     kobalt_show_sleep_view(power);
     require(sleepHandoffs == 2, "Handed off over the PIN prompt");
@@ -225,16 +285,18 @@ int main(int argc, char **argv) {
         emit usb->aboutToUnplug();
         emit usb->doneProcessing();
         require(available() && !lifecycle.blocked(), "Remount did not reopen the profile");
-        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(), "Remount left native session saves blocked");
+        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+                "Remount left native session saves blocked");
     };
     // Both native USB entry points must release the connection before handoff.
-    for (bool fullWorkflow : {false, true}) {
+    for (bool fullWorkflow : { false, true }) {
         if (fullWorkflow)
             kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         else
             kobalt::NativeLifecycle::interceptUsb(usb);
         require(available(), "Pending USB preparation blocked storage before its final save");
-        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(), "Pending USB blocked its native final save");
+        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+                "Pending USB blocked its native final save");
         const auto finish = drains.takeLast();
         finish();
         require(!available(), "USB preparation did not keep the profile closed");
@@ -246,7 +308,7 @@ int main(int argc, char **argv) {
     require(handoffs == 2 && workflows == 1, "USB entry points did not complete");
     // Cancel while the asynchronous reader drain is pending. Its late result
     // must not block storage again, including when a newer USB request exists.
-    for (bool fullWorkflow : {false, true}) {
+    for (bool fullWorkflow : { false, true }) {
         const int before = handoffs;
         if (fullWorkflow)
             kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
@@ -257,27 +319,36 @@ int main(int argc, char **argv) {
         cancelled();
         require(available() && !lifecycle.blocked() && handoffs == before,
                 "Cancelled USB cleanup blocked the profile or exported storage");
-        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(), "Cancelled USB blocked native session retry");
+        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+                "Cancelled USB blocked native session retry");
         kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         const auto current = drains.takeLast();
         cancelled();
-        require(available() && lifecycle.storageBlocked(), "A stale completion affected the newer USB request");
+        require(available() && lifecycle.storageBlocked(),
+                "A stale completion affected the newer USB request");
         current();
         remount();
     }
     // A failed queued write still drains and permits USB handoff. Nickel must
     // not wait forever because a save failed on a full or failing volume.
-    require(kobalt::storage::profileTransaction(profile, [](QSqlDatabase &db) {
-        QSqlQuery query(db);
-        return query.exec("CREATE TRIGGER refuse_save BEFORE INSERT ON book_state BEGIN SELECT RAISE(ABORT,'test'); END");
-    }), "Cannot obstruct the final save");
-    std::atomic_int saved{-1};
+    require(kobalt::storage::profileTransaction(
+                    profile,
+                    [](QSqlDatabase &db) {
+                        QSqlQuery query(db);
+                        return query.exec(
+                                "CREATE TRIGGER refuse_save BEFORE INSERT ON book_state BEGIN SELECT RAISE(ABORT,'test'); END");
+                    }),
+            "Cannot obstruct the final save");
+    std::atomic_int saved{ -1 };
     kobalt::storage::RecordWriter writer;
-    writer.post([] {
-        QJsonObject state;
-        state["book"] = "failed-save";
-        return kobalt::storage::writeBookState(kobalt::storage::Paths{profile}, "failed-save", state);
-    }, [&](bool ok) { saved = ok ? 1 : 0; });
+    writer.post(
+            [] {
+                QJsonObject state;
+                state["book"] = "failed-save";
+                return kobalt::storage::writeBookState(kobalt::storage::Paths{ profile },
+                                                       "failed-save", state);
+            },
+            [&](bool ok) { saved = ok ? 1 : 0; });
     const int beforeFailure = handoffs;
     kobalt::NativeLifecycle::interceptUsb(usb);
     drains.takeLast()();
@@ -294,14 +365,16 @@ int main(int argc, char **argv) {
     power->asleep = true;
     emit power->aboutToSleep();
     power->visible = true;
-    require(kobalt::NativeLifecycle::interceptShutdown(usb, kobalt::NativeLifecycle::Shutdown::PowerOff),
+    require(kobalt::NativeLifecycle::interceptShutdown(usb,
+                                                       kobalt::NativeLifecycle::Shutdown::PowerOff),
             "Power-off was not intercepted");
     kobalt::NativeLifecycle::disconnected();
     abandoned();
     QCoreApplication::processEvents();
     require(sleepHandoffs == 3, "A queued sleep handoff crossed power-off");
     require(shutdowns == 1 && !available(), "USB cancellation reopened storage during shutdown");
-    require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(), "USB cancellation reopened native saves during shutdown");
+    require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "USB cancellation reopened native saves during shutdown");
     kobalt::storage::reopenProfile();
     kobalt::storage::closeProfile();
     kobalt::pauseDiagnostics(true);

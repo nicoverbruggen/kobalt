@@ -4,13 +4,17 @@
 
 namespace kobalt::ui {
 
-class HoldTimer : public QTimer {
+class HoldTimer : public QTimer
+{
 public:
-    void start(const QInputEvent *event) {
+    void start(const QInputEvent *event)
+    {
         pressedAt = quint32(event->timestamp());
         QTimer::start();
     }
-    bool finish(const QInputEvent *event) {
+
+    bool finish(const QInputEvent *event)
+    {
         const quint32 elapsed = quint32(event->timestamp()) - pressedAt;
         // Source timestamps keep a queued release from turning a real hold into
         // a tap when painting blocks the GUI. Subtraction permits clock wrap.
@@ -18,6 +22,7 @@ public:
         stop();
         return due;
     }
+
 private:
     quint32 pressedAt = 0;
 };

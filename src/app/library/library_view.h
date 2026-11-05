@@ -6,13 +6,15 @@
 
 class QLineEdit;
 class QPushButton;
+
 namespace kobalt::ui {
 class CellButton;
 class PagerBar;
 class ModalOverlay;
 class ActionMenu;
 class LoadingIndicator;
-}
+} // namespace kobalt::ui
+
 namespace kobalt::library {
 class BookPages;
 class FolderPage;
@@ -21,9 +23,11 @@ class SortSheet;
 // The Android and desktop library. It draws in device pixels on the reader's
 // canvas, with the reader's header, rows, pager and dialogs. The host owns the
 // index and every file operation; the view only reports what was chosen.
-class LibraryView final : public ui::Panel {
+class LibraryView final : public ui::Panel
+{
 public:
-    LibraryView(const Index &index, std::function<QString(const QString &)> coverPath, QWidget *parent = nullptr);
+    LibraryView(const Index &index, std::function<QString(const QString &)> coverPath,
+                QWidget *parent = nullptr);
     ~LibraryView() override;
     // Call after the index changes. While scanning, the view redraws at most
     // once a second, which keeps e-paper refreshes down.
@@ -81,4 +85,4 @@ private:
     QWidget *buildEmpty();
     void setSearching(bool value);
 };
-}
+} // namespace kobalt::library

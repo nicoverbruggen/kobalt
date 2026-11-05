@@ -7,17 +7,21 @@ namespace kobalt {
 // Nickel can add a mode-only keyboard entry alongside Qt's text policy.
 // Complete its waveform so it does not bypass the reader's damage splitting.
 inline quint64 completeKeyboardWaveform(const QRect &damage, const QRect &keyboard, quint64 policy,
-                                       quint64 ordinary, quint64 modeMask) {
+                                        quint64 ordinary, quint64 modeMask)
+{
     const auto mode = policy & modeMask;
-    if (!damage.isEmpty() && !keyboard.isEmpty() && keyboard.contains(damage) && policy == mode && mode &&
-        !(mode & (mode - 1)))
+    if (!damage.isEmpty() && !keyboard.isEmpty() && keyboard.contains(damage) && policy == mode
+        && mode && !(mode & (mode - 1)))
         return (ordinary & ~modeMask) | mode;
     return policy;
 }
+
 // Mode variants can describe the same keyboard pixels in one Qt flush. Keep
 // the strongest requested mode so a new full update cannot match a partial one.
 template <class Policies>
-quint64 commonKeyboardPolicy(const Policies &policies, quint64 modeMask, quint64 fullMode, quint64 heuristicMode) {
+quint64 commonKeyboardPolicy(const Policies &policies, quint64 modeMask, quint64 fullMode,
+                             quint64 heuristicMode)
+{
     if (policies.isEmpty())
         return 0;
     const quint64 waveform = quint64(policies[0].second) & ~modeMask;
@@ -31,16 +35,23 @@ quint64 commonKeyboardPolicy(const Policies &policies, quint64 modeMask, quint64
     const auto mode = modes & fullMode ? fullMode : modes & heuristicMode ? heuristicMode : modes;
     return waveform | mode;
 }
-class KeyboardRefreshCache {
+
+class KeyboardRefreshCache
+{
 public:
-    void clear() {
+    void clear()
+    {
         pixels = {};
         bounds = {};
         submitted = {};
         lastPolicy = 0;
     }
-    bool unchanged(const QImage *image, const QRegion &damage, const QRect &keyboard, quint64 policy, bool maySkip) {
-        if (!image || image->depth() != 32 || keyboard.isEmpty() || !image->rect().contains(keyboard)) {
+
+    bool unchanged(const QImage *image, const QRegion &damage, const QRect &keyboard,
+                   quint64 policy, bool maySkip)
+    {
+        if (!image || image->depth() != 32 || keyboard.isEmpty()
+            || !image->rect().contains(keyboard)) {
             clear();
             return false;
         }
@@ -66,7 +77,8 @@ public:
         ) {
             const int bytes = part.width() * 4;
             for (int y = part.top(); y <= part.bottom(); ++y) {
-                const auto *source = image->constScanLine(y + keyboard.top()) + (part.left() + keyboard.left()) * 4;
+                const auto *source = image->constScanLine(y + keyboard.top())
+                        + (part.left() + keyboard.left()) * 4;
                 auto *previous = pixels.scanLine(y) + part.left() * 4;
                 if (std::memcmp(source, previous, bytes) != 0) {
                     same = false;
@@ -74,8 +86,9 @@ public:
                 }
             }
         }
-        const bool skip = maySkip && damage.boundingRect().isValid() && keyboard.contains(damage.boundingRect()) &&
-                          policy == lastPolicy && covered && same;
+        const bool skip = maySkip && damage.boundingRect().isValid()
+                && keyboard.contains(damage.boundingRect()) && policy == lastPolicy && covered
+                && same;
         submitted += inside;
         lastPolicy = policy;
         return skip;
@@ -87,4 +100,4 @@ private:
     QRegion submitted;
     quint64 lastPolicy = 0;
 };
-}
+} // namespace kobalt

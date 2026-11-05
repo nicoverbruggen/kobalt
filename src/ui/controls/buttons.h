@@ -10,56 +10,70 @@
 #include <functional>
 
 namespace kobalt::ui {
-inline bool isHoverEvent(const QEvent *event) {
-    return event->type() == QEvent::HoverEnter || event->type() == QEvent::HoverLeave ||
-           event->type() == QEvent::HoverMove;
+inline bool isHoverEvent(const QEvent *event)
+{
+    return event->type() == QEvent::HoverEnter || event->type() == QEvent::HoverLeave
+            || event->type() == QEvent::HoverMove;
 }
-class Button : public QPushButton {
+
+class Button : public QPushButton
+{
 public:
     using QPushButton::QPushButton;
     void setPaintMode(ButtonPaintMode mode);
+
     // Content stays vertically centered in either horizontal alignment.
-    void setContentAlignment(Qt::Alignment alignment) {
+    void setContentAlignment(Qt::Alignment alignment)
+    {
         const auto next = alignment.testFlag(Qt::AlignLeft) ? Qt::AlignLeft : Qt::AlignHCenter;
         if (contentAlignment == next)
             return;
         contentAlignment = next;
         update();
     }
+
     void clearIconConfiguration();
-    void setFill(QPalette::ColorRole role) {
+
+    void setFill(QPalette::ColorRole role)
+    {
         if (fill == role)
             return;
         fill = role;
         update();
     }
-    ButtonPaintMode paintMode() const {
-        return mode;
-    }
+
+    ButtonPaintMode paintMode() const { return mode; }
+
     void setIconConfiguration(ButtonIcon configuration);
-    const ButtonIcon *iconConfiguration() const {
+
+    const ButtonIcon *iconConfiguration() const
+    {
         return hasConfiguredIcon ? &configuredIcon : nullptr;
     }
+
     void refreshIcon();
-    void setIconLabelGap(int pixels) {
+
+    void setIconLabelGap(int pixels)
+    {
         if (iconLabelGap == pixels) {
             return;
         }
         iconLabelGap = pixels;
         update();
     }
+
     // With a gap set, draw the icon centred above the label, as the bottom
     // tabs do, instead of beside it.
-    void setIconAboveLabel(bool above) {
+    void setIconAboveLabel(bool above)
+    {
         if (iconAboveLabel == above) {
             return;
         }
         iconAboveLabel = above;
         update();
     }
-    bool isIconAboveLabel() const {
-        return iconAboveLabel;
-    }
+
+    bool isIconAboveLabel() const { return iconAboveLabel; }
 
 protected:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -82,7 +96,8 @@ private:
 };
 
 // A selectable diagram of the actual page hit regions, with a label below it.
-class TapZoneButton : public Button {
+class TapZoneButton : public Button
+{
 public:
     TapZoneButton(tapZones::Layout layout, bool rightToLeft, QWidget *parent);
     QSize sizeHint() const override;
@@ -95,7 +110,8 @@ private:
     bool rightToLeft;
 };
 
-class BackButton : public Button {
+class BackButton : public Button
+{
 public:
     using Button::Button;
     QSize sizeHint() const override;
@@ -104,7 +120,8 @@ protected:
     void paintEvent(QPaintEvent *) override;
 };
 
-class ElidingButton : public Button {
+class ElidingButton : public Button
+{
 public:
     using Button::Button;
     QSize sizeHint() const override;
@@ -112,7 +129,9 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override;
 };
-class StepButton : public Button {
+
+class StepButton : public Button
+{
 public:
     StepButton(ControlIcon icon, QWidget *parent);
 
@@ -123,12 +142,16 @@ protected:
 private:
     QIcon normal, pressed;
 };
-class DropdownButton : public Button {
+
+class DropdownButton : public Button
+{
 public:
     explicit DropdownButton(QWidget *parent);
+
     // A forward button opens another page instead of a list, so it shows a
     // right chevron in place of the arrow.
-    void setForward(bool value) {
+    void setForward(bool value)
+    {
         if (forward == value)
             return;
         forward = value;
@@ -137,25 +160,26 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *) override;
-    virtual QFont labelFont() const {
-        return font();
-    }
-    virtual bool opticalLabel() const {
-        return false;
-    }
-    virtual SampleAppearance sampleAppearance() const {
-        return {};
-    }
+
+    virtual QFont labelFont() const { return font(); }
+
+    virtual bool opticalLabel() const { return false; }
+
+    virtual SampleAppearance sampleAppearance() const { return {}; }
 
 private:
     bool forward = false;
 };
-class FontButton : public DropdownButton {
+
+class FontButton : public DropdownButton
+{
 public:
     explicit FontButton(QWidget *parent);
     void setFace(const QString &face);
     QString resolvedFace() const;
-    void setAppearance(const SampleAppearance &value) {
+
+    void setAppearance(const SampleAppearance &value)
+    {
         if (appearance == value)
             return;
         appearance = value;
@@ -163,31 +187,30 @@ public:
     }
 
 protected:
-    QFont labelFont() const override {
-        return sample;
-    }
-    bool opticalLabel() const override {
-        return true;
-    }
-    SampleAppearance sampleAppearance() const override {
-        return appearance;
-    }
+    QFont labelFont() const override { return sample; }
+
+    bool opticalLabel() const override { return true; }
+
+    SampleAppearance sampleAppearance() const override { return appearance; }
 
 private:
     QFont sample;
     SampleAppearance appearance;
 };
+
 // Caption rows and list actions retain their different text and icon placement.
-class CaptionButton : public Button {
+class CaptionButton : public Button
+{
 public:
     enum class Presentation { Caption, ListAction, ToolbarAction, CompactAction };
     CaptionButton(ControlIcon icon, QWidget *parent);
     CaptionButton(Presentation presentation, QWidget *parent);
     QSize sizeHint() const override;
-    Presentation presentation() const {
-        return mode;
-    }
-    void setCaption(const QString &caption) {
+
+    Presentation presentation() const { return mode; }
+
+    void setCaption(const QString &caption)
+    {
         if (note == caption)
             return;
         note = caption;
@@ -195,32 +218,45 @@ public:
             updateGeometry();
         update();
     }
+
     void setDescription(const QString &text);
-    void setValueCaption(bool enabled) { valueCaption = enabled; update(); }
-    bool hasHeightForWidth() const override { return !description.isEmpty(); }
-    int heightForWidth(int width) const override;
-    QString caption() const {
-        return note;
+
+    void setValueCaption(bool enabled)
+    {
+        valueCaption = enabled;
+        update();
     }
+
+    bool hasHeightForWidth() const override { return !description.isEmpty(); }
+
+    int heightForWidth(int width) const override;
+
+    QString caption() const { return note; }
+
     // Typeface rows reserve an Aa sample before their chevron.
     void setTypefacePreview(const QString &face);
-    QString typefacePreview() const {
-        return previewFace;
-    }
-    void setRule(Edges edges) {
+
+    QString typefacePreview() const { return previewFace; }
+
+    void setRule(Edges edges)
+    {
         if (rule == edges)
             return;
         rule = edges;
         update();
     }
-    void setChevron(bool shown) {
+
+    void setChevron(bool shown)
+    {
         if (chevron == shown)
             return;
         chevron = shown;
         update();
     }
+
     // List actions have an optional icon; caption rows retain their required glyph.
-    void setIconVisible(bool shown) {
+    void setIconVisible(bool shown)
+    {
         if (mode != Presentation::ListAction || iconVisible == shown)
             return;
         iconVisible = shown;
@@ -239,41 +275,64 @@ private:
     Edges rule;
     bool chevron = false, iconVisible = true, valueCaption = false;
 };
-CaptionButton *makeCaptionButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,
-                                 std::function<void()> action);
+
+CaptionButton *makeCaptionButton(QWidget *parent, QBoxLayout *layout, const char *name,
+                                 const QString &text, std::function<void()> action);
+
 // The hit area follows the widget's bounds. Contents margins position the smaller visible mark.
-class DismissButton : public Button {
+class DismissButton : public Button
+{
 public:
-    explicit DismissButton(QWidget *parent) : Button(parent) {}
+    explicit DismissButton(QWidget *parent) : Button(parent) { }
 
 protected:
     void paintEvent(QPaintEvent *) override;
 };
+
 // A header or pager cell: an icon, or an uppercase label with a chevron. It has
 // a rule on its inner side and fills with ink while pressed, like a tab.
-class CellButton : public Button {
+class CellButton : public Button
+{
 public:
     CellButton(ControlIcon icon, QWidget *parent, int iconPixels = metrics::chrome::cellIcon);
-    void setDropdownIndicator(bool value) {
+
+    void setDropdownIndicator(bool value)
+    {
         if (dropdownIndicator == value)
             return;
         dropdownIndicator = value;
         updateGeometry();
         update();
     }
-    void setCircular(bool value) { circular = value; update(); }
-    void setGrayPress(bool value) { grayPress = value; update(); }
-    void setGlyph(ControlIcon icon) {
+
+    void setCircular(bool value)
+    {
+        circular = value;
+        update();
+    }
+
+    void setGrayPress(bool value)
+    {
+        grayPress = value;
+        update();
+    }
+
+    void setGlyph(ControlIcon icon)
+    {
         if (glyph != icon) {
             glyph = icon;
             update();
         }
     }
-    void setRule(Edges edges) {
+
+    void setRule(Edges edges)
+    {
         rule = edges;
         update();
     }
-    void setTrailingInset(int pixels) {
+
+    void setTrailingInset(int pixels)
+    {
         pixels = qMax(0, pixels);
         if (trailingInset == pixels)
             return;
@@ -281,6 +340,7 @@ public:
         updateGeometry();
         update();
     }
+
     int widthForLabel(int maximumWidth) const;
     QSize sizeHint() const override;
 
@@ -296,7 +356,8 @@ private:
     bool grayPress = false;
     int trailingInset = metrics::chrome::inset;
 };
+
 QPushButton *makeButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,
                         std::function<void()> action);
 
-}
+} // namespace kobalt::ui

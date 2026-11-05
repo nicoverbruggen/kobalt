@@ -5,4 +5,4 @@ namespace kobalt::platform {
 // Preserves existing addresses and other interfaces. False reports errno,
 // or zero for no change.
 bool configureLoopback(int *error);
-}
+} // namespace kobalt::platform

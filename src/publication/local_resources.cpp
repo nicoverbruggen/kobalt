@@ -12,7 +12,8 @@
 
 namespace kobalt {
 namespace {
-class LocalResources {
+class LocalResources
+{
 public:
     QString path, systemFont;
     QMap<QString, qint64> sizes;
@@ -22,17 +23,20 @@ public:
     ZipResourceIndex index;
     qint64 requests = 0, failures = 0, readNs = 0, sinkNs = 0, xmlNs = 0;
 
-    bool cancelled() const {
-        return !lease || lease->revoked();
+    bool cancelled() const { return !lease || lease->revoked(); }
+
+    QJsonObject statistics() const
+    {
+        return qt::object({ { "requests", double(requests) },
+                            { "request_failures", double(failures) },
+                            { "request_ms", double(readNs) / 1000000.0 },
+                            { "resource_sink_ms", double(sinkNs) / 1000000.0 },
+                            { "resource_xml_ms", double(xmlNs) / 1000000.0 } });
     }
-    QJsonObject statistics() const {
-        return qt::object({{"requests", double(requests)},
-                           {"request_failures", double(failures)},
-                           {"request_ms", double(readNs) / 1000000.0},
-                           {"resource_sink_ms", double(sinkNs) / 1000000.0},
-                           {"resource_xml_ms", double(xmlNs) / 1000000.0}});
-    }
-    bool read(const QString &name, const ResourceCache::Sink &sink, QString *error, QSize *dimensions = nullptr) {
+
+    bool read(const QString &name, const ResourceCache::Sink &sink, QString *error,
+              QSize *dimensions = nullptr)
+    {
         QElapsedTimer timer;
         timer.start();
         ++requests;
@@ -45,7 +49,9 @@ public:
     }
 
 private:
-    bool transfer(const QString &name, const ResourceCache::Sink &sink, QString *error, QSize *dimensions) {
+    bool transfer(const QString &name, const ResourceCache::Sink &sink, QString *error,
+                  QSize *dimensions)
+    {
         auto fail = [&](const char *reason) {
             if (error && error->isEmpty()) {
                 *error = strings::get(reason);
@@ -72,7 +78,8 @@ private:
         }
         QElapsedTimer deadline;
         deadline.start();
-        const bool validateXml = name.endsWith(".opf", Qt::CaseInsensitive) || name == "META-INF/container.xml";
+        const bool validateXml =
+                name.endsWith(".opf", Qt::CaseInsensitive) || name == "META-INF/container.xml";
         QXmlStreamReader xml;
         auto deliver = [&](const QByteArray &bytes) {
             QElapsedTimer work;
@@ -89,7 +96,8 @@ private:
                     xml.readNext();
                 }
                 xmlNs += work.nsecsElapsed();
-                if (xml.hasError() && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError) {
+                if (xml.hasError()
+                    && xml.error() != QXmlStreamReader::PrematureEndOfDocumentError) {
                     if (contentRejected) {
                         contentRejected->store(true);
                     }
@@ -154,12 +162,13 @@ private:
         return true;
     }
 };
-}
+} // namespace
 
-ResourceFactory localResourceFactory(QString path, std::shared_ptr<SourceLease> lease) {
-    return [path = std::move(path), lease = std::move(lease)](const QMap<QString, qint64> &sizes,
-                                                              const QString &systemFont,
-                                                              std::shared_ptr<std::atomic_bool> contentRejected) {
+ResourceFactory localResourceFactory(QString path, std::shared_ptr<SourceLease> lease)
+{
+    return [path = std::move(path),
+            lease = std::move(lease)](const QMap<QString, qint64> &sizes, const QString &systemFont,
+                                      std::shared_ptr<std::atomic_bool> contentRejected) {
         auto access = std::make_shared<LocalResources>();
         access->path = path;
         access->systemFont = systemFont;
@@ -170,51 +179,47 @@ ResourceFactory localResourceFactory(QString path, std::shared_ptr<SourceLease> 
             return access->read(name, sink, error);
         };
         auto probe = [access](const QString &name) {
-            if (!imageFileName(name) || name.endsWith(".svg", Qt::CaseInsensitive) ||
-                access->sizes.value(name) < 256 * 1024 || access->sizes.value(name) > ResourceCache::budgetBytes) {
+            if (!imageFileName(name) || name.endsWith(".svg", Qt::CaseInsensitive)
+                || access->sizes.value(name) < 256 * 1024
+                || access->sizes.value(name) > ResourceCache::budgetBytes) {
                 return QSize();
             }
             QSize dimensions;
             QString error;
-            access->read(
-                name,
-                [](const char *, qint64) {
-                    return true;
-                },
-                &error, &dimensions);
+            access->read(name, [](const char *, qint64) { return true; }, &error, &dimensions);
             return dimensions;
         };
-        return std::make_shared<ResourceCache>(sizes.keys(), ResourceCache::Access{std::move(load),
-                                                                                   [access] {
-                                                                                       return access->cancelled();
-                                                                                   },
-                                                                                   [access] {
-                                                                                       return access->statistics();
-                                                                                   },
-                                                                                   std::move(probe)});
+        return std::make_shared<ResourceCache>(
+                sizes.keys(),
+                ResourceCache::Access{ std::move(load), [access] { return access->cancelled(); },
+                                       [access] { return access->statistics(); },
+                                       std::move(probe) });
     };
 }
 
 namespace native {
 namespace {
-class LocalPublication final : public PublicationEndpoint {
+class LocalPublication final : public PublicationEndpoint
+{
 public:
-    explicit LocalPublication(QString path) : path_(std::move(path)) {}
-    int port() const override {
-        return 0;
-    }
-    bool active() const override {
-        return true;
-    }
-    ResourceFactory resources(std::shared_ptr<SourceLease> lease) const override {
+    explicit LocalPublication(QString path) : path_(std::move(path)) { }
+
+    int port() const override { return 0; }
+
+    bool active() const override { return true; }
+
+    ResourceFactory resources(std::shared_ptr<SourceLease> lease) const override
+    {
         return localResourceFactory(path_, std::move(lease));
     }
 
 private:
     QString path_;
 };
-}
-std::unique_ptr<PublicationEndpoint> openLocalPublication(const QString &path, QString *error) {
+} // namespace
+
+std::unique_ptr<PublicationEndpoint> openLocalPublication(const QString &path, QString *error)
+{
     QFile file(path);
     Publication publication;
     if (!file.open(QIODevice::ReadOnly)) {
@@ -225,5 +230,5 @@ std::unique_ptr<PublicationEndpoint> openLocalPublication(const QString &path, Q
         return {};
     return std::make_unique<LocalPublication>(path);
 }
-}
-}
+} // namespace native
+} // namespace kobalt

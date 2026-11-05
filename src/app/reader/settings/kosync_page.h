@@ -9,7 +9,9 @@
 
 namespace kobalt::reader {
 class KosyncScheduleSheet;
-class KosyncPage final : public QWidget {
+
+class KosyncPage final : public QWidget
+{
 public:
     KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory keyboard);
     ~KosyncPage() override;
@@ -22,8 +24,11 @@ public:
     void setDeviceName(const QString &name, const QString &defaultName);
     void setFilenameMatching(bool enabled);
     void setStatus(const QString &status, bool busy);
+
     QString server() const { return server_; }
+
     QString username() const { return username_; }
+
     QString takePassword();
     void dismissEditor();
     QPointer<ui::ModalOverlay> editorDialog;
@@ -64,10 +69,11 @@ private:
     bool automatic_ = true;
     kosync::Schedule schedule_;
     bool sleepWake_ = false, wifi_ = false;
-    ui::CaptionButton *serverButton_, *usernameButton_, *passwordButton_, *deviceNameButton_, *matchingButton_;
+    ui::CaptionButton *serverButton_, *usernameButton_, *passwordButton_, *deviceNameButton_,
+            *matchingButton_;
     QPushButton *login_, *logout_, *sync_, *learnMore_;
     ui::CaptionButton *automaticButton_;
     QLabel *description_, *sideloadGuidance_, *status_, *lastSync_;
     QWidget *syncInformation_;
 };
-}
+} // namespace kobalt::reader

@@ -4,16 +4,22 @@
 
 namespace kobalt {
 namespace {
-template <class T> T symbol(const char *name) {
+template <class T>
+T symbol(const char *name)
+{
     return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
+
 quint64 nextConnectionId = 0;
-}
+} // namespace
+
 QPointer<NativeProgress> NativeProgress::active;
 #ifndef KOBALT_READER_HARDWARE
 bool NativeProgress::failNextWrite = false;
 #endif
-NativeProgress::NativeProgress(QString identity) : book(std::move(identity)), connectionId(++nextConnectionId) {
+NativeProgress::NativeProgress(QString identity)
+    : book(std::move(identity)), connectionId(++nextConnectionId)
+{
     active = this;
 #ifndef KOBALT_READER_HARDWARE
     failNextWrite = false;
@@ -35,19 +41,24 @@ NativeProgress::NativeProgress(QString identity) : book(std::move(identity)), co
     }
     if (const auto sync = symbol<QObject *(*)()>("_ZN13N3SyncManager14sharedInstanceEv")) {
         const bool finished = bool(connect(sync(), SIGNAL(finished()), this, SLOT(markChanged())));
-        const bool profile = bool(connect(sync(), SIGNAL(userProfileUpdated()), this, SLOT(markChanged())));
+        const bool profile =
+                bool(connect(sync(), SIGNAL(userProfileUpdated()), this, SLOT(markChanged())));
         syncSignalled = finished && profile;
     }
     // Without these signals the reader falls back to reading Nickel's saved
     // position once a minute.
     signalled = usbSignalled && syncSignalled;
 }
-NativeProgress::~NativeProgress() {
+
+NativeProgress::~NativeProgress()
+{
     if (active == this)
         active.clear();
 }
-void NativeProgress::disconnected() {
+
+void NativeProgress::disconnected()
+{
     if (active)
         active->finishUnplug();
 }
-}
+} // namespace kobalt

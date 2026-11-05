@@ -11,7 +11,7 @@ class DescribedOption;
 class ListHeader;
 class RadioList;
 class PagerBar;
-}
+} // namespace kobalt::ui
 class QLabel;
 class QVBoxLayout;
 
@@ -22,16 +22,16 @@ using SlotContents = std::array<headerfooter::Content, headerfooter::slotCount>;
 // text at the top edge, footer text at the bottom edge above the progress bar,
 // and a few lines between them. The preset page shows it read-only; Custom taps a slot
 // to choose what goes in it. Each slot is a button for input and accessibility.
-class SlotMap final : public QWidget {
+class SlotMap final : public QWidget
+{
 public:
     SlotMap(QWidget *parent, bool editable);
     void setSlots(const headerfooter::Layout &layout, const SlotContents &contents);
     QPushButton *cell(int slot) const;
     std::function<void(int)> chosen;
     QSize sizeHint() const override;
-    QSize minimumSizeHint() const override {
-        return sizeHint();
-    }
+
+    QSize minimumSizeHint() const override { return sizeHint(); }
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -47,12 +47,13 @@ private:
 // A preset as a miniature page with its name below. A selected card has a
 // heavy border and an inverted name; the card itself stays paper, so choosing
 // a preset does not flash the whole panel.
-class PresetCard final : public ui::Button {
+class PresetCard final : public ui::Button
+{
 public:
     PresetCard(headerfooter::Preset preset, QWidget *parent);
-    headerfooter::Preset preset() const {
-        return value;
-    }
+
+    headerfooter::Preset preset() const { return value; }
+
     void setLayout(const headerfooter::Layout &layout);
     void setDivider(bool shown);
     // A modified Custom layout shows a star after its name.
@@ -74,15 +75,15 @@ private:
 // content, so the page shows above. Its rows hold the presets, the slots and
 // the size and progress bar rows. Short screens page between complete rows.
 // Close returns to the Layout panel.
-class HeaderFooterView final : public ui::Panel {
+class HeaderFooterView final : public ui::Panel
+{
 public:
     explicit HeaderFooterView(QWidget *parent);
-    QWidget *body() const {
-        return content;
-    }
-    QVBoxLayout *rows() const {
-        return contentRows;
-    }
+
+    QWidget *body() const { return content; }
+
+    QVBoxLayout *rows() const { return contentRows; }
+
     // The title row and the rows' height at this width.
     int preferredHeight(int width) const;
     std::function<void()> closed;
@@ -108,14 +109,15 @@ private:
 // and returns to Header and footer; the close cell returns without one.
 // Fields that do not fit go to further pages, with the Chapters pager at the
 // bottom. The Uppercase checkbox on the right of the bar keeps the list open.
-class FieldChooser final : public ui::Panel {
+class FieldChooser final : public ui::Panel
+{
 public:
     explicit FieldChooser(QWidget *parent);
-    void open(int slot, headerfooter::Field current, const headerfooter::Values &values, bool uppercase,
-              int textPixels = 0);
-    int slot() const {
-        return currentSlot;
-    }
+    void open(int slot, headerfooter::Field current, const headerfooter::Values &values,
+              bool uppercase, int textPixels = 0);
+
+    int slot() const { return currentSlot; }
+
     std::function<void(headerfooter::Field)> selected;
     // The slot's case: true for uppercase.
     std::function<void(bool)> uppercaseChanged;
@@ -139,4 +141,4 @@ private:
     void arrange();
     int barHeight() const;
 };
-}
+} // namespace kobalt::reader

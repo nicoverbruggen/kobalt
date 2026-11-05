@@ -8,26 +8,36 @@
 #include <QtEndian>
 #include <zlib.h>
 using namespace kobalt;
+
 namespace {
-void u16(QByteArray &b, quint16 v) {
+void u16(QByteArray &b, quint16 v)
+{
     v = qToLittleEndian(v);
     b.append(reinterpret_cast<char *>(&v), 2);
 }
-void u32(QByteArray &b, quint32 v) {
+
+void u32(QByteArray &b, quint32 v)
+{
     v = qToLittleEndian(v);
     b.append(reinterpret_cast<char *>(&v), 4);
 }
-void replace16(QByteArray &bytes, int offset, quint16 value) {
+
+void replace16(QByteArray &bytes, int offset, quint16 value)
+{
     QByteArray encoded;
     u16(encoded, value);
     bytes.replace(offset, encoded.size(), encoded);
 }
-void replace32(QByteArray &bytes, int offset, quint32 value) {
+
+void replace32(QByteArray &bytes, int offset, quint32 value)
+{
     QByteArray encoded;
     u32(encoded, value);
     bytes.replace(offset, encoded.size(), encoded);
 }
-QByteArray zip(const QByteArray &source, bool deflated, bool badCrc = false, bool truncated = false) {
+
+QByteArray zip(const QByteArray &source, bool deflated, bool badCrc = false, bool truncated = false)
+{
     QByteArray packed = source;
     if (deflated) {
         z_stream stream{};
@@ -45,8 +55,8 @@ QByteArray zip(const QByteArray &source, bool deflated, bool badCrc = false, boo
     }
     if (truncated)
         packed.chop(1);
-    const quint32 crc =
-        crc32(0, reinterpret_cast<const Bytef *>(source.constData()), source.size()) ^ (badCrc ? 1U : 0U);
+    const quint32 crc = crc32(0, reinterpret_cast<const Bytef *>(source.constData()), source.size())
+            ^ (badCrc ? 1U : 0U);
     const QByteArray name("image.png");
     QByteArray bytes, directory;
     u32(bytes, 0x04034b50);
@@ -90,7 +100,9 @@ QByteArray zip(const QByteArray &source, bool deflated, bool badCrc = false, boo
     u16(bytes, 0);
     return bytes;
 }
-QByteArray manyEntries(int count) {
+
+QByteArray manyEntries(int count)
+{
     QByteArray bytes, directory;
     for (int i = 0; i < count; ++i) {
         auto entry = zip(QByteArray::number(i), false);
@@ -115,22 +127,30 @@ QByteArray manyEntries(int count) {
     u16(bytes, 0);
     return bytes;
 }
-class CountingBuffer : public QBuffer {
+
+class CountingBuffer : public QBuffer
+{
 public:
-    CountingBuffer(QByteArray bytes, int entries) : directoryStart(bytes.size() - 22 - entries * (46 + 9)) {
+    CountingBuffer(QByteArray bytes, int entries)
+        : directoryStart(bytes.size() - 22 - entries * (46 + 9))
+    {
         setData(std::move(bytes));
         if (!open(QIODevice::ReadOnly | QIODevice::Unbuffered)) {
             qFatal("open counted ZIP");
         }
     }
+
     qint64 directoryBytes = 0;
 
 protected:
-    qint64 readData(char *data, qint64 size) override {
+    qint64 readData(char *data, qint64 size) override
+    {
         const auto start = pos();
         const auto count = QBuffer::readData(data, size);
         if (count > 0) {
-            directoryBytes += qMax(qint64(0), qMin(start + count, this->size() - 22) - qMax(start, directoryStart));
+            directoryBytes +=
+                    qMax(qint64(0),
+                         qMin(start + count, this->size() - 22) - qMax(start, directoryStart));
         }
         return count;
     }
@@ -138,15 +158,17 @@ protected:
 private:
     qint64 directoryStart;
 };
-void checkDirectoryReuse() {
+
+void checkDirectoryReuse()
+{
     constexpr int count = 1024;
     CountingBuffer source(manyEntries(count), count);
     ZipResourceIndex index;
     for (int i = count - 1; i >= 0; --i) {
         ZipResource stream;
         const auto name = QString("%1.bin").arg(i, 5, 10, QChar('0'));
-        if (!stream.open(source, name, index) || stream.next() != QByteArray::number(i) || !stream.valid() ||
-            !stream.finished()) {
+        if (!stream.open(source, name, index) || stream.next() != QByteArray::number(i)
+            || !stream.valid() || !stream.finished()) {
             qFatal("indexed member lookup or CRC");
         }
     }
@@ -171,13 +193,17 @@ void checkDirectoryReuse() {
         qFatal("ZIP index exceeded its entry budget");
     }
 }
-void save(const QString &path, const QByteArray &bytes) {
+
+void save(const QString &path, const QByteArray &bytes)
+{
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size())
         qFatal("write");
 }
-}
-int main(int argc, char **argv) {
+} // namespace
+
+int main(int argc, char **argv)
+{
     QCoreApplication app(argc, argv);
     QTemporaryDir dir;
     if (!dir.isValid())
@@ -185,8 +211,8 @@ int main(int argc, char **argv) {
     const auto path = dir.path() + "/book.zip";
     ZipResourceIndex index;
     checkDirectoryReuse();
-    for (bool deflated : {false, true})
-        for (int length : {0, 1, 65535, 65536, 65537, 196608, 2097171}) {
+    for (bool deflated : { false, true })
+        for (int length : { 0, 1, 65535, 65536, 65537, 196608, 2097171 }) {
             QByteArray original(length, 'a');
             quint32 state = 913;
             for (int i = 0; i < length; ++i) {
@@ -194,18 +220,18 @@ int main(int argc, char **argv) {
                 original[i] = char(state >> 24);
             }
             // The second pattern covers very small compressed input producing many blocks.
-            for (bool compressible : {false, true}) {
+            for (bool compressible : { false, true }) {
                 const auto input = compressible ? QByteArray(length, 'a') : original;
                 save(path, zip(input, deflated));
                 ZipResource first, second;
-                if (!first.open(path, "image.png", index) || !second.open(path, "image.png", index) ||
-                    first.size() != length)
+                if (!first.open(path, "image.png", index) || !second.open(path, "image.png", index)
+                    || first.size() != length)
                     qFatal("open");
                 QByteArray a, b;
                 while (!first.finished() || !second.finished()) {
                     auto x = first.next(), y = second.next();
-                    if (!first.valid() || !second.valid() || x.size() > ResourceCache::blockBytes ||
-                        y.size() > ResourceCache::blockBytes)
+                    if (!first.valid() || !second.valid() || x.size() > ResourceCache::blockBytes
+                        || y.size() > ResourceCache::blockBytes)
                         qFatal("bounded read");
                     a += x;
                     b += y;
@@ -213,7 +239,7 @@ int main(int argc, char **argv) {
                 if (a != input || b != input)
                     qFatal("bytes or concurrent positions");
             }
-            for (bool truncated : {false, true}) {
+            for (bool truncated : { false, true }) {
                 if (!length && truncated)
                     continue;
                 save(path, zip(original, deflated, !truncated, truncated));
@@ -227,7 +253,7 @@ int main(int argc, char **argv) {
                 }
             }
         }
-    for (bool deflated : {false, true}) {
+    for (bool deflated : { false, true }) {
         QBuffer borrowed;
         borrowed.setData(zip("borrowed payload", deflated));
         if (!borrowed.open(QIODevice::ReadOnly))
@@ -270,7 +296,8 @@ int main(int argc, char **argv) {
             save(path, bytes);
             if (stream.open(path, "image.png", index))
                 qFatal("%s", reason);
-            if (stream.valid() || stream.finished() || stream.size() != -1 || !stream.next().isEmpty())
+            if (stream.valid() || stream.finished() || stream.size() != -1
+                || !stream.next().isEmpty())
                 qFatal("Failed reopen retained the previous resource");
         };
         auto changed = original;
@@ -304,16 +331,16 @@ int main(int argc, char **argv) {
         replace32(changed, original.size() - 22 + 16, quint32(directory + 1));
         reject(changed, "Central directory does not end at the trailer");
         save(path, original);
-        for (qint64 limit : {qint64(-1), qint64(6)}) {
+        for (qint64 limit : { qint64(-1), qint64(6) }) {
             if (stream.open(path, "image.png", index, limit))
                 qFatal("Invalid or undersized resource limit accepted");
         }
-        if (!stream.open(path, "image.png", index, 7) || stream.next() != "payload" || !stream.finished() ||
-            !stream.valid())
+        if (!stream.open(path, "image.png", index, 7) || stream.next() != "payload"
+            || !stream.finished() || !stream.valid())
             qFatal("Resource at its exact limit rejected");
         save(path, zip({}, false));
-        if (!stream.open(path, "image.png", index, 0) || !stream.next().isEmpty() || !stream.finished() ||
-            !stream.valid())
+        if (!stream.open(path, "image.png", index, 0) || !stream.next().isEmpty()
+            || !stream.finished() || !stream.valid())
             qFatal("Empty resource at a zero limit rejected");
     }
     // A stream can finish its original file after its path is replaced. The
@@ -324,10 +351,9 @@ int main(int argc, char **argv) {
         qFatal("open original before replacement");
     }
     save(path, zip("after!", false));
-    if (!replacement.open(path, "image.png", index) || replacement.next() != "after!" || !replacement.valid() ||
-        previous.next() != "before" || !previous.valid()) {
+    if (!replacement.open(path, "image.png", index) || replacement.next() != "after!"
+        || !replacement.valid() || previous.next() != "before" || !previous.valid()) {
         qFatal("File replacement reused stale directory metadata or changed an existing stream");
     }
-    qInfo(
-        "PASS: stored, deflated, boundaries, independent readers, CRC, truncation, header agreement, limits and bounded directory reuse");
+    qInfo("PASS: stored, deflated, boundaries, independent readers, CRC, truncation, header agreement, limits and bounded directory reuse");
 }

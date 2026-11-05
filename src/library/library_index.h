@@ -8,11 +8,14 @@
 namespace kobalt::library {
 // A folder the user added. Its key is what the host source understands: a
 // local path on the desktop, a granted document tree on Android.
-struct Folder {
+struct Folder
+{
     QString key, label;
 };
+
 // A file as a source lists it, before its contents are read.
-struct Entry {
+struct Entry
+{
     QString key, folder, name;
     qint64 size = 0, modified = 0;
 };
@@ -23,7 +26,8 @@ enum class Sort { Opened, Added, Title, Author, Series };
 // The cover grid's target cover width.
 enum class CoverSize { Small, Medium, Large };
 
-struct Book {
+struct Book
+{
     // `key` identifies the file for its source. `folder` is empty for a book
     // opened on its own, which stays in the library until it is removed.
     QString key, folder, name, title, author, cover, series;
@@ -46,7 +50,8 @@ struct Book {
     static Book fromJson(const QJsonObject &value);
 };
 
-struct Settings {
+struct Settings
+{
     View view = View::Grid;
     Sort sort = Sort::Opened;
     CoverSize coverSize = CoverSize::Medium;
@@ -54,7 +59,8 @@ struct Settings {
     bool checkAtStart = true;
 };
 
-class Index {
+class Index
+{
 public:
     QVector<Folder> folders;
     QMap<QString, Book> books;
@@ -79,10 +85,12 @@ public:
     // their metadata, new or changed files and books read by an older
     // metadata version must be read, and books whose file is gone leave the
     // library.
-    struct Plan {
+    struct Plan
+    {
         QVector<Entry> read;
         QStringList removed;
     };
+
     Plan plan(const QString &folder, const QVector<Entry> &files) const;
 };
-}
+} // namespace kobalt::library

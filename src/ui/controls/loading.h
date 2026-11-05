@@ -2,18 +2,20 @@
 #include <QWidget>
 
 class QTimer;
+
 namespace kobalt::ui {
 // An opt-in status control. Hidden controls do no timer work; showing one
 // restarts the requested delay. The caller owns when loading starts and stops.
-class LoadingIndicator final : public QWidget {
+class LoadingIndicator final : public QWidget
+{
 public:
     enum class Style { Dots, Squares, Logo };
     explicit LoadingIndicator(Style style, QWidget *parent = nullptr);
     void start(int delayMilliseconds = 1000);
     void stop();
-    bool isRunning() const {
-        return running;
-    }
+
+    bool isRunning() const { return running; }
+
     QSize sizeHint() const override;
 
 protected:
@@ -31,4 +33,4 @@ private:
     void restart();
     void advance();
 };
-}
+} // namespace kobalt::ui

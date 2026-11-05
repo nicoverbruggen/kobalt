@@ -6,12 +6,15 @@
 // Nickel's own styling. The plugin's symbols are hidden, so these types do not
 // replace Nickel's classes. This header includes nothing else, because Qt 5.2's
 // moc cannot parse the C++17 headers the adapters use.
-class MetaDataHeaderLabel : public QLabel {
+class MetaDataHeaderLabel : public QLabel
+{
     Q_OBJECT
 public:
     using QLabel::QLabel;
 };
-class RegularLabelVPadded : public QLabel {
+
+class RegularLabelVPadded : public QLabel
+{
     Q_OBJECT
 public:
     using QLabel::QLabel;

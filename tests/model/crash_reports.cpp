@@ -18,38 +18,49 @@
 // crash reaches the host's crash reporter.
 namespace {
 const char *self = nullptr;
-void hostHandler(int signal) {
+
+void hostHandler(int signal)
+{
     _exit(100 + signal);
 }
-extern "C" __attribute__((noinline)) void kobalt_test_crash_here() {
+
+extern "C" __attribute__((noinline)) void kobalt_test_crash_here()
+{
     volatile int *volatile target = nullptr;
     *target = 1;
 }
-int crash(const char *kind, const char *directory, const char *mount) {
-    for (const int signal : {SIGSEGV, SIGBUS, SIGABRT})
+
+int crash(const char *kind, const char *directory, const char *mount)
+{
+    for (const int signal : { SIGSEGV, SIGBUS, SIGABRT })
         std::signal(signal, hostHandler);
     kobalt::installCrashReports(QString::fromLocal8Bit(directory), QString::fromLocal8Bit(mount));
-    kobalt::diagnostic("font-load-start", {{"file_bytes", 123456}, {"retained_bytes", 7890}}, false);
+    kobalt::diagnostic("font-load-start", { { "file_bytes", 123456 }, { "retained_bytes", 7890 } },
+                       false);
     const char resource[] = "{\"resource_sample_monotonic_ms\":1,\"rss_kib\":456}\n";
     kobalt::crashContext::resources.store(resource, sizeof(resource) - 1);
     // A writer interrupted while owning a slot must not deadlock the handler.
     kobalt::crashContext::events[15].busy.test_and_set();
     if (std::strcmp(kind, "sent") == 0) {
         kill(getpid(), SIGSEGV);
-        for (;;) pause();
+        for (;;)
+            pause();
     }
     if (std::strcmp(kind, "abort") == 0)
         std::abort();
     kobalt_test_crash_here();
     return 1;
 }
-int crashChild(const QString &directory, const QString &mount, const char *kind) {
+
+int crashChild(const QString &directory, const QString &mount, const char *kind)
+{
     const auto directoryName = QFile::encodeName(directory), mountName = QFile::encodeName(mount);
     const pid_t child = fork();
     if (child < 0)
         qFatal("Cannot fork");
     if (child == 0) {
-        execlp(self, self, "--crash", kind, directoryName.constData(), mountName.constData(), nullptr);
+        execlp(self, self, "--crash", kind, directoryName.constData(), mountName.constData(),
+               nullptr);
         _exit(2);
     }
     int status = 0;
@@ -57,20 +68,27 @@ int crashChild(const QString &directory, const QString &mount, const char *kind)
         qFatal("Cannot wait for the crashing child");
     return WIFEXITED(status) ? WEXITSTATUS(status) : -WTERMSIG(status);
 }
-QStringList reports(const QString &directory) {
-    return QDir(directory).entryList({QStringLiteral("crash-*.log"), QStringLiteral("crash-*.txt")}, QDir::Files,
-                                     QDir::Name);
+
+QStringList reports(const QString &directory)
+{
+    return QDir(directory).entryList(
+            { QStringLiteral("crash-*.log"), QStringLiteral("crash-*.txt") }, QDir::Files,
+            QDir::Name);
 }
-QByteArray read(const QString &path) {
+
+QByteArray read(const QString &path)
+{
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
         qFatal("Cannot read crash report");
     return file.readAll();
 }
-bool faultStatus(int status) {
+
+bool faultStatus(int status)
+{
     return status == 100 + SIGSEGV || status == 100 + SIGBUS;
 }
-}
+} // namespace
 
 // Crashes child processes with a fault and with `abort`. On Linux it also sends
 // `SIGSEGV` and verifies sender fields instead of a fault address. Reports
@@ -83,7 +101,8 @@ bool faultStatus(int status) {
 // files alone. Without the mounted storage, no report may be written. Register
 // capture and stack scanning for ARM Linux run only on a Kobo; read a report on
 // a device after a crash to check them.
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     self = argv[0];
     if (argc == 5 && std::strcmp(argv[1], "--crash") == 0)
         return crash(argv[2], argv[3], argv[4]);
@@ -98,12 +117,13 @@ int main(int argc, char **argv) {
     if (names.size() != 1)
         qFatal("A fault did not write one report");
     auto report = read(directory + '/' + names.first());
-    if (!report.startsWith("Kobalt crash report\n") ||
-        !(report.contains("\nsignal: SIGSEGV (") || report.contains("\nsignal: SIGBUS (")) ||
-        !report.contains("\nbacktrace:\n") || !report.contains("\nsymbols:\n") || !report.endsWith("end\n"))
+    if (!report.startsWith("Kobalt crash report\n")
+        || !(report.contains("\nsignal: SIGSEGV (") || report.contains("\nsignal: SIGBUS ("))
+        || !report.contains("\nbacktrace:\n") || !report.contains("\nsymbols:\n")
+        || !report.endsWith("end\n"))
         qFatal("The fault report lost its signal, backtrace or symbols:\n%s", report.constData());
-    if (!report.contains("event=font-load-start") || !report.contains("retained_bytes=7890") ||
-        !report.contains("resource_sample_monotonic_ms"))
+    if (!report.contains("event=font-load-start") || !report.contains("retained_bytes=7890")
+        || !report.contains("resource_sample_monotonic_ms"))
         qFatal("Crash context lost an unflushed event or resource sample");
     if (!report.contains("kobalt_test_crash_here"))
         qFatal("The fault report does not name the crashing function:\n%s", report.constData());
@@ -123,7 +143,9 @@ int main(int argc, char **argv) {
     const auto full = root.path() + "/full";
     QDir().mkpath(full);
     for (int i = 0; i < kobalt::crashReportLimit + 5; ++i) {
-        QFile file(full + QStringLiteral("/crash-20000101-0000%1-1.txt").arg(i, 2, 10, QLatin1Char('0')));
+        QFile file(
+                full
+                + QStringLiteral("/crash-20000101-0000%1-1.txt").arg(i, 2, 10, QLatin1Char('0')));
         if (!file.open(QIODevice::WriteOnly))
             qFatal("Cannot create an old report");
     }
@@ -134,8 +156,8 @@ int main(int argc, char **argv) {
     if (!faultStatus(crashChild(full, {}, "fault")))
         qFatal("A fault with a full set did not reach the previous handler");
     names = reports(full);
-    if (names.size() != kobalt::crashReportLimit || names.first() != "crash-20000101-000006-1.txt" ||
-        names.last().startsWith("crash-20000101-") || !QFile::exists(full + "/notes.txt"))
+    if (names.size() != kobalt::crashReportLimit || names.first() != "crash-20000101-000006-1.txt"
+        || names.last().startsWith("crash-20000101-") || !QFile::exists(full + "/notes.txt"))
         qFatal("A full set did not keep the newest reports: %s", qPrintable(names.join(", ")));
 
 #ifdef __linux__
@@ -146,7 +168,8 @@ int main(int argc, char **argv) {
     if (sentStatus != 100 + SIGSEGV)
         qFatal("Sent signal did not chain: %d", sentStatus);
     const auto sentReport = read(sent + '/' + reports(sent).first());
-    if (!sentReport.contains("sender_pid:") || !sentReport.contains("sender_uid:") || sentReport.contains("\naddress:"))
+    if (!sentReport.contains("sender_pid:") || !sentReport.contains("sender_uid:")
+        || sentReport.contains("\naddress:"))
         qFatal("Sent signal was reported as a fault address");
 #endif
 

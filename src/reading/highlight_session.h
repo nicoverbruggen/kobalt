@@ -12,24 +12,26 @@
 namespace kobalt {
 class ReaderSession;
 struct BookmarkLocations;
+
 // An edit changes the list at once. Its save runs on a writer thread, because
 // each save syncs storage several times. When the newest save fails, the list
 // returns to the last saved one and `failed` runs. Destruction waits for a
 // running save.
-class HighlightSession final : public QObject {
+class HighlightSession final : public QObject
+{
 public:
-    HighlightSession(ReaderSession &session, std::function<QString()> layout, const QString &annotations,
-                     const QString &identity, const QByteArray &fingerprint, const QString &title, const QString &database = {});
+    HighlightSession(ReaderSession &session, std::function<QString()> layout,
+                     const QString &annotations, const QString &identity,
+                     const QByteArray &fingerprint, const QString &title,
+                     const QString &database = {});
     ~HighlightSession() override;
-    bool available() const {
-        return bool(store_);
-    }
-    bool writable() const {
-        return store_ && !loadFailed_;
-    }
-    QString error() const {
-        return error_;
-    }
+
+    bool available() const { return bool(store_); }
+
+    bool writable() const { return store_ && !loadFailed_; }
+
+    QString error() const { return error_; }
+
     const QVector<Highlight> &highlights() const;
     // Ordinary reading fetches payloads only for visible rows or an edited passage.
     bool excerpts(const QStringList &ids, QVector<HighlightExcerpt> *rows);
@@ -44,13 +46,17 @@ public:
     BookmarkLocations locations() const;
     int page(int index) const;
     int endPage(int index) const;
+
     int sourceOrder(int index) const { return resolved() ? order_.value(index * 2, -1) : -1; }
+
     // Empty id creates a distinct passage. Existing IDs replace that passage.
     // Ranges may touch, but cannot overlap another saved passage.
     // Completion is always called while this session lives, false on stale work.
-    void save(const QString &start, const QString &end, const QString &id = {}, std::function<void(bool)> finished = {},
-              const QString &chosenEnd = {}, bool sentenceEndPolicy = false, const QString &chosenStart = {},
-              bool sentenceStartPolicy = false, const QString &color = {}, const QString &style = {});
+    void save(const QString &start, const QString &end, const QString &id = {},
+              std::function<void(bool)> finished = {}, const QString &chosenEnd = {},
+              bool sentenceEndPolicy = false, const QString &chosenStart = {},
+              bool sentenceStartPolicy = false, const QString &color = {},
+              const QString &style = {});
     // Omitted save colors preserve an existing passage, or use gray for a new one.
     // Recolor changes only the color and commits atomically with rollback on failure.
     bool recolor(const QString &id, const QString &color);
@@ -58,13 +64,15 @@ public:
     // Empty fields preserve saved values. Both changes persist together or roll back.
     bool updateAppearance(const QString &id, const QString &color, const QString &style);
     bool remove(const QString &id);
+
     // True until the newest save has reported back.
-    bool saving() const {
-        return reported_ < posted_;
-    }
+    bool saving() const { return reported_ < posted_; }
+
     // Waits for the running and pending save, for example before USB export.
     void flush();
+
     bool hasFailedSave() const { return retryPending_; }
+
     bool retryFailedSave();
     // `failed` reports a refused edit or a failed save. `saveFailed` reports
     // only a failed save, after the list has returned to the saved one.
@@ -102,4 +110,4 @@ private:
     // rows read. A list refresh after an edit then need not wait for its save.
     QHash<QString, HighlightExcerpt> known_;
 };
-}
+} // namespace kobalt

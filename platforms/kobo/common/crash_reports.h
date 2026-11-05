@@ -12,4 +12,4 @@ inline constexpr int crashReportLimit = 20;
 // the main thread. Only that thread gets an alternate signal stack, so a stack
 // overflow in another thread is not reported.
 void installCrashReports(const QString &directory, const QString &mount = {});
-}
+} // namespace kobalt

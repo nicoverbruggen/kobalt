@@ -5,8 +5,10 @@
 #include <QMap>
 #include <memory>
 #include <functional>
+
 namespace kobalt {
-class AssetBundle {
+class AssetBundle
+{
 public:
     AssetBundle(QString root, QString expectedVersion);
     ~AssetBundle();
@@ -34,10 +36,12 @@ private:
     struct Data;
     std::unique_ptr<Data> data;
 };
+
 // Keep this owner alive as long as Qt can retain registered font faces. Asset
 // invalidation releases verification state, not these independent copies.
 // Creation and writes belong on the GUI thread.
-class FontCopies {
+class FontCopies
+{
 public:
     FontCopies();
     ~FontCopies();
@@ -49,4 +53,4 @@ private:
     struct Data;
     std::unique_ptr<Data> data;
 };
-}
+} // namespace kobalt

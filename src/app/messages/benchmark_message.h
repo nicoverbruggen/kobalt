@@ -9,7 +9,9 @@ namespace kobalt {
 // What the reader tells the user when a benchmark run ends. A run fails when
 // a scenario failed, nothing ran or the results could not be saved. `folder`
 // holds the results, as the user finds it on a computer.
-inline ReaderNotice benchmarkNotice(const QVector<QJsonObject> &results, bool saved, const QString &folder) {
+inline ReaderNotice benchmarkNotice(const QVector<QJsonObject> &results, bool saved,
+                                    const QString &folder)
+{
     int completed = 0, skipped = 0, failed = 0;
     QString firstFailure, reason;
     for (const auto &result : results) {
@@ -36,7 +38,7 @@ inline ReaderNotice benchmarkNotice(const QVector<QJsonObject> &results, bool sa
         parts.append(strings::get("benchmark.first_failure_reason").arg(firstFailure, reason));
     parts.append(strings::get("benchmark.connect").arg(folder));
     const bool succeeded = saved && !results.isEmpty() && !failed;
-    return {succeeded ? strings::get("benchmark.finished") : strings::get("benchmark.failed"),
-            parts.join(QStringLiteral("\n\n")), QStringLiteral("rrBenchmarkNotice")};
+    return { succeeded ? strings::get("benchmark.finished") : strings::get("benchmark.failed"),
+             parts.join(QStringLiteral("\n\n")), QStringLiteral("rrBenchmarkNotice") };
 }
-}
+} // namespace kobalt

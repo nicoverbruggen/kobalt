@@ -9,8 +9,10 @@ class DescribedOption;
 
 namespace kobalt {
 class LightControls;
+
 // The reader owns the light controller and destroys this panel before it.
-class LightPanel : public ui::Panel {
+class LightPanel : public ui::Panel
+{
 public:
     LightPanel(LightControls &light, QWidget *parent);
     ~LightPanel() override;
@@ -38,4 +40,4 @@ private:
     void refreshValues();
     void layoutPanel();
 };
-}
+} // namespace kobalt

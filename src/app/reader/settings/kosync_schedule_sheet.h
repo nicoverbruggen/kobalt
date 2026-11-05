@@ -16,18 +16,23 @@ class DropdownButton;
 namespace kobalt::reader {
 class KosyncWifiTile;
 class MomentCheck;
+
 // Automatic sync in one sheet: whether it is on, when Kobalt syncs and
 // whether a sync while reading may turn on Wi-Fi. Choices apply at once.
 // Close or a tap outside dismisses it. With automatic sync off, the rest
 // stays visible in gray, so the reader still sees what it would do.
-class KosyncScheduleSheet final : public ui::ModalOverlay {
+class KosyncScheduleSheet final : public ui::ModalOverlay
+{
 public:
     // What the host platform can do. A moment or choice it lacks is left out.
-    struct Features {
+    struct Features
+    {
         bool sleepWake = false;
         bool wifi = false;
     };
-    KosyncScheduleSheet(QWidget *parent, bool automatic, const kosync::Schedule &schedule, Features features);
+
+    KosyncScheduleSheet(QWidget *parent, bool automatic, const kosync::Schedule &schedule,
+                        Features features);
     ~KosyncScheduleSheet() override;
     void setChoices(bool automatic, const kosync::Schedule &schedule);
     // Sizes the card for the parent. A short screen pages the rows.
@@ -54,4 +59,4 @@ private:
     KosyncWifiTile *wait_ = nullptr, *wake_ = nullptr;
     QPointer<ui::ModalOverlay> intervals_;
 };
-}
+} // namespace kobalt::reader

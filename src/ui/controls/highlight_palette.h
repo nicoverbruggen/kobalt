@@ -16,9 +16,12 @@
 #include <functional>
 
 namespace kobalt::ui {
-class HighlightSwatch : public QAbstractButton {
+class HighlightSwatch : public QAbstractButton
+{
 public:
-    HighlightSwatch(QString key, QString label, QWidget *parent) : QAbstractButton(parent), key(std::move(key)) {
+    HighlightSwatch(QString key, QString label, QWidget *parent)
+        : QAbstractButton(parent), key(std::move(key))
+    {
         setObjectName("rrAnnotationColor_" + this->key);
         setText(label);
         setAccessibleName(label);
@@ -30,9 +33,12 @@ public:
     }
 
 protected:
-    void paintEvent(QPaintEvent *) override {
+    void paintEvent(QPaintEvent *) override
+    {
         QPainter p(this);
-        p.fillRect(rect(), isEnabled() && isDown() ? themeColors(this).pressedPaper : palette().color(QPalette::Window));
+        p.fillRect(rect(),
+                   isEnabled() && isDown() ? themeColors(this).pressedPaper
+                                           : palette().color(QPalette::Window));
         p.setRenderHint(QPainter::Antialiasing);
         const auto ink = palette().color(QPalette::WindowText);
         const int pen = px(2), ring = px(5);
@@ -55,22 +61,27 @@ protected:
             p.drawEllipse(chip.adjusted(-ring, -ring, ring, ring));
             p.setPen(QPen(Qt::black, px(3)));
             p.drawLine(chip.center() + QPoint(-px(12), 0), chip.center() + QPoint(-px(3), px(10)));
-            p.drawLine(chip.center() + QPoint(-px(3), px(10)), chip.center() + QPoint(px(14), -px(13)));
+            p.drawLine(chip.center() + QPoint(-px(3), px(10)),
+                       chip.center() + QPoint(px(14), -px(13)));
         }
         p.setPen(ink);
         p.setFont(labelFont);
         const int labelTop = chip.y() + diameter + ringExtent + gap;
-        drawInterfaceText(p, QRect(0, labelTop, width(), labelLine.height()), text(), Qt::AlignHCenter | Qt::AlignTop);
+        drawInterfaceText(p, QRect(0, labelTop, width(), labelLine.height()), text(),
+                          Qt::AlignHCenter | Qt::AlignTop);
     }
 
 private:
     QString key;
 };
+
 // Presentation only: the owner supplies selection and handles persistence.
-class HighlightPalette : public QWidget {
+class HighlightPalette : public QWidget
+{
 public:
     HighlightPalette(const QString &selected, std::function<void(QString)> changed, QWidget *parent)
-        : QWidget(parent), selectedColor(selected) {
+        : QWidget(parent), selectedColor(selected)
+    {
         setObjectName("rrAnnotationPalette");
         parent->installEventFilter(this);
         setFixedHeight(compactHeight());
@@ -80,14 +91,15 @@ public:
         auto *row = new QHBoxLayout;
         row->setSpacing(px(12));
         layout->addLayout(row);
-        for (const auto &key : {"yellow", "green", "blue", "pink", "gray"}) {
-            auto *swatch = new HighlightSwatch(key,
-                                               (QString(key) == "yellow"  ? strings::get("annotations.color_yellow")
-                                                : QString(key) == "green" ? strings::get("annotations.color_green")
-                                                : QString(key) == "blue"  ? strings::get("annotations.color_blue")
-                                                : QString(key) == "pink"  ? strings::get("annotations.color_pink")
-                                                                          : strings::get("annotations.color_gray")),
-                                               this);
+        for (const auto &key : { "yellow", "green", "blue", "pink", "gray" }) {
+            auto *swatch = new HighlightSwatch(
+                    key,
+                    (QString(key) == "yellow"          ? strings::get("annotations.color_yellow")
+                             : QString(key) == "green" ? strings::get("annotations.color_green")
+                             : QString(key) == "blue"  ? strings::get("annotations.color_blue")
+                             : QString(key) == "pink"  ? strings::get("annotations.color_pink")
+                                                       : strings::get("annotations.color_gray")),
+                    this);
             swatch->setChecked(selected == key);
             row->addWidget(swatch);
             connect(swatch, &QAbstractButton::clicked, this, [this, key, changed] {
@@ -100,25 +112,26 @@ public:
         error->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         error->setWordWrap(true);
         error->setFont(chromeFont(px(23)));
-        readerStyle(error, QStringLiteral("font-family:'@ui-caption-family@';") + styles::font(px(23)));
+        readerStyle(error,
+                    QStringLiteral("font-family:'@ui-caption-family@';") + styles::font(px(23)));
         layout->addWidget(error);
         error->hide();
     }
 
-    static int compactHeight() {
-        return px(112);
-    }
-    void setError(const QString &message) {
+    static int compactHeight() { return px(112); }
+
+    void setError(const QString &message)
+    {
         error->setText(message);
         error->setVisible(!message.isEmpty());
         error->ensurePolished();
         measureError();
     }
 
-    ~HighlightPalette() override {
-        retireRepairBounds();
-    }
-    void setSelectedColor(const QString &selected) {
+    ~HighlightPalette() override { retireRepairBounds(); }
+
+    void setSelectedColor(const QString &selected)
+    {
         selectedColor = selected;
         for (auto *button : findChildren<QAbstractButton *>()) {
             button->setChecked(button->objectName() == "rrAnnotationColor_" + selected);
@@ -128,7 +141,9 @@ public:
 private:
     QString selectedColor;
     QLabel *error = nullptr;
-    void measureError() {
+
+    void measureError()
+    {
         int extra = 0;
         if (error && !error->isHidden()) {
             const int room = qMax(1, width() - px(56));
@@ -139,55 +154,73 @@ private:
             setFixedHeight(wanted);
         }
     }
-    void retireRepairBounds() {
-        window()->setProperty("reader_palette_repairs",
-                              QVariant::fromValue(window()->property("reader_palette_repairs").value<QRegion>() |
-                                                  window()->property("reader_palette_regions").value<QRegion>()));
+
+    void retireRepairBounds()
+    {
+        window()->setProperty(
+                "reader_palette_repairs",
+                QVariant::fromValue(
+                        window()->property("reader_palette_repairs").value<QRegion>()
+                        | window()->property("reader_palette_regions").value<QRegion>()));
         window()->setProperty("reader_palette_regions", QVariant::fromValue(QRegion()));
     }
 
 protected:
-    void paintEvent(QPaintEvent *event) override {
+    void paintEvent(QPaintEvent *event) override
+    {
         QWidget::paintEvent(event);
         QPainter painter(this);
         paintEdges(painter, rect(), Edges(Qt::BottomEdge), dividerColor(this));
     }
-    bool eventFilter(QObject *object, QEvent *event) override {
+
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
         if (isVisible() && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
             syncRepairBounds();
         }
         return QWidget::eventFilter(object, event);
     }
-    void resizeEvent(QResizeEvent *event) override {
+
+    void resizeEvent(QResizeEvent *event) override
+    {
         QWidget::resizeEvent(event);
         measureError();
         if (isVisible()) {
             syncRepairBounds();
         }
     }
-    void showEvent(QShowEvent *event) override {
+
+    void showEvent(QShowEvent *event) override
+    {
         QWidget::showEvent(event);
         syncRepairBounds();
     }
-    void hideEvent(QHideEvent *event) override {
+
+    void hideEvent(QHideEvent *event) override
+    {
         retireRepairBounds();
         QWidget::hideEvent(event);
     }
 
 public:
-    void syncRepairBounds() {
+    void syncRepairBounds()
+    {
         const QRegion region(QRect(mapTo(window(), QPoint()), size()));
-        window()->setProperty("reader_palette_repairs",
-                              QVariant::fromValue(window()->property("reader_palette_repairs").value<QRegion>() |
-                                                  window()->property("reader_palette_regions").value<QRegion>() |
-                                                  region));
+        window()->setProperty(
+                "reader_palette_repairs",
+                QVariant::fromValue(window()->property("reader_palette_repairs").value<QRegion>()
+                                    | window()->property("reader_palette_regions").value<QRegion>()
+                                    | region));
         window()->setProperty("reader_palette_regions", QVariant::fromValue(region));
     }
 };
-class HighlightStyleSample : public Button {
+
+class HighlightStyleSample : public Button
+{
 public:
     HighlightStyleSample(const QString &style, const QString &label, bool last, QWidget *parent)
-        : Button(parent), style(style), label(label), last(last) {
+        : Button(parent), style(style), label(label), last(last)
+    {
         setObjectName("rrAnnotationStyle_" + style);
         setAccessibleName(label);
         setCheckable(true);
@@ -198,12 +231,16 @@ public:
         setFont(interfaceFont(px(23)));
         readerStyle(this, styles::font(px(23)));
     }
-    void setColor(const QString &key) {
+
+    void setColor(const QString &key)
+    {
         color = render::highlightTint(key);
         update();
     }
+
 protected:
-    void paintEvent(QPaintEvent *) override {
+    void paintEvent(QPaintEvent *) override
+    {
         QPainter p(this);
         p.fillRect(rect(), isDown() ? sectionColor(this) : palette().color(QPalette::Window));
         const auto ink = palette().color(QPalette::WindowText);
@@ -211,9 +248,10 @@ protected:
         p.setFont(interfaceFont(px(32)));
         p.setPen(ink);
         drawInterfaceText(p, sample, QStringLiteral("Abc"), Qt::AlignCenter);
-        render::paintHighlightMark(p, {sample}, QRegion(sample), color, style, darkTheme(this));
+        render::paintHighlightMark(p, { sample }, QRegion(sample), color, style, darkTheme(this));
         p.setFont(font());
-        drawInterfaceText(p, QRect(px(6), px(62), width() - px(12), px(30)), label, Qt::AlignCenter);
+        drawInterfaceText(p, QRect(px(6), px(62), width() - px(12), px(30)), label,
+                          Qt::AlignCenter);
         if (isChecked()) {
             const QRect check(width() - px(40), px(10), px(24), px(24));
             p.setRenderHint(QPainter::Antialiasing);
@@ -226,15 +264,20 @@ protected:
         }
         paintEdges(p, rect(), last ? Edges{} : Edges(Qt::RightEdge), dividerColor(this));
     }
+
 private:
     QString style, label;
     QColor color = render::highlightTint("gray");
     bool last;
 };
-class HighlightStylePicker : public QWidget {
+
+class HighlightStylePicker : public QWidget
+{
 public:
-    HighlightStylePicker(const QString &selected, std::function<void(QString)> changed, QWidget *parent)
-        : QWidget(parent) {
+    HighlightStylePicker(const QString &selected, std::function<void(QString)> changed,
+                         QWidget *parent)
+        : QWidget(parent)
+    {
         setObjectName("rrAnnotationStyles");
         auto *layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
@@ -243,10 +286,10 @@ public:
         layout->addLayout(row);
         row->setContentsMargins(0, 0, 0, 0);
         row->setSpacing(0);
-        for (const auto &style : {"shaded", "underline", "dotted"}) {
+        for (const auto &style : { "shaded", "underline", "dotted" }) {
             const auto label = QString(style) == "shaded" ? strings::get("annotations.style_shaded")
-                             : QString(style) == "underline" ? strings::get("annotations.style_underline")
-                                                              : strings::get("annotations.style_dotted");
+                    : QString(style) == "underline" ? strings::get("annotations.style_underline")
+                                                    : strings::get("annotations.style_dotted");
             auto *button = new HighlightStyleSample(style, label, QString(style) == "dotted", this);
             button->setChecked(selected == style);
             row->addWidget(button);
@@ -264,23 +307,31 @@ public:
         error->hide();
         setFixedHeight(px(104));
     }
-    void setSelectedStyle(const QString &selected) {
+
+    void setSelectedStyle(const QString &selected)
+    {
         for (auto *button : findChildren<QAbstractButton *>())
             button->setChecked(button->objectName() == "rrAnnotationStyle_" + selected);
     }
-    void setColor(const QString &color) {
+
+    void setColor(const QString &color)
+    {
         for (auto *button : findChildren<QAbstractButton *>())
             if (auto *sample = dynamic_cast<HighlightStyleSample *>(button))
                 sample->setColor(color);
     }
-    void setError(const QString &message, const QString &selected) {
+
+    void setError(const QString &message, const QString &selected)
+    {
         setSelectedStyle(selected);
         error->setText(message);
         error->show();
-        setFixedHeight(px(104) + qMax(error->sizeHint().height(), error->heightForWidth(qMax(1, width()))));
+        setFixedHeight(px(104)
+                       + qMax(error->sizeHint().height(), error->heightForWidth(qMax(1, width()))));
     }
+
 private:
     QLabel *error = nullptr;
 };
 
-}
+} // namespace kobalt::ui

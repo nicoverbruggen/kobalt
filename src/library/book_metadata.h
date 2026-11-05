@@ -7,7 +7,8 @@ namespace kobalt::library {
 // What the library shows before a book is opened. Reading the package
 // document and one cover image is far cheaper than opening the book in the
 // engine, so a scan can read every new book.
-struct BookMetadata {
+struct BookMetadata
+{
     enum class Result { Ok, Protected, Unreadable };
     Result result = Result::Unreadable;
     QString title, author;
@@ -18,11 +19,12 @@ struct BookMetadata {
     // Scaled to fit coverSize; null when the book has no usable cover.
     QImage cover;
 };
+
 // The largest stored cover. The shelf view on a 300 ppi screen draws covers
 // about this tall, so larger thumbnails would only cost memory.
-inline constexpr QSize coverSize{240, 360};
+inline constexpr QSize coverSize{ 240, 360 };
 // Raise this when readBookMetadata reads something new. Books read by an
 // older version are read again by the next scan.
 inline constexpr int metadataVersion = 1;
 BookMetadata readBookMetadata(QIODevice &source);
-}
+} // namespace kobalt::library

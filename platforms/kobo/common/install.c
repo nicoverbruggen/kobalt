@@ -4,8 +4,10 @@
 #include "startup_recovery.h"
 
 // NickelHook calls this before loading Nickel libraries or installing hooks.
-bool nh_startup_failed(void) {
-    if (!kobalt_startup_remove(KOBALT_CONFIG_DIR "/startup-session")) return false;
+bool nh_startup_failed(void)
+{
+    if (!kobalt_startup_remove(KOBALT_CONFIG_DIR "/startup-session"))
+        return false;
     // Failure to save the explanation must not prevent recovery.
     kobalt_startup_removed(KOBALT_CONFIG_DIR "/startup-removed.txt");
     return true;

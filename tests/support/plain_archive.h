@@ -8,4 +8,4 @@ namespace kobalt::native {
 // Nickel's archive to exercise the native resource path. Empty when the file
 // cannot be opened.
 std::unique_ptr<ResourceArchive> openPlainArchive(const QString &path);
-}
+} // namespace kobalt::native

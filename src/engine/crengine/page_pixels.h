@@ -3,7 +3,7 @@
 #include <QImage>
 #include <QVector>
 #if defined(__arm__) && defined(__ARM_NEON)
-#include <arm_neon.h>
+#  include <arm_neon.h>
 #endif
 
 namespace kobalt {
@@ -12,8 +12,9 @@ namespace kobalt {
 // `rgbaBytes`, the pixels are stored in RGBX8888 byte order instead of RGB32,
 // so a screen that stores RGBA bytes can copy the page without converting it.
 // The image keeps its RGB32 format; the caller reinterprets it.
-inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorTiles, int tileColumns,
-                                bool rgbaBytes = false) {
+inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorTiles,
+                                int tileColumns, bool rgbaBytes = false)
+{
     const int width = image.width(), height = image.height();
     quint32 colorBits = 0;
     const quint32 inversion = dark ? 0x00ffffffU : 0;
@@ -31,11 +32,13 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorT
         for (; x + 4 <= width; x += 4) {
             const uint32x4_t pixel = vld1q_u32(pixels + x);
             const uint32x4_t green = vshrq_n_u32(pixel, 8);
-            vectorColorBits = vorrq_u32(vectorColorBits,
-                                         vorrq_u32(veorq_u32(vshrq_n_u32(pixel, 16), green), veorq_u32(green, pixel)));
+            vectorColorBits = vorrq_u32(
+                    vectorColorBits,
+                    vorrq_u32(veorq_u32(vshrq_n_u32(pixel, 16), green), veorq_u32(green, pixel)));
             uint32x4_t shown = veorq_u32(pixel, vectorInversion);
             if (rgbaBytes)
-                shown = vorrq_u32(vorrq_u32(vandq_u32(shown, greenMask), vandq_u32(vshrq_n_u32(shown, 16), byteMask)),
+                shown = vorrq_u32(vorrq_u32(vandq_u32(shown, greenMask),
+                                            vandq_u32(vshrq_n_u32(shown, 16), byteMask)),
                                   vshlq_n_u32(vandq_u32(shown, byteMask), 16));
             vst1q_u32(pixels + x, vorrq_u32(shown, opaque));
         }
@@ -50,8 +53,8 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorT
         }
     }
 #if defined(__arm__) && defined(__ARM_NEON)
-    colorBits |= vgetq_lane_u32(vectorColorBits, 0) | vgetq_lane_u32(vectorColorBits, 1) |
-                  vgetq_lane_u32(vectorColorBits, 2) | vgetq_lane_u32(vectorColorBits, 3);
+    colorBits |= vgetq_lane_u32(vectorColorBits, 0) | vgetq_lane_u32(vectorColorBits, 1)
+            | vgetq_lane_u32(vectorColorBits, 2) | vgetq_lane_u32(vectorColorBits, 3);
 #endif
     // Grayscale pages need no colour regions. Keep their pixel conversion
     // free of tile writes and per-pixel colour thresholds. The checks below
@@ -74,4 +77,4 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorT
     }
     return hasColor;
 }
-}
+} // namespace kobalt

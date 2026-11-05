@@ -20,14 +20,17 @@ void pauseDiagnostics(bool paused);
 bool diagnosticsActive();
 void initializeDiagnostics(const QString &directory, bool detailed = true);
 bool diagnosticsRequested(const QString &profile);
+
 // Start/end records survive an unfinished operation. They enqueue only small
 // fields; JSON formatting and file writes stay on the diagnostic worker.
-class DiagnosticOperation {
+class DiagnosticOperation
+{
 public:
     explicit DiagnosticOperation(const char *operation);
     ~DiagnosticOperation();
     DiagnosticOperation(const DiagnosticOperation &) = delete;
     DiagnosticOperation &operator=(const DiagnosticOperation &) = delete;
+
 private:
     const char *operation;
     quint64 id = 0;
@@ -72,11 +75,16 @@ void setDiagnosticsSync(bool enabled);
 void setDiagnosticObserver(std::function<void(const QJsonObject &)> observer);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 // Qt 5.2 cannot build a QJsonObject from a braced list of fields.
-inline void diagnostic(const char *event, std::initializer_list<qt::JsonField> fields, bool durable = true) {
+inline void diagnostic(const char *event, std::initializer_list<qt::JsonField> fields,
+                       bool durable = true)
+{
     diagnostic(event, qt::object(fields), durable);
 }
-inline void diagnostic(const char *event, std::initializer_list<qt::JsonField> fields, DiagnosticSeverity severity) {
+
+inline void diagnostic(const char *event, std::initializer_list<qt::JsonField> fields,
+                       DiagnosticSeverity severity)
+{
     diagnostic(event, qt::object(fields), severity);
 }
 #endif
-}
+} // namespace kobalt

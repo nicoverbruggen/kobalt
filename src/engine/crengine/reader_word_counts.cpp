@@ -22,21 +22,29 @@ constexpr int maximumCacheBytes = 512 * 1024;
 constexpr int maximumDepth = 512;
 constexpr int chunkCharacters = 4096;
 
-lString32 cre(const QString &value) {
+lString32 cre(const QString &value)
+{
     return Utf8ToUnicode(value.toUtf8().constData());
 }
-bool excluded(ldomNode *node) {
-    return node->isNodeName("head") || node->isNodeName("script") || node->isNodeName("style") ||
-           node->isNodeName("svg") || node->isNodeName("rt") || node->isNodeName("rp") ||
-           node->getRendMethod() == erm_invisible ||
-           (!node->getStyle().isNull() && node->getStyle()->display == css_d_none);
+
+bool excluded(ldomNode *node)
+{
+    return node->isNodeName("head") || node->isNodeName("script") || node->isNodeName("style")
+            || node->isNodeName("svg") || node->isNodeName("rt") || node->isNodeName("rp")
+            || node->getRendMethod() == erm_invisible
+            || (!node->getStyle().isNull() && node->getStyle()->display == css_d_none);
 }
-bool block(ldomNode *node) {
-    return node->isNodeName("br") ||
-           (!node->getStyle().isNull() && node->getStyle()->display >= css_d_block &&
-            node->getStyle()->display != css_d_inline_block && node->getStyle()->display != css_d_inline_table);
+
+bool block(ldomNode *node)
+{
+    return node->isNodeName("br")
+            || (!node->getStyle().isNull() && node->getStyle()->display >= css_d_block
+                && node->getStyle()->display != css_d_inline_block
+                && node->getStyle()->display != css_d_inline_table);
 }
-QByteArray encode(const DocumentWordCounts &counts) {
+
+QByteArray encode(const DocumentWordCounts &counts)
+{
     QJsonArray entries;
     int remaining = maximumCacheBytes - 64;
     for (const auto &chapter : counts.chapters) {
@@ -46,12 +54,15 @@ QByteArray encode(const DocumentWordCounts &counts) {
             return {};
         }
         remaining -= chapter.position.size() * 6 + 32;
-        entries.append(qt::array({chapter.position, QString::number(chapter.words)}));
+        entries.append(qt::array({ chapter.position, QString::number(chapter.words) }));
     }
-    return QJsonDocument(qt::object({{"total", QString::number(counts.total)}, {"chapters", entries}}))
-        .toJson(QJsonDocument::Compact);
+    return QJsonDocument(qt::object({ { "total", QString::number(counts.total) },
+                                      { "chapters", entries } }))
+            .toJson(QJsonDocument::Compact);
 }
-DocumentWordCounts decode(const QByteArray &bytes, const QVector<ChapterLink> &chapters) {
+
+DocumentWordCounts decode(const QByteArray &bytes, const QVector<ChapterLink> &chapters)
+{
     if (bytes.isEmpty() || bytes.size() > maximumCacheBytes) {
         return {};
     }
@@ -89,21 +100,26 @@ DocumentWordCounts decode(const QByteArray &bytes, const QVector<ChapterLink> &c
             }
             covered += words;
         }
-        result.chapters.append({chapters[i].position, words});
+        result.chapters.append({ chapters[i].position, words });
     }
     return result;
 }
-struct Event {
+
+struct Event
+{
     int offset;
     int chapter;
 };
-struct Prefix {
+
+struct Prefix
+{
     qint64 words = -1;
     int order = -1;
 };
-}
+} // namespace
 
-DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
+DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
+{
     if (!engine_ || (current && !current())) {
         return {};
     }
@@ -132,7 +148,7 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
     QVector<Prefix> prefixes(chapters.size());
     DocumentWordCounts result;
     for (int i = 0; i < chapters.size(); ++i) {
-        result.chapters.append({chapters[i].position, -1});
+        result.chapters.append({ chapters[i].position, -1 });
         auto pointer = document->createXPointer(cre(chapters[i].position));
         if (pointer.isNull()) {
             continue;
@@ -150,28 +166,30 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
                 offset = 0;
             }
         }
-        events[node].append({offset, i});
+        events[node].append({ offset, i });
     }
     for (auto it = events.begin(); it != events.end(); ++it) {
-        std::stable_sort(it->begin(), it->end(), [](const Event &a, const Event &b) {
-            return a.offset < b.offset;
-        });
+        std::stable_sort(it->begin(), it->end(),
+                         [](const Event &a, const Event &b) { return a.offset < b.offset; });
     }
 
     LogicalWordCounter counter;
     int order = 0;
     const auto capture = [&](const Event &event) {
-        prefixes[event.chapter] = {counter.words(), order++};
+        prefixes[event.chapter] = { counter.words(), order++ };
     };
     const auto checkpoint = [&] {
         engineActivity().checkpoint();
         return !current || current();
     };
-    struct Frame {
+
+    struct Frame
+    {
         ldomNode *node;
         int child = -1;
     };
-    std::vector<Frame> stack{{document->getRootNode()}};
+
+    std::vector<Frame> stack{ { document->getRootNode() } };
     unsigned nodes = 0;
     unsigned characters = 0;
     while (!stack.empty()) {
@@ -232,7 +250,7 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
                 return {};
             }
             auto *child = node->getChildNode(frame.child++);
-            stack.push_back({child});
+            stack.push_back({ child });
         } else {
             const auto found = events.constFind(node);
             if (found != events.cend()) {
@@ -258,9 +276,8 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
             ordered.append(i);
         }
     }
-    std::sort(ordered.begin(), ordered.end(), [&](int a, int b) {
-        return prefixes[a].order < prefixes[b].order;
-    });
+    std::sort(ordered.begin(), ordered.end(),
+              [&](int a, int b) { return prefixes[a].order < prefixes[b].order; });
     for (int i = 0; i < ordered.size(); ++i) {
         const auto start = prefixes[ordered[i]].words;
         const auto end = i + 1 < ordered.size() ? prefixes[ordered[i + 1]].words : result.total;
@@ -275,4 +292,4 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
     }
     return publish(std::move(result));
 }
-}
+} // namespace kobalt

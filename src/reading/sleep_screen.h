@@ -8,9 +8,11 @@ namespace kobalt::sleep {
 enum class Mode { Stock, Cover, Page };
 // The status tile drawn over the backdrop. It is independent of the backdrop.
 enum class Tile { Card, Band, Bookmark };
+
 // Keep the backdrop separate from the card so sleep and power-off can use
 // the same saved page with their own current status.
-struct Snapshot {
+struct Snapshot
+{
     QImage image;
     Qt::ScreenOrientation orientation = Qt::PrimaryOrientation;
     QString progress, remaining;
@@ -24,8 +26,10 @@ struct Snapshot {
     QString coverPath{};
     qint64 coverBytes = 0, coverModified = 0;
 };
+
 // Fit without cropping and keep the unused screen area black.
-inline QImage coverBackground(const QImage &cover, QSize size) {
+inline QImage coverBackground(const QImage &cover, QSize size)
+{
     if (cover.isNull() || size.isEmpty() || qint64(size.width()) * size.height() > 4 * 1024 * 1024)
         return {};
     QImage background(size, QImage::Format_RGB32);
@@ -33,16 +37,21 @@ inline QImage coverBackground(const QImage &cover, QSize size) {
         return {};
     background.fill(Qt::black);
     const auto fitted = cover.size().scaled(size, Qt::KeepAspectRatio);
-    const QRect area(QPoint((size.width() - fitted.width()) / 2, (size.height() - fitted.height()) / 2), fitted);
+    const QRect area(
+            QPoint((size.width() - fitted.width()) / 2, (size.height() - fitted.height()) / 2),
+            fitted);
     QPainter painter(&background);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     painter.drawImage(area, cover);
     painter.end();
     return background;
 }
-inline constexpr Mode modes[] = {Mode::Stock, Mode::Cover, Mode::Page};
+
+inline constexpr Mode modes[] = { Mode::Stock, Mode::Cover, Mode::Page };
 inline constexpr auto preferenceKey = "sleep_screen";
-inline QString value(Mode mode) {
+
+inline QString value(Mode mode)
+{
     switch (mode) {
     case Mode::Stock:
         return QStringLiteral("stock");
@@ -53,7 +62,9 @@ inline QString value(Mode mode) {
     }
     return {};
 }
-inline Mode mode(const QJsonObject &preferences) {
+
+inline Mode mode(const QJsonObject &preferences)
+{
     const auto saved = preferences.value(preferenceKey);
     if (saved.isUndefined()) {
         return preferences.value("kobalt_sleep_screen").toBool(false) ? Mode::Cover : Mode::Stock;
@@ -66,9 +77,12 @@ inline Mode mode(const QJsonObject &preferences) {
     }
     return Mode::Stock;
 }
-inline constexpr Tile tiles[] = {Tile::Card, Tile::Band, Tile::Bookmark};
+
+inline constexpr Tile tiles[] = { Tile::Card, Tile::Band, Tile::Bookmark };
 inline constexpr auto tileKey = "sleep_tile";
-inline QString value(Tile tile) {
+
+inline QString value(Tile tile)
+{
     switch (tile) {
     case Tile::Card:
         return QStringLiteral("card");
@@ -79,7 +93,9 @@ inline QString value(Tile tile) {
     }
     return {};
 }
-inline Tile tile(const QJsonObject &preferences) {
+
+inline Tile tile(const QJsonObject &preferences)
+{
     const auto saved = preferences.value(tileKey);
     if (saved == value(Tile::Band)) {
         return Tile::Band;
@@ -89,4 +105,4 @@ inline Tile tile(const QJsonObject &preferences) {
     }
     return Tile::Card;
 }
-}
+} // namespace kobalt::sleep

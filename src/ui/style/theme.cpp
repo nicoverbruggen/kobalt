@@ -6,11 +6,12 @@
 #include <QVariant>
 #include <algorithm>
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-#include <private/qwidget_p.h>
+#  include <private/qwidget_p.h>
 #endif
 
 namespace kobalt::ui {
-const ThemeColors &themeColors(bool dark) {
+const ThemeColors &themeColors(bool dark)
+{
     static const ThemeColors light = [] {
         ThemeColors colors;
         colors.paper = QColor(Qt::white);
@@ -53,11 +54,15 @@ const ThemeColors &themeColors(bool dark) {
     }();
     return dark ? night : light;
 }
-const ThemeColors &themeColors(const QWidget *widget) {
+
+const ThemeColors &themeColors(const QWidget *widget)
+{
     return themeColors(darkTheme(widget));
 }
+
 namespace {
-QRectF pixelAlignedRect(const QPainter &painter, const QRectF &rect) {
+QRectF pixelAlignedRect(const QPainter &painter, const QRectF &rect)
+{
     const auto transform = painter.deviceTransform();
     if (transform.type() > QTransform::TxScale || transform.m11() <= 0 || transform.m22() <= 0)
         return rect;
@@ -67,6 +72,7 @@ QRectF pixelAlignedRect(const QPainter &painter, const QRectF &rect) {
                          qMax(1, qRound(device.bottom()) - qRound(device.top())));
     return transform.inverted().mapRect(aligned);
 }
+
 // Qt 6 keeps the new sheet of a widget whose subtree is not polished yet and
 // styles the widget when it is first polished. Qt 5.2 polishes the widget and
 // its whole subtree at once whenever an ancestor already has a sheet, and
@@ -75,14 +81,15 @@ QRectF pixelAlignedRect(const QPainter &painter, const QRectF &rect) {
 // Qt 5.2 caches each parsed sheet until the next repolish, and its polish
 // does not drop that copy as Qt 6 does. A widget that already has a sheet may
 // have a parsed copy, so a changed sheet still takes the repolish.
-void applyStyleSheet(QWidget *widget, const QString &style) {
+void applyStyleSheet(QWidget *widget, const QString &style)
+{
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     const auto polished = [](QWidget *candidate) {
         return static_cast<QWidgetPrivate *>(QObjectPrivate::get(candidate))->polished != nullptr;
     };
     auto *d = static_cast<QWidgetPrivate *>(QObjectPrivate::get(widget));
-    if (d->extra && d->extra->style && d->extra->style->inherits("QStyleSheetStyle") &&
-        d->extra->styleSheet.isEmpty() && !polished(widget)) {
+    if (d->extra && d->extra->style && d->extra->style->inherits("QStyleSheetStyle")
+        && d->extra->styleSheet.isEmpty() && !polished(widget)) {
         const auto children = widget->findChildren<QWidget *>();
         if (std::none_of(children.begin(), children.end(), polished)) {
             d->extra->styleSheet = style;
@@ -92,8 +99,10 @@ void applyStyleSheet(QWidget *widget, const QString &style) {
 #endif
     widget->setStyleSheet(style);
 }
-}
-void paintEdges(QPainter &painter, const QRect &rect, Edges edges, const QColor &ink, int width) {
+} // namespace
+
+void paintEdges(QPainter &painter, const QRect &rect, Edges edges, const QColor &ink, int width)
+{
     if (rect.isEmpty() || width <= 0 || !edges)
         return;
     const QRectF bounds(rect);
@@ -111,8 +120,10 @@ void paintEdges(QPainter &painter, const QRect &rect, Edges edges, const QColor 
     if (edges.testFlag(Qt::RightEdge))
         fill(QRectF(bounds.right() - width, bounds.top(), width, bounds.height()));
 }
+
 void paintButtonShape(QPainter &painter, const QRect &rect, const QColor &paper, const QColor &fill,
-                      const QColor &border) {
+                      const QColor &border)
+{
     painter.fillRect(rect, paper);
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
@@ -123,7 +134,9 @@ void paintButtonShape(QPainter &painter, const QRect &rect, const QColor &paper,
                             metrics::control::buttonRadius, metrics::control::buttonRadius);
     painter.restore();
 }
-bool darkTheme(const QWidget *widget) {
+
+bool darkTheme(const QWidget *widget)
+{
     for (auto *ancestor = widget; ancestor; ancestor = ancestor->parentWidget()) {
         const auto theme = ancestor->property("reader_dark");
         if (theme.isValid())
@@ -131,33 +144,48 @@ bool darkTheme(const QWidget *widget) {
     }
     return false;
 }
-QColor dividerColor(const QWidget *widget) {
+
+QColor dividerColor(const QWidget *widget)
+{
     return themeColors(widget).divider;
 }
-QColor sectionColor(const QWidget *widget) {
+
+QColor sectionColor(const QWidget *widget)
+{
     return themeColors(widget).pressedPaper;
 }
-QColor noteColor(const QWidget *widget) {
+
+QColor noteColor(const QWidget *widget)
+{
     return themeColors(widget).secondaryInk;
 }
-void paintHeaderRules(QPainter &painter, const QWidget *view) {
-    painter.fillRect(0, metrics::chrome::statusHeight - metrics::control::border, view->width(), metrics::control::border,
-                     view->palette().color(QPalette::Mid));
-    painter.fillRect(0, metrics::chrome::headerHeight() - metrics::chrome::heavyRule, view->width(), metrics::chrome::heavyRule,
-                     view->palette().color(QPalette::WindowText));
+
+void paintHeaderRules(QPainter &painter, const QWidget *view)
+{
+    painter.fillRect(0, metrics::chrome::statusHeight - metrics::control::border, view->width(),
+                     metrics::control::border, view->palette().color(QPalette::Mid));
+    painter.fillRect(0, metrics::chrome::headerHeight() - metrics::chrome::heavyRule, view->width(),
+                     metrics::chrome::heavyRule, view->palette().color(QPalette::WindowText));
 }
-void readerStyle(QWidget *widget, const QString &source) {
+
+void readerStyle(QWidget *widget, const QString &source)
+{
     widget->setProperty("reader_style", source);
     const bool dark = darkTheme(widget);
     // The sheet depends only on the source, the theme and the fonts that the
     // source names. On Kobo, building it costs about as much as setting it, and
     // a book opening builds the same few sources hundreds of times.
-    static const char *const placeholders[] = {"@ui-font-family@", "@ui-caption-family@", "@header-footer-font@"};
+    static const char *const placeholders[] = { "@ui-font-family@", "@ui-caption-family@",
+                                                "@header-footer-font@" };
     QString families[3];
     for (int index = 0; index < 3; ++index)
         if (source.contains(QLatin1String(placeholders[index])))
-            families[index] = (index == 0 ? interfaceFont() : index == 1 ? chromeFont() : headerFooterFont()).family();
-    const auto key = QString(dark ? "1\n" : "0\n") + families[0] + '\n' + families[1] + '\n' + families[2] + '\n' + source;
+            families[index] = (index == 0           ? interfaceFont()
+                                       : index == 1 ? chromeFont()
+                                                    : headerFooterFont())
+                                      .family();
+    const auto key = QString(dark ? "1\n" : "0\n") + families[0] + '\n' + families[1] + '\n'
+            + families[2] + '\n' + source;
     static QHash<QString, QString> sheets;
     auto sheet = sheets.constFind(key);
     if (sheet == sheets.constEnd()) {
@@ -165,7 +193,8 @@ void readerStyle(QWidget *widget, const QString &source) {
         if (sheets.size() >= 512)
             sheets.clear();
         const auto &colors = themeColors(dark);
-        auto style = QString("QPushButton{border-radius:%1px;} ").arg(int(metrics::control::buttonRadius));
+        auto style = QString("QPushButton{border-radius:%1px;} ")
+                             .arg(int(metrics::control::buttonRadius));
         style += source.contains('{') ? source : QString("*{%1}").arg(source);
         const auto escapedFamily = [](QString name) {
             name.replace('\\', "\\\\");
@@ -191,11 +220,15 @@ void readerStyle(QWidget *widget, const QString &source) {
     if (widget->styleSheet() != *sheet)
         applyStyleSheet(widget, *sheet);
 }
-QPalette readerPalette(QPalette colors, bool dark) {
+
+QPalette readerPalette(QPalette colors, bool dark)
+{
     const auto &theme = themeColors(dark);
-    for (const auto role : {QPalette::Window, QPalette::Base, QPalette::Button, QPalette::HighlightedText})
+    for (const auto role :
+         { QPalette::Window, QPalette::Base, QPalette::Button, QPalette::HighlightedText })
         colors.setColor(role, theme.paper);
-    for (const auto role : {QPalette::WindowText, QPalette::Text, QPalette::ButtonText, QPalette::Highlight})
+    for (const auto role :
+         { QPalette::WindowText, QPalette::Text, QPalette::ButtonText, QPalette::Highlight })
         colors.setColor(role, theme.ink);
     colors.setColor(QPalette::Mid, theme.disabledInk);
     colors.setColor(QPalette::Midlight, theme.pressedPaper);
@@ -206,18 +239,24 @@ QPalette readerPalette(QPalette colors, bool dark) {
 #endif
     return colors;
 }
-void applyReaderPalette(QWidget *widget, const QPalette &colors) {
+
+void applyReaderPalette(QWidget *widget, const QPalette &colors)
+{
     widget->setPalette(colors);
     if (widget->property("reader_style").isValid())
         readerStyle(widget, widget->property("reader_style").toString());
     auto styled = widget->palette();
-    for (const auto role : {QPalette::Mid, QPalette::Midlight, QPalette::Light, QPalette::Dark,
+    for (const auto role : {
+                 QPalette::Mid,
+                 QPalette::Midlight,
+                 QPalette::Light,
+                 QPalette::Dark,
 #if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
-                           QPalette::PlaceholderText,
+                 QPalette::PlaceholderText,
 #endif
          })
-        for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled})
+        for (const auto group : { QPalette::Active, QPalette::Inactive, QPalette::Disabled })
             styled.setColor(group, role, colors.color(group, role));
     widget->setPalette(styled);
 }
-}
+} // namespace kobalt::ui

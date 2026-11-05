@@ -6,7 +6,8 @@
 #include <future>
 
 namespace kobalt::nickel {
-class HomeSleepScreen final : public QObject {
+class HomeSleepScreen final : public QObject
+{
 public:
     explicit HomeSleepScreen(storage::Paths paths, QObject *parent);
     void remember(const sleep::Snapshot &, const QString &identity);
@@ -31,7 +32,13 @@ private:
     bool poweredOff = false, invalidated = false;
     void compose();
     std::unique_ptr<WindowPresentation> presentation;
-    struct Saved { bool ok = false; QString token; };
+
+    struct Saved
+    {
+        bool ok = false;
+        QString token;
+    };
+
     std::future<Saved> pendingSave;
     sleep::Snapshot remembered;
     QString rememberedToken;
@@ -39,4 +46,4 @@ private:
     std::shared_ptr<QJsonObject> saveMeasurement;
 #endif
 };
-}
+} // namespace kobalt::nickel

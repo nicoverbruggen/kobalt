@@ -11,7 +11,8 @@ namespace kobalt::ui {
 // finished, and writes one "panel-open" diagnostics event. Stages record the
 // time since the previous stage, so an asynchronous lookup and the synchronous
 // open call can be told apart. Nothing is recorded while diagnostics are off.
-class PanelTiming {
+class PanelTiming
+{
 public:
     explicit PanelTiming(const QString &panel);
     void stage(const char *name);
@@ -24,7 +25,8 @@ private:
     QJsonObject fields;
     bool active;
 };
+
 // Calls `painted` once `widget` has finished its next paint, including the
 // layout that painting can trigger. Nothing is called if it hides first.
 void afterNextPaint(QWidget *widget, std::function<void()> painted);
-}
+} // namespace kobalt::ui

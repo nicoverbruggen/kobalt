@@ -11,7 +11,9 @@ namespace kobalt::library {
 namespace {
 constexpr qint64 xmlLimit = 2 * 1024 * 1024, imageLimit = 8 * 1024 * 1024;
 
-QByteArray member(QIODevice &source, const Publication &publication, const QString &name, qint64 limit) {
+QByteArray member(QIODevice &source, const Publication &publication, const QString &name,
+                  qint64 limit)
+{
     if (publication.sizes().value(name, -1) < 0 || publication.sizes().value(name) > limit)
         return {};
     ZipResource stream;
@@ -22,8 +24,10 @@ QByteArray member(QIODevice &source, const Publication &publication, const QStri
         bytes += stream.next();
     return stream.valid() && stream.finished() ? bytes : QByteArray();
 }
+
 // A package path relative to the package document, without escaping the archive.
-QString resolve(const QString &package, const QString &href) {
+QString resolve(const QString &package, const QString &href)
+{
     const auto decoded = QUrl::fromPercentEncoding(href.section('#', 0, 0).toUtf8());
     if (decoded.isEmpty() || decoded.contains(':'))
         return {};
@@ -31,19 +35,27 @@ QString resolve(const QString &package, const QString &href) {
     const auto path = QDir::cleanPath(base + decoded);
     return path.startsWith("../") || path == ".." || path.startsWith('/') ? QString() : path;
 }
-QString clean(QString text) {
+
+QString clean(QString text)
+{
     return text.simplified().left(1024);
 }
-struct Package {
+
+struct Package
+{
     QString title, author, coverHref, series;
     double seriesIndex = 0;
 };
-double position(const QString &text) {
+
+double position(const QString &text)
+{
     bool ok = false;
     const double value = text.trimmed().toDouble(&ok);
     return ok && value > 0 && value < 1e6 ? value : 0;
 }
-Package readPackage(const QByteArray &bytes) {
+
+Package readPackage(const QByteArray &bytes)
+{
     Package result;
     QXmlStreamReader xml(bytes);
     QString coverId, calibreSeries, calibreIndex;
@@ -54,17 +66,20 @@ Package readPackage(const QByteArray &bytes) {
     while (!xml.atEnd()) {
         xml.readNext();
         // Entity expansion can multiply a small document; refuse it.
-        if (xml.tokenType() == QXmlStreamReader::DTD || xml.tokenType() == QXmlStreamReader::EntityReference)
+        if (xml.tokenType() == QXmlStreamReader::DTD
+            || xml.tokenType() == QXmlStreamReader::EntityReference)
             return {};
         if (!xml.isStartElement())
             continue;
         const auto name = xml.name().toString();
         const auto attributes = xml.attributes();
-        if (name == "title" && xml.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
+        if (name == "title"
+            && xml.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
             const auto text = clean(xml.readElementText(QXmlStreamReader::IncludeChildElements));
             if (result.title.isEmpty())
                 result.title = text;
-        } else if (name == "creator" && xml.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
+        } else if (name == "creator"
+                   && xml.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
             const auto text = clean(xml.readElementText(QXmlStreamReader::IncludeChildElements));
             if (!text.isEmpty())
                 result.author = result.author.isEmpty() ? text : result.author + ", " + text;
@@ -72,9 +87,11 @@ Package readPackage(const QByteArray &bytes) {
             coverId = attributes.value("content").toString();
         } else if (name == "meta" && attributes.value("name") == QStringLiteral("calibre:series")) {
             calibreSeries = clean(attributes.value("content").toString());
-        } else if (name == "meta" && attributes.value("name") == QStringLiteral("calibre:series_index")) {
+        } else if (name == "meta"
+                   && attributes.value("name") == QStringLiteral("calibre:series_index")) {
             calibreIndex = attributes.value("content").toString();
-        } else if (name == "meta" && attributes.value("property") == QStringLiteral("belongs-to-collection")) {
+        } else if (name == "meta"
+                   && attributes.value("property") == QStringLiteral("belongs-to-collection")) {
             const auto id = attributes.value("id").toString();
             const auto text = clean(xml.readElementText(QXmlStreamReader::IncludeChildElements));
             if (!id.isEmpty() && !text.isEmpty()) {
@@ -85,7 +102,8 @@ Package readPackage(const QByteArray &bytes) {
             const auto id = attributes.value("refines").mid(1).toString();
             const auto property = attributes.value("property");
             if (property == QStringLiteral("collection-type"))
-                collectionTypes.insert(id, xml.readElementText(QXmlStreamReader::IncludeChildElements).trimmed());
+                collectionTypes.insert(
+                        id, xml.readElementText(QXmlStreamReader::IncludeChildElements).trimmed());
             else if (property == QStringLiteral("group-position"))
                 positions.insert(id, xml.readElementText(QXmlStreamReader::IncludeChildElements));
         } else if (name == "item") {
@@ -113,23 +131,28 @@ Package readPackage(const QByteArray &bytes) {
         result.coverHref = hrefs.value(coverId);
     if (result.coverHref.isEmpty())
         for (auto it = hrefs.begin(); it != hrefs.end(); ++it)
-            if (it.key().compare("cover", Qt::CaseInsensitive) == 0 ||
-                it.key().compare("cover-image", Qt::CaseInsensitive) == 0)
+            if (it.key().compare("cover", Qt::CaseInsensitive) == 0
+                || it.key().compare("cover-image", Qt::CaseInsensitive) == 0)
                 result.coverHref = it.value();
     return result;
 }
-QString packagePath(const QByteArray &container) {
+
+QString packagePath(const QByteArray &container)
+{
     QXmlStreamReader xml(container);
     while (!xml.atEnd()) {
         xml.readNext();
-        if (xml.tokenType() == QXmlStreamReader::DTD || xml.tokenType() == QXmlStreamReader::EntityReference)
+        if (xml.tokenType() == QXmlStreamReader::DTD
+            || xml.tokenType() == QXmlStreamReader::EntityReference)
             return {};
         if (xml.isStartElement() && xml.name() == QStringLiteral("rootfile"))
             return xml.attributes().value("full-path").toString();
     }
     return {};
 }
-QImage decodeCover(const QByteArray &bytes) {
+
+QImage decodeCover(const QByteArray &bytes)
+{
     QBuffer buffer;
     buffer.setData(bytes);
     buffer.open(QIODevice::ReadOnly);
@@ -143,8 +166,10 @@ QImage decodeCover(const QByteArray &bytes) {
     auto image = reader.read();
     return image.isNull() ? QImage() : image.convertToFormat(QImage::Format_RGB32);
 }
-}
-BookMetadata readBookMetadata(QIODevice &source) {
+} // namespace
+
+BookMetadata readBookMetadata(QIODevice &source)
+{
     BookMetadata metadata;
     Publication publication;
     QString error;
@@ -153,7 +178,8 @@ BookMetadata readBookMetadata(QIODevice &source) {
             metadata.result = BookMetadata::Result::Protected;
         return metadata;
     }
-    const auto package = packagePath(member(source, publication, "META-INF/container.xml", xmlLimit));
+    const auto package =
+            packagePath(member(source, publication, "META-INF/container.xml", xmlLimit));
     if (package.isEmpty())
         return metadata;
     const auto document = member(source, publication, package, xmlLimit);
@@ -170,4 +196,4 @@ BookMetadata readBookMetadata(QIODevice &source) {
         metadata.cover = decodeCover(member(source, publication, cover, imageLimit));
     return metadata;
 }
-}
+} // namespace kobalt::library

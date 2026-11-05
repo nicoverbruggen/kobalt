@@ -6,7 +6,8 @@ namespace {
 // Compares without case or accents, and reads runs of digits as numbers so
 // "Book 9" comes before "Book 10". QCollator would depend on whether Qt was
 // built with ICU, which differs between hosts.
-int naturalCompare(const QString &first, const QString &second) {
+int naturalCompare(const QString &first, const QString &second)
+{
     const auto a = searchKey(first), b = searchKey(second);
     int i = 0, j = 0;
     while (i < a.size() && j < b.size()) {
@@ -36,16 +37,21 @@ int naturalCompare(const QString &first, const QString &second) {
     }
     return int(a.size() - i) - int(b.size() - j);
 }
+
 // "Mary Shelley" files under Shelley. A name already written "Shelley, Mary"
 // files under its first part.
-QString surnameKey(const QString &author) {
+QString surnameKey(const QString &author)
+{
     if (author.contains(','))
         return author;
     const auto parts = author.split(' ', Qt::SkipEmptyParts);
-    return parts.isEmpty() ? QString() : parts.last() + ' ' + parts.mid(0, parts.size() - 1).join(' ');
+    return parts.isEmpty() ? QString()
+                           : parts.last() + ' ' + parts.mid(0, parts.size() - 1).join(' ');
 }
-}
-QString searchKey(const QString &text) {
+} // namespace
+
+QString searchKey(const QString &text)
+{
     const auto decomposed = text.normalized(QString::NormalizationForm_KD);
     QString result;
     result.reserve(decomposed.size());
@@ -54,21 +60,25 @@ QString searchKey(const QString &text) {
             result.append(character.toCaseFolded());
     return result;
 }
-QString firstAuthor(const Book &book) {
+
+QString firstAuthor(const Book &book)
+{
     // Several creators are stored joined by ", ". A single "Surname, Given"
     // creator cannot be told apart, so only the first comma part is used when
     // it contains a space.
     const auto first = book.author.section(QStringLiteral(", "), 0, 0).trimmed();
     return first.contains(' ') ? first : book.author.trimmed();
 }
-QVector<const Book *> arrange(const Index &index, const Query &query) {
+
+QVector<const Book *> arrange(const Index &index, const Query &query)
+{
     QVector<const Book *> result;
     const auto needle = searchKey(query.text.trimmed());
     for (const auto &book : index.books) {
         if (book.hidden || (query.hideFinished && book.status() == Status::Finished))
             continue;
-        if (!needle.isEmpty() && !searchKey(book.displayTitle()).contains(needle) &&
-            !searchKey(book.author).contains(needle) && !searchKey(book.series).contains(needle))
+        if (!needle.isEmpty() && !searchKey(book.displayTitle()).contains(needle)
+            && !searchKey(book.author).contains(needle) && !searchKey(book.series).contains(needle))
             continue;
         result.append(&book);
     }
@@ -119,4 +129,4 @@ QVector<const Book *> arrange(const Index &index, const Query &query) {
     }
     return result;
 }
-}
+} // namespace kobalt::library

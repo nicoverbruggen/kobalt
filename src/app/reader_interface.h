@@ -10,7 +10,9 @@ namespace kobalt {
 // used to show that work, and the viewport it reserves for the book.
 // Storage is a failure caused by saved data that cannot be read or moved aside.
 enum class OpeningFallback { Failure, Protected, Remembered, Storage };
-class ReaderOpeningView {
+
+class ReaderOpeningView
+{
 public:
     virtual ~ReaderOpeningView() = default;
     virtual QDialog *window() const = 0;
@@ -23,9 +25,13 @@ public:
     // The controller owns authorization and the native continuation.
     virtual void showFallback(OpeningFallback state) = 0;
 };
-struct ReaderInterface {
-    ReaderWindow *(*createWindow)(std::unique_ptr<ReadingBook>, ReaderOrientation *, ReaderHostServices);
-    std::unique_ptr<ReaderOpeningView> (*createOpening)(QWidget *background, const QJsonObject &preferences,
+
+struct ReaderInterface
+{
+    ReaderWindow *(*createWindow)(std::unique_ptr<ReadingBook>, ReaderOrientation *,
+                                  ReaderHostServices);
+    std::unique_ptr<ReaderOpeningView> (*createOpening)(QWidget *background,
+                                                        const QJsonObject &preferences,
                                                         PresentationFactory);
     QSize (*readingViewport)(QSize screen, const QJsonObject &preferences);
     // Sizes the interface for a screen of this many pixels per inch. Call before
@@ -35,5 +41,6 @@ struct ReaderInterface {
     // before creating any view.
     void (*setLargeText)(qreal requested);
 };
+
 const ReaderInterface &readerInterface();
-}
+} // namespace kobalt

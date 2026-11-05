@@ -61,14 +61,17 @@ class QVBoxLayout;
 namespace kobalt::reader {
 // Global preference for the Wi-Fi power saver. Missing means on.
 inline constexpr const char *wifiPowerSaverKey = "turn_off_wifi_on_open";
+
 // Input and accessibility target only. The cached header image supplies its
 // pixels and invalidates only the part whose text changed.
-class ChapterHeader : public QPushButton {
+class ChapterHeader : public QPushButton
+{
 public:
     explicit ChapterHeader(QWidget *parent);
 };
 
-class Reader : public kobalt::ReaderWindow {
+class Reader : public kobalt::ReaderWindow
+{
 public:
     ~Reader() override;
     Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOrientation *orientation,
@@ -87,9 +90,12 @@ public:
     void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) override;
     sleep::Snapshot powerScreenSnapshot() override;
     void sleepReader() override;
-    bool pendingNetworkSync() const override {
+
+    bool pendingNetworkSync() const override
+    {
         return kosyncFinishing && kosyncFinishingElapsed.elapsed() < kosyncFinishBudget;
     }
+
     void prepareWake() override;
     void cancelWake() override;
     void sleepViewReady() override;
@@ -98,18 +104,24 @@ public:
     void refreshHostPresentation() override;
     void pageButton(int direction) override;
     void scriptedPageButton(int direction) override;
-    bool busy() const override {
-        return resizeTimer.isActive() || session->busy() || session->preparingNeighbours() || stylingSamplesPending > 0;
+
+    bool busy() const override
+    {
+        return resizeTimer.isActive() || session->busy() || session->preparingNeighbours()
+                || stylingSamplesPending > 0;
     }
+
     // Automatic syncs follow the account setting, unless a performance run
     // has paused them for the whole process.
-    bool kosyncAutomatic() const {
+    bool kosyncAutomatic() const
+    {
         return kosyncClient->automatic() && !kobalt::kosync::automaticPaused();
     }
+
     void setOpeningTiming(const QElapsedTimer &started, const QJsonObject &stages) override;
-    kobalt::ActionTiming closingTiming() const override {
-        return closingTimes;
-    }
+
+    kobalt::ActionTiming closingTiming() const override { return closingTimes; }
+
     void locateText(const QString &text, std::function<void(QPoint)> found) override;
     void locateLink(const QString &label, std::function<void(QPoint)> found) override;
     QVector<QWidget *> popups() const;
@@ -147,10 +159,11 @@ private:
     void moveAnnotationDrag(QPoint point);
     void finishAnnotationDrag(bool cancelled);
     void requestAnnotationDrag();
-    void resolveAnnotationDraft(std::function<void()> after = {}, std::function<void()> reject = {});
-    void resolveAnnotationTokens(kobalt::AnnotationToken start, kobalt::AnnotationToken end,
-                                bool startPolicy, bool endPolicy, std::function<void()> after = {},
+    void resolveAnnotationDraft(std::function<void()> after = {},
                                 std::function<void()> reject = {});
+    void resolveAnnotationTokens(kobalt::AnnotationToken start, kobalt::AnnotationToken end,
+                                 bool startPolicy, bool endPolicy, std::function<void()> after = {},
+                                 std::function<void()> reject = {});
     void prepareAnnotation(bool leave = false, std::function<void()> after = {});
     void clearAnnotationDraft();
     bool annotationMenuSelectionEnabled() const;
@@ -169,28 +182,37 @@ private:
     void showAnnotationMatches(QVector<QString> ids, QRect anchor, int page = 0);
     void removeAnnotation(const QString &id);
     QVector<kobalt::BookmarkRow> annotationRows() const;
-    struct AnnotationAction {
+
+    struct AnnotationAction
+    {
         QString name;
         kobalt::ui::ControlIcon icon;
         QString label;
         std::function<void()> run;
     };
-    void annotationActionsFor(const QVector<AnnotationAction> &actions, QRect anchor, bool compactActions = true,
-                              const QString &paletteColor = {}, std::function<void(QString)> colorChanged = {},
-                              const QString &selectedStyle = {}, std::function<void(QString)> styleChanged = {});
-    bool colorAnnotations() const {
-        return services.colorDisplay && services.colorDisplay();
-    }
+
+    void annotationActionsFor(const QVector<AnnotationAction> &actions, QRect anchor,
+                              bool compactActions = true, const QString &paletteColor = {},
+                              std::function<void(QString)> colorChanged = {},
+                              const QString &selectedStyle = {},
+                              std::function<void(QString)> styleChanged = {});
+
+    bool colorAnnotations() const { return services.colorDisplay && services.colorDisplay(); }
+
     QString annotationColor = "yellow", annotationSelectedColor = "yellow";
     QString annotationStyle = "shaded", annotationSelectedStyle = "shaded";
     void syncAnnotationAppearance();
     bool annotationColorChosen = false, annotationStyleChosen = false;
-    bool minimalAnnotationMode() const {
+
+    bool minimalAnnotationMode() const
+    {
         return preferences.value("minimal_annotation_mode").toBool(false);
     }
+
     bool annotationMode = false, annotationSaving = false, annotationShowActionsPending = false,
          annotationAdjusting = false, annotationDirty = false;
-    QString annotationStart, annotationEnd, annotationEditing, annotationFrame, annotationViewportFrame;
+    QString annotationStart, annotationEnd, annotationEditing, annotationFrame,
+            annotationViewportFrame;
     kobalt::AnnotationToken annotationStartWord, annotationEndWord;
     bool annotationStartPolicy = false, annotationEndPolicy = false;
     QString annotationChosenStart, annotationChosenEnd;
@@ -200,7 +222,8 @@ private:
     QVector<QRect> draftHighlightRects, savedHighlightRects;
     kobalt::AnnotationGeometry draftHighlightGeometry;
     bool annotationDragging = false, annotationDragPending = false, annotationDragReleased = false;
-    bool annotationHandleDragging = false, annotationDragAwaitingRelease = false, annotationDragLoadingEdges = false;
+    bool annotationHandleDragging = false, annotationDragAwaitingRelease = false,
+         annotationDragLoadingEdges = false;
     int annotationDragTurn = 0;
     kobalt::AnnotationPageEdges annotationDragEdges;
     int annotationDragBoundary = -1;
@@ -345,8 +368,10 @@ private:
     kobalt::ui::Panel *general = nullptr;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption, *lightGestureFeedbackOption, *denseGraphOption;
-    QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr, *hideTabLabelsOption = nullptr;
+    QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption,
+            *lightGestureFeedbackOption, *denseGraphOption;
+    QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
+              *hideTabLabelsOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
     QPushButton *autoRotateOption;
     bool hideNativeStatus() const;
@@ -402,19 +427,21 @@ private:
     // Custom has a saved layout that differs from Kobalt's.
     bool customModified() const;
     // Before an edit replaces a modified Custom layout with a preset's, ask.
-    void confirmCustomReplace(const std::function<void()> &proceed, const std::function<void()> &cancel);
+    void confirmCustomReplace(const std::function<void()> &proceed,
+                              const std::function<void()> &cancel);
     // Reads the preset and layout from the preferences and shows them.
     void loadChrome();
     // Saves the preset, and the Custom layout when given, then shows them.
-    bool saveChrome(kobalt::headerfooter::Preset preset, const kobalt::headerfooter::Layout *custom = nullptr,
+    bool saveChrome(kobalt::headerfooter::Preset preset,
+                    const kobalt::headerfooter::Layout *custom = nullptr,
                     const kobalt::headerfooter::Layout *text = nullptr);
     void syncChromeControls();
     void openFieldChooser(int slot);
     void closeFieldChooser();
     // True when a slot shows something that changes with the clock.
     bool chromeTicks() const;
-    kobalt::ui::SettingSlider *sizeSlider, *opticalSizeSlider, *weightSlider, *variableWeightSlider, *spacingSlider,
-        *marginSlider, *verticalMarginSlider, *bookSlider;
+    kobalt::ui::SettingSlider *sizeSlider, *opticalSizeSlider, *weightSlider, *variableWeightSlider,
+            *spacingSlider, *marginSlider, *verticalMarginSlider, *bookSlider;
     kobalt::reader::AppearanceEditSession appearanceEdit;
     QSize appearanceViewport;
     quint64 warmScheduledGeneration = 0;
@@ -451,12 +478,15 @@ private:
     bool linkReturnAvailable = false;
     QString imageSuggestionPosition;
     bool imageSuggestionDismissed = false;
-    struct LinkVisit {
+
+    struct LinkVisit
+    {
         QString position;
         int page;
         QString chapter;
         bool pinnedShortcut = false;
     };
+
     QVector<LinkVisit> linkHistory;
     LinkVisit pendingPassage{};
     quint64 linkEpoch = 0;
@@ -524,13 +554,16 @@ private:
     void openSleepScreen();
     void openSleepTile();
     void openSessionTimeout();
-    struct SleepOption {
+
+    struct SleepOption
+    {
         QString value, label, explanation;
     };
+
     // Sleep and session choices share one popup.
     void openSleepChoice(const QString &name, const QString &optionPrefix, const QString &heading,
-                         const QVector<SleepOption> &options, int current, std::function<void(int)> chosen,
-                         const QString &description = {});
+                         const QVector<SleepOption> &options, int current,
+                         std::function<void(int)> chosen, const QString &description = {});
     bool saveSleepPreferences(const QJsonObject &next);
     void closeSleepScreen();
     void showTapZones();
@@ -595,12 +628,13 @@ private:
     ui::DescribedOption *bionicOption = nullptr;
     kobalt::ui::CaptionButton *refreshButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> refreshPopup;
-    kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr, *sleepTileButton = nullptr;
+    kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr,
+                              *sleepTileButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> sleepPopup;
     kobalt::ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                               *navigationBarButton = nullptr;
-    QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup, navigationBarPopup, menuViewPopup,
-                                     tappableLinksPopup;
+    QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup, navigationBarPopup,
+            menuViewPopup, tappableLinksPopup;
     kobalt::ui::CaptionButton *menuViewButton = nullptr, *tappableLinksButton = nullptr;
     int settingsColumnSpacing = defaultColumnSpacingPercent;
     int settingsWordSpacing = 100;
@@ -640,7 +674,8 @@ private:
     void closeMarksActions();
     void askExportMarks(AnnotationExportFormat format);
     QByteArray marksExportArchive(AnnotationExportFormat format);
-    void confirmMarksExport(AnnotationExportFormat format, bool replace, const QString &path, std::function<void()> accepted);
+    void confirmMarksExport(AnnotationExportFormat format, bool replace, const QString &path,
+                            std::function<void()> accepted);
     void saveMarksExport(AnnotationExportFormat format, const QString &path, bool replaceApproved);
     void chooseMarksExport(AnnotationExportFormat format);
     void finishMarksExport(AnnotationExportFormat format, bool saved, const QString &location = {});
@@ -677,7 +712,8 @@ private:
     bool pagePainted = false;
     kobalt::ActionTiming closingTimes;
     void reportShown();
-    void findLink(QVector<kobalt::PageLink> links, int index, QString label, std::function<void(QPoint)> found);
+    void findLink(QVector<kobalt::PageLink> links, int index, QString label,
+                  std::function<void(QPoint)> found);
     void locateOnPage(const kobalt::SearchHit &hit, std::function<void(QPoint)> found, int attempt);
     void recordOpening();
     void finishExit();
@@ -686,7 +722,8 @@ private:
     void finishExitSaved(quint64 request);
     void saveTransition(quint64 request, bool usb, const QString &location, const QString &error,
                         bool mapped, std::function<void()> finished, int failures = 0);
-    void finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures = 0);
+    void finishStorageData(std::function<void(bool)> finished, bool nativeAllowed,
+                           int failures = 0);
     bool allowFailedTransition = false;
     void transitionSaveError(std::function<void()> retry, std::function<void()> discard);
     void failExit(quint64 request, const QString &error = {});
@@ -706,6 +743,6 @@ private:
     // storage or wait for another thread; see support/main_thread.h.
     bool takesInput() const;
     // Declared last, so it is unregistered before the members it reads.
-    mainthread::Interaction interaction{[this] { return takesInput(); }};
+    mainthread::Interaction interaction{ [this] { return takesInput(); } };
 };
-}
+} // namespace kobalt::reader

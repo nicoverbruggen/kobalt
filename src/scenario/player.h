@@ -14,7 +14,8 @@ namespace kobalt::scenario {
 // What a platform supplies so the player can drive its reader. The player
 // itself only presses widgets by name, sends keys and waits for widgets and
 // diagnostics events, so the same scenario file runs on every platform.
-struct Host {
+struct Host
+{
     // The open reader window, or null.
     std::function<QWidget *()> reader;
     // Starts opening the book with this key from the scenario file's `books`.
@@ -69,7 +70,9 @@ struct Host {
     // `"standby": true`. Optional.
     std::function<void(bool)> keepAwake;
 };
-struct Options {
+
+struct Options
+{
     // Runs only scenarios whose id starts with this, or that this starts with.
     QString filter;
     // Multiplies each scenario's repetitions. Warm-up runs stay as they are.
@@ -79,9 +82,10 @@ struct Options {
     // Called as each scenario starts, for a run that someone watches.
     std::function<void(const QString &id)> started;
 };
+
 // Runs the scenarios in `file`, a parsed scenario file, and returns one result
 // per scenario: its id, kind, paths, unit, fixture, status (`completed`,
 // `skipped` or `failed`), reason, samples and stages. Diagnostics must be
 // active, because samples come from diagnostics events.
 QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Options &options = {});
-}
+} // namespace kobalt::scenario

@@ -7,13 +7,15 @@ namespace kobalt::ui {
 // Uses the deepest visible pager, including a list inside a paged settings sheet.
 // A disabled page arrow still consumes the request at a text/list boundary.
 bool turnVisiblePageControl(QWidget *scope, int direction);
+
 // A full-width bar with a cell at each end and the count between them.
 // It hides itself when there is only one page.
 // Horizontal swipes in the parent panel use its arrows. Controls with their
 // own gestures can opt out with the reader_owns_swipes property.
 // reader_swipe_hold preserves a row's long-press action
 // (metrics::input::longPressMilliseconds) instead of paging.
-class PagerBar : public QWidget {
+class PagerBar : public QWidget
+{
 public:
     PagerBar(QWidget *parent, const QString &prefix);
     ~PagerBar() override;
@@ -36,7 +38,9 @@ private:
     QRect blankArea;
     void updateHint();
 };
-class PageControls : public QWidget {
+
+class PageControls : public QWidget
+{
 public:
     PageControls(QWidget *parent, const QString &prefix, bool compact = false);
     void setPage(int page, int count);
@@ -51,7 +55,9 @@ private:
     bool compact;
     void arrange();
 };
-class PageNavigation {
+
+class PageNavigation
+{
 public:
     PageNavigation(QWidget *parent, const QString &prefix);
     void layout(const QSize &size, bool compact = false);
@@ -63,4 +69,4 @@ public:
 private:
     PageControls *paging;
 };
-}
+} // namespace kobalt::ui

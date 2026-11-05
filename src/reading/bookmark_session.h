@@ -29,20 +29,21 @@ QString bookmarkLayoutKey(int pages, const QJsonObject &state, const QSize &page
 // each save syncs storage several times. When the newest save fails, the list
 // returns to the last saved one and `failed` runs. Destruction waits for a
 // running save.
-class BookmarkSession final : public QObject {
+class BookmarkSession final : public QObject
+{
 public:
-    BookmarkSession(ReaderSession &session, std::function<QString()> layout, const QString &annotations,
-                    const QString &identity, const QByteArray &fingerprint, const QString &title, const QString &database = {});
+    BookmarkSession(ReaderSession &session, std::function<QString()> layout,
+                    const QString &annotations, const QString &identity,
+                    const QByteArray &fingerprint, const QString &title,
+                    const QString &database = {});
+
     // False when the book has no stable key. The session then does nothing.
-    bool available() const {
-        return bool(store);
-    }
-    bool writable() const {
-        return store && !loadFailed_;
-    }
-    QString error() const {
-        return error_;
-    }
+    bool available() const { return bool(store); }
+
+    bool writable() const { return store && !loadFailed_; }
+
+    QString error() const { return error_; }
+
     const QVector<Bookmark> &bookmarks() const;
     // Starts a page lookup when the layout is new. True when the pages of
     // the current layout are known.
@@ -58,19 +59,22 @@ public:
     Toggle toggle(int page);
     bool remove(const QString &position);
     bool setPin(const QString &position, const QString &name, const QString &icon);
-    const QVector<int> &pages() const {
-        return pages_;
-    }
+
+    const QVector<int> &pages() const { return pages_; }
+
     // True until the newest save has reported back.
-    bool saving() const {
-        return reported < posted;
-    }
+    bool saving() const { return reported < posted; }
+
     // Waits for the running and pending save, for example before USB export.
     void flush();
+
     bool hasFailedSave() const { return retryPending; }
+
     bool retryFailedSave();
+
     // One validity check for callers rendering an entire bookmark list.
     QVector<int> resolvedPages() const { return resolved() ? pages_ : QVector<int>{}; }
+
     // The known pages changed: a lookup finished, needs repeating, or merged
     // bookmarks. The window refreshes.
     std::function<void()> changed;
@@ -114,4 +118,4 @@ private:
     // Counts errors, so a save clears only errors set before it was posted.
     quint64 errors = 0;
 };
-}
+} // namespace kobalt

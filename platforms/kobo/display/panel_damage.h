@@ -10,7 +10,8 @@ namespace kobalt {
 // becomes that panel's bounding rectangle. Page rectangles and rectangles in
 // different panels stay separate: merging them would refresh unchanged book
 // text or bars between them.
-inline QVector<QRect> panelDamage(const QWidget *window, const QWidget *page, const QRegion &region) {
+inline QVector<QRect> panelDamage(const QWidget *window, const QWidget *page, const QRegion &region)
+{
     QVector<QRect> result;
     QVector<const QWidget *> owners;
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
@@ -34,4 +35,4 @@ inline QVector<QRect> panelDamage(const QWidget *window, const QWidget *page, co
     }
     return result;
 }
-}
+} // namespace kobalt

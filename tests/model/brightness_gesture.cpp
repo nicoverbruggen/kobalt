@@ -2,48 +2,51 @@
 #include "ui/input/brightness_gesture.h"
 #include <QCoreApplication>
 #include <cmath>
-#define CHECK(x)                                                                                                       \
-    do {                                                                                                               \
-        if (!(x))                                                                                                      \
-            qFatal("line %d: %s", __LINE__, #x);                                                                       \
+#define CHECK(x)                                 \
+    do {                                         \
+        if (!(x))                                \
+            qFatal("line %d: %s", __LINE__, #x); \
     } while (0)
-int main(int argc, char **argv) {
+
+int main(int argc, char **argv)
+{
     QCoreApplication app(argc, argv);
     kobalt::ui::BrightnessGesture gesture;
-    for (const QSize size : {QSize(1072, 1448), QSize(1448, 1072)}) {
-        gesture.begin({20, 600}, size);
-        CHECK(!gesture.move({20, 570}) && !gesture.active());
-        CHECK(gesture.move({24, 500}) && gesture.active());
-        CHECK(qAbs(gesture.moved({24, 500}) - 100. / size.height()) < 1e-9);
-        CHECK(gesture.moved({20, 900}) < 0);
+    for (const QSize size : { QSize(1072, 1448), QSize(1448, 1072) }) {
+        gesture.begin({ 20, 600 }, size);
+        CHECK(!gesture.move({ 20, 570 }) && !gesture.active());
+        CHECK(gesture.move({ 24, 500 }) && gesture.active());
+        CHECK(qAbs(gesture.moved({ 24, 500 }) - 100. / size.height()) < 1e-9);
+        CHECK(gesture.moved({ 20, 900 }) < 0);
         gesture.cancel();
-        CHECK(!gesture.active() && !gesture.move({20, 400}));
-        gesture.begin({size.width() * .3, 600}, size);
-        CHECK(!gesture.move({size.width() * .3, 400}));
-        gesture.begin({20, 600}, size);
-        CHECK(!gesture.move({80, 602}));
-        CHECK(!gesture.move({20, 300}));
-        gesture.begin({20, 600}, size);
+        CHECK(!gesture.active() && !gesture.move({ 20, 400 }));
+        gesture.begin({ size.width() * .3, 600 }, size);
+        CHECK(!gesture.move({ size.width() * .3, 400 }));
+        gesture.begin({ 20, 600 }, size);
+        CHECK(!gesture.move({ 80, 602 }));
+        CHECK(!gesture.move({ 20, 300 }));
+        gesture.begin({ 20, 600 }, size);
         gesture.cancel();
-        CHECK(!gesture.move({20, 400}));
+        CHECK(!gesture.move({ 20, 400 }));
         using Edge = kobalt::ui::BrightnessGesture::Edge;
         const double right = size.width() - 20;
         // The right edge claims warmth only when it is enabled.
-        gesture.begin({right, 600}, size);
-        CHECK(gesture.edge() == Edge::None && !gesture.move({right, 400}));
-        gesture.begin({right, 600}, size, true, true);
+        gesture.begin({ right, 600 }, size);
+        CHECK(gesture.edge() == Edge::None && !gesture.move({ right, 400 }));
+        gesture.begin({ right, 600 }, size, true, true);
         CHECK(gesture.edge() == Edge::Right);
-        CHECK(gesture.move({right - 4, 500}) && gesture.active() && gesture.edge() == Edge::Right);
-        CHECK(qAbs(gesture.moved({right, 500}) - 100. / size.height()) < 1e-9);
-        gesture.begin({right, 600}, size, true, true);
-        CHECK(!gesture.move({right - 80, 602}));
-        CHECK(!gesture.move({right, 300}));
-        gesture.begin({size.width() * .7, 600}, size, true, true);
-        CHECK(!gesture.move({size.width() * .7, 400}));
+        CHECK(gesture.move({ right - 4, 500 }) && gesture.active()
+              && gesture.edge() == Edge::Right);
+        CHECK(qAbs(gesture.moved({ right, 500 }) - 100. / size.height()) < 1e-9);
+        gesture.begin({ right, 600 }, size, true, true);
+        CHECK(!gesture.move({ right - 80, 602 }));
+        CHECK(!gesture.move({ right, 300 }));
+        gesture.begin({ size.width() * .7, 600 }, size, true, true);
+        CHECK(!gesture.move({ size.width() * .7, 400 }));
         // With both edges off, as when the setting is off, no edge claims a drag.
-        gesture.begin({20, 600}, size, false, false);
-        CHECK(gesture.edge() == Edge::None && !gesture.move({20, 400}));
-        gesture.begin({20, 600}, size, true, true);
+        gesture.begin({ 20, 600 }, size, false, false);
+        CHECK(gesture.edge() == Edge::None && !gesture.move({ 20, 400 }));
+        gesture.begin({ 20, 600 }, size, true, true);
         CHECK(gesture.edge() == Edge::Left);
     }
     using Gesture = kobalt::ui::BrightnessGesture;
@@ -66,7 +69,7 @@ int main(int argc, char **argv) {
     }
     // A drag and a reversal use the original level, so event frequency never
     // accumulates rounding errors and returning to the start restores it.
-    for (const QSize size : {QSize(1072, 1448), QSize(1448, 1072)}) {
+    for (const QSize size : { QSize(1072, 1448), QSize(1448, 1072) }) {
         const QPointF start(20, size.height() * .75);
         gesture.begin(start, size);
         CHECK(gesture.move(start - QPointF(0, size.height() * .1)));
@@ -86,16 +89,15 @@ int main(int argc, char **argv) {
         gesture.cancel();
     }
     // Nickel's reader claims the outer 13% of the width at either edge.
-    for (const QSize size : {QSize(1072, 1448), QSize(1448, 1072)}) {
-        gesture.begin({size.width() * .12, 600}, size, true, true);
+    for (const QSize size : { QSize(1072, 1448), QSize(1448, 1072) }) {
+        gesture.begin({ size.width() * .12, 600 }, size, true, true);
         CHECK(gesture.edge() == Gesture::Edge::Left);
-        gesture.begin({size.width() * .14, 600}, size, true, true);
+        gesture.begin({ size.width() * .14, 600 }, size, true, true);
         CHECK(gesture.edge() == Gesture::Edge::None);
-        gesture.begin({size.width() * .88, 600}, size, true, true);
+        gesture.begin({ size.width() * .88, 600 }, size, true, true);
         CHECK(gesture.edge() == Gesture::Edge::Right);
-        gesture.begin({size.width() * .86, 600}, size, true, true);
+        gesture.begin({ size.width() * .86, 600 }, size, true, true);
         CHECK(gesture.edge() == Gesture::Edge::None);
     }
-    qInfo(
-        "PASS: enabled edges, vertical intent, horizontal rejection, cancellation, linear sensitivity, reversal, clamping, event-independent levels and orientation scaling");
+    qInfo("PASS: enabled edges, vertical intent, horizontal rejection, cancellation, linear sensitivity, reversal, clamping, event-independent levels and orientation scaling");
 }

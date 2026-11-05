@@ -18,7 +18,8 @@ namespace kobalt {
 // settings. One request varies one setting through its options; the others
 // keep their current values, because page-break settings change each other's
 // results.
-struct StyleSampleRequest {
+struct StyleSampleRequest
+{
     QJsonObject settings;
     QString key;
     QVector<QJsonValue> values;
@@ -40,7 +41,9 @@ struct StyleSampleRequest {
     // step, so a closed Settings panel does not delay the book behind it.
     std::shared_ptr<std::atomic_bool> cancelled;
 };
-struct StyleSample {
+
+struct StyleSample
+{
     // The spread shown, as the first of two page indices.
     int page = 0;
     // False when every option lays out and draws the sample the same way.
@@ -61,10 +64,10 @@ struct StyleSample {
     QVector<QImage> details;
     QRect detailArea;
     QVector<QVector<QRect>> spare;
-    bool valid() const {
-        return !spreads.isEmpty();
-    }
+
+    bool valid() const { return !spreads.isEmpty(); }
 };
+
 // Lays out the sample on the shared engine worker and calls `finished` on
 // the GUI thread, unless `context` was destroyed first.
 void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObject *context,
@@ -77,4 +80,4 @@ QJsonObject styleSampleSettings(QJsonObject state);
 QJsonObject styleSamplePageSettings(const QJsonObject &reading);
 QSize styleSamplePageSize();
 QRect styleSampleReadingArea();
-}
+} // namespace kobalt

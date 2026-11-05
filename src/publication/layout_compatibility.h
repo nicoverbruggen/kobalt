@@ -4,8 +4,10 @@
 
 namespace kobalt {
 // Checks declarations the engine cannot honor, without resolving the CSS cascade.
-struct LayoutCompatibility {
+struct LayoutCompatibility
+{
     enum Verdict { Supported, VerticalWriting, RightToLeftProgression, Incomplete };
+
     Verdict verdict = Incomplete;
     int resources = 0;
     qint64 bytes = 0;
@@ -18,5 +20,6 @@ struct LayoutCompatibility {
     const char *reasonKey() const;
     QString reason() const;
 };
+
 LayoutCompatibility inspectLayout(ResourceCache &resources, const QMap<QString, qint64> &sizes);
-}
+} // namespace kobalt

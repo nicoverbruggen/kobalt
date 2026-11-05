@@ -6,17 +6,20 @@ namespace kobalt::android {
 // Give each region its own buffer instead of letting distant strips join.
 // On the tested BOOX firmware, even a disjoint GU header and REGAL body in
 // one buffer become a whole-screen driver update.
-class BooxFrameQueue {
+class BooxFrameQueue
+{
 public:
-    void reset() {
+    void reset()
+    {
         ui = {};
         text = {};
         clean = false;
     }
-    bool pending() const {
-        return clean || !ui.isEmpty() || !text.isEmpty();
-    }
-    QRect nextArea() const {
+
+    bool pending() const { return clean || !ui.isEmpty() || !text.isEmpty(); }
+
+    QRect nextArea() const
+    {
         if (!text.isEmpty()) {
             return text.boundingRect();
         }
@@ -28,14 +31,20 @@ public:
         }
         return largest;
     }
-    template <class Submit> bool prepare(const RefreshFrame &frame, Submit submit) {
+
+    template <class Submit>
+    bool prepare(const RefreshFrame &frame, Submit submit)
+    {
         // Newer pixels replace the policy of overlapping pending pixels.
         ui = (ui - frame.screenPixels) | (frame.screenPixels - frame.textPixels);
         text = (text - frame.screenPixels) | frame.textPixels;
         clean = clean || frame.clean;
         return present(submit);
     }
-    template <class Submit> bool present(Submit submit) {
+
+    template <class Submit>
+    bool present(Submit submit)
+    {
         if (!pending()) {
             return false;
         }
@@ -62,4 +71,4 @@ private:
     QRegion ui, text;
     bool clean = false;
 };
-}
+} // namespace kobalt::android

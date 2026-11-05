@@ -12,8 +12,9 @@
 #include <utility>
 
 namespace kobalt {
-void saveNativeWifiPower(QObject *context, const NativeWifiPowerBindings &bindings, const char *reason,
-                         std::function<void(bool)> done) {
+void saveNativeWifiPower(QObject *context, const NativeWifiPowerBindings &bindings,
+                         const char *reason, std::function<void(bool)> done)
+{
     if (!bindings.valid() || !bindings.wifiOn() || bindings.nickelSyncing()) {
         done(false);
         return;
@@ -23,10 +24,11 @@ void saveNativeWifiPower(QObject *context, const NativeWifiPowerBindings &bindin
     // replies counts as unknown after the deadline, which keeps Wi-Fi on.
     auto answered = std::make_shared<bool>(false);
     const auto answer = [guard, bindings, reason, done, answered](BluetoothPower power) {
-        if (!guard || std::exchange(*answered, true)) return;
+        if (!guard || std::exchange(*answered, true))
+            return;
         // Wi-Fi or Nickel's sync may have changed while the query ran.
         if (power != BluetoothPower::Off || !bindings.wifiOn() || bindings.nickelSyncing()) {
-            diagnostic("wifi-power-saver-kept", qt::object({{"bluetooth", int(power)}}));
+            diagnostic("wifi-power-saver-kept", qt::object({ { "bluetooth", int(power) } }));
             done(false);
             return;
         }
@@ -44,31 +46,43 @@ void saveNativeWifiPower(QObject *context, const NativeWifiPowerBindings &bindin
     qt::later(nativeWifiPowerDeadlineMs, context, [answer] { answer(BluetoothPower::Unknown); });
     bindings.bluetooth(context, answer);
 }
+
 void (*nativeConnectWirelessSilently)(void *);
+
 namespace {
 QPointer<QObject> holdOwner;
 std::function<bool()> holdDecision;
-}
-void holdNativeWifiOff(QObject *owner, std::function<bool()> holding) {
+} // namespace
+
+void holdNativeWifiOff(QObject *owner, std::function<bool()> holding)
+{
     holdOwner = owner;
     holdDecision = std::move(holding);
 }
-bool nativeWifiHeldOff() {
-    if (!holdOwner || !holdDecision || NativeSyncNetwork::preparing()) return false;
+
+bool nativeWifiHeldOff()
+{
+    if (!holdOwner || !holdDecision || NativeSyncNetwork::preparing())
+        return false;
     // Nickel's browser connects for the page it opens over the reader.
-    if (BrowserHandoff::activeFor(qobject_cast<QWidget *>(holdOwner.data()))) return false;
+    if (BrowserHandoff::activeFor(qobject_cast<QWidget *>(holdOwner.data())))
+        return false;
     return holdDecision();
 }
-}
+} // namespace kobalt
+
 // Nickel 4.46.23852 and 6.0.279225 call this from the routine that runs after
 // every wake, before it re-enables stylus warnings and Bluetooth devices. They
 // also call it for image downloads, the browser and store, and after USB.
 // Nickel's store sync connects through connectWireless() instead, so it is
 // not affected.
-extern "C" __attribute__((visibility("default"))) void kobalt_connect_wireless_silently(void *workflow) {
+extern "C" __attribute__((visibility("default"))) void
+kobalt_connect_wireless_silently(void *workflow)
+{
     using namespace kobalt;
     if (qApp && QThread::currentThread() == qApp->thread() && nativeWifiHeldOff()) {
-        diagnostic("wifi-power-saver", qt::object({{"moment", "nickel-connection"}, {"held", true}}));
+        diagnostic("wifi-power-saver",
+                   qt::object({ { "moment", "nickel-connection" }, { "held", true } }));
         return;
     }
     nativeConnectWirelessSilently(workflow);

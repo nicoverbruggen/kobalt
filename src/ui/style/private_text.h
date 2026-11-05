@@ -16,6 +16,7 @@ class QPainter;
 namespace kobalt {
 class AssetBundle;
 }
+
 namespace kobalt::ui {
 // Owns independent font bytes and faces on the GUI thread. It never shares
 // CREngine's worker-owned font manager or changes Qt's font database.
@@ -42,16 +43,22 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
 QByteArray nativeEditorFontData(const QFont &font);
 // Bundled interface and fallback font files by name, for font previews.
 QMap<QString, QString> privateInterfaceFontFiles();
+
 // Sample sizes in device pixels, from the interface metrics.
-struct FontPreviewScale {
+struct FontPreviewScale
+{
     int inkHeight, base, minimum, maximum, lineGap;
 };
+
 // Uses isolated file-backed faces and retains no font bytes. Returns an 8-bit coverage bitmap.
 // Characters the font lacks use the bundled `fallbacks` from privateInterfaceFontFiles().
-QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text, QSize size,
-                               const FontPreviewScale &scale, int weight, bool boldReading, bool centered, bool wrap,
+QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
+                               QSize size, const FontPreviewScale &scale, int weight,
+                               bool boldReading, bool centered, bool wrap,
                                const QMap<QString, QString> &fallbacks = {});
-struct PrivateText {
+
+struct PrivateText
+{
     QImage image;
     int advance = 0;
     int height = 0;
@@ -61,7 +68,9 @@ struct PrivateText {
     QPoint origin;
 };
 enum class PrivateTextEmphasis { Synthetic, FontFace };
-struct PrivateTextStyle {
+
+struct PrivateTextStyle
+{
     int start = 0, length = 0;
     QFont font;
     QColor color;
@@ -69,6 +78,7 @@ struct PrivateTextStyle {
     QImage image{};
     QColor background{};
 };
+
 // All application text uses private painting once font sources are initialized.
 bool needsPrivateText(const QString &text, const QFont &font);
 bool privateFontFixedPitch(const QFont &font);
@@ -78,7 +88,8 @@ PrivateText renderPrivateText(const QString &text, const QFont &font, int weight
                               PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,
                               Qt::LayoutDirection direction = Qt::LayoutDirectionAuto,
                               const QVector<PrivateTextStyle> &styles = {});
-int measurePrivateText(const QString &text, const QFont &font, const QVector<QPair<int, int>> &boldRanges = {},
+int measurePrivateText(const QString &text, const QFont &font,
+                       const QVector<QPair<int, int>> &boldRanges = {},
                        PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,
                        Qt::LayoutDirection direction = Qt::LayoutDirectionAuto);
 PrivateText measurePrivateTextLayout(const QString &text, const QFont &font,
@@ -113,16 +124,26 @@ void drawOpticalPrivateText(QPainter &painter, const QRect &area, const QString 
 // lift it above the baseline that its neighbours share.
 void drawSegmentPrivateText(QPainter &painter, const QRect &area, const QString &text,
                             Qt::Alignment alignment = Qt::AlignHCenter);
-class PrivateTextLabel : public QLabel {
+
+class PrivateTextLabel : public QLabel
+{
 public:
     using QLabel::QLabel;
-    void setMaximumLines(int value) { maximumLines = value; update(); }
-    void setHighlight(const QString &style, QColor color, int spacing) {
+
+    void setMaximumLines(int value)
+    {
+        maximumLines = value;
+        update();
+    }
+
+    void setHighlight(const QString &style, QColor color, int spacing)
+    {
         highlightStyle = style;
         highlightColor = color;
         lineSpacing = spacing;
         update();
     }
+
     int textWidth(const QString &value) const;
     QString elidedText(const QString &value, int width) const;
     QSize sizeHint() const override;
@@ -137,4 +158,4 @@ private:
     QColor highlightColor;
     int lineSpacing = 0;
 };
-}
+} // namespace kobalt::ui

@@ -17,7 +17,8 @@
 #include <thread>
 #include <vector>
 
-class Workflow final : public QObject {
+class Workflow final : public QObject
+{
     Q_OBJECT
 signals:
     void internetIsAccessible();
@@ -25,18 +26,28 @@ signals:
     void connectingFailed();
     void connectionCancelled();
 };
-class MainWindowView final : public QWidget { Q_OBJECT };
-class ConfirmationDialog final : public QWidget {
+
+class MainWindowView final : public QWidget
+{
+    Q_OBJECT
+};
+
+class ConfirmationDialog final : public QWidget
+{
     Q_OBJECT
 public:
     using QWidget::QWidget;
 };
-class ProgressDialog final : public QWidget {
+
+class ProgressDialog final : public QWidget
+{
     Q_OBJECT
 public:
     using QWidget::QWidget;
 };
-class WirelessStatus final : public QObject {
+
+class WirelessStatus final : public QObject
+{
     Q_OBJECT
 signals:
     void wifiEnabled(bool);
@@ -44,25 +55,39 @@ signals:
     void networkDisconnected();
     void linkQualityForConnectedNetwork(double);
 };
+
 static WirelessStatus *wirelessStatus = nullptr;
 static bool radioUp = false;
-extern "C" QObject *_ZN15WirelessManager14sharedInstanceEv() { return wirelessStatus; }
-extern "C" bool _ZNK15WirelessManager2upEv(QObject *) { return radioUp; }
-static void wifiNotifications() {
+
+extern "C" QObject *_ZN15WirelessManager14sharedInstanceEv()
+{
+    return wirelessStatus;
+}
+
+extern "C" bool _ZNK15WirelessManager2upEv(QObject *)
+{
+    return radioUp;
+}
+
+static void wifiNotifications()
+{
     WirelessStatus wireless;
     wirelessStatus = &wireless;
     std::vector<kobalt::WifiStatus> states;
     {
         QObject context;
-        kobalt::observeNativeWifi(&context, [&](kobalt::WifiStatus state) { states.push_back(state); });
-        require(states.size() == 1 && !states.back().enabled, "the Wi-Fi subscription reports initial radio state");
+        kobalt::observeNativeWifi(&context,
+                                  [&](kobalt::WifiStatus state) { states.push_back(state); });
+        require(states.size() == 1 && !states.back().enabled,
+                "the Wi-Fi subscription reports initial radio state");
         radioUp = true;
         emit wireless.wifiEnabled(true);
         emit wireless.networkConnected();
         require(states.back().enabled && states.back().connected && states.back().strength == -1,
                 "a connection without a quality report must not invent full signal strength");
         emit wireless.linkQualityForConnectedNetwork(0.8);
-        require(states.back().strength == 3, "native normalized link quality maps to four signal levels");
+        require(states.back().strength == 3,
+                "native normalized link quality maps to four signal levels");
         const auto before = states.size();
         emit wireless.linkQualityForConnectedNetwork(std::numeric_limits<double>::quiet_NaN());
         require(states.size() == before, "invalid link-quality reports do not alter the indicator");
@@ -76,20 +101,24 @@ static void wifiNotifications() {
     require(states.size() == before, "the Wi-Fi subscription ends with the reader context");
     wirelessStatus = nullptr;
 }
-static void nativePrompt() {
+
+static void nativePrompt()
+{
     MainWindowView nickel;
     nickel.setStyleSheet("QLabel { font-size: 17px; color: #135724; }");
     nickel.resize(600, 800);
     nickel.show();
     QDialog reader(&nickel);
-    reader.setStyleSheet("QWidget { background: black; color: white; font-family: monospace; } QLabel { font-size: 42px; }");
+    reader.setStyleSheet(
+            "QWidget { background: black; color: white; font-family: monospace; } QLabel { font-size: 42px; }");
     reader.resize(600, 800);
     reader.show();
     auto presentation = kobalt::nickel::makeWindowPresentation(&reader, false);
     reader.hide();
     reader.show();
     QApplication::processEvents();
-    require(reader.parentWidget() == &nickel, "the reader dialog must never be promoted into itself");
+    require(reader.parentWidget() == &nickel,
+            "the reader dialog must never be promoted into itself");
     presentation->pauseBackground();
     ConfirmationDialog prompt(&nickel, Qt::Widget);
     prompt.setGeometry(50, 100, 400, 200);
@@ -111,56 +140,71 @@ static void nativePrompt() {
     bindings.connecting = [&] { return connecting; };
     bindings.inputPending = [] { return kobalt::nickel::NativeDialogOverlay::inputPending(); };
     bindings.request = [&](bool) { prompt.show(); };
-    bindings.cancel = [&] { connecting = false; prompt.hide(); emit workflow.connectionCancelled(); };
+    bindings.cancel = [&] {
+        connecting = false;
+        prompt.hide();
+        emit workflow.connectionCancelled();
+    };
     kobalt::NativeSyncNetwork network(bindings);
     network.prepare(true, [&](bool) { ++replies; });
     QApplication::processEvents();
     require(explanation.font() == nativeFont && explanation.palette() == nativePalette,
             "promoting a native dialog must preserve Nickel fonts and colors instead of inheriting reader styles");
-    reader.setStyleSheet("QWidget { background: white; color: black; } QLabel { font-size: 31px; }");
+    reader.setStyleSheet(
+            "QWidget { background: white; color: black; } QLabel { font-size: 31px; }");
     QApplication::processEvents();
     require(explanation.font() == nativeFont && explanation.palette() == nativePalette,
             "reader theme changes must not restyle an open native dialog");
-    require(prompt.parentWidget() == &nickel && prompt.isWindow() && prompt.isVisible() &&
-                prompt.windowHandle()->transientParent() == reader.windowHandle(),
+    require(prompt.parentWidget() == &nickel && prompt.isWindow() && prompt.isVisible()
+                    && prompt.windowHandle()->transientParent() == reader.windowHandle(),
             "the native Wi-Fi permission prompt must appear above the reader");
-    require(prompt.updatesEnabled(), "the native prompt must paint outside Nickel's paused backing store");
-    require(explanation.updatesEnabled() && allow.updatesEnabled(), "native dialog children must remain able to paint");
-    require(kobalt::nickel::NativeDialogOverlay::activeFor(&reader), "native input must block reader shortcuts");
+    require(prompt.updatesEnabled(),
+            "the native prompt must paint outside Nickel's paused backing store");
+    require(explanation.updatesEnabled() && allow.updatesEnabled(),
+            "native dialog children must remain able to paint");
+    require(kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
+            "native input must block reader shortcuts");
     QEventLoop permissionWait;
     QTimer::singleShot(11200, &permissionWait, &QEventLoop::quit);
     permissionWait.exec();
-    require(replies == 0 && prompt.isVisible(), "a native permission prompt must not time out while the user is answering");
+    require(replies == 0 && prompt.isVisible(),
+            "a native permission prompt must not time out while the user is answering");
     network.cancel();
     QApplication::processEvents();
     require(prompt.parentWidget() == &nickel && !prompt.isVisible() && replies == 0,
             "cancelling sync restores the native prompt without completing a stale wait");
-    require(prompt.windowFlags() == nativeFlags && prompt.testAttribute(Qt::WA_WindowPropagation) == nativePropagation &&
-                explanation.font() == nativeFont && explanation.palette() == nativePalette,
+    require(prompt.windowFlags() == nativeFlags
+                    && prompt.testAttribute(Qt::WA_WindowPropagation) == nativePropagation
+                    && explanation.font() == nativeFont && explanation.palette() == nativePalette,
             "closing the overlay restores native window flags and leaves Nickel styling intact");
-    require(!kobalt::nickel::NativeDialogOverlay::activeFor(&reader), "closing the prompt releases reader input");
+    require(!kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
+            "closing the prompt releases reader input");
     QDialog bluetooth(&nickel, Qt::Widget);
     bluetooth.setGeometry(20, 50, 300, 150);
     bluetooth.show();
     QApplication::processEvents();
-    require(bluetooth.parentWidget() == &nickel && bluetooth.isWindow() &&
-                bluetooth.windowHandle()->transientParent() == reader.windowHandle(), "other native modal dialogs also appear above Kobalt");
+    require(bluetooth.parentWidget() == &nickel && bluetooth.isWindow()
+                    && bluetooth.windowHandle()->transientParent() == reader.windowHandle(),
+            "other native modal dialogs also appear above Kobalt");
     auto *error = new ConfirmationDialog(&nickel, Qt::Widget);
     error->show();
     QApplication::processEvents();
     delete error;
-    require(kobalt::nickel::NativeDialogOverlay::activeFor(&reader), "a nested dialog does not release another modal's guard");
+    require(kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
+            "a nested dialog does not release another modal's guard");
     ProgressDialog progress(&nickel);
     progress.show();
     QApplication::processEvents();
-    require(progress.parentWidget() == &nickel && progress.isWindow() &&
-                progress.windowHandle()->transientParent() == reader.windowHandle(), "native progress widgets need the same presentation as confirmation dialogs");
+    require(progress.parentWidget() == &nickel && progress.isWindow()
+                    && progress.windowHandle()->transientParent() == reader.windowHandle(),
+            "native progress widgets need the same presentation as confirmation dialogs");
     progress.hide();
     QDialog password(&nickel, Qt::Widget);
     QLineEdit input(&password);
     password.show();
     QApplication::processEvents();
-    require(password.parentWidget() == &nickel && password.isWindow() && kobalt::nickel::NativeDialogOverlay::inputPending(),
+    require(password.parentWidget() == &nickel && password.isWindow()
+                    && kobalt::nickel::NativeDialogOverlay::inputPending(),
             "native password entry remains above the reader and counts as user interaction");
     password.hide();
     QDialog browser(&nickel, Qt::Widget);
@@ -169,17 +213,20 @@ static void nativePrompt() {
     browserView.setObjectName("N3BrowserView");
     browser.show();
     QApplication::processEvents();
-    require(browser.parentWidget() == &nickel, "the native browser keeps its separate handoff workflow");
+    require(browser.parentWidget() == &nickel,
+            "the native browser keeps its separate handoff workflow");
     browser.hide();
     reader.hide();
-    require(bluetooth.parentWidget() == &nickel && !bluetooth.isVisible() &&
-                !kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
+    require(bluetooth.parentWidget() == &nickel && !bluetooth.isVisible()
+                    && !kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
             "sleeping or closing the reader restores all native modal ownership");
 }
+
 // The power saver turns Wi-Fi off only while it is on, Nickel is not
 // syncing and Bluetooth is known to be off, and it checks again after the
 // asynchronous Bluetooth answer.
-static void wifiPowerSaver() {
+static void wifiPowerSaver()
+{
     using kobalt::BluetoothPower;
     bool wifi = true, syncing = false;
     int queries = 0, turnedOff = 0, violations = 0;
@@ -202,20 +249,22 @@ static void wifiPowerSaver() {
     int replies = 0;
     bool result = true;
     const auto save = [&] {
-        kobalt::saveNativeWifiPower(&context, bindings, "wifi-off before reader input", [&](bool value) {
-            ++replies;
-            result = value;
-        });
+        kobalt::saveNativeWifiPower(&context, bindings, "wifi-off before reader input",
+                                    [&](bool value) {
+                                        ++replies;
+                                        result = value;
+                                    });
     };
     wifi = false;
     save();
-    require(replies == 1 && !result && queries == 0, "Wi-Fi that is already off needs no Bluetooth query");
+    require(replies == 1 && !result && queries == 0,
+            "Wi-Fi that is already off needs no Bluetooth query");
     wifi = true;
     syncing = true;
     save();
     require(replies == 2 && !result && queries == 0, "Nickel's sync keeps Wi-Fi on");
     syncing = false;
-    for (const auto power : {BluetoothPower::On, BluetoothPower::Unknown}) {
+    for (const auto power : { BluetoothPower::On, BluetoothPower::Unknown }) {
         save();
         answer(power);
         require(!result && turnedOff == 0, "Bluetooth that is on or unknown keeps Wi-Fi on");
@@ -228,7 +277,8 @@ static void wifiPowerSaver() {
     save();
     require(replies == 5 && queries == 4, "the saver waits for the Bluetooth answer");
     answer(BluetoothPower::Off);
-    require(replies == 6 && result && turnedOff == 1 && !wifi, "Bluetooth off turns Wi-Fi off once");
+    require(replies == 6 && result && turnedOff == 1 && !wifi,
+            "Bluetooth off turns Wi-Fi off once");
     require(violations == 0, "the declared wait is not reported as a violation");
     // A Bluetooth stack that never answers must not hold the opening.
     wifi = true;
@@ -236,17 +286,25 @@ static void wifiPowerSaver() {
     QEventLoop loop;
     QTimer::singleShot(kobalt::nativeWifiPowerDeadlineMs + 500, &loop, &QEventLoop::quit);
     loop.exec();
-    require(replies == 7 && !result && turnedOff == 1, "an unanswered Bluetooth query keeps Wi-Fi on after the deadline");
+    require(replies == 7 && !result && turnedOff == 1,
+            "an unanswered Bluetooth query keeps Wi-Fi on after the deadline");
     answer(BluetoothPower::Off);
     require(replies == 7 && turnedOff == 1, "a late Bluetooth answer is ignored");
     kobalt::mainthread::setViolationHandler({});
 }
+
 static int nickelConnections = 0;
-static void countNickelConnection(void *) { ++nickelConnections; }
+
+static void countNickelConnection(void *)
+{
+    ++nickelConnections;
+}
+
 // Nickel's own background connections, such as the one after every wake, pass
 // through the hook. The reader's hold skips them, except while Kobalt waits
 // for a connection of its own or Nickel's browser is open over the reader.
-static void wifiHold() {
+static void wifiHold()
+{
     kobalt::nativeConnectWirelessSilently = countNickelConnection;
     kobalt_connect_wireless_silently(nullptr);
     require(nickelConnections == 1, "without a reader Nickel connects as usual");
@@ -254,7 +312,8 @@ static void wifiHold() {
     auto *reader = new QWidget;
     kobalt::holdNativeWifiOff(reader, [&] { return holding; });
     kobalt_connect_wireless_silently(nullptr);
-    require(nickelConnections == 1 && kobalt::nativeWifiHeldOff(), "the reader's hold skips Nickel's connection");
+    require(nickelConnections == 1 && kobalt::nativeWifiHeldOff(),
+            "the reader's hold skips Nickel's connection");
     holding = false;
     kobalt_connect_wireless_silently(nullptr);
     require(nickelConnections == 2, "a reader that does not hold Wi-Fi off lets Nickel connect");
@@ -270,13 +329,14 @@ static void wifiHold() {
     bindings.cancel = [&] { connecting = false; };
     {
         kobalt::NativeSyncNetwork network(bindings);
-        network.prepare(true, [](bool) {});
+        network.prepare(true, [](bool) { });
         require(kobalt::NativeSyncNetwork::preparing(), "a running request counts as preparing");
         kobalt_connect_wireless_silently(nullptr);
-        require(nickelConnections == 3, "Nickel's dialogs may connect while Kobalt waits for a connection");
+        require(nickelConnections == 3,
+                "Nickel's dialogs may connect while Kobalt waits for a connection");
         network.cancel();
         require(!kobalt::NativeSyncNetwork::preparing(), "a cancelled request no longer counts");
-        network.prepare(false, [](bool) {});
+        network.prepare(false, [](bool) { });
     }
     require(!kobalt::NativeSyncNetwork::preparing(), "a destroyed controller no longer counts");
     kobalt_connect_wireless_silently(nullptr);
@@ -287,13 +347,17 @@ static void wifiHold() {
     reader->setProperty("kobalt_native_browser", false);
     std::thread worker([] { kobalt_connect_wireless_silently(nullptr); });
     worker.join();
-    require(nickelConnections == 5, "a call from another thread is passed on without asking the reader");
+    require(nickelConnections == 5,
+            "a call from another thread is passed on without asking the reader");
     delete reader;
     kobalt_connect_wireless_silently(nullptr);
-    require(nickelConnections == 6 && !kobalt::nativeWifiHeldOff(), "a deleted reader ends the hold");
+    require(nickelConnections == 6 && !kobalt::nativeWifiHeldOff(),
+            "a deleted reader ends the hold");
 }
+
 // Checks the Kobo connection controller, Wi-Fi release, signal levels, the power saver, the hold on Nickel's background connections and native prompts above the reader, with fake native calls.
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     QApplication app(argc, argv);
     wifiNotifications();
     wifiPowerSaver();
@@ -308,22 +372,37 @@ int main(int argc, char **argv) {
     bindings.ready = [&] { return ready; };
     bindings.disabled = [&] { return disabled; };
     bindings.connecting = [&] { return connecting; };
-    bindings.request = [&](bool showUi) { ++requests; interactive = showUi; connecting = true; };
-    bindings.cancel = [&] { ++cancelled; connecting = false; emit workflow.connectionCancelled(); };
-    auto done = [&](bool connected) { ++replies; result = connected; };
+    bindings.request = [&](bool showUi) {
+        ++requests;
+        interactive = showUi;
+        connecting = true;
+    };
+    bindings.cancel = [&] {
+        ++cancelled;
+        connecting = false;
+        emit workflow.connectionCancelled();
+    };
+    auto done = [&](bool connected) {
+        ++replies;
+        result = connected;
+    };
     kobalt::NativeSyncNetwork network(bindings);
     network.prepare(false, done);
-    require(replies == 1 && result && requests == 0, "reuse an available connection without touching the radio");
+    require(replies == 1 && result && requests == 0,
+            "reuse an available connection without touching the radio");
     ready = false;
     disabled = true;
     network.prepare(false, done);
-    require(replies == 2 && !result && requests == 0, "automatic reconnect respects explicitly disabled Wi-Fi");
+    require(replies == 2 && !result && requests == 0,
+            "automatic reconnect respects explicitly disabled Wi-Fi");
     network.prepare(true, done);
-    require(requests == 1 && interactive && replies == 2, "manual sync starts the native interactive workflow and waits");
+    require(requests == 1 && interactive && replies == 2,
+            "manual sync starts the native interactive workflow and waits");
     ready = true;
     connecting = false;
     emit workflow.internetPartiallyAccessible();
-    require(replies == 3 && result, "a usable connection can proceed when internet access is partial");
+    require(replies == 3 && result,
+            "a usable connection can proceed when internet access is partial");
     emit workflow.internetIsAccessible();
     require(replies == 3, "duplicate readiness notifications do not start another exchange");
     ready = false;
@@ -335,7 +414,8 @@ int main(int argc, char **argv) {
     require(replies == 4 && !result, "native connection failure completes the wait once");
     network.prepare(true, done);
     network.cancel();
-    require(cancelled == 1 && replies == 4, "cancel stops an owned native workflow without completing a stale wait");
+    require(cancelled == 1 && replies == 4,
+            "cancel stops an owned native workflow without completing a stale wait");
     ready = true;
     emit workflow.internetIsAccessible();
     require(replies == 4, "late connection success after cancellation is ignored");
@@ -347,19 +427,24 @@ int main(int argc, char **argv) {
     network.prepare(true, done);
     require(requests == before, "join an existing workflow instead of starting another one");
     network.cancel();
-    require(cancelled == 1, "cancelling this waiter does not cancel another native caller's workflow");
+    require(cancelled == 1,
+            "cancelling this waiter does not cancel another native caller's workflow");
     connecting = false;
     {
         kobalt::NativeSyncNetwork pending(bindings);
         pending.prepare(false, done);
     }
-    require(cancelled == 2 && replies == 5, "destruction releases an owned wait and suppresses its callback");
+    require(cancelled == 2 && replies == 5,
+            "destruction releases an owned wait and suppresses its callback");
     {
         // Only a silent connection this controller started is turned off again.
         const int savedReplies = replies, savedRequests = requests;
         int turnedOff = 0;
         auto releasing = bindings;
-        releasing.turnOff = [&] { ++turnedOff; ready = false; };
+        releasing.turnOff = [&] {
+            ++turnedOff;
+            ready = false;
+        };
         kobalt::NativeSyncNetwork owned(releasing);
         ready = true;
         owned.prepare(false, done);
@@ -403,7 +488,10 @@ int main(int argc, char **argv) {
         int turnedOff = 0;
         auto releasing = bindings;
         releasing.radioOn = [&] { return radio; };
-        releasing.turnOff = [&] { ++turnedOff; radio = ready = false; };
+        releasing.turnOff = [&] {
+            ++turnedOff;
+            radio = ready = false;
+        };
         kobalt::NativeSyncNetwork radioNetwork(releasing);
         ready = false;
         connecting = false;
@@ -413,20 +501,23 @@ int main(int argc, char **argv) {
         emit workflow.internetIsAccessible();
         require(result, "a silent request can connect a radio that is already on");
         radioNetwork.release();
-        require(turnedOff == 0, "a radio that was already on stays on when Kobalt's request connects it");
+        require(turnedOff == 0,
+                "a radio that was already on stays on when Kobalt's request connects it");
         radio = ready = false;
         radioNetwork.prepare(false, done);
         radio = true;
         radioNetwork.cancel();
         radioNetwork.release();
-        require(turnedOff == 1 && !radio, "a cancelled silent request turns off the radio it turned on");
+        require(turnedOff == 1 && !radio,
+                "a cancelled silent request turns off the radio it turned on");
         radioNetwork.prepare(false, done);
         radio = true;
         connecting = false;
         emit workflow.connectingFailed();
         require(!result, "a silent request can fail with the radio on");
         radioNetwork.release();
-        require(turnedOff == 2 && !radio, "a failed silent request turns off the radio it turned on");
+        require(turnedOff == 2 && !radio,
+                "a failed silent request turns off the radio it turned on");
         const int beforeRelease = cancelled;
         radioNetwork.prepare(false, done);
         radio = true;
@@ -436,7 +527,8 @@ int main(int argc, char **argv) {
         // Nickel can still be powering the radio for a running request.
         radioNetwork.prepare(false, done);
         radioNetwork.release();
-        require(turnedOff == 4, "release turns off a radio that a running request may still bring up");
+        require(turnedOff == 4,
+                "release turns off a radio that a running request may still bring up");
         radioNetwork.prepare(true, done);
         radio = ready = true;
         connecting = false;
@@ -452,21 +544,28 @@ int main(int argc, char **argv) {
     unavailable.prepare(true, done);
     require(replies == 6 && !result, "unsupported native APIs fail without a connection attempt");
     QEventLoop deadline;
-    network.prepare(false, [&](bool connected) { done(connected); deadline.quit(); });
+    network.prepare(false, [&](bool connected) {
+        done(connected);
+        deadline.quit();
+    });
     QTimer::singleShot(12000, &deadline, &QEventLoop::quit);
     deadline.exec();
-    require(replies == 7 && !result && cancelled == 3, "a stalled native workflow is cancelled at the bounded deadline");
+    require(replies == 7 && !result && cancelled == 3,
+            "a stalled native workflow is cancelled at the bounded deadline");
     require(!connecting, "the deadline leaves no owned connection workflow running");
     network.prepare(false, done);
     ready = true;
     connecting = false;
     emit workflow.connectingFailed();
-    require(replies == 8 && result, "a failed native internet probe does not reject an available LAN connection");
+    require(replies == 8 && result,
+            "a failed native internet probe does not reject an available LAN connection");
     ready = false;
     network.prepare(true, done);
     ready = true;
     connecting = false;
     emit workflow.connectionCancelled();
-    require(replies == 9 && !result, "explicit native cancellation wins even if an address became available");
+    require(replies == 9 && !result,
+            "explicit native cancellation wins even if an address became available");
 }
+
 #include "native_sync_network.moc"

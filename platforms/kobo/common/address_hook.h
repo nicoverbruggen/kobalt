@@ -14,4 +14,4 @@ int redirectAddressReferences(void *library, const char *symbol, void *target);
 // holds the workflow and saves before Nickel starts the connection, as a
 // direct connection does. Call after NickelHook has installed its hooks.
 void redirectUsbDialog();
-}
+} // namespace kobalt::nickel

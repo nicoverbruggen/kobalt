@@ -3,12 +3,14 @@
 #include <QCoreApplication>
 #include <QPainter>
 #include <random>
-#define CHECK(x)                                                                                                       \
-    do {                                                                                                               \
-        if (!(x))                                                                                                      \
-            qFatal("line %d: %s", __LINE__, #x);                                                                       \
+#define CHECK(x)                                 \
+    do {                                         \
+        if (!(x))                                \
+            qFatal("line %d: %s", __LINE__, #x); \
     } while (0)
-int main(int argc, char **argv) {
+
+int main(int argc, char **argv)
+{
     QCoreApplication app(argc, argv);
     using kobalt::render::imageDamage;
     QImage base(107, 73, QImage::Format_RGB32);
@@ -52,7 +54,8 @@ int main(int argc, char **argv) {
     for (int run = 0; run < 100; ++run) {
         changed = base.copy();
         for (int i = 0; i < 20; ++i)
-            changed.setPixel(int(random() % 107u), int(random() % 73u), quint32(random()) | 0xff000000);
+            changed.setPixel(int(random() % 107u), int(random() % 73u),
+                             quint32(random()) | 0xff000000);
         auto patched = base.copy();
         const auto damage = imageDamage(base, changed);
         {

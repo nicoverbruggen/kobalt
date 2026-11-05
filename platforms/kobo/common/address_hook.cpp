@@ -11,7 +11,8 @@ extern "C" void kobalt_usb_workflow(void *manager);
 extern "C" void kobalt_continue_using(void *manager);
 
 namespace kobalt::nickel {
-int redirectAddressReferences(void *library, const char *symbol, void *target) {
+int redirectAddressReferences(void *library, const char *symbol, void *target)
+{
     link_map *map = nullptr;
     void *original = library ? dlsym(library, symbol) : nullptr;
     if (!original || !target || dlinfo(library, RTLD_DI_LINKMAP, &map) != 0 || !map)
@@ -22,11 +23,21 @@ int redirectAddressReferences(void *library, const char *symbol, void *target) {
     const char *names = nullptr;
     for (const auto *dynamic = map->l_ld; dynamic->d_tag != DT_NULL; ++dynamic) {
         switch (dynamic->d_tag) {
-        case DT_REL: relocations = reinterpret_cast<const ElfW(Rel) *>(dynamic->d_un.d_ptr); break;
-        case DT_RELSZ: size = dynamic->d_un.d_val; break;
-        case DT_RELENT: entry = dynamic->d_un.d_val; break;
-        case DT_SYMTAB: symbols = reinterpret_cast<const ElfW(Sym) *>(dynamic->d_un.d_ptr); break;
-        case DT_STRTAB: names = reinterpret_cast<const char *>(dynamic->d_un.d_ptr); break;
+        case DT_REL:
+            relocations = reinterpret_cast<const ElfW(Rel) *>(dynamic->d_un.d_ptr);
+            break;
+        case DT_RELSZ:
+            size = dynamic->d_un.d_val;
+            break;
+        case DT_RELENT:
+            entry = dynamic->d_un.d_val;
+            break;
+        case DT_SYMTAB:
+            symbols = reinterpret_cast<const ElfW(Sym) *>(dynamic->d_un.d_ptr);
+            break;
+        case DT_STRTAB:
+            names = reinterpret_cast<const char *>(dynamic->d_un.d_ptr);
+            break;
         }
     }
     // Nickel is 32-bit ARM, which uses REL relocations only.
@@ -36,8 +47,8 @@ int redirectAddressReferences(void *library, const char *symbol, void *target) {
     int redirected = 0;
     for (size_t i = 0; i < size / entry; ++i) {
         const auto &relocation = relocations[i];
-        if (ELF32_R_TYPE(relocation.r_info) != R_ARM_GLOB_DAT ||
-            std::strcmp(names + symbols[ELF32_R_SYM(relocation.r_info)].st_name, symbol) != 0)
+        if (ELF32_R_TYPE(relocation.r_info) != R_ARM_GLOB_DAT
+            || std::strcmp(names + symbols[ELF32_R_SYM(relocation.r_info)].st_name, symbol) != 0)
             continue;
         auto **slot = reinterpret_cast<void **>(map->l_addr + relocation.r_offset);
         if (*slot != original)
@@ -52,18 +63,23 @@ int redirectAddressReferences(void *library, const char *symbol, void *target) {
     }
     return redirected;
 }
-void redirectUsbDialog() {
+
+void redirectUsbDialog()
+{
     void *nickel = dlopen("/usr/local/Kobo/libnickel.so.1.0.0", RTLD_LAZY | RTLD_NOLOAD);
     if (!nickel) {
-        diagnostic("usb-dialog-hooks", {{"available", false}}, DiagnosticSeverity::Warning);
+        diagnostic("usb-dialog-hooks", { { "available", false } }, DiagnosticSeverity::Warning);
         return;
     }
-    const int connect = redirectAddressReferences(nickel, "_ZN19PlugWorkflowManager18onCancelAndConnectEv",
-                                                  reinterpret_cast<void *>(kobalt_usb_workflow));
-    const int cancel = redirectAddressReferences(nickel, "_ZN19PlugWorkflowManager15onContinueUsingEv",
-                                                 reinterpret_cast<void *>(kobalt_continue_using));
+    const int connect =
+            redirectAddressReferences(nickel, "_ZN19PlugWorkflowManager18onCancelAndConnectEv",
+                                      reinterpret_cast<void *>(kobalt_usb_workflow));
+    const int cancel =
+            redirectAddressReferences(nickel, "_ZN19PlugWorkflowManager15onContinueUsingEv",
+                                      reinterpret_cast<void *>(kobalt_continue_using));
     dlclose(nickel);
-    diagnostic("usb-dialog-hooks", {{"available", true}, {"connect", connect}, {"cancel", cancel}},
+    diagnostic("usb-dialog-hooks",
+               { { "available", true }, { "connect", connect }, { "cancel", cancel } },
                connect && cancel ? DiagnosticSeverity::Activity : DiagnosticSeverity::Warning);
 }
-}
+} // namespace kobalt::nickel

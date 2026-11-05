@@ -8,4 +8,4 @@ namespace kobalt::ui {
 // canvas, and returns true. Returns false for an unknown name. The geometry
 // is generated from assets/icons/phosphor; see doc/building.md.
 bool phosphorGeometry(const QString &name, QPainterPath &path);
-}
+} // namespace kobalt::ui

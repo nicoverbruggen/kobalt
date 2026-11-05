@@ -20,30 +20,33 @@ namespace kobalt::nickel {
 // survives pauses; clear also discards it when the account changes.
 // A ticked cache has no timer of its own: the reader's minute tick calls
 // tick(), so the device wakes once a minute for the clock and the pace together.
-class ReadingPaceCache final : public QObject {
+class ReadingPaceCache final : public QObject
+{
 public:
     static constexpr int refreshInterval = 60000;
     enum class Schedule { Timed, Ticked };
 
     explicit ReadingPaceCache(int interval = refreshInterval, Schedule schedule = Schedule::Timed)
-        : interval(qMax(1, interval)), timed(schedule == Schedule::Timed) {
+        : interval(qMax(1, interval)), timed(schedule == Schedule::Timed)
+    {
         attempted.invalidate();
         timer.setSingleShot(true);
         timer.setTimerType(Qt::PreciseTimer);
-        connect(&timer, &QTimer::timeout, this, [this] {
-            refresh();
-        });
+        connect(&timer, &QTimer::timeout, this, [this] { refresh(); });
     }
-    ~ReadingPaceCache() override {
-        stop();
-    }
-    void start(QObject *target, std::function<double()> query) {
+
+    ~ReadingPaceCache() override { stop(); }
+
+    void start(QObject *target, std::function<double()> query)
+    {
         worker = target;
         this->query = std::move(query);
         active = true;
         refresh();
     }
-    void stop() {
+
+    void stop()
+    {
         active = false;
         timer.stop();
         if (pending) {
@@ -51,27 +54,35 @@ public:
         }
         query = {};
     }
-    void clear() {
+
+    void clear()
+    {
         stop();
         secondsPerWord = -1;
         attempted.invalidate();
     }
-    double value() const {
-        return secondsPerWord;
-    }
+
+    double value() const { return secondsPerWord; }
+
     // A minute tick can arrive slightly before a full interval has passed.
     // Accept it within a twelfth of the interval, so one tick a minute refreshes.
-    void tick() {
-        if (active && !pending && (!attempted.isValid() || attempted.elapsed() >= interval - interval / 12))
+    void tick()
+    {
+        if (active && !pending
+            && (!attempted.isValid() || attempted.elapsed() >= interval - interval / 12))
             refresh(true);
     }
+
     std::function<void()> changed;
 
 private:
-    struct Request {
-        std::atomic_bool active{true};
+    struct Request
+    {
+        std::atomic_bool active{ true };
     };
-    void refresh(bool ticked = false) {
+
+    void refresh(bool ticked = false)
+    {
         if (!active || pending) {
             return;
         }
@@ -92,23 +103,25 @@ private:
         const auto fetch = query;
         const QPointer<ReadingPaceCache> guard(this);
         if (!qt::invoke(
-                worker,
-                [guard, request, fetch] {
-                    const double result = request->active.load() ? fetch() : -1;
-                    qt::invoke(
-                        qApp,
-                        [guard, request, result] {
-                            if (guard) {
-                                guard->complete(request, result);
-                            }
-                        },
-                        Qt::QueuedConnection);
-                },
-                Qt::QueuedConnection)) {
+                    worker,
+                    [guard, request, fetch] {
+                        const double result = request->active.load() ? fetch() : -1;
+                        qt::invoke(
+                                qApp,
+                                [guard, request, result] {
+                                    if (guard) {
+                                        guard->complete(request, result);
+                                    }
+                                },
+                                Qt::QueuedConnection);
+                    },
+                    Qt::QueuedConnection)) {
             complete(request, -1);
         }
     }
-    void complete(const std::shared_ptr<Request> &request, double result) {
+
+    void complete(const std::shared_ptr<Request> &request, double result)
+    {
         if (pending != request) {
             return;
         }
@@ -118,13 +131,15 @@ private:
         if (attempted.isValid()) {
             attempted.start();
         }
-        const bool publish = request->active.load() && std::isfinite(result) && result > 0 && result != secondsPerWord;
+        const bool publish = request->active.load() && std::isfinite(result) && result > 0
+                && result != secondsPerWord;
         if (publish) {
             secondsPerWord = result;
         }
         if (active && timed) {
             // A slow query must not cause a burst of catch-up requests.
-            timer.start(int(qMax<qint64>(1, attempted.isValid() ? interval - attempted.elapsed() : 0)));
+            timer.start(
+                    int(qMax<qint64>(1, attempted.isValid() ? interval - attempted.elapsed() : 0)));
         }
         if (publish && changed) {
             changed();
@@ -141,4 +156,4 @@ private:
     double secondsPerWord = -1;
     bool active = false;
 };
-}
+} // namespace kobalt::nickel

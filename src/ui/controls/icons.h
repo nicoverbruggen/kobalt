@@ -151,16 +151,25 @@ void refreshButtonIcon(QPushButton *button);
 void iconAction(QPushButton *button, ControlIcon icon, const QString &label);
 enum class ButtonPaintMode { Native, OutlinedAction, ToolbarSquare, ToolbarCell };
 enum class IconRendition { OriginalAsset, Action };
-struct ButtonIcon {
-    ButtonIcon(ControlIcon glyph = ControlIcon{}, IconRendition rendition = IconRendition::OriginalAsset,
+
+struct ButtonIcon
+{
+    ButtonIcon(ControlIcon glyph = ControlIcon{},
+               IconRendition rendition = IconRendition::OriginalAsset,
                bool rotationSideButtons = false)
-        : glyph(glyph), rendition(rendition), rotationSideButtons(rotationSideButtons) {}
+        : glyph(glyph), rendition(rendition), rotationSideButtons(rotationSideButtons)
+    {
+    }
+
     ControlIcon glyph;
     IconRendition rendition = IconRendition::OriginalAsset;
     bool rotationSideButtons = false;
-    bool operator==(const ButtonIcon &other) const {
-        return glyph == other.glyph && rendition == other.rendition && rotationSideButtons == other.rotationSideButtons;
+
+    bool operator==(const ButtonIcon &other) const
+    {
+        return glyph == other.glyph && rendition == other.rendition
+                && rotationSideButtons == other.rotationSideButtons;
     }
 };
 
-}
+} // namespace kobalt::ui

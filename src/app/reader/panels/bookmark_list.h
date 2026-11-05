@@ -12,7 +12,8 @@
 #include "platform/api/keyboard_controller.h"
 
 namespace kobalt {
-struct BookmarkRow {
+struct BookmarkRow
+{
     QString position, chapter, excerpt;
     QDateTime created;
     int page = -1; // Zero-based, or -1 when the position no longer resolves.
@@ -26,21 +27,26 @@ struct BookmarkRow {
 
 // The Bookmarks list covers the header's action row with its own bar, like
 // the Chapters list. Bookmark rows open a page or an actions menu.
-class BookmarkList : public ui::Panel {
+class BookmarkList : public ui::Panel
+{
 public:
     explicit BookmarkList(QWidget *parent, KeyboardFactory keyboard = {});
     ~BookmarkList() override;
+
     QWidget *pinDialog() const { return pinPopup.data(); }
+
     std::function<bool(const QString &, const QString &, const QString &)> pinRequested;
     void showBookmarks(QVector<BookmarkRow> rows);
     void showAnnotations(QVector<BookmarkRow> rows, bool loading = false);
     void setSortOrder(const QString &order);
+
     QString sortOrder() const { return order; }
+
     std::function<void(const QString &)> sortRequested;
     void setExcerptFont(const QString &family);
-    bool annotationsShown() const {
-        return annotations;
-    }
+
+    bool annotationsShown() const { return annotations; }
+
     std::function<void(bool)> tabRequested;
     std::function<void(const QString &)> selected, removeRequested;
     std::function<void()> back;
@@ -97,4 +103,4 @@ private:
     ui::PagerBar *pager;
     int page = 0, rows = 1;
 };
-}
+} // namespace kobalt

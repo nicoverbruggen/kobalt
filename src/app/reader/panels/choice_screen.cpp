@@ -25,13 +25,16 @@
 namespace kobalt {
 namespace metrics = ui::metrics;
 namespace styles = ui::styles;
-using ui::readerStyle;
-using ui::fontSample;
 using platform::textRefresh;
+using ui::fontSample;
+using ui::readerStyle;
+
 namespace {
-class FontCell final : public ui::Button {
+class FontCell final : public ui::Button
+{
 public:
-    explicit FontCell(QWidget *parent) : ui::Button(parent), detail(new ui::InterfaceLabel(this)) {
+    explicit FontCell(QWidget *parent) : ui::Button(parent), detail(new ui::InterfaceLabel(this))
+    {
         setProperty("reader_swipe_hold", true);
         detail->setAttribute(Qt::WA_TransparentForMouseEvents);
         detail->setAlignment(Qt::AlignCenter);
@@ -40,16 +43,20 @@ public:
         hold.setInterval(metrics::input::longPressMilliseconds);
         connect(&hold, &QTimer::timeout, this, [this] { triggerHold(); });
     }
+
     QLabel *detail;
     bool placeholder = false, fontMode = false;
     QFont helpFont;
     std::function<void()> defaultRequested;
 
 protected:
-    void nextCheckState() override {
+    void nextCheckState() override
+    {
         // Only the confirmed font selection changes the checkmark.
     }
-    bool event(QEvent *event) override {
+
+    bool event(QEvent *event) override
+    {
         if (event->type() == QEvent::TouchCancel) {
             hold.stop();
             held = false;
@@ -59,7 +66,9 @@ protected:
         }
         return ui::Button::event(event);
     }
-    void mousePressEvent(QMouseEvent *event) override {
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
         held = false;
         ui::Button::mousePressEvent(event);
         if (event->button() == Qt::LeftButton && isDown() && defaultRequested) {
@@ -67,12 +76,16 @@ protected:
             hold.start(event);
         }
     }
-    void mouseMoveEvent(QMouseEvent *event) override {
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
         if ((ui::mousePosition(event).toPoint() - press).manhattanLength() > ui::px(12))
             hold.stop();
         ui::Button::mouseMoveEvent(event);
     }
-    void mouseReleaseEvent(QMouseEvent *event) override {
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
         if ((ui::mousePosition(event).toPoint() - press).manhattanLength() > ui::px(12))
             hold.stop();
         QPointer<FontCell> guard(this);
@@ -88,15 +101,21 @@ protected:
         }
         ui::Button::mouseReleaseEvent(event);
     }
-    void leaveEvent(QEvent *event) override {
+
+    void leaveEvent(QEvent *event) override
+    {
         hold.stop();
         ui::Button::leaveEvent(event);
     }
-    void hideEvent(QHideEvent *event) override {
+
+    void hideEvent(QHideEvent *event) override
+    {
         hold.stop();
         ui::Button::hideEvent(event);
     }
-    void contextMenuEvent(QContextMenuEvent *event) override {
+
+    void contextMenuEvent(QContextMenuEvent *event) override
+    {
         if (!defaultRequested) {
             ui::Button::contextMenuEvent(event);
             return;
@@ -106,22 +125,29 @@ protected:
         defaultRequested();
         event->accept();
     }
-    void keyPressEvent(QKeyEvent *event) override {
-        if (defaultRequested && (event->key() == Qt::Key_Menu ||
-                                 (event->key() == Qt::Key_F10 && event->modifiers().testFlag(Qt::ShiftModifier)))) {
+
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (defaultRequested
+            && (event->key() == Qt::Key_Menu
+                || (event->key() == Qt::Key_F10
+                    && event->modifiers().testFlag(Qt::ShiftModifier)))) {
             defaultRequested();
             event->accept();
             return;
         }
         ui::Button::keyPressEvent(event);
     }
-    void paintEvent(QPaintEvent *event) override {
+
+    void paintEvent(QPaintEvent *event) override
+    {
         ui::Button::paintEvent(event);
         if (!fontMode)
             return;
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        const auto ink = parentWidget()->palette().color(isChecked() ? QPalette::Window : QPalette::WindowText);
+        const auto ink = parentWidget()->palette().color(isChecked() ? QPalette::Window
+                                                                     : QPalette::WindowText);
         painter.setPen(QPen(ink, ui::px(2), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         if (placeholder) {
             const qreal side = qMin<int>(ui::px(64), qMin(width() / 3, height() / 2));
@@ -148,30 +174,38 @@ protected:
     }
 
 private:
-    void triggerHold() {
+    void triggerHold()
+    {
         if (held || !isDown() || !isVisible() || !isEnabled() || !defaultRequested)
             return;
         held = true;
         setDown(false);
         defaultRequested();
     }
+
     ui::HoldTimer hold;
     QPoint press;
     bool held = false;
 };
-}
-void ChoiceScreen::setFontAppearance(const ui::SampleAppearance &appearance) {
+} // namespace
+
+void ChoiceScreen::setFontAppearance(const ui::SampleAppearance &appearance)
+{
     if (fontAppearance == appearance)
         return;
     fontAppearance = appearance;
     if (mode == Mode::Fonts)
         for (int row = 0; row < labels.size(); ++row) {
             const int index = itemIndex(row);
-            labels[row]->setAppearance(
-                index >= 0 && index < items.size() && !items[index].placeholder ? appearance : ui::SampleAppearance());
+            labels[row]->setAppearance(index >= 0 && index < items.size()
+                                                       && !items[index].placeholder
+                                               ? appearance
+                                               : ui::SampleAppearance());
         }
 }
-QJsonObject ChoiceScreen::fontSamples() const {
+
+QJsonObject ChoiceScreen::fontSamples() const
+{
     QJsonObject result;
     if (mode == Mode::Fonts)
         for (int row = 0; row < labels.size(); ++row)
@@ -180,7 +214,9 @@ QJsonObject ChoiceScreen::fontSamples() const {
     return result;
 }
 
-ChoiceScreen::ChoiceScreen(QWidget *parent) : kobalt::ui::Panel(parent), navigation(this, "rrChoices") {
+ChoiceScreen::ChoiceScreen(QWidget *parent)
+    : kobalt::ui::Panel(parent), navigation(this, "rrChoices")
+{
     setObjectName("rrChoices");
     fontHeader = new ui::Panel(this, ui::Edges(Qt::TopEdge));
     fontHeader->setEdgeWidth(metrics::chrome::heavyRule);
@@ -250,8 +286,9 @@ ChoiceScreen::ChoiceScreen(QWidget *parent) : kobalt::ui::Panel(parent), navigat
     });
 }
 
-void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices, const QString &current,
-                               Mode presentation) {
+void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices,
+                               const QString &current, Mode presentation)
+{
     mode = presentation;
     fontPager->setBlankArea({});
     if (mode == Mode::Chapters) {
@@ -266,8 +303,9 @@ void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices, 
         return;
     }
     // The selector supplies the shared top edge of its dropdown.
-    setEdges(mode == Mode::Fonts ? ui::Edges()
-                                 : ui::Edges(Qt::LeftEdge) | Qt::RightEdge | Qt::BottomEdge | Qt::TopEdge);
+    setEdges(mode == Mode::Fonts
+                     ? ui::Edges()
+                     : ui::Edges(Qt::LeftEdge) | Qt::RightEdge | Qt::BottomEdge | Qt::TopEdge);
     setEdgeWidth(mode == Mode::Sizes ? 2 : 1);
     navigation.title->setText(heading);
     items = std::move(choices);
@@ -286,43 +324,54 @@ void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices, 
         changed();
 }
 
-int ChoiceScreen::chapterPage() const {
+int ChoiceScreen::chapterPage() const
+{
     return contents->currentPage();
 }
-void ChoiceScreen::setChapterPosition(const QString &text) {
+
+void ChoiceScreen::setChapterPosition(const QString &text)
+{
     contents->setPosition(text);
 }
 
-void ChoiceScreen::selectValue(const QString &value) {
+void ChoiceScreen::selectValue(const QString &value)
+{
     selectedValue = value;
     redraw();
 }
 
-void ChoiceScreen::setDropdownGeometry(const QRect &bounds) {
+void ChoiceScreen::setDropdownGeometry(const QRect &bounds)
+{
     fittingHeight = true;
     setGeometry(bounds);
     fittingHeight = false;
 }
-void ChoiceScreen::setFontGeometry(const QRect &bounds) {
+
+void ChoiceScreen::setFontGeometry(const QRect &bounds)
+{
     if (geometry() == bounds)
         return;
     setDropdownGeometry(bounds);
     layoutChoices();
     redraw();
 }
-void ChoiceScreen::resizeEvent(QResizeEvent *) {
+
+void ChoiceScreen::resizeEvent(QResizeEvent *)
+{
     if (fittingHeight)
         return;
     layoutChoices();
     redraw();
 }
 
-int ChoiceScreen::pageCount() const {
+int ChoiceScreen::pageCount() const
+{
     return mode == Mode::Fonts ? qMax(1, int(fontPages.size()))
                                : qMax(1, (int(items.size()) + pageSize - 1) / pageSize);
 }
 
-int ChoiceScreen::itemIndex(int row) const {
+int ChoiceScreen::itemIndex(int row) const
+{
     if (mode == Mode::Fonts) {
         if (page < 0 || page >= fontPages.size() || row < 0 || row >= fontPages[page].size())
             return -1;
@@ -331,7 +380,8 @@ int ChoiceScreen::itemIndex(int row) const {
     return page * pageSize + row;
 }
 
-int ChoiceScreen::pageForIndex(int index) const {
+int ChoiceScreen::pageForIndex(int index) const
+{
     if (mode == Mode::Fonts) {
         for (int i = 0; i < fontPages.size(); ++i)
             if (fontPages[i].contains(index))
@@ -341,7 +391,8 @@ int ChoiceScreen::pageForIndex(int index) const {
     return index / pageSize;
 }
 
-void ChoiceScreen::layoutChoices() {
+void ChoiceScreen::layoutChoices()
+{
     if (mode == Mode::Chapters) {
         contents->setGeometry(rect());
         return;
@@ -373,7 +424,8 @@ void ChoiceScreen::layoutChoices() {
     navigation.layout(size(), true);
 }
 
-void ChoiceScreen::redraw() {
+void ChoiceScreen::redraw()
+{
     for (auto *row : sizeRows)
         row->setVisible(mode == Mode::Sizes);
     fontHeader->setVisible(mode == Mode::Fonts);
@@ -416,9 +468,10 @@ void ChoiceScreen::redraw() {
         const bool current = items[index].value == selectedValue;
         row->setTitle(items[index].label);
         row->setChecked(current);
-        row->setAccessory(current ? ui::ListRow::Accessory{ui::ListRow::Check{}}
-                                  : ui::ListRow::Accessory{ui::ListRow::None{}});
-        row->setGeometry(2, 2 + index * metrics::list::oneLine, width() - 4, metrics::list::oneLine);
+        row->setAccessory(current ? ui::ListRow::Accessory{ ui::ListRow::Check{} }
+                                  : ui::ListRow::Accessory{ ui::ListRow::None{} });
+        row->setGeometry(2, 2 + index * metrics::list::oneLine, width() - 4,
+                         metrics::list::oneLine);
     }
     navigation.setPage(0, 1);
     navigation.setPagingVisible(false);
@@ -428,22 +481,31 @@ void ChoiceScreen::redraw() {
     if (changed && isVisible())
         changed();
 }
-int ChoiceScreen::fontPanelHeight() const {
-    return metrics::choices::pickerHeader + ui::px(42) + metrics::chrome::actionHeight + 4 * metrics::choices::pickerRow;
+
+int ChoiceScreen::fontPanelHeight() const
+{
+    return metrics::choices::pickerHeader + ui::px(42) + metrics::chrome::actionHeight
+            + 4 * metrics::choices::pickerRow;
 }
-void ChoiceScreen::redrawFonts() {
+
+void ChoiceScreen::redrawFonts()
+{
     contents->hide();
     navigation.title->hide();
     navigation.back->hide();
     navigation.setPagingVisible(false);
     page = qBound(0, page, pageCount() - 1);
-    const int header = metrics::choices::pickerHeader, sectionHeight = ui::px(42), pager = metrics::chrome::actionHeight;
+    const int header = metrics::choices::pickerHeader, sectionHeight = ui::px(42),
+              pager = metrics::chrome::actionHeight;
     fontHeader->setGeometry(0, 0, width(), header);
     const int cell = qMin(int(metrics::choices::pickerHeader), width() / 4);
-    fontTitle->setGeometry(metrics::chrome::inset, 1, qMax(0, width() - cell - metrics::chrome::inset), header - 2);
-    fontClose->setGeometry(width() - cell, metrics::chrome::heavyRule, cell, header - metrics::chrome::heavyRule);
+    fontTitle->setGeometry(metrics::chrome::inset, 1,
+                           qMax(0, width() - cell - metrics::chrome::inset), header - 2);
+    fontClose->setGeometry(width() - cell, metrics::chrome::heavyRule, cell,
+                           header - metrics::chrome::heavyRule);
     fontSectionBar->setGeometry(0, header, width(), sectionHeight);
-    fontSection->setGeometry(metrics::chrome::inset, 0, width() - 2 * metrics::chrome::inset, sectionHeight);
+    fontSection->setGeometry(metrics::chrome::inset, 0, width() - 2 * metrics::chrome::inset,
+                             sectionHeight);
     const int first = itemIndex(0);
     fontSection->setText(first < 0 ? QString() : items[first].section.toUpper());
     fontPager->setGeometry(0, height() - pager, width(), pager);
@@ -471,7 +533,8 @@ void ChoiceScreen::redrawFonts() {
     // Phone pages show six choices with room for the font name and captions.
     // Wider e-reader sheets retain twelve choices.
     const int columns = pageSize == 6 ? (width() > height() ? 3 : 2)
-        : body / 4 < int(metrics::choices::pickerRow) * 3 / 4 && width() >= 6 * ui::px(200) ? 6 : 3;
+            : body / 4 < int(metrics::choices::pickerRow) * 3 / 4 && width() >= 6 * ui::px(200) ? 6
+                                                                                                : 3;
     const int rows = pageSize / columns;
     int used = header + sectionHeight;
     for (int row = 0; row < buttons.size(); ++row) {
@@ -488,11 +551,11 @@ void ChoiceScreen::redrawFonts() {
         fontCell->fontMode = true;
         fontCell->placeholder = item.placeholder;
         fontCell->defaultRequested = !item.placeholder
-                                         ? std::function<void()>([this, value = item.value] {
-                                               if (defaultRequested)
-                                                   defaultRequested(value, false);
-                                           })
-                                         : std::function<void()>{};
+                ? std::function<void()>([this, value = item.value] {
+                      if (defaultRequested)
+                          defaultRequested(value, false);
+                  })
+                : std::function<void()>{};
         // Qt 5.2 does not repaint the area that a caption leaves when it is
         // hidden. A cell that shows another font repaints completely, so a
         // caption from the previous page cannot stay on screen.
@@ -508,11 +571,10 @@ void ChoiceScreen::redrawFonts() {
                             (col + 1) * width() / columns - col * width() / columns,
                             (line + 1) * body / rows - line * body / rows);
         readerStyle(
-            button,
-            QString(
-                "QPushButton{min-height:0;padding:0;border:0;border-right:%2px solid palette(light);border-bottom:%2px solid palette(light);background:%1;}")
-                .arg(selectedItem ? "palette(window-text)" : "palette(window)")
-                .arg(int(metrics::control::border)));
+                button,
+                QString("QPushButton{min-height:0;padding:0;border:0;border-right:%2px solid palette(light);border-bottom:%2px solid palette(light);background:%1;}")
+                        .arg(selectedItem ? "palette(window-text)" : "palette(window)")
+                        .arg(int(metrics::control::border)));
         const QFont labelFont = ui::chromeFont(metrics::text::body);
         const auto family = item.value.isEmpty() ? QStringLiteral("Libron") : item.value;
         label->setFont(labelFont);
@@ -529,36 +591,40 @@ void ChoiceScreen::redrawFonts() {
         auto styleFamily = labelFont.family();
         styleFamily.replace('"', "\\\"");
         readerStyle(
-            label,
-            QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;font-weight:400;")
-                .arg(selectedItem ? "palette(window)" : "palette(window-text)")
-                .arg(styleFamily)
-                .arg(labelFont.pixelSize()));
+                label,
+                QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;font-weight:400;")
+                        .arg(selectedItem ? "palette(window)" : "palette(window-text)")
+                        .arg(styleFamily)
+                        .arg(labelFont.pixelSize()));
         auto *detail = fontCell->detail;
         detail->setObjectName(item.name + "Detail");
         detail->setText(item.detail.toUpper());
         const auto caption = ui::captionFont(ui::px(18));
         detail->setFont(caption);
-        readerStyle(detail, QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;")
-                                .arg(selectedItem ? "palette(window)" : ui::noteColor(this).name())
-                                .arg(caption.family())
-                                .arg(caption.pixelSize()));
+        readerStyle(
+                detail,
+                QString("background:transparent;color:%1;border:none;font-family:\"%2\";font-size:%3px;")
+                        .arg(selectedItem ? "palette(window)" : ui::noteColor(this).name())
+                        .arg(caption.family())
+                        .arg(caption.pixelSize()));
         const int inset = ui::px(12), detailWidth = qMax(1, button->width() - 2 * inset);
         // A short cell, as in two rows of six, keeps a line for the name. The
         // caption drops its first lines, which give the least detail. Only a
         // caption with several lines measures its sample, which loads that face.
         auto lines = item.detail.toUpper().split('\n');
-        const int sampleHeight = !item.placeholder && lines.size() > 1 ? fontSample(family).pixelSize() : 0;
-        while (sampleHeight && lines.size() > 1 &&
-               button->height() - detail->heightForWidth(detailWidth) - ui::px(32) < sampleHeight) {
+        const int sampleHeight =
+                !item.placeholder && lines.size() > 1 ? fontSample(family).pixelSize() : 0;
+        while (sampleHeight && lines.size() > 1
+               && button->height() - detail->heightForWidth(detailWidth) - ui::px(32)
+                       < sampleHeight) {
             lines.removeFirst();
             detail->setText(lines.join('\n'));
         }
         const int detailHeight = item.detail.isEmpty() ? 0 : detail->heightForWidth(detailWidth);
         const int titleLimit = item.detail.isEmpty() ? ui::px(96) : ui::px(64);
         const int titleHeight = item.placeholder
-                                    ? ui::px(64)
-                                    : qMax(0, qMin<int>(titleLimit, button->height() - detailHeight - ui::px(32)));
+                ? ui::px(64)
+                : qMax(0, qMin<int>(titleLimit, button->height() - detailHeight - ui::px(32)));
         const int top = qMax(0, (button->height() - titleHeight - detailHeight - ui::px(8)) / 2);
         label->setGeometry(inset, top, detailWidth, titleHeight);
         detail->setGeometry(inset, top + titleHeight + ui::px(8), detailWidth, detailHeight);
@@ -568,7 +634,8 @@ void ChoiceScreen::redrawFonts() {
     for (auto *button : buttons)
         if (!button->isHidden())
             used = qMax(used, button->geometry().bottom() + 1);
-    fontPager->setBlankArea({metrics::chrome::inset, used, width() - 2 * metrics::chrome::inset, fontPager->y() - used});
+    fontPager->setBlankArea({ metrics::chrome::inset, used, width() - 2 * metrics::chrome::inset,
+                              fontPager->y() - used });
     fontHeader->raise();
     fontSectionBar->raise();
     fontPager->raise();
@@ -576,4 +643,4 @@ void ChoiceScreen::redrawFonts() {
         changed();
 }
 
-}
+} // namespace kobalt

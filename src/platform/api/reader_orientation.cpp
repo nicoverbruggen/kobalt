@@ -6,7 +6,8 @@
 
 namespace kobalt {
 namespace {
-Qt::ScreenOrientation validOrientation(int value) {
+Qt::ScreenOrientation validOrientation(int value)
+{
     switch (value) {
     case Qt::PortraitOrientation:
     case Qt::LandscapeOrientation:
@@ -17,7 +18,9 @@ Qt::ScreenOrientation validOrientation(int value) {
         return Qt::PortraitOrientation;
     }
 }
-Qt::ScreenOrientation orientationAxis(Qt::ScreenOrientation orientation) {
+
+Qt::ScreenOrientation orientationAxis(Qt::ScreenOrientation orientation)
+{
     switch (orientation) {
     case Qt::PortraitOrientation:
     case Qt::InvertedPortraitOrientation:
@@ -30,7 +33,8 @@ Qt::ScreenOrientation orientationAxis(Qt::ScreenOrientation orientation) {
     }
 }
 #ifndef KOBALT_NO_SENSORS
-Qt::ScreenOrientation readingOrientation(const QOrientationReading *reading) {
+Qt::ScreenOrientation readingOrientation(const QOrientationReading *reading)
+{
     switch (reading->orientation()) {
     case QOrientationReading::TopUp:
         return Qt::PortraitOrientation;
@@ -45,16 +49,18 @@ Qt::ScreenOrientation readingOrientation(const QOrientationReading *reading) {
     }
 }
 #endif
-}
+} // namespace
 
-Qt::ScreenOrientation shownOrientation(const QScreen *screen) {
+Qt::ScreenOrientation shownOrientation(const QScreen *screen)
+{
     if (!screen)
         return Qt::PrimaryOrientation;
     const auto orientation = screen->orientation();
     return orientation == Qt::PrimaryOrientation ? screen->primaryOrientation() : orientation;
 }
 
-ReaderOrientation::ReaderOrientation(QOrientationSensor *sensor, std::function<void(Qt::ScreenOrientation)> turn,
+ReaderOrientation::ReaderOrientation(QOrientationSensor *sensor,
+                                     std::function<void(Qt::ScreenOrientation)> turn,
                                      std::function<void(bool)> rotationOwnership,
                                      std::function<bool()> nativeRotationAllowed)
     : rotationOwnership(std::move(rotationOwnership)),
@@ -62,7 +68,8 @@ ReaderOrientation::ReaderOrientation(QOrientationSensor *sensor, std::function<v
 #ifndef KOBALT_NO_SENSORS
       sensor(sensor),
 #endif
-      turn(std::move(turn)) {
+      turn(std::move(turn))
+{
 #ifdef KOBALT_NO_SENSORS
     Q_ASSERT(!sensor);
     Q_UNUSED(sensor);
@@ -73,25 +80,31 @@ ReaderOrientation::ReaderOrientation(QOrientationSensor *sensor, std::function<v
     debounce.setObjectName("rrOrientationDebounce");
     debounce.setSingleShot(true);
     debounce.setInterval(250);
-    connect(&debounce, &QTimer::timeout, this, [this] {
-        deliver();
-    });
+    connect(&debounce, &QTimer::timeout, this, [this] { deliver(); });
 }
-ReaderOrientation::~ReaderOrientation() {
+
+ReaderOrientation::~ReaderOrientation()
+{
     stop();
 }
-void ReaderOrientation::configure(const QJsonObject &settings) {
-    manualOrientation = validOrientation(settings.value("orientation").toInt(Qt::PortraitOrientation));
+
+void ReaderOrientation::configure(const QJsonObject &settings)
+{
+    manualOrientation =
+            validOrientation(settings.value("orientation").toInt(Qt::PortraitOrientation));
     if (sensor) {
         manualOrientation = orientationAxis(manualOrientation);
     }
     const bool automatic = settings.value("auto_rotate").toBool(false);
-    if (active && !frozen && (!sensor || (!automatic && orientationAxis(currentOrientation) != manualOrientation))) {
+    if (active && !frozen
+        && (!sensor || (!automatic && orientationAxis(currentOrientation) != manualOrientation))) {
         apply(manualOrientation);
     }
     setAutomatic(automatic);
 }
-void ReaderOrientation::start(Qt::ScreenOrientation orientation) {
+
+void ReaderOrientation::start(Qt::ScreenOrientation orientation)
+{
     if (active) {
         // Wake can arrive before the sleep view hides the reader. Native PIN
         // rotation may still have changed the screen while we were frozen.
@@ -141,7 +154,9 @@ void ReaderOrientation::start(Qt::ScreenOrientation orientation) {
         startSensor();
     }
 }
-void ReaderOrientation::stop(bool keepForSleep) {
+
+void ReaderOrientation::stop(bool keepForSleep)
+{
     if (keepForSleep) {
         freeze();
     }
@@ -162,7 +177,8 @@ void ReaderOrientation::stop(bool keepForSleep) {
         return;
     }
 #ifndef KOBALT_NO_SENSORS
-    const bool handback = !keepForSleep && !frozen && sensor && !startedSensor && sensor->isActive();
+    const bool handback =
+            !keepForSleep && !frozen && sensor && !startedSensor && sensor->isActive();
 #endif
     active = false;
     debounce.stop();
@@ -187,8 +203,8 @@ void ReaderOrientation::stop(bool keepForSleep) {
         apply(nativeOrientation);
     }
 #ifndef KOBALT_NO_SENSORS
-    if (handback && sensor && sensor->isActive() && latestReading >= QOrientationReading::TopUp &&
-        latestReading <= QOrientationReading::RightUp) {
+    if (handback && sensor && sensor->isActive() && latestReading >= QOrientationReading::TopUp
+        && latestReading <= QOrientationReading::RightUp) {
         // Rejected samples never reached the borrowed sensor's cache or its
         // native owner. Publish the final sample once, after restoring the
         // native screen mask. Waiting for another movement leaves Home in the
@@ -204,7 +220,9 @@ void ReaderOrientation::stop(bool keepForSleep) {
         rotationOwnership(false);
     }
 }
-void ReaderOrientation::freeze() {
+
+void ReaderOrientation::freeze()
+{
     if (!active || frozen) {
         return;
     }
@@ -213,18 +231,22 @@ void ReaderOrientation::freeze() {
     pending = Qt::PrimaryOrientation;
     heldOrientation = currentOrientation;
 }
-void ReaderOrientation::rotate() {
+
+void ReaderOrientation::rotate()
+{
     if (frozen)
         return;
     setAutomatic(false);
     manualOrientation = currentOrientation == Qt::InvertedLandscapeOrientation
-                            ? Qt::PortraitOrientation
-                            : static_cast<Qt::ScreenOrientation>(int(currentOrientation) * 2);
+            ? Qt::PortraitOrientation
+            : static_cast<Qt::ScreenOrientation>(int(currentOrientation) * 2);
     if (active && !frozen) {
         apply(manualOrientation);
     }
 }
-bool ReaderOrientation::setAutomatic(bool enabled) {
+
+bool ReaderOrientation::setAutomatic(bool enabled)
+{
     debounce.stop();
     pending = Qt::PrimaryOrientation;
     automaticRotation = enabled && sensor;
@@ -237,7 +259,8 @@ bool ReaderOrientation::setAutomatic(bool enabled) {
     return !enabled || automaticRotation;
 }
 #ifndef KOBALT_NO_SENSORS
-bool ReaderOrientation::startSensor() {
+bool ReaderOrientation::startSensor()
+{
     if (sensor->isActive()) {
         return true;
     }
@@ -248,15 +271,20 @@ bool ReaderOrientation::startSensor() {
     return startedSensor;
 }
 #else
-bool ReaderOrientation::startSensor() { return false; }
+bool ReaderOrientation::startSensor()
+{
+    return false;
+}
 #endif
-void ReaderOrientation::setBlocked(bool value) {
+void ReaderOrientation::setBlocked(bool value)
+{
     blocked = value;
     if (!blocked && pending != Qt::PrimaryOrientation && !debounce.isActive())
         debounce.start(0);
 }
 #ifndef KOBALT_NO_SENSORS
-bool ReaderOrientation::filter(QOrientationReading *reading) {
+bool ReaderOrientation::filter(QOrientationReading *reading)
+{
     if (sleeping || frozen) {
         return nativeRotationAllowed && nativeRotationAllowed();
     }
@@ -271,11 +299,15 @@ bool ReaderOrientation::filter(QOrientationReading *reading) {
     return false;
 }
 #endif
-bool ReaderOrientation::permits(Qt::ScreenOrientation orientation) const {
-    return orientation != Qt::PrimaryOrientation && (automaticRotation || orientation == manualOrientation ||
-                                                     (sensor && orientationAxis(orientation) == manualOrientation));
+bool ReaderOrientation::permits(Qt::ScreenOrientation orientation) const
+{
+    return orientation != Qt::PrimaryOrientation
+            && (automaticRotation || orientation == manualOrientation
+                || (sensor && orientationAxis(orientation) == manualOrientation));
 }
-void ReaderOrientation::follow() {
+
+void ReaderOrientation::follow()
+{
     if (!permits(heldOrientation) || heldOrientation == currentOrientation) {
         pending = Qt::PrimaryOrientation;
         debounce.stop();
@@ -285,14 +317,19 @@ void ReaderOrientation::follow() {
         debounce.start(250);
     }
 }
-void ReaderOrientation::deliver() {
+
+void ReaderOrientation::deliver()
+{
     if (!active || frozen || !sensor || blocked || pending == Qt::PrimaryOrientation)
         return;
     const auto orientation = pending;
     pending = Qt::PrimaryOrientation;
     apply(orientation);
 }
-QJsonObject ReaderOrientation::settings() const {
-    return kobalt::qt::object({{"orientation", int(manualOrientation)}, {"auto_rotate", automaticRotation}});
+
+QJsonObject ReaderOrientation::settings() const
+{
+    return kobalt::qt::object(
+            { { "orientation", int(manualOrientation) }, { "auto_rotate", automaticRotation } });
 }
-}
+} // namespace kobalt

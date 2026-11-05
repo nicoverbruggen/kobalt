@@ -10,4 +10,4 @@ class FontCopies;
 // copies that must outlive both the engine and Qt's registered font faces.
 // Encrypted fonts are skipped.
 QStringList systemFontFiles(const QString &directory, FontCopies &copies);
-}
+} // namespace kobalt

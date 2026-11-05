@@ -13,7 +13,8 @@ namespace kobalt::storage {
 // writes run in the order they were first posted. Calls that a caller waits
 // for, from runOnWriterThread(), run before them, but a background write that
 // has waited two seconds runs next.
-class RecordWriter {
+class RecordWriter
+{
 public:
     using Write = std::function<bool()>;
     using Done = std::function<void(bool)>;
@@ -42,6 +43,7 @@ private:
     std::chrono::steady_clock::time_point queuedAt;
     bool queued = false, running = false;
 };
+
 // Runs `operation` on the writer thread and waits for it. On the writer
 // thread itself it runs at once. An exception from `operation` reaches the
 // caller.
@@ -49,4 +51,4 @@ void runOnWriterThread(const std::function<void()> &operation);
 bool onWriterThread();
 // Waits until no write or call is waiting or running on the writer thread.
 void drainWriterThread();
-}
+} // namespace kobalt::storage

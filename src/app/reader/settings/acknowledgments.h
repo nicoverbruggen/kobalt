@@ -10,7 +10,8 @@
 #include <functional>
 
 namespace kobalt {
-class LicenseText : public QWidget {
+class LicenseText : public QWidget
+{
 public:
     explicit LicenseText(QWidget *parent);
     void setText(const QString &text);
@@ -31,7 +32,8 @@ private:
 
 // The project list and each license page use the header geometry: a caption
 // strip, a back cell and the title in the brand serif.
-class Acknowledgments : public QFrame {
+class Acknowledgments : public QFrame
+{
 public:
     explicit Acknowledgments(QWidget *parent);
     std::function<void()> finished;
@@ -58,4 +60,4 @@ private:
     void turnPage(int direction);
     void redraw(bool paging = false);
 };
-}
+} // namespace kobalt

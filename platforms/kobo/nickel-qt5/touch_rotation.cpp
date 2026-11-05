@@ -10,13 +10,16 @@
 namespace kobalt::nickel_qt5 {
 QPoint (*nativeMapFromDevice)(const void *, const QPoint &);
 QPoint (*nativeTouchTransform)(const QTransform *, const QPoint &);
+
 namespace {
-std::atomic<int> rotation{0};
+std::atomic<int> rotation{ 0 };
 // Written once before rotation is enabled, then immutable for the input thread.
 int portraitWidth = 0, portraitHeight = 0;
 thread_local bool mappingTouch = false;
-}
-bool reversedTouchForVersion(const QByteArray &record) {
+} // namespace
+
+bool reversedTouchForVersion(const QByteArray &record)
+{
     if (record.isEmpty() || record.size() > 1024 || record.contains('\0')) {
         return false;
     }
@@ -35,7 +38,7 @@ bool reversedTouchForVersion(const QByteArray &record) {
     if (version.size() != 3 || version[0] != "4") {
         return false;
     }
-    for (int field : {1, 2}) {
+    for (int field : { 1, 2 }) {
         if (version[field].isEmpty()) {
             return false;
         }
@@ -54,11 +57,14 @@ bool reversedTouchForVersion(const QByteArray &record) {
     const auto id = fields[5];
     // Only Clara BW and Clara Colour need the replacement transform.
     // Clara HD must retain the driver's native orientation mapping.
-    return minor >= 45 &&
-           (id == "00000000-0000-0000-0000-000000000391" || id == "00000000-0000-0000-0000-000000000395" ||
-            id == "00000000-0000-0000-0000-000000000393");
+    return minor >= 45
+            && (id == "00000000-0000-0000-0000-000000000391"
+                || id == "00000000-0000-0000-0000-000000000395"
+                || id == "00000000-0000-0000-0000-000000000393");
 }
-QPoint rotatedTouchPoint(QPoint point, Qt::ScreenOrientation orientation, int width, int height) {
+
+QPoint rotatedTouchPoint(QPoint point, Qt::ScreenOrientation orientation, int width, int height)
+{
     if (width <= 0 || height <= 0) {
         return point;
     }
@@ -66,16 +72,18 @@ QPoint rotatedTouchPoint(QPoint point, Qt::ScreenOrientation orientation, int wi
     point.setY(qBound(0, point.y(), height - 1));
     switch (orientation) {
     case Qt::LandscapeOrientation:
-        return {height - 1 - point.y(), point.x()};
+        return { height - 1 - point.y(), point.x() };
     case Qt::InvertedPortraitOrientation:
-        return {width - 1 - point.x(), height - 1 - point.y()};
+        return { width - 1 - point.x(), height - 1 - point.y() };
     case Qt::InvertedLandscapeOrientation:
-        return {point.y(), width - 1 - point.x()};
+        return { point.y(), width - 1 - point.x() };
     default:
         return point;
     }
 }
-void configureTouchRotation(bool enabled, Qt::ScreenOrientation orientation, int width, int height) {
+
+void configureTouchRotation(bool enabled, Qt::ScreenOrientation orientation, int width, int height)
+{
     // The panel dimensions do not change when the screen rotates.
     if (!portraitWidth && width > 0 && height > 0) {
         portraitWidth = width;
@@ -83,22 +91,27 @@ void configureTouchRotation(bool enabled, Qt::ScreenOrientation orientation, int
     }
     rotation.store(enabled ? int(orientation) : 0, std::memory_order_release);
 }
-extern "C" __attribute__((visibility("default"))) QPoint kobalt_touch_map_from_device(const void *self,
-                                                                                      const QPoint &point) {
+
+extern "C" __attribute__((visibility("default"))) QPoint
+kobalt_touch_map_from_device(const void *self, const QPoint &point)
+{
     standbyTouchAcquired();
-    struct Scope {
+
+    struct Scope
+    {
         bool saved = mappingTouch;
-        Scope() {
-            mappingTouch = true;
-        }
-        ~Scope() {
-            mappingTouch = saved;
-        }
+
+        Scope() { mappingTouch = true; }
+
+        ~Scope() { mappingTouch = saved; }
     } scope;
+
     return nativeMapFromDevice(self, point);
 }
-extern "C" __attribute__((visibility("default"))) QPoint kobalt_touch_transform(const QTransform *transform,
-                                                                                const QPoint &point) {
+
+extern "C" __attribute__((visibility("default"))) QPoint
+kobalt_touch_transform(const QTransform *transform, const QPoint &point)
+{
     const int current = rotation.load(std::memory_order_acquire);
     if (!mappingTouch || !current || !nativeMapFromDevice || !nativeTouchTransform) {
         return nativeTouchTransform(transform, point);
@@ -109,12 +122,14 @@ extern "C" __attribute__((visibility("default"))) QPoint kobalt_touch_transform(
     if (current == Qt::PortraitOrientation) {
         return point;
     }
-    return rotatedTouchPoint(point, static_cast<Qt::ScreenOrientation>(current), portraitWidth, portraitHeight);
+    return rotatedTouchPoint(point, static_cast<Qt::ScreenOrientation>(current), portraitWidth,
+                             portraitHeight);
 }
-}
+} // namespace kobalt::nickel_qt5
 
 namespace kobalt::nickel_qt5 {
-void ownReaderTouchRotation(bool owned) {
+void ownReaderTouchRotation(bool owned)
+{
     static bool initialized = false, supported = false, active = false;
     auto *screen = QGuiApplication::primaryScreen();
     if (!initialized && screen) {
@@ -124,8 +139,9 @@ void ownReaderTouchRotation(bool owned) {
         if (size.width() > size.height()) {
             size.transpose();
         }
-        supported = version.open(QIODevice::ReadOnly) && reversedTouchForVersion(version.read(1025)) &&
-                    size == QSize(1072, 1448) && screen->nativeOrientation() == Qt::PortraitOrientation;
+        supported = version.open(QIODevice::ReadOnly) && reversedTouchForVersion(version.read(1025))
+                && size == QSize(1072, 1448)
+                && screen->nativeOrientation() == Qt::PortraitOrientation;
         configureTouchRotation(false, screen->orientation(), size.width(), size.height());
         QObject::connect(screen, &QScreen::orientationChanged, QGuiApplication::instance(),
                          [](Qt::ScreenOrientation orientation) {
@@ -137,4 +153,4 @@ void ownReaderTouchRotation(bool owned) {
         configureTouchRotation(active && supported, screen->orientation(), 0, 0);
     }
 }
-}
+} // namespace kobalt::nickel_qt5

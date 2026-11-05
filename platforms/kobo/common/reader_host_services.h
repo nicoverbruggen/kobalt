@@ -4,4 +4,4 @@
 namespace kobalt::nickel {
 // Construct only after the firmware adapter has accepted the running Nickel.
 ReaderHostServices readerHostServices();
-}
+} // namespace kobalt::nickel

@@ -9,20 +9,23 @@
 #include <utility>
 
 namespace kobalt {
-QDialog *showMissingAssetsAlert(const QString &installedVersion, bool filesystemRecovery) {
+QDialog *showMissingAssetsAlert(const QString &installedVersion, bool filesystemRecovery)
+{
     if (!qApp || QThread::currentThread() != qApp->thread())
         return nullptr;
     using ShowError = QDialog *(*)(const QString &, const QString &);
     static const auto show = reinterpret_cast<ShowError>(
-        dlsym(RTLD_DEFAULT, "_ZN25ConfirmationDialogFactory15showErrorDialogERK7QStringS2_"));
+            dlsym(RTLD_DEFAULT, "_ZN25ConfirmationDialogFactory15showErrorDialogERK7QStringS2_"));
     return show ? show(strings::get("native_ui.missing_assets_title"),
                        strings::get(filesystemRecovery ? "native_ui.recovered_assets_message"
                                                        : "native_ui.missing_assets_message")
-                           .arg(installedVersion))
+                               .arg(installedVersion))
                 : nullptr;
 }
 
-void bindReaderFallback(QObject *owner, QDialog *dialog, std::function<void()> openStock, int automaticDelay) {
+void bindReaderFallback(QObject *owner, QDialog *dialog, std::function<void()> openStock,
+                        int automaticDelay)
+{
     // Qt 5.2 copies the functor when invoking it. Keep the consumed state shared
     // so acceptance runs once and cancellation releases the retained request.
     const auto pending = std::make_shared<std::function<void()>>(std::move(openStock));
@@ -38,4 +41,4 @@ void bindReaderFallback(QObject *owner, QDialog *dialog, std::function<void()> o
                 dialog->accept();
         });
 }
-}
+} // namespace kobalt

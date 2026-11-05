@@ -11,38 +11,51 @@
 
 namespace kobalt::library {
 namespace {
-bool hiddenPath(const QString &root, const QString &directory) {
+bool hiddenPath(const QString &root, const QString &directory)
+{
     for (const auto &part : QDir(root).relativeFilePath(directory).split('/'))
         if (part.startsWith('.') && part != QLatin1String("."))
             return true;
     return false;
 }
-}
-bool isBookName(const QString &name) {
+} // namespace
+
+bool isBookName(const QString &name)
+{
     return name.endsWith(QLatin1String(".epub"), Qt::CaseInsensitive) && !name.startsWith('.');
 }
-QString coverName(const QString &key) {
-    return QString::fromLatin1(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex()) + ".png";
+
+QString coverName(const QString &key)
+{
+    return QString::fromLatin1(
+                   QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha1).toHex())
+            + ".png";
 }
-bool LocalSource::list(const Folder &folder, QVector<Entry> &files, const std::atomic<bool> &cancelled) {
+
+bool LocalSource::list(const Folder &folder, QVector<Entry> &files,
+                       const std::atomic<bool> &cancelled)
+{
     const QFileInfo root(folder.key);
     if (!root.isDir() || !root.isReadable())
         return false;
     // Hidden folders hold application data, not books. Symbolic links are not
     // followed, so a link back up the tree cannot repeat the walk.
-    QDirIterator walk(folder.key, QDir::Files | QDir::Readable | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    QDirIterator walk(folder.key, QDir::Files | QDir::Readable | QDir::NoDotAndDotDot,
+                      QDirIterator::Subdirectories);
     while (walk.hasNext() && !cancelled.load()) {
         walk.next();
         const auto info = walk.fileInfo();
-        if (!isBookName(info.fileName()) || info.isSymLink() ||
-            hiddenPath(root.absoluteFilePath(), info.absolutePath()))
+        if (!isBookName(info.fileName()) || info.isSymLink()
+            || hiddenPath(root.absoluteFilePath(), info.absolutePath()))
             continue;
-        files.append({info.absoluteFilePath(), folder.key, info.fileName(), info.size(),
-                      info.lastModified().toMSecsSinceEpoch()});
+        files.append({ info.absoluteFilePath(), folder.key, info.fileName(), info.size(),
+                       info.lastModified().toMSecsSinceEpoch() });
     }
     return !cancelled.load();
 }
-std::unique_ptr<QIODevice> LocalSource::open(const Entry &entry) {
+
+std::unique_ptr<QIODevice> LocalSource::open(const Entry &entry)
+{
     auto file = std::make_unique<QFile>(entry.key);
     if (!file->open(QIODevice::ReadOnly))
         return {};
@@ -50,19 +63,27 @@ std::unique_ptr<QIODevice> LocalSource::open(const Entry &entry) {
 }
 
 Scanner::Scanner(std::shared_ptr<Source> source, QString coverDirectory, QObject *parent)
-    : QObject(parent), source(std::move(source)), covers(std::move(coverDirectory)) {}
-Scanner::~Scanner() {
+    : QObject(parent), source(std::move(source)), covers(std::move(coverDirectory))
+{
+}
+
+Scanner::~Scanner()
+{
     cancel();
     if (worker) {
         worker->wait();
         delete worker;
     }
 }
-void Scanner::cancel() {
+
+void Scanner::cancel()
+{
     if (cancelled)
         cancelled->store(true);
 }
-void Scanner::start(const Index &index, QVector<Folder> folders) {
+
+void Scanner::start(const Index &index, QVector<Folder> folders)
+{
     if (worker)
         return;
     cancelled = std::make_shared<std::atomic<bool>>(false);
@@ -129,4 +150,4 @@ void Scanner::start(const Index &index, QVector<Folder> folders) {
     });
     worker->start(QThread::LowPriority);
 }
-}
+} // namespace kobalt::library

@@ -1,6 +1,6 @@
 #include "player.h"
 #include "app/reader_window.h"
-#include "reading/kosync.h"
+#include "sync/kosync.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "support/qt_input.h"

@@ -229,7 +229,7 @@ bool recordTransaction(const QString &directory, const QString &name, const QStr
         read->status = exists || replacement || !importedDigest.isEmpty() ? ReadStatus::Ok : ReadStatus::Missing;
         return true;
     };
-    const bool ok = database ? operation(*database) : AnnotationDatabase::transaction(directory, operation);
+    const bool ok = database ? operation(*database) : storage::profileTransaction(directory, operation);
     if (ok && !database) archiveSource(directory, legacy, importedDigest);
     if (!ok) {
         read->object = {};
@@ -245,7 +245,7 @@ JsonRead readRecord(const QString &directory, const QString &name, const QString
 }
 void archiveImportedSource(const QString &directory, const QString &source) {
     QByteArray digest;
-    const bool ok = AnnotationDatabase::transaction(directory, [&](QSqlDatabase &db) {
+    const bool ok = storage::profileTransaction(directory, [&](QSqlDatabase &db) {
         QSqlQuery query(db);
         if (!query.prepare("SELECT digest FROM imports WHERE source=?")) return false;
         query.addBindValue(source);
@@ -280,7 +280,7 @@ bool writeReadingActivity(const Paths &paths, const QString &identity, const QJs
         QJsonDocument(book).toJson(QJsonDocument::Compact).size() > maxJsonBytes ||
         QJsonDocument(speed).toJson(QJsonDocument::Compact).size() > maxJsonBytes)
         return false;
-    return AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+    return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
         JsonRead result;
         if (!recordTransaction(paths.directory, "book:" + identity, legacy.isEmpty() ? paths.bookState(identity) : legacy, maxJsonBytes,
                                &result, &book, &db)) return false;

@@ -10,7 +10,7 @@
     {
       "id": "book.open",
       "kind": "e2e",
-      "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"],
+      "paths": ["src/reading/", "src/sync/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"],
       "book": "benchmark",
       "steps": [
         {"close": true},
@@ -435,7 +435,7 @@
     {
       "id": "book.open.large",
       "kind": "e2e",
-      "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"],
+      "paths": ["src/reading/", "src/sync/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"],
       "book": "war-and-peace",
       "steps": [
         {"open": "war-and-peace", "fresh": true},
@@ -562,7 +562,7 @@
       "id": "kosync.wifi-off",
       "kind": "e2e",
       "opt_in": true,
-      "paths": ["src/app/reader/window/reader_kosync.cpp","src/reading/kosync.cpp","platforms/kobo/common/native_sync_network.cpp"],
+      "paths": ["src/app/reader/window/reader_kosync.cpp","src/sync/kosync.cpp","platforms/kobo/common/native_sync_network.cpp"],
       "book": "benchmark",
       "needs": ["kosync","wifi-control"],
       "repeat": 5,

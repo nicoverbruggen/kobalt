@@ -6,7 +6,6 @@
 #include "app/messages/opening_message.h"
 #include "reading/reader_session.h"
 #include "storage/reader_storage.h"
-#include "storage/annotation_database.h"
 #include "storage/bookmark_store.h"
 #include "storage/highlight_store.h"
 #include "storage/record_writer.h"
@@ -384,7 +383,7 @@ int main(int argc, char **argv) {
     qunsetenv("KOBALT_ANNOTATIONS_SQLITE");
     const auto historyValue = [&](const QString &statement) {
         QVariant value;
-        require(AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
             QSqlQuery query(db);
             if (!query.exec(statement) || !query.next()) return false;
             value = query.value(0);
@@ -543,7 +542,7 @@ int main(int argc, char **argv) {
             saved = storage::readBookState(paths, identity).object;
             require(saved.value("future_optional") == optional && saved.value("position") == snapshot.value("position"),
                     "Background checkpoint lost optional fields or reading position");
-            require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+            require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 return query.exec("CREATE TRIGGER refuse_fields BEFORE UPDATE ON book_state "
                                   "BEGIN SELECT RAISE(ABORT,'test'); END");
@@ -553,7 +552,7 @@ int main(int argc, char **argv) {
             require(book.checkpoint(&snapshot, true), "Cannot queue obstructed checkpoint");
             waitUntil([&] { return failures == 1; });
             require(storage::readBookState(paths, identity).object == saved, "Failed checkpoint changed saved fields");
-            require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+            require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 return query.exec("DROP TRIGGER refuse_fields");
             }) && book.checkpoint(&snapshot), "Cannot retry preserved checkpoint");
@@ -650,7 +649,7 @@ int main(int argc, char **argv) {
         require(local.checkpointReadingHistory(), "Active interval checkpoint failed");
         QJsonObject unchangedCheckpoint;
         require(local.checkpoint(&unchangedCheckpoint), "Initial unchanged-checkpoint fixture");
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("CREATE TABLE history_write_audit(value INTEGER)") &&
                    query.exec("CREATE TRIGGER audit_history AFTER UPDATE ON reading_sessions BEGIN INSERT INTO history_write_audit VALUES(1); END");
@@ -668,19 +667,19 @@ int main(int argc, char **argv) {
         require(local.checkpointReadingHistory() &&
                 historyValue("SELECT COUNT(*) FROM history_write_audit").toInt() == 2,
                 "Periodic checkpoint skipped time without a page turn");
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("DROP TRIGGER audit_history") && query.exec("DROP TABLE history_write_audit");
         }), "Remove history write audit");
 
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("CREATE TRIGGER fail_history BEFORE UPDATE ON reading_sessions BEGIN SELECT RAISE(ABORT,'test'); END");
         }), "History failure fixture");
         require(!local.checkpointReadingHistory(), "Blocked history update succeeded");
         QJsonObject independentCheckpoint;
         require(!local.checkpoint(&independentCheckpoint), "A lifecycle checkpoint must report history failure");
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db); return query.exec("DROP TRIGGER fail_history");
         }) && local.checkpointReadingHistory(), "History update retry failed");
 
@@ -862,7 +861,7 @@ int main(int argc, char **argv) {
             require(book->checkpoint(&snapshot), "Seed continuation history");
             const bool failure = QString(outcome) == "failure";
             if (failure)
-                require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+                require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
                     QSqlQuery query(db);
                     return query.exec("CREATE TRIGGER refuse_activity_history BEFORE UPDATE ON reading_sessions "
                                       "BEGIN SELECT RAISE(ABORT,'test'); END");
@@ -918,7 +917,7 @@ int main(int argc, char **argv) {
                             "Activity completion lost the newer checkpoint");
             }
             if (failure)
-                require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+                require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
                     QSqlQuery query(db); return query.exec("DROP TRIGGER refuse_activity_history");
                 }), "Release activity history");
         }
@@ -981,7 +980,7 @@ int main(int argc, char **argv) {
         tick();
         QJsonObject snapshot;
         require(book.checkpoint(&snapshot), "Native history initial checkpoint");
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("CREATE TABLE native_history_audit(value INTEGER)") &&
                    query.exec("CREATE TRIGGER audit_native_history AFTER UPDATE ON reading_sessions "
@@ -1029,14 +1028,14 @@ int main(int argc, char **argv) {
                 "Native history lost or duplicated reading duration");
         require(historyValue("SELECT COUNT(*) FROM reading_sessions WHERE identity='native-history' AND status='completed'").toInt() == 1,
                 "Native history did not finish exactly one interval");
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("DROP TRIGGER audit_native_history") && query.exec("DROP TABLE native_history_audit");
         }), "Remove native history audit");
         book.observeReading();
         tick();
         storage::drainWriterThread();
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("CREATE TRIGGER refuse_native_history BEFORE UPDATE ON reading_sessions "
                               "BEGIN SELECT RAISE(ABORT,'test'); END");
@@ -1049,7 +1048,7 @@ int main(int argc, char **argv) {
         const auto stopped = book.readingMilliseconds();
         tick();
         require(book.readingMilliseconds() == stopped, "Failed close kept counting reading time");
-        require(AnnotationDatabase::transaction(paths.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(paths.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db); return query.exec("DROP TRIGGER refuse_native_history");
         }), "Release final native history save");
         closed = saved = false;
@@ -1196,7 +1195,7 @@ int main(int argc, char **argv) {
         require(book.nativeSaveResult() == ReadingBook::NativeSave::LocalOnly,
                 "Unsupported store position was reported as a storage failure");
         const auto changeSql = [&](const QString &sql) {
-            return AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+            return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
                 QSqlQuery query(db); return query.exec(sql);
             });
         };

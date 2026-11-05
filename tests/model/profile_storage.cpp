@@ -1,5 +1,4 @@
 #include "storage/reader_storage.h"
-#include "storage/annotation_database.h"
 #include "storage/profile_database.h"
 #include "storage/record_writer.h"
 #include "storage/reading_history.h"
@@ -32,7 +31,7 @@ void write(const QString &path, const QByteArray &value) {
 // Stands in for a change made while Kobalt was closed: the profile closes
 // afterwards, so the next operation opens and checks the file again.
 void execute(const QString &directory, const QString &sql) {
-    require(AnnotationDatabase::transaction(directory, [&](QSqlDatabase &db) {
+    require(storage::profileTransaction(directory, [&](QSqlDatabase &db) {
         QSqlQuery query(db); return query.exec(sql);
     }), "SQL fixture");
     storage::closeProfile();
@@ -91,7 +90,7 @@ int main(int argc, char **argv) {
         require(storage::readBookState(batch, "batch-book").object == oldBook &&
                 storage::readRecord(batch.directory, "reading-speed", batch.readingSpeed()).object == oldSpeed,
                 "History failure must roll back position and speed");
-        require(AnnotationDatabase::transaction(batch.directory, [](QSqlDatabase &db) {
+        require(storage::profileTransaction(batch.directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             return query.exec("SELECT count(*) FROM reading_sessions") && query.next() && query.value(0).toInt() == 0;
         }), "Failed activity must roll back history too");
@@ -213,7 +212,7 @@ int main(int argc, char **argv) {
     require(storage::writeJson(oldPaths.bookState("native-beta3"), qt::object({{"schema", 1}, {"book", "native-beta3"},
             {"position", mark.position}, {"font_pixels", 39}})), "Beta 3 reading fixture");
     require(storage::prepareProfile(oldPaths) && !QFile::exists(oldMarks.folder()), "Beta 3 profile cleanup");
-    require(AnnotationDatabase::transaction(beta3.path(), [&](QSqlDatabase &db) {
+    require(storage::profileTransaction(beta3.path(), [&](QSqlDatabase &db) {
         QSqlQuery query(db);
         return query.exec("PRAGMA user_version") && query.next() && query.value(0).toInt() == 3;
     }), "Beta 3 migration did not create SQLite schema version 3");

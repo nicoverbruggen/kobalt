@@ -1,6 +1,6 @@
 #pragma once
 #include "ui/dialogs/modals.h"
-#include "reading/kosync_schedule.h"
+#include "sync/kosync_schedule.h"
 #include <QPointer>
 #include <QPair>
 #include <QVector>

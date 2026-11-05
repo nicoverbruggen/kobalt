@@ -1,5 +1,4 @@
 #include "platforms/kobo/common/native_lifecycle.h"
-#include "storage/annotation_database.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
@@ -75,7 +74,7 @@ namespace {
 QString profile;
 int handoffs = 0, workflows = 0, shutdowns = 0;
 bool available() {
-    return kobalt::AnnotationDatabase::transaction(profile, [](QSqlDatabase &) { return true; });
+    return kobalt::storage::profileTransaction(profile, [](QSqlDatabase &) { return true; });
 }
 void unused(void *) {}
 void handoff(void *) {
@@ -268,7 +267,7 @@ int main(int argc, char **argv) {
     }
     // A failed queued write still drains and permits USB handoff. Nickel must
     // not wait forever because a save failed on a full or failing volume.
-    require(kobalt::AnnotationDatabase::transaction(profile, [](QSqlDatabase &db) {
+    require(kobalt::storage::profileTransaction(profile, [](QSqlDatabase &db) {
         QSqlQuery query(db);
         return query.exec("CREATE TRIGGER refuse_save BEFORE INSERT ON book_state BEGIN SELECT RAISE(ABORT,'test'); END");
     }), "Cannot obstruct the final save");

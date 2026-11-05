@@ -2,8 +2,8 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "reader_session.h"
-#include "kosync.h"
-#include "engine_worker.h"
+#include "sync/kosync.h"
+#include "engine/crengine/engine_worker.h"
 #include "render/highlight_paint.h"
 #include "appearance_settings.h"
 #include "engine/crengine/engine_activity.h"
@@ -24,32 +24,6 @@
 
 namespace kobalt {
 namespace {
-struct EngineWorker {
-    QThread *thread = nullptr;
-    QObject *object = nullptr;
-    std::atomic_bool stopped{false};
-};
-const std::shared_ptr<EngineWorker> &engineWorkerState() {
-    // One worker serializes CREngine's process-global font state across closing
-    // sessions and new openings. The state outlives the worker so retained
-    // models can still be released during application destruction.
-    static const auto state = [] {
-        auto state = std::make_shared<EngineWorker>();
-        auto *thread = state->thread = new QThread(qApp);
-        auto *object = state->object = new QObject;
-        object->moveToThread(thread);
-        QObject::connect(thread, &QThread::finished, object, &QObject::deleteLater);
-        QObject::connect(qApp, &QCoreApplication::aboutToQuit, thread, [state] {
-            engineActivity().pause(false);
-            state->thread->quit();
-            state->thread->wait();
-            state->stopped.store(true);
-        });
-        thread->start();
-        return state;
-    }();
-    return state;
-}
 QByteArray readUserStyleSheet(const QString &path) {
     if (path.isEmpty() || !QFileInfo(path).isFile()) {
         return {};
@@ -193,10 +167,6 @@ ReaderFrame capture(ReaderModel &model, const PositionCodec &positions, bool nei
     result.error = model.resourceError();
     return result;
 }
-}
-
-QObject *engineWorker() {
-    return engineWorkerState()->object;
 }
 
 ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)

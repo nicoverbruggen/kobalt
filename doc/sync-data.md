@@ -196,7 +196,7 @@ Kobalt talks to the KOSync server over HTTPS with the standard KOSync protocol:
 
 ### Where it lives in the code
 
-- `src/reading/kosync.*`: the account, the requests and the conflict rules.
+- `src/sync/kosync.*`: the account, the requests and the conflict rules.
 - `src/app/reader/window/reader_kosync.cpp`: when the reader syncs.
 - `platforms/kobo/common/native_sync_network.*`: on Kobo, how the connection is made through Nickel's Wi-Fi.
 - `kosync.json`: the saved account and its settings. See [Storage compatibility](storage.md).

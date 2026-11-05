@@ -189,7 +189,7 @@ void malformedProfile() {
                               "book_state", "profile_state"}) {
         for (const bool keepColumns : {false, true}) {
             QTemporaryDir root;
-            require(AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }),
+            require(storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }),
                     "Cannot initialize malformed-schema fixture");
             const auto name = QString::fromLatin1(table);
             sql(root.path(), "CREATE TABLE damaged AS SELECT * FROM " + name);
@@ -200,7 +200,7 @@ void malformedProfile() {
             const auto path = AnnotationDatabase::path(root.path());
             const auto before = bytes(path);
             QString error;
-            require(!AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }, &error) &&
+            require(!storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }, &error) &&
                         error == "invalid-database", "Malformed columns or missing primary key were accepted");
             require(bytes(path) == before && !QFile::exists(path + "-wal") && !QFile::exists(path + "-shm"),
                     "Rejecting a malformed schema changed its bytes or created sidecars");
@@ -211,23 +211,23 @@ void malformedProfile() {
              "identity TEXT NOT NULL,book TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,title TEXT NOT NULL",
              "book INTEGER PRIMARY KEY,identity TEXT NOT NULL,fingerprint TEXT NOT NULL,title TEXT NOT NULL"}) {
         QTemporaryDir root;
-        require(AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }),
+        require(storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }),
                 "Cannot initialize reordered-schema fixture");
         sql(root.path(), "DROP TABLE books");
         sql(root.path(), "CREATE TABLE books(" + QString::fromLatin1(definition) + ')');
         const auto path = AnnotationDatabase::path(root.path());
         const auto before = bytes(path);
-        require(!AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }) &&
+        require(!storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }) &&
                     bytes(path) == before && !QFile::exists(path + "-wal"),
                 "Reordered or mistyped columns were accepted");
     }
     QTemporaryDir root;
-    require(AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }),
+    require(storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }),
             "Cannot initialize orphaned-list fixture");
     sql(root.path(), "INSERT INTO lists VALUES('missing-book',0,0,0,'',0,0)");
     const auto path = AnnotationDatabase::path(root.path());
     const auto before = bytes(path);
-    require(!AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }) && bytes(path) == before &&
+    require(!storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }) && bytes(path) == before &&
                 !QFile::exists(path + "-wal"), "Opening an orphaned list changed the profile");
 }
 void versionsAndCorruption() {

@@ -3,7 +3,6 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
-#include "storage/annotation_database.h"
 #include "storage/reader_storage.h"
 #include "storage/bookmark_store.h"
 #include "storage/highlight_store.h"
@@ -27,7 +26,7 @@ void require(bool ok, const char *message) { if (!ok) qFatal("%s", message); }
 bool recoverProfile(const QString &directory) { return bool(ReadingHistory::openProfile(directory)); }
 QVariant sql(const QString &directory, const QString &statement) {
     QVariant value;
-    require(AnnotationDatabase::transaction(directory, [&](QSqlDatabase &db) {
+    require(storage::profileTransaction(directory, [&](QSqlDatabase &db) {
         QSqlQuery query(db);
         if (!query.exec(statement)) return false;
         if (query.next()) value = query.value(0);
@@ -239,7 +238,7 @@ void migrationCommitFailureLeavesVersionTwoRetryable() {
         require(query.exec("BEGIN") && query.exec("SELECT payload FROM book_state") && query.next(), "Hold old-schema snapshot");
         query.finish();
         QString error;
-        require(!AnnotationDatabase::transaction(root.path(), [](QSqlDatabase &) { return true; }, &error) &&
+        require(!storage::profileTransaction(root.path(), [](QSqlDatabase &) { return true; }, &error) &&
                 error == "database-commit", "Migration did not exercise a failed commit");
         require(query.exec("ROLLBACK"), "Release migration commit blocker");
     }

@@ -4,9 +4,6 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
-#include <functional>
-
-class QSqlDatabase;
 
 namespace kobalt {
 struct Bookmark;
@@ -31,10 +28,6 @@ struct AnnotationDatabaseState {
 // for the operation.
 class AnnotationDatabase {
 public:
-    // Shared profile tables use the same ownership, version and durability checks.
-    // A false result rolls the transaction back. The handle must not escape.
-    static bool transaction(const QString &directory, const std::function<bool(QSqlDatabase &)> &operation,
-                            QString *error = nullptr);
     static bool load(const AnnotationBook &, QVector<Highlight> *, AnnotationDatabaseState *, QString *error);
     static bool load(const AnnotationBook &, QVector<Bookmark> *, AnnotationDatabaseState *, QString *error);
     static bool loadCompact(const AnnotationBook &, QVector<Highlight> *, AnnotationDatabaseState *, QString *error);

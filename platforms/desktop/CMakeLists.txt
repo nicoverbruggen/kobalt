@@ -75,7 +75,7 @@ configure_file("${source}/support/build_info.h.in" build_info.h @ONLY)
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS
     "${source}/dictionaries/*.cpp" "${source}/engine/*.cpp"
     "${source}/library/*.cpp" "${source}/render/*.cpp"
-    "${source}/reading/*.cpp" "${source}/storage/*.cpp")
+    "${source}/reading/*.cpp" "${source}/storage/*.cpp" "${source}/sync/*.cpp")
 add_library(kobalt-core OBJECT ${shared} display.cpp
     "${source}/assets/assets.cpp" "${source}/assets/bundled_fonts.cpp" "${source}/assets/font_catalog.cpp"
     "${source}/assets/system_fonts.cpp"

@@ -134,19 +134,19 @@ int main(int argc, char **argv) {
             original.note = QString::fromUtf8("kept \xc3\xa9") + QChar(0) + " note";
             seed.setHighlights({original});
             require(seed.save(), "Cannot seed malformed SQLite highlight fixture");
-            require(AnnotationDatabase::transaction(damagedRoot.path(), [](QSqlDatabase &db) {
+            require(storage::profileTransaction(damagedRoot.path(), [](QSqlDatabase &db) {
                 QSqlQuery query(db); return query.exec("UPDATE entries SET start='' WHERE kind=1");
             }), "Cannot damage SQLite highlight fixture");
             {
                 HighlightSession damaged(model, layout, damagedRoot.path(), identity, model.sourceHash(), "Book");
                 require(!damaged.writable() && !damaged.error().isEmpty() && !damaged.remove(original.id),
                         "Malformed SQLite highlight accepted an edit");
-                require(AnnotationDatabase::transaction(damagedRoot.path(), [](QSqlDatabase &db) {
+                require(storage::profileTransaction(damagedRoot.path(), [](QSqlDatabase &db) {
                     QSqlQuery query(db);
                     return query.exec("SELECT start FROM entries WHERE kind=1") && query.next() && query.value(0).toString().isEmpty();
                 }), "Failed load removed the damaged SQLite highlight");
             }
-            require(AnnotationDatabase::transaction(damagedRoot.path(), [&](QSqlDatabase &db) {
+            require(storage::profileTransaction(damagedRoot.path(), [&](QSqlDatabase &db) {
                 QSqlQuery query(db); query.prepare("UPDATE entries SET start=? WHERE kind=1");
                 query.addBindValue(original.start); return query.exec();
             }), "Cannot repair SQLite highlight fixture");

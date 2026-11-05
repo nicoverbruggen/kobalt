@@ -1,4 +1,4 @@
-#include "reading/kosync.h"
+#include "sync/kosync.h"
 #include "support/strings.h"
 #include "check.h"
 #include "kosync_reply.h"

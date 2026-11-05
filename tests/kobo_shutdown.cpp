@@ -1,6 +1,5 @@
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/screensaver_compatibility.h"
-#include "storage/annotation_database.h"
 #include "storage/profile_database.h"
 #include <QAbstractEventDispatcher>
 #include <QCoreApplication>
@@ -58,7 +57,7 @@ void ignore(void *) {}
 void usbConnect(void *) { ++usbHandoffs; }
 bool canSuspend(void *) { return true; }
 void recordHandoff() {
-    profileClosedAtHandoff = !kobalt::AnnotationDatabase::transaction(profilePath, [](QSqlDatabase &) { return true; });
+    profileClosedAtHandoff = !kobalt::storage::profileTransaction(profilePath, [](QSqlDatabase &) { return true; });
     QVERIFY2(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(), "Shutdown allowed late native session writes");
     QVERIFY2(!kobalt::NativeLifecycle::nativeProgressSaveAllowed(), "Shutdown allowed late native progress writes");
 }
@@ -148,7 +147,7 @@ private slots:
         QTemporaryDir profile;
         profilePath = profile.path();
         const auto available = [&] {
-            return kobalt::AnnotationDatabase::transaction(profile.path(), [](QSqlDatabase &) { return true; });
+            return kobalt::storage::profileTransaction(profile.path(), [](QSqlDatabase &) { return true; });
         };
         QVERIFY(available());
         kobalt::NativeLifecycle lifecycle(nullptr);
@@ -201,7 +200,7 @@ private slots:
         QFETCH(int, screen);
         QTemporaryDir profile;
         profilePath = profile.path();
-        QVERIFY(kobalt::AnnotationDatabase::transaction(profilePath, [](QSqlDatabase &) { return true; }));
+        QVERIFY(kobalt::storage::profileTransaction(profilePath, [](QSqlDatabase &) { return true; }));
         auto *power = N3PowerWorkflowManager::sharedInstance();
         power->asleep = screen == 0;
         power->sleepVisible = screen == 1;
@@ -287,7 +286,7 @@ private slots:
         kobalt::nativePowerOff = screensaverLast ? stock : hook;
         QTemporaryDir profile;
         profilePath = profile.path();
-        QVERIFY(kobalt::AnnotationDatabase::transaction(profilePath, [](QSqlDatabase &) { return true; }));
+        QVERIFY(kobalt::storage::profileTransaction(profilePath, [](QSqlDatabase &) { return true; }));
         {
             kobalt::NativeLifecycle lifecycle(nullptr);
             QVERIFY(lifecycle.connected());
@@ -306,7 +305,7 @@ private slots:
             QVERIFY2(pendingSingleShots(lifecycle).isEmpty(),
                      qPrintable("A timer could end the held shutdown: " + pendingSingleShots(lifecycle).join(", ")));
             QCOMPARE(powerOffs, 0);
-            QVERIFY(kobalt::AnnotationDatabase::transaction(profilePath, [](QSqlDatabase &) { return true; }));
+            QVERIFY(kobalt::storage::profileTransaction(profilePath, [](QSqlDatabase &) { return true; }));
             QVERIFY(kobalt::NativeLifecycle::nativeProgressSaveAllowed());
             drained();
             QCOMPARE(powerOffs, 1);

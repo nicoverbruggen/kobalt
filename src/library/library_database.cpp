@@ -1,5 +1,5 @@
 #include "library_index.h"
-#include "storage/annotation_database.h"
+#include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include <QCryptographicHash>
 #include <QFile>
@@ -95,7 +95,7 @@ bool Index::loadDatabase(const QString &directory) {
     Index loaded;
     const auto legacy = directory + "/library.json";
     bool imported = false;
-    const bool ok = AnnotationDatabase::transaction(directory, [&](QSqlDatabase &db) {
+    const bool ok = storage::profileTransaction(directory, [&](QSqlDatabase &db) {
         QSqlQuery query(db);
         if (!query.exec("SELECT format FROM profile_state WHERE name='library'")) return false;
         const bool exists = query.next();
@@ -162,7 +162,7 @@ bool Index::saveDatabase(const QString &directory) const {
         preferences.object["library"] = next;
         if (!storage::writePreferences(directory + "/reader-settings.json", preferences.object)) return false;
     }
-    return AnnotationDatabase::transaction(directory, [&](QSqlDatabase &db) {
+    return storage::profileTransaction(directory, [&](QSqlDatabase &db) {
         QSqlQuery query(db);
         return query.exec("SELECT format FROM profile_state WHERE name='library'") && query.next() &&
                query.value(0).toInt() == 1 && saveRows(db, *this);

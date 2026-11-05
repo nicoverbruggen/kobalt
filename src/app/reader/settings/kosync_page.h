@@ -3,7 +3,7 @@
 #include "ui/controls/options.h"
 #include "ui/dialogs/modals.h"
 #include "platform/api/keyboard_controller.h"
-#include "reading/kosync_schedule.h"
+#include "sync/kosync_schedule.h"
 #include <QPointer>
 #include <QDateTime>
 

@@ -2135,10 +2135,10 @@ void Reader::pageButton(int direction, quint32 sourceTime, bool userInput) {
         linksActive() || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible() ||
         lightPopup->isVisible())
         return;
-    turnPage(direction, sourceTime, userInput, pageNavigation::InputClock::Key);
+    turnPage(direction, sourceTime, userInput, ui::InputClock::Key);
 }
 
-void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, pageNavigation::InputClock clock) {
+void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::InputClock clock) {
     if (annotationSaving) {
         return;
     }

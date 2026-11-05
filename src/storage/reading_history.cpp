@@ -1,5 +1,5 @@
 #include "reading_history.h"
-#include "annotation_database.h"
+#include "profile_database.h"
 #include "bookmark_store.h"
 #include "support/diagnostics.h"
 #include <QDateTime>
@@ -118,7 +118,7 @@ bool ReadingHistory::save(bool background) {
     const auto pending = snapshot();
     auto write = [directory = directory, pending] {
         bool ok = false;
-        try { ok = AnnotationDatabase::transaction(directory, pending.write); } catch (...) {}
+        try { ok = storage::profileTransaction(directory, pending.write); } catch (...) {}
         pending.complete(ok);
         return ok;
     };
@@ -227,7 +227,7 @@ std::shared_ptr<ReadingHistory::Profile> ReadingHistory::openProfile(const QStri
     return owner;
 }
 bool ReadingHistory::recover(const QString &directory) {
-    return AnnotationDatabase::transaction(directory, [](QSqlDatabase &db) {
+    return storage::profileTransaction(directory, [](QSqlDatabase &db) {
         QSqlQuery query(db);
         return query.exec("UPDATE reading_sessions SET status='interrupted' WHERE status='active'");
     });

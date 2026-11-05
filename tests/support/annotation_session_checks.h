@@ -1,6 +1,6 @@
 #pragma once
 #include "check.h"
-#include "storage/annotation_database.h"
+#include "storage/profile_database.h"
 #include <QCoreApplication>
 #include <QProcess>
 #include <QSqlQuery>
@@ -9,7 +9,7 @@
 class SqliteSessionWriteFailure {
 public:
     SqliteSessionWriteFailure(QString directory, int kind) : directory(std::move(directory)) {
-        require(kobalt::AnnotationDatabase::transaction(this->directory, [kind](QSqlDatabase &db) {
+        require(kobalt::storage::profileTransaction(this->directory, [kind](QSqlDatabase &db) {
             QSqlQuery query(db);
             for (const auto *operation : {"INSERT", "UPDATE", "DELETE"}) {
                 const auto row = QByteArray(operation) == "DELETE" ? "OLD" : "NEW";
@@ -21,7 +21,7 @@ public:
         }), "Cannot obstruct SQLite session writes");
     }
     ~SqliteSessionWriteFailure() {
-        require(kobalt::AnnotationDatabase::transaction(directory, [](QSqlDatabase &db) {
+        require(kobalt::storage::profileTransaction(directory, [](QSqlDatabase &db) {
             QSqlQuery query(db);
             for (const auto *operation : {"INSERT", "UPDATE", "DELETE"})
                 if (!query.exec(QString("DROP TRIGGER session_fail_%1").arg(operation))) return false;

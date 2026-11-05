@@ -172,7 +172,7 @@ While the reader sits idle, Kobalt writes nothing to its database or settings fi
 
 ### SQLite settings
 
-`kobalt.sqlite` opens with `locking_mode=EXCLUSIVE`, `journal_mode=WAL`, `synchronous=FULL`, `fullfsync=ON` and `wal_autocheckpoint=1000` (`src/storage/annotation_database.cpp`). Routine batches switch to `synchronous=NORMAL` for their transaction. If WAL is refused, the database uses a DELETE journal with `synchronous=EXTRA`.
+`kobalt.sqlite` opens with `locking_mode=EXCLUSIVE`, `journal_mode=WAL`, `synchronous=FULL`, `fullfsync=ON` and `wal_autocheckpoint=1000` (`src/storage/profile_database.cpp`). Routine batches switch to `synchronous=NORMAL` for their transaction. If WAL is refused, the database uses a DELETE journal with `synchronous=EXTRA`.
 
 ## Sleep and standby
 

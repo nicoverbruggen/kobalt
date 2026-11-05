@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
             BookmarkStore seed(damagedRoot.path(), identity, model.sourceHash(), model.title());
             seed.setBookmarks({{position, "Chapter", "Saved passage", QDateTime::currentDateTimeUtc()}});
             require(seed.save(), "Cannot seed malformed SQLite bookmark");
-            require(AnnotationDatabase::transaction(damagedRoot.path(), [](QSqlDatabase &db) {
+            require(storage::profileTransaction(damagedRoot.path(), [](QSqlDatabase &db) {
                 QSqlQuery query(db); return query.exec("UPDATE entries SET start='' WHERE kind=0");
             }), "Cannot damage SQLite bookmark");
             {
@@ -145,12 +145,12 @@ int main(int argc, char **argv) {
                 damaged.failed = [&] { ++failures; };
                 require(!damaged.sync() && damaged.toggle(model.page()) == BookmarkSession::Toggle::Refused && failures == 1,
                         "Malformed SQLite bookmark accepted an edit");
-                require(AnnotationDatabase::transaction(damagedRoot.path(), [](QSqlDatabase &db) {
+                require(storage::profileTransaction(damagedRoot.path(), [](QSqlDatabase &db) {
                     QSqlQuery query(db);
                     return query.exec("SELECT start FROM entries WHERE kind=0") && query.next() && query.value(0).toString().isEmpty();
                 }), "Failed load removed the damaged SQLite row");
             }
-            require(AnnotationDatabase::transaction(damagedRoot.path(), [&](QSqlDatabase &db) {
+            require(storage::profileTransaction(damagedRoot.path(), [&](QSqlDatabase &db) {
                 QSqlQuery query(db); query.prepare("UPDATE entries SET start=? WHERE kind=0");
                 query.addBindValue(position); return query.exec();
             }), "Cannot repair SQLite bookmark fixture");

@@ -2,6 +2,7 @@
 #include "ui/input/hold_timer.h"
 #include "render/page_turn_paint.h"
 #include "reading/page_navigation.h"
+#include "ui/input/tap_filter.h"
 #include "support/paint_regions.h"
 #include "ui/controls/keyboard.h"
 #include <QLineEdit>
@@ -405,18 +406,18 @@ private slots:
         QCOMPARE(counter->text(), first);
     }
     void pageTurnTapFilter() {
-        pageNavigation::TapFilter filter;
+        ui::TapFilter filter;
         QVERIFY(filter.accept(1000, 0));
         QVERIFY(!filter.accept(1130, 5000)); // A queued tap is still only 130 ms later.
         QVERIFY(!filter.accept(1199, 5100));
         QVERIFY(filter.accept(1200, 5101)); // Ignored taps do not extend the window.
         QVERIFY(filter.accept(2200, 5102)); // Widely spaced queued taps remain valid.
         QVERIFY(!filter.accept(2100, 5103)); // Reject stale input.
-        pageNavigation::TapFilter wrap;
+        ui::TapFilter wrap;
         QVERIFY(wrap.accept(0xffffffc0u, 0));
         QVERIFY(!wrap.accept(0x41u, 10));
         QVERIFY(wrap.accept(0x88u, 20)); // Exactly 200 ms across source-clock wrap.
-        pageNavigation::TapFilter fallback;
+        ui::TapFilter fallback;
         QVERIFY(fallback.accept(0, 0));
         QVERIFY(!fallback.accept(0, 199));
         QVERIFY(fallback.accept(0, 200));
@@ -424,8 +425,8 @@ private slots:
         QVERIFY(!fallback.accept(0, 500)); // Mixed input uses delivery time.
     }
     void pageTurnFilterSeparatesInputClocks() {
-        pageNavigation::TapFilter filter;
-        using Clock = pageNavigation::InputClock;
+        ui::TapFilter filter;
+        using Clock = ui::InputClock;
         // Recorded Libra timestamps after suspension: touch includes time
         // asleep, while page buttons use a clock that excludes it.
         QVERIFY(filter.accept(4778052, 0, Clock::Pointer));

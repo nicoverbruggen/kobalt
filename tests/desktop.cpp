@@ -105,7 +105,7 @@
 #include <QTimer>
 
 #include "engine/crengine/engine_activity.h"
-#include "reading/engine_worker.h"
+#include "engine/crengine/engine_worker.h"
 #include "support/qt_compat.h"
 #include <QScopeGuard>
 #include <QSemaphore>
@@ -7324,7 +7324,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE_WITH_TIMEOUT(secondOpened.count(), 1, 10000);
         QTRY_VERIFY(second.window()->readyForPresentation());
         int live = 0;
-        QVERIFY(AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+        QVERIFY(storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
             QSqlQuery query(db);
             if (!query.exec("SELECT COUNT(*) FROM reading_sessions WHERE source_key='first-window' AND status='active'") || !query.next()) return false;
             live = query.value(0).toInt();
@@ -7345,7 +7345,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         const auto value = [&](const QString &statement) {
             QVariant result;
-            const bool ok = AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+            const bool ok = storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 if (!query.exec(statement) || !query.next()) return false;
                 result = query.value(0);

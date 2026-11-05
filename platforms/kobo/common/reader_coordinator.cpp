@@ -50,7 +50,7 @@
 #include <QKeyEvent>
 #include <QScreen>
 #ifdef KOBALT_SCENARIO_PLAYER
-#include "reading/kosync.h"
+#include "sync/kosync.h"
 #include "scenario/player.h"
 #include "native_sync_network.h"
 #include "scenario/sleep_persistence.h"

@@ -15,7 +15,8 @@
 #include "reading/appearance_settings.h"
 #include "reading/reader_session.h"
 #include "reading/page_navigation.h"
-#include "reading/kosync.h"
+#include "ui/input/tap_filter.h"
+#include "sync/kosync.h"
 #include "app/reader/settings/kosync_page.h"
 #include "reading/bookmark_session.h"
 #include "reading/highlight_session.h"
@@ -572,8 +573,8 @@ private:
     void buildProgressChoice(const kobalt::ReadingProgress &shown, int direction, bool located);
     void pageButton(int direction, quint32 sourceTime, bool userInput = true);
     void turnPage(int direction, quint32 sourceTime = 0, bool userInput = true,
-                  pageNavigation::InputClock clock = pageNavigation::InputClock::Pointer);
-    pageNavigation::TapFilter pageTurnFilter;
+                  ui::InputClock clock = ui::InputClock::Pointer);
+    ui::TapFilter pageTurnFilter;
     QElapsedTimer pageTurnClock;
     bool pageList(int direction);
     // Runs from a tap or swipe until its page is painted; invalid otherwise.

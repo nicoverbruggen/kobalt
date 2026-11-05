@@ -1,9 +1,19 @@
 #pragma once
 #include <QString>
+#include <functional>
+
+class QSqlDatabase;
 
 namespace kobalt::storage {
 // The profile database stays open on the writer thread while Kobalt runs. See
-// the profile connection in annotation_database.cpp.
+// the profile connection in profile_database.cpp.
+
+// Runs `operation` in a write transaction on the profile database in
+// `directory`. Shared profile tables use the same ownership, version and
+// durability checks. A false result rolls the transaction back. The handle
+// must not escape.
+bool profileTransaction(const QString &directory, const std::function<bool(QSqlDatabase &)> &operation,
+                        QString *error = nullptr);
 
 // Waits for waiting writes, then folds the log into the main file, returns it
 // to a rollback journal and closes it. With `keepClosed`, every operation

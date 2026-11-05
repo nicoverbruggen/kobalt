@@ -31,7 +31,7 @@
 #include "reading/reading_density.h"
 #include "reading/sleep_screen.h"
 #include "reading/reader_session.h"
-#include "reading/kosync.h"
+#include "sync/kosync.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include <QLocale>
@@ -766,7 +766,7 @@ private slots:
         connect(qApp, &QGuiApplication::applicationStateChanged, &host, [&](Qt::ApplicationState state) {
             if (state != Qt::ApplicationInactive || !host.window()) return;
             host.window()->checkpoint();
-            AnnotationDatabase::transaction(profile, [&](QSqlDatabase &db) {
+            storage::profileTransaction(profile, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 if (!query.exec("SELECT COUNT(*) FROM reading_sessions WHERE status='active'") || !query.next()) return false;
                 checkpointSawPausedSession = query.value(0).toInt() == 1 && !host.book()->readingActive();
@@ -784,7 +784,7 @@ private slots:
         host.window()->checkpoint();
         storage::drainWriterThread();
         bool active = false;
-        QVERIFY(AnnotationDatabase::transaction(profile, [&](QSqlDatabase &db) {
+        QVERIFY(storage::profileTransaction(profile, [&](QSqlDatabase &db) {
             QSqlQuery query(db);
             if (!query.exec("SELECT COUNT(*) FROM reading_sessions WHERE status='active'") || !query.next()) return false;
             active = query.value(0).toInt() == 1;
@@ -804,7 +804,7 @@ private slots:
         host.configureServices = [&](ReaderHostServices &services) { services.suspended = [&] { return suspended; }; };
         const auto value = [&](const QString &statement) {
             QVariant result;
-            const bool ok = AnnotationDatabase::transaction(profile, [&](QSqlDatabase &db) {
+            const bool ok = storage::profileTransaction(profile, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 if (!query.exec(statement)) return false;
                 if (query.next()) result = query.value(0);
@@ -862,7 +862,7 @@ private slots:
         };
         const auto value = [&](const QString &statement) {
             QVariant result;
-            const bool ok = AnnotationDatabase::transaction(profile, [&](QSqlDatabase &db) {
+            const bool ok = storage::profileTransaction(profile, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 if (!query.exec(statement) || !query.next()) return false;
                 result = query.value(0);
@@ -5073,7 +5073,7 @@ private slots:
         QCOMPARE(host.progress->writes, 0);
         QTRY_VERIFY(!storage::readBookState(paths, identity).object.isEmpty());
         const auto changeSql = [&](const QString &statement) {
-            return AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+            return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 return query.exec(statement);
             });
@@ -5265,7 +5265,7 @@ private slots:
         QTRY_VERIFY(checkpointed);
         const auto saved = storage::readBookState(paths, identity).object;
         const auto changeSql = [&](const QString &statement) {
-            return AnnotationDatabase::transaction(paths.directory, [&](QSqlDatabase &db) {
+            return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
                 return query.exec(statement);
             });

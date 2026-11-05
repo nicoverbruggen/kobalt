@@ -172,7 +172,7 @@ The APK is `build/android-HOST/android-build/build/outputs/apk/debug/android-bui
 
 ## Code formatting
 
-First-party C and C++ code uses the Qt project style in `.clang-format`. Format changed files with clang-format 21 before you commit, for example `xcrun clang-format -i FILE` on the Mac. A newer major version can format untouched lines differently. The style keeps string literals and comment text as written. `.clang-format-ignore` excludes `dependencies/`, the vendored NickelHook files and the generated icon geometry.
+First-party C and C++ code uses the Qt project style in `.clang-format`. Format changed files with clang-format 21 before you commit, for example `xcrun clang-format -i FILE` on the Mac. A newer major version can format untouched lines differently. The style keeps string literals and comment text as written. `.clang-format-ignore` excludes `dependencies/`, the vendored NickelHook files and the generated icon geometry. `.git-blame-ignore-revs` lists whole-tree formatting commits. Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once, and `git blame` skips them.
 
 ## Dependencies and validation
 

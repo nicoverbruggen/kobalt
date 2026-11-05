@@ -1,0 +1,3 @@
+# Whole-tree formatting commits. Run once: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# Format C and C++ in the Qt project style
+d6c1741c824434f9469aaedba3361657b28f4f81

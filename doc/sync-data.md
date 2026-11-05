@@ -52,7 +52,7 @@ It checks for a newer position after Nickel's signals: the sync manager's `finis
 5. Load a fresh `Volume` with `VolumeManager::getById` and set the fields through Nickel's setters:
    - Position and `DateLastRead`: `VolumeManager::updateBookmark`. The time is the current UTC time, at least one second after the previous stored time. Nickel stores it in whole seconds, as `YYYY-MM-DDTHH:MM:SSZ`.
    - `ReadStatus`: `Content::setReadStatus`, 1 while reading, 2 when finished.
-   - `___PercentRead`: `Content::setPercentRead`, the book percentage capped at 99 while reading, 100 when finished.
+   - `___PercentRead`: `Content::setPercentRead`, the same book percentage that Kobalt shows (first page 0, last page 100), capped at 99 while reading, 100 when finished.
    - `FirstTimeReading`: `Content::setFirstTimeReading(false)`.
    - `RestOfBookEstimate` and `CurrentChapterEstimate`: `Volume::setRestOfBookEstimate` and `Volume::setCurrentChapterEstimate`, in seconds, 0 when finished. Only when Kobalt has a reading pace.
    - `CurrentChapterProgress`: `Volume::setCurrentChapterProgress`, a fraction from 0 to 1. Nickel's reader computes it as (page in chapter − 1) / pages in chapter, and so does `wordEstimates::chapterProgress` (`src/reading/word_estimates.h`). Text before the first table-of-contents entry counts as its own chapter. An unknown layout writes nothing.

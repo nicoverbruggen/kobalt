@@ -6184,7 +6184,9 @@ private slots:
         const auto expected = host.session()->savedNativePosition(&error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QVERIFY(!expected.isEmpty());
-        const double percent = 100.0 * host.session()->page() / host.session()->pages();
+        // Kobo gets the same page progress that Kobalt shows.
+        const double percent =
+                100.0 * pageProgressFraction(host.session()->page(), host.session()->pages());
         if (outcome == "newer") {
             host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         }

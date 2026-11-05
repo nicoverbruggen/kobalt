@@ -119,6 +119,8 @@ public:
 
     bool offerFinish() const;
     void markFinished();
+    // True while the reader stays on the position the user marked as finished.
+    bool finishedHere() const;
 
     void suppressFinishPrompt() { finishPromptSuppressed = true; }
 

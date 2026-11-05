@@ -256,13 +256,11 @@ ReadingActivity ReadingBook::readingActivity() const
     QString error;
     const auto nativePosition = session_->savedNativePosition(&error);
     return { session_->state().value("position").toString(),
-             100.0 * session_->page() / qMax(1, session_->pages()),
-             session_->page(),
-             session_->pages(),
-             session_->turnDirection(),
-             session_->totalWords(),
-             session_->chapterGraph(),
-             session_->graphSelection(),
+             // Kobalt's page progress, kept below 100 like every native write of
+             // an unfinished book, so the last page never reports a finished read.
+             qMin(99.0, 100.0 * pageProgressFraction(session_->page(), session_->pages())),
+             session_->page(), session_->pages(), session_->turnDirection(), session_->totalWords(),
+             session_->chapterGraph(), session_->graphSelection(),
              error.isEmpty() ? nativePosition : QString() };
 }
 
@@ -640,6 +638,12 @@ void ReadingBook::markFinished()
         acceptedFinishedAnchor = session_->state().value("position").toString();
 }
 
+bool ReadingBook::finishedHere() const
+{
+    return !acceptedFinishedAnchor.isEmpty()
+            && acceptedFinishedAnchor == session_->state().value("position").toString();
+}
+
 ReadingProgress ReadingBook::readProgress() const
 {
     return bridge ? bridge->read() : ReadingProgress{};
@@ -728,9 +732,11 @@ bool ReadingBook::writeNative(const QString &location, const QString &mappingErr
             return false;
         if (reconciliation.mayWrite(current)) {
             ReadingProgress verified;
-            const double percent = 100.0 * session_->page() / qMax(1, session_->pages());
-            const bool preserveFinished = !acceptedFinishedAnchor.isEmpty()
-                    && acceptedFinishedAnchor == session_->state().value("position").toString();
+            // The same page progress as Kobalt's own views; the bridge caps an
+            // unfinished book below 100, which Kobo reads as finished.
+            const double percent =
+                    100.0 * pageProgressFraction(session_->page(), session_->pages());
+            const bool preserveFinished = finishedHere();
             diagnostic("native-save-start");
             if (bridge->write(current, timeOnly ? QString() : location, percent, preserveFinished,
                               readingActivity(), &verified, &error)) {

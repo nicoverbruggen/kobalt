@@ -365,7 +365,7 @@ int main(int argc, char **argv) {
     reader::SettingsPanel panel(&window, inputs);
     panel.resize(window.size());
     auto *tab = panel.findChild<QPushButton *>("rrSettingsKosync");
-    require(tab && panel.settingsPages->widget(reader::KosyncSettings) == panel.kosync,
+    require(tab && panel.settingsPages->widget(int(reader::SettingsPage::Kosync)) == panel.kosync,
             "Sync has its own Settings tab on desktop");
     panel.show();
     window.show();
@@ -373,7 +373,7 @@ int main(int argc, char **argv) {
     panel.fitContent(window.size());
     QApplication::processEvents();
     // A narrow panel lists its sections without a selection; the rail checks the open one.
-    require(panel.settingsPages->currentIndex() == reader::KosyncSettings && (tab->isChecked() || !tab->isCheckable()),
+    require(panel.settingsPages->currentIndex() == int(reader::SettingsPage::Kosync) && (tab->isChecked() || !tab->isCheckable()),
             "Sync tab selects its page and check state");
     auto *about = panel.findChild<QPushButton *>("rrSettingsAbout");
     require(about && tab->mapTo(&panel, QPoint()).y() < about->mapTo(&panel, QPoint()).y(),
@@ -617,7 +617,7 @@ int main(int argc, char **argv) {
     learnMore->click();
     QPointer<QWidget> reopenedHelp = window.findChildren<QWidget *>("rrKosyncHelp").last();
     require(reopenedHelp && reopenedHelp->isVisible(), "sync explanation can be reopened");
-    panel.settingsPages->setCurrentIndex(reader::DisplaySettings);
+    panel.settingsPages->setCurrentIndex(int(reader::SettingsPage::Display));
     require(!reopenedHelp || !reopenedHelp->isVisible(), "leaving Sync dismisses its explanation");
     tab->click();
     page->setNativeCloudSync(false);
@@ -737,7 +737,7 @@ int main(int argc, char **argv) {
     QApplication::processEvents();
     password->click();
     require(page->editorDialog, "signed-out password editor opens");
-    panel.settingsPages->setCurrentIndex(reader::DisplaySettings);
+    panel.settingsPages->setCurrentIndex(int(reader::SettingsPage::Display));
     require(!page->editorDialog && page->takePassword().isEmpty(), "leaving Sync dismisses keyboard and clears secrets");
     tab->click();
     server->click();

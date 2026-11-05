@@ -351,7 +351,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             if (same && listMode && refitRequested)
                 refitRequested();
         });
-        if (index == DictionariesSettings)
+        if (index == int(SettingsPage::Dictionaries))
             button->setAccessibleName(strings::get("settings.dictionaries"));
         button->setProperty("reader_tab_label", tabs[index]);
         button->setProperty("reader_tab_icon", int(tabIcons[index]));
@@ -367,14 +367,14 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             button->style()->polish(button);
         });
         settingsTabs->setStretch(index, 1);
-        if (index == DictionariesSettings && !inputs.downloadableDictionaries) {
+        if (index == int(SettingsPage::Dictionaries) && !inputs.downloadableDictionaries) {
             button->setEnabled(false);
             button->hide();
             settingsTabs->setStretch(index, 0);
         }
     }
-    settingsTabs->removeWidget(settingsTabButtons[KosyncSettings]);
-    settingsTabs->insertWidget(AboutSettings, settingsTabButtons[KosyncSettings], 1);
+    settingsTabs->removeWidget(settingsTabButtons[int(SettingsPage::Kosync)]);
+    settingsTabs->insertWidget(int(SettingsPage::About), settingsTabButtons[int(SettingsPage::Kosync)], 1);
     auto section = [](QWidget *parent, QBoxLayout *rows, const char *name, const QString &caption) {
         auto *header = new ui::ListHeader(parent);
         header->setObjectName(name);
@@ -506,7 +506,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     resetRow->addStretch(1);
     resetDefaults = ui::makeCaptionButton(defaultsPage, resetRow, "rrRestoreDefaults",
                                           strings::get("reader.restore_appearance_defaults"), [this] {
-                                              settingsPages->setCurrentIndex(DefaultsSettings);
+                                              settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
                                               restoreDialog->fitCard();
                                               restoreDialog->show();
                                               restoreDialog->raise();
@@ -710,7 +710,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         debugProgress->setFixedSize(metrics::control::stepSize, metrics::control::stepSize);
     }
     dictionaries = new DictionariesPage(settingsPages);
-    settingsPages->insertWidget(DictionariesSettings, dictionaries);
+    settingsPages->insertWidget(int(SettingsPage::Dictionaries), dictionaries);
     kosync = new KosyncPage(settingsPages, parent, inputs.keyboard);
     settingsPages->addWidget(kosync);
     restoreDialog =
@@ -904,7 +904,7 @@ int SettingsPanel::fitContent(QSize availableSize) {
         return qMax(rows->minimumSize().height(),
                     rows->hasHeightForWidth() ? rows->totalHeightForWidth(width) : rows->sizeHint().height());
     };
-    const bool dictionaries = settingsPages->currentIndex() == DictionariesSettings;
+    const bool dictionaries = settingsPages->currentIndex() == int(SettingsPage::Dictionaries);
     settingsPages->ensurePolished();
     const auto frame = settingsPages->contentsMargins();
     const int contentWidth = qMax(1, fullWidth - frame.left() - frame.right());
@@ -951,7 +951,7 @@ int SettingsPanel::fitContent(QSize availableSize) {
     optionPages.append({start, overflow ? qMax(start + 1, contentHeight) : pageHeight});
     // Keep the About description off the logo/build page on short screens.
     // Tall screens retain the existing centered layout.
-    if (overflow && settingsPages->currentIndex() == AboutSettings) {
+    if (overflow && settingsPages->currentIndex() == int(SettingsPage::About)) {
         const int split = aboutDescription->mapTo(settingsPages, QPoint()).y() - int(metrics::about::sectionGap);
         if (split > 0 && split <= pageHeight && contentHeight - split <= pageHeight)
             optionPages = {{0, split}, {split, contentHeight}};
@@ -1795,11 +1795,11 @@ void SettingsPanel::resizeEvent(QResizeEvent *event) {
     ui::Panel::resizeEvent(event);
 }
 void SettingsPanel::showDictionaries(bool visible) {
-    auto *button = settingsTabButtons[DictionariesSettings];
+    auto *button = settingsTabButtons[int(SettingsPage::Dictionaries)];
     button->setVisible(visible);
     button->setEnabled(visible);
-    if (!visible && settingsPages->currentIndex() == DictionariesSettings)
-        settingsPages->setCurrentIndex(DisplaySettings);
+    if (!visible && settingsPages->currentIndex() == int(SettingsPage::Dictionaries))
+        settingsPages->setCurrentIndex(int(SettingsPage::Display));
     fitRail();
 }
 void SettingsPanel::showPowerManagement(bool visible) {

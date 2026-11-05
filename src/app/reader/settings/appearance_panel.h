@@ -12,7 +12,7 @@
 namespace kobalt::reader {
 // The sheet's pages, in this order. Header and footer is a full-screen view;
 // the reader supplies its rows in AppearanceLayout.
-enum AppearancePage { TypographyPage, LayoutPage };
+enum class AppearancePage { Typography, Layout };
 struct AppearanceLayout {
     QWidget *typography = nullptr, *pageLayout = nullptr, *headerFooter = nullptr;
     QVBoxLayout *typeRows = nullptr, *pageRows = nullptr, *headerFooterRows = nullptr;

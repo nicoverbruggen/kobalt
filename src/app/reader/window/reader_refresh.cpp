@@ -459,7 +459,7 @@ void Reader::syncReadingControls() {
         ->setChecked(!general->isVisible() && appearanceEdit.panelOpen() && panels->currentIndex() == 0);
     findChild<QPushButton *>("rrLayout")
         ->setChecked(!general->isVisible() && appearanceEdit.panelOpen() &&
-                     panels->currentIndex() != kobalt::reader::TypographyPage);
+                     panels->currentIndex() != int(kobalt::reader::AppearancePage::Typography));
     findChild<QPushButton *>("rrSettings")->setChecked(general->isVisible());
     const bool settingsOpen = general->isVisible();
     for (auto *action : std::initializer_list<QWidget *>{toolbarComposition.exitAction, toolbarComposition.settings,

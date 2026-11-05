@@ -1252,7 +1252,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     // replaces it with the Text page, which also closes them.
     menu->installEventFilter(this);
     connect(panels, &QStackedWidget::currentChanged, this, [this](int index) {
-        if (index == kobalt::reader::TypographyPage)
+        if (index == int(kobalt::reader::AppearancePage::Typography))
             closeChromeViews();
     });
     syncChromeControls();
@@ -1545,7 +1545,7 @@ void Reader::buildSettings() {
         showScreenRefresh();
         resetDefaults->setText(strings::get("reader.defaults_selected"));
         resetDefaults->setEnabled(false);
-        settingsPages->setCurrentIndex(DefaultsSettings);
+        settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
     });
 #ifndef KOBALT_READER_HARDWARE
     connect(settings->debugProgress, &QPushButton::clicked, this, [this] {

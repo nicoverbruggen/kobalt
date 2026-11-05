@@ -15,16 +15,8 @@
 #include <QPointer>
 
 namespace kobalt::reader {
-enum SettingsPage {
-    DisplaySettings,
-    ControlsSettings,
-    DefaultsSettings,
-    StylingSettings,
-    DictionariesSettings,
-    SystemSettings,
-    AboutSettings,
-    KosyncSettings
-};
+// Settings tabs, in the order of the stacked pages.
+enum class SettingsPage { Display, Controls, Defaults, Styling, Dictionaries, System, About, Kosync };
 struct SettingsPanelInputs {
     KeyboardFactory keyboard;
     QString release, commit;

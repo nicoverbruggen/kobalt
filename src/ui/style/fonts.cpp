@@ -28,7 +28,7 @@ struct Family {
 // The interface registers the bundled faces unchanged, so Qt draws its few
 // remaining controls, such as editable fields, in the regular weight. The
 // private renderer draws everything else and adds the interface weight itself.
-enum FamilyIndex { Sans, Mono, Serif };
+enum class FamilyIndex { Sans, Mono, Serif };
 const QVector<Family> &families() {
     static const QVector<Family> value{
         {"IBM Plex Sans",
@@ -97,7 +97,7 @@ void registerFaces() {
 }
 QString family(FamilyIndex index, const QString &missing = {}) {
     registerFaces();
-    return registration().ids.value(index).isEmpty() ? missing : QString::fromLatin1(families()[index].name);
+    return registration().ids.value(int(index)).isEmpty() ? missing : QString::fromLatin1(families()[int(index)].name);
 }
 QFont sizedFont(const QString &family, int pixels) {
     QFont font(family);
@@ -396,13 +396,13 @@ void setHeaderFooterFontFamily(const QString &family) {
     selectedHeaderFooterFamily = family;
 }
 QFont headerFooterFont(int pixels) {
-    return sizedFont(selectedHeaderFooterFamily.isEmpty() ? family(Mono) : selectedHeaderFooterFamily, pixels);
+    return sizedFont(selectedHeaderFooterFamily.isEmpty() ? family(FamilyIndex::Mono) : selectedHeaderFooterFamily, pixels);
 }
 QFont interfaceFont(int pixels) {
-    return sizedFont(selectedInterfaceFamily.isEmpty() ? family(Sans) : selectedInterfaceFamily, pixels);
+    return sizedFont(selectedInterfaceFamily.isEmpty() ? family(FamilyIndex::Sans) : selectedInterfaceFamily, pixels);
 }
 QFont chromeFont(int pixels) {
-    return sizedFont(selectedInterfaceMonoFamily.isEmpty() ? family(Mono) : selectedInterfaceMonoFamily, pixels);
+    return sizedFont(selectedInterfaceMonoFamily.isEmpty() ? family(FamilyIndex::Mono) : selectedInterfaceMonoFamily, pixels);
 }
 QFont captionFont(int pixels) {
     QFont font = chromeFont(pixels);
@@ -411,7 +411,7 @@ QFont captionFont(int pixels) {
     return font;
 }
 QFont brandFont(int pixels, bool italic) {
-    QFont font(family(Serif, "serif"));
+    QFont font(family(FamilyIndex::Serif, "serif"));
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setPixelSize(pixels);
     font.setWeight(QFont::Normal);

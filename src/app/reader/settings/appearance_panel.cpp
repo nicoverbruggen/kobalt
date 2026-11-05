@@ -161,7 +161,7 @@ AppearanceSheet::AppearanceSheet(QWidget *parent) : ui::Panel(parent, Qt::Bottom
     // QStackedLayout otherwise keeps the largest hidden page's minimum size.
     pages->layout()->setSizeConstraint(QLayout::SetNoConstraint);
     rows->addWidget(pages, 1);
-    for (int index = TypographyPage; index <= LayoutPage; ++index) {
+    for (int index = int(AppearancePage::Typography); index <= int(AppearancePage::Layout); ++index) {
         auto *page = new QWidget;
         auto *controls = new QVBoxLayout(page);
         controls->setContentsMargins(metrics::panel::rowsMargins);
@@ -185,8 +185,8 @@ AppearanceLayout AppearanceSheet::controls() const {
     const auto rows = [this](int page) {
         return static_cast<QVBoxLayout *>(pages->widget(page)->layout());
     };
-    return {pages->widget(TypographyPage), pages->widget(LayoutPage), nullptr,
-            rows(TypographyPage),          rows(LayoutPage),          nullptr};
+    return {pages->widget(int(AppearancePage::Typography)), pages->widget(int(AppearancePage::Layout)), nullptr,
+            rows(int(AppearancePage::Typography)),          rows(int(AppearancePage::Layout)),          nullptr};
 }
 
 int AppearanceSheet::fitHeight(int width, int availableHeight) {

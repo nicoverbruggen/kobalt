@@ -283,7 +283,7 @@ void Reader::openSettings() {
         if (!session->fontFaces().contains(*face))
             face->clear();
     showSettingsFonts();
-    settingsPages->setCurrentIndex(DisplaySettings);
+    settingsPages->setCurrentIndex(int(SettingsPage::Display));
     resetDefaults->setText(strings::get("reader.restore_appearance_defaults"));
     resetDefaults->setEnabled(true);
     // Keep the typography draft until Settings is applied.
@@ -387,7 +387,7 @@ int Reader::stylingChoice(int feature) const {
 
 void Reader::renderStylingSamples(int requested) {
     auto *panel = static_cast<SettingsPanel *>(general);
-    if (!general->isVisible() || panel->settingsPages->currentIndex() != StylingSettings || page->image.isNull())
+    if (!general->isVisible() || panel->settingsPages->currentIndex() != int(SettingsPage::Styling) || page->image.isNull())
         return;
     using Feature = SettingsPanel::AdvancedText;
     // The sample uses the book's typography with the Styling choices made so
@@ -875,7 +875,7 @@ void Reader::selectPanel(int index) {
         applySettings();
     } else if (menu->isVisible() &&
                (panels->currentIndex() == index ||
-                (index == kobalt::reader::LayoutPage && panels->currentIndex() != kobalt::reader::TypographyPage))) {
+                (index == int(kobalt::reader::AppearancePage::Layout) && panels->currentIndex() != int(kobalt::reader::AppearancePage::Typography)))) {
         // The Layout tab closes the header and footer pages too.
         finishPreview();
     } else

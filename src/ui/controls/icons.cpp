@@ -11,7 +11,7 @@
 #include <QPainterPathStroker>
 #include <QTransform>
 #include <QVariant>
-#include "phosphor_geometry.h"
+#include "reader_icon_vectors.h"
 
 namespace kobalt::ui {
 QStringList bookmarkIconNames()

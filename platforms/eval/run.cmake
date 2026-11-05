@@ -158,10 +158,38 @@ else()
                 COMMAND_ERROR_IS_FATAL ANY)
         endif()
         # Verified dependency archives and screenshot books from this checkout
-        # keep the export offline.
-        file(GLOB archives "${root}/build/desktop-${desktop_platform}/downloads/*")
-        foreach(directory desktop-${desktop_platform} desktop-${desktop_platform}-perf)
-            file(COPY ${archives} DESTINATION "${source}/build/${directory}/downloads")
+        # keep the export offline. The export builds its dependencies in its
+        # own cache, so a run never depends on the shared cache's state.
+        # Revisions from before the shared cache read their archives from each
+        # build directory.
+        include("${root}/dependencies/cache.cmake")
+        kobalt_dependency_cache_root("${root}" "$ENV{KOBALT_DEPENDENCY_CACHE}" shared)
+        if(EXISTS "${source}/dependencies/cache.cmake")
+            set(destinations dependency-cache)
+        else()
+            set(destinations desktop-${desktop_platform} desktop-${desktop_platform}-perf)
+            foreach(target IN LISTS DEVICE_TARGETS)
+                list(APPEND destinations kobo-${target}-eval)
+            endforeach()
+        endif()
+        file(READ "${source}/dependencies/manifest.json" pins)
+        string(JSON count LENGTH "${pins}")
+        math(EXPR last "${count} - 1")
+        foreach(index RANGE ${last})
+            string(JSON name MEMBER "${pins}" ${index})
+            string(JSON hash GET "${pins}" "${name}" sha256)
+            foreach(archive "${shared}/downloads/${name}-${hash}.tar"
+                    "${root}/build/desktop-${desktop_platform}/downloads/${name}-${hash}.tar")
+                if(EXISTS "${archive}")
+                    file(SHA256 "${archive}" actual)
+                    if(actual STREQUAL hash)
+                        foreach(directory IN LISTS destinations)
+                            file(COPY "${archive}" DESTINATION "${source}/build/${directory}/downloads")
+                        endforeach()
+                        break()
+                    endif()
+                endif()
+            endforeach()
         endforeach()
         # A copy, not a link: the Kobo build container mounts only the export,
         # and evaluation packages include War and Peace from here.
@@ -188,9 +216,15 @@ set(has_perf OFF)
 if(presets MATCHES "\"${desktop_platform}-perf\"")
     set(has_perf ON)
 endif()
+# An exported revision uses its own dependency cache; see the export above.
+set(cache_environment)
+if(NOT source STREQUAL root)
+    set(cache_environment "KOBALT_DEPENDENCY_CACHE=${source}/build/dependency-cache")
+endif()
 function(configure preset directory)
     if(NOT EXISTS "${source}/build/${directory}/CMakeCache.txt")
-        execute_process(COMMAND "${CMAKE_COMMAND}" --preset ${preset} "-DCMAKE_PREFIX_PATH=${QT_PREFIX}"
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${cache_environment}
+            "${CMAKE_COMMAND}" --preset ${preset} "-DCMAKE_PREFIX_PATH=${QT_PREFIX}"
             WORKING_DIRECTORY "${desktop}" COMMAND_ERROR_IS_FATAL ANY)
     endif()
 endfunction()
@@ -245,12 +279,10 @@ if("perf" IN_LIST PARTS)
 endif()
 if("device" IN_LIST PARTS)
     foreach(target IN LISTS DEVICE_TARGETS)
-        # The checkout's verified archives keep the evaluation build offline.
-        file(GLOB archives "${root}/build/kobo-${target}/downloads/*" "${root}/build/kobo-${target}-eval/downloads/*")
-        if(archives)
-            file(COPY ${archives} DESTINATION "${source}/build/kobo-${target}-eval/downloads")
-        endif()
-        execute_process(COMMAND bash platforms/kobo/build.sh ${target}-eval WORKING_DIRECTORY "${source}"
+        # The export copied the checkout's verified archives, which keeps the
+        # evaluation build offline.
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${cache_environment}
+            bash platforms/kobo/build.sh ${target}-eval WORKING_DIRECTORY "${source}"
             COMMAND_ERROR_IS_FATAL ANY)
     endforeach()
 endif()

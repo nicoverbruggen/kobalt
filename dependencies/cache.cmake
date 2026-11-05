@@ -1,0 +1,255 @@
+# Shared dependency sets, keyed by their content. See doc/building.md#dependency-cache.
+#
+# A dependency set is built once per key into <cache>/<key>/ and published when
+# its `complete` marker appears. Builds of one key hold <cache>/<key>.lock.
+# Installed CMake and pkg-config files contain the entry's absolute path, so an
+# entry is built in place and never moved; the marker is the only thing renamed.
+#
+# The Mac and a container cannot see each other's locks through a bind mount.
+# They never share a key, because the key includes the compiler and system.
+# They do share <cache>/downloads/, so a download is published by rename after
+# its checksum is verified, without a lock.
+#
+# Run as a script, this file prints the cache directory for the launchers.
+
+# Resolve the cache directory. An explicit path wins. Otherwise use
+# build/dependency-cache in the main checkout, found through Git's common
+# directory, so all linked worktrees share it. A tree without its own .git, such
+# as an export inside a checkout, uses its own cache, like source-info.cmake.
+function(kobalt_dependency_cache_root root explicit output)
+    if(explicit)
+        if(NOT IS_ABSOLUTE "${explicit}")
+            message(FATAL_ERROR "KOBALT_DEPENDENCY_CACHE must be an absolute path: ${explicit}")
+        endif()
+        set(${output} "${explicit}" PARENT_SCOPE)
+        return()
+    endif()
+    set(result "${root}/build/dependency-cache")
+    if(NOT EXISTS "${root}/.git")
+        set(${output} "${result}" PARENT_SCOPE)
+        return()
+    endif()
+    execute_process(COMMAND git -C "${root}" rev-parse --git-common-dir
+        RESULT_VARIABLE status OUTPUT_VARIABLE common OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(status EQUAL 0)
+        get_filename_component(common "${common}" ABSOLUTE BASE_DIR "${root}")
+        get_filename_component(name "${common}" NAME)
+        if(name STREQUAL ".git")
+            get_filename_component(checkout "${common}" DIRECTORY)
+            set(result "${checkout}/build/dependency-cache")
+        endif()
+    endif()
+    set(${output} "${result}" PARENT_SCOPE)
+endfunction()
+
+# Return the verified archive <downloads>/<name>-<hash>.tar. A missing or
+# damaged archive is copied from a bundled path or downloaded, verified and
+# then renamed into place. A rename is atomic, so another process sees a whole
+# verified archive or none. Two processes can publish the same bytes; the
+# later rename replaces the earlier file with an identical one.
+function(kobalt_dependency_archive downloads name url hash output)
+    set(archive "${downloads}/${name}-${hash}.tar")
+    set(${output} "${archive}" PARENT_SCOPE)
+    if(EXISTS "${archive}")
+        file(SHA256 "${archive}" actual)
+        if(actual STREQUAL hash)
+            return()
+        endif()
+        message(WARNING "Replacing a damaged download in the dependency cache: ${archive}")
+    endif()
+    file(MAKE_DIRECTORY "${downloads}")
+    string(RANDOM LENGTH 16 token)
+    set(partial "${archive}.${token}.partial")
+    if(IS_ABSOLUTE "${url}")
+        if(NOT EXISTS "${url}")
+            message(FATAL_ERROR "Missing bundled source archive: ${name}")
+        endif()
+        file(COPY_FILE "${url}" "${partial}")
+        set(origin Bundled)
+    else()
+        file(DOWNLOAD "${url}" "${partial}" TIMEOUT 600 INACTIVITY_TIMEOUT 60 TLS_VERIFY ON STATUS status)
+        list(GET status 0 code)
+        if(NOT code EQUAL 0)
+            file(REMOVE "${partial}")
+            message(FATAL_ERROR "Cannot download ${name}: ${status}")
+        endif()
+        set(origin Downloaded)
+    endif()
+    file(SHA256 "${partial}" actual)
+    if(NOT actual STREQUAL hash)
+        file(REMOVE "${partial}")
+        message(FATAL_ERROR "${origin} source checksum mismatch: ${name}")
+    endif()
+    file(RENAME "${partial}" "${archive}")
+endfunction()
+
+# Build the dependency set `key` from the project in `source` with the initial
+# cache `settings`, unless it is already published. A failed build leaves no
+# marker, so it is never used. The next attempt resumes it when it came from
+# the same recipe directory, and starts again otherwise.
+function(kobalt_dependency_set cache key source settings)
+    set(entry "${cache}/${key}")
+    if(EXISTS "${entry}/complete")
+        return()
+    endif()
+    file(MAKE_DIRECTORY "${cache}")
+    file(LOCK "${entry}.lock" GUARD FUNCTION TIMEOUT 0 RESULT_VARIABLE locked)
+    if(NOT locked STREQUAL "0")
+        message(STATUS "Waiting for another build of dependency set ${key}")
+        file(LOCK "${entry}.lock" GUARD FUNCTION RESULT_VARIABLE locked)
+        if(NOT locked STREQUAL "0")
+            message(FATAL_ERROR "Cannot lock dependency set ${key}: ${locked}")
+        endif()
+    endif()
+    if(EXISTS "${entry}/complete")
+        return()
+    endif()
+    set(project "${entry}/project")
+    set(resume OFF)
+    if(EXISTS "${project}/CMakeCache.txt")
+        file(STRINGS "${project}/CMakeCache.txt" home REGEX "^CMAKE_HOME_DIRECTORY:INTERNAL=")
+        if(home STREQUAL "CMAKE_HOME_DIRECTORY:INTERNAL=${source}")
+            set(resume ON)
+        endif()
+    endif()
+    if(NOT resume)
+        file(REMOVE_RECURSE "${entry}")
+    endif()
+    message(STATUS "Building dependency set ${key} in ${entry}")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -S "${source}" -B "${project}" -G Ninja -C "${settings}"
+        RESULT_VARIABLE status)
+    if(status EQUAL 0)
+        execute_process(COMMAND "${CMAKE_COMMAND}" --build "${project}" RESULT_VARIABLE status)
+    endif()
+    if(NOT status EQUAL 0)
+        message(FATAL_ERROR "Dependency set ${key} failed to build and was not published")
+    endif()
+    file(WRITE "${entry}/complete.partial" "${key}\n")
+    file(RENAME "${entry}/complete.partial" "${entry}/complete")
+endfunction()
+
+# Check bundled archives on every configure, including when the dependency set
+# is already published, so a changed bundle never passes unnoticed.
+function(kobalt_check_bundled_archives directory manifest)
+    string(JSON count LENGTH "${manifest}")
+    math(EXPR last "${count} - 1")
+    foreach(index RANGE ${last})
+        string(JSON name MEMBER "${manifest}" ${index})
+        string(JSON hash GET "${manifest}" "${name}" sha256)
+        set(archive "${directory}/${name}.archive")
+        if(NOT EXISTS "${archive}")
+            message(FATAL_ERROR "Missing bundled source archive: ${name}")
+        endif()
+        file(SHA256 "${archive}" actual)
+        if(NOT actual STREQUAL hash)
+            message(FATAL_ERROR "Bundled source checksum mismatch: ${name}")
+        endif()
+    endforeach()
+endfunction()
+
+function(kobalt_settings_line output name)
+    set(${output} "${${output}}set(${name} [==[${ARGN}]==] CACHE STRING \"\" FORCE)\n" PARENT_SCOPE)
+endfunction()
+
+# Called by the platform projects. Selects the dependency set for this compiler
+# and SDK, builds it when it is missing and sets the paths the platforms use.
+function(kobalt_dependencies)
+    set(recipes "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
+    get_filename_component(root "${recipes}/.." ABSOLUTE)
+    set(KOBALT_DEPENDENCY_JOBS 2 CACHE STRING "Compiler jobs for third-party libraries")
+    if(NOT KOBALT_DEPENDENCY_JOBS MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR "KOBALT_DEPENDENCY_JOBS must be positive")
+    endif()
+    set(KOBALT_DEPENDENCY_CACHE "$ENV{KOBALT_DEPENDENCY_CACHE}" CACHE PATH
+        "Shared dependency cache; empty selects build/dependency-cache in the main checkout")
+    kobalt_dependency_cache_root("${root}" "${KOBALT_DEPENDENCY_CACHE}" cache)
+    set(KOBALT_SOURCE_ARCHIVES "$ENV{KOBALT_SOURCE_ARCHIVES}" CACHE PATH "Directory of checksum-pinned source archives")
+    set(archives "${KOBALT_SOURCE_ARCHIVES}")
+    if(NOT archives AND EXISTS "${root}/upstream/manifest.json")
+        set(archives "${root}/upstream")
+    endif()
+    file(READ "${recipes}/manifest.json" manifest)
+    if(archives)
+        kobalt_check_bundled_archives("${archives}" "${manifest}")
+    endif()
+
+    # The Mac uses libpng from its Qt SDK and Kobo from its prepared SDK.
+    if(APPLE)
+        get_filename_component(qt "${Qt6_DIR}/../../.." ABSOLUTE)
+        set(png "${qt}/lib/libQt6BundledLibpng.a")
+        set(png_include "${qt}/include/QtPng")
+        if(NOT EXISTS "${png}" OR NOT EXISTS "${png_include}/png.h")
+            message(FATAL_ERROR "The selected Mac Qt SDK needs bundled libpng headers and archive")
+        endif()
+        file(STRINGS "${png_include}/png.h" png_version REGEX "^#define PNG_LIBPNG_VER_STRING")
+        string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" png_version "${png_version}")
+    elseif(NOT ANDROID)
+        find_package(PNG REQUIRED)
+        set(png "${PNG_LIBRARY}")
+        set(png_include "${PNG_PNG_INCLUDE_DIR}")
+        set(png_version "${PNG_VERSION_STRING}")
+    endif()
+
+    # A dependency set belongs to one SDK and compiler. A different identity
+    # gets a new set, rather than reusing objects compiled with old flags.
+    # Checkout paths are not part of the key; containers mount at fixed paths.
+    set(identity "${CMAKE_C_COMPILER};${CMAKE_C_COMPILER_ID};${CMAKE_C_COMPILER_VERSION};${CMAKE_CXX_COMPILER};${CMAKE_CXX_COMPILER_VERSION};${CMAKE_SYSTEM_NAME};${CMAKE_SYSTEM_PROCESSOR};${CMAKE_OSX_DEPLOYMENT_TARGET};${CMAKE_OSX_ARCHITECTURES};${CMAKE_C_FLAGS};${CMAKE_CXX_FLAGS};${Qt6_DIR};${Qt6_VERSION};${Qt5_DIR};${Qt5_VERSION};${CMAKE_TOOLCHAIN_FILE};${ANDROID_NDK};${ANDROID_ABI};${ANDROID_PLATFORM};${KOBALT_SDK_ID};${png};${png_include}")
+    if(CMAKE_TOOLCHAIN_FILE)
+        file(SHA256 "${CMAKE_TOOLCHAIN_FILE}" toolchain_hash)
+        string(APPEND identity ";${toolchain_hash}")
+    endif()
+    file(GLOB inputs CONFIGURE_DEPENDS "${recipes}/patches/*")
+    list(SORT inputs)
+    list(PREPEND inputs "${recipes}/CMakeLists.txt" "${recipes}/cache.cmake" "${recipes}/apply-patches.cmake"
+        "${recipes}/crengine-patches.txt" "${recipes}/manifest.json")
+    foreach(path IN LISTS inputs)
+        file(SHA256 "${path}" hash)
+        file(RELATIVE_PATH name "${recipes}" "${path}")
+        string(APPEND identity ";${name}:${hash}")
+    endforeach()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${inputs})
+    string(SHA256 key "${identity}")
+    string(SUBSTRING "${key}" 0 16 key)
+    set(entry "${cache}/${key}")
+
+    set(settings "")
+    foreach(name CMAKE_C_COMPILER CMAKE_CXX_COMPILER CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_MAKE_PROGRAM)
+        kobalt_settings_line(settings ${name} "${${name}}")
+    endforeach()
+    foreach(name CMAKE_TOOLCHAIN_FILE CMAKE_OSX_DEPLOYMENT_TARGET ANDROID_ABI ANDROID_PLATFORM ANDROID_NDK
+            ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES QT_HOST_PATH KOBALT_QT_MAJOR)
+        if(DEFINED ${name} AND NOT "${${name}}" STREQUAL "")
+            kobalt_settings_line(settings ${name} "${${name}}")
+        endif()
+    endforeach()
+    kobalt_settings_line(settings KOBALT_DEPENDENCY_ENTRY "${entry}")
+    kobalt_settings_line(settings KOBALT_DEPENDENCY_DOWNLOADS "${cache}/downloads")
+    kobalt_settings_line(settings KOBALT_DEPENDENCY_JOBS "${KOBALT_DEPENDENCY_JOBS}")
+    kobalt_settings_line(settings KOBALT_SOURCE_ARCHIVES "${archives}")
+    kobalt_settings_line(settings KOBALT_PNG_LIBRARY "${png}")
+    kobalt_settings_line(settings KOBALT_PNG_INCLUDE "${png_include}")
+    kobalt_settings_line(settings KOBALT_PNG_VERSION "${png_version}")
+    file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/dependency-settings.cmake" CONTENT "${settings}" @ONLY)
+    kobalt_dependency_set("${cache}" "${key}" "${recipes}" "${CMAKE_BINARY_DIR}/dependency-settings.cmake")
+    message(STATUS "Dependency set ${key}: ${entry}")
+
+    set(prefix "${entry}/install")
+    if(ANDROID)
+        set(png "${prefix}/lib/libpng16.a")
+        set(png_include "${prefix}/include")
+        set(openssl "${entry}/openssl" PARENT_SCOPE)
+        set(boox_jar "${entry}/sources/hiddenapibypass/classes.jar" PARENT_SCOPE)
+    endif()
+    set(CRENGINE_SOURCE "${entry}/sources/crengine" PARENT_SCOPE)
+    set(CRENGINE_BUILD "${entry}/crengine" PARENT_SCOPE)
+    set(KOBALT_TEST_DEPENDENCIES "${prefix}" PARENT_SCOPE)
+    set(KOBALT_TEST_PNG "${png}" PARENT_SCOPE)
+    set(KOBALT_TEST_PNG_INCLUDE "${png_include}" PARENT_SCOPE)
+    set(prefix "${prefix}" PARENT_SCOPE)
+endfunction()
+
+if(CMAKE_SCRIPT_MODE_FILE STREQUAL CMAKE_CURRENT_LIST_FILE)
+    get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+    kobalt_dependency_cache_root("${root}" "$ENV{KOBALT_DEPENDENCY_CACHE}" cache)
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E echo "${cache}")
+endif()

@@ -1,42 +1,24 @@
-# Fetch pinned sources at configuration; compile them as normal build dependencies.
+# Builds one dependency set into KOBALT_DEPENDENCY_ENTRY. The platform projects
+# configure this project through cache.cmake, which chooses the entry, passes
+# the compiler and SDK settings and publishes the entry when the build succeeds.
+cmake_minimum_required(VERSION 3.22)
+project(KobaltDependencies LANGUAGES C CXX)
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
 include(FetchContent)
 include(ExternalProject)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cache.cmake")
 find_program(PATCH_EXECUTABLE patch REQUIRED)
 find_program(MAKE_EXECUTABLE make REQUIRED)
 find_program(KOBALT_HOST_PKG_CONFIG pkg-config NO_CMAKE_FIND_ROOT_PATH REQUIRED)
-set(CMAKE_AUTOMOC OFF)
-set(KOBALT_DEPENDENCY_JOBS 2 CACHE STRING "Compiler jobs for third-party libraries")
-if(NOT KOBALT_DEPENDENCY_JOBS MATCHES "^[1-9][0-9]*$")
-    message(FATAL_ERROR "KOBALT_DEPENDENCY_JOBS must be positive")
-endif()
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/manifest.json" manifest)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS manifest.json crengine-patches.txt)
-set(KOBALT_SOURCE_ARCHIVES "$ENV{KOBALT_SOURCE_ARCHIVES}" CACHE PATH "Directory of checksum-pinned source archives")
-if(NOT KOBALT_SOURCE_ARCHIVES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../upstream/manifest.json")
-    get_filename_component(KOBALT_SOURCE_ARCHIVES "${CMAKE_CURRENT_SOURCE_DIR}/../upstream" ABSOLUTE)
-endif()
-
-# A configured build tree belongs to one SDK and compiler. A different identity
-# gets new output, rather than reusing objects compiled with old flags.
-set(identity "${CMAKE_C_COMPILER};${CMAKE_C_COMPILER_ID};${CMAKE_C_COMPILER_VERSION};${CMAKE_CXX_COMPILER};${CMAKE_CXX_COMPILER_VERSION};${CMAKE_SYSTEM_NAME};${CMAKE_SYSTEM_PROCESSOR};${CMAKE_OSX_DEPLOYMENT_TARGET};${CMAKE_OSX_ARCHITECTURES};${CMAKE_C_FLAGS};${CMAKE_CXX_FLAGS};${Qt6_DIR};${Qt6_VERSION};${Qt5_DIR};${Qt5_VERSION};${CMAKE_TOOLCHAIN_FILE};${ANDROID_NDK};${ANDROID_ABI};${ANDROID_PLATFORM};${KOBALT_SDK_ID}")
-if(CMAKE_TOOLCHAIN_FILE)
-    file(SHA256 "${CMAKE_TOOLCHAIN_FILE}" toolchain_hash)
-    string(APPEND identity ";${toolchain_hash}")
-endif()
-file(SHA256 "${CMAKE_CURRENT_LIST_FILE}" recipe_hash)
-file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/apply-patches.cmake" patch_recipe_hash)
-file(GLOB patch_inputs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/patches/*")
-list(APPEND patch_inputs "${CMAKE_CURRENT_SOURCE_DIR}/crengine-patches.txt")
-foreach(path IN LISTS patch_inputs)
-    file(SHA256 "${path}" hash)
-    string(APPEND identity ";${hash}")
+foreach(setting KOBALT_DEPENDENCY_ENTRY KOBALT_DEPENDENCY_DOWNLOADS KOBALT_DEPENDENCY_JOBS)
+    if(NOT ${setting})
+        message(FATAL_ERROR "Configure dependencies through dependencies/cache.cmake; ${setting} is missing")
+    endif()
 endforeach()
-string(SHA256 sdk_key "${identity};${manifest};${recipe_hash};${patch_recipe_hash}")
-string(SUBSTRING "${sdk_key}" 0 16 sdk_key)
-set(output "${CMAKE_CURRENT_BINARY_DIR}/${sdk_key}")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/manifest.json" manifest)
+set(output "${KOBALT_DEPENDENCY_ENTRY}")
 set(prefix "${output}/install")
 set(common -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
@@ -73,50 +55,25 @@ function(kobalt_source name)
     string(JSON hash GET "${manifest}" "${name}" sha256)
     if(KOBALT_SOURCE_ARCHIVES)
         set(url "${KOBALT_SOURCE_ARCHIVES}/${name}.archive")
-        if(NOT EXISTS "${url}")
-            message(FATAL_ERROR "Missing bundled source archive: ${name}")
-        endif()
-        file(SHA256 "${url}" actual)
-        if(NOT actual STREQUAL hash)
-            message(FATAL_ERROR "Bundled source checksum mismatch: ${name}")
-        endif()
-        # CMake 3.22 cannot extract a local URL ending in .archive. Keep the
-        # shipped bytes unchanged and give the verified build copy a tar name.
-        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bundled-sources")
-        set(local "${CMAKE_BINARY_DIR}/bundled-sources/${name}-${hash}.tar")
-        configure_file("${url}" "${local}" COPYONLY)
-        set(url "${local}")
     endif()
-    file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/apply-patches.cmake" patch_recipe)
-    set(recipe "${hash};${source_NATIVE_ENGINE};${patch_recipe};${PATCH_EXECUTABLE};source-v2")
-    if(name STREQUAL "fribidi" OR name STREQUAL "libunibreak")
-        string(APPEND recipe ";release-timestamps")
-    endif()
-    foreach(patch IN LISTS source_PATCHES)
-        file(SHA256 "${patch}" patch_hash)
-        string(APPEND recipe ";${patch_hash}")
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${patch}")
-    endforeach()
-    string(SHA256 key "${recipe}")
-    string(SUBSTRING "${key}" 0 16 key)
-    string(REPLACE "-" "_" content "kobalt_${name}_${key}")
+    # The shared download is verified on every use; extraction checks it again.
+    kobalt_dependency_archive("${KOBALT_DEPENDENCY_DOWNLOADS}" "${name}" "${url}" "${hash}" archive)
+    string(REPLACE "-" "_" content "kobalt_${name}")
     string(JOIN "\n" patch_list ${source_PATCHES})
-    file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/sources/${content}-patches.txt" CONTENT "${patch_list}" @ONLY)
+    file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/${content}-patches.txt" CONTENT "${patch_list}" @ONLY)
     set(extraction)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
-        # Source directories include their checksum. Preserve release timestamps
-        # so Autotools does not regenerate shipped configure scripts.
+        # Preserve release timestamps so Autotools does not regenerate shipped
+        # configure scripts.
         set(extraction DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
     endif()
     FetchContent_Declare(${content}
-        URL "${url}" URL_HASH "SHA256=${hash}"
+        URL "${archive}" URL_HASH "SHA256=${hash}"
         ${extraction}
-        DOWNLOAD_NAME "${name}-${hash}.tar" TIMEOUT 600 INACTIVITY_TIMEOUT 60 TLS_VERIFY ON
-        DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/downloads"
-        SOURCE_DIR "${CMAKE_BINARY_DIR}/sources/${name}-${key}"
+        SOURCE_DIR "${output}/sources/${name}"
         SOURCE_SUBDIR kobalt-no-project
         PATCH_COMMAND "${CMAKE_COMMAND}" "-DSOURCE=<SOURCE_DIR>"
-            "-DPATCH_EXECUTABLE=${PATCH_EXECUTABLE}" "-DPATCH_LIST=${CMAKE_BINARY_DIR}/sources/${content}-patches.txt"
+            "-DPATCH_EXECUTABLE=${PATCH_EXECUTABLE}" "-DPATCH_LIST=${CMAKE_BINARY_DIR}/${content}-patches.txt"
             "-DNATIVE_ENGINE=${source_NATIVE_ENGINE}" -P "${CMAKE_CURRENT_SOURCE_DIR}/apply-patches.cmake")
     FetchContent_MakeAvailable(${content})
     set(${name}_source "${${content}_SOURCE_DIR}" PARENT_SCOPE)
@@ -169,7 +126,6 @@ set(host)
             BUILD_BYPRODUCTS "${byproduct}"
             DEPENDS ${lib_DEPENDS})
     endif()
-    set_property(GLOBAL APPEND PROPERTY KOBALT_DEPENDENCY_TARGETS dep-${name})
 endfunction()
 
 foreach(name freetype harfbuzz fribidi utf8proc libjpeg-turbo xxhash libunibreak koreader-base)
@@ -185,35 +141,22 @@ if(APPLE OR (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND
 endif()
 kobalt_source(crengine ${engine_options} PATCHES ${engine_patches})
 
-# Reuse libpng from the installed Mac Qt SDK. Other targets use their SDK's
-# libpng or a pinned source build; Qt itself is never configured here.
-if(APPLE)
-    get_filename_component(qt "${Qt6_DIR}/../../.." ABSOLUTE)
-    set(png "${qt}/lib/libQt6BundledLibpng.a")
-    set(png_include "${qt}/include/QtPng")
-    if(NOT EXISTS "${png}" OR NOT EXISTS "${png_include}/png.h")
-        message(FATAL_ERROR "The selected Mac Qt SDK needs bundled libpng headers and archive")
-    endif()
-    file(STRINGS "${png_include}/png.h" png_version REGEX "^#define PNG_LIBPNG_VER_STRING")
-    string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" png_version "${png_version}")
-    file(MAKE_DIRECTORY "${prefix}/lib/pkgconfig")
-    file(CONFIGURE OUTPUT "${prefix}/lib/pkgconfig/libpng.pc" CONTENT
-        "Name: libpng\nDescription: libpng from the installed Qt SDK\nVersion: ${png_version}\nLibs: ${png} -lz\nCflags: -I${png_include}\n" @ONLY)
-elseif(ANDROID)
+# Android builds pinned libpng. The Mac reuses libpng from its Qt SDK and Kobo
+# from its prepared SDK, so Kobo keeps the same libpng ABI as Qt; cache.cmake
+# finds those. Qt itself is never configured here.
+if(ANDROID)
     kobalt_source(libpng)
     kobalt_library(libpng ARCHIVE libpng16.a OPTIONS -DPNG_SHARED=OFF -DPNG_STATIC=ON
         -DPNG_TESTS=OFF -DPNG_TOOLS=OFF)
     set(png "${prefix}/lib/libpng16.a")
     set(png_include "${prefix}/include")
-set(png_dependency dep-libpng)
+    set(png_dependency dep-libpng)
 else()
-    # Keep Kobo on the same libpng ABI as its prepared Qt SDK.
-    find_package(PNG REQUIRED)
-    set(png "${PNG_LIBRARY}")
-    set(png_include "${PNG_PNG_INCLUDE_DIR}")
+    set(png "${KOBALT_PNG_LIBRARY}")
+    set(png_include "${KOBALT_PNG_INCLUDE}")
     file(MAKE_DIRECTORY "${prefix}/lib/pkgconfig")
     file(CONFIGURE OUTPUT "${prefix}/lib/pkgconfig/libpng.pc" CONTENT
-        "Name: libpng\nDescription: libpng from the prepared SDK\nVersion: ${PNG_VERSION_STRING}\nLibs: ${png} -lz\nCflags: -I${png_include}\n" @ONLY)
+        "Name: libpng\nDescription: libpng from the SDK\nVersion: ${KOBALT_PNG_VERSION}\nLibs: ${png} -lz\nCflags: -I${png_include}\n" @ONLY)
 endif()
 file(CONFIGURE OUTPUT "${prefix}/lib/pkgconfig/zlib.pc" CONTENT "Name: zlib\nDescription: SDK zlib\nVersion: 1\nLibs: -lz\n" @ONLY)
 kobalt_library(freetype ARCHIVE libfreetype.a DEPENDS ${png_dependency} OPTIONS -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BZIP2=ON
@@ -248,21 +191,9 @@ if(ANDROID)
             "${MAKE_EXECUTABLE}" -j "${KOBALT_DEPENDENCY_JOBS}" SHLIB_VERSION_NUMBER= libcrypto_3.so libssl_3.so
         INSTALL_COMMAND "${CMAKE_COMMAND}" -E true
         BUILD_BYPRODUCTS "${openssl}/libcrypto_3.so" "${openssl}/libssl_3.so")
-    set_property(GLOBAL APPEND PROPERTY KOBALT_DEPENDENCY_TARGETS dep-openssl)
     kobalt_source(hiddenapibypass)
-    set(boox_jar "${hiddenapibypass_source}/classes.jar")
-    file(SHA256 "${boox_jar}" jar_hash)
+    file(SHA256 "${hiddenapibypass_source}/classes.jar" jar_hash)
     if(NOT jar_hash STREQUAL "021973912a8f481b84308aec519b6bb7f93ff4a82e90d494cbc658288c7b6e2f")
         message(FATAL_ERROR "AndroidHiddenApiBypass classes.jar checksum mismatch")
     endif()
-    set(boox_jar "${boox_jar}" PARENT_SCOPE)
-    set(openssl "${openssl}" PARENT_SCOPE)
 endif()
-get_property(targets GLOBAL PROPERTY KOBALT_DEPENDENCY_TARGETS)
-add_custom_target(kobalt-dependencies DEPENDS ${targets})
-set(CRENGINE_SOURCE "${crengine_source}" PARENT_SCOPE)
-set(CRENGINE_BUILD "${output}/crengine" PARENT_SCOPE)
-set(KOBALT_TEST_DEPENDENCIES "${prefix}" PARENT_SCOPE)
-set(KOBALT_TEST_PNG "${png}" PARENT_SCOPE)
-set(KOBALT_TEST_PNG_INCLUDE "${png_include}" PARENT_SCOPE)
-set(prefix "${prefix}" PARENT_SCOPE)

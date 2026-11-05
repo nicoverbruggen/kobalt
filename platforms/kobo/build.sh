@@ -20,6 +20,10 @@ image=$(sh "$root/platforms/sdk-image.sh" "${target%%-*}")
 engine=${CONTAINER_ENGINE:-docker}
 sdk_id=$("$engine" image inspect "$image" --format '{{.Id}}')
 info=$("${CMAKE_COMMAND:-cmake}" -P "$root/platforms/source-info.cmake")
+# The shared dependency cache is created on the host, so the host user owns it.
+# Containers mount it at one fixed path, the path stored in its CMake files.
+cache=$("${CMAKE_COMMAND:-cmake}" -P "$root/dependencies/cache.cmake")
+mkdir -p "$cache"
 read -r commit modified KOBALT_RELEASE_VERSION <<< "$info"
 export KOBALT_RELEASE_VERSION
 # Own exactly this container, including when the foreground client is interrupted.
@@ -42,11 +46,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 "$engine" run --cidfile "$run_dir/container.cid" --pull=never --user "$(id -u):$(id -g)" -e HOME=/tmp -e KOBALT_RELEASE_VERSION \
     --volume "$root:/work" \
+    --volume "$cache:/dependency-cache" \
     --workdir /work/platforms/kobo "$image" bash -euc '
         started=$SECONDS
         cmake --preset "$1" \
             -DKOBALT_SDK_ID="$5" -DKOBALT_DEPENDENCY_JOBS="$2" -DKOBALT_COMMIT="$3" -DKOBALT_COMMIT_MODIFIED="$4" \
-            -DKOBALT_VERBOSE_DIAGNOSTICS="$6"
+            -DKOBALT_VERBOSE_DIAGNOSTICS="$6" -DKOBALT_DEPENDENCY_CACHE=/dependency-cache
         echo "Configure: $((SECONDS - started)) seconds"
         started=$SECONDS
         if [[ "$7" == --check ]]; then

@@ -77,7 +77,8 @@ CONTAINER_ENGINE="$scratch/container-engine" KOBALT_ANDROID_IMAGE=fixture-sdk KO
     bash platforms/android/build.sh
 # A Git-free source export must not inherit its enclosing checkout's identity.
 exported="$scratch/export/application"
-mkdir -p "$exported/platforms/android" "$exported/platforms/kobo" "$exported/assets"
+mkdir -p "$exported/platforms/android" "$exported/platforms/kobo" "$exported/assets" "$exported/dependencies"
+cp dependencies/cache.cmake "$exported/dependencies/"
 cp platforms/source-info.cmake platforms/release-version.cmake platforms/sdk-image.sh "$exported/platforms/"
 cp platforms/android/build.sh "$exported/platforms/android/"
 cp platforms/kobo/build.sh "$exported/platforms/kobo/"
@@ -89,6 +90,11 @@ env -u KOBALT_RELEASE_VERSION CONTAINER_ENGINE="$scratch/container-engine" \
     KOBALT_TEST_ENGINE_LOG="$scratch/export-engine.log" bash "$exported/platforms/android/build.sh"
 env -u KOBALT_RELEASE_VERSION CONTAINER_ENGINE="$scratch/container-engine" \
     KOBALT_TEST_ENGINE_LOG="$scratch/export-engine.log" bash "$exported/platforms/kobo/build.sh" qt6
+# A Git-free export uses its own dependency cache, created on the host and
+# mounted at the fixed container path.
+[[ -d $exported/build/dependency-cache ]]
+[[ $(grep -cF -- "--volume $exported/build/dependency-cache:/dependency-cache" "$scratch/export-engine.log") == 2 ]]
+[[ $(grep -cF -- "-DKOBALT_DEPENDENCY_CACHE=/dependency-cache" "$scratch/export-engine.log") == 2 ]]
 grep -Fx 'v9.8.7-beta.6' "$scratch/export-engine.log" > /dev/null
 grep -F 'fffffff OFF' "$scratch/export-engine.log" > /dev/null
 # Direct builds enable diagnostics; an explicit release choice must survive

@@ -1,10 +1,10 @@
 # Building Kobalt
 
-Application code lives in `src/` and `platforms/`. Shared assets live in root `assets/`. Pinned third-party source URLs, checksums, patches and CMake recipes live in `dependencies/`. Each platform owns its CMake project, presets and toolchain definitions. Generated files, downloaded sources and incremental objects stay under ignored `build/` in this worktree.
+Application code lives in `src/` and `platforms/`. Shared assets live in root `assets/`. Pinned third-party source URLs, checksums, patches and CMake recipes live in `dependencies/`. Each platform owns its CMake project, presets and toolchain definitions. Generated files and incremental application objects stay under ignored `build/` in this worktree. Compiled third-party dependencies and their downloads live in the shared [dependency cache](#dependency-cache), which belongs to no worktree.
 
 Install CMake 3.22 or later on the build host. The Kobo and Android launchers also use it to read source provenance before starting their prepared container.
 
-Application builds do not use Python, compile Qt or read prepared libraries or assets from another checkout. The first configuration downloads the selected third-party archives and verifies their SHA-256 checksums. Exported source bundles use their local `application/upstream/` archives instead. Missing or changed bundled archives fail configuration without a network fallback. For another local archive directory, set the CMake `KOBALT_SOURCE_ARCHIVES` path. The build compiles those libraries before compiling Kobalt. Later builds reuse the configured sources and objects. Network access is required for uncached sources and Android Gradle packages.
+Application builds do not use Python, compile Qt or read prepared libraries or assets from another checkout. The shared dependency cache is the only exception. Configuration selects the dependency set for the compiler and SDK. When the cache does not have that set yet, configuration downloads the selected third-party archives, verifies their SHA-256 checksums and compiles the libraries before it continues. Exported source bundles use their local `application/upstream/` archives instead. Missing or changed bundled archives fail configuration without a network fallback, also when the cache already has the set. For another local archive directory, set the CMake `KOBALT_SOURCE_ARCHIVES` path. Network access is required for uncached sources and Android Gradle packages.
 
 ## Developer launcher
 
@@ -37,7 +37,7 @@ A build from a linked Git worktree is a variant named after the worktree's folde
 
 Run `cmake --build --preset mac-kobo-checks` from `platforms/desktop/` to check both Kobo SDKs. This optional target uses the prepared Qt5 and Qt6 images, compiles changed production objects and links the mod library. It skips installation ZIP creation and package checks. Ordinary Mac app and test builds do not run it. Workers can use it when their change needs Kobo checks. Run both targets before integration; the ordinary edit/build/test loop does not require them.
 
-From the repository root, use `bash platforms/kobo/build.sh qt5 --check` or `qt6 --check` for one SDK. Set `KOBALT_CHECK_SOURCE_ROOT` only when using a newer check runner against another explicitly selected checkout. Checks reuse the selected checkout's incremental Kobo build directories. A first build still needs the application dependencies and objects; later checks rebuild only stale inputs. The checks use the real SDKs and catch compile and link errors, including code hidden behind platform conditionals. They do not replace package or runtime validation. Missing Docker access or a prepared image fails the check without downloading or building an SDK.
+From the repository root, use `bash platforms/kobo/build.sh qt5 --check` or `qt6 --check` for one SDK. Set `KOBALT_CHECK_SOURCE_ROOT` only when using a newer check runner against another explicitly selected checkout. Checks reuse the selected checkout's incremental Kobo build directories and the shared dependency cache. A first check in a new worktree still compiles the application objects; later checks rebuild only stale inputs. The checks use the real SDKs and catch compile and link errors, including code hidden behind platform conditionals. They do not replace package or runtime validation. Missing Docker access or a prepared image fails the check without downloading or building an SDK.
 
 ### Headless tests and screenshots
 
@@ -118,7 +118,7 @@ bash platforms/kobo/build.sh qt5
 bash platforms/kobo/build.sh qt6
 ```
 
-The launcher pins these images by digest. It mounts this worktree, configures CMake and builds the reader dependencies, application and installation ZIP. It does not pull or repair SDKs. Configure and build/package durations are printed separately. Parallelism defaults to two; set `JOBS` to change it.
+The launcher pins these images by digest. It mounts this worktree and the [dependency cache](#dependency-cache), configures CMake, which builds missing reader dependencies, and builds the application and installation ZIP. It does not pull or repair SDKs. Configure and build/package durations are printed separately. Parallelism defaults to two; set `JOBS` to change it.
 
 Direct Kobo builds enable verbose diagnostics and produce `Kobalt-qtN-diagnostic.zip` under `build/kobo-qt5/` or `build/kobo-qt6/`, alongside `libkobalt.so` with debug symbols. Tagged CI release builds, including beta releases, set `KOBALT_VERBOSE_DIAGNOSTICS=OFF` and produce `Kobalt-qtN.zip`. Branch builds and nightly/interim tags enable verbose diagnostics. CI keeps the downloaded artifact names `Kobalt-qtN.zip` for both modes. The ZIP contains a stripped installation library and runtime assets. To reproduce release logging locally, run `KOBALT_VERBOSE_DIAGNOSTICS=OFF bash platforms/kobo/build.sh qt5` or use `qt6`. The launcher passes the logging choice on every configure, including when reusing an existing build directory. Qt5 uses `.kobo/KoboRoot.tgz`; Qt6 uses `.kobo/Kobo.tgz`. Packaging removes its staging directory and does no work when its inputs are unchanged. Both tar formats store only the library on the system partition, with numeric owner `0:0` and mode `0755`, regardless of the build user. The build launcher runs the `check-package` target after packaging to verify the member path, ownership and permissions. The same check can be run in the prepared SDK with `cmake --build --preset qt5 --target check-package` or the Qt6 preset.
 
@@ -143,7 +143,28 @@ The APK is `build/android-HOST/android-build/build/outputs/apk/debug/android-bui
 
 ## Dependencies and validation
 
-CREngine and its text/image libraries use the versions and patches recorded in this worktree. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. Build directories are separated by compiler, SDK, source manifest and recipe identity. This initial setup invalidates the dependency set when its recipes, patches or source pins change; application-only changes reuse it.
+CREngine and its text/image libraries use the versions and patches recorded in this worktree. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. A change to their recipes, patches or source pins selects a new dependency set; application-only changes reuse it.
+
+### Dependency cache
+
+All worktrees of a repository share compiled dependencies. The cache is `build/dependency-cache/` in the main checkout. Configuration finds it through Git's common directory, so every linked worktree uses the same folder. A tree without Git, such as an extracted source bundle, uses its own `build/dependency-cache/`. To use another folder, set `KOBALT_DEPENDENCY_CACHE` to an absolute path, as a CMake variable or in the environment. The environment value applies when a build directory is first configured.
+
+| Path | Contents |
+| --- | --- |
+| `downloads/<name>-<SHA-256>.tar` | Verified source archives, shared by all platforms. |
+| `<key>/` | One dependency set: patched sources, library build trees, the installed libraries in `install/` and the CREngine archive in `crengine/`. |
+| `<key>/complete` | The publication marker. A set without it is unfinished and is never used. |
+| `<key>.lock` | The lock held while the set builds. |
+
+The key is a hash of the compiler, compiler flags, system, Qt SDK, toolchain contents, prepared SDK image, libpng choice, source pins, recipes and patches. It does not contain the checkout path. Worktrees with the same pins and patches share one set. A change to a pin, recipe or patch selects a new key, and other worktrees keep their set. The Mac `mac` and `mac-perf` builds share one set, and so do each Kobo SDK's regular, evaluation and diagnostic builds. Application objects stay in each worktree.
+
+When a set is missing, configuration takes its lock, builds it in place and then publishes the `complete` marker by rename. Another configuration that needs the same set waits for the lock and then uses the result. A failed or interrupted build never writes the marker. The next attempt continues it when it comes from the same checkout, and starts again otherwise. A published set is never changed. A cache hit never skips a checksum check: the key contains the pinned checksums, a set is built only from verified archives, a cached download is verified again on every use and bundled archives are checked on every configuration. On the development Mac with two dependency jobs, a second worktree configured in 2 seconds for the Mac and in 1 second for each Kobo SDK. Building a missing set took one to one and a half minutes, depending on download speed.
+
+Do not move or rename the cache. Installed CMake and pkg-config files contain its absolute path. To use another location, set `KOBALT_DEPENDENCY_CACHE` and let configuration build the sets there. Delete a `<key>/` folder that no branch uses to free space, but only while no build runs. An interrupted download leaves a `*.partial` file in `downloads/`; it is never used and can be deleted at the same time. Never edit files inside a published set.
+
+The Kobo and Android launchers create the cache on the host, so it belongs to the host user. They mount it at the fixed container path `/dependency-cache`, so all container builds store the same paths. Container builds lock each other out. File locks do not reach across the bind mount between the Mac and a container, measured with OrbStack. The Mac and a container never build the same key, because the compiler and system are part of it. They share only `downloads/`, where each archive is downloaded under a temporary name, verified and then renamed into place without a lock.
+
+Release evaluation exports build their dependencies in their own cache; see [Release evaluation](release-evaluation.md). The fast check `build.dependencyCache` covers the cache location, locking, publication, failure handling and archive verification.
 
 Stop and reap run-owned helper processes and remove temporary profiles, staging directories and containers after each run. Keep current outputs, useful measurements and incremental caches. Native desktop, model, renderer and session checks cover the paths listed above. [Native validation](validation.md#feature-coverage-and-limits) records the remaining corpus, gesture and platform gaps. These checks do not establish firmware compatibility or physical-device display behavior.
 

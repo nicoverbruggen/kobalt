@@ -15,6 +15,10 @@ if [[ $release == 1 && -z ${KOBALT_RELEASE_VERSION:-} && ! -f $root/source-info.
     echo 'Missing KOBALT_RELEASE_VERSION' >&2; exit 2
 fi
 info=$(cmake -P "$root/platforms/source-info.cmake")
+# The shared dependency cache is created on the host, so the host user owns it.
+# Containers mount it at one fixed path, the path stored in its CMake files.
+cache=$(cmake -P "$root/dependencies/cache.cmake")
+mkdir -p "$cache"
 read -r commit modified KOBALT_RELEASE_VERSION <<< "$info"
 export KOBALT_RELEASE_VERSION
 extra=(--pull=never)
@@ -33,6 +37,7 @@ fi
     -e HOME=/tmp -e GRADLE_USER_HOME=/gradle -e ANDROID_USER_HOME="/work/build/android-$arch/user-home" -e KOBALT_ANDROID_HOST_ARCH="$arch" \
     --volume "$root:/work" \
     --volume "$root/build/gradle:/gradle" \
+    --volume "$cache:/dependency-cache" \
     --workdir /work/platforms/android "$image" bash -euc '
         exec 9>"/work/build/android-$KOBALT_ANDROID_HOST_ARCH/build.lock"
         flock -n 9 || { echo "Android output is in use by another build" >&2; exit 1; }
@@ -40,7 +45,7 @@ fi
         options=(-DKOBALT_ANDROID_RELEASE=OFF)
         if [[ $KOBALT_ANDROID_RELEASE == 1 ]]; then options=(-DKOBALT_ANDROID_RELEASE=ON -DCMAKE_BUILD_TYPE=Release); fi
         cmake --preset android "${options[@]}" -DKOBALT_ANDROID_VERSION_CODE="$KOBALT_ANDROID_VERSION_CODE" \
-            -DKOBALT_SDK_ID="$4" -DKOBALT_DEPENDENCY_JOBS="$1" -DKOBALT_COMMIT="$2" -DKOBALT_COMMIT_MODIFIED="$3"
+            -DKOBALT_SDK_ID="$4" -DKOBALT_DEPENDENCY_JOBS="$1" -DKOBALT_DEPENDENCY_CACHE=/dependency-cache -DKOBALT_COMMIT="$2" -DKOBALT_COMMIT_MODIFIED="$3"
         echo "Configure: $((SECONDS - started)) seconds"
         started=$SECONDS
         cmake --build --preset android --parallel "$1"

@@ -33,11 +33,12 @@ foreach(component IN LISTS qt_components)
     endif()
 endforeach()
 get_filename_component(KOBALT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
-foreach(retired KOBALT_DEPENDENCIES KOBALT_DEPENDENCY_CACHE KOBALT_ASSETS)
+foreach(retired KOBALT_DEPENDENCIES KOBALT_ASSETS)
     unset(${retired} CACHE)
 endforeach()
 
-add_subdirectory("${KOBALT_ROOT}/dependencies" "${CMAKE_CURRENT_BINARY_DIR}/dependencies")
+include("${KOBALT_ROOT}/dependencies/cache.cmake")
+kobalt_dependencies()
 add_subdirectory("${KOBALT_ROOT}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
 
 file(READ "${KOBALT_ASSETS}/manifest.json" assets)
@@ -84,7 +85,6 @@ add_library(kobalt-core OBJECT ${shared} display.cpp
     "${source}/publication/image_policy.cpp" "${source}/publication/layout_compatibility.cpp"
     "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
     "${source}/publication/plain_archive.cpp")
-add_dependencies(kobalt-core kobalt-dependencies)
 target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}"
     "${source}/interfaces/reader/ui/controls")
 target_include_directories(kobalt-core SYSTEM PUBLIC
@@ -228,6 +228,11 @@ if(BUILD_TESTING)
         "-DPOLICY_FILE=${KOBALT_ROOT}/platforms/cache-policy.cmake"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/test-cache-policy.cmake")
     set_tests_properties(build.cachePolicy PROPERTIES LABELS "fast;build" TIMEOUT 30)
+    add_test(NAME build.dependencyCache COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/dependency-cache-test"
+        "-DCACHE_SCRIPT=${KOBALT_ROOT}/dependencies/cache.cmake" "-DMAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/test-dependency-cache.cmake")
+    set_tests_properties(build.dependencyCache PROPERTIES LABELS "fast;build" TIMEOUT 60)
     add_test(NAME build.strings COMMAND "${CMAKE_COMMAND}"
         "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
         -P "${KOBALT_ROOT}/platforms/strings-test.cmake")

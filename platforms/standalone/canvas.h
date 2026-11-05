@@ -18,7 +18,7 @@
 #include <functional>
 #include "ui/input.h"
 
-namespace kobalt::android {
+namespace kobalt::standalone {
 // Qt caches each damaged rectangle, but its default proxy paints their bounding
 // rectangle. Pass the cache's clip region to QWidget to keep the work local.
 class RegionProxy final : public QGraphicsProxyWidget {

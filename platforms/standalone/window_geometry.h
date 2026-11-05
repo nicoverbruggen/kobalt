@@ -7,7 +7,7 @@
 #include <QtMath>
 #include <utility>
 
-namespace kobalt::android {
+namespace kobalt::standalone {
 // Android can finish rotation after Qt chooses its initial fullscreen size.
 // Follow the activity's laid-out bounds.
 inline void fitWindowToSurface(QWidget &window, QSize pixels) {

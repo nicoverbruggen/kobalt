@@ -25,7 +25,7 @@
 #include <QtCore/qnativeinterface.h>
 #endif
 
-namespace kobalt::android {
+namespace kobalt::standalone {
 namespace {
 QString recentText(QString text) {
     // Keep metadata and the optional cover below the 256 KiB record limit.

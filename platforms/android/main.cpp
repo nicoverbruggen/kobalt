@@ -1,9 +1,9 @@
-#include "reader.h"
-#include "start_screen.h"
+#include "platforms/standalone/reader.h"
+#include "platforms/standalone/start_screen.h"
 #include "services.h"
 #include "runtime.h"
-#include "canvas.h"
-#include "window_geometry.h"
+#include "platforms/standalone/canvas.h"
+#include "platforms/standalone/window_geometry.h"
 #include "refresh.h"
 #include "canvas_refresh.h"
 #include "assets.h"
@@ -69,18 +69,18 @@ public:
         layout = new QStackedLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
         const auto services = android::readerServices();
-        start = new android::StartScreen(services.presentation, store, services.textScale);
+        start = new standalone::StartScreen(services.presentation, store, services.textScale);
         start->setLibrarySystemBarBorders(true);
         // A book picked while the library is shown joins it; see openBook.
-        connect(start, &android::StartScreen::libraryOpenRequested, this, [] {
+        connect(start, &standalone::StartScreen::libraryOpenRequested, this, [] {
             android::activity("chooseBook");
         });
-        connect(start, &android::StartScreen::addFolderRequested, this, [] {
+        connect(start, &standalone::StartScreen::addFolderRequested, this, [] {
             android::activity("chooseFolder");
         });
-        connect(start, &android::StartScreen::exitRequested, this, &QWidget::close);
-        connect(start, &android::StartScreen::bookRequested, this, &Window::openLibraryBook);
-        connect(start, &android::StartScreen::markUnreadRequested, this, [this](const QString &key) {
+        connect(start, &standalone::StartScreen::exitRequested, this, &QWidget::close);
+        connect(start, &standalone::StartScreen::bookRequested, this, &Window::openLibraryBook);
+        connect(start, &standalone::StartScreen::markUnreadRequested, this, [this](const QString &key) {
             const auto book = store.index().books.value(key);
             const auto path = book.folder.isEmpty() ? key : cachePath(key);
             if (controller.resetBook(path))
@@ -88,11 +88,11 @@ public:
             else
                 start->showLibraryError(tr("The book's reading settings and position could not be reset."));
         });
-        connect(start, &android::StartScreen::removeFolderRequested, this, [this](const QString &key) {
+        connect(start, &standalone::StartScreen::removeFolderRequested, this, [this](const QString &key) {
             store.removeFolder(key);
             android::releaseFolder(key);
         });
-        connect(start, &android::StartScreen::removeBookRequested, this, [this](const QString &key) {
+        connect(start, &standalone::StartScreen::removeBookRequested, this, [this](const QString &key) {
             const auto book = store.index().books.value(key);
             // A book opened on its own is Kobalt's copy; delete it with the entry.
             if (book.folder.isEmpty() &&
@@ -103,14 +103,14 @@ public:
         start->setSingleBooksAreCopies(true);
         applyLibraryTheme();
         layout->addWidget(start);
-        canvas = new android::WidgetCanvas(this);
+        canvas = new standalone::WidgetCanvas(this);
         layout->addWidget(canvas);
         new android::CanvasRefresh(canvas, android::refreshAvailable, submitRefresh);
         libraryRefresh = new android::CanvasRefresh(start->libraryCanvas(), android::refreshAvailable, submitRefresh);
         canvas->viewportResized = [this] { sizeCanvas(); };
         libraryHandoff.setInterval(16);
         connect(&libraryHandoff, &QTimer::timeout, this, [this] {
-            if (!android::libraryGeometryReady() || !android::contentFitsSurface(*this, android::libraryContentSize()))
+            if (!android::libraryGeometryReady() || !standalone::contentFitsSurface(*this, android::libraryContentSize()))
                 return;
             // Lay out the hidden Library at its final size. Leave its queued
             // layout and proxy updates one event-loop pass before revealing it.
@@ -127,9 +127,9 @@ public:
             libraryHandoff.stop();
             syncPageButtons();
         });
-        connect(&controller, &android::ReaderController::retiring, this, [this] {
+        connect(&controller, &standalone::ReaderController::retiring, this, [this] {
             if (layout->currentWidget() == canvas) {
-                surfaceHandoff.hold([](android::WidgetCanvas *surface) {
+                surfaceHandoff.hold([](standalone::WidgetCanvas *surface) {
                     new android::CanvasRefresh(surface, android::refreshAvailable, submitRefresh, false);
                 });
             }
@@ -199,9 +199,9 @@ public:
             if (state != Qt::ApplicationActive && controller.window())
                 controller.window()->checkpoint();
         });
-        connect(&controller, &android::ReaderController::openingProgress, start, &android::StartScreen::setProgress);
-        connect(&controller, &android::ReaderController::openingCover, start, &android::StartScreen::setCover);
-        connect(&controller, &android::ReaderController::opened, this, [this] {
+        connect(&controller, &standalone::ReaderController::openingProgress, start, &standalone::StartScreen::setProgress);
+        connect(&controller, &standalone::ReaderController::openingCover, start, &standalone::StartScreen::setCover);
+        connect(&controller, &standalone::ReaderController::opened, this, [this] {
             if (!openedKey.isEmpty())
                 store.setOpened(openedKey);
             auto *reader = controller.window();
@@ -219,7 +219,7 @@ public:
             settings.remove("lastBook");
             settings.sync();
         });
-        connect(&controller, &android::ReaderController::failed, this, [this](const QString &error) {
+        connect(&controller, &standalone::ReaderController::failed, this, [this](const QString &error) {
             failedOpening = true;
             android::setPageButtonsAvailable(false);
             openingHandoff.stop();
@@ -232,7 +232,7 @@ public:
             syncPageButtons();
             qWarning() << "Kobalt reader error:" << error;
         });
-        connect(&controller, &android::ReaderController::closed, this, [this] {
+        connect(&controller, &standalone::ReaderController::closed, this, [this] {
             android::setPageButtonsAvailable(false);
             if (closing) {
                 android::activity("exitReader");
@@ -262,14 +262,14 @@ public:
     }
 
 private:
-    android::ReaderController controller;
+    standalone::ReaderController controller;
     library::Store store;
     QStackedLayout *layout;
-    android::StartScreen *start;
+    standalone::StartScreen *start;
     // The library entry of the book being read, and the local file it opened.
     QString openedKey, openedPath;
-    android::WidgetCanvas *canvas;
-    android::SurfaceHandoff surfaceHandoff{*this};
+    standalone::WidgetCanvas *canvas;
+    standalone::SurfaceHandoff surfaceHandoff{*this};
     android::CanvasRefresh *libraryRefresh = nullptr;
     QTimer libraryHandoff;
     QSize libraryPreparedSize;
@@ -296,7 +296,7 @@ private:
     }
     void fitInsets() {
         const int side = qMax(surfaceInsets.left(), surfaceInsets.right());
-        android::fitWindowToSurface(*this, surfacePixels,
+        standalone::fitWindowToSurface(*this, surfacePixels,
                                     readingInsets ? QMargins(side, 0, side, 0) : surfaceInsets);
     }
     static bool submitRefresh(const android::RefreshFrame &frame) {

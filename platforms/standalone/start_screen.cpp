@@ -10,7 +10,7 @@
 #include <QResizeEvent>
 #include <QVBoxLayout>
 
-namespace kobalt::android {
+namespace kobalt::standalone {
 StartScreen::StartScreen(PresentationFactory presentation, library::Store &store, std::function<qreal()> textScale,
                          QWidget *parent)
     : QStackedWidget(parent), presentation(std::move(presentation)), store(store), textScale(std::move(textScale)) {

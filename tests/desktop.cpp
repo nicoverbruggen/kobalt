@@ -16,10 +16,10 @@
 #include "interfaces/reader/views/opening.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
-#include "platforms/android/start_screen.h"
-#include "platforms/android/canvas.h"
-#include "platforms/android/reader.h"
-#include "platforms/android/window_geometry.h"
+#include "platforms/standalone/start_screen.h"
+#include "platforms/standalone/canvas.h"
+#include "platforms/standalone/reader.h"
+#include "platforms/standalone/window_geometry.h"
 #include <QStackedLayout>
 #include <QProgressBar>
 #include "platforms/android/boox_frame_queue.h"
@@ -852,7 +852,7 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     QCoreApplication::processEvents();
     const auto destination = captureDirectory + '/' + name + ".png";
     QWidget *surface = nativeScreen ? nativeScreen : fixture.window.readerWindow();
-    auto *start = fixture.window.findChild<android::StartScreen *>();
+    auto *start = fixture.window.findChild<standalone::StartScreen *>();
     if (!nativeScreen && start && start->libraryShown()) surface = start->library();
     int preset = fixture.window.findChild<QComboBox *>("desktopScreenPicker")->currentIndex();
     if (fixture.window.findChild<QAction *>("desktopRotateDevice")->isChecked()) {
@@ -2800,7 +2800,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.window.findChild<QComboBox *>("desktopResolutionPicker")->currentData().toInt(), 300);
         QCOMPARE(fixture.window.findChild<QComboBox *>("desktopTextSizePicker")->currentData().toInt(), 100);
         QVERIFY(!fixture.window.readerWindow());
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start && start->libraryShown());
         QVERIFY(start->library()->findChild<QPushButton *>("libraryOpenBook")->isVisible());
         QVERIFY(!start->findChild<QWidget *>("androidIntro"));
@@ -2810,7 +2810,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         library::Store store(directory.path(), std::make_shared<library::LocalSource>());
-        android::StartScreen start(desktop::readerServices().presentation, store);
+        standalone::StartScreen start(desktop::readerServices().presentation, store);
         start.resize(640, 800);
         start.show();
         QVERIFY(start.libraryShown());
@@ -2820,13 +2820,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!view->findChild<QWidget *>("librarySort")->isVisible());
         QVERIFY(!view->findChild<QPushButton *>("libraryViewGrid")->isVisible());
         QVERIFY(!view->findChild<QPushButton *>("libraryLeave"));
-        QSignalSpy open(&start, &android::StartScreen::libraryOpenRequested);
+        QSignalSpy open(&start, &standalone::StartScreen::libraryOpenRequested);
         view->findChild<QPushButton *>("libraryOpenBook")->click();
         QTRY_COMPARE(open.count(), 1);
         QVERIFY(start.libraryShown());
         QVERIFY(QDir().mkpath(directory.path() + "/books"));
         QVERIFY(QFile::copy(book, directory.path() + "/books/first.epub"));
-        connect(&start, &android::StartScreen::addFolderRequested, &start, [&] {
+        connect(&start, &standalone::StartScreen::addFolderRequested, &start, [&] {
             store.addFolder({directory.path() + "/books", "Books"});
         });
         view->findChild<QPushButton *>("libraryChooseFolder")->click();
@@ -2840,7 +2840,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     void library() {
         Fixture fixture;
         QVERIFY(fixture.prepared);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start);
         const auto libraryBooks = [&fixture] {
             library::Index index;
@@ -2940,7 +2940,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                                   QDateTime::currentDateTimeUtc()}});
         QVERIFY(highlights.save());
         const auto preferences = storage::readJson(fixture.paths.preferences());
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start && start->libraryShown());
         start->library()->markBook(book, library::Book::Mark::Unread);
         QCOMPARE(storage::readBookState(fixture.paths, identity).object, QJsonObject({{"book", identity}}));
@@ -2960,7 +2960,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         // On the 7-inch, Small makes 5 by 4 (two pages) and Large 3 by 2 (seven).
         Fixture fixture(false, false, true, true);
         QVERIFY(fixture.prepared);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
         QVERIFY(start && picker);
         start->showLibrary();
@@ -2993,7 +2993,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     void libraryScanningCaption() {
         Fixture fixture(false, false, true, true);
         QVERIFY(fixture.prepared);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         auto *textSize = fixture.window.findChild<QComboBox *>("desktopTextSizePicker");
         QVERIFY(start && textSize);
         fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(1);
@@ -3039,7 +3039,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         // the Mac app delivers the press.
         Fixture fixture(false, false, true, true);
         QVERIFY(fixture.prepared);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start);
         start->showLibrary();
         auto *view = start->library();
@@ -3075,7 +3075,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         // Once there is a library, a fresh start opens on it.
         Fixture fixture(false, false, true, false);
         QVERIFY(fixture.prepared);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start && start->libraryShown());
         QVERIFY(!start->dismissModal());
         QVERIFY(start->libraryShown());
@@ -3184,7 +3184,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.state().value("page").toInt() > 0);
         fixture.window.readerWindow()->close();
         QTRY_VERIFY(fixture.window.idle());
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start && start->library());
         start->library()->markBook(QFileInfo(book).absoluteFilePath(), library::Book::Mark::Finished);
         fixture.window.openBook(book);
@@ -3391,7 +3391,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         // including the preview toolbar and the space around the device.
         Fixture fixture(false);
         QVERIFY(fixture.prepared);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
         QVERIFY(start && picker);
         const auto hover = [](QWidget *target) {
@@ -3439,7 +3439,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         Fixture fixture(false, false, true);
         QVERIFY(fixture.prepared);
         fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(2);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start && start->libraryShown());
         auto *library = start->library();
         QTRY_VERIFY(library->isVisible() && library->size() == QSize(1264, 1680));
@@ -7302,19 +7302,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             result.suspended = [] { return false; };
             return result;
         };
-        android::ReaderController first(paths, engineFontInputs(*assets, {}, {}),
+        standalone::ReaderController first(paths, engineFontInputs(*assets, {}, {}),
             placeholderFontFamily(*assets, *copies), services, [](Qt::ScreenOrientation) {});
-        android::ReaderController second(paths, engineFontInputs(*assets, {}, {}),
+        standalone::ReaderController second(paths, engineFontInputs(*assets, {}, {}),
             placeholderFontFamily(*assets, *copies), services, [](Qt::ScreenOrientation) {});
         const auto drain = qScopeGuard([&] {
             second.close(); first.close();
             if (!QTest::qWaitFor([&] { return first.idle() && second.idle(); }, 10000))
                 QTest::qFail("Readers did not drain", __FILE__, __LINE__);
         });
-        connect(&first, &android::ReaderController::opened, &first, [&] { first.window()->show(); });
-        connect(&second, &android::ReaderController::opened, &second, [&] { second.window()->show(); });
-        QSignalSpy firstOpened(&first, &android::ReaderController::opened);
-        QSignalSpy secondOpened(&second, &android::ReaderController::opened);
+        connect(&first, &standalone::ReaderController::opened, &first, [&] { first.window()->show(); });
+        connect(&second, &standalone::ReaderController::opened, &second, [&] { second.window()->show(); });
+        QSignalSpy firstOpened(&first, &standalone::ReaderController::opened);
+        QSignalSpy secondOpened(&second, &standalone::ReaderController::opened);
         first.open(book, QSize(600, 800), "first-window");
         QTRY_COMPARE_WITH_TIMEOUT(firstOpened.count(), 1, 10000);
         QTRY_VERIFY(first.window()->readyForPresentation());
@@ -7354,7 +7354,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             if (!ok) QTest::qFail("Cannot inspect controller history", __FILE__, __LINE__);
             return result;
         };
-        android::ReaderController controller(paths, engineFontInputs(*assets, {}, {}),
+        standalone::ReaderController controller(paths, engineFontInputs(*assets, {}, {}),
             placeholderFontFamily(*assets, *copies), [] {
                 auto services = desktop::readerServices();
                 services.suspended = [] { return false; };
@@ -7365,10 +7365,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             if (!QTest::qWaitFor([&] { return controller.idle(); }, 10000))
                 QTest::qFail("History controller did not drain", __FILE__, __LINE__);
         });
-        connect(&controller, &android::ReaderController::opened, &controller, [&] {
+        connect(&controller, &standalone::ReaderController::opened, &controller, [&] {
             controller.window()->show();
         });
-        QSignalSpy opened(&controller, &android::ReaderController::opened);
+        QSignalSpy opened(&controller, &standalone::ReaderController::opened);
         controller.open(book, QSize(600, 800), "content://library/first");
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
         QTRY_VERIFY(controller.window()->readyForPresentation());
@@ -7391,7 +7391,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTemporaryDir directory;
         storage::Paths paths{directory.path()};
         QVERIFY(storage::writeJson(paths.preferences(), {{"default_menu_view", "none"}, {"highlight_help_seen", true}}));
-        android::ReaderController controller(paths, engineFontInputs(*assets, {}, {}),
+        standalone::ReaderController controller(paths, engineFontInputs(*assets, {}, {}),
                                              placeholderFontFamily(*assets, *copies), desktop::readerServices,
                                              [](Qt::ScreenOrientation) {});
         const auto drain = qScopeGuard([&] {
@@ -7402,21 +7402,21 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QWidget window;
         auto *layout = new QStackedLayout(&window);
         layout->setContentsMargins(0, 0, 0, 0);
-        auto *canvas = new android::WidgetCanvas(&window);
+        auto *canvas = new standalone::WidgetCanvas(&window);
         layout->addWidget(canvas);
         window.resize(600, 800);
         window.show();
-        android::SurfaceHandoff handoff(window);
-        connect(&controller, &android::ReaderController::opened, &window, [&] {
+        standalone::SurfaceHandoff handoff(window);
+        connect(&controller, &standalone::ReaderController::opened, &window, [&] {
             canvas->setContent(controller.window());
             canvas->fitContent();
             controller.window()->show();
         });
-        QSignalSpy opened(&controller, &android::ReaderController::opened);
-        QSignalSpy retiring(&controller, &android::ReaderController::retiring);
+        QSignalSpy opened(&controller, &standalone::ReaderController::opened);
+        QSignalSpy retiring(&controller, &standalone::ReaderController::retiring);
         bool visibleAtRetirement = false;
         QImage lastFrame;
-        connect(&controller, &android::ReaderController::retiring, &window, [&] {
+        connect(&controller, &standalone::ReaderController::retiring, &window, [&] {
             visibleAtRetirement = controller.window() && controller.window()->isVisible();
             handoff.hold();
             lastFrame = window.grab().toImage();
@@ -7733,7 +7733,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY2(qAlpha(caption.pixel(x, y)) <= 128 || qGray(caption.pixel(x, y)) > 128,
                          "the exit caption must not draw in the arrow's cell");
         // The Library and the reader use one text size.
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QVERIFY(start);
         const auto queryPixels = [start] {
             auto *query = start->library()->findChild<QLineEdit *>("librarySearchQuery");
@@ -8253,7 +8253,7 @@ private slots:
         Fixture library(dark, false, true);
         QVERIFY(library.prepared);
         selectPreview(library, preset);
-        auto *start = library.window.findChild<android::StartScreen *>();
+        auto *start = library.window.findChild<standalone::StartScreen *>();
         QVERIFY(start);
         start->showLibrary();
         auto *view = start->library();
@@ -8476,7 +8476,7 @@ private slots:
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QTRY_VERIFY(start && start->libraryShown());
         // The portrait phone keeps its 60-pixel camera band above the Library.
         QTRY_COMPARE(start->library()->size(), librarySize(preset));
@@ -8559,7 +8559,7 @@ private slots:
         Fixture fixture(dark, false, true);
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         auto *view = start->library();
         QTRY_VERIFY(view->isVisible() && view->width() > 600);
         view->findChild<QPushButton *>("librarySearch")->click();
@@ -8815,7 +8815,7 @@ private slots:
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         auto *reader = fixture.window.readerWindow();
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         auto *view = start->openingCanvas()->content->findChild<QDialog *>("rrOpening");
         QVERIFY(view);
         // Keep the production opening, including the cover delivered by its worker.
@@ -9480,7 +9480,7 @@ private slots:
         const auto device = screenshotDevice(preset);
         const auto name = device + ('-' + screenshotTheme(dark));
         // Onboarding is part of the Library and follows both themes.
-        auto *start = fixture.window.findChild<android::StartScreen *>();
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
         QTRY_VERIFY(start && start->library()->size() == librarySize(preset));
         QVERIFY(capture(fixture, name + "-library-empty"));
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -9528,7 +9528,7 @@ private slots:
             Fixture fixture(dark);
             QVERIFY(fixture.prepared);
             selectPreview(fixture, preset);
-            auto *start = fixture.window.findChild<android::StartScreen *>();
+            auto *start = fixture.window.findChild<standalone::StartScreen *>();
             auto *view = start->library();
             auto *canvas = start->libraryCanvas();
             // The portrait phone's Library starts below its camera band.
@@ -9543,7 +9543,7 @@ private slots:
             Fixture fixture(dark, false, true, reading);
             QVERIFY(fixture.prepared);
             selectPreview(fixture, preset);
-            auto *start = fixture.window.findChild<android::StartScreen *>();
+            auto *start = fixture.window.findChild<standalone::StartScreen *>();
             QVERIFY(start);
             start->showLibrary();
             auto *view = start->library();

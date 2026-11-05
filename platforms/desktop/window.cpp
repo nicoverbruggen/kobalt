@@ -1,8 +1,8 @@
 #include "window.h"
 #include "interfaces/library/library_view.h"
 #include "services.h"
-#include "platforms/android/canvas.h"
-#include "platforms/android/start_screen.h"
+#include "platforms/standalone/canvas.h"
+#include "platforms/standalone/start_screen.h"
 #include "platform/api/safe_area.h"
 #include "interfaces/reader/views/reading_page.h"
 #include "reading/reading_density.h"
@@ -408,7 +408,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         renderingDpi = resolutionPicker->currentData().toInt();
         sizeCanvas();
     });
-    start = new android::StartScreen(readerServices().presentation, store, [this] {
+    start = new standalone::StartScreen(readerServices().presentation, store, [this] {
         return textSize / 100.0;
     });
     start->setKeyboardFactory(readerServices().keyboard);
@@ -420,32 +420,32 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
             start->applyTextSize();
     });
     start->setDark(controller.preferences().value("dark_mode").toBool(false));
-    connect(start, &android::StartScreen::bookRequested, this, &Window::openBook);
-    connect(start, &android::StartScreen::libraryOpenRequested, this, &Window::chooseBook);
-    connect(start, &android::StartScreen::markUnreadRequested, this, [this](const QString &key) {
+    connect(start, &standalone::StartScreen::bookRequested, this, &Window::openBook);
+    connect(start, &standalone::StartScreen::libraryOpenRequested, this, &Window::chooseBook);
+    connect(start, &standalone::StartScreen::markUnreadRequested, this, [this](const QString &key) {
         if (controller.resetBook(key))
             store.setMark(key, library::Book::Mark::Unread);
         else
             start->showLibraryError(tr("The book's reading settings and position could not be reset."));
     });
-    connect(start, &android::StartScreen::addFolderRequested, this, &Window::chooseFolder);
-    connect(start, &android::StartScreen::removeFolderRequested, this, [this](const QString &key) {
+    connect(start, &standalone::StartScreen::addFolderRequested, this, &Window::chooseFolder);
+    connect(start, &standalone::StartScreen::removeFolderRequested, this, [this](const QString &key) {
         store.removeFolder(key);
     });
     // The desktop never deletes a book file; it only leaves the library.
-    connect(start, &android::StartScreen::removeBookRequested, this, [this](const QString &key) {
+    connect(start, &standalone::StartScreen::removeBookRequested, this, [this](const QString &key) {
         store.removeBook(key);
     });
     if (store.index().settings.checkAtStart)
         QTimer::singleShot(0, this, [this] {
             store.scan();
         });
-    canvas = new android::WidgetCanvas(stack);
+    canvas = new standalone::WidgetCanvas(stack);
     canvas->setMouseTracking(true);
     canvas->viewport()->setMouseTracking(true);
     stack->addWidget(start);
     stack->addWidget(canvas);
-    connect(start, &android::StartScreen::exitRequested, this, &QWidget::close);
+    connect(start, &standalone::StartScreen::exitRequested, this, &QWidget::close);
     auto *file = menuBar()->addMenu(tr("File"));
     auto *open = file->addAction(tr("Open EPUB…"), this, &Window::chooseBook);
     open->setShortcut(QKeySequence::Open);
@@ -520,9 +520,9 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         update();
     });
     qApp->installEventFilter(this);
-    connect(&controller, &android::ReaderController::openingProgress, start, &android::StartScreen::setProgress);
-    connect(&controller, &android::ReaderController::openingCover, start, &android::StartScreen::setCover);
-    connect(&controller, &android::ReaderController::opened, this, [this] {
+    connect(&controller, &standalone::ReaderController::openingProgress, start, &standalone::StartScreen::setProgress);
+    connect(&controller, &standalone::ReaderController::openingCover, start, &standalone::StartScreen::setCover);
+    connect(&controller, &standalone::ReaderController::opened, this, [this] {
         if (!openedKey.isEmpty())
             store.setOpened(openedKey);
         auto *reader = controller.window();
@@ -535,13 +535,13 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         emit bookOpened();
         setPreviewControlsEnabled(true);
     });
-    connect(&controller, &android::ReaderController::failed, this, [this](const QString &error) {
+    connect(&controller, &standalone::ReaderController::failed, this, [this](const QString &error) {
         failed = true;
         start->showLibraryError(error);
         stack->setCurrentWidget(start);
         emit bookFailed(error);
     });
-    connect(&controller, &android::ReaderController::closed, this, [this] {
+    connect(&controller, &standalone::ReaderController::closed, this, [this] {
         recordProgress();
         start->setDark(controller.preferences().value("dark_mode").toBool(false));
         if (!failed)

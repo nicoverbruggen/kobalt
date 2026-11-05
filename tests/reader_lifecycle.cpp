@@ -20,7 +20,7 @@
 #include "interfaces/reader/views/reading_page.h"
 #include "interfaces/reader/views/kosync_notice.h"
 #include "interfaces/reader/views/sleep_screen.h"
-#include "platforms/android/canvas.h"
+#include "platforms/standalone/canvas.h"
 #include "platforms/desktop/services.h"
 #include "platforms/kobo/common/engine_positions.h"
 #include "platform/api/reader_orientation.h"
@@ -445,7 +445,7 @@ QTimer *transitionMappingDeadline(ReaderWindow *window) {
     return deadlines.last();
 }
 
-class Canvas final : public android::WidgetCanvas {
+class Canvas final : public standalone::WidgetCanvas {
 public:
     Canvas(ReaderWindow *reader, QSize size) : WidgetCanvas(nullptr) {
         reader->setFixedSize(size);

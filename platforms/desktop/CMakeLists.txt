@@ -130,7 +130,7 @@ endif()
 file(GLOB_RECURSE interfaces CONFIGURE_DEPENDS "${source}/interfaces/*.cpp")
 add_library(kobalt-desktop OBJECT ${interfaces}
     window.cpp services.cpp
-    ../android/reader.cpp ../android/start_screen.cpp
+    ../standalone/reader.cpp ../standalone/start_screen.cpp
     "${source}/platform/api/reader_orientation.cpp")
 target_link_libraries(kobalt-desktop PUBLIC kobalt-core)
 set_source_files_properties("${source}/interfaces/reader/views/reading_page.cpp" PROPERTIES

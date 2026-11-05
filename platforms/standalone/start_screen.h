@@ -9,7 +9,7 @@ class LibraryView;
 class Store;
 }
 
-namespace kobalt::android {
+namespace kobalt::standalone {
 class WidgetCanvas;
 // Qt-only library and book-opening UI. The host supplies document and folder
 // picking, file access and exit.

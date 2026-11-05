@@ -1,5 +1,5 @@
 #pragma once
-#include "platforms/android/reader.h"
+#include "platforms/standalone/reader.h"
 #include "library/library_store.h"
 #include <QMainWindow>
 #include <QTimer>
@@ -13,7 +13,7 @@ class QActionGroup;
 class QAction;
 class QLabel;
 class QPushButton;
-namespace kobalt::android {
+namespace kobalt::standalone {
 class WidgetCanvas;
 class StartScreen;
 }
@@ -52,14 +52,14 @@ private:
     const std::function<QString()> clockSource;
     // This controller and canvas contain no Android API calls. Reuse their
     // publication lifetime and physical-pixel rendering on the desktop.
-    android::ReaderController controller;
+    standalone::ReaderController controller;
     library::Store store;
     // The library entry of the book being read.
     QString openedKey;
     QStackedWidget *stack;
     DeviceFrame *deviceFrame;
-    android::StartScreen *start;
-    android::WidgetCanvas *canvas;
+    standalone::StartScreen *start;
+    standalone::WidgetCanvas *canvas;
     QComboBox *screenPicker, *resolutionPicker, *textSizePicker;
     QActionGroup *screenActions, *resolutionActions, *textSizeActions;
     QAction *rotateAction;

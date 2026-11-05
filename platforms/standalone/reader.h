@@ -8,7 +8,7 @@
 #include "publication/publication_endpoint.h"
 #include <QPointer>
 
-namespace kobalt::android {
+namespace kobalt::standalone {
 // Own the publication until engine work has drained.
 // A newer document replaces a pending opening; closing always cancels it.
 class ReaderController : public QObject {

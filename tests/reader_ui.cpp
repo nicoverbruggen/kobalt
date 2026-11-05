@@ -28,11 +28,11 @@
 #include "interfaces/reader/views/reading_page.h"
 #include "interfaces/reader/settings/header_footer_panel.h"
 #include "interfaces/reader/panels/bookmark_list.h"
-#include "platforms/android/canvas.h"
+#include "platforms/standalone/canvas.h"
 #include "platforms/android/canvas_refresh.h"
 #include "platforms/android/boox_refresh.h"
-#include "platforms/android/start_screen.h"
-#include "platforms/android/window_geometry.h"
+#include "platforms/standalone/start_screen.h"
+#include "platforms/standalone/window_geometry.h"
 #include "library/library_store.h"
 #include "platforms/kobo/display/annotation_damage.h"
 #include "platforms/kobo/display/panel_damage.h"
@@ -76,7 +76,7 @@ public:
         return QPushButton::event(event);
     }
 };
-class Canvas final : public android::WidgetCanvas {
+class Canvas final : public standalone::WidgetCanvas {
 public:
     Canvas(QWidget *surface, QSize size) : WidgetCanvas(nullptr) {
         surface->setFixedSize(size);
@@ -604,7 +604,7 @@ private slots:
             void mousePressEvent(QMouseEvent *event) override { pressed = event->timestamp(); }
             void mouseReleaseEvent(QMouseEvent *event) override { released = event->timestamp(); }
         };
-        android::WidgetCanvas canvas(nullptr);
+        standalone::WidgetCanvas canvas(nullptr);
         auto *widget = new StampWidget;
         canvas.setContent(widget);
         auto *device = QTest::createTouchDevice();
@@ -1056,7 +1056,7 @@ private slots:
     }
     void cancelledCanvasTouchRestoresSlider() {
         QFETCH(bool, secondFinger);
-        android::WidgetCanvas canvas(nullptr);
+        standalone::WidgetCanvas canvas(nullptr);
         canvas.resize(400, 300);
         auto *host = new QWidget;
         auto *slider = new ui::SettingSlider(host, 0, 100);
@@ -1089,7 +1089,7 @@ private slots:
         QCOMPARE(slider->value(), 25);
     }
     void canvasCancellationCanDeleteTarget() {
-        android::WidgetCanvas canvas(nullptr);
+        standalone::WidgetCanvas canvas(nullptr);
         canvas.resize(400, 300);
         auto *host = new QWidget;
         QPointer<DeleteOnTouchCancel> button = new DeleteOnTouchCancel(host);
@@ -1109,7 +1109,7 @@ private slots:
         QApplication::sendEvent(canvas.viewport(), &cancel);
     }
     void canvasCancellationKeepsReentrantGesture() {
-        android::WidgetCanvas canvas(nullptr);
+        standalone::WidgetCanvas canvas(nullptr);
         canvas.resize(400, 300);
         auto *host = new QWidget;
         auto *first = new QPushButton(host);
@@ -1154,7 +1154,7 @@ private slots:
     }
     void canvasReleaseCanDeleteWidgets() {
         QFETCH(bool, deleteContent);
-        android::WidgetCanvas canvas(nullptr);
+        standalone::WidgetCanvas canvas(nullptr);
         canvas.resize(400, 300);
         QPointer<QWidget> host = new QWidget;
         QPointer<QPushButton> button = new QPushButton(host);
@@ -1584,7 +1584,7 @@ private slots:
         host.setPalette(ui::readerPalette(host.palette(), !dark));
         host.resize(600, 800);
         host.setContentsMargins(0, 60, 0, 40);
-        android::StartScreen start(test::makeHostPresentation, store, {}, &host);
+        standalone::StartScreen start(test::makeHostPresentation, store, {}, &host);
         start.setGeometry(host.contentsRect());
         host.show();
         start.show();
@@ -1612,7 +1612,7 @@ private slots:
         window.setWindowFlag(Qt::ExpandedClientAreaHint);
         auto *layout = new QStackedLayout(&window);
         layout->setContentsMargins(0, 0, 0, 0);
-        auto *start = new android::StartScreen(test::makeHostPresentation, store);
+        auto *start = new standalone::StartScreen(test::makeHostPresentation, store);
         start->setDark(dark);
         start->setLibrarySystemBarBorders(true);
         layout->addWidget(start);
@@ -1625,15 +1625,15 @@ private slots:
             const int side = pixels.width() > pixels.height() ? 84 : 0;
             const bool rightCutout = side && pixels.width() == 600;
             const QMargins safePixels(rightCutout ? 0 : side, 84, rightCutout ? side : 0, 78);
-            android::fitWindowToSurface(window, pixels, safePixels);
+            standalone::fitWindowToSurface(window, pixels, safePixels);
             const auto ratio = window.devicePixelRatioF();
             QCOMPARE(window.size(), QSize(qRound(pixels.width() / ratio), qRound(pixels.height() / ratio)));
             QCOMPARE(window.contentsMargins(), QMargins(qCeil(side / ratio), qCeil(84 / ratio), qCeil(side / ratio), qCeil(78 / ratio)));
             QVERIFY(!window.testAttribute(Qt::WA_ContentsMarginsRespectsSafeArea));
-            QVERIFY(android::contentFitsSurface(window, pixels - QSize(2 * side, 84 + 78)));
-            QVERIFY(!android::contentFitsSurface(window, pixels));
+            QVERIFY(standalone::contentFitsSurface(window, pixels - QSize(2 * side, 84 + 78)));
+            QVERIFY(!standalone::contentFitsSurface(window, pixels));
             QWidget readerWindow;
-            android::fitWindowToSurface(readerWindow, pixels, QMargins(side, 0, side, 0));
+            standalone::fitWindowToSurface(readerWindow, pixels, QMargins(side, 0, side, 0));
             QCOMPARE(window.contentsRect().left(), readerWindow.contentsRect().left());
             QCOMPARE(window.contentsRect().right(), readerWindow.contentsRect().right());
             QCoreApplication::processEvents();
@@ -1678,17 +1678,17 @@ private slots:
         // Insets change when entering/leaving a book even if surface size stays
         // the same. Cold launch must reserve them without a fullscreen toggle.
         const auto pixels = QSize(1264, 1680);
-        android::fitWindowToSurface(window, pixels, {});
+        standalone::fitWindowToSurface(window, pixels, {});
         QCOMPARE(window.contentsMargins(), QMargins());
         QCoreApplication::processEvents();
         QCOMPARE(start->geometry(), window.rect());
-        android::fitWindowToSurface(window, pixels, QMargins(0, 84, 0, 78));
+        standalone::fitWindowToSurface(window, pixels, QMargins(0, 84, 0, 78));
         QCoreApplication::processEvents();
         QCOMPARE(start->geometry(), window.contentsRect());
         QVERIFY(start->y() > 0);
         const auto previous = window.size();
-        android::fitWindowToSurface(window, QSize(0, 1680));
-        android::fitWindowToSurface(window, QSize(-1, -1));
+        standalone::fitWindowToSurface(window, QSize(0, 1680));
+        standalone::fitWindowToSurface(window, QSize(-1, -1));
         QCOMPARE(window.size(), previous);
         start->showOpening();
         QVERIFY(!canvas->isVisible());
@@ -1710,10 +1710,10 @@ private slots:
         bool targetAvailable = true;
         int rejected = 0;
         QVector<android::RefreshFrame> frames;
-        android::StartScreen start(test::makeHostPresentation, store);
+        standalone::StartScreen start(test::makeHostPresentation, store);
         start.setDark(dark);
         start.resize(600, 800);
-        auto attach = [&](android::WidgetCanvas *canvas) {
+        auto attach = [&](standalone::WidgetCanvas *canvas) {
             new android::CanvasRefresh(canvas, [&] { return available; }, [&](const auto &frame) {
                 if (!targetAvailable) {
                     ++rejected;
@@ -1851,7 +1851,7 @@ private slots:
         auto palette = reader->palette();
         palette.setColor(QPalette::Window, QColor(80, 90, 100));
         reader->setPalette(palette);
-        auto *start = new android::StartScreen(test::makeHostPresentation, store);
+        auto *start = new standalone::StartScreen(test::makeHostPresentation, store);
         start->setDark(dark);
         layout->addWidget(reader);
         layout->addWidget(start);
@@ -1862,10 +1862,10 @@ private slots:
             frames.append(frame);
             return true;
         });
-        android::SurfaceHandoff handoff(window);
+        standalone::SurfaceHandoff handoff(window);
         const auto previous = window.grab().toImage();
         QVector<android::RefreshFrame> heldFrames;
-        handoff.hold([&](android::WidgetCanvas *surface) {
+        handoff.hold([&](standalone::WidgetCanvas *surface) {
             new android::CanvasRefresh(surface, [] { return true; }, [&](const auto &frame) {
                 heldFrames.append(frame);
                 return true;
@@ -1886,11 +1886,11 @@ private slots:
         // Android reports final content bounds before Qt applies its insets.
         const auto ratio = window.devicePixelRatioF();
         const QSize expected(qRound(window.width() * ratio), qRound((window.height() - 85) * ratio));
-        QVERIFY(!android::contentFitsSurface(window, expected));
-        QVERIFY(!android::contentFitsSurface(window, {}));
+        QVERIFY(!standalone::contentFitsSurface(window, expected));
+        QVERIFY(!standalone::contentFitsSurface(window, {}));
         // Restore the bars and lay out the final safe area behind the snapshot.
         window.setContentsMargins(0, 44, 0, 41);
-        QVERIFY(android::contentFitsSurface(window, expected));
+        QVERIFY(standalone::contentFitsSurface(window, expected));
         layout->activate();
         QCoreApplication::processEvents();
         QVERIFY(frames.isEmpty());

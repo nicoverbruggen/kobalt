@@ -1,7 +1,7 @@
 #pragma once
 #include "boox_frame_queue.h"
 #include "boox_refresh.h"
-#include "canvas.h"
+#include "platforms/standalone/canvas.h"
 #include <QTimer>
 
 namespace kobalt::android {
@@ -9,7 +9,7 @@ namespace kobalt::android {
 // REGAL text regions; Library, opening and dialog controls use GU regions.
 class CanvasRefresh final : public QObject {
 public:
-    CanvasRefresh(WidgetCanvas *canvas, std::function<bool()> available,
+    CanvasRefresh(standalone::WidgetCanvas *canvas, std::function<bool()> available,
                   std::function<bool(const RefreshFrame &)> submit, bool cleanOnReveal = true)
         : QObject(canvas), canvas(canvas), available(std::move(available)), submit(std::move(submit)),
           cleanOnReveal(cleanOnReveal), cleanPending(cleanOnReveal) {
@@ -79,7 +79,7 @@ private:
         // Accepted regions leave time for Qt's queued backing-store flush.
         timer.start(accepted ? 34 : 100);
     }
-    WidgetCanvas *canvas;
+    standalone::WidgetCanvas *canvas;
     std::function<bool()> available;
     std::function<bool(const RefreshFrame &)> submit;
     BooxRefreshPolicy policy;

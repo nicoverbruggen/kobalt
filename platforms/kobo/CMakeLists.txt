@@ -80,6 +80,8 @@ endforeach()
 string(APPEND embedded "{NULL, NULL, 0}};\n")
 file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/embedded_resources.h" CONTENT "${embedded}" @ONLY)
 
+# syntax.cmake repeats the source selection, compile flags and definitions
+# below, also for the evaluation package. Change both files together.
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS "${source}/*.cpp" "${source}/*.h")
 # The scenario player is built only into evaluation packages.
 list(FILTER shared EXCLUDE REGEX "/src/scenario/")

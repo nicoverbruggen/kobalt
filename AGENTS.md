@@ -36,7 +36,7 @@ When adding a UI screen that needs screenshot coverage, include its scenes in th
 
 The root `./start.sh` builds and opens the Qt developer launcher on Linux and Mac. Keep launcher sources and presets under `platforms/launcher/`. Startup checks must explain missing dependencies in the terminal, keep Docker optional for desktop work, and never install tools or pull SDK images automatically. Its actions delegate to the existing platform presets, Kobo build script and autonomous scenario player. Keep visible scenarios separate from the full headless assertion suite. Preserve run-owned process, container and scratch cleanup when changing launcher actions.
 
-For an optional check against both prepared Kobo SDKs, use `cmake --build --preset mac-kobo-checks`. Ordinary Mac builds stay independent of Docker and Kobo checks. Run both SDK checks before integration. See [Kobo compatibility checks](doc/building.md#kobo-compatibility-checks).
+For an optional check against both prepared Kobo SDKs, use `cmake --build --preset mac-kobo-checks`. Ordinary Mac builds stay independent of Docker and Kobo checks. Run both SDK checks before integration. See [Kobo compatibility checks](doc/building.md#kobo-compatibility-checks). After the first edit of a slice to shared code, run `cmake -P platforms/kobo/syntax.cmake` to find Qt 5.2 and Qt 6.5 errors before the Kobo builds. Add `-DEVAL=ON` when the change touches code of the evaluation package. See [Kobo syntax check](doc/building.md#kobo-syntax-check).
 
 ## The page turn is sacred
 

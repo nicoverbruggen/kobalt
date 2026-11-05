@@ -39,6 +39,29 @@ Run `cmake --build --preset mac-kobo-checks` from `platforms/desktop/` to check 
 
 From the repository root, use `bash platforms/kobo/build.sh qt5 --check` or `qt6 --check` for one SDK. Set `KOBALT_CHECK_SOURCE_ROOT` only when using a newer check runner against another explicitly selected checkout. Checks reuse the selected checkout's incremental Kobo build directories and the shared dependency cache. A first check in a new worktree still compiles the application objects; later checks rebuild only stale inputs. The checks use the real SDKs and catch compile and link errors, including code hidden behind platform conditionals. They do not replace package or runtime validation. Missing Docker access or a prepared image fails the check without downloading or building an SDK.
 
+### Kobo syntax check
+
+Run `cmake -P platforms/kobo/syntax.cmake` from the repository root to find Kobo compile errors on the Mac in seconds. It checks every source that the Kobo Qt5 and Qt6 builds compile, including the C files and the Qt5 refresh check program. The Mac's clang reads each source in syntax-only mode against the headers of the prepared images. Each lane uses the flags, definitions and warnings of its Kobo build.
+
+| Lane | Headers |
+| --- | --- |
+| `qt5` | Qt 5.2, the GCC 4.9 C++ library and the sysroot of the Qt5 image. |
+| `qt6` | Qt 6.5, the GCC 11 C++ library and the glibc headers of the Qt6 image. |
+
+The check finds missing C++17 library headers such as `<optional>` in GCC 4.9, Qt APIs that are newer than the SDK, Qt 6.5 deprecations such as the `QCryptographicHash::addData(const char *, qsizetype)` overload, `override` on a function that overrides nothing in the SDK, missing includes and `-Werror` warnings.
+
+The default checks both lanes. To check one lane, put `-DSDK=qt5` or `-DSDK=qt6` before `-P`. Add `-DEVAL=ON` to also check the evaluation package of each selected lane: every source again with `KOBALT_SCENARIO_PLAYER` defined, and the scenario player. This doubles the work of a first run, so it is off by default.
+
+The check is incremental. A later run checks only the sources whose files, headers or flags changed. To check only some sources, give their paths as arguments. Each selected lane that compiles a source checks it. A header argument checks all sources of the selected lanes again, because the recorded dependencies decide which sources include it. The Ninja file, response files and recorded dependencies stay in `build/kobo-syntax/` in each worktree.
+
+The first run of a lane copies its SDK headers out of the prepared image into `sdk-headers/` in the [dependency cache](#dependency-cache), so all worktrees share one copy for each image. This needs a running container engine and the image from `platforms/sdk-image.sh`. Later runs do not use the container engine until that image pin or the copy recipe in the script changes. The check never pulls or builds an image.
+
+On the development Mac, a first run of one lane, including the header copy, took 7 to 12 seconds. A first check of both lanes with copied headers took 15 seconds while other builds ran. A run with no changes takes less than a second.
+
+The check reads Kobalt's generated headers and the dependency headers from the desktop build. Configure the `mac` preset first, as described in [Mac](#mac).
+
+The check does not link. `mac-kobo-checks` remains the final check before integration.
+
 ### Headless tests and screenshots
 
 Schedule a full native suite separately from other full suites and heavy builds on the same Mac, including work in other checkouts. Keep the preset's parallelism within that run. Test deadlines measure wall time, so competing runs can exhaust a test's budget without an assertion failure.
@@ -157,12 +180,15 @@ All worktrees of a repository share compiled dependencies. The cache is `build/d
 | `<key>/` | One dependency set: patched sources, library build trees, the installed libraries in `install/` and the CREngine archive in `crengine/`. |
 | `<key>/complete` | The publication marker. A set without it is unfinished and is never used. |
 | `<key>.lock` | The lock held while the set builds. |
+| `sdk-headers/<sdk>-<key>/` | The Kobo SDK headers of the [syntax check](#kobo-syntax-check). The key is a hash of the pinned image digest and the copy recipe. |
 
 The key is a hash of the compiler, compiler flags, system, Qt SDK, toolchain contents, prepared SDK image, libpng choice, source pins, recipes and patches. It does not contain the checkout path. Worktrees with the same pins and patches share one set. A change to a pin, recipe or patch selects a new key, and other worktrees keep their set. The Mac `mac` and `mac-perf` builds share one set, and so do each Kobo SDK's regular, evaluation and diagnostic builds. Application objects stay in each worktree.
 
 When a set is missing, configuration takes its lock, builds it in place and then publishes the `complete` marker by rename. Another configuration that needs the same set waits for the lock and then uses the result. A failed or interrupted build never writes the marker. The next attempt continues it when it comes from the same checkout, and starts again otherwise. A published set is never changed. A cache hit never skips a checksum check: the key contains the pinned checksums, a set is built only from verified archives, a cached download is verified again on every use and bundled archives are checked on every configuration. On the development Mac with two dependency jobs, a second worktree configured in 2 seconds for the Mac and in 1 second for each Kobo SDK. Building a missing set took one to one and a half minutes, depending on download speed.
 
 Do not move or rename the cache. Installed CMake and pkg-config files contain its absolute path. To use another location, set `KOBALT_DEPENDENCY_CACHE` and let configuration build the sets there. Delete a `<key>/` folder that no branch uses to free space, but only while no build runs. An interrupted download leaves a `*.partial` file in `downloads/`; it is never used and can be deleted at the same time. Never edit files inside a published set.
+
+The syntax check copies SDK headers into a `*.partial` folder in `sdk-headers/` and then renames it into place. A concurrent run sees a whole copy or none. When two runs copy the same headers at the same time, the first rename wins and the other run removes its copy. An interrupted copy leaves its `*.partial` folder; it is never used. Delete it, or an `sdk-headers/` entry that no branch uses, only while no syntax check runs.
 
 The Kobo and Android launchers create the cache on the host, so it belongs to the host user. They mount it at the fixed container path `/dependency-cache`, so all container builds store the same paths. Container builds lock each other out. File locks do not reach across the bind mount between the Mac and a container, measured with OrbStack. The Mac and a container never build the same key, because the compiler and system are part of it. They share only `downloads/`, where each archive is downloaded under a temporary name, verified and then renamed into place without a lock.
 

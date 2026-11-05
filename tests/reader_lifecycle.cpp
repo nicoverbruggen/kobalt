@@ -45,6 +45,7 @@
 #include "support/engine_fixtures.h"
 #include "support/host_presentation.h"
 #include "support/input_clock.h"
+#include "support/kosync_reply.h"
 #include "support/reading_bridge_fixture.h"
 #include "support/strings.h"
 
@@ -61,6 +62,8 @@
 #include <QFontDatabase>
 #include <QImageWriter>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QNetworkAccessManager>
 #include <QLabel>
 #include <QLineEdit>
 #ifndef KOBALT_NO_SENSORS
@@ -153,6 +156,33 @@ public:
     void release() override { ++state->releases; }
 private:
     std::shared_ptr<SyncNetworkState> state;
+};
+// Answers the reader's KOSync requests without a server: no remote progress
+// for a GET, and the uploaded document for a PUT. While `hold` is set, new
+// replies wait in `held` until the test finishes them.
+struct KosyncHttpState {
+    int requests = 0;
+    bool hold = false;
+    QList<QPointer<test::KosyncReply>> held;
+};
+class KosyncHttp final : public QNetworkAccessManager {
+public:
+    explicit KosyncHttp(std::shared_ptr<KosyncHttpState> state) : state(std::move(state)) {}
+protected:
+    QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request, QIODevice *data) override {
+        ++state->requests;
+        QByteArray body = "{}";
+        if (operation == PutOperation) {
+            const auto upload = QJsonDocument::fromJson(data ? data->readAll() : QByteArray()).object();
+            body = QJsonDocument(QJsonObject{{"document", upload.value("document")}, {"timestamp", 1}})
+                       .toJson(QJsonDocument::Compact);
+        }
+        auto *reply = new test::KosyncReply(request, body, 200, QNetworkReply::NoError, this, state->hold);
+        if (state->hold) state->held.append(reply);
+        return reply;
+    }
+private:
+    std::shared_ptr<KosyncHttpState> state;
 };
 // Observe queued reply delivery without delaying the worker or sleeping.
 class NativeTestApplication final : public QApplication {
@@ -4030,6 +4060,74 @@ private slots:
         QCOMPARE(input->echoMode(), QLineEdit::Password);
         QVERIFY(input->text().isEmpty());
     }
+    void kosyncSleepSavesSyncTime_data() {
+        QTest::addColumn<bool>("sleepSync");
+        QTest::newRow("reading") << false;
+        QTest::newRow("sleep-sync") << true;
+    }
+    // Checks that sleep saves the sync time, also when the sleep sync ends later, and that a sleep without a sync writes nothing.
+    void kosyncSleepSavesSyncTime() {
+        QFETCH(bool, sleepSync);
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(), {
+            {"schema", 1}, {"server", "https://127.0.0.1:9"}, {"username", "test-reader"},
+            {"key", QString(32, 'a')}, {"device_id", "test-device"}, {"automatic", true},
+            {"sync_on_open", !sleepSync}, {"sync_on_sleep_wake", sleepSync}}));
+        const auto savedSyncTime = [&] {
+            return storage::readJsonFile(paths.syncAccount()).object.value("last_sync").toString();
+        };
+        auto http = std::make_shared<KosyncHttpState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [http](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+            services.kosyncSleepWake = true;
+        };
+        CloseHost cleanup{host};
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool prepared = false;
+        host.window()->preparePresentation([&](bool ready) { prepared = ready; });
+        QTRY_VERIFY_WITH_TIMEOUT(prepared, 1500);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QPointer<ReaderWindow> window = host.window();
+        auto *status = window->findChild<QLabel *>("rrKosyncStatus");
+        QVERIFY(status);
+        if (!sleepSync) {
+            // The opening sync keeps its time in memory until the sleep.
+            QTRY_COMPARE(status->text(), strings::get("kosync.up_to_date"));
+            QCOMPARE(http->requests, 2);
+            QVERIFY(savedSyncTime().isEmpty());
+            window->sleepReader();
+            QVERIFY(QDateTime::fromString(savedSyncTime(), Qt::ISODate).isValid());
+            const auto modified = QFileInfo(paths.syncAccount()).lastModified();
+            const auto contents = storage::readJsonFile(paths.syncAccount()).object;
+            window->sleepViewReady();
+            window->wakeReader();
+            QCoreApplication::processEvents();
+            window->sleepReader();
+            QCOMPARE(http->requests, 2);
+            QCOMPARE(QFileInfo(paths.syncAccount()).lastModified(), modified);
+            QCOMPARE(storage::readJsonFile(paths.syncAccount()).object, contents);
+            return;
+        }
+        QCOMPARE(http->requests, 0);
+        http->hold = true;
+        window->sleepReader();
+        // The sleep sync starts after the sleep save and is still in flight.
+        QCOMPARE(http->requests, 1);
+        QVERIFY(window->pendingNetworkSync());
+        QVERIFY(savedSyncTime().isEmpty());
+        http->hold = false;
+        for (const auto &reply : std::exchange(http->held, {}))
+            if (reply) QMetaObject::invokeMethod(reply, [reply] { reply->finish(); }, Qt::QueuedConnection);
+        QTRY_VERIFY(!window->pendingNetworkSync());
+        QCOMPARE(http->requests, 2);
+        QTRY_VERIFY(QDateTime::fromString(savedSyncTime(), Qt::ISODate).isValid());
+    }
     // Checks the toolbar Sync button: the first-use prompt until confirmed, an interactive request, the busy button and the error notice.
     void kosyncManualToolbar() {
         const auto paths = testPaths();
@@ -4926,9 +5024,9 @@ private slots:
         if (live) {
             // A second production client observes the final position on the server.
             kosync::Client verify(paths.syncAccount());
-            // Closing writes the sync time. Sleep keeps it in the reader.
-            if (transition == "close") QVERIFY(verify.lastSync().isValid());
-            else QVERIFY(showsSyncTime(window));
+            // Closing and sleep write the sync time.
+            QVERIFY(verify.lastSync().isValid());
+            if (transition != "close") QVERIFY(showsSyncTime(window));
             bool received = false;
             QString failure;
             kosync::Progress remote;

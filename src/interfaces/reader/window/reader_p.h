@@ -249,6 +249,8 @@ private:
     void showKosyncOpening();
     void hideKosyncOpening();
     void kosyncStatus(const QString &message);
+    // Declared before the client, which uses it until destroyed.
+    std::unique_ptr<QNetworkAccessManager> kosyncHttp;
     std::unique_ptr<kosync::Client> kosyncClient;
     std::unique_ptr<SyncNetwork> kosyncNetwork;
     KosyncPage *kosyncPage = nullptr;

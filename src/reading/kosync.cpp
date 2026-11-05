@@ -326,10 +326,9 @@ bool Client::recordSyncSuccess() {
     syncTimeDirty_ = true;
     return true;
 }
-bool Client::persistSyncTime() {
-    if (!syncTimeDirty_) return true;
-    const bool saved = accountWriter().writeNow([path = accountPath_, server = server_, username = username_,
-                                                key = key_, device = deviceId_, stamp = lastSync_, filenameMatching = filenameMatching_] {
+std::function<bool()> Client::syncTimeWrite() const {
+    return [path = accountPath_, server = server_, username = username_, key = key_, device = deviceId_,
+            stamp = lastSync_, filenameMatching = filenameMatching_] {
         const auto read = storage::readJsonFile(path);
         if (read.status != storage::ReadStatus::Ok) return false;
         auto object = read.object;
@@ -348,10 +347,20 @@ bool Client::persistSyncTime() {
         file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
         const auto bytes = QJsonDocument(object).toJson();
         return file.write(bytes) == bytes.size() && file.commit();
-    });
+    };
+}
+bool Client::persistSyncTime() {
+    if (!syncTimeDirty_) return true;
+    const bool saved = accountWriter().writeNow(syncTimeWrite());
     if (saved) syncTimeDirty_ = false;
     else diagnostic("kosync-sync-time-unsaved", {}, DiagnosticSeverity::Warning);
     return saved;
+}
+void Client::queueSyncTime() {
+    if (!syncTimeDirty_) return;
+    accountWriter().post(syncTimeWrite(), [](bool saved) {
+        if (!saved) diagnostic("kosync-sync-time-unsaved", {}, DiagnosticSeverity::Warning);
+    });
 }
 
 void Client::request(const QByteArray &method, const QString &path, const QUrl &server,

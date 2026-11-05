@@ -437,6 +437,10 @@ void Reader::sleepReader() {
         saveNativeProgress();
     }
     checkpoint();
+    // A device can stay asleep until its battery runs out, so the last sync
+    // time cannot wait for the book to close. The sleep sync below starts
+    // after this point; finishKosync() queues its time.
+    kosyncClient->persistSyncTime();
     // Fold waiting saves into the main profile file before a long sleep.
     bookmarks->flush();
     highlights->flush();

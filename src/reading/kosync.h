@@ -86,8 +86,13 @@ public:
     bool logout();
     QDateTime lastSync() const { return lastSync_; }
     bool recordSyncSuccess();
-    // Closing checkpoints the informational timestamp without rewriting credentials.
+    // Sleep and closing checkpoint the informational timestamp without
+    // rewriting credentials. Writes nothing when no sync succeeded since.
     bool persistSyncTime();
+    // Queues the same write on the account writer thread and does not wait,
+    // for a sync that ends while the reader sleeps. The time stays unconfirmed
+    // until the next persistSyncTime(), which then only reads the file.
+    void queueSyncTime();
     void cancel();
     void pull(const QByteArray &document, std::function<void(Progress, QString)> done, bool retryTransient = true);
     void push(const QByteArray &document, const Progress &progress, Done done);
@@ -95,6 +100,7 @@ public:
 private:
     using Response = std::function<void(int, QJsonObject, QString)>;
     void observeNetworkState();
+    std::function<bool()> syncTimeWrite() const;
     void request(const QByteArray &method, const QString &path, const QUrl &server,
                  const QString &username, const QByteArray &key, const QJsonObject &body, Response done, bool retryTransient = true);
     void requestAttempt(const QByteArray &method, const QString &path, const QUrl &server,

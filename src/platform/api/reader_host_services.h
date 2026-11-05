@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 class QKeyEvent;
+class QNetworkAccessManager;
 class QLineEdit;
 class QWidget;
 class QObject;
@@ -113,6 +114,9 @@ struct ReaderHostServices {
     KeyboardFactory keyboard;
     // Optional on hosts whose operating system already supplies connectivity.
     SyncNetworkFactory syncNetwork;
+    // Optional HTTP access for KOSync requests; tests replace it. Hosts leave
+    // it empty, and the KOSync client then uses its own.
+    std::function<std::unique_ptr<QNetworkAccessManager>()> kosyncHttp;
     // Automatic KOsync moments the host supports: a device sleep and wake
     // lifecycle, and a sync while reading that may turn on Wi-Fi.
     bool kosyncSleepWake = false, kosyncWifiControl = false;

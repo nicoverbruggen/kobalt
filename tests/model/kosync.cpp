@@ -1,6 +1,7 @@
 #include "reading/kosync.h"
 #include "support/strings.h"
 #include "check.h"
+#include "kosync_reply.h"
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -21,42 +22,7 @@
 
 using namespace kobalt;
 namespace {
-class Reply final : public QNetworkReply {
-public:
-    Reply(const QNetworkRequest &request, QByteArray bytes, int status, QNetworkReply::NetworkError error, QObject *parent)
-        : QNetworkReply(parent), bytes_(std::move(bytes)) {
-        setRequest(request);
-        setUrl(request.url());
-        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, error == QNetworkReply::NoError ? status : 0);
-        if (error != QNetworkReply::NoError) setError(error, "fixture transport failure");
-        open(QIODevice::ReadOnly);
-        QTimer::singleShot(0, this, [this] {
-            if (isFinished()) return;
-            emit readyRead();
-            if (isFinished()) return;
-            setFinished(true);
-            emit finished();
-        });
-    }
-    void abort() override {
-        if (isFinished()) return;
-        setError(OperationCanceledError, "cancelled");
-        setFinished(true);
-        emit finished();
-    }
-    qint64 bytesAvailable() const override { return bytes_.size() - offset_ + QNetworkReply::bytesAvailable(); }
-protected:
-    qint64 readData(char *output, qint64 maximum) override {
-        const auto count = qMin<qint64>(maximum, bytes_.size() - offset_);
-        if (count <= 0) return -1;
-        std::memcpy(output, bytes_.constData() + offset_, size_t(count));
-        offset_ += count;
-        return count;
-    }
-private:
-    QByteArray bytes_;
-    qint64 offset_ = 0;
-};
+using Reply = test::KosyncReply;
 class Network final : public QNetworkAccessManager {
 public:
     QByteArray response = "{}", payload;

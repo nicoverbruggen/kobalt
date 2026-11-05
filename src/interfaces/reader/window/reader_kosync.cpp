@@ -22,7 +22,8 @@ void Reader::kosyncStatus(const QString &message) {
     }
 }
 void Reader::buildKosync() {
-    kosyncClient = std::make_unique<kosync::Client>(book->paths().syncAccount());
+    if (services.kosyncHttp) kosyncHttp = services.kosyncHttp();
+    kosyncClient = std::make_unique<kosync::Client>(book->paths().syncAccount(), nullptr, kosyncHttp.get());
     if (kosyncClient->signedIn() && !book->usesNativeCloudSync() && services.syncNetwork)
         kosyncNetwork = services.syncNetwork();
     kosyncClient->setDefaultDeviceName(services.deviceName.isEmpty() ? QStringLiteral("Kobalt")
@@ -450,6 +451,10 @@ void Reader::restartKosync() {
 void Reader::finishKosync(const QString &message) {
     kosyncReaderRetry.stop();
     kosyncReaderReady = {};
+    // The sleep sync, and an older request that it waited for, end after
+    // sleepReader() saved the sync time. Queue the new time without waiting:
+    // the device may not wake before its battery runs out.
+    if (lifecycleHidden && !closing) kosyncClient->queueSyncTime();
     if (kosyncFlushWaiting) {
         kosyncFlushWaiting = false;
         startKosyncExchange(true);

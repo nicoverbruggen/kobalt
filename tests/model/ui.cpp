@@ -1023,7 +1023,8 @@ int main(int argc, char **argv)
         require(graph.findChild<QLabel *>("rrGraphChapterCaption")->text() == "stats.chapter",
                 "Chapter caption does not expose its catalog key");
         graph.setProgress("Title", 4, 10, 12, 25, 100);
-        require(graph.findChild<QLabel *>("rrGraphChapterPercent")->text() == "common.percent [33]",
+        // Nickel's count: chapter page 4 of 10 is 40%.
+        require(graph.findChild<QLabel *>("rrGraphChapterPercent")->text() == "common.percent [40]",
                 "Key mode lost the formatting argument");
         ui::PageNavigation navigation(&host, "keyTest");
         require(navigation.back->text() == "common.back", "Navigation bypasses the string catalog");
@@ -1686,7 +1687,8 @@ int main(int argc, char **argv)
         require(barPaints.paints > 0, "Changed chapter word count did not repaint the bars");
         graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
         require(title->text() == "The Second Voyage", "The chapter title is missing");
-        require(text("rrGraphChapterPercent") == get("common.percent").arg(33)
+        // Nickel's count: chapter page 4 of 10 is 40%, book page 26 of 100 is 26%.
+        require(text("rrGraphChapterPercent") == get("common.percent").arg(40)
                         && text("rrGraphChapterFigure") == "7"
                         && text("rrGraphChapterUnit") == get("stats.pages_left"),
                 "Chapter progress differs from the shared display rule");
@@ -1695,7 +1697,7 @@ int main(int argc, char **argv)
         require(text("rrGraphNextChapter")
                         == get("chapter_graph.next_chapter").arg(12).arg(get("common.pages")),
                 "Next chapter length is missing");
-        require(text("rrGraphBookPercent") == get("common.percent").arg(25),
+        require(text("rrGraphBookPercent") == get("common.percent").arg(26),
                 "Book progress disagrees with the current page");
         require(text("rrGraphBookFigure") == "75", "Book pages remaining omit the displayed page");
         graph.setChapterNumber(13, 24);

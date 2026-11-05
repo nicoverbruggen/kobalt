@@ -241,7 +241,9 @@ int main(int argc, char **argv)
                         && calls.stoppedActivity.nativePosition != opening.nativePosition
                         && calls.stoppedActivity.nativePosition == finalPosition
                         && calls.stoppedActivity.percent
-                                == 100.0 * book.session()->page() / book.session()->pages(),
+                                == qMin(99,
+                                        pageProgressPercent(book.session()->page(),
+                                                            book.session()->pages())),
                 "The closing native interval received the preceding page's progress or mapping");
         require(calls.writes == 0, "Stopping the native interval persisted book progress");
     }

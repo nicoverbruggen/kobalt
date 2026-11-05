@@ -740,16 +740,18 @@ bool phonePreset(int preset) {
     return preset == 3 || preset == 5;
 }
 
-// Each screen has light and dark captures. E-reader profiles also support
-// 150% interface text; the phone profiles support normal text only.
+QString screenshotDevice(int preset) {
+    return preset ? test::screenshotDevices().at(preset - 1) : QString("fill");
+}
+
+// One row for each gallery variant: every viewport, with the themes that
+// test::screenshotThemes declares for it.
 void screenshotVariants() {
     QTest::addColumn<int>("preset");
     QTest::addColumn<bool>("dark");
-    for (int preset : {1, 2, 3, 4, 5}) {
-        for (bool dark : {false, true})
-            QTest::newRow(qPrintable(QString("%1-%2").arg(preset).arg(dark ? "dark" : "light"))) << preset << dark;
-        if (!phonePreset(preset)) QTest::newRow(qPrintable(QString("%1-large").arg(preset))) << preset << false;
-    }
+    for (int preset : {1, 2, 3, 4, 5})
+        for (const auto &theme : test::screenshotThemes(screenshotDevice(preset)))
+            QTest::newRow(qPrintable(QString::number(preset) + '-' + theme)) << preset << (theme == "dark");
 }
 
 QString screenshotTheme(bool dark) {
@@ -766,10 +768,6 @@ QSize screenshotSize(int preset) {
 // Android keeps its status bar there.
 QSize librarySize(int preset) {
     return screenshotSize(preset) - QSize(0, preset == 3 ? 60 : 0);
-}
-
-QString screenshotDevice(int preset) {
-    return QStringList{"fill", "six-inch", "seven-inch", "phone", "six-inch-landscape", "phone-landscape"}.at(preset);
 }
 
 QString screenshotVariant(int preset, bool dark) {
@@ -2548,10 +2546,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(directory.isValid());
         QJsonArray images;
         QMap<QString, QByteArray> originals;
-        for (const auto &device : {QString("six-inch"), QString("seven-inch"), QString("phone"), QString("six-inch-landscape"), QString("phone-landscape")}) {
-            for (const auto &theme : {QString("light"), QString("dark"), QString("large")}) {
-                if (device.startsWith("phone") && theme == "large") continue;
-                QImage image(screenshotSize(QStringList{"fill", "six-inch", "seven-inch", "phone", "six-inch-landscape", "phone-landscape"}.indexOf(device)), QImage::Format_RGB32);
+        for (const auto &device : test::screenshotDevices()) {
+            for (const auto &theme : test::screenshotThemes(device)) {
+                QImage image(screenshotSize(test::screenshotDevices().indexOf(device) + 1), QImage::Format_RGB32);
                 image.fill(theme == "dark" ? Qt::black : Qt::white);
                 image.setDotsPerMeterX(11811);
                 image.setDotsPerMeterY(11811);
@@ -2626,6 +2623,33 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         manifest(changed);
         run(2);
         retained();
+        // The coverage check names every missing capture, and every capture
+        // of a screen, viewport or variant that the gallery does not declare.
+        QVERIFY(test::screenshotCoverage(images, {"reading"}).isEmpty());
+        const auto absent = test::screenshotCoverage(images, {"reading", "about"});
+        QCOMPARE(absent.size(), images.size());
+        QVERIFY(absent.contains("Missing capture: screen about, viewport phone-landscape, variant dark, page 1"));
+        QCOMPARE(test::screenshotCoverage(images, {"about"}).first(),
+                 QString("Capture of an undeclared screen: six-inch-light-reading.png"));
+        const auto entry = [](const QString &device, const QString &theme, int page) {
+            return QJsonObject{{"file", device + '-' + theme + "-reading-" + QString::number(page) + ".png"},
+                               {"device", device}, {"theme", theme}, {"screen", "reading"}, {"capture_page", page}};
+        };
+        // A second light page needs a second dark page. 150% text may add
+        // pages, but they are numbered without a gap too.
+        auto paged = images;
+        paged.append(entry("six-inch", "light", 2));
+        paged.append(entry("six-inch", "large", 3));
+        QCOMPARE(test::screenshotCoverage(paged, {"reading"}),
+                 QStringList({"Missing capture: screen reading, viewport six-inch, variant dark, page 2",
+                              "Missing capture: screen reading, viewport six-inch, variant large, page 2"}));
+        paged.append(entry("six-inch", "dark", 2));
+        paged.append(entry("six-inch", "large", 2));
+        QVERIFY(test::screenshotCoverage(paged, {"reading"}).isEmpty());
+        // Phone mode has no 150% text variant.
+        paged.append(entry("phone", "large", 1));
+        QCOMPARE(test::screenshotCoverage(paged, {"reading"}),
+                 QStringList{"Capture of an undeclared viewport or variant: phone-large-reading-1.png"});
     }
     void diagnostics() {
         // Capture native stdout/stderr too: Qt's message handler does not see
@@ -8019,6 +8043,11 @@ void checkPageAnimationCompatibility(int preset, bool dark) {
     }
 }
 
+// The screens of the light gallery. It runs primaryViews only, so this list
+// changes with that case.
+const QSet<QString> primaryScreens{"library-home", "reading", "menu", "chapters", "stats", "text", "fonts", "layout",
+                                   "settings", "bookmarks", "search-empty", "search", "annotation-actions", "menu-return-pressed"};
+
 class ScreenshotTests final : public QObject {
     Q_OBJECT
 private slots:
@@ -8901,12 +8930,11 @@ private slots:
             QVERIFY(!languages.contains(language));
             languages.insert(language);
             for (const bool vertical : {false, true}) {
-                if (vertical && !QStringList{"ja", "ko", "zh-Hans", "zh-Hant"}.contains(language)) continue;
+                if (vertical && !test::verticalWritingTour(language)) continue;
                 for (const int preset : {1, 2, 3, 4, 5}) {
                     const auto name = QString::number(preset) + '-' + language + (vertical ? "-vertical" : "");
-                    for (const bool dark : {false, true})
-                        QTest::newRow(qPrintable(name + (dark ? "-dark" : "-light"))) << entry << preset << vertical << dark;
-                    if (!phonePreset(preset)) QTest::newRow(qPrintable(name + "-large")) << entry << preset << vertical << false;
+                    for (const auto &theme : test::screenshotThemes(screenshotDevice(preset)))
+                        QTest::newRow(qPrintable(name + '-' + theme)) << entry << preset << vertical << (theme == "dark");
                 }
             }
         }
@@ -8978,9 +9006,8 @@ private slots:
         for (const auto *publication : {"alice", "maths", "moby-dick"})
             for (const int preset : {1, 2, 3, 4, 5}) {
                 const auto name = QString::number(preset) + '-' + QString(publication);
-                for (const bool dark : {false, true})
-                    QTest::newRow(qPrintable(name + (dark ? "-dark" : "-light"))) << QString(publication) << preset << dark;
-                if (!phonePreset(preset)) QTest::newRow(qPrintable(name + "-large")) << QString(publication) << preset << false;
+                for (const auto &theme : test::screenshotThemes(screenshotDevice(preset)))
+                    QTest::newRow(qPrintable(name + '-' + theme)) << QString(publication) << preset << (theme == "dark");
             }
     }
     void typography_data() { screenshotVariants(); }
@@ -9681,8 +9708,6 @@ int main(int argc, char **argv) {
     const bool caseGallery = !qEnvironmentVariableIsEmpty("KOBALT_GALLERY_CASE");
     const auto selectedScenes = qEnvironmentVariable("KOBALT_GALLERY_SCENE").split(',', Qt::SkipEmptyParts);
     QMap<QString, QStringList> selection;
-    QSet<QString> selectedVariants;
-    int expectedScreenshots = lightGallery ? 182 : 3668;
     if (screenshots) {
         if ((arguments.size() != 3 && !lightGallery) || !QDir::isAbsolutePath(arguments.at(2))) {
             qCritical() << "Usage: kobalt-desktop-tests --screenshots ABSOLUTE_DIRECTORY [--light]";
@@ -9698,7 +9723,6 @@ int main(int argc, char **argv) {
             const auto images = index.open(QIODevice::ReadOnly)
                 ? QJsonDocument::fromJson(index.readAll()).object().value("images").toArray() : QJsonArray{};
             QSet<QString> found;
-            expectedScreenshots = 0;
             for (const auto &value : images) {
                 const auto image = value.toObject();
                 if (!selectedScenes.contains(image["screen"].toString())) continue;
@@ -9709,9 +9733,7 @@ int main(int argc, char **argv) {
                 auto &screens = selection[image["case"].toString()];
                 const auto screen = "@" + image["screen"].toString();
                 if (!screens.contains(screen)) screens.append(screen);
-                selectedVariants.insert(image["device"].toString() + "/" + image["theme"].toString() + "/" + image["screen"].toString());
                 found.insert(image["screen"].toString());
-                ++expectedScreenshots;
             }
             for (const auto &scene : selectedScenes) {
                 if (!found.contains(scene)) {
@@ -9770,21 +9792,24 @@ int main(int argc, char **argv) {
         return app.exec();
     }
     QFile fixture(book);
-    if (!selection.isEmpty()) {
-        QSet<QString> capturedVariants;
-        for (const auto &value : captures) {
-            const auto image = value.toObject();
-            if (!selectedScenes.contains(image["screen"].toString())) return 2;
-            if (image["capture_page"].toInt() == 1)
-                capturedVariants.insert(image["device"].toString() + "/" + image["theme"].toString() + "/" + image["screen"].toString());
+    if (!caseGallery) {
+        // The expected captures follow from the declared screens, viewports
+        // and themes. A case run checks only the screens it captured, when
+        // the gallery page is generated.
+        QSet<QString> expected(selectedScenes.cbegin(), selectedScenes.cend());
+        if (lightGallery) {
+            expected = primaryScreens;
+        } else if (selection.isEmpty()) {
+            QFile catalog(QStringLiteral(KOBALT_TEST_CORPUS) + "/screenshot-catalog.json");
+            if (!catalog.open(QIODevice::ReadOnly)) return 2;
+            expected = test::galleryScreens(QJsonDocument::fromJson(catalog.readAll()).array());
         }
-        if (capturedVariants != selectedVariants) {
-            qCritical() << "Scene capture lost a selected screen or viewport variant";
+        const auto problems = test::screenshotCoverage(captures, expected);
+        for (const auto &problem : problems) qCritical().noquote() << problem;
+        if (!problems.isEmpty()) {
+            qCritical() << "The gallery is incomplete:" << problems.size() << "problems";
             return 2;
         }
-    } else if (!caseGallery && captures.size() != expectedScreenshots) {
-        qCritical() << "Expected" << expectedScreenshots << "screenshots, captured" << captures.size();
-        return 2;
     }
     if (!fixture.open(QIODevice::ReadOnly)) return 2;
     const QJsonObject manifest{{"schema", 1}, {"generator", "kobalt-desktop"}, {"qt", qVersion()}, {"version", KOBALT_VERSION},

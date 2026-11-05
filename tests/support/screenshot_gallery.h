@@ -1,5 +1,6 @@
 #pragma once
 #include <QFile>
+#include <algorithm>
 #include <QFileInfo>
 #include <QCryptographicHash>
 #include <QDebug>
@@ -30,15 +31,28 @@ inline QString screenshotGroup(const QString &scene) {
     return "Reading";
 }
 
-inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
-    if (scene.startsWith("international-")) {
-        auto language = book["language_name"].toString();
-        if (book["language"] == "zh-Hans") language = "Simplified Chinese";
-        if (book["language"] == "zh-Hant") language = "Traditional Chinese";
-        const bool vertical = scene.contains("-vertical-");
-        const auto panel = scene.endsWith("-reading") ? "Reading" : scene.endsWith("-chapters") ? "Chapter list" : "Font picker";
-        return language + " · " + panel + (vertical ? " (vertical)" : "");
-    }
+// The gallery viewports, in the order of the desktop preview presets 1 to 5.
+inline const QStringList &screenshotDevices() {
+    static const QStringList devices{"six-inch", "seven-inch", "phone", "six-inch-landscape", "phone-landscape"};
+    return devices;
+}
+
+// Every viewport has light and dark captures. The e-reader viewports also have
+// light captures with 150% interface text, "large". Phone mode supports 100%
+// interface text only.
+inline QStringList screenshotThemes(const QString &device) {
+    if (device.startsWith("phone")) return {"light", "dark"};
+    return {"light", "dark", "large"};
+}
+
+// Japanese, Korean and Chinese books also have a vertical-writing tour.
+inline bool verticalWritingTour(const QString &language) {
+    return QStringList{"ja", "ko", "zh-Hans", "zh-Hant"}.contains(language);
+}
+
+// The card title of every gallery scene other than the international books.
+// A capture of a scene without a title fails, so this map declares the scenes.
+inline const QMap<QString, QString> &screenshotTitles() {
     static const QMap<QString, QString> titles{
         {"about", "About Kobalt"},
         {"viewport-transition", "Updating page layout"},
@@ -243,6 +257,19 @@ inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
         {"widget-keyboard-qwertz", "German QWERTZ keyboard"},
         {"widget-keyboard-azerty", "French AZERTY keyboard"},
     };
+    return titles;
+}
+
+inline QString screenshotTitle(const QString &scene, const QJsonObject &book) {
+    if (scene.startsWith("international-")) {
+        auto language = book["language_name"].toString();
+        if (book["language"] == "zh-Hans") language = "Simplified Chinese";
+        if (book["language"] == "zh-Hant") language = "Traditional Chinese";
+        const bool vertical = scene.contains("-vertical-");
+        const auto panel = scene.endsWith("-reading") ? "Reading" : scene.endsWith("-chapters") ? "Chapter list" : "Font picker";
+        return language + " · " + panel + (vertical ? " (vertical)" : "");
+    }
+    const auto &titles = screenshotTitles();
     if (titles.contains(scene)) return titles[scene];
     const auto page = QRegularExpression("^(.+)-(\\d+)$").match(scene);
     if (page.hasMatch() && titles.contains(page.captured(1)))
@@ -257,6 +284,65 @@ inline QPair<QString, int> screenshotIdentity(const QString &scene) {
     if (page.hasMatch() && !screenshotTitle(page.captured(1), {}).isEmpty())
         return {page.captured(1), page.captured(2).toInt()};
     return {scene, 1};
+}
+
+// The screens of the full gallery: every titled scene, and the reading, chapter
+// list and font picker of each book in the international catalog.
+inline QSet<QString> galleryScreens(const QJsonArray &catalog) {
+    QSet<QString> screens;
+    const auto &titles = screenshotTitles();
+    for (auto it = titles.keyBegin(); it != titles.keyEnd(); ++it) screens.insert(screenshotIdentity(*it).first);
+    for (const auto &value : catalog) {
+        const auto language = value.toObject()["language"].toString();
+        for (const bool vertical : {false, true}) {
+            if (vertical && !verticalWritingTour(language)) continue;
+            for (const auto *panel : {"reading", "chapters", "fonts"})
+                screens.insert("international-" + language + (vertical ? "-vertical-" : "-") + panel);
+        }
+    }
+    return screens;
+}
+
+// Lists what the captures lack for the expected screens, or nothing when they
+// are complete. Each expected screen needs every viewport and theme, with
+// pages numbered from 1 without a gap. Light and dark have the same pages at
+// each viewport; 150% text may add pages. A capture of another screen, or of
+// a viewport or theme that the gallery does not declare, is also a problem.
+// A paged screen that loses its last page in every theme at once still passes
+// here; the paging helpers fail an inventory that does not complete its cycle.
+inline QStringList screenshotCoverage(const QJsonArray &captures, const QSet<QString> &screens) {
+    QStringList problems;
+    QMap<QString, QMap<QString, QSet<int>>> pages;
+    for (const auto &value : captures) {
+        const auto shot = value.toObject();
+        const auto screen = shot["screen"].toString();
+        const auto device = shot["device"].toString();
+        const auto theme = shot["theme"].toString();
+        if (!screens.contains(screen))
+            problems.append("Capture of an undeclared screen: " + shot["file"].toString());
+        else if (!screenshotDevices().contains(device) || !screenshotThemes(device).contains(theme))
+            problems.append("Capture of an undeclared viewport or variant: " + shot["file"].toString());
+        else
+            pages[screen][device + '/' + theme].insert(shot["capture_page"].toInt());
+    }
+    QStringList expected(screens.cbegin(), screens.cend());
+    expected.sort();
+    for (const auto &screen : expected) {
+        const auto variants = pages.value(screen);
+        for (const auto &device : screenshotDevices()) {
+            const auto themed = variants.value(device + "/light") | variants.value(device + "/dark");
+            for (const auto &theme : screenshotThemes(device)) {
+                const auto captured = variants.value(device + '/' + theme);
+                const auto wanted = theme == "large" ? captured : themed;
+                const int last = wanted.isEmpty() ? 1 : *std::max_element(wanted.cbegin(), wanted.cend());
+                for (int page = 1; page <= last; ++page)
+                    if (!captured.contains(page))
+                        problems.append(QString("Missing capture: screen %1, viewport %2, variant %3, page %4")
+                                            .arg(screen, device, theme).arg(page));
+            }
+        }
+    }
+    return problems;
 }
 
 inline QByteArray screenshotGallery(const QString &directory, const QJsonArray &captures, const QJsonObject &manifest) {
@@ -276,7 +362,7 @@ inline QByteArray screenshotGallery(const QString &directory, const QJsonArray &
         const auto device = shot["device"].toString();
         const auto theme = shot["theme"].toString();
         if (QFileInfo(file).fileName() != file || !file.endsWith(".png") || QFileInfo(directory + '/' + file).isSymLink() ||
-            (device != "six-inch" && device != "seven-inch" && device != "phone" && device != "six-inch-landscape" && device != "phone-landscape") || (theme != "light" && theme != "dark" && theme != "large") ||
+            !screenshotDevices().contains(device) || !screenshotThemes(device).contains(theme) ||
             shot["capture"] != "screen" || shot["ppi"].toInt() != 300 || screen.isEmpty() || capturePage < 1) { qCritical() << "Invalid screenshot metadata:" << file; return {}; }
         const auto variant = device + '/' + theme;
         if (variants[screen][variant].contains(capturePage)) { qCritical() << "Duplicate screenshot page:" << file; return {}; }
@@ -300,23 +386,12 @@ inline QByteArray screenshotGallery(const QString &directory, const QJsonArray &
             .arg(escape(screen), escape(device), escape(theme), escape(file), escape(shot["sha256"].toString()),
                  QString::fromLatin1(bytes.toBase64()), QString::number(shot["width"].toInt()), QString::number(shot["height"].toInt()), QString::number(capturePage));
     }
+    // Every screen in the set needs all its variants and pages.
+    const auto problems = screenshotCoverage(captures, QSet<QString>(scenes.keyBegin(), scenes.keyEnd()));
+    for (const auto &problem : problems) qCritical().noquote() << problem;
+    if (!problems.isEmpty()) return {};
     QMap<QString, QString> sections;
     for (auto it = scenes.cbegin(); it != scenes.cend(); ++it) {
-        const auto &pages = variants[it.key()];
-        // Light and dark everywhere, and light with 150% text on the
-        // e-reader profiles. Larger text can add pages, so only the two
-        // themes must match page for page.
-        if (pages.size() != 13) { qCritical() << "Missing screenshot variants:" << it.key() << pages.keys(); return {}; }
-        for (const auto &device : {QString("six-inch"), QString("seven-inch"), QString("phone"), QString("six-inch-landscape"), QString("phone-landscape")}) {
-            const auto light = pages.value(device + "/light");
-            if (light != pages.value(device + "/dark")) { qCritical() << "Screenshot theme pages differ:" << it.key() << device << light << pages.value(device + "/dark"); return {}; }
-            for (const auto &theme : {QString("light"), QString("large")}) {
-                if (device.startsWith("phone") && theme == "large") continue;
-                const auto captured = pages.value(device + '/' + theme);
-                for (int page = 1; page <= captured.size(); ++page)
-                    if (!captured.contains(page)) { qCritical() << "Screenshot page missing:" << it.key() << device << theme << page; return {}; }
-            }
-        }
         const auto shot = it.value();
         const auto book = shot["book"].toObject();
         const auto title = screenshotTitle(it.key(), book);

@@ -381,7 +381,7 @@ Geometry geometry(ControlIcon icon, bool sideButtons) {
                                             "desktop",
                                             "translate",
                                             "info",
-                                            "flask"};
+                                            "toolbox"};
         static_assert(sizeof(names) / sizeof(*names) == size_t(ControlIcon::System) + 1);
         const int index = int(icon);
         if (index >= 0 && index <= int(ControlIcon::System) && names[index]) {

@@ -159,10 +159,6 @@
       "sha256": "48ee36faf3fe2768c2f39dfa19ea82e2e80653d541574dbc8af0d3c6787cbf71"
     },
     {
-      "file": "flask.svg",
-      "sha256": "6fe1929c860962cadddc917a3d119145444537ccaee6a9d618e7d856c16f8501"
-    },
-    {
       "file": "floppy-disk.svg",
       "sha256": "067b385ee62469be500d2d5bcd10e2aedd7529cd615ed180fa8414aaef0e40ab"
     },
@@ -333,6 +329,10 @@
     {
       "file": "text-columns.svg",
       "sha256": "172ac521a002019c6898b16f9a4a0e4930a3eb1f9275044312d4de6acc84f0f6"
+    },
+    {
+      "file": "toolbox.svg",
+      "sha256": "1bc3a40ba89821d9defb144b0fa4ae3f40aefcda58b62216c7f30a5d64e7144e"
     },
     {
       "file": "translate.svg",

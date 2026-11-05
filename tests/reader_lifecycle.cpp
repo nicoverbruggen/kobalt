@@ -4844,7 +4844,7 @@ private slots:
             auto *status = host.window()->findChild<QLabel *>("rrKosyncStatus");
             QVERIFY(status);
             QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("kosync.up_to_date"), 12000);
-            QVERIFY(kosync::Client(paths.syncAccount()).lastSync().isValid());
+            QVERIFY(showsSyncTime(host.window()));
             // Time alone does not sync; a changed position after the interval does.
             status->setText("unchanged position");
             clock += 16 * 60000;
@@ -4864,6 +4864,7 @@ private slots:
                 option->click();
                 QCOMPARE(status->text(), strings::get("kosync.matching_changed"));
                 QVERIFY(!kosync::Client(paths.syncAccount()).lastSync().isValid());
+                QVERIFY(!showsSyncTime(host.window()));
                 auto *sync = host.window()->findChild<QPushButton *>("rrKosyncNow");
                 QVERIFY(sync);
                 sync->click();
@@ -4925,7 +4926,9 @@ private slots:
         if (live) {
             // A second production client observes the final position on the server.
             kosync::Client verify(paths.syncAccount());
-            QVERIFY(verify.lastSync().isValid());
+            // Closing writes the sync time. Sleep keeps it in the reader.
+            if (transition == "close") QVERIFY(verify.lastSync().isValid());
+            else QVERIFY(showsSyncTime(window));
             bool received = false;
             QString failure;
             kosync::Progress remote;
@@ -6531,6 +6534,13 @@ private slots:
     }
 
 private:
+    // A successful sync sets the sync time only in memory. The reader writes
+    // it to the account file when the book closes or the account changes, so
+    // read it from the reader's KOSync page.
+    static bool showsSyncTime(QWidget *window) {
+        auto *label = window ? window->findChild<QLabel *>("rrKosyncLastSync") : nullptr;
+        return label && label->text() != strings::get("kosync.last_synced").arg(strings::get("kosync.never"));
+    }
     void verifyKosyncManualHandoff(const QString &state) {
         auto paths = testPaths();
         QVERIFY(storage::writeJson(paths.syncAccount(), {
@@ -6588,7 +6598,7 @@ private:
         QTRY_VERIFY_WITH_TIMEOUT(events().contains("\"event\":\"kosync-reader-wait\""), 3000);
         QCOMPARE(status->text(), strings::get("kosync.syncing"));
         QVERIFY(!host.window()->findChild<QPushButton *>("rrKosyncServer")->isEnabled());
-        QVERIFY(!kosync::Client(paths.syncAccount()).lastSync().isValid());
+        QVERIFY(!showsSyncTime(host.window()));
         QPointer<QWidget> popup = host.window()->findChild<QWidget *>("rrKosyncOpening");
         QVERIFY(popup);
         if (state == "deadline") {
@@ -6608,10 +6618,10 @@ private:
         host.window()->show();
         if (state == "cancel" || state == "deadline" || state == "sleep") {
             QTest::qWait(400);
-            QVERIFY(!kosync::Client(paths.syncAccount()).lastSync().isValid());
+            QVERIFY(!showsSyncTime(host.window()));
         } else {
             QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("kosync.up_to_date"), 3000);
-            QVERIFY(kosync::Client(paths.syncAccount()).lastSync().isValid());
+            QVERIFY(showsSyncTime(host.window()));
             QVERIFY(popup && popup->isVisible());
             QCOMPARE(popup->findChild<QLabel *>("rrModalTitle")->text(), strings::get("kosync.completed"));
             QVERIFY(!popup->findChild<QPushButton *>("rrKosyncCancel")->isVisible());
@@ -6836,12 +6846,13 @@ private:
         const auto remotePosition = invalid ? QString("/not/a/real/position") : host.session()->state().value("position").toString();
         const auto remoteChapter = host.session()->chapterTitle();
         // A contradictory percentage must not reverse the source-order warning.
-        const double remotePercent = decision == "dismiss" ? 0.99 : double(host.session()->page()) / (count - 1);
+        const double remotePercent = decision == "dismiss" ? 0.99 : double(host.session()->page()) / (host.session()->pages() - 1);
         QVERIFY(host.session()->go(int(count * 0.5)));
         QTRY_VERIFY(!host.session()->busy());
         const auto localPosition = host.session()->state().value("position").toString();
         const auto localChapter = host.session()->chapterTitle();
-        const double localPercent = 100.0 * host.session()->page() / (count - 1);
+        // The page total can still grow after the book opens. Read it with the page.
+        const double localPercent = 100.0 * host.session()->page() / (host.session()->pages() - 1);
         QVERIFY(!localChapter.isEmpty() && !remoteChapter.isEmpty());
         account["device_id"] = "choice-remote";
         account["device_name"] = "Crosspoint X4";

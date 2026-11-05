@@ -79,7 +79,7 @@ CONTAINER_ENGINE="$scratch/container-engine" KOBALT_ANDROID_IMAGE=fixture-sdk KO
 exported="$scratch/export/application"
 mkdir -p "$exported/platforms/android" "$exported/platforms/kobo" "$exported/assets" "$exported/dependencies"
 cp dependencies/cache.cmake "$exported/dependencies/"
-cp platforms/source-info.cmake platforms/release-version.cmake platforms/sdk-image.sh "$exported/platforms/"
+cp platforms/source-info.cmake platforms/release-version.cmake platforms/sdk-image.sh platforms/load-lock.cmake "$exported/platforms/"
 cp platforms/android/build.sh "$exported/platforms/android/"
 cp platforms/kobo/build.sh "$exported/platforms/kobo/"
 printf '{"version":"v1.0-beta.1"}\n' > "$exported/assets/manifest.json"

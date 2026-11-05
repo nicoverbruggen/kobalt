@@ -242,6 +242,11 @@ if(BUILD_TESTING)
         "-DPREPARE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/prepare-screenshot-books.cmake"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/test-screenshot-books.cmake")
     set_tests_properties(build.screenshotBooks PROPERTIES LABELS "fast;build" TIMEOUT 30)
+    add_test(NAME build.loadLock COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/load-lock-test"
+        "-DLOAD_LOCK=${KOBALT_ROOT}/platforms/load-lock.cmake"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/test-load-lock.cmake")
+    set_tests_properties(build.loadLock PROPERTIES LABELS "fast;build" TIMEOUT 30)
     find_program(KOBALT_TEST_ZIP zip REQUIRED)
     set(test_book "${KOBALT_ROOT}/tests/fixtures/trevelyans-type-tester.kepub.epub")
     file(SHA256 "${test_book}" test_book_hash)

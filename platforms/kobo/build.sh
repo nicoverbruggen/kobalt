@@ -10,12 +10,18 @@ diagnostics=${KOBALT_VERBOSE_DIAGNOSTICS:-ON}
 [[ "$target" != *-diagnostic ]] || diagnostics=ON
 [[ "$diagnostics" == ON || "$diagnostics" == OFF ]] || { echo 'KOBALT_VERBOSE_DIAGNOSTICS must be ON or OFF' >&2; exit 2; }
 root=$(cd "$(dirname "$0")/../.." && pwd)
+# Register the build, so a performance evaluation waits for it; see platforms/load-lock.cmake.
+if [[ -z "${KOBALT_LOAD_LOCK_HELD:-}" ]]; then
+    exec 3< <("${CMAKE_COMMAND:-cmake}" "-DROOT=$root" "-DOWNER=$$" -P "$root/platforms/load-lock.cmake")
+    read -r registered <&3 && [[ "$registered" == registered ]] || { echo 'Cannot register the build' >&2; exit 1; }
+fi
 if [[ "$mode" == --check && -n "${KOBALT_CHECK_SOURCE_ROOT:-}" ]]; then
     [[ -f "$KOBALT_CHECK_SOURCE_ROOT/platforms/kobo/CMakeLists.txt" ]] || { echo 'Invalid check source root' >&2; exit 2; }
     root=$(cd "$KOBALT_CHECK_SOURCE_ROOT" && pwd)
 fi
 jobs=${JOBS:-2}
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo "JOBS must be positive" >&2; exit 2; }
+[[ "${KOBALT_DOCKER_CPUS:-1}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "KOBALT_DOCKER_CPUS must be a number of CPUs" >&2; exit 2; }
 image=$(sh "$root/platforms/sdk-image.sh" "${target%%-*}")
 engine=${CONTAINER_ENGINE:-docker}
 sdk_id=$("$engine" image inspect "$image" --format '{{.Id}}')
@@ -44,7 +50,16 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-"$engine" run --cidfile "$run_dir/container.cid" --pull=never --user "$(id -u):$(id -g)" -e HOME=/tmp -e KOBALT_RELEASE_VERSION \
+# Leave CPUs for the rest of the machine: half of the host's, at least two and
+# at most what the engine has.
+cpus=${KOBALT_DOCKER_CPUS:-}
+if [[ -z "$cpus" ]]; then
+    host_cpus=$(sysctl -n hw.ncpu 2> /dev/null || getconf _NPROCESSORS_ONLN)
+    cpus=$((host_cpus / 2 > 2 ? host_cpus / 2 : 2))
+    engine_cpus=$("$engine" info --format '{{.NCPU}}' 2> /dev/null || true)
+    [[ ! "$engine_cpus" =~ ^[1-9][0-9]*$ || "$engine_cpus" -ge "$cpus" ]] || cpus=$engine_cpus
+fi
+"$engine" run --cpus "$cpus" --cidfile "$run_dir/container.cid" --pull=never --user "$(id -u):$(id -g)" -e HOME=/tmp -e KOBALT_RELEASE_VERSION \
     --volume "$root:/work" \
     --volume "$cache:/dependency-cache" \
     --workdir /work/platforms/kobo "$image" bash -euc '

@@ -61,6 +61,16 @@ The report compares each timing metric as the median of the process medians. A s
 
 Each performance process runs under `taskpolicy -t 0 -l 0`. Without it, macOS moves whole processes between fast and slow cores, and medians of the same build differed by up to 70% on the measured Mac. With it, they stayed within about 20%, mostly within 10%. Timings compare only on the same machine. The report tells you to measure again when the machine model, the power source or Low Power Mode differs between the runs. Do not run builds or other heavy work during a run.
 
+## Machine load
+
+Only one evaluation runs at a time. `run.cmake` takes the lock `kobalt-load/evaluation.lock` in the Git common directory, so all worktrees of the repository share it. When another evaluation holds the lock, the run prints `Waiting for another evaluation to finish` and continues when the other run ends.
+
+Each Kobo build holds its own lock file in `kobalt-load/builds/` while it runs. This applies to `platforms/kobo/build.sh` and to the `mac-kobo-checks` target. After its own build step, the evaluation waits until these builds end and prints `Waiting for a Kobo build to finish before the measured steps`. A Kobo build that starts while an evaluation runs prints a message and waits until the evaluation ends. The device builds of an evaluation do not wait, because the evaluation started them. To stop a wait, stop the build or the other evaluation.
+
+The operating system releases each lock when its process ends, so a crashed run or build leaves no lock behind. A lock file that stays on disk without an owner has no effect. The fast check `build.loadLock` covers the evaluation lock, the wait for a registered build and a stale registration in a scratch lock folder, without Docker or a real evaluation.
+
+Other heavy work does not register, for example native test runs, desktop builds, Android builds and device emulators. Do not start it during a run. Kobo build containers also have a CPU limit; see [Building](building.md#kobo).
+
 ## Calibration
 
 The default bands in `eval.json` are 15% for micro-benchmarks, 20% for end-to-end scenarios, 25% for device scenarios and 10% for memory. Memory metrics are in KiB and use the `floors_kib` floor; the other metrics use `floors_ms`. Measure the noise on your machine before you rely on them:

@@ -92,6 +92,9 @@ endif()
 if(NOT EXISTS "${QT_PREFIX}/lib/cmake/Qt6" AND NOT EXISTS "${QT_PREFIX}/Qt6Config.cmake")
     message(FATAL_ERROR "Configure the ${desktop_platform} preset first, or pass QT_PREFIX")
 endif()
+# One evaluation at a time in all worktrees. Kobo builds wait while it runs.
+include("${CMAKE_CURRENT_LIST_DIR}/../load-lock.cmake")
+kobalt_lock_evaluation("${root}")
 
 # Resolve the subject. A worktree subject is measured in place. A revision is
 # exported with git archive, so no checkout or branch is created.
@@ -287,6 +290,8 @@ if("device" IN_LIST PARTS)
     endforeach()
 endif()
 finish(build)
+# A Kobo build that started before this evaluation must end before the measured steps.
+kobalt_wait_for_builds("${root}")
 
 set(tests_exit "")
 if("tests" IN_LIST PARTS)

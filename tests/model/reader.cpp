@@ -298,28 +298,28 @@ static void checkPagePixelConversion() {
                 const int columns = (size.width() + 31) / 32, rows = (size.height() + 31) / 32;
                 const bool bounded = qint64(columns) * rows <= 4096;
                 QVector<uchar> expectedTiles(bounded ? columns * rows : 0, 0), actualTiles = expectedTiles;
-                bool expectedColour = false;
+                bool expectedColor = false;
                 for (int y = 0; y < size.height(); ++y) {
                     auto *pixels = reinterpret_cast<QRgb *>(expected.scanLine(y));
                     for (int x = 0; x < size.width(); ++x) {
                         const QRgb pixel = pixels[x];
-                        expectedColour |= kobalt::hasVisibleColour(pixel);
+                        expectedColor |= kobalt::hasVisibleColor(pixel);
                         if (bounded && (qRed(pixel) != qGreen(pixel) || qGreen(pixel) != qBlue(pixel)))
                             expectedTiles[(y / 32) * columns + x / 32] = 1;
                         pixels[x] = (pixel ^ (dark ? 0x00ffffffU : 0)) | 0xff000000U;
                     }
                 }
-                const bool actualColour =
+                const bool actualColor =
                     kobalt::normalizePagePixels(actual, dark, bounded ? &actualTiles : nullptr, columns);
-                require(actual == expected && actualColour == expectedColour && actualTiles == expectedTiles,
+                require(actual == expected && actualColor == expectedColor && actualTiles == expectedTiles,
                         "Page pixel conversion changed pixels or colour refresh classification");
                 // RGBA byte order shows the same colours and classifies them alike.
                 auto rgba = before.copy();
                 QVector<uchar> rgbaTiles(expectedTiles.size(), 0);
-                const bool rgbaColour =
+                const bool rgbaColor =
                     kobalt::normalizePagePixels(rgba, dark, bounded ? &rgbaTiles : nullptr, columns, true);
                 rgba.reinterpretAsFormat(QImage::Format_RGBX8888);
-                require(rgba.convertToFormat(QImage::Format_RGB32) == expected && rgbaColour == expectedColour &&
+                require(rgba.convertToFormat(QImage::Format_RGB32) == expected && rgbaColor == expectedColor &&
                             rgbaTiles == expectedTiles,
                         "RGBA page pixels changed colours or colour refresh classification");
             }
@@ -1385,13 +1385,13 @@ int main(int argc, char **argv) {
         const auto colorPage = color.image(0);
         require(colorPage.text("kobalt.animation_text_only") == "false", "Colour page eligible for animation");
         require(colorPage.format() == QImage::Format_RGB32, "Book colors were converted to grayscale");
-        QRegion colourRepairs;
+        QRegion colorRepairs;
         const auto metadata = QJsonDocument::fromJson(colorPage.text("kobalt.colour_regions").toUtf8());
         require(metadata.isArray(), "Colour repair metadata is missing");
         for (const auto &entry : metadata.array()) {
             const auto rectangle = entry.toArray();
             require(rectangle.size() == 4, "Colour repair rectangle is invalid");
-            colourRepairs +=
+            colorRepairs +=
                 QRect(rectangle[0].toInt(), rectangle[1].toInt(), rectangle[2].toInt(), rectangle[3].toInt());
         }
         int red = 0, green = 0, blue = 0, yellow = 0, blended = 0, magenta = 0, teal = 0, orange = 0;
@@ -1402,7 +1402,7 @@ int main(int argc, char **argv) {
                 const auto pixel = colorPage.pixel(x, y);
                 require(qAlpha(pixel) == 255, "Page has invalid opaque alpha");
                 if (qRed(pixel) != qGreen(pixel) || qGreen(pixel) != qBlue(pixel))
-                    require(colourRepairs.contains(QPoint(x, y)), "Colour repair omitted a faint edge pixel");
+                    require(colorRepairs.contains(QPoint(x, y)), "Colour repair omitted a faint edge pixel");
                 red += pixel == qRgb(255, 0, 0);
                 green += pixel == qRgb(0, 192, 0);
                 blue += pixel == qRgb(0, 0, 255);
@@ -2656,13 +2656,13 @@ int main(int argc, char **argv) {
                 "Deferred image failure stopped rendering or lost its warning");
         require(deferred.loadNextImage(), "Deferred image failure stopped subsequent work");
         const auto rendered = deferred.image(0);
-        bool coloured = false;
-        for (int y = 0; y < rendered.height() && !coloured; ++y)
-            for (int x = 0; x < rendered.width() && !coloured; ++x) {
+        bool colored = false;
+        for (int y = 0; y < rendered.height() && !colored; ++y)
+            for (int x = 0; x < rendered.width() && !colored; ++x) {
                 const auto pixel = rendered.pixel(x, y);
-                coloured = qRed(pixel) > 200 && qGreen(pixel) < 50 && qBlue(pixel) < 80;
+                colored = qRed(pixel) > 200 && qGreen(pixel) < 50 && qBlue(pixel) < 80;
             }
-        require(coloured && failedLoads == 1 && goodLoads == 1 && deferred.resourceError().isEmpty(),
+        require(colored && failedLoads == 1 && goodLoads == 1 && deferred.resourceError().isEmpty(),
                 "Good image did not render after a failed image, or the failed image retried while painting");
     }
     auto invalid = saved;

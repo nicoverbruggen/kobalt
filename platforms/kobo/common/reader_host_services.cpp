@@ -162,7 +162,7 @@ ReaderHostServices readerHostServices() {
 
     result.deviceName = syncDeviceModel();
     result.colorDisplay = [] {
-        return pageAnimationPanel() == AnimationPanel::Colour;
+        return pageAnimationPanel() == AnimationPanel::Color;
     };
     result.downloadableDictionaries = false;
     result.browserAvailable = nativeReaderBrowserAvailable;

@@ -37,7 +37,7 @@ AnimationPanel animationPanel(const QByteArray &product, const QByteArray &drive
         return AnimationPanel::None;
     if (support == PageAnimationSupport::Supported &&
         (product.startsWith("monza") || (product.startsWith("spa") && product.contains("Colour"))))
-        return AnimationPanel::Colour;
+        return AnimationPanel::Color;
     return AnimationPanel::Mono;
 }
 bool pageAnimationsAvailable() {

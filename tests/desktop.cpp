@@ -345,7 +345,7 @@ struct Fixture {
         struct Run {
             const char *series, *author;
             QStringList titles;
-            QColor colour;
+            QColor color;
             double megabytes;
         };
         const QVector<Run> runs{
@@ -377,7 +377,7 @@ struct Fixture {
                 const auto key = QString("/kobalt-fixture-library/%1.epub").arg(number);
                 const auto cover = QString("cover-%1.png").arg(number);
                 QImage image(240, 360, QImage::Format_RGB32);
-                image.fill(run.colour.lighter(100 + 12 * (i % 4)));
+                image.fill(run.color.lighter(100 + 12 * (i % 4)));
                 QPainter painter(&image);
                 painter.setPen(Qt::white);
                 painter.setFont(QFont(ui::interfaceFont().family(), 22));
@@ -2320,8 +2320,8 @@ void checkImageViewer(int preset, bool dark, bool screenshots) {
     QVERIFY(fixture.press("rrScrubberImage"));
     image = fixture.widget("rrImageCanvas");
     QTRY_VERIFY(image->property("imageReady").toBool());
-    const auto colourImage = image->grab().toImage();
-    QCOMPARE(colourImage.pixelColor(colourImage.rect().center()), QColor("#d32f2f"));
+    const auto colorImage = image->grab().toImage();
+    QCOMPARE(colorImage.pixelColor(colorImage.rect().center()), QColor("#d32f2f"));
 }
 
 class DesktopTests final : public QObject {
@@ -2873,13 +2873,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!QImage(fixture.directory.path() + "/library-covers/" + cover).isNull());
         const auto pages = start->library()->findChild<QWidget *>("libraryPages")->grab().toImage().convertToFormat(
             QImage::Format_RGB32);
-        int coloured = 0;
+        int colored = 0;
         for (int y = 0; y < pages.height(); y += 4)
             for (int x = 0; x < pages.width(); x += 4) {
                 const QRgb pixel = pages.pixel(x, y);
-                coloured += qAbs(qRed(pixel) - qBlue(pixel)) > 12;
+                colored += qAbs(qRed(pixel) - qBlue(pixel)) > 12;
             }
-        QVERIFY2(coloured > 200, "The cover grid did not draw the book's cover");
+        QVERIFY2(colored > 200, "The cover grid did not draw the book's cover");
 
         // Library is the root, not a page above an intro screen.
         QVERIFY(!start->dismissModal());

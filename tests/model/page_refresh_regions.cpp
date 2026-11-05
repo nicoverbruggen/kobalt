@@ -7,8 +7,8 @@
 #include <cstdio>
 
 int main() {
-    require(!kobalt::hasVisibleColour(qRgb(100, 110, 100)), "Near-gray pixel counted as colour");
-    require(kobalt::hasVisibleColour(qRgb(100, 111, 100)), "Colour threshold excluded a visible tint");
+    require(!kobalt::hasVisibleColor(qRgb(100, 110, 100)), "Near-gray pixel counted as colour");
+    require(kobalt::hasVisibleColor(qRgb(100, 111, 100)), "Colour threshold excluded a visible tint");
     QImage page(100, 100, QImage::Format_RGB32);
     page.setText("kobalt.image_regions", "[[10,10,60,80]]");
     require(kobalt::pageImageAtPoint(page, {40, 50}), "Cover was not an image target");

@@ -17,10 +17,10 @@ bool submitPageTransition(QBackingStore *store, QWidget *reader, int direction, 
     if (!direction || !pageAnimationsAvailable())
         return false;
     const QRect screen = reader->rect();
-    const bool colour = pageAnimationPanel() == AnimationPanel::Colour;
+    const bool color = pageAnimationPanel() == AnimationPanel::Color;
     const QRegion regions =
-        reader->property(colour ? "reader_image_repairs" : "reader_mono_repairs").value<QRegion>() & screen;
-    if (!regions.isEmpty() || (colour && reader->property("reader_colour_regions").toBool())) {
+        reader->property(color ? "reader_image_repairs" : "reader_mono_repairs").value<QRegion>() & screen;
+    if (!regions.isEmpty() || (color && reader->property("reader_colour_regions").toBool())) {
         submit(QRegion(screen), ordinary);
         return true;
     }

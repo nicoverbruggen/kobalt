@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
             }
     }
     for (const auto *product : {"monza", "monzaTolino", "spaColour", "spaColourTolino"})
-        require(animationPanel(product, "hwtcon") == AnimationPanel::Colour, "Supported Kobo/Tolino colour panel lost");
+        require(animationPanel(product, "hwtcon") == AnimationPanel::Color, "Supported Kobo/Tolino colour panel lost");
     for (const auto *product : {"spaBW", "spaBWTolino", "goldfinch", "io", "cadmus", "unknown"}) {
         require(animationPanel(product, "hwtcon") == AnimationPanel::Mono, "MTK runtime policy depends on model list");
         require(animationPanel(product, "mxc_epdc_fb") == AnimationPanel::Mono, "i.MX mono panel misclassified");

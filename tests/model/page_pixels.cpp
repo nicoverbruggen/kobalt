@@ -33,14 +33,14 @@ int main() {
                         }
                     }
                     auto expected = original.copy();
-                    bool colour = false;
+                    bool color = false;
                     const int columns = (width + 31) / 32;
                     QVector<uchar> expectedTiles(columns * 3, 0), actualTiles = expectedTiles;
                     for (int y = 0; y < expected.height(); ++y) {
                         auto *pixels = reinterpret_cast<QRgb *>(expected.scanLine(y));
                         for (int x = 0; x < width; ++x) {
                             const QRgb pixel = pixels[x];
-                            colour |= kobalt::hasVisibleColour(pixel);
+                            color |= kobalt::hasVisibleColor(pixel);
                             if (tiles && (qRed(pixel) != qGreen(pixel) || qGreen(pixel) != qBlue(pixel)))
                                 expectedTiles[(y / 32) * columns + x / 32] = 1;
                             pixels[x] = (pixel ^ (dark ? 0x00ffffffU : 0)) | 0xff000000U;
@@ -49,7 +49,7 @@ int main() {
                     // A shared source must detach before the first vector store.
                     auto actual = original;
                     const auto unchanged = original.copy();
-                    CHECK(kobalt::normalizePagePixels(actual, dark, tiles ? &actualTiles : nullptr, columns) == colour);
+                    CHECK(kobalt::normalizePagePixels(actual, dark, tiles ? &actualTiles : nullptr, columns) == color);
                     CHECK(actualTiles == expectedTiles);
                     CHECK(actual == expected);
                     CHECK(original == unchanged);
@@ -57,7 +57,7 @@ int main() {
                     auto rgba = original;
                     QVector<uchar> rgbaTiles(columns * 3, 0);
                     CHECK(kobalt::normalizePagePixels(rgba, dark, tiles ? &rgbaTiles : nullptr, columns, true) ==
-                          colour);
+                          color);
                     CHECK(rgbaTiles == expectedTiles);
                     rgba.reinterpretAsFormat(QImage::Format_RGBX8888);
                     CHECK(rgba.convertToFormat(QImage::Format_RGB32) == expected);

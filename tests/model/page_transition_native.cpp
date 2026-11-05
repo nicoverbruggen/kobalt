@@ -8,7 +8,7 @@ namespace {
 kobalt::PageAnimationResult result = kobalt::PageAnimationResult::None;
 bool success = true, available = true;
 int arms = 0, repairs = 0;
-kobalt::AnimationPanel panel = kobalt::AnimationPanel::Colour;
+kobalt::AnimationPanel panel = kobalt::AnimationPanel::Color;
 }
 namespace kobalt {
 void beginPageRepair() {
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
                         for (bool succeeds : {false, true}) {
                             // The reader publishes the union of outgoing and incoming regions.
                             // Also cover colour content on its own and colour on a mono panel.
-                            panel = mono ? kobalt::AnimationPanel::Mono : kobalt::AnimationPanel::Colour;
+                            panel = mono ? kobalt::AnimationPanel::Mono : kobalt::AnimationPanel::Color;
                             success = succeeds;
                             arms = repairs = 0;
                             reader.setProperty(

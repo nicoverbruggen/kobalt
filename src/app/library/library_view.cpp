@@ -135,8 +135,8 @@ public:
     CoverSize coverSize = CoverSize::Medium;
     QVector<const Book *> books;
     int page = 0;
-    std::function<void(const QString &)> onOpen, onHold;
-    std::function<void(int)> onTurn;
+    std::function<void(const QString &)> openRequested, holdRequested;
+    std::function<void(int)> turnRequested;
 
     int pageCount() {
         layout();
@@ -234,16 +234,16 @@ protected:
         const auto delta = event->pos() - start;
         // A horizontal swipe turns the page, as in the reader.
         if (!held && qAbs(delta.x()) > 4 * QApplication::startDragDistance() && qAbs(delta.x()) > 2 * qAbs(delta.y())) {
-            if (onTurn)
-                onTurn(delta.x() < 0 ? 1 : -1);
+            if (turnRequested)
+                turnRequested(delta.x() < 0 ? 1 : -1);
             pressed = -1;
             return;
         }
         const int released = hitAt(event->pos());
         if (!held && released >= 0 && released == pressed) {
             const auto &hit = placed[released];
-            if (hit.book && onOpen)
-                onOpen(hit.book->key);
+            if (hit.book && openRequested)
+                openRequested(hit.book->key);
         }
         pressed = -1;
         held = false;
@@ -251,11 +251,11 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override {
         placed = placements();
         const int hit = hitAt(event->pos());
-        if (hit >= 0 && placed[hit].book && onHold) {
+        if (hit >= 0 && placed[hit].book && holdRequested) {
             held = true;
             hold.stop();
             setHighlight(-1);
-            onHold(placed[hit].book->key);
+            holdRequested(placed[hit].book->key);
         }
     }
 
@@ -265,8 +265,8 @@ private:
             return;
         held = true;
         setHighlight(-1);
-        if (onHold)
-            onHold(placed[pressed].book->key);
+        if (holdRequested)
+            holdRequested(placed[pressed].book->key);
     }
     // The book under a press, drawn pressed until the press ends or moves away.
     int highlighted = -1;
@@ -867,15 +867,15 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
         pages->page = pager->turnTarget(1);
         rebuild(true);
     });
-    pages->onOpen = [this](const QString &key) {
+    pages->openRequested = [this](const QString &key) {
         closeOverlay();
         if (openBook)
             openBook(key);
     };
-    pages->onHold = [this](const QString &key) {
+    pages->holdRequested = [this](const QString &key) {
         showBookMenu(key);
     };
-    pages->onTurn = [this](int direction) {
+    pages->turnRequested = [this](int direction) {
         if (pages->pageCount() > 1) {
             pages->page = pager->turnTarget(direction);
             rebuild(true);

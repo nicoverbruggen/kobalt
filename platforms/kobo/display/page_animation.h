@@ -44,7 +44,7 @@ private:
 // Unknown backends and unavailable display hooks leave animations disabled.
 PageAnimationSupport animationSupport(const QByteArray &driver, bool enabled, bool hookAvailable);
 PageAnimationSupport pageAnimationSupport();
-enum class AnimationPanel { None, Mono, Colour };
+enum class AnimationPanel { None, Mono, Color };
 AnimationPanel animationPanel(const QByteArray &product, const QByteArray &driver);
 // This device's panel, read once from PRODUCT and the framebuffer driver.
 AnimationPanel pageAnimationPanel();

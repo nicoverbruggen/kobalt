@@ -178,7 +178,7 @@ public:
         // CREngine pre-inverts every non-gray text color. Undo that for faint
         // tints on neutral paper so near-black text becomes light in dark mode.
         // On preserved colored paper, keep the publisher's original contrast.
-        const bool invertInk = dark && (preserveContrast ? neutral : !neutral && !hasVisibleColour(color));
+        const bool invertInk = dark && (preserveContrast ? neutral : !neutral && !hasVisibleColor(color));
         const lUInt32 ink = invertInk ? color ^ 0x00ffffffU : color;
         LVColorDrawBuf::Draw(x, y, bitmap, width, height, &ink);
     }
@@ -244,7 +244,7 @@ QString regionMetadata(const QVector<QRect> &regions) {
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
 }
-QVector<QRect> colourTileRegions(const QVector<uchar> &tiles, int columns, int rows, const QSize &size) {
+QVector<QRect> colorTileRegions(const QVector<uchar> &tiles, int columns, int rows, const QSize &size) {
     QRegion region;
     for (int row = 0; row < rows; ++row) {
         for (int column = 0; column < columns;) {
@@ -1209,16 +1209,16 @@ QImage EngineDocument::image(int pageNumber) {
     const int tileColumns = result.width() / tileSize + (result.width() % tileSize != 0);
     const int tileRows = result.height() / tileSize + (result.height() % tileSize != 0);
     const bool boundedTiles = qint64(tileColumns) * tileRows <= 4096;
-    QVector<uchar> colourTiles(boundedTiles ? tileColumns * tileRows : 0, 0);
+    QVector<uchar> colorTiles(boundedTiles ? tileColumns * tileRows : 0, 0);
     const auto format = QImage::Format(pageFormat.load());
-    hasColor = normalizePagePixels(result, darkMode_, boundedTiles ? &colourTiles : nullptr, tileColumns,
+    hasColor = normalizePagePixels(result, darkMode_, boundedTiles ? &colorTiles : nullptr, tileColumns,
                                    format == QImage::Format_RGBX8888);
     usePageFormat(result, format);
     result.setText("kobalt.image_regions", regionMetadata(buffer.imageRegions));
     result.setText("kobalt.image_only", buffer.imageRegions.size() == 1 && !buffer.hasText ? "true" : "false");
     result.setText(
         "kobalt.colour_regions",
-        regionMetadata(hasColor ? (boundedTiles ? colourTileRegions(colourTiles, tileColumns, tileRows, result.size())
+        regionMetadata(hasColor ? (boundedTiles ? colorTileRegions(colorTiles, tileColumns, tileRows, result.size())
                                                 : QVector<QRect>{QRect(QPoint(0, 0), result.size())})
                                 : QVector<QRect>{}));
     result.setText("kobalt.animation_text_only", !buffer.hasImages && !hasColor ? "true" : "false");

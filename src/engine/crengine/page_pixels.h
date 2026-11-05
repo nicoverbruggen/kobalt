@@ -12,14 +12,14 @@ namespace kobalt {
 // `rgbaBytes`, the pixels are stored in RGBX8888 byte order instead of RGB32,
 // so a screen that stores RGBA bytes can copy the page without converting it.
 // The image keeps its RGB32 format; the caller reinterprets it.
-inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colourTiles, int tileColumns,
+inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colorTiles, int tileColumns,
                                 bool rgbaBytes = false) {
     const int width = image.width(), height = image.height();
-    quint32 colourBits = 0;
+    quint32 colorBits = 0;
     const quint32 inversion = dark ? 0x00ffffffU : 0;
     // Keep the compiler-generated loop on ARM64.
 #if defined(__arm__) && defined(__ARM_NEON)
-    uint32x4_t vectorColourBits = vdupq_n_u32(0);
+    uint32x4_t vectorColorBits = vdupq_n_u32(0);
     const uint32x4_t vectorInversion = vdupq_n_u32(inversion);
     const uint32x4_t opaque = vdupq_n_u32(0xff000000U);
     const uint32x4_t greenMask = vdupq_n_u32(0x0000ff00U), byteMask = vdupq_n_u32(0x000000ffU);
@@ -31,7 +31,7 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colour
         for (; x + 4 <= width; x += 4) {
             const uint32x4_t pixel = vld1q_u32(pixels + x);
             const uint32x4_t green = vshrq_n_u32(pixel, 8);
-            vectorColourBits = vorrq_u32(vectorColourBits,
+            vectorColorBits = vorrq_u32(vectorColorBits,
                                          vorrq_u32(veorq_u32(vshrq_n_u32(pixel, 16), green), veorq_u32(green, pixel)));
             uint32x4_t shown = veorq_u32(pixel, vectorInversion);
             if (rgbaBytes)
@@ -42,7 +42,7 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colour
 #endif
         for (; x < width; ++x) {
             const quint32 pixel = pixels[x];
-            colourBits |= ((pixel >> 16) ^ (pixel >> 8)) | ((pixel >> 8) ^ pixel);
+            colorBits |= ((pixel >> 16) ^ (pixel >> 8)) | ((pixel >> 8) ^ pixel);
             quint32 shown = pixel ^ inversion;
             if (rgbaBytes)
                 shown = (shown & 0x0000ff00U) | ((shown >> 16) & 0xffU) | ((shown & 0xffU) << 16);
@@ -50,28 +50,28 @@ inline bool normalizePagePixels(QImage &image, bool dark, QVector<uchar> *colour
         }
     }
 #if defined(__arm__) && defined(__ARM_NEON)
-    colourBits |= vgetq_lane_u32(vectorColourBits, 0) | vgetq_lane_u32(vectorColourBits, 1) |
-                  vgetq_lane_u32(vectorColourBits, 2) | vgetq_lane_u32(vectorColourBits, 3);
+    colorBits |= vgetq_lane_u32(vectorColorBits, 0) | vgetq_lane_u32(vectorColorBits, 1) |
+                  vgetq_lane_u32(vectorColorBits, 2) | vgetq_lane_u32(vectorColorBits, 3);
 #endif
     // Grayscale pages need no colour regions. Keep their pixel conversion
     // free of tile writes and per-pixel colour thresholds. The checks below
     // treat red and blue alike, so they also hold for RGBA bytes.
-    if (!(colourBits & 0xffU))
+    if (!(colorBits & 0xffU))
         return false;
-    bool hasColour = false;
-    auto *tiles = colourTiles ? colourTiles->data() : nullptr;
+    bool hasColor = false;
+    auto *tiles = colorTiles ? colorTiles->data() : nullptr;
     for (int y = 0; y < height; ++y) {
         const auto *pixels = reinterpret_cast<const QRgb *>(image.constScanLine(y));
         for (int x = 0; x < width; ++x) {
             const QRgb pixel = pixels[x];
             if (qRed(pixel) == qGreen(pixel) && qGreen(pixel) == qBlue(pixel))
                 continue;
-            if (hasVisibleColour(pixel))
-                hasColour = true;
+            if (hasVisibleColor(pixel))
+                hasColor = true;
             if (tiles)
                 tiles[(y / 32) * tileColumns + x / 32] = 1;
         }
     }
-    return hasColour;
+    return hasColor;
 }
 }

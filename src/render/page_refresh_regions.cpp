@@ -80,13 +80,13 @@ QRect pageSingleImage(const QImage &image) {
     return regions.first();
 }
 
-QRegion pageRefreshRegions(const QImage &image, bool colourDevice) {
+QRegion pageRefreshRegions(const QImage &image, bool colorDevice) {
     if (image.isNull())
         return {};
     const QRegion fullPage(QRect(QPoint(0, 0), image.size()));
-    QVector<QRect> imageRects, colourRects;
+    QVector<QRect> imageRects, colorRects;
     if (!parseRegions(image, "kobalt.image_regions", imageRects) ||
-        (colourDevice && !parseRegions(image, "kobalt.colour_regions", colourRects)))
+        (colorDevice && !parseRegions(image, "kobalt.colour_regions", colorRects)))
         return image.text("kobalt.animation_text_only") == "true" ? QRegion() : fullPage;
 
     QRegion regions;
@@ -95,8 +95,8 @@ QRegion pageRefreshRegions(const QImage &image, bool colourDevice) {
     for (const QRect &rect : imageRects)
         if (quint64(rect.width()) * quint64(rect.height()) >= minimumImageArea)
             regions += rect;
-    if (colourDevice)
-        for (const QRect &rect : colourRects)
+    if (colorDevice)
+        for (const QRect &rect : colorRects)
             regions += rect;
     return regions;
 }

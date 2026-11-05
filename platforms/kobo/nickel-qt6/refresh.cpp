@@ -122,7 +122,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
     }
     previousDark = dark;
     const QRegion annotationRepairs = annotationRepairRegions(readerWindow);
-    if (pageAnimationPanel() == AnimationPanel::Colour && !(region & annotationRepairs).isEmpty()) {
+    if (pageAnimationPanel() == AnimationPanel::Color && !(region & annotationRepairs).isEmpty()) {
         keyboardPixels.clear();
         if (pageTurn || direction) {
             // Nickel turns onto and away from coloured highlights with its
@@ -197,14 +197,14 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                 return;
         }
         if (pageTurn && compatible && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
-            const bool colour = pageAnimationPanel() == AnimationPanel::Colour;
+            const bool color = pageAnimationPanel() == AnimationPanel::Color;
             const QRegion images =
-                readerWindow->property(colour ? "reader_image_repairs" : "reader_mono_repairs").value<QRegion>() &
+                readerWindow->property(color ? "reader_image_repairs" : "reader_mono_repairs").value<QRegion>() &
                 readerWindow->rect();
             // Large pictures and colour turn like Nickel: the reading waveform
             // over the whole screen in full mode, which drives every non-white
             // pixel without the GC16 flash. Other turns stay partial.
-            if (!images.isEmpty() || (colour && readerWindow->property("reader_colour_regions").toBool())) {
+            if (!images.isEmpty() || (color && readerWindow->property("reader_colour_regions").toBool())) {
                 const QRect screen = readerWindow->rect();
                 nativeFlush(store, QRegion(screen), target, offset,
                             {{screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush)}});

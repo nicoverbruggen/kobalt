@@ -5,7 +5,7 @@
 #include "assets/assets.h"
 #include <QTemporaryDir>
 #include <QDir>
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "engine/crengine/document_cache.h"
 #include "engine/crengine/kobo_styles.h"
 #include "engine/crengine/page_pixels.h"
@@ -145,7 +145,7 @@ static void checkKoboStyleHacks() {
     publisher.last().second = head + body;
     const auto settings = kobalt::qt::object({{"font_pixels", 36}});
     QString error;
-    kobalt::ReaderModel expected(kobalt::test::readerFonts()), actual(kobalt::test::readerFonts());
+    kobalt::EngineDocument expected(kobalt::test::readerFonts()), actual(kobalt::test::readerFonts());
     require(expected.open(storedEpub(publisher), QSize(800, 1000), settings, &error), qPrintable(error));
     require(actual.open(storedEpub(files), QSize(800, 1000), settings, &error), qPrintable(error));
     require(actual.image(0) == expected.image(0), "ZIP opening did not restore publisher spacing");
@@ -162,7 +162,7 @@ static void checkKoboStyleHacks() {
             return sink(bytes.constData(), bytes.size());
         },
         std::make_shared<std::atomic_bool>(false));
-    kobalt::ReaderModel streamed(kobalt::test::readerFonts()), preview(kobalt::test::readerFonts());
+    kobalt::EngineDocument streamed(kobalt::test::readerFonts()), preview(kobalt::test::readerFonts());
     require(streamed.openResources(resources, sizes, QSize(800, 1000), settings, &error), qPrintable(error));
     require(streamed.image(0) == expected.image(0), "Resource opening retained Kobo style hacks");
     require(preview.openPreview(streamed, QSize(800, 1000), &error), qPrintable(error));
@@ -192,7 +192,7 @@ static void checkDarkModeTextColors() {
         {"#e8f0f0", "#224466", qRgb(232, 240, 240), qRgb(34, 68, 102)},
         {"#eeeeee", "#224466", qRgb(238, 238, 238), qRgb(34, 68, 102)},
     };
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     for (const auto &test : cases) {
         for (const bool inlinePaper : {false, true}) {
             const QByteArray ink(test.ink), paper(test.paper);
@@ -340,8 +340,8 @@ static void checkPageFormat() {
         {"c.xhtml", "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Page format</title></head><body>" + body + "</body></html>"},
     });
     const auto pages = [&bytes](QImage::Format format, bool dark) {
-        kobalt::ReaderModel::setPageFormat(format);
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument::setPageFormat(format);
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         QString error;
         require(model.open(bytes, QSize(400, 300), {{"font_pixels", 24}}, &error), qPrintable(error));
         model.setDarkMode(dark);
@@ -356,7 +356,7 @@ static void checkPageFormat() {
     for (const bool dark : {false, true}) {
         const auto plain = pages(QImage::Format_RGB32, dark);
         const auto rgba = pages(QImage::Format_RGBX8888, dark);
-        kobalt::ReaderModel::setPageFormat(QImage::Format_RGB32);
+        kobalt::EngineDocument::setPageFormat(QImage::Format_RGB32);
         for (int page = 0; page < plain.size(); ++page) {
             require(plain[page].format() == QImage::Format_RGB32 && rgba[page].format() == QImage::Format_RGBX8888,
                     "Page images did not use the requested format");
@@ -375,7 +375,7 @@ static QByteArray hash(const QImage &image) {
 }
 // Dictionary hyphenation breaks only where a line would otherwise be loose, so
 // hyphenation checks compare the first pages rather than one.
-static QByteArray leadingPages(kobalt::ReaderModel &model) {
+static QByteArray leadingPages(kobalt::EngineDocument &model) {
     QByteArray result;
     for (int page = 0; page < qMin(5, model.pages()); ++page)
         result += hash(model.image(page));
@@ -474,7 +474,7 @@ static void checkCssDensity() {
                     return sink(bytes.constData(), bytes.size());
                 },
                 std::make_shared<std::atomic_bool>(false));
-            kobalt::ReaderModel model(kobalt::test::readerFonts());
+            kobalt::EngineDocument model(kobalt::test::readerFonts());
             QString error;
             const auto settings = kobalt::qt::object(
                 {{"font_pixels", 40}, {"margin_pixels", 0}, {"top_margin_pixels", 0}, {"bottom_margin_pixels", 0}});
@@ -499,7 +499,7 @@ static void checkCssDensity() {
             require(model.imageAt({799, 999}).isNull(), "Blank paper resolved to an image");
             (ppi == 212 ? sizesAt212 : sizesAt300)[i] = ink.size();
             if (i == 0) {
-                kobalt::ReaderModel preview(kobalt::test::readerFonts());
+                kobalt::EngineDocument preview(kobalt::test::readerFonts());
                 require(preview.openPreview(model, QSize(800, 1000), &error), qPrintable(error));
                 require(preview.image(0) == rendered, "Preview used a different CSS density");
             }
@@ -509,7 +509,7 @@ static void checkCssDensity() {
     for (const auto &body : {illustration, illustration + "<p>A caption</p>", illustration + illustration}) {
         auto data = base;
         data["c.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><body>" + body + "</body></html>";
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         QString error;
         QList<QPair<QByteArray, QByteArray>> members;
         for (auto it = data.cbegin(); it != data.cend(); ++it) members.append({it.key().toUtf8(), it.value()});
@@ -559,7 +559,7 @@ static void checkBionicWidth() {
     };
     QImage normalWidth;
     for (const int width : {100, 75}) {
-        kobalt::ReaderModel actual(kobalt::test::readerFonts()), expected(kobalt::test::readerFonts());
+        kobalt::EngineDocument actual(kobalt::test::readerFonts()), expected(kobalt::test::readerFonts());
         QString error;
         auto settings = kobalt::qt::object({{"font_face", family}, {"font_weight", defaultWeight},
                                           {"font_pixels", 40}, {"margin_pixels", 0}, {"bold_reading", "bold"}});
@@ -606,11 +606,11 @@ static void checkObfuscatedFonts() {
     QString error;
     QByteArray expected, expectedPreview;
     {
-        kobalt::ReaderModel plain(kobalt::test::readerFonts());
+        kobalt::EngineDocument plain(kobalt::test::readerFonts());
         require(plain.open(book(original, {}, "test-identifier"), QSize(800, 1000), {}, &error), qPrintable(error));
         require(plain.embeddedFontCount() == 1 && plain.style(32, 120, "", 36), "load original publisher font");
         expected = hash(plain.image(0));
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(plain, QSize(800, 1000), &error), qPrintable(error));
         expectedPreview = hash(preview.image(0));
     }
@@ -642,14 +642,14 @@ static void checkObfuscatedFonts() {
         require(cache.isValid(), "create obfuscated font cache");
         const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
         for (bool cached : {false, true}) {
-            kobalt::ReaderModel decoded(kobalt::test::readerFonts());
+            kobalt::EngineDocument decoded(kobalt::test::readerFonts());
             decoded.setDocumentCache(cache.path(), fingerprint, "obfuscated-font-test", bytes.size());
             require(decoded.open(bytes, QSize(800, 1000), {}, &error), qPrintable(error));
             require(decoded.openedFromCache() == cached, "obfuscated font cache was not reused");
             require(decoded.embeddedFontCount() == 1 && decoded.style(32, 120, "", 36),
                     "load obfuscated publisher font");
             require(hash(decoded.image(0)) == expected, "obfuscated font glyphs differ from the original font");
-            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            kobalt::EngineDocument preview(kobalt::test::readerFonts());
             require(preview.openPreview(decoded, QSize(800, 1000), &error), qPrintable(error));
             require(preview.embeddedFontCount() == 1 && hash(preview.image(0)) == expectedPreview,
                     "obfuscated font preview changed publisher glyphs");
@@ -678,9 +678,9 @@ static void checkDeferredPublisherStyles() {
     QString error;
     QByteArray page, preview;
     for (bool deferred : {false, true}) {
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(book(deferred), QSize(800, 1000), {}, &error), qPrintable(error));
-        kobalt::ReaderModel section(kobalt::test::readerFonts());
+        kobalt::EngineDocument section(kobalt::test::readerFonts());
         require(section.openPreview(model, QSize(800, 1000), &error), qPrintable(error));
         if (!deferred) {
             page = hash(model.image(0));
@@ -706,7 +706,7 @@ static void checkVerticalJustification() {
     require(cache.isValid(), "create vertical justification cache");
     QByteArray expected;
     for (bool cached : {false, true}) {
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         model.setDocumentCache(cache.path(), "vertical-fill-fingerprint", "vertical-fill", bytes.size());
         require(model.open(bytes, QSize(800, 973), {}, &error), qPrintable(error));
         require(model.openedFromCache() == cached, "vertical fill cache was not reused");
@@ -786,7 +786,7 @@ static void checkVerticalJustification() {
              QByteArray("<p>First verse<br/>Second verse<br/>Third verse<br/>Fourth verse</p>").repeated(60),
              QByteArray("<pre>First code line\nSecond code line\nThird code line\n</pre>").repeated(60),
              QByteArray("<div style='border:1px solid black'>") + paragraph.repeated(90) + "</div>"}) {
-        kobalt::ReaderModel excluded(kobalt::test::readerFonts());
+        kobalt::EngineDocument excluded(kobalt::test::readerFonts());
         require(excluded.open(publication(body), QSize(800, 973), {}, &error), qPrintable(error));
         require(excluded.pages() > 2, "exclusion fixture did not fill a page");
         const auto before = excluded.image(0);
@@ -817,11 +817,11 @@ int main(int argc, char **argv) {
     checkCssDensity();
     checkBionicWidth();
     {
-        kobalt::ReaderModel unopened(kobalt::test::readerFonts());
-        const kobalt::PositionCodec synthetic{[](const kobalt::ReaderModel &, const QString &, QString *) {
+        kobalt::EngineDocument unopened(kobalt::test::readerFonts());
+        const kobalt::PositionCodec synthetic{[](const kobalt::EngineDocument &, const QString &, QString *) {
                                                   return QStringLiteral("/body/p[1]");
                                               },
-                                              [](const kobalt::ReaderModel &, QString *) {
+                                              [](const kobalt::EngineDocument &, QString *) {
                                                   return QStringLiteral("external-position");
                                               },
                                               [](const QString &location) {
@@ -830,7 +830,7 @@ int main(int argc, char **argv) {
         QString error;
         require(unopened.comparePlatformPosition(synthetic, "external-position", &error) == 0 && !error.isEmpty(),
                 "Unopened model accepted a decoded position without a document");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         error.clear();
         require(!preview.openPreview(unopened, QSize(600, 800), &error) && !error.isEmpty() && preview.pages() == 0 &&
                     preview.image(0).isNull(),
@@ -846,7 +846,7 @@ int main(int argc, char **argv) {
             if (QFileInfo(file).fileName().startsWith("NotoSerif-"))
                 changed.fallbackFiles.removeOne(file);
         {
-            kobalt::ReaderModel first(initial);
+            kobalt::EngineDocument first(initial);
             require(first.initializeFonts(), "Initial explicit font inputs failed");
             const auto faces = first.fontFaces();
             require(faces.contains("Noto Serif"), "Font cache fixture has no supplemental serif");
@@ -860,13 +860,13 @@ int main(int argc, char **argv) {
             catalog.clear();
             require(first.fontFaces() == faces && !first.fontCatalog().isEmpty(),
                     "Returned metadata modified the shared font cache");
-            kobalt::ReaderModel conflicting(changed);
+            kobalt::EngineDocument conflicting(changed);
             require(!conflicting.initializeFonts(), "Different live font inputs replaced the shared manager");
             require(conflicting.fontFaces().isEmpty() && conflicting.fontCatalog().isEmpty(),
                     "Conflicting inputs received another model's font cache");
             require(first.fontFaces() == faces, "Rejected font inputs changed an active model");
         }
-        kobalt::ReaderModel afterDrain(changed);
+        kobalt::EngineDocument afterDrain(changed);
         require(afterDrain.initializeFonts(), "Font inputs could not change after the last model released them");
         require(!afterDrain.fontFaces().contains("Noto Serif"), "Closed font manager left stale cached families");
         for (const auto &font : afterDrain.fontCatalog())
@@ -1027,8 +1027,8 @@ int main(int argc, char **argv) {
         require(error == kobalt::strings::get("error.this_publication_is_lcp_protected"),
                 "LCP publication rejected for another reason");
     }
-    require(!kobalt::ReaderModel::supportedArchive(QByteArray(100, 'x'), &error), "Invalid ZIP accepted");
-    require(kobalt::ReaderModel::supportedArchive(bytes, &error), qPrintable(error));
+    require(!kobalt::EngineDocument::supportedArchive(QByteArray(100, 'x'), &error), "Invalid ZIP accepted");
+    require(kobalt::EngineDocument::supportedArchive(bytes, &error), qPrintable(error));
     {
         // Empty or false EPUB media types must fail before an engine document
         // can be published through a resource provider.
@@ -1039,7 +1039,7 @@ int main(int argc, char **argv) {
                     return sink(mediaType.constData(), mediaType.size());
                 },
                 std::make_shared<std::atomic_bool>(false));
-            kobalt::ReaderModel rejected(kobalt::test::readerFonts());
+            kobalt::EngineDocument rejected(kobalt::test::readerFonts());
             kobalt::OpeningResult result;
             error.clear();
             require(!rejected.openResources(resources, {{"mimetype", mediaType.size()}}, QSize(600, 800), {}, &error,
@@ -1057,7 +1057,7 @@ int main(int argc, char **argv) {
                 return false;
             },
             std::make_shared<std::atomic_bool>(false));
-        kobalt::ReaderModel recovered(kobalt::test::readerFonts());
+        kobalt::EngineDocument recovered(kobalt::test::readerFonts());
         kobalt::OpeningResult result;
         error.clear();
         require(!recovered.openResources(unavailable, {{"mimetype", 20}}, QSize(600, 800), {}, &error, {}, &result) &&
@@ -1089,12 +1089,12 @@ int main(int argc, char **argv) {
     }
     auto corrupt = bytes;
     corrupt.truncate(corrupt.size() - 1);
-    require(!kobalt::ReaderModel::supportedArchive(corrupt, &error), "Truncated ZIP accepted");
+    require(!kobalt::EngineDocument::supportedArchive(corrupt, &error), "Truncated ZIP accepted");
     corrupt = bytes;
     int central = corrupt.indexOf(QByteArray("PK\1\2", 4));
     require(central >= 0, "Missing test ZIP directory");
     corrupt[central + 8] = char(corrupt[central + 8] | 1);
-    require(!kobalt::ReaderModel::supportedArchive(corrupt, &error), "Encrypted ZIP accepted");
+    require(!kobalt::EngineDocument::supportedArchive(corrupt, &error), "Encrypted ZIP accepted");
     // Use current line-height units and a bundled comparison face on both firmware versions.
     // The boolean hyphenation value still exercises the legacy setting.
     const QJsonObject legacySettings = kobalt::qt::object({{"font_face", "NV Bitter"},
@@ -1104,9 +1104,9 @@ int main(int argc, char **argv) {
                                                            {"margin_pixels", 36},
                                                            {"hyphenation", true}});
     for (int cycle = 0; cycle < 2; ++cycle) {
-        auto book = std::make_unique<kobalt::ReaderModel>(kobalt::test::readerFonts());
+        auto book = std::make_unique<kobalt::EngineDocument>(kobalt::test::readerFonts());
         require(book->open(bytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
-        auto preview = std::make_unique<kobalt::ReaderModel>(kobalt::test::readerFonts());
+        auto preview = std::make_unique<kobalt::EngineDocument>(kobalt::test::readerFonts());
         require(preview->openPreview(*book, QSize(1072, 1328), &error), qPrintable(error));
         book.reset();
         require(fontMan != nullptr && !preview->image(preview->page()).isNull(),
@@ -1119,11 +1119,11 @@ int main(int argc, char **argv) {
         const auto mime = wrongType.indexOf("application/epub+zip");
         require(mime >= 0, "Fixture does not have an uncompressed media type");
         wrongType[mime] = 'x';
-        kobalt::ReaderModel invalid(kobalt::test::readerFonts());
+        kobalt::EngineDocument invalid(kobalt::test::readerFonts());
         require(!invalid.open(wrongType, QSize(1072, 1328), {}, &error),
                 "Container import accepted a non-EPUB media type");
     }
-    kobalt::ReaderModel defaults(kobalt::test::readerFonts());
+    kobalt::EngineDocument defaults(kobalt::test::readerFonts());
     QVector<QPair<kobalt::OpeningStage, int>> progress;
     require(defaults.open(bytes, QSize(1072, 1328), {}, &error,
                           [&](kobalt::OpeningStage stage, int percent) {
@@ -1153,7 +1153,7 @@ int main(int argc, char **argv) {
             "New books do not use the bundled typography defaults");
     {
         kobalt::readingPpi.store(212);
-        kobalt::ReaderModel lowerDensity(kobalt::test::readerFonts());
+        kobalt::EngineDocument lowerDensity(kobalt::test::readerFonts());
         require(lowerDensity.open(bytes, QSize(758, 940), {}, &error), qPrintable(error));
         require(lowerDensity.state().value("top_margin_pixels").toInt() == kobalt::readingPixels(24) &&
                     lowerDensity.state().value("bottom_margin_pixels").toInt() == kobalt::readingPixels(24),
@@ -1168,7 +1168,7 @@ int main(int argc, char **argv) {
     const auto defaultImage = hash(defaults.image(0));
     require(defaults.style(45, 121) && defaults.fontSize() == 45 && defaults.spacing() == 121,
             "Single-unit typography changes were rounded");
-    kobalt::ReaderModel granular(kobalt::test::readerFonts());
+    kobalt::EngineDocument granular(kobalt::test::readerFonts());
     require(granular.open(bytes, QSize(600, 800), defaults.state(), &error), qPrintable(error));
     require(granular.fontSize() == 45 && granular.spacing() == 121, "Single-unit typography was not restored");
     require(defaults.style(kobalt::halfPointPixels(80), 121), "Cannot select 40 point text");
@@ -1212,13 +1212,13 @@ int main(int argc, char **argv) {
                 return loader(name, sink, error);
             },
             std::make_shared<std::atomic_bool>(false));
-        kobalt::ReaderModel lazy(kobalt::test::readerFonts());
+        kobalt::EngineDocument lazy(kobalt::test::readerFonts());
         require(lazy.openResources(source, directory.sizes(), QSize(1072, 1328), legacySettings, &error),
                 qPrintable(error));
         require(lazy.pages() == defaults.pages() && hash(lazy.image(0)) == hash(defaults.image(0)),
                 "On-demand resources changed pagination or rendered pixels");
         {
-            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            kobalt::EngineDocument preview(kobalt::test::readerFonts());
             require(preview.openPreview(lazy, QSize(1072, 1328), &error), qPrintable(error));
             require(hash(preview.image(0)) == hash(lazy.image(0)), "Resource-backed preview changed rendered pixels");
             require(!lazy.rebindResources(fresh, directory.sizes()),
@@ -1227,7 +1227,7 @@ int main(int argc, char **argv) {
         oldAccess->store(true);
         require(lazy.rebindResources(fresh, directory.sizes()), "Drained source could not bind fresh access");
         {
-            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            kobalt::EngineDocument preview(kobalt::test::readerFonts());
             require(preview.openPreview(lazy, QSize(1072, 1328), &error), qPrintable(error));
             require(freshReads > 0 && hash(preview.image(0)) == hash(lazy.image(0)),
                     "Retained container or preview read its old cancelled source");
@@ -1235,7 +1235,7 @@ int main(int argc, char **argv) {
         require(lazy.resourceStats()["peak_bytes"].toDouble() <= kobalt::ResourceCache::budgetBytes,
                 "Model exceeded source cache budget");
     }
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     require(model.open(bytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
     {
         QImage pattern(2, 2, QImage::Format_RGB32);
@@ -1264,7 +1264,7 @@ int main(int argc, char **argv) {
         QMap<QString, qint64> sizes;
         for (auto it = data.begin(); it != data.end(); ++it)
             sizes[it.key()] = it.value().size();
-        kobalt::ReaderModel scaled(kobalt::test::readerFonts());
+        kobalt::EngineDocument scaled(kobalt::test::readerFonts());
         require(scaled.openResources(resources, sizes, QSize(600, 800), {}, &error), qPrintable(error));
         require(!scaled.state().contains("smooth_images"), "Retired smoothing option was persisted");
         require(scaled.image(0).text("kobalt.animation_text_only") == "false",
@@ -1287,7 +1287,7 @@ int main(int argc, char **argv) {
         };
         require(grayPixels(smooth) > 100, "Image smoothing did not interpolate the enlarged image");
         require(scaled.pages() == pages && scaled.position() == position, "Image smoothing changed layout or position");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts()), reopened(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts()), reopened(kobalt::test::readerFonts());
         require(preview.openPreview(scaled, QSize(600, 800), &error) && hash(preview.image(0)) == hash(smooth),
                 "Preview lost image smoothing");
         require(reopened.openResources(resources, sizes, QSize(600, 800),
@@ -1316,7 +1316,7 @@ int main(int argc, char **argv) {
         require(ink > 100, "Image placeholder did not render its centered label");
     }
     {
-        kobalt::ReaderModel separate(kobalt::test::readerFonts()), combined(kobalt::test::readerFonts());
+        kobalt::EngineDocument separate(kobalt::test::readerFonts()), combined(kobalt::test::readerFonts());
         require(separate.open(bytes, QSize(1072, 1328), legacySettings, &error) &&
                     combined.open(bytes, QSize(1072, 1328), legacySettings, &error),
                 qPrintable(error));
@@ -1364,14 +1364,14 @@ int main(int argc, char **argv) {
     {
         QFile colorFile(QString::fromLocal8Bit(argv[2]));
         require(colorFile.open(QIODevice::ReadOnly), "Cannot read color fixture");
-        kobalt::ReaderModel color(kobalt::test::readerFonts());
+        kobalt::EngineDocument color(kobalt::test::readerFonts());
         const auto colorBytes = colorFile.readAll();
         require(color.open(colorBytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
         {
-            kobalt::ReaderModel retainedPreview(kobalt::test::readerFonts());
+            kobalt::EngineDocument retainedPreview(kobalt::test::readerFonts());
             QImage original;
             {
-                kobalt::ReaderModel closingSource(kobalt::test::readerFonts());
+                kobalt::EngineDocument closingSource(kobalt::test::readerFonts());
                 require(closingSource.open(colorBytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
                 original = closingSource.image(0);
                 require(retainedPreview.openPreview(closingSource, QSize(1072, 1328), &error), qPrintable(error));
@@ -1426,7 +1426,7 @@ int main(int argc, char **argv) {
         require(magenta > 3000 && teal > 50 && orange > 1000, "SVG shape, text or inline SVG colors were lost");
         require(blended > 1000, "PNG transparency was not composited onto the page");
         require(color.go(0), "Cannot select color section");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(color, QSize(1072, 1328), &error), qPrintable(error));
         require(hash(preview.image(0)) == hash(colorPage), "Preview changed publisher colors");
         const auto position = color.position();
@@ -1470,7 +1470,7 @@ int main(int argc, char **argv) {
         require(maxHighlightDifference <= 2, "Dark mode reduced contrast on a publisher highlight");
         require(color.pages() == pages && color.position() == position,
                 "Dark mode moved the text or changed pagination");
-        kobalt::ReaderModel darkPreview(kobalt::test::readerFonts()), reopened(kobalt::test::readerFonts());
+        kobalt::EngineDocument darkPreview(kobalt::test::readerFonts()), reopened(kobalt::test::readerFonts());
         require(darkPreview.openPreview(color, QSize(1072, 1328), &error), qPrintable(error));
         require(darkPreview.state().value("dark_mode").toBool() && hash(darkPreview.image(0)) == hash(night),
                 "Section preview did not inherit dark mode");
@@ -1480,7 +1480,7 @@ int main(int argc, char **argv) {
         require(hash(color.image(0)) == hash(colorPage), "Returning to day mode changed the page");
     }
     require(fontMan->GetHintingMode() == HINTING_MODE_DISABLED, "Book fonts still use hinting");
-    kobalt::ReaderModel transported(kobalt::test::readerFonts());
+    kobalt::EngineDocument transported(kobalt::test::readerFonts());
     require(transported.open(assembled, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
     require(transported.pages() == model.pages() && hash(transported.image(0)) == hash(model.image(0)),
             "Native resource assembly changed the publication");
@@ -1530,7 +1530,7 @@ int main(int argc, char **argv) {
                  {"c.xhtml",
                   "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Test</title></head><body><h1 id='heading'>" +
                       heading + "</h1><p>Body text.</p></body></html>"}});
-            kobalt::ReaderModel fallback(kobalt::test::readerFonts());
+            kobalt::EngineDocument fallback(kobalt::test::readerFonts());
             require(fallback.open(book, QSize(1072, 1328), {}, &error), qPrintable(error));
             const auto original = fallback.chapters();
             require(original.size() == 1 && !original[0].position.isEmpty(), "Missing EPUB TOC destination");
@@ -1571,7 +1571,7 @@ int main(int argc, char **argv) {
              {"text/c.xhtml",
               "<?xml version='1.0' encoding='utf-8'?>\n<html xmlns='http://www.w3.org/1999/xhtml'>\n<head>\n<title>Plain</title>\n</head>\n"
               "<body>\n<h1>Kapitel</h1>\n<p>Erste Zeile.</p>\n<p>Zweite <em>Gr\xc3\xb6\xc3\x9f" "e</em> Zeile.</p>\n</body>\n</html>"}});
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(plain, QSize(1072, 1328), {}, &error), qPrintable(error));
         // Paragraph start, inside the inline element after a two-byte letter,
         // and inside the text after it.
@@ -1614,7 +1614,7 @@ int main(int argc, char **argv) {
               "\t\t\t<p>\xe2\x80\x9cYou must follow me carefully.\xe2\x80\x9d</p>\n"
               "\t\t\t<p>Is not <i epub:type=\"se:name\">that</i> rather large?</p>\n"
               "\t\t</section>\n\t</body>\n</html>\n"}});
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(sectioned, QSize(1072, 1328), {}, &error), qPrintable(error));
         // Heading and paragraph starts, after a three-byte quotation mark,
         // inside the inline element and in the text after it.
@@ -1652,7 +1652,7 @@ int main(int argc, char **argv) {
               "\t\t\t\t<p>Plain text outside a span.</p>\n"
               "\t\t\t\t<p><span class=\"koboSpan\" id=\"kobo.2.1\">Text inside a span.</span></p>\n"
               "\t\t\t</div>\n\t\t</div>\n\t</body>\n</html>\n"}});
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(kepub, QSize(1072, 1328), {}, &error), qPrintable(error));
         require(model.goToPlatform(positions, "text/c.xhtml#point(/1/4/2/2/2/1:6)", &error), qPrintable(error));
         require(model.platformPosition(positions, &error) == "text/c.xhtml" && error.isEmpty(),
@@ -1661,7 +1661,7 @@ int main(int argc, char **argv) {
         require(model.platformPosition(positions, &error) == "text/c.xhtml#kobo.2.1:5",
                 "A KEPUB span position lost its exact form");
     }
-    kobalt::ReaderModel native(kobalt::test::readerFonts());
+    kobalt::EngineDocument native(kobalt::test::readerFonts());
     require(native.open(bytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
     require(native.goToPlatform(positions, chapter2 + "#kobo.8.1:7", &error), qPrintable(error));
     require(native.position().contains("/DocFragment[2]/") && native.position().endsWith(".7"),
@@ -1672,7 +1672,7 @@ int main(int argc, char **argv) {
         const auto before = native.position();
         require(!native.goToPlatform({}, before, &error) && !error.isEmpty() && native.position() == before,
                 "Missing codec treated a platform location as an engine anchor");
-        require(native.goToPlatformNearest({}, chapter2, &error) == kobalt::ReaderModel::PositionTarget::Unavailable &&
+        require(native.goToPlatformNearest({}, chapter2, &error) == kobalt::EngineDocument::PositionTarget::Unavailable &&
                     native.position() == before,
                 "Missing codec changed position through nearest fallback");
         require(native.platformPosition({}, &error).isEmpty() && !error.isEmpty(),
@@ -1813,7 +1813,7 @@ int main(int argc, char **argv) {
             "Native chapter-only location was misplaced");
     // Like Nickel, a position that cannot be placed opens its chapter, or the
     // book when the chapter is missing, and says why.
-    using Target = kobalt::ReaderModel::PositionTarget;
+    using Target = kobalt::EngineDocument::PositionTarget;
     require(native.goToPlatformNearest(positions, chapter2 + "#kobo.8.1:7", &error) == Target::Exact &&
                 native.position() == nativeAnchor,
             "An exact native position fell back");
@@ -1842,7 +1842,7 @@ int main(int argc, char **argv) {
     const int pages = model.pages();
     {
         const auto unchanged = model.state();
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(model, QSize(1072, 1328), &error), qPrintable(error));
         require(preview.pages() > 0 && preview.pages() < model.pages(), "Preview did not isolate one section");
         const auto before = hash(preview.image(preview.page()));
@@ -1863,7 +1863,7 @@ int main(int argc, char **argv) {
         for (const int ppi : {300, 212}) {
             kobalt::readingPpi.store(ppi);
             for (const bool dark : {false, true}) {
-                kobalt::ReaderModel baseline(model.fontInputs()), styled(model.fontInputs()),
+                kobalt::EngineDocument baseline(model.fontInputs()), styled(model.fontInputs()),
                     preview(model.fontInputs());
                 auto settings = model.state();
                 settings["dark_mode"] = dark;
@@ -1892,14 +1892,14 @@ int main(int argc, char **argv) {
     }
     {
         require(model.goTo(model.chapters()[1].position) && model.go(model.page() + 1), "Cannot open second section");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         const auto expected = hash(model.image(model.page()));
         require(preview.openPreview(model, QSize(1072, 1328), &error), qPrintable(error));
         require(hash(preview.image(preview.page())) == expected, "Section preview lost a later chapter's text anchor");
         require(model.go(3), "Cannot return after section preview check");
     }
     {
-        kobalt::ReaderModel recycling(model.fontInputs()), fresh(model.fontInputs());
+        kobalt::EngineDocument recycling(model.fontInputs()), fresh(model.fontInputs());
         require(recycling.open(bytes, QSize(1072, 1328), {}, &error), qPrintable(error));
         require(fresh.open(bytes, QSize(1072, 1328), {}, &error), qPrintable(error));
         require(recycling.pages() > 4, "Buffer reuse fixture needs several pages");
@@ -1968,7 +1968,7 @@ int main(int argc, char **argv) {
     require(model.position() == anchor && model.page() == reflowPage, "Resize changed the text anchor");
     const auto saved = model.state();
     const auto expected = hash(model.image(model.page()));
-    kobalt::ReaderModel reopened(kobalt::test::readerFonts());
+    kobalt::EngineDocument reopened(kobalt::test::readerFonts());
     require(reopened.open(bytes, QSize(1072, 1328), saved, &error), qPrintable(error));
     require(reopened.page() == model.page() && hash(reopened.image(reopened.page())) == expected,
             "Reopen lost page or typography");
@@ -2013,7 +2013,7 @@ int main(int argc, char **argv) {
             "Invalid alignment changed the model");
 
     {
-        kobalt::ReaderModel hyphenated(kobalt::test::readerFonts());
+        kobalt::EngineDocument hyphenated(kobalt::test::readerFonts());
         require(hyphenated.open(bytes, QSize(320, 720), legacySettings, &error), qPrintable(error));
         const auto anchor = hyphenated.position();
         require(hyphenated.setHyphenation("on"), "Cannot enable hyphenation");
@@ -2049,7 +2049,7 @@ int main(int argc, char **argv) {
                 content.replace("</head>", "<style>" + publisherRule + "</style></head>");
             require(publisherHyphens.append(name, content, &error), qPrintable(error));
         }
-        kobalt::ReaderModel hyphens(kobalt::test::readerFonts());
+        kobalt::EngineDocument hyphens(kobalt::test::readerFonts());
         const auto fixture = publisherHyphens.finish(&error);
         require(hyphens.open(fixture, QSize(320, 720), legacySettings, &error), qPrintable(error));
         const auto publisherPixels = leadingPages(hyphens);
@@ -2062,7 +2062,7 @@ int main(int argc, char **argv) {
                 "Auto did not follow publisher CSS with hyphenation off by default");
         auto settings = legacySettings;
         settings.remove("hyphenation");
-        kobalt::ReaderModel defaultHyphens(kobalt::test::readerFonts());
+        kobalt::EngineDocument defaultHyphens(kobalt::test::readerFonts());
         require(defaultHyphens.open(fixture, QSize(320, 720), settings, &error) &&
                     defaultHyphens.state().value("hyphenation").toString() == "off" &&
                     leadingPages(defaultHyphens) == offPixels,
@@ -2128,7 +2128,7 @@ int main(int argc, char **argv) {
         return pitch;
     };
     {
-        kobalt::ReaderModel height(kobalt::test::readerFonts());
+        kobalt::EngineDocument height(kobalt::test::readerFonts());
         auto settings = kobalt::qt::object({{"font_pixels", 40},
                                             {"line_spacing", 150},
                                             {"line_spacing_version", 1},
@@ -2150,7 +2150,7 @@ int main(int argc, char **argv) {
         require(height.open(lineHeightBytes, QSize(320, 720), migrated, &error) && height.spacing() == 150 &&
                     linePitch(height.image(0)) == 60,
                 "Reopening migrated spacing applied the conversion again");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(height, height.viewport(), &error) && linePitch(preview.image(0)) == 60,
                 "Preview multiplied or migrated line height again");
     }
@@ -2190,7 +2190,7 @@ int main(int argc, char **argv) {
         return maximum > natural;
     };
     for (const auto &alignment : {QString("left"), QString("justify")}) {
-        kobalt::ReaderModel spacing(kobalt::test::readerFonts());
+        kobalt::EngineDocument spacing(kobalt::test::readerFonts());
         require(spacing.open(spacedBytes, QSize(320, 720),
                              kobalt::qt::object({{"margin_pixels", 0}, {"text_alignment", alignment}}), &error),
                 qPrintable(error));
@@ -2200,7 +2200,7 @@ int main(int argc, char **argv) {
         checkSpaces(spacing.image(0));
         require(spacing.style(48, 120), "Cannot reflow spacing fixture");
         checkSpaces(spacing.image(0));
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(spacing, QSize(352, 720), &error), qPrintable(error));
         checkSpaces(preview.image(0));
     }
@@ -2223,7 +2223,7 @@ int main(int argc, char **argv) {
                 "<p class=\"hidden\">Hidden text<span id=\"duplicate\"><span id=\"duplicate\">X</span></span></p></body></html>";
         require(styled.append(name, content, &error), qPrintable(error));
     }
-    kobalt::ReaderModel css(kobalt::test::readerFonts());
+    kobalt::EngineDocument css(kobalt::test::readerFonts());
     const auto styledBytes = styled.finish(&error);
     require(css.open(styledBytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
     require(css.pages() == 3, "Short EPUB chapter files ran together instead of starting new pages");
@@ -2294,7 +2294,7 @@ int main(int argc, char **argv) {
             "Publisher CSS did not override the default paragraph margin");
     {
         require(css.go(0), "Cannot select styled section");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(css, QSize(1072, 1328), &error), qPrintable(error));
         require(hash(preview.image(preview.page())) == hash(styledPage), "Section preview changed publisher CSS");
     }
@@ -2324,7 +2324,7 @@ int main(int argc, char **argv) {
         const int initialWeight = qBound(axis.minimum, kobalt::defaultVariableFontWeight, axis.maximum);
         const int normalWeight = axis.minimum;
         const int alternateWeight = axis.maximum;
-        kobalt::ReaderModel variable(kobalt::test::readerFonts()), restored(kobalt::test::readerFonts());
+        kobalt::EngineDocument variable(kobalt::test::readerFonts()), restored(kobalt::test::readerFonts());
         require(variable.open(styledBytes, QSize(1072, 1328),
                               kobalt::qt::object({{"font_face", variableFace.family}, {"font_weight", normalWeight}}),
                               &error),
@@ -2464,7 +2464,7 @@ int main(int argc, char **argv) {
     for (const auto *mode : {"bold"}) {
         require(css.applyAppearance(kobalt::qt::object({{"bold_reading", mode}})), "Cannot enable Bionic reading");
         const auto emphasized = hash(css.image(0));
-        kobalt::ReaderModel freshlyEmphasized(css.fontInputs());
+        kobalt::EngineDocument freshlyEmphasized(css.fontInputs());
         require(freshlyEmphasized.open(styledBytes, css.viewport(), css.state(), &error), qPrintable(error));
         require(css.pages() == freshlyEmphasized.pages() && hash(freshlyEmphasized.image(0)) == emphasized,
                 "Changing Bionic mode reused old pagination instead of matching a fresh layout");
@@ -2493,7 +2493,7 @@ int main(int argc, char **argv) {
             "Retired Bionic mode was accepted");
     auto legacyBionic = css.state();
     legacyBionic["bold_reading"] = QStringLiteral("synthetic");
-    kobalt::ReaderModel migratedBionic(css.fontInputs());
+    kobalt::EngineDocument migratedBionic(css.fontInputs());
     require(migratedBionic.open(styledBytes, css.viewport(), legacyBionic, &error), qPrintable(error));
     require(migratedBionic.state().value("bold_reading").toString() == "bold",
             "Retired Bionic setting did not migrate to bold");
@@ -2514,7 +2514,7 @@ int main(int argc, char **argv) {
                 "</body></html>";
         require(codeBook.append(name, content, &error), qPrintable(error));
     }
-    kobalt::ReaderModel codeModel(css.fontInputs());
+    kobalt::EngineDocument codeModel(css.fontInputs());
     require(codeModel.open(codeBook.finish(&error), QSize(1072, 1328), {}, &error), qPrintable(error));
     const auto codeImage = hash(codeModel.image(0));
     for (const auto *mode : {"bold"})
@@ -2536,7 +2536,7 @@ int main(int argc, char **argv) {
                       "</body></html>";
         require(nowrapBook.append(name, content, &error), qPrintable(error));
     }
-    kobalt::ReaderModel nowrapModel(css.fontInputs());
+    kobalt::EngineDocument nowrapModel(css.fontInputs());
     require(nowrapModel.open(nowrapBook.finish(&error), QSize(1072, 1328),
                              kobalt::qt::object({{"font_pixels", 44}, {"font_face", "Libron"}, {"weight_steps", 5}}),
                              &error),
@@ -2583,7 +2583,7 @@ int main(int argc, char **argv) {
                 "<p>Ordinary reading text.</p></body></html>";
         require(inlineBook.append(name, content, &error), qPrintable(error));
     }
-    kobalt::ReaderModel inlineHeading(css.fontInputs());
+    kobalt::EngineDocument inlineHeading(css.fontInputs());
     require(inlineHeading.open(inlineBook.finish(&error), QSize(1072, 1328), {}, &error), qPrintable(error));
     for (const auto &face : {QStringLiteral("Libron"), kobalt::test::headingReadingFace()}) {
         require(inlineHeading.applyAppearance(kobalt::qt::object({{"font_face", face}, {"bold_reading", "off"}})),
@@ -2648,7 +2648,7 @@ int main(int argc, char **argv) {
                              [](const QString &name) {
                                  return name.endsWith(".png") ? QSize(64, 64) : QSize();
                              }});
-        kobalt::ReaderModel deferred(kobalt::test::readerFonts());
+        kobalt::EngineDocument deferred(kobalt::test::readerFonts());
         require(deferred.openResources(resources, sizes, QSize(600, 800), {}, &error), qPrintable(error));
         deferred.image(0);
         require(deferred.loadNextImage() && deferred.resourceError().isEmpty() &&

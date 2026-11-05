@@ -1,6 +1,6 @@
 #include "column_view.h"
 #include "support/qt_compat.h"
-#include "reader_model.h"
+#include "engine_document.h"
 #include "engine_activity.h"
 #include <lvdocview.h>
 #include <QTextBoundaryFinder>
@@ -31,7 +31,7 @@ QString contextText(const QString &text) {
 }
 // Engine pointers belong to one document and one rendered DOM. Reflow can
 // change boxing nodes, so even source-only comparisons use the layout epoch.
-struct ReaderModel::SourceIndex {
+struct EngineDocument::SourceIndex {
     struct Position {
         ldomXPointerEx pointer;
         int page[2] = {-2, -2}; // Normal anchor and exclusive passage end.
@@ -95,7 +95,7 @@ struct ReaderModel::SourceIndex {
     }
 };
 
-QPair<int, qint64> ReaderModel::sourceIndexUsage() const {
+QPair<int, qint64> EngineDocument::sourceIndexUsage() const {
     if (!sourceIndex_)
         return {};
     const auto &index = *sourceIndex_;
@@ -105,7 +105,7 @@ QPair<int, qint64> ReaderModel::sourceIndexUsage() const {
         qint64(index.tree.capacity()) * sizeof(SourceIndex::Node)};
 }
 
-std::shared_ptr<ReaderModel::SourceIndex> ReaderModel::sourceIndex(
+std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceIndex(
     const QStringList &anchors, const std::function<bool()> &current) const {
     // Allow room for highlight endpoints, bookmarks and a changing draft.
     // The byte budget includes UTF-16 key payloads, pointer records and a
@@ -171,7 +171,7 @@ std::shared_ptr<ReaderModel::SourceIndex> ReaderModel::sourceIndex(
     return index;
 }
 
-QVector<int> ReaderModel::pagesOf(const QStringList &positions, bool rangeEndpoints, QVector<int> *sourceOrder,
+QVector<int> EngineDocument::pagesOf(const QStringList &positions, bool rangeEndpoints, QVector<int> *sourceOrder,
                                  std::function<bool()> current) const {
     QVector<int> pages;
     if (sourceOrder)
@@ -222,12 +222,12 @@ QVector<int> ReaderModel::pagesOf(const QStringList &positions, bool rangeEndpoi
     }
     return current && !current() ? QVector<int>() : pages;
 }
-QString ReaderModel::pageStart(int page) const {
+QString EngineDocument::pageStart(int page) const {
     if (!engine_ || page < 0 || page >= pages())
         return {};
     return qstring(engine_->getPageBookmark(page).toString());
 }
-QString ReaderModel::pageExcerpt(int page) const {
+QString EngineDocument::pageExcerpt(int page) const {
     if (!engine_ || page < 0 || page >= pages())
         return {};
     return qstring(engine_->getPageText(false, page)).simplified().left(200);
@@ -727,7 +727,7 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
 }
 
 }
-WordSelection ReaderModel::wordAt(QPoint point) {
+WordSelection EngineDocument::wordAt(QPoint point) {
     if (!engine_ || !QRect(QPoint(), size_).contains(point)) {
         return {};
     }
@@ -740,7 +740,7 @@ WordSelection ReaderModel::wordAt(QPoint point) {
     }
     return {};
 }
-AnnotationPageEdges ReaderModel::annotationPageEdges() {
+AnnotationPageEdges EngineDocument::annotationPageEdges() {
     AnnotationPageEdges result;
     if (!engine_ || pages() <= 0)
         return result;
@@ -851,7 +851,7 @@ AnnotationPageEdges ReaderModel::annotationPageEdges() {
     return result;
 }
 
-AnnotationToken ReaderModel::annotationTokenAt(QPoint point) {
+AnnotationToken EngineDocument::annotationTokenAt(QPoint point) {
     if (!engine_ || !QRect(QPoint(), size_).contains(point)) {
         return {};
     }
@@ -892,7 +892,7 @@ AnnotationToken ReaderModel::annotationTokenAt(QPoint point) {
     }
     return {};
 }
-AnnotationToken ReaderModel::annotationDragTokenAt(QPoint point, const QString &boundary, bool start) {
+AnnotationToken EngineDocument::annotationDragTokenAt(QPoint point, const QString &boundary, bool start) {
     auto token = annotationTokenAt(point);
     if (boundary.isEmpty() || !engine_ || !QRect(QPoint(), size_).contains(point))
         return token;
@@ -965,7 +965,7 @@ AnnotationToken ReaderModel::annotationDragTokenAt(QPoint point, const QString &
     }
     return {};
 }
-TextRange ReaderModel::annotationRange(const QString &startTokenStart, const QString &startTokenEnd,
+TextRange EngineDocument::annotationRange(const QString &startTokenStart, const QString &startTokenEnd,
                                        const QString &endTokenStart, const QString &endTokenEnd, bool endTokenPolicy,
                                        bool startTokenPolicy, std::function<bool()> current) {
     if (!engine_) {
@@ -1035,7 +1035,7 @@ TextRange ReaderModel::annotationRange(const QString &startTokenStart, const QSt
     result.text = text.text;
     return result;
 }
-TextRange ReaderModel::annotationRange(const QString &start, const QString &end) {
+TextRange EngineDocument::annotationRange(const QString &start, const QString &end) {
     if (!engine_ || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
         return {};
     }
@@ -1063,7 +1063,7 @@ TextRange ReaderModel::annotationRange(const QString &start, const QString &end)
     }
     return textRange(first.start, last.end);
 }
-TextRange ReaderModel::textRange(const QString &start, const QString &end) {
+TextRange EngineDocument::textRange(const QString &start, const QString &end) {
     if (!engine_ || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
         return {};
     }
@@ -1086,7 +1086,7 @@ TextRange ReaderModel::textRange(const QString &start, const QString &end) {
     }
     return {qstring(a.toString()), qstring(b.toString()), text};
 }
-QVector<int> ReaderModel::intersectingRanges(const QString &start, const QString &end,
+QVector<int> EngineDocument::intersectingRanges(const QString &start, const QString &end,
                                              const QVector<QPair<QString, QString>> &ranges) const {
     QVector<int> result;
     if (!engine_) {
@@ -1121,7 +1121,7 @@ QVector<int> ReaderModel::intersectingRanges(const QString &start, const QString
     }
     return result;
 }
-std::shared_ptr<ReaderModel::SourceIndex> ReaderModel::sourceRanges(const QVector<QPair<QString, QString>> &ranges) const {
+std::shared_ptr<EngineDocument::SourceIndex> EngineDocument::sourceRanges(const QVector<QPair<QString, QString>> &ranges) const {
     auto index = sourceIndex_;
     if (!index || index->layout != layoutSignature() || index->ranges != ranges) {
         QStringList anchors;
@@ -1185,7 +1185,7 @@ std::shared_ptr<ReaderModel::SourceIndex> ReaderModel::sourceRanges(const QVecto
     }
     return index;
 }
-QVector<int> ReaderModel::visibleRanges(const QVector<QPair<QString, QString>> &ranges) const {
+QVector<int> EngineDocument::visibleRanges(const QVector<QPair<QString, QString>> &ranges) const {
     if (ranges.isEmpty() || ranges.size() > 2001 || !engine_ || pages() <= 0)
         return {};
     auto *doc = engine_->getDocument();
@@ -1199,7 +1199,7 @@ QVector<int> ReaderModel::visibleRanges(const QVector<QPair<QString, QString>> &
         return {};
     return sourceRanges(ranges)->intersections(first, last);
 }
-bool ReaderModel::rangeVisible(const QString &start, const QString &end) const {
+bool EngineDocument::rangeVisible(const QString &start, const QString &end) const {
     if (!engine_ || pages() <= 0 || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096)
         return false;
     auto *doc = engine_->getDocument();
@@ -1214,7 +1214,7 @@ bool ReaderModel::rangeVisible(const QString &start, const QString &end) const {
                                                       : ldomXRange(doc->getRootNode(), true).getEnd();
     return !first.isNull() && !last.isNull() && a.compare(b) < 0 && a.compare(last) < 0 && first.compare(b) < 0;
 }
-AnnotationGeometry ReaderModel::annotationGeometry(const QString &start, const QString &end) {
+AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, const QString &end) {
     AnnotationGeometry result;
     if (!engine_ || pages() <= 0 || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
         return result;
@@ -1293,7 +1293,7 @@ AnnotationGeometry ReaderModel::annotationGeometry(const QString &start, const Q
     result.end = endpoint(b, true);
     return result;
 }
-QVector<QVector<QRect>> ReaderModel::pageRangeRects(int target, const QVector<QPair<QString, QString>> &ranges) {
+QVector<QVector<QRect>> EngineDocument::pageRangeRects(int target, const QVector<QPair<QString, QString>> &ranges) {
     QVector<QVector<QRect>> result;
     if (!engine_ || target < 0 || target >= pages() || ranges.isEmpty() || ranges.size() > 2000)
         return result;
@@ -1323,7 +1323,7 @@ QVector<QVector<QRect>> ReaderModel::pageRangeRects(int target, const QVector<QP
     }
     return result;
 }
-QVector<QRect> ReaderModel::rangeRects(const QString &start, const QString &end, bool includeImages) {
+QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &end, bool includeImages) {
     QVector<QRect> result;
     if (!engine_)
         return result;
@@ -1367,7 +1367,7 @@ QVector<QRect> ReaderModel::rangeRects(const QString &start, const QString &end,
     }
     return result;
 }
-SearchBatch ReaderModel::searchPage(const QString &query, int number) {
+SearchBatch EngineDocument::searchPage(const QString &query, int number) {
     SearchBatch result;
     result.nextPage = number + 1;
     result.done = !engine_ || number < 0 || number + 1 >= pages() || query.isEmpty() || query.size() > 256;

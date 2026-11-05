@@ -9,7 +9,7 @@ using namespace kobalt;
 using Probe = ReaderSourceIndexProbe;
 using Ranges = Probe::Ranges;
 namespace {
-void open(ReaderModel &model, const test::BookFiles &files, QSize size = {600, 800}) {
+void open(EngineDocument &model, const test::BookFiles &files, QSize size = {600, 800}) {
     QMap<QString, qint64> sizes;
     for (auto it = files.cbegin(); it != files.cend(); ++it)
         sizes[it.key()] = it.value().size();
@@ -27,7 +27,7 @@ QStringList endpoints(const Ranges &ranges) {
         result << range.first << range.second;
     return result;
 }
-void compare(ReaderModel &model, const Ranges &ranges, bool geometry = false) {
+void compare(EngineDocument &model, const Ranges &ranges, bool geometry = false) {
     for (int page = 0; page < model.pages(); ++page) {
         model.go(page);
         const auto expected = Probe::visible(model, ranges);
@@ -69,7 +69,7 @@ void compare(ReaderModel &model, const Ranges &ranges, bool geometry = false) {
 // Checks cached annotation visibility and overlap against the previous algorithms, and bounded anchor-name lookups.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
-    ReaderModel model(test::readerFonts());
+    EngineDocument model(test::readerFonts());
     auto book = test::engineBook(false, 3, 5);
     book["OEBPS/c1.xhtml"].replace("</body>", "<p style=\"display:none\">Invisible marker.</p></body>");
     open(model, book);
@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
     require(model.pagesOf(many).size() == many.size(), "Oversized endpoint request lost results");
     require(!Probe::cached(model), "Endpoint count bound retained oversized cache");
     compare(model, marks);
-    // Same ReaderModel object opens a different document. Configure clears even
+    // Same EngineDocument object opens a different document. Configure clears even
     // if allocator reuse gives the replacement document the same address.
     open(model, test::engineBook(false, 1, 1));
     require(!Probe::cached(model), "Replacing document retained source pointers");

@@ -1,5 +1,5 @@
 #pragma once
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "open_request.h"
 #include "highlight_geometry.h"
 #include <QElapsedTimer>
@@ -93,7 +93,7 @@ struct SyncedPositionDescription {
 };
 
 // GUI-side settings and immutable frame copies. The worker owns engine access.
-// After application shutdown joins that worker, remaining models are released
+// After application shutdown joins that worker, remaining documents are released
 // synchronously by their GUI-side owners.
 class ReaderSession : public QObject {
 public:
@@ -361,10 +361,10 @@ public:
 private:
     bool formattingWarning_ = false;
     QJsonObject formattingDetails_;
-    ReaderSession(std::shared_ptr<ReaderModel> retainedModel, QString placeholderFamily);
+    ReaderSession(std::shared_ptr<EngineDocument> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;
     QString placeholderFamily_;
-    std::shared_ptr<ReaderModel> model;
+    std::shared_ptr<EngineDocument> engine_;
     ReaderFrame frame;
     void completeFrameMarkup(ReaderFrame result, quint64 job, const std::shared_ptr<SourceLease> &lease,
                              std::function<void(ReaderFrame)> finished);

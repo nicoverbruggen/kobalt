@@ -1,6 +1,6 @@
 #include "check.h"
 #include "reader_inputs.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "support/qt_compat.h"
 #include <QBuffer>
 #include <QDir>
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         kobalt::readingPpi.store(ppi);
         QTemporaryDir cache;
         require(cache.isValid(), "Cannot create image cache fixture");
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         for (const auto &fixture : cases) {
             // The full matrix uses CSS pixels directly. Repeat the reported
             // figures and the zero-rounding cases at Kobo's reading density.
@@ -119,12 +119,12 @@ int main(int argc, char **argv) {
                     ++failures;
                     continue;
                 }
-                kobalt::ReaderModel preview(kobalt::test::readerFonts());
+                kobalt::EngineDocument preview(kobalt::test::readerFonts());
                 require(preview.openPreview(model, QSize(800, 1000), &error), qPrintable(error));
                 require(preview.image(0) == rendered, "Image proportions changed in a preview");
                 if (cacheCase) {
                     require(!model.openedFromCache() && model.saveDocumentCache(), "Cannot cache image proportions");
-                    kobalt::ReaderModel reopened(kobalt::test::readerFonts());
+                    kobalt::EngineDocument reopened(kobalt::test::readerFonts());
                     reopened.setDocumentCache(cache.path(), "image-proportions", "image-test", 1024 * 1024);
                     require(reopened.openResources(resources, lengths, QSize(800, 1000), settings, &error), qPrintable(error));
                     require(reopened.openedFromCache() && reopened.image(0) == rendered,
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
                 const auto bytes = data.value(name);
                 return sink(bytes.constData(), bytes.size());
             }, std::make_shared<std::atomic_bool>(false));
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         QString error;
         require(model.openResources(resources, lengths, {800, 1000}, {}, &error), qPrintable(error));
         const auto day = model.image(0);
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
                     inverted.save(captureDirectory + "/smart-" + kind + "-dark.png"), "Cannot capture smart inversion");
         }
         require(model.image(0) == night, "Repeated rendering changed inversion");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(model, {800, 1000}, &error), qPrintable(error));
         require(preview.image(0) == night, "Preview lost automatic smart inversion");
         require(model.pages() == pages && model.position() == position, "Smart inversion changed reading position");

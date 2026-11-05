@@ -99,7 +99,7 @@ public:
     void pageButton(int direction) override;
     void scriptedPageButton(int direction) override;
     bool busy() const override {
-        return resizeTimer.isActive() || model->busy() || model->preparingNeighbours() || stylingSamplesPending > 0;
+        return resizeTimer.isActive() || session->busy() || session->preparingNeighbours() || stylingSamplesPending > 0;
     }
     // Automatic syncs follow the account setting, unless a performance run
     // has paused them for the whole process.
@@ -307,7 +307,7 @@ private:
     kobalt::ReaderHostServices services;
     std::unique_ptr<kobalt::WindowPresentation> presentation;
     std::unique_ptr<kobalt::ReadingBook> book;
-    kobalt::ReaderSession *model;
+    kobalt::ReaderSession *session;
     QPointer<kobalt::ReaderOrientation> orientation;
     QPointer<kobalt::ui::ModalOverlay> syncDialog, finishDialog;
     bool finishChoiceResolved = false;

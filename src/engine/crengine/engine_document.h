@@ -98,10 +98,10 @@ struct AnnotationPageEdges {
 };
 
 // All engine calls stay on one owning thread. Images own their pixels.
-class ReaderModel {
+class EngineDocument {
 public:
-    explicit ReaderModel(EngineFontInputs fonts);
-    ~ReaderModel();
+    explicit EngineDocument(EngineFontInputs fonts);
+    ~EngineDocument();
     bool initializeFonts();
     QStringList fontFaces();
     QVector<ReadingFont> fontCatalog();
@@ -124,7 +124,7 @@ public:
     // changes with the code that builds the parsed book. An empty directory
     // or fingerprint opens without the cache.
     void setDocumentCache(QString directory, QByteArray fingerprint, QByteArray policy, qint64 bytes);
-    // Set before opening. Previews inherit these bytes from their source model.
+    // Set before opening. Previews inherit these bytes from their source document.
     void setUserStyleSheet(QByteArray css) {
         userStyleSheet_ = std::move(css);
     }
@@ -149,7 +149,7 @@ public:
     }
     QString resourceError() const;
     QJsonObject resourceStats() const;
-    bool openPreview(ReaderModel &source, QSize size, QString *error);
+    bool openPreview(EngineDocument &source, QSize size, QString *error);
     bool go(int page);
     // The page that `delta` page turns from `from` reach. When hiding is enabled,
     // skip other non-linear sections. Returns `from` at either end.
@@ -363,7 +363,7 @@ private:
     int alternateColumns_ = 1, alternateColumnSpacing_ = 0, layoutPpi_ = 0;
     QByteArray layoutCss_;
     QMap<int, QImage> cache_;
-    // One retired page, owned only by this model. Never retain client images.
+    // One retired page, owned only by this document. Never retain client images.
     QImage spareImage_;
     quint64 imageRevision_ = 0;
     bool refreshImages();

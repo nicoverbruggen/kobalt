@@ -42,23 +42,23 @@ QByteArray readUserStyleSheet(const QString &path) {
     return bytes;
 }
 
-struct ModelDeleter {
-    void operator()(ReaderModel *value) const {
+struct DocumentDeleter {
+    void operator()(EngineDocument *value) const {
         EngineJob job;
         delete value;
     }
 };
 
-void captureChapters(ReaderFrame &result, ReaderModel &model) {
-    const auto chapter = model.chapterProgress();
+void captureChapters(ReaderFrame &result, EngineDocument &engine) {
+    const auto chapter = engine.chapterProgress();
     result.state["chapter_title"] = chapter.title;
     result.state["chapter_page"] = chapter.page;
     result.state["chapter_pages"] = chapter.pages;
-    result.chapters = model.chapters();
-    result.chapterGraph = model.chapterGraph();
-    result.totalWords = model.totalWords();
-    result.contentsSelection = model.chapterSelection(result.chapters);
-    result.graphSelection = model.chapterSelection(result.chapterGraph);
+    result.chapters = engine.chapters();
+    result.chapterGraph = engine.chapterGraph();
+    result.totalWords = engine.totalWords();
+    result.contentsSelection = engine.chapterSelection(result.chapters);
+    result.graphSelection = engine.chapterSelection(result.chapterGraph);
 }
 // Counts one neighbour job from the moment it is queued until it ends.
 class NeighbourJob {
@@ -79,19 +79,19 @@ private:
 // the cache. `direction` is the turn that led here; the page further that way
 // is the likelier next one and goes first. Stops when `current` reports a newer
 // request, because that request's page matters more than a page nobody asked for.
-void prepareNeighbours(ReaderModel &model, int direction, const std::function<bool()> &current) {
+void prepareNeighbours(EngineDocument &engine, int direction, const std::function<bool()> &current) {
     for (const int step : {direction < 0 ? -1 : 1, direction < 0 ? 1 : -1}) {
         if (current && !current())
             return;
         engineActivity().checkpoint();
-        const int target = model.turnTarget(model.page(), step);
-        if (target == model.page())
+        const int target = engine.turnTarget(engine.page(), step);
+        if (target == engine.page())
             continue;
-        model.image(target);
-        model.prepareDamage(model.page(), target);
+        engine.image(target);
+        engine.prepareDamage(engine.page(), target);
     }
 }
-ReaderMarkupFrame captureFrameMarkup(ReaderModel &model, const ReaderMarkupRequest &request, quint64 generation,
+ReaderMarkupFrame captureFrameMarkup(EngineDocument &engine, const ReaderMarkupRequest &request, quint64 generation,
                                      qint64 imageKey) {
     ReaderMarkupFrame result;
     result.request = request;
@@ -107,14 +107,14 @@ ReaderMarkupFrame captureFrameMarkup(ReaderModel &model, const ReaderMarkupReque
     }
     // Only intersecting source ranges reach segment or caret geometry. A book
     // with marks elsewhere keeps the unmarked destination's geometry fast path.
-    const auto visible = model.visibleRanges(ranges);
+    const auto visible = engine.visibleRanges(ranges);
     int remaining = 65536;
     // A moving draft does not change the saved-range index. Give its geometry
     // the budget first so overlapping saved marks cannot hide the selection.
-    if (!request.draftStart.isEmpty() && model.rangeVisible(request.draftStart, request.draftEnd)) {
+    if (!request.draftStart.isEmpty() && engine.rangeVisible(request.draftStart, request.draftEnd)) {
         engineActivity().checkpoint();
         ++result.resolvedRanges;
-        result.draft = model.annotationGeometry(request.draftStart, request.draftEnd);
+        result.draft = engine.annotationGeometry(request.draftStart, request.draftEnd);
         if (result.draft.rectangles.size() > remaining) {
             result.draft.rectangles.resize(remaining);
         }
@@ -127,7 +127,7 @@ ReaderMarkupFrame captureFrameMarkup(ReaderModel &model, const ReaderMarkupReque
         }
         ++result.resolvedRanges;
         const auto &range = request.saved[index];
-        auto rectangles = model.rangeRects(range.start, range.end);
+        auto rectangles = engine.rangeRects(range.start, range.end);
         if (rectangles.size() > remaining) {
             rectangles.resize(remaining);
         }
@@ -139,32 +139,32 @@ ReaderMarkupFrame captureFrameMarkup(ReaderModel &model, const ReaderMarkupReque
 
 // `neighbours` is false when the caller hands the frame to the screen first
 // and prepares the neighbour pages afterwards.
-ReaderFrame capture(ReaderModel &model, const PositionCodec &positions, bool neighbours = true,
+ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool neighbours = true,
                     const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0) {
     engineActivity().checkpoint();
     ReaderFrame result;
-    result.image = model.image(model.page());
-    result.markup = captureFrameMarkup(model, markup, markupGeneration, result.image.cacheKey());
-    result.links = model.pageLinks();
-    result.state = model.state();
-    result.nativePosition = model.platformPosition(positions, &result.nativePositionError);
-    captureChapters(result, model);
-    result.state["page"] = model.page();
-    result.state["pages"] = model.pages();
-    result.state["next_page"] = model.turnTarget(model.page(), 1);
-    result.state["text_font_face"] = model.textFontFace();
-    result.state["embedded_font_count"] = model.embeddedFontCount();
-    result.title = model.title();
-    result.fonts = model.fontFaces();
-    result.fontCatalog = model.fontCatalog();
+    result.image = engine.image(engine.page());
+    result.markup = captureFrameMarkup(engine, markup, markupGeneration, result.image.cacheKey());
+    result.links = engine.pageLinks();
+    result.state = engine.state();
+    result.nativePosition = engine.platformPosition(positions, &result.nativePositionError);
+    captureChapters(result, engine);
+    result.state["page"] = engine.page();
+    result.state["pages"] = engine.pages();
+    result.state["next_page"] = engine.turnTarget(engine.page(), 1);
+    result.state["text_font_face"] = engine.textFontFace();
+    result.state["embedded_font_count"] = engine.embeddedFontCount();
+    result.title = engine.title();
+    result.fonts = engine.fontFaces();
+    result.fontCatalog = engine.fontCatalog();
     engineActivity().checkpoint();
     if (neighbours) {
-        prepareNeighbours(model, 1, {});
+        prepareNeighbours(engine, 1, {});
         engineActivity().checkpoint();
     }
-    result.state["cached_pages"] = model.cachedPages();
-    result.resources = model.resourceStats();
-    result.error = model.resourceError();
+    result.state["cached_pages"] = engine.cachedPages();
+    result.resources = engine.resourceStats();
+    result.error = engine.resourceError();
     return result;
 }
 }
@@ -172,17 +172,17 @@ ReaderFrame capture(ReaderModel &model, const PositionCodec &positions, bool nei
 ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)
     : fonts_(std::move(fonts)), placeholderFamily_(std::move(placeholderFamily)) {
     const auto worker = engineWorkerState();
-    model = std::shared_ptr<ReaderModel>(new ReaderModel(fonts_), [worker](ReaderModel *value) {
+    engine_ = std::shared_ptr<EngineDocument>(new EngineDocument(fonts_), [worker](EngineDocument *value) {
         // Session owners live on the GUI thread; queued jobs own the other
         // references. After the GUI has joined the worker, it can destroy a
-        // retained model directly without touching either deleted Qt object.
+        // retained document directly without touching either deleted Qt object.
         // While the worker runs, release stays on that thread. Owning the
         // queued value also releases it if shutdown discards the pending call.
         if (worker->stopped.load() || QThread::currentThread() == worker->thread) {
-            ModelDeleter{}(value);
+            DocumentDeleter{}(value);
             return;
         }
-        auto release = std::make_shared<std::unique_ptr<ReaderModel, ModelDeleter>>(value);
+        auto release = std::make_shared<std::unique_ptr<EngineDocument, DocumentDeleter>>(value);
         kobalt::qt::invoke(
             worker->object,
             [release] {
@@ -192,9 +192,9 @@ ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)
     });
 }
 
-ReaderSession::ReaderSession(std::shared_ptr<ReaderModel> retainedModel, QString placeholderFamily)
-    : fonts_(retainedModel->fontInputs()), placeholderFamily_(std::move(placeholderFamily)),
-      model(std::move(retainedModel)) {}
+ReaderSession::ReaderSession(std::shared_ptr<EngineDocument> retainedEngine, QString placeholderFamily)
+    : fonts_(retainedEngine->fontInputs()), placeholderFamily_(std::move(placeholderFamily)),
+      engine_(std::move(retainedEngine)) {}
 
 std::unique_ptr<ReaderSession> ReaderSession::retained() {
     if (running || !openingResult_.ready() || !frame.error.isEmpty() || fingerprint.isEmpty())
@@ -213,7 +213,7 @@ std::unique_ptr<ReaderSession> ReaderSession::retained() {
     frame.resources["allocated_bytes"] = 0;
     frame.resources["pending_images"] = 0;
     frame.resources["ready_images"] = 0;
-    auto retained = std::unique_ptr<ReaderSession>(new ReaderSession(model, placeholderFamily_));
+    auto retained = std::unique_ptr<ReaderSession>(new ReaderSession(engine_, placeholderFamily_));
     retained->frame = frame;
     retained->formattingWarning_ = formattingWarning_;
     retained->formattingDetails_ = formattingDetails_;
@@ -231,7 +231,7 @@ std::unique_ptr<ReaderSession> ReaderSession::retained() {
     retained->identity_ = identity_;
     retained->positions_ = positions_;
     cancelSource();
-    const auto engine = model;
+    const auto engine = engine_;
     kobalt::qt::invoke(
         engineWorker(),
         [engine] {
@@ -282,17 +282,17 @@ void ReaderSession::drain(std::function<void()> finished) {
 // Nickel's reader opens every saved position, falling back to the chapter or
 // the book start without a message. Log the fallback, with the chapter file
 // inside the book, so a device report can tell which position failed.
-static bool openAtPlatform(ReaderModel &engine, const PositionCodec &codec, const QString &location, QString *failure) {
+static bool openAtPlatform(EngineDocument &engine, const PositionCodec &codec, const QString &location, QString *failure) {
     QString error;
     const auto target = engine.goToPlatformNearest(codec, location, &error);
-    if (target == ReaderModel::PositionTarget::Unavailable) {
+    if (target == EngineDocument::PositionTarget::Unavailable) {
         if (failure)
             *failure = error;
         return false;
     }
-    if (target != ReaderModel::PositionTarget::Exact) {
+    if (target != EngineDocument::PositionTarget::Exact) {
         diagnostic("native-position-fallback",
-                   {{"target", target == ReaderModel::PositionTarget::Chapter ? "chapter" : "book"},
+                   {{"target", target == EngineDocument::PositionTarget::Chapter ? "chapter" : "book"},
                     {"error_code", diagnosticErrorCode(error)},
                     {"chapter", location.left(location.indexOf('#') < 0 ? location.size() : location.indexOf('#'))}});
     }
@@ -343,7 +343,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     turning = false;
     pendingTurn = 0;
     QPointer<ReaderSession> guard(this);
-    auto engine = model;
+    auto engine = engine_;
     // A failed open may still have inspected this archive and recorded its
     // fingerprint. It is not a retained readable document, even on this facade.
     const auto retainedHash =
@@ -760,7 +760,7 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size, std::fu
     const auto positions = positions_;
     const auto markup = markupRequest_;
     const auto markupGeneration = markupGeneration_;
-    auto engine = model, book = source.model;
+    auto engine = engine_, book = source.engine_;
     const auto latest = newest;
     kobalt::qt::invoke(
         engineWorker(),
@@ -991,7 +991,7 @@ bool ReaderSession::importPosition(const QString &location, bool native, std::fu
     cancelSearch();
     running = true;
     const auto job = revision;
-    auto engine = model;
+    auto engine = engine_;
     const auto positions = positions_;
     const auto markup = markupRequest_;
     const auto markupGeneration = markupGeneration_;
@@ -1043,7 +1043,7 @@ bool ReaderSession::importPosition(const QString &location, bool native, std::fu
 }
 void ReaderSession::describeSyncedPosition(const QString &position,
                                           std::function<void(SyncedPositionDescription)> finished) {
-    const auto engine = model;
+    const auto engine = engine_;
     const auto lease = lease_;
     const auto job = revision;
     const bool ready = layoutReady_;
@@ -1069,7 +1069,7 @@ void ReaderSession::describeSyncedPosition(const QString &position,
     }, Qt::QueuedConnection);
 }
 void ReaderSession::compareNativePosition(const QString &location, std::function<void(PositionComparison)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     const auto positions = positions_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
@@ -1103,7 +1103,7 @@ void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage)> fi
     coverImage(maximumSize, [finished](QImage image, QFileInfo) { finished(std::move(image)); }, preferredPath);
 }
 void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage, QFileInfo)> finished, QString preferredPath) {
-    auto engine = model;
+    auto engine = engine_;
     const auto lease = lease_;
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
@@ -1138,7 +1138,7 @@ void ReaderSession::bookmarkPages(QStringList positions, std::function<void(QVec
 }
 void ReaderSession::bookmarkLocations(QStringList positions, std::function<void(BookmarkLocations)> finished,
                                       bool rangeEndpoints, bool sourceOrder, std::shared_ptr<std::atomic_bool> cancelled) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto latest = newestLayout;
     const auto job = latest->load();
@@ -1170,7 +1170,7 @@ void ReaderSession::bookmarkLocations(QStringList positions, std::function<void(
         Qt::QueuedConnection);
 }
 void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto latest = newestLayout;
     const auto job = latest->load();
@@ -1211,7 +1211,7 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
     const auto latest = newest;
     const auto job = revision;
     const auto lease = lease_;
-    const auto engine = model;
+    const auto engine = engine_;
     const auto markup = markupRequest_;
     const auto markupGeneration = markupGeneration_;
     const bool dark = frame.state.value("dark_mode").toBool(false);
@@ -1259,7 +1259,7 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
         Qt::QueuedConnection);
 }
 void ReaderSession::nativePosition(std::function<void(QString, QString)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     const auto positions = positions_;
     QPointer<ReaderSession> guard(this);
     const auto lease = lease_;
@@ -1284,7 +1284,7 @@ void ReaderSession::nativePosition(std::function<void(QString, QString)> finishe
 void ReaderSession::intersectingRanges(const QString &start, const QString &end,
                                        QVector<QPair<QString, QString>> ranges,
                                        std::function<void(QVector<int>)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto latest = newestLayout;
     const auto job = latest->load();
@@ -1309,7 +1309,7 @@ void ReaderSession::intersectingRanges(const QString &start, const QString &end,
         Qt::QueuedConnection);
 }
 void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(engineWorker(), [engine, guard, job, finished] {
@@ -1323,7 +1323,7 @@ void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)>
 }
 void ReaderSession::annotationTokenAt(QPoint point, std::function<void(AnnotationToken)> finished,
                                       const QString &boundary, bool start) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1347,7 +1347,7 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
                                     const QString &endTokenStart, const QString &endTokenEnd,
                                     std::function<void(TextRange)> finished, bool endTokenPolicy,
                                     bool startTokenPolicy) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     const auto latest = newest;
@@ -1372,7 +1372,7 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
         Qt::QueuedConnection);
 }
 void ReaderSession::annotationRange(const QString &start, const QString &end, std::function<void(TextRange)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1392,7 +1392,7 @@ void ReaderSession::annotationRange(const QString &start, const QString &end, st
         Qt::QueuedConnection);
 }
 void ReaderSession::textRange(const QString &start, const QString &end, std::function<void(TextRange)> finished) {
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto latest = newestLayout;
     const auto job = latest->load();
@@ -1419,7 +1419,7 @@ void ReaderSession::textRange(const QString &start, const QString &end, std::fun
 void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> finished) {
     if (running)
         return;
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1440,7 +1440,7 @@ void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> fini
 void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished) {
     if (running)
         return;
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(engineWorker(), [engine, guard, job, point, finished] {
@@ -1455,7 +1455,7 @@ void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished) 
 void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDetails)> finished) {
     if (running)
         return;
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1516,7 +1516,7 @@ void ReaderSession::startPendingSearch() {
 void ReaderSession::searchNext(QString query, int page, int count, quint64 job,
                                std::shared_ptr<std::atomic_bool> cancelled, std::function<void(SearchBatch)> finished,
                                bool reset) {
-    auto engine = model;
+    auto engine = engine_;
     const auto lease = lease_;
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
@@ -1601,7 +1601,7 @@ void ReaderSession::completeFrameMarkup(ReaderFrame result, quint64 job, const s
     // One pending frame and one bounded geometry job remain owned by this chain.
     const auto request = markupRequest_;
     const auto generation = markupGeneration_;
-    const auto engine = model;
+    const auto engine = engine_;
     const auto latest = newest;
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
@@ -1662,7 +1662,7 @@ void ReaderSession::captureMarkup(std::function<void(bool)> finished) {
         finished(true);
         return;
     }
-    const auto engine = model;
+    const auto engine = engine_;
     const auto job = revision;
     const auto lease = lease_;
     const auto latest = newest;
@@ -1698,7 +1698,7 @@ void ReaderSession::annotationGeometry(const QString &start, const QString &end,
     if (running) {
         return;
     }
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1720,7 +1720,7 @@ void ReaderSession::annotationGeometry(const QString &start, const QString &end,
 void ReaderSession::rangeRects(const QString &start, const QString &end, std::function<void(QVector<QRect>)> finished) {
     if (running)
         return;
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1742,7 +1742,7 @@ void ReaderSession::rangeRects(QVector<QPair<QString, QString>> ranges, std::fun
     if (running) {
         return;
     }
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1773,7 +1773,7 @@ void ReaderSession::rangeRectGroups(QVector<QPair<QString, QString>> ranges,
         finished({});
         return;
     }
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1810,7 +1810,7 @@ void ReaderSession::resize(QSize size) {
 }
 void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph) {
     const auto positions = positions_;
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
@@ -1849,7 +1849,7 @@ void ReaderSession::loadImages() {
         frame.resources.value("pending_images").toInt() == 0 || !frame.error.isEmpty())
         return;
     loadingImage = true;
-    const auto engine = model;
+    const auto engine = engine_;
     const auto latest = newest;
     const auto job = revision;
     QPointer<ReaderSession> guard(this);
@@ -1930,7 +1930,7 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job) {
     loadImages();
     if (loadingImage || preview_ || !openingResult_.ready() || !lease_ || lease_->revoked())
         return;
-    const auto engine = model;
+    const auto engine = engine_;
     const auto latest = newest;
     const auto lease = lease_;
     const auto neighbours = std::make_shared<NeighbourJob>(neighbourJobs);
@@ -2019,7 +2019,7 @@ void ReaderSession::dispatch(bool pageTurn) {
     const auto delta = std::exchange(pageDelta, 0);
     const auto target = std::exchange(pageTarget, -1);
     const auto job = revision;
-    auto engine = model;
+    auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto lease = lease_;
     const auto latest = newest;

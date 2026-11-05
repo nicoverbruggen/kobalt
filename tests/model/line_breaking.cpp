@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QDir>
 #include <QGuiApplication>
 #include <cstdio>
@@ -33,7 +33,7 @@ static Layout render(const QByteArray &mode) {
             return sink(bytes.constData(), bytes.size());
         },
         std::make_shared<std::atomic_bool>(false));
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     require(model.openResources(resources, sizes, QSize(122, 480),
                                 kobalt::qt::object({{"margin_pixels", 0}, {"font_pixels", 32}}), &error),

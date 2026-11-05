@@ -2,7 +2,7 @@
 #include "reader_inputs.h"
 #include "book_fixtures.h"
 #include "engine_fixtures.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <lvpagesplitter.h>
 #include <QCryptographicHash>
 #include <QFile>
@@ -126,7 +126,7 @@ void decorativePages() {
         const auto bytes = input.readAll();
         const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
         for (bool dark : {false, true}) for (int columns : {1, 2}) {
-            ReaderModel model(test::readerFonts());
+            EngineDocument model(test::readerFonts());
             const QSize viewport = columns == 1 ? QSize(800, 1143) : QSize(1143, 807);
             const QJsonObject settings{{"font_pixels", 32}, {"line_spacing", 150}, {"line_spacing_version", 1},
                 {"widows_orphans", "avoid"}, {"columns", columns}, {"dark_mode", dark}};
@@ -217,11 +217,11 @@ void decorativePages() {
                     }
                     else if (QByteArray(mode) == "expand") expanded |= after != before;
                     else centered |= after != before;
-                    ReaderModel preview(test::readerFonts());
+                    EngineDocument preview(test::readerFonts());
                     require(preview.openPreview(model, viewport, &error) && preview.image(page) == after,
                             "Decorative spacing preview differs");
                     require(model.saveDocumentCache(), "Cannot save decorative layout");
-                    ReaderModel reopened(test::readerFonts());
+                    EngineDocument reopened(test::readerFonts());
                     reopened.setDocumentCache(cache, fingerprint, "decorative-spacing", 1024 * 1024);
                     require(reopened.open(bytes, viewport, model.state(), &error) && reopened.openedFromCache() &&
                         reopened.image(page) == after, "Cached decorative spacing differs");
@@ -289,7 +289,7 @@ int main(int argc, char **argv) {
     const QJsonObject typography{{"font_pixels", 32}, {"line_spacing", 150}, {"line_spacing_version", 1}};
     QString error;
     {
-        ReaderModel model(test::readerFonts());
+        EngineDocument model(test::readerFonts());
         require(model.open(bytes, QSize(800, 973), typography, &error), qPrintable(error));
         const auto before = model.image(0);
         const auto beforeInk = inkBounds(before);
@@ -326,7 +326,7 @@ int main(int argc, char **argv) {
         require(test::writeBook(directory.path(), "framed.epub", framed), "Write visible border fixture");
         QFile framedInput(directory.path() + "/framed.epub");
         require(framedInput.open(QIODevice::ReadOnly), "Read visible border fixture");
-        ReaderModel model(test::readerFonts());
+        EngineDocument model(test::readerFonts());
         require(model.open(framedInput.readAll(), QSize(800, 973), typography, &error), qPrintable(error));
         const auto before = model.image(0);
         for (const auto *mode : {"expand", "center"}) {
@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
     const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
     int height = 640;
     for (bool cached : {false, true}) {
-        ReaderModel model(test::readerFonts());
+        EngineDocument model(test::readerFonts());
         model.setDocumentCache(directory.path() + "/cache", fingerprint, "vertical-spacing", bytes.size());
         auto settings = typography;
         settings["widows_orphans"] = "avoid";

@@ -1,6 +1,6 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
-#include "reader_model.h"
+#include "engine_document.h"
 #include "reader_source.h"
 #include "kobo_styles.h"
 #include "reader_render_callback.h"
@@ -266,7 +266,7 @@ private:
 };
 
 }
-bool ReaderModel::supportedArchive(const QByteArray &bytes, QString *error) {
+bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error) {
     auto fail = [error](const QString &message) {
         *error = message;
         return false;
@@ -320,7 +320,7 @@ bool ReaderModel::supportedArchive(const QByteArray &bytes, QString *error) {
     return true;
 }
 
-bool ReaderModel::open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,
+bool EngineDocument::open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,
                        OpeningProgress progress) {
     if (!supportedArchive(bytes, error))
         return false;
@@ -334,7 +334,7 @@ bool ReaderModel::open(QByteArray bytes, QSize size, const QJsonObject &saved, Q
     }
     return openSource(std::move(source), size, saved, error, std::move(progress));
 }
-bool ReaderModel::openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes,
+bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes,
                                 QSize size, const QJsonObject &saved, QString *error, OpeningProgress progress,
                                 OpeningResult *result, std::function<void()> coverReady) {
     auto source = std::make_shared<ReaderSource>();
@@ -343,23 +343,23 @@ bool ReaderModel::openResources(std::shared_ptr<ResourceCache> resources, const 
     source->container = LVContainerRef(new ResourceContainer(source->resources, sizes));
     return openSource(std::move(source), size, saved, error, std::move(progress), result, std::move(coverReady));
 }
-bool ReaderModel::rebindResources(const std::shared_ptr<ResourceCache> &resources, const QMap<QString, qint64> &sizes) {
+bool EngineDocument::rebindResources(const std::shared_ptr<ResourceCache> &resources, const QMap<QString, qint64> &sizes) {
     // Previews retain ReaderSource as their parent. Do not change their access
     // underneath them, even if the main reader itself has already closed.
     if (!source_ || source_.use_count() != 1 || !source_->resources || source_->sizes != sizes || !resources)
         return false;
     return source_->resources->rebind(*resources);
 }
-QString ReaderModel::resourceError() const {
+QString EngineDocument::resourceError() const {
     return source_ && source_->resources ? source_->resources->error() : QString();
 }
-QJsonObject ReaderModel::resourceStats() const {
+QJsonObject EngineDocument::resourceStats() const {
     auto result = source_ && source_->resources ? source_->resources->statistics() : QJsonObject();
     for (auto at = openingTimes_.begin(); at != openingTimes_.end(); ++at)
         result.insert(at.key(), at.value());
     return result;
 }
-bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved, QString *error,
+bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved, QString *error,
                              OpeningProgress progress, OpeningResult *result, std::function<void()> coverReady) {
     if (result)
         *result = {};
@@ -485,7 +485,7 @@ bool ReaderModel::openSource(std::shared_ptr<ReaderSource> source, QSize size, c
     }
     return true;
 }
-bool ReaderModel::openPreview(ReaderModel &source, QSize size, QString *error) {
+bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *error) {
     auto fail = [error](const QString &message) {
         *error = message;
         return false;

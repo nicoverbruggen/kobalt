@@ -45,7 +45,7 @@
 #include "support/screenshot_gallery.h"
 #include "support/screenshot_runner.h"
 #include "support/strings.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "ui/controls/page_scrubber.h"
 #include "ui/controls/loading.h"
 #include "app/reader/settings/dictionaries_page.h"
@@ -636,7 +636,7 @@ struct Fixture {
             {
                 EngineJob activity;
                 QFile input(path);
-                ReaderModel coordinates(fonts);
+                EngineDocument coordinates(fonts);
                 QString error;
                 if (input.open(QIODevice::ReadOnly) &&
                     coordinates.open(input.readAll(), size, current, &error) &&
@@ -656,7 +656,7 @@ struct Fixture {
         if (!page)
             return {-1, -1};
         const int top = page->topHeight();
-        return coordinateQuery(book, QPoint(-1, -1), [point, start, top](ReaderModel &coordinates) {
+        return coordinateQuery(book, QPoint(-1, -1), [point, start, top](EngineDocument &coordinates) {
             const auto token = coordinates.annotationTokenAt(point - QPoint(0, top));
             const auto geometry = coordinates.annotationGeometry(token.start, token.end);
             const auto edge = start ? geometry.start : geometry.end;
@@ -664,7 +664,7 @@ struct Fixture {
         });
     }
     AnnotationPageEdges pageEdges() {
-        return coordinateQuery(book, AnnotationPageEdges{}, [](ReaderModel &coordinates) {
+        return coordinateQuery(book, AnnotationPageEdges{}, [](EngineDocument &coordinates) {
             return coordinates.annotationPageEdges();
         });
     }
@@ -674,7 +674,7 @@ struct Fixture {
             return {-1, -1};
         const int top = page->topHeight();
         const auto size = page->image.size();
-        return coordinateQuery(book, QPoint(-1, -1), [ordinal, top, size](ReaderModel &coordinates) mutable {
+        return coordinateQuery(book, QPoint(-1, -1), [ordinal, top, size](EngineDocument &coordinates) mutable {
             QSet<QString> seen;
             for (int y = size.height() / 3; y < size.height() * 2 / 3; y += 12)
                 for (int x = size.width() / 3; x < size.width() * 2 / 3; x += 12) {
@@ -694,7 +694,7 @@ struct Fixture {
             return {};
         const int top = page->topHeight();
         const auto size = page->image.size();
-        return coordinateQuery(book, QRect{}, [text, top, size](ReaderModel &coordinates) {
+        return coordinateQuery(book, QRect{}, [text, top, size](EngineDocument &coordinates) {
             for (int y = 0; y < size.height(); y += 12)
                 for (int x = 0; x < size.width(); x += 16) {
                     const auto word = coordinates.wordAt({x, y});
@@ -709,7 +709,7 @@ struct Fixture {
         if (!page)
             return {-1, -1};
         const int top = page->topHeight();
-        return coordinateQuery(path, QPoint(-1, -1), [label, top](ReaderModel &coordinates) {
+        return coordinateQuery(path, QPoint(-1, -1), [label, top](EngineDocument &coordinates) {
             for (const auto &link : coordinates.pageLinks())
                 if (coordinates.linkDetails(link.source).label == label && !link.rectangles.isEmpty())
                     return link.rectangles.first().center() + QPoint(0, top);
@@ -1048,7 +1048,7 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
     openPrologueBody(fixture);
     const auto fullProsePage = [&] {
         for (int attempt = 0; attempt < 16; ++attempt) {
-            const bool fills = fixture.coordinateQuery(book, false, [](ReaderModel &coordinates) {
+            const bool fills = fixture.coordinateQuery(book, false, [](EngineDocument &coordinates) {
                 const int page = coordinates.page();
                 if (!coordinates.applyAppearance({{"vertical_justification", "off"}, {"vertical_spacing_scope", "all"}})) return false;
                 const auto before = coordinates.image(page);
@@ -4321,7 +4321,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }, Qt::QueuedConnection);
         QTRY_VERIFY(gate->entered.load());
         qt::later(20, qApp, [gate] { gate->release.release(); });
-        const auto result = fixture.coordinateQuery(book, QPair<bool, bool>{false, false}, [gate](ReaderModel &model) {
+        const auto result = fixture.coordinateQuery(book, QPair<bool, bool>{false, false}, [gate](EngineDocument &model) {
             return qMakePair(QThread::currentThread() == engineWorker()->thread(),
                              gate->finished.load() && model.pages() > 0);
         });
@@ -5507,7 +5507,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 }
                 QCOMPARE(fixture.state().value("position"), origin);
             }
-            const auto outside = fixture.coordinateQuery(path, QPoint(-1, -1), [top = static_cast<ReadingPage *>(page)->topHeight()](ReaderModel &coordinates) {
+            const auto outside = fixture.coordinateQuery(path, QPoint(-1, -1), [top = static_cast<ReadingPage *>(page)->topHeight()](EngineDocument &coordinates) {
                 for (const auto &link : coordinates.pageLinks())
                     if (coordinates.linkDetails(link.source).label == "short note") {
                         const auto r = link.rectangles.first();

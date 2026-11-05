@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 
 #include "check.h"
 #include "reader_inputs.h"
@@ -21,7 +21,7 @@ QRect ink(const QImage &image, bool red = false) {
     }
     return result;
 }
-void open(kobalt::ReaderModel &model, const QByteArray &body, const QByteArray &css = {}, QJsonObject saved = {},
+void open(kobalt::EngineDocument &model, const QByteArray &body, const QByteArray &css = {}, QJsonObject saved = {},
           QSize size = QSize(800, 1000), bool preceding = false, bool following = false) {
     QMap<QString, QByteArray> data{
         {"mimetype", "application/epub+zip"},
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 200 100' preserveAspectRatio='xMidYMid meet'><rect width='200' height='100' fill='red'/></svg>";
     for (int ppi : {300, 212}) {
         kobalt::readingPpi.store(ppi);
-        kobalt::ReaderModel heading(kobalt::test::readerFonts());
+        kobalt::EngineDocument heading(kobalt::test::readerFonts());
         open(heading, "<h2>Chapter heading</h2>", "h2{margin:2em 0;font-size:1em}", {}, QSize(800, 1000), true);
         require(heading.pages() == 2, "Heading lost its chapter break");
         const auto original = heading.image(1);
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         const auto preserved = ink(heading.image(1));
         std::printf("%d ppi heading top: trimmed=%d preserved=%d\n", ppi, trimmed.top(), preserved.top());
         require(preserved.top() >= trimmed.top() + 60, "Forced break discarded publisher top margin");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         QString error;
         require(preview.openPreview(heading, QSize(800, 1000), &error), qPrintable(error));
         require(!preview.state().value("reduce_chapter_spacing").toBool(), "Preview lost publisher spacing preference");
@@ -81,13 +81,13 @@ int main(int argc, char **argv) {
         QTemporaryDir cache;
         require(cache.isValid(), "Cannot create page layout cache");
         {
-            kobalt::ReaderModel cached(kobalt::test::readerFonts());
+            kobalt::EngineDocument cached(kobalt::test::readerFonts());
             cached.setDocumentCache(cache.path(), "spacing-fixture", "page-layout-test", 4096);
             open(cached, "<h2>Chapter heading</h2>", "h2{margin:2em 0;font-size:1em}", {}, QSize(800, 1000), true);
             require(cached.saveDocumentCache(), "Cannot save trimmed layout cache");
         }
         {
-            kobalt::ReaderModel cached(kobalt::test::readerFonts());
+            kobalt::EngineDocument cached(kobalt::test::readerFonts());
             cached.setDocumentCache(cache.path(), "spacing-fixture", "page-layout-test", 4096);
             open(cached, "<h2>Chapter heading</h2>", "h2{margin:2em 0;font-size:1em}",
                  {{"reduce_chapter_spacing", false}}, QSize(800, 1000), true);
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
             require(ink(cached.image(1)).top() == preserved.top(), "Document cache retained trimmed publisher margins");
         }
 
-        kobalt::ReaderModel margins(kobalt::test::readerFonts());
+        kobalt::EngineDocument margins(kobalt::test::readerFonts());
         open(margins, "<p>Body margins</p>", "body{margin:20px;padding:10px}");
         const auto zero = ink(margins.image(0));
         require(margins.applyAppearance({{"normalize_page_margins", false}}), "Cannot restore body margins");
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
                 "Publisher body spacing was still overridden");
 
         for (const auto size : {QSize(800, 1000), QSize(1000, 800)}) {
-            kobalt::ReaderModel image(kobalt::test::readerFonts());
+            kobalt::EngineDocument image(kobalt::test::readerFonts());
             open(image, "<div>" + svg + "</div>", {}, {}, size, true);
             require(image.pages() == 2, "Full-page SVG changed chapter boundaries");
             const auto rect = ink(image.image(1), true);
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
             require(qAbs(rotated.center().y() - size.width() / 2) < 20, "SVG viewport did not update after rotation");
 
             for (bool avoid : {true, false}) {
-                kobalt::ReaderModel verse(kobalt::test::readerFonts());
+                kobalt::EngineDocument verse(kobalt::test::readerFonts());
                 open(
                     verse,
                     "<div class='outer'><div class='inner'><p>First verse line.</p><p>Second verse line.</p></div></div>",
@@ -136,22 +136,22 @@ int main(int argc, char **argv) {
                         "Full-page verse is not vertically centred");
             }
         }
-        kobalt::ReaderModel stretched(kobalt::test::readerFonts());
-        kobalt::ReaderModel styledImage(kobalt::test::readerFonts());
+        kobalt::EngineDocument stretched(kobalt::test::readerFonts());
+        kobalt::EngineDocument styledImage(kobalt::test::readerFonts());
         open(styledImage, QByteArray(svg).replace("width='100%' height='100%'", "style='width:100%;height:100%'"));
         require(qAbs(ink(styledImage.image(0), true).center().y() - 500) < 20,
                 "CSS percentage dimensions prevented full-page SVG alignment");
         open(stretched, QByteArray(svg).replace("xMidYMid meet", "none"));
         const auto stretch = ink(stretched.image(0), true);
         require(stretch.width() > 780 && stretch.height() > 950, "SVG preserveAspectRatio=none did not fill the page");
-        kobalt::ReaderModel narrow(kobalt::test::readerFonts());
+        kobalt::EngineDocument narrow(kobalt::test::readerFonts());
         open(narrow, QByteArray(svg).replace("width='100%'", "width='50%'"));
         require(ink(narrow.image(0), true).width() < 500, "Partial-width SVG became a full-page image");
-        kobalt::ReaderModel ordinaryTable(kobalt::test::readerFonts());
+        kobalt::EngineDocument ordinaryTable(kobalt::test::readerFonts());
         open(ordinaryTable, "<table><tr><td>Ordinary table.</td></tr></table>", {}, {}, QSize(800, 1000), true, true);
         require(ordinaryTable.pages() == 3, "Ordinary table lost its chapter boundaries");
         require(ink(ordinaryTable.image(1)).top() < 100, "Ordinary table became vertically centred");
-        kobalt::ReaderModel inlineImage(kobalt::test::readerFonts());
+        kobalt::EngineDocument inlineImage(kobalt::test::readerFonts());
         open(inlineImage, "<p>Before</p>" + svg + "<p>After</p>");
         require(inlineImage.pages() == 1, "Inline SVG became page-height");
         require(ink(inlineImage.image(0), true).top() < 200, "Inline SVG was vertically centred");

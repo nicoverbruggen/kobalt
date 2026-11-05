@@ -1,7 +1,7 @@
 #include "assets/assets.h"
 #include "assets/font_catalog.h"
 #include "assets/system_fonts.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "reader_inputs.h"
 #include "font_fixtures.h"
 #include "support/qt_compat.h"
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
                                    kfDirectory + "/KF_Bitter.ttf", "NV Bitter", "KF Bitter"),
            "create name-only KF catalog fixture");
     inputs.sources.sideloadDirectory = kfDirectory;
-    ReaderModel model(inputs);
+    EngineDocument model(inputs);
     bool registered = false;
     for (const auto &font : model.fontCatalog()) {
         if (font.family == systemFamily) {

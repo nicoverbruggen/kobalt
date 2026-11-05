@@ -2,7 +2,7 @@
 #include "../display/annotation_damage.h"
 #include "platform/api/kobo_refresh.h"
 #include "refresh.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/display/keyboard_refresh.h"
 #include "platforms/kobo/display/panel_damage.h"
@@ -52,7 +52,7 @@ void choosePageFormat(QBackingStore *store) {
     const auto format = static_cast<QImage *>(device)->format();
     if (format == QImage::Format_RGBA8888 || format == QImage::Format_RGBX8888 ||
         format == QImage::Format_RGBA8888_Premultiplied)
-        ReaderModel::setPageFormat(QImage::Format_RGBX8888);
+        EngineDocument::setPageFormat(QImage::Format_RGBX8888);
 }
 bool readerOwnsScreen() {
     if (!qApp || QThread::currentThread() != qApp->thread() || !readerWindow || !readerWindow->isVisible())

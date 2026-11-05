@@ -40,14 +40,14 @@ QStringList fallbackFontDefaults(const QStringList &families) {
 
 kobalt::headerfooter::Values Reader::chromeValues() {
     kobalt::headerfooter::Values values;
-    values.title = model->title();
-    values.author = model->author();
-    values.chapter = model->chapterTitle().isEmpty() ? strings::get("reader.reading") : model->chapterTitle();
+    values.title = session->title();
+    values.author = session->author();
+    values.chapter = session->chapterTitle().isEmpty() ? strings::get("reader.reading") : session->chapterTitle();
     values.time = services.clock();
-    values.chapterPage = model->chapterPage();
-    values.chapterPages = model->chapterPages();
-    values.page = model->page() + 1;
-    values.pages = model->pages();
+    values.chapterPage = session->chapterPage();
+    values.chapterPages = session->chapterPages();
+    values.page = session->page() + 1;
+    values.pages = session->pages();
     const auto battery = services.battery();
     values.battery = battery.percent;
     values.charging = battery.charging;
@@ -175,7 +175,7 @@ QWidget *Reader::chromeView() const {
 }
 
 void Reader::openHeaderFooterView() {
-    if (model->temporaryTypography() || !menu->isVisible())
+    if (session->temporaryTypography() || !menu->isVisible())
         return;
     fieldChooser->hide();
     syncChromeControls();
@@ -193,7 +193,7 @@ void Reader::closeChromeViews() {
 }
 
 void Reader::openFieldChooser(int slot) {
-    if (model->temporaryTypography() || !menu->isVisible())
+    if (session->temporaryTypography() || !menu->isVisible())
         return;
     const auto &current = page->chrome;
     fieldChooser->open(slot, current.slotFields[slot], chromeValues(), current.uppercase[slot],
@@ -243,7 +243,7 @@ bool Reader::hideNativeStatus() const {
 }
 
 void Reader::openSettings() {
-    if (model->temporaryTypography())
+    if (session->temporaryTypography())
         return;
     kobalt::ui::PanelTiming timing("settings");
     kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(), kosyncClient->signedIn(),
@@ -252,7 +252,7 @@ void Reader::openSettings() {
     kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
     kosyncPage->setDeviceName(kosyncClient->customDeviceName(), kosyncClient->defaultDeviceName());
     kosyncPage->setStatus(kosyncMessage, kosyncClient->busy() || kosyncConnecting || kosyncAuthenticating || bool(kosyncReaderReady));
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     hideRevealedLinks(false);
     dismissLookup();
     closeSearch();
@@ -264,10 +264,10 @@ void Reader::openSettings() {
     restoringDefaults = false;
     for (const auto *key : appearance::fallbackFontKeys) {
         const auto family = preferences.value(key).toString();
-        settingsFontFaces[key] = model->fontFaces().contains(family) ? family : QString();
+        settingsFontFaces[key] = session->fontFaces().contains(family) ? family : QString();
     }
     settingsDefaultFontFace = preferences.value("default_font_face").toString(defaultFontFace);
-    if (!settingsDefaultFontFace.isEmpty() && !model->fontFaces().contains(settingsDefaultFontFace))
+    if (!settingsDefaultFontFace.isEmpty() && !session->fontFaces().contains(settingsDefaultFontFace))
         settingsDefaultFontFace = defaultFontFace;
     settingsUiFontFace = preferences.value("ui_font_face").toString();
     settingsUiMonoFontFace = preferences.value("ui_mono_font_face").toString();
@@ -280,7 +280,7 @@ void Reader::openSettings() {
     if (wifiPowerSaverOption)
         wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(true));
     for (auto *face : {&settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace, &settingsDictionaryFontFace})
-        if (!model->fontFaces().contains(*face))
+        if (!session->fontFaces().contains(*face))
             face->clear();
     showSettingsFonts();
     settingsPages->setCurrentIndex(DisplaySettings);
@@ -296,30 +296,30 @@ void Reader::openSettings() {
     choices->hide();
     settingsError->clear();
     settingsError->hide();
-    darkOption->setChecked(model->state().value("dark_mode").toBool(false));
+    darkOption->setChecked(session->state().value("dark_mode").toBool(false));
     static_cast<SettingsPanel *>(general)->lightDarkModeOption->setChecked(
         preferences.value("light_dark_mode_shortcut").toBool(false));
     inheritTextLayoutOption->setChecked(preferences.value(appearance::inheritTextLayoutKey).toBool(true));
-    hideNonlinearOption->setChecked(model->state().value("hide_nonlinear_fragments").toBool(false));
+    hideNonlinearOption->setChecked(session->state().value("hide_nonlinear_fragments").toBool(false));
     auto *displaySettings = static_cast<SettingsPanel *>(general);
-    settingsVerticalSpacing = appearance::verticalSpacingMode(model->state().value("vertical_justification"));
-    settingsVerticalSpacingScope = appearance::verticalSpacingScope(model->state().value("vertical_spacing_scope"));
+    settingsVerticalSpacing = appearance::verticalSpacingMode(session->state().value("vertical_justification"));
+    settingsVerticalSpacingScope = appearance::verticalSpacingScope(session->state().value("vertical_spacing_scope"));
     displaySettings->landscapeColumnsOption->setChecked(preferences.value("two_columns_landscape").toBool(false));
     settingsColumnSpacing = preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent);
     displaySettings->columnSpacingButton->setEnabled(displaySettings->landscapeColumnsOption->isChecked());
     displaySettings->columnSpacingButton->setCaption(SettingsPanel::columnSpacingLabel(settingsColumnSpacing));
-    settingsWordSpacing = model->state().value("word_spacing").toInt(100);
+    settingsWordSpacing = session->state().value("word_spacing").toInt(100);
     settingsParagraphSpacing = appearance::paragraphSpacing(preferences.value("paragraph_spacing"));
     settingsParagraphIndent = appearance::paragraphIndent(preferences.value("paragraph_indent"));
     settingsBeautifier = appearance::normalizationSettings(preferences);
     settingsBeautifier[appearance::normalizationPresetKey] = appearance::normalizationPreset(preferences);
-    settingsTracking = model->state().value("justification_tracking").toInt(0);
-    settingsHangingPunctuation = model->state().value("hanging_punctuation").toBool(false);
-    settingsWidowsOrphans = model->state().value("widows_orphans").toString("publisher");
+    settingsTracking = session->state().value("justification_tracking").toInt(0);
+    settingsHangingPunctuation = session->state().value("hanging_punctuation").toBool(false);
+    settingsWidowsOrphans = session->state().value("widows_orphans").toString("publisher");
     showAdvancedText();
     animationOption->setChecked(services.softwarePageAnimations ? pageTurn::selected(preferences) == pageTurn::Style::Sweep
                                                              : preferences.value("page_animations").toBool(false));
-    bionicOption->setChecked(model->state().value("bold_reading").toString("off") == "bold");
+    bionicOption->setChecked(session->state().value("bold_reading").toString("off") == "bold");
     linkIndicatorOption->setChecked(preferences.value("show_link_indicator").toBool(false));
     edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
     lightGestureFeedbackOption->setChecked(preferences.value("show_light_gesture_feedback").toBool(true));
@@ -392,7 +392,7 @@ void Reader::renderStylingSamples(int requested) {
     using Feature = SettingsPanel::AdvancedText;
     // The sample uses the book's typography with the Styling choices made so
     // far, which are applied to the book only when Settings closes.
-    auto settings = styleSampleSettings(model->state());
+    auto settings = styleSampleSettings(session->state());
     settings["dark_mode"] = darkOption->isChecked();
     settings["word_spacing"] = settingsWordSpacing;
     settings["paragraph_spacing"] = settingsParagraphSpacing;
@@ -494,7 +494,7 @@ void Reader::renderStylingSamples(int requested) {
         panel->setStylingSample(entry.feature, {});
         render = request.cancelled = std::make_shared<std::atomic_bool>(false);
         ++stylingSamplesPending;
-        renderStyleSample(model->fontInputs(), request, this,
+        renderStyleSample(session->fontInputs(), request, this,
                           [this, panel, entry = entry.feature, cancelled = render](StyleSample sample) {
                               --stylingSamplesPending;
                               if (cancelled->load() || !sample.valid())
@@ -524,8 +524,8 @@ bool Reader::writePreferences(const QJsonObject &next) {
     // can undo the change when the write fails.
     mainthread::AllowBlocking allow("settings write");
     auto global = appearance::globalPreferences(next);
-    appearance::rememberTextLayout(global, model->state());
-    appearance::rememberPageMargins(global, model->state());
+    appearance::rememberTextLayout(global, session->state());
+    appearance::rememberPageMargins(global, session->state());
     // On the writer thread, after any queued layout memory, so neither write
     // loses the other's change.
     if (!preferencesWriter)
@@ -540,7 +540,7 @@ bool Reader::writePreferences(const QJsonObject &next) {
 }
 
 void Reader::applySettings() {
-    if (savingDarkMode >= 0 || model->temporaryTypography())
+    if (savingDarkMode >= 0 || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
@@ -602,7 +602,7 @@ void Reader::applySettings() {
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
     if (!writePreferences(next)) {
-        bionicOption->setChecked(model->requestedState().value("bold_reading").toString("off") == "bold");
+        bionicOption->setChecked(session->requestedState().value("bold_reading").toString("off") == "bold");
         minimalAnnotationOption->setChecked(minimalAnnotationMode());
         settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
         settingsError->show();
@@ -622,7 +622,7 @@ void Reader::applySettings() {
     applyEdgeLight();
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
     auto settings =
-        appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()->requestedState() : model->state();
+        appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()->requestedState() : session->state();
     settings["default_font_face"] = settingsDefaultFontFace.isEmpty() ? QString(defaultFontFace) : settingsDefaultFontFace;
     for (const auto *key : appearance::fallbackFontKeys)
         settings[key] = preferences.value(key).toString();
@@ -646,11 +646,11 @@ void Reader::applySettings() {
         for (auto it = defaults.begin(); it != defaults.end(); ++it)
             settings[it.key()] = it.value();
     }
-    model->apply(settings, bodySize());
-    applyingText = model->busy();
+    session->apply(settings, bodySize());
+    applyingText = session->busy();
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);
-    appearanceEdit.beginApply(!model->busy() && appearanceEdit.edited() && appearanceEdit.ready()
+    appearanceEdit.beginApply(!session->busy() && appearanceEdit.edited() && appearanceEdit.ready()
                                   ? kobalt::reader::AppearanceEditSession::Retention::Reuse
                                   : kobalt::reader::AppearanceEditSession::Retention::Release);
     header->setGeometry(0, 0, width(), page->topHeight());
@@ -659,13 +659,13 @@ void Reader::applySettings() {
 }
 
 void Reader::applyDarkMode(bool enabled) {
-    if (savingDarkMode >= 0 || pendingDarkMode >= 0 || model->busy() || model->temporaryTypography()) {
+    if (savingDarkMode >= 0 || pendingDarkMode >= 0 || session->busy() || session->temporaryTypography()) {
         refresh();
         return;
     }
     auto next = appearance::globalPreferences(preferences);
-    appearance::rememberTextLayout(next, model->state());
-    appearance::rememberPageMargins(next, model->state());
+    appearance::rememberTextLayout(next, session->state());
+    appearance::rememberPageMargins(next, session->state());
     next["dark_mode"] = enabled;
     savingDarkMode = enabled;
     if (!preferencesWriter)
@@ -687,7 +687,7 @@ void Reader::applyDarkMode(bool enabled) {
             reader->settingsError->clear();
             reader->settingsError->hide();
             reader->pendingDarkMode = enabled;
-            reader->model->setDarkMode(enabled);
+            reader->session->setDarkMode(enabled);
             if (reader->appearanceEdit.preview())
                 reader->appearanceEdit.preview()->setDarkMode(enabled);
             reader->refresh();
@@ -697,21 +697,21 @@ void Reader::applyDarkMode(bool enabled) {
 }
 
 void Reader::applyBoldReading(bool enabled) {
-    if (model->temporaryTypography())
+    if (session->temporaryTypography())
         return;
     const auto mode = enabled ? QStringLiteral("bold") : QStringLiteral("off");
     auto next = preferences;
     next["bold_reading"] = mode;
     if (!writePreferences(next)) {
-        bionicOption->setChecked(model->requestedState().value("bold_reading").toString("off") == "bold");
+        bionicOption->setChecked(session->requestedState().value("bold_reading").toString("off") == "bold");
         return;
     }
     preferences = next;
     settingsError->clear();
     settingsError->hide();
-    auto settings = model->requestedState();
+    auto settings = session->requestedState();
     settings["bold_reading"] = mode;
-    model->apply(settings);
+    session->apply(settings);
     // Keep a pending typography draft in the same mode, including a preview
     // that has not finished opening yet.
     if (appearanceEdit.preview()) {
@@ -778,15 +778,15 @@ void Reader::applyTheme(bool dark) {
 // Resolve the displayed book face and retain its bytes for GUI text. Publisher
 // faces use the current text face, with the configured reading default as fallback.
 QString Reader::bookFace() {
-    QString face = model->fontFace();
+    QString face = session->fontFace();
     if (face.isEmpty())
-        face = model->state().value("text_font_face").toString();
+        face = session->state().value("text_font_face").toString();
     bool loadable = false;
-    for (const auto &font : model->fontCatalog())
+    for (const auto &font : session->fontCatalog())
         loadable |= font.family == face;
     if (!loadable) {
-        face = model->state().value("default_font_face").toString(kobalt::defaultFontFace);
-        if (!model->fontFaces().contains(face))
+        face = session->state().value("default_font_face").toString(kobalt::defaultFontFace);
+        if (!session->fontFaces().contains(face))
             face = QString::fromLatin1(kobalt::defaultFontFace);
     }
     registerPickerFonts(face);
@@ -806,13 +806,13 @@ void Reader::registerPickerFonts(const QString &family) {
     // Qt 5.2 on firmware 4 keeps the first face it sees for a weight and
     // slant. A bold face whose PANOSE weight says "medium" is filed under
     // normal weight there, so register each family's regular face first.
-    for (const auto &font : model->fontCatalog()) {
+    for (const auto &font : session->fontCatalog()) {
         if (!family.isEmpty() && font.family != family)
             continue;
         if (family.isEmpty() && font.origin == FontOrigin::Interface) {
             const auto state = appearanceEdit.edited() && appearanceEdit.ready()
                                    ? appearanceEdit.preview()->requestedState()
-                                   : model->state();
+                                   : session->state();
             if (font.family != supplementalFontFamily(state.value("language").toString()) &&
                 font.family != preferences.value("default_font_face").toString(kobalt::defaultFontFace) &&
                 font.family != state.value("font_face").toString())
@@ -835,7 +835,7 @@ void Reader::resizeText() {
                        {{"viewport_width", viewport.width()},
                         {"viewport_height", viewport.height()},
                         {"target", appearanceEdit.preview() ? "preview" : "main"},
-                        {"main_busy", model->busy()},
+                        {"main_busy", session->busy()},
                         {"preview_busy", appearanceEdit.preview() && appearanceEdit.preview()->busy()},
                         {"updates_enabled", updatesEnabled()},
                         {"resize_pending", resizePending}},
@@ -851,15 +851,15 @@ void Reader::resizeText() {
             resizedPreview = true;
         }
     } else
-        model->resize(viewport);
-    applyingText = model->busy();
+        session->resize(viewport);
+    applyingText = session->busy();
     if (!resizedPreview)
         refresh();
     kobalt::diagnostic("reader-resize-refresh-return",
                        {{"viewport_width", viewport.width()},
                         {"viewport_height", viewport.height()},
                         {"target", appearanceEdit.preview() ? "preview" : "main"},
-                        {"main_busy", model->busy()},
+                        {"main_busy", session->busy()},
                         {"preview_busy", appearanceEdit.preview() && appearanceEdit.preview()->busy()},
                         {"updates_enabled", updatesEnabled()},
                         {"resize_pending", resizePending}},
@@ -867,7 +867,7 @@ void Reader::resizeText() {
 }
 
 void Reader::selectPanel(int index) {
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();
     if (general->isVisible()) {
@@ -883,16 +883,16 @@ void Reader::selectPanel(int index) {
 }
 
 void Reader::openPanel(int index) {
-    if (model->temporaryTypography())
+    if (session->temporaryTypography())
         return;
-    if (model->busy())
+    if (session->busy())
         return;
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     appearanceEdit.cancelDeferredApply();
     // Only the selected font is drawn here. Load the other faces when the
     // font picker opens, and do not read font files for the Layout panel.
-    if (index == 0 && !model->fontFace().isEmpty())
-        registerPickerFonts(model->fontFace());
+    if (index == 0 && !session->fontFace().isEmpty())
+        registerPickerFonts(session->fontFace());
     panels->setCurrentIndex(index);
     if (!menu->isVisible() && !appearanceEdit.preview()) {
         warmAttemptGeneration = 0;
@@ -920,7 +920,7 @@ void Reader::openPanel(int index) {
 
 void Reader::schedulePreviewWarm() {
     if (!appearanceEdit.panelOpen() || !menu->isVisible() || general->isVisible() || appearanceEdit.preview() ||
-        model->busy() || lifecycleHidden || exitPending)
+        session->busy() || lifecycleHidden || exitPending)
         return;
     const quint64 panelGeneration = appearanceEdit.panelGeneration();
     if (warmAttemptGeneration == panelGeneration || warmScheduledGeneration == panelGeneration)
@@ -930,11 +930,11 @@ void Reader::schedulePreviewWarm() {
         if (warmScheduledGeneration == panelGeneration)
             warmScheduledGeneration = 0;
         if (appearanceEdit.panelGeneration() != panelGeneration || !appearanceEdit.panelOpen() || !menu->isVisible() ||
-            general->isVisible() || appearanceEdit.preview() || model->busy() || lifecycleHidden || exitPending)
+            general->isVisible() || appearanceEdit.preview() || session->busy() || lifecycleHidden || exitPending)
             return;
         warmAttemptGeneration = panelGeneration;
         appearanceEdit.open(
-            *model, bodySize(),
+            *session, bodySize(),
             [this] {
                 refresh();
             },
@@ -956,7 +956,7 @@ void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation) {
     diagnostic("appearance-preview-request", {}, false);
     appearanceViewport = bodySize();
     appearanceEdit.mutate(
-        *model, bodySize(),
+        *session, bodySize(),
         [this] {
             refresh();
         },
@@ -973,7 +973,7 @@ void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation) {
 }
 
 void Reader::finishPreview() {
-    if (model->temporaryTypography())
+    if (session->temporaryTypography())
         return;
     if (!appearanceEdit.panelOpen())
         return;
@@ -1021,14 +1021,14 @@ void Reader::finishPreview() {
     appearanceEdit.clearError();
     const QSize viewport = bodySize();
     if (appearanceEdit.ready())
-        model->apply(appearanceEdit.preview()->requestedState(), viewport);
-    else if (model->image().size() != viewport)
-        model->apply(model->state(), viewport);
+        session->apply(appearanceEdit.preview()->requestedState(), viewport);
+    else if (session->image().size() != viewport)
+        session->apply(session->state(), viewport);
     header->setGeometry(0, 0, width(), page->topHeight());
     header->setVisible(page->topHeight() > 0);
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);
-    applyingText = model->busy();
+    applyingText = session->busy();
     appearanceEdit.beginApply();
     refresh();
 }
@@ -1115,7 +1115,7 @@ void Reader::showSettingsFonts() {
     sample(panel->defaultFontButton, settingsDefaultFontFace);
     panel->defaultFontButton->setCaption((settingsDefaultFontFace.isEmpty()
         ? strings::get("reader.publisher_fonts") : fontDisplayName(settingsDefaultFontFace)).toUpper());
-    const auto defaults = fallbackFontDefaults(model->fontFaces());
+    const auto defaults = fallbackFontDefaults(session->fontFaces());
     int index = 0;
     for (auto *button : {panel->serifFontButton, panel->sansFontButton, panel->monoFontButton}) {
         const auto family = settingsFontFaces.value(appearance::fallbackFontKeys[index]).toString();
@@ -1146,7 +1146,7 @@ void Reader::openSettingsFont(const QString &key) {
                           : isHeaderFooter ? settingsHeaderFooterFontFace
                           : isDictionary   ? settingsDictionaryFontFace
                                            : settingsFontFaces.value(key).toString();
-    auto fonts = model->fontCatalog();
+    auto fonts = session->fontCatalog();
     const auto nativeFamilies = services.fontFamilies();
     for (int row = fonts.size() - 1; row >= 0; --row)
         if (fonts[row].origin == FontOrigin::BuiltIn &&
@@ -1167,7 +1167,7 @@ void Reader::openSettingsFont(const QString &key) {
                   : strings::get("settings.font_default_value").arg(fontDisplayName(
                         isUi ? QString("IBM Plex Sans")
                         : (isMono || isHeaderFooter) ? QString("IBM Plex Mono")
-                        : isDictionary ? bookFace() : fallbackFontDefaults(model->fontFaces())[index])),
+                        : isDictionary ? bookFace() : fallbackFontDefaults(session->fontFaces())[index])),
         [this, key, isDefault, isUi, isMono, isHeaderFooter, isDictionary](const QString &family) {
             if (isDefault)
                 settingsDefaultFontFace = family;

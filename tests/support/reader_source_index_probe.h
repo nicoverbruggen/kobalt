@@ -1,6 +1,6 @@
 #pragma once
 #include "engine/crengine/column_view.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <algorithm>
 
 namespace kobalt {
@@ -9,10 +9,10 @@ namespace kobalt {
 struct ReaderSourceIndexProbe {
     using Ranges = QVector<QPair<QString, QString>>;
     static lString32 cre(const QString &text) { return Utf8ToUnicode(text.toUtf8().constData()); }
-    static void clear(ReaderModel &model) { model.sourceIndex_.reset(); }
-    static QPair<int, qint64> usage(const ReaderModel &model) { return model.sourceIndexUsage(); }
-    static bool cached(const ReaderModel &model) { return bool(model.sourceIndex_); }
-    static bool positionLookupPreservesNames(const ReaderModel &model, bool normalized) {
+    static void clear(EngineDocument &model) { model.sourceIndex_.reset(); }
+    static QPair<int, qint64> usage(const EngineDocument &model) { return model.sourceIndexUsage(); }
+    static bool cached(const EngineDocument &model) { return bool(model.sourceIndex_); }
+    static bool positionLookupPreservesNames(const EngineDocument &model, bool normalized) {
         auto *doc = model.engine_->getDocument();
         const char *name = normalized ? "unknown_position_v2" : "unknown_position_v1";
         if (doc->findElementNameIndex(name))
@@ -25,7 +25,7 @@ struct ReaderSourceIndexProbe {
         doc->setDOMVersionRequested(version);
         return pointer.isNull() && !doc->findElementNameIndex(name);
     }
-    static QVector<int> visible(const ReaderModel &model, const Ranges &ranges) {
+    static QVector<int> visible(const EngineDocument &model, const Ranges &ranges) {
         QVector<int> result;
         if (ranges.isEmpty() || ranges.size() > 2001 || !model.engine_ || model.pages() <= 0)
             return result;
@@ -50,7 +50,7 @@ struct ReaderSourceIndexProbe {
         }
         return result;
     }
-    static QVector<int> overlaps(const ReaderModel &model, const QString &start, const QString &end, const Ranges &ranges) {
+    static QVector<int> overlaps(const EngineDocument &model, const QString &start, const QString &end, const Ranges &ranges) {
         QVector<int> result;
         if (!model.engine_)
             return result;
@@ -73,14 +73,14 @@ struct ReaderSourceIndexProbe {
         }
         return result;
     }
-    static QString shifted(const ReaderModel &model, const QString &anchor, int amount) {
+    static QString shifted(const EngineDocument &model, const QString &anchor, int amount) {
         auto point = model.engine_->getDocument()->createXPointer(cre(anchor));
         if (point.isNull())
             return {};
         point.setOffset(point.getOffset() + amount);
         return QString::fromUtf8(UnicodeToUtf8(point.toString()).c_str());
     }
-    static QString textPoint(const ReaderModel &model, const QString &needle, int offset) {
+    static QString textPoint(const EngineDocument &model, const QString &needle, int offset) {
         std::function<ldomNode *(ldomNode *)> find = [&](ldomNode *node) -> ldomNode * {
             if (node->isText() && QString::fromUtf8(UnicodeToUtf8(node->getText()).c_str()).contains(needle))
                 return node;
@@ -92,7 +92,7 @@ struct ReaderSourceIndexProbe {
         auto *node = find(model.engine_->getDocument()->getRootNode());
         return node ? QString::fromUtf8(UnicodeToUtf8(ldomXPointer(node, offset).toString()).c_str()) : QString();
     }
-    static QVector<int> pages(const ReaderModel &model, const QStringList &anchors, bool endpoints, QVector<int> *order = nullptr) {
+    static QVector<int> pages(const EngineDocument &model, const QStringList &anchors, bool endpoints, QVector<int> *order = nullptr) {
         QVector<int> result;
         QVector<ldomXPointerEx> pointers;
         if (order) {
@@ -122,7 +122,7 @@ struct ReaderSourceIndexProbe {
         }
         return result;
     }
-    static QString childOffset(const ReaderModel &model, const QString &anchor) {
+    static QString childOffset(const EngineDocument &model, const QString &anchor) {
         auto point = model.engine_->getDocument()->createXPointer(cre(anchor));
         if (point.isNull())
             return {};

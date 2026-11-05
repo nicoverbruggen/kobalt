@@ -18,7 +18,7 @@ void Reader::refreshRenderNotice() {
     if (!busyNotice)
         return;
     renderNoticeTimer.stop();
-    const auto progress = model->renderProgress();
+    const auto progress = session->renderProgress();
     const bool active = progress.active && !resizePending && !closing && !lifecycleHidden;
     const bool showNotice = active && progress.elapsedMilliseconds >= 1000;
     const char *message = strings::key("reader.applying_appearance_changes");
@@ -56,8 +56,8 @@ void Reader::refresh() {
         continueKosyncWhenReady(std::move(kosyncReaderReady));
     const bool darkReady = publishPendingDarkMode();
     const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode) : pendingDarkMode >= 0 ? bool(pendingDarkMode)
-        : model->state().value("dark_mode").toBool(false);
-    const bool darkEnabled = savingDarkMode < 0 && pendingDarkMode < 0 && !model->busy() && !model->temporaryTypography();
+        : session->state().value("dark_mode").toBool(false);
+    const bool darkEnabled = savingDarkMode < 0 && pendingDarkMode < 0 && !session->busy() && !session->temporaryTypography();
     if (!restoringDefaults) darkOption->setChecked(dark);
     darkOption->setEnabled(darkEnabled);
     lightPopup->setDarkModeShortcut(preferences.value("light_dark_mode_shortcut").toBool(false), dark, darkEnabled);
@@ -68,7 +68,7 @@ void Reader::refresh() {
     // database, the account and the book. On a page turn that waits until
     // the new page is painted.
     const bool turnFrame =
-        !model->busy() && model->turnDirection() != 0 && model->image().cacheKey() != page->image.cacheKey();
+        !session->busy() && session->turnDirection() != 0 && session->image().cacheKey() != page->image.cacheKey();
     if (!turnFrame || book->usesLocalPace())
         observeReading();
     // A sync can call into the host's network; on a turn it starts after the
@@ -80,7 +80,7 @@ void Reader::refresh() {
         return;
     // syncFrameState consumes the completed jump and its return history.
     // Refresh the destination's text, strips and bookmark ribbon together.
-    const bool passageFrame = !model->busy() && (!pendingPassage.position.isEmpty() || returningFromLink);
+    const bool passageFrame = !session->busy() && (!pendingPassage.position.isEmpty() || returningFromLink);
     syncFrameState();
     finishAppearanceApply();
     // A synced position waits while a panel or dialog is open. Check again
@@ -94,10 +94,10 @@ void Reader::refresh() {
     showChapterText();
     // Publish only the final viewport. A cancelled intermediate layout must
     // not replace the placeholder while the window is still being resized.
-    if (resizePending && !resizeTimer.isActive() && !model->busy() &&
+    if (resizePending && !resizeTimer.isActive() && !session->busy() &&
         (!appearanceEdit.preview() || !appearanceEdit.preview()->busy()))
         page->setViewportTransition(false);
-    const auto nextImage = model->image();
+    const auto nextImage = session->image();
     const auto previousPageImage = page->image.cacheKey();
     showPageImage(nextImage);
     syncLinkDiscovery();
@@ -108,7 +108,7 @@ void Reader::refresh() {
     // controls, the chapter graph and the saved position follow.
     const bool readingTurn = !resizePending && isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() &&
                              !general->isVisible() && !choices->isVisible() && !syncDialog && !kosyncDialog && !finishDialog &&
-                             !services.suspended() && !applyingText && !model->busy() && model->turnDirection() != 0 &&
+                             !services.suspended() && !applyingText && !session->busy() && session->turnDirection() != 0 &&
                              nextImage.cacheKey() != previousPageImage;
     if (readingTurn) {
         paintTurn();
@@ -121,7 +121,7 @@ void Reader::refresh() {
     saveSoon();
     // Wait for the selected preview page before clearing the dimmed frame.
     // Settings can also close the menu later than the tap, after applying.
-    if ((flashAfterMenu || flashAfterPagePreview) && (!flashAfterPagePreview || !model->busy()) && isVisible() &&
+    if ((flashAfterMenu || flashAfterPagePreview) && (!flashAfterPagePreview || !session->busy()) && isVisible() &&
         !appearanceEdit.panelOpen() && (flashAfterPagePreview || !topControls->isVisible()) && !general->isVisible() &&
         !choices->isVisible()) {
         const bool preview = std::exchange(flashAfterPagePreview, false);
@@ -134,7 +134,7 @@ void Reader::refresh() {
     if (!readingTurn)
         page->refreshContent(isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible() &&
                              !general->isVisible() && !choices->isVisible() && !syncDialog && !kosyncDialog && !finishDialog &&
-                             !services.suspended() && !applyingText && (model->turnDirection() != 0 || passageFrame) &&
+                             !services.suspended() && !applyingText && (session->turnDirection() != 0 || passageFrame) &&
                              nextImage.cacheKey() != previousPageImage);
     if (!recordedOpening && pagePainted)
         recordOpening();
@@ -157,10 +157,10 @@ bool Reader::publishPendingDarkMode() {
         return true;
     // Main and preview frames use one worker but arrive separately.
     // Publish the new page and UI palette together, never a mixed pair.
-    if (model->busy() || (appearanceEdit.preview() && appearanceEdit.preview()->busy()))
+    if (session->busy() || (appearanceEdit.preview() && appearanceEdit.preview()->busy()))
         return false;
     const bool target = std::exchange(pendingDarkMode, -1);
-    if (model->state().value("dark_mode").toBool(false) != target ||
+    if (session->state().value("dark_mode").toBool(false) != target ||
         (appearanceEdit.preview() && appearanceEdit.preview()->state().value("dark_mode").toBool(false) != target)) {
         settingsError->setText(strings::get("reader.could_not_change_dark_mode"));
         settingsError->show();
@@ -171,12 +171,12 @@ bool Reader::publishPendingDarkMode() {
 
 void Reader::syncFrameState() {
     syncBookmarks();
-    if (!model->busy() && !pendingSearchHit.start.isEmpty()) {
+    if (!session->busy() && !pendingSearchHit.start.isEmpty()) {
         const auto hit = std::exchange(pendingSearchHit, {});
         const auto epoch = searchEpoch;
-        const auto imageKey = model->image().cacheKey();
+        const auto imageKey = session->image().cacheKey();
         QPointer<Reader> guard(this);
-        model->rangeRects(hit.start, hit.end, [guard, epoch, imageKey](QVector<QRect> rects) {
+        session->rangeRects(hit.start, hit.end, [guard, epoch, imageKey](QVector<QRect> rects) {
             if (guard && guard->searchEpoch == epoch && !guard->lifecycleHidden &&
                 guard->page->image.cacheKey() == imageKey)
                 guard->page->mark(rects);
@@ -186,31 +186,31 @@ void Reader::syncFrameState() {
     // lookup. Do not cancel its panel-dismiss gesture when that frame updates.
     // A new frame, such as a loaded image, must not look up the old text.
     // It must not drop a tap or swipe in progress either.
-    if (!appearanceEdit.panelOpen() && (model->busy() || model->image().cacheKey() != page->image.cacheKey()))
+    if (!appearanceEdit.panelOpen() && (session->busy() || session->image().cacheKey() != page->image.cacheKey()))
         dismissLookup(true);
-    if (!model->busy() && !pendingPassage.position.isEmpty()) {
+    if (!session->busy() && !pendingPassage.position.isEmpty()) {
         // Accept the visit only after the engine confirms a different passage.
         const auto origin = std::exchange(pendingPassage, {});
-        if (model->error().isEmpty() && model->state().value("position").toString() != origin.position) {
+        if (session->error().isEmpty() && session->state().value("position").toString() != origin.position) {
             // One return point covers a chain of pinned reference shortcuts.
             // Ordinary links can still nest above it and return normally.
             if (!origin.pinnedShortcut || linkHistory.isEmpty() || !linkHistory.last().pinnedShortcut)
                 linkHistory.append(origin);
         }
     }
-    if (returningFromLink && !model->busy()) {
+    if (returningFromLink && !session->busy()) {
         returningFromLink = false;
-        if (!linkHistory.isEmpty() && model->state().value("position").toString() == linkHistory.last().position)
+        if (!linkHistory.isEmpty() && session->state().value("position").toString() == linkHistory.last().position)
             linkHistory.removeLast();
     }
-    applyTheme(model->state().value("dark_mode").toBool(false));
+    applyTheme(session->state().value("dark_mode").toBool(false));
 }
 
 void Reader::finishAppearanceApply() {
-    if (appearanceEdit.applying() && !model->busy()) {
+    if (appearanceEdit.applying() && !session->busy()) {
         const bool switchingAppearance = appearanceEdit.appearanceDestination();
         const bool returnToReading = appearanceEdit.destination() == AppearanceDestination::Reading;
-        const bool successful = model->error().isEmpty();
+        const bool successful = session->error().isEmpty();
         appearanceEdit.completeApply(successful, exitPending);
         if (successful) {
             book->rememberAppearance();
@@ -243,7 +243,7 @@ bool Reader::syncFontPicker() {
 // footer's place until it clears.
 void Reader::showChapterText() {
     page->cleanRefresh(false);
-    page->notice = !model->error().isEmpty() ? model->error() : model->imageWarning();
+    page->notice = !session->error().isEmpty() ? session->error() : session->imageWarning();
     const auto values = chromeValues();
     for (int slot = 0; slot < kobalt::headerfooter::slotCount; ++slot)
         page->slotContents[slot] =
@@ -256,12 +256,12 @@ void Reader::showChapterText() {
 void Reader::showPageImage(const QImage &nextImage) {
     page->setPageAnimationStyle(services.softwarePageAnimations ? pageTurn::selected(preferences) : pageTurn::Style::Off);
     auto displayedImage = nextImage;
-    QPointer<ReaderSession> displayedSource = model;
+    QPointer<ReaderSession> displayedSource = session;
     if (appearanceEdit.edited() && appearanceEdit.ready() && appearanceEdit.preview()) {
         const auto *preview = appearanceEdit.preview();
         // Opening a panel keeps the current book frame. Use the isolated
         // preview only after appearance or viewport dimensions change.
-        if (model->busy() || !appearance::same(preview->state(), model->state()) ||
+        if (session->busy() || !appearance::same(preview->state(), session->state()) ||
             preview->image().size() != nextImage.size()) {
             displayedImage = preview->image();
             displayedSource = appearanceEdit.preview();
@@ -277,7 +277,7 @@ void Reader::showPageImage(const QImage &nextImage) {
                     (services.softwarePageAnimations ? pageTurn::selected(preferences) != pageTurn::Style::Off
                                                      : preferences.value("page_animations").toBool(false)) &&
                     pageAnimationsAvailable(services.animationSupport())
-                ? model->turnDirection()
+                ? session->turnDirection()
                 : 0;
     }
     if (!page->viewportTransition()) {
@@ -302,8 +302,8 @@ void Reader::showPageImage(const QImage &nextImage) {
         }
     }
     // Only a turn forward counts towards the session's pace; jumps and reflows do not.
-    if (!model->busy())
-        book->pace().observe(model->page(), model->turnDirection() > 0);
+    if (!session->busy())
+        book->pace().observe(session->page(), session->turnDirection() > 0);
 }
 
 void Reader::paintTurn() {
@@ -313,22 +313,22 @@ void Reader::paintTurn() {
     QElapsedTimer painting;
     if (turnStarted.isValid())
         painting.start();
-    page->progressFraction = pageProgressFraction(model->page(), model->pages());
-    page->preparedDamage = model->damage();
-    page->preparedFrom = model->damageFrom();
+    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    page->preparedDamage = session->damage();
+    page->preparedFrom = session->damageFrom();
     // The Refresh the screen setting decides which turns flash.
     ++pagesSinceFlash;
-    const bool chapterStart = model->turnDirection() > 0 && model->chapterPage() == 1;
+    const bool chapterStart = session->turnDirection() > 0 && session->chapterPage() == 1;
     const auto mode = kobalt::screenRefresh(preferences.value("screen_refresh").toString());
     if (kobalt::refreshOnTurn(mode, pagesSinceFlash, chapterStart))
         requestFlash(mode == kobalt::ScreenRefresh::Smart || mode == kobalt::ScreenRefresh::Chapter ? "chapter"
                                                                                                     : "pages");
     if (kobalt::diagnosticsActive())
-        kobalt::diagnostic("page-paint-start", {{"render_id", double(model->renderId())}, {"page", model->page()}}, false);
+        kobalt::diagnostic("page-paint-start", {{"render_id", double(session->renderId())}, {"page", session->page()}}, false);
     page->refreshContent(true, true);
     if (turnStarted.isValid()) {
         kobalt::diagnostic("page-turn-painted",
-                           {{"render_id", double(model->renderId())}, {"page", model->page()},
+                           {{"render_id", double(session->renderId())}, {"page", session->page()},
                             {"elapsed_ms", turnStarted.nsecsElapsed() / 1e6},
                             {"render_ms", rendered},
                             {"paint_ms", painting.nsecsElapsed() / 1e6}},
@@ -344,7 +344,7 @@ void Reader::paintTurn() {
 }
 
 void Reader::syncAppearanceControls(bool pickingFont) {
-    auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+    auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
     previewLabel->setText(appearanceEdit.error());
     previewLabel->setVisible(!pickingFont && !appearanceEdit.error().isEmpty());
     if (appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening) {
@@ -431,30 +431,30 @@ void Reader::syncAppearanceControls(bool pickingFont) {
 }
 
 void Reader::syncReadingControls() {
-    if (model->busy())
+    if (session->busy())
         pageScrubber->cancel();
     QVector<QPair<int, QString>> chapters;
-    for (const auto &chapter : model->chapters())
+    for (const auto &chapter : session->chapters())
         chapters.append({chapter.page, chapter.title});
     pageScrubber->setChapterJumps(pageNavigation::barButtons(preferences) == pageNavigation::BarButtons::Chapters);
-    pageScrubber->setBook(model->page(), model->pages(), chapters, model->image().size());
-    pageScrubber->setEnabled(!model->busy());
-    const auto chapter = model->chapterTitle().isEmpty() ? strings::get("reader.contents") : model->chapterTitle();
+    pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+    pageScrubber->setEnabled(!session->busy());
+    const auto chapter = session->chapterTitle().isEmpty() ? strings::get("reader.contents") : session->chapterTitle();
     chapterButton->setText(chapter);
     chapterButton->setAccessibleName(strings::get("reader.contents_detail").arg(chapter));
-    page->progressFraction = pageProgressFraction(model->page(), model->pages());
-    if (!model->busy())
+    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
-    findChild<QPushButton *>("rrLight")->setEnabled(services.lightAvailable() && !model->busy() &&
+    findChild<QPushButton *>("rrLight")->setEnabled(services.lightAvailable() && !session->busy() &&
                                                     !appearanceEdit.applying());
     findChild<QPushButton *>("rrLight")->setChecked(lightPopup->isVisible() ||
                                                     appearanceEdit.destination() == AppearanceDestination::Light);
-    findChild<QPushButton *>("rrTypography")->setEnabled(!model->busy());
-    findChild<QPushButton *>("rrLayout")->setEnabled(!model->busy());
+    findChild<QPushButton *>("rrTypography")->setEnabled(!session->busy());
+    findChild<QPushButton *>("rrLayout")->setEnabled(!session->busy());
     // Settings applies the newest draft, or waits for the preview to open.
     // Its click handler ignores taps while a panel's changes apply.
-    findChild<QPushButton *>("rrSettings")->setEnabled(!model->busy() || appearanceEdit.applying());
+    findChild<QPushButton *>("rrSettings")->setEnabled(!session->busy() || appearanceEdit.applying());
     findChild<QPushButton *>("rrTypography")
         ->setChecked(!general->isVisible() && appearanceEdit.panelOpen() && panels->currentIndex() == 0);
     findChild<QPushButton *>("rrLayout")
@@ -467,8 +467,8 @@ void Reader::syncReadingControls() {
                                                        toolbarComposition.search})
         if (action)
             action->setVisible(!settingsOpen);
-    toolbarComposition.formattingWarning->setVisible(!settingsOpen && model->formattingWarning());
-    findChild<QPushButton *>("rrGraph")->setEnabled(!model->busy() && !appearanceEdit.applying());
+    toolbarComposition.formattingWarning->setVisible(!settingsOpen && session->formattingWarning());
+    findChild<QPushButton *>("rrGraph")->setEnabled(!session->busy() && !appearanceEdit.applying());
     findChild<QPushButton *>("rrGraph")->setChecked(chapterGraph->isVisible() ||
                                                     appearanceEdit.destination() == AppearanceDestination::Stats);
     if (chapterGraph->isVisible())
@@ -485,23 +485,23 @@ void Reader::syncReadingControls() {
 }
 
 void Reader::publishResize() {
-    if (resizePending && (model->busy() || (appearanceEdit.preview() && appearanceEdit.preview()->busy()))) {
+    if (resizePending && (session->busy() || (appearanceEdit.preview() && appearanceEdit.preview()->busy()))) {
         kobalt::diagnostic("reader-resize-wait",
                            {{"width", width()},
                             {"height", height()},
-                            {"main_busy", model->busy()},
+                            {"main_busy", session->busy()},
                             {"preview_busy", appearanceEdit.preview() && appearanceEdit.preview()->busy()},
                             {"updates_enabled", updatesEnabled()}},
                            false);
     }
-    if (resizePending && !resizeTimer.isActive() && !model->busy() && (!appearanceEdit.edited() || !appearanceEdit.preview()->busy())) {
+    if (resizePending && !resizeTimer.isActive() && !session->busy() && (!appearanceEdit.edited() || !appearanceEdit.preview()->busy())) {
         // refreshContent already queued the reflowed page. Do not repaint it
         // again after that flush, which would add a second refresh.
         resizePending = false;
         kobalt::diagnostic("reader-resize-end",
                            {{"width", width()},
                             {"height", height()},
-                            {"main_busy", model->busy()},
+                            {"main_busy", session->busy()},
                             {"preview_busy", appearanceEdit.preview() && appearanceEdit.preview()->busy()},
                             {"updates_enabled", updatesEnabled()},
                             {"resize_pending", resizePending}});
@@ -509,7 +509,7 @@ void Reader::publishResize() {
 }
 
 void Reader::openPendingDestination() {
-    if (appearanceEdit.panelDestination() && !model->busy() && !appearanceEdit.applying()) {
+    if (appearanceEdit.panelDestination() && !session->busy() && !appearanceEdit.applying()) {
         if (appearanceEdit.externalDestination()) {
             if (!appearanceEdit.panelOpen() && !general->isVisible()) {
                 const auto destination = appearanceEdit.takeDestination();
@@ -536,24 +536,24 @@ void Reader::openPendingDestination() {
 // Stats uses the shared source count on every platform. A failed count keeps
 // the chapter navigation and the existing page-length fallback available.
 void Reader::updateGraph() {
-    const bool counted = model->totalWords() >= 0;
-    const auto graph = counted ? model->chapterGraph() : kobalt::chapterPageLengths(model->chapters(), model->pages());
-    chapterGraph->setData(graph, counted ? model->graphSelection() : model->contentsSelection(), true, {});
-    const auto contents = model->chapters();
-    const int next = model->contentsSelection().next;
+    const bool counted = session->totalWords() >= 0;
+    const auto graph = counted ? session->chapterGraph() : kobalt::chapterPageLengths(session->chapters(), session->pages());
+    chapterGraph->setData(graph, counted ? session->graphSelection() : session->contentsSelection(), true, {});
+    const auto contents = session->chapters();
+    const int next = session->contentsSelection().next;
     int nextPages = 0;
     if (next >= 0 && next < contents.size()) {
         const int start = contents[next].page;
-        int end = model->pages();
+        int end = session->pages();
         for (const auto &chapter : contents)
             if (chapter.page > start)
                 end = qMin(end, chapter.page);
         nextPages = qMax(1, end - start);
     }
-    chapterGraph->setChapterNumber(model->contentsSelection().current + 1, contents.size());
+    chapterGraph->setChapterNumber(session->contentsSelection().current + 1, contents.size());
     updateReadingStats();
-    chapterGraph->setProgress(model->chapterTitle(), model->chapterPage(), model->chapterPages(), nextPages,
-                              model->page(), model->pages());
+    chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(), session->chapterPages(), nextPages,
+                              session->page(), session->pages());
 }
 
 void Reader::updateMenuStatus() {
@@ -578,7 +578,7 @@ void Reader::updateMenuStatus() {
 void Reader::updateReadingStats() {
     const auto reading = book->sessionReadingMilliseconds();
     const auto estimates = book->estimates();
-    chapterGraph->setReading(int(reading / 60000), model->totalWords(), estimates.chapterMilliseconds,
+    chapterGraph->setReading(int(reading / 60000), session->totalWords(), estimates.chapterMilliseconds,
                              estimates.bookMilliseconds);
 }
 

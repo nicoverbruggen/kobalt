@@ -204,8 +204,8 @@ int main(int argc, char **argv) {
     {
         Calls calls;
         const PositionCodec positions{
-            [](const ReaderModel &, const QString &location, QString *) { return location; },
-            [](const ReaderModel &model, QString *) { return model.position(); },
+            [](const EngineDocument &, const QString &location, QString *) { return location; },
+            [](const EngineDocument &model, QString *) { return model.position(); },
             [](const QString &location) { return location; }};
         auto session = open(QSize(758, 900), {}, "session-event", positions);
         const auto hash = session->sourceHash();
@@ -499,8 +499,8 @@ int main(int argc, char **argv) {
                 "Legacy checkpoint fields changed during import");
         {
             const PositionCodec positions{
-                [](const ReaderModel &, const QString &location, QString *) { return location; },
-                [](const ReaderModel &model, QString *) { return model.position(); },
+                [](const EngineDocument &, const QString &location, QString *) { return location; },
+                [](const EngineDocument &model, QString *) { return model.position(); },
                 [](const QString &location) { return location; }};
             auto session = open(QSize(758, 900), imported.object, identity, positions);
             const auto hash = session->sourceHash();

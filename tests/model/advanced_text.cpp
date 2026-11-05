@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "check.h"
 #include "reader_inputs.h"
 #include <QGuiApplication>
@@ -6,7 +6,7 @@
 #include <array>
 
 namespace {
-void open(kobalt::ReaderModel &model, const QByteArray &body, const QByteArray &css = {},
+void open(kobalt::EngineDocument &model, const QByteArray &body, const QByteArray &css = {},
           QJsonObject settings = {}, QSize size = {1072, 1448}) {
     const QMap<QString, QByteArray> data{
         {"mimetype", "application/epub+zip"},
@@ -30,7 +30,7 @@ void open(kobalt::ReaderModel &model, const QByteArray &body, const QByteArray &
     QString error;
     require(model.openResources(source, sizes, size, settings, &error), qPrintable(error));
 }
-std::array<int, 4> paragraphPages(kobalt::ReaderModel &model) {
+std::array<int, 4> paragraphPages(kobalt::EngineDocument &model) {
     std::array<int, 4> pages;
     int index = 0;
     for (const auto *marker : {"Firstmarker", "Secondmarker", "Thirdmarker", "Fourthmarker"}) {
@@ -53,9 +53,9 @@ std::array<int, 4> paragraphPages(kobalt::ReaderModel &model) {
 // Checks justification tracking, word spacing, widow and orphan control and hanging punctuation, with previews and cached reopening.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
-    using kobalt::ReaderModel;
+    using kobalt::EngineDocument;
     const QByteArray prose = "<p>" + QByteArray("Office affinity café amber birch cedar dogwood hazel oak. ").repeated(20) + "</p>";
-    ReaderModel model(kobalt::test::readerFonts());
+    EngineDocument model(kobalt::test::readerFonts());
     open(model, prose, {}, {{"text_alignment", "justify"}});
     const auto original = model.image(0);
     const auto anchor = model.position();
@@ -66,12 +66,12 @@ int main(int argc, char **argv) {
         require(model.applyAppearance({{"justification_tracking", percent}}), "Cannot apply tracking");
         require(model.image(0) != original, "Tracking did not change loose justified lines");
         require(model.pages() == pages && model.position() == anchor, "Tracking changed line fitting or position");
-        ReaderModel preview(kobalt::test::readerFonts());
+        EngineDocument preview(kobalt::test::readerFonts());
         QString error;
         require(preview.openPreview(model, {1072, 1448}, &error), qPrintable(error));
         require(preview.state().value("justification_tracking").toInt() == percent &&
                     preview.image(0) == model.image(0), "Preview lost tracking");
-        ReaderModel reopened(kobalt::test::readerFonts());
+        EngineDocument reopened(kobalt::test::readerFonts());
         open(reopened, prose, {}, model.state());
         require(reopened.image(0) == model.image(0), "Reopening lost tracking");
     }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
                 !model.applyAppearance({{"justification_tracking", 21}}) &&
                 !model.applyAppearance({{"widows_orphans", "invalid"}}), "Invalid advanced text was accepted");
     for (const auto *alignment : {"left", "right", "center"}) {
-        ReaderModel aligned(kobalt::test::readerFonts());
+        EngineDocument aligned(kobalt::test::readerFonts());
         open(aligned, prose, {}, {{"text_alignment", alignment}});
         const auto before = aligned.image(0);
         require(aligned.applyAppearance({{"justification_tracking", 15}}) && aligned.image(0) == before,
@@ -89,14 +89,14 @@ int main(int argc, char **argv) {
     }
     for (const QByteArray &text : {QByteArray("日本語の文章を読む楽しみ。漢字と仮名。"),
                                  QByteArray("القراءة تمنح الإنسان معرفة وحكمة ")}) {
-        ReaderModel shaped(kobalt::test::readerFonts());
+        EngineDocument shaped(kobalt::test::readerFonts());
         open(shaped, "<p>" + text.repeated(15) + "</p>", {}, {{"text_alignment", "justify"}});
         const auto before = shaped.image(0);
         require(shaped.applyAppearance({{"justification_tracking", 15}}) && shaped.image(0) == before,
                 "Tracking changed CJK glyphs or cursive joining");
     }
     const QByteArray spacingProse = "<p>" + QByteArray("A small boat lay by the shore while we walked slowly over the sand and watched birds rise above the water. " ).repeated(25) + "</p>";
-    ReaderModel spaced(kobalt::test::readerFonts());
+    EngineDocument spaced(kobalt::test::readerFonts());
     open(spaced, spacingProse, {}, {{"text_alignment", "left"}}, {530, 320});
     const auto normalSpaces = spaced.image(0);
     require(spaced.state().value("word_spacing").toInt() == 100, "Word spacing default changed");
@@ -111,12 +111,12 @@ int main(int argc, char **argv) {
             narrowStarts = starts;
         else
             require(starts != narrowStarts, "Word spacing did not reflow the book");
-        ReaderModel preview(kobalt::test::readerFonts());
+        EngineDocument preview(kobalt::test::readerFonts());
         QString error;
         require(preview.openPreview(spaced, {530, 320}, &error), qPrintable(error));
         require(preview.state().value("word_spacing").toInt() == percent && preview.image(0) == spaced.image(0),
                 "Preview lost word spacing");
-        ReaderModel reopened(kobalt::test::readerFonts());
+        EngineDocument reopened(kobalt::test::readerFonts());
         open(reopened, spacingProse, {}, spaced.state(), {530, 320});
         require(reopened.image(0) == spaced.image(0), "Reopening lost word spacing");
     }
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
             "Normal word spacing did not restore pixels");
     require(!spaced.applyAppearance({{"word_spacing", 0}}) && !spaced.applyAppearance({{"word_spacing", 101}}),
             "Invalid word spacing was accepted");
-    ReaderModel invalidSpacing(kobalt::test::readerFonts());
+    EngineDocument invalidSpacing(kobalt::test::readerFonts());
     open(invalidSpacing, spacingProse, {}, {{"word_spacing", 500}, {"text_alignment", "left"}}, {530, 320});
     require(invalidSpacing.state().value("word_spacing").toInt() == 100 && invalidSpacing.image(0) == normalSpaces,
             "Invalid saved word spacing did not fall back to Normal");
@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
                                  "Firstmarker<br/>Secondmarker<br/>Thirdmarker<br/>Fourthmarker</p>";
     for (int count = 3; count < 10 && (!orphan || !widow); ++count) {
         const auto body = "<p>" + QByteArray("Filler<br/>").repeated(count - 1) + "Filler</p>" + paragraph;
-        ReaderModel pagination(kobalt::test::readerFonts());
+        EngineDocument pagination(kobalt::test::readerFonts());
         open(pagination, body, {}, {}, {1072, 320});
         const auto allowed = paragraphPages(pagination);
         const bool hasOrphan = allowed[0] != allowed[1];
@@ -146,23 +146,23 @@ int main(int argc, char **argv) {
         const auto avoided = paragraphPages(pagination);
         require(avoided[0] == avoided[1] && avoided[2] == avoided[3],
                 "Avoid both failed to override inline publisher important rules");
-        ReaderModel preview(kobalt::test::readerFonts());
+        EngineDocument preview(kobalt::test::readerFonts());
         QString error;
         require(preview.openPreview(pagination, {1072, 320}, &error), qPrintable(error));
         require(paragraphPages(preview) == avoided, "Preview lost widow and orphan avoidance");
-        ReaderModel reopened(kobalt::test::readerFonts());
+        EngineDocument reopened(kobalt::test::readerFonts());
         open(reopened, body, {}, pagination.state(), {1072, 320});
         require(paragraphPages(reopened) == avoided, "Reopening lost widow and orphan avoidance");
         require(pagination.applyAppearance({{"widows_orphans", "publisher"}}) &&
                     paragraphPages(pagination) == allowed, "Publisher did not restore authored pagination");
-        ReaderModel publisher(kobalt::test::readerFonts());
+        EngineDocument publisher(kobalt::test::readerFonts());
         auto protectedBody = body;
         protectedBody.replace("orphans:1!important;widows:1!important", "orphans:2!important;widows:2!important");
         open(publisher, protectedBody, {}, {}, {1072, 320});
         require(paragraphPages(publisher) == avoided, "Publisher mode ignored authored avoidance");
         require(publisher.applyAppearance({{"widows_orphans", "allow"}}) && paragraphPages(publisher) == allowed,
                 "Allow both failed to override publisher avoidance");
-        ReaderModel inherited(kobalt::test::readerFonts());
+        EngineDocument inherited(kobalt::test::readerFonts());
         auto inheritedBody = body;
         inheritedBody.replace(" style='orphans:1!important;widows:1!important'", "");
         open(inherited, inheritedBody, "body{orphans:2;widows:2}", {}, {1072, 320});
@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
         const QByteArray body = "<p lang='en'>" + text.repeated(35) + "</p>";
         QJsonObject settings{{"columns", columns}, {"column_spacing", 80}, {"margin_pixels", 40},
                              {"text_alignment", alignment}, {"hyphenation", "on"}};
-        ReaderModel hanging(kobalt::test::readerFonts());
+        EngineDocument hanging(kobalt::test::readerFonts());
         open(hanging, body, {}, settings, {800, 600});
         const auto before = hanging.image(0);
         const auto anchor = hanging.position();
@@ -204,11 +204,11 @@ int main(int argc, char **argv) {
             require(enabled == before, "Hanging hyphens changed left-aligned or centered text");
         }
         require(rightInk(enabled, 799, 800) == 0, "Hanging punctuation reached the screen edge");
-        ReaderModel preview(kobalt::test::readerFonts());
+        EngineDocument preview(kobalt::test::readerFonts());
         QString error;
         require(preview.openPreview(hanging, {800, 600}, &error), qPrintable(error));
         require(preview.image(0) == enabled, "Preview lost hanging punctuation or column geometry");
-        ReaderModel reopened(kobalt::test::readerFonts());
+        EngineDocument reopened(kobalt::test::readerFonts());
         open(reopened, body, {}, hanging.state(), {800, 600});
         require(reopened.image(0) == enabled, "Reopening lost hanging punctuation");
         require(hanging.applyAppearance({{"hanging_punctuation", false}}) && hanging.image(0) == before &&
@@ -217,19 +217,19 @@ int main(int argc, char **argv) {
             QTemporaryDir directory;
             require(directory.isValid(), "Cannot create hanging punctuation cache");
             {
-                ReaderModel cached(kobalt::test::readerFonts());
+                EngineDocument cached(kobalt::test::readerFonts());
                 cached.setDocumentCache(directory.path(), "hanging", "hanging-test", 4096);
                 open(cached, body, {}, settings, {800, 600});
                 require(cached.saveDocumentCache(), "Cannot save hanging punctuation cache");
             }
-            ReaderModel restored(kobalt::test::readerFonts());
+            EngineDocument restored(kobalt::test::readerFonts());
             restored.setDocumentCache(directory.path(), "hanging", "hanging-test", 4096);
             settings["hanging_punctuation"] = true;
             open(restored, body, {}, settings, {800, 600});
             require(restored.openedFromCache() && restored.image(0) == enabled,
                     "Cached reopening retained disabled hanging punctuation");
             require(restored.saveDocumentCache(), "Cannot cache enabled hanging punctuation");
-            ReaderModel disabled(kobalt::test::readerFonts());
+            EngineDocument disabled(kobalt::test::readerFonts());
             disabled.setDocumentCache(directory.path(), "hanging", "hanging-test", 4096);
             settings["hanging_punctuation"] = false;
             open(disabled, body, {}, settings, {800, 600});
@@ -240,20 +240,20 @@ int main(int argc, char **argv) {
     QTemporaryDir cache;
     require(cache.isValid(), "Cannot create advanced text cache");
     {
-        ReaderModel cached(kobalt::test::readerFonts());
+        EngineDocument cached(kobalt::test::readerFonts());
         cached.setDocumentCache(cache.path(), "advanced-text", "advanced-text-test", 4096);
         open(cached, prose, {}, {{"text_alignment", "justify"}});
         require(cached.saveDocumentCache(), "Cannot save advanced text cache");
     }
-    ReaderModel restored(kobalt::test::readerFonts());
+    EngineDocument restored(kobalt::test::readerFonts());
     restored.setDocumentCache(cache.path(), "advanced-text", "advanced-text-test", 4096);
     open(restored, prose, {}, {{"text_alignment", "justify"}, {"justification_tracking", 15}});
     require(restored.openedFromCache() && restored.image(0) != original,
             "Document cache retained disabled tracking");
-    ReaderModel cachedSpaces(kobalt::test::readerFonts());
+    EngineDocument cachedSpaces(kobalt::test::readerFonts());
     cachedSpaces.setDocumentCache(cache.path(), "advanced-text", "advanced-text-test", 4096);
     open(cachedSpaces, prose, {}, {{"text_alignment", "justify"}, {"word_spacing", 120}});
-    ReaderModel freshSpaces(kobalt::test::readerFonts());
+    EngineDocument freshSpaces(kobalt::test::readerFonts());
     open(freshSpaces, prose, {}, {{"text_alignment", "justify"}, {"word_spacing", 120}});
     require(cachedSpaces.openedFromCache() && cachedSpaces.image(0) == freshSpaces.image(0) &&
                 cachedSpaces.image(0) != original, "Document cache retained Normal word spacing");

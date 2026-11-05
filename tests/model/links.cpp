@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QBuffer>
 #include <QFile>
 #include <QGuiApplication>
@@ -28,14 +28,14 @@ QImage decoratedLink(const QByteArray &markup, const QByteArray &css, bool dark)
             return sink(bytes.constData(), bytes.size());
         },
         std::make_shared<std::atomic_bool>(false));
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     require(model.openResources(resources, sizes, QSize(800, 600),
                                 kobalt::qt::object({{"font_pixels", 40}, {"dark_mode", dark}}), &error),
             qPrintable(error));
     require(model.pageLinks().size() == 1, "Decorated link lost its hit region");
     const auto image = model.image(0);
-    kobalt::ReaderModel preview(kobalt::test::readerFonts());
+    kobalt::EngineDocument preview(kobalt::test::readerFonts());
     require(preview.openPreview(model, QSize(800, 600), &error), qPrintable(error));
     require(preview.image(0) == image, "Link decoration changed in the appearance preview");
     return image;
@@ -110,7 +110,7 @@ kobalt::LinkDetails inspectNote(const NoteCase &test, bool dark) {
             return sink(bytes.constData(), bytes.size());
         },
         std::make_shared<std::atomic_bool>(false));
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     require(model.openResources(resources, sizes, QSize(1072, 1300),
                                 kobalt::qt::object({{"font_pixels", 24}, {"dark_mode", dark}}), &error),
@@ -305,7 +305,7 @@ int main(int argc, char **argv) {
     require(argc == 2, "Pass the synthetic links EPUB");
     QFile file(QString::fromLocal8Bit(argv[1]));
     require(file.open(QIODevice::ReadOnly), "Cannot open link fixture");
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     require(model.open(file.readAll(), QSize(1072, 1300), kobalt::qt::object({{"font_pixels", 32}}), &error),
             qPrintable(error));

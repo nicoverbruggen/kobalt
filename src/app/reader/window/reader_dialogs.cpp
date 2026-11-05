@@ -81,7 +81,7 @@ void Reader::confirmCustomReplace(const std::function<void()> &proceed, const st
 }
 
 void Reader::showFontDefaultDialog(const QString &face, bool instructions) {
-    if (model->temporaryTypography())
+    if (session->temporaryTypography())
         return;
     if (fontDefaultDialog || !appearanceEdit.panelOpen())
         return;
@@ -174,7 +174,7 @@ void Reader::showFormattingWarning() {
     if (formattingWarningDialog || closing || lifecycleHidden || services.suspended()) {
         return;
     }
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     auto *notice = new kobalt::ui::NoticeModal(
         this, {strings::get("reader.formatting_warning_description"), strings::get("reader.formatting_warning"), {}},
         {strings::get("common.ok"), "rrFormattingWarningConfirm"});
@@ -203,7 +203,7 @@ void Reader::showFormattingWarning() {
 bool Reader::progressBlocked() const {
     return bool(debugDialog) || bool(finishDialog) || bool(kosyncDialog) || bool(annotationErrorDialog) || bool(formattingWarningDialog) ||
            bool(settingsWriteErrorDialog) || book->deviceTransition() || services.suspended() || !isVisible() ||
-           lightPopup->isVisible() || model->busy() || chapterGraph->isVisible() || dictionaryPanel->isVisible() ||
+           lightPopup->isVisible() || session->busy() || chapterGraph->isVisible() || dictionaryPanel->isVisible() ||
            searchPanel->isVisible() || linksActive() || lookupPending || appearanceEdit.panelOpen() ||
            appearanceEdit.applying() || general->isVisible() || choices->isVisible() || acknowledgments->isVisible();
 }
@@ -231,9 +231,9 @@ void Reader::showProgressChoice() {
     if (comparingProgress)
         return;
     const auto shown = book->candidate();
-    const auto anchor = model->state().value("position").toString();
+    const auto anchor = session->state().value("position").toString();
     comparingProgress = true;
-    model->compareNativePosition(shown.location, [this, shown, anchor](const kobalt::PositionComparison &result) {
+    session->compareNativePosition(shown.location, [this, shown, anchor](const kobalt::PositionComparison &result) {
         using Status = kobalt::PositionComparison::Status;
         comparingProgress = false;
         if (result.status == Status::Stale)
@@ -241,14 +241,14 @@ void Reader::showProgressChoice() {
         if (progressBlocked())
             progressCheckDeferred = true;
         if (!book->pendingProgress() || !(book->candidate() == shown) || progressBlocked() ||
-            model->state().value("position").toString() != anchor)
+            session->state().value("position").toString() != anchor)
             return;
         buildProgressChoice(shown, result.direction, result.status == Status::Compared);
     });
 }
 
 void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direction, bool located) {
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     QString prompt;
     if (shown.status == 2)
         prompt = strings::get("sync.finished");
@@ -291,7 +291,7 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
         importingProgress = true;
         go->setEnabled(false);
         keep->setEnabled(false);
-        model->goToNative(shown.location, [this, shown, message, go, keep](const QString &error) {
+        session->goToNative(shown.location, [this, shown, message, go, keep](const QString &error) {
             importingProgress = false;
             if (!error.isEmpty()) {
                 // Staying is the only choice left, so it becomes an acknowledgement.
@@ -401,7 +401,7 @@ void Reader::showProgressDebug() {
 void Reader::showFinishChoice() {
     if (finishDialog || !book->offerFinish())
         return;
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     auto *choice = new ui::ChoiceModal(this, {{}, strings::get("finish.prompt"), {}},
                                        {strings::get("finish.still_reading"), "rrStillReading"},
                                        {strings::get("finish.mark_finished"), "rrMarkFinished"});
@@ -425,7 +425,7 @@ void Reader::showFinishChoice() {
     auto choose = [this, suppress](bool finished) {
         if (!finishDialog)
             return;
-        if (services.suspended() || book->deviceTransition() || model->busy())
+        if (services.suspended() || book->deviceTransition() || session->busy())
             return;
         if (finished)
             book->markFinished();
@@ -527,7 +527,7 @@ void Reader::askRemoveBookmark(const QString &position) {
         removeDialog.clear();
         if (remove) {
             bookmarks->remove(position);
-            page->bookmarked = bookmarks->marked(model->page());
+            page->bookmarked = bookmarks->marked(session->page());
             if (bookmarkList->isVisible() && !bookmarkList->annotationsShown())
                 bookmarkList->showBookmarks(bookmarkRows());
         }
@@ -557,7 +557,7 @@ void Reader::openBookmarks() {
         showBookmarkError();
         return;
     }
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     if (general->isVisible() || appearanceEdit.panelOpen()) {
         appearanceEdit.request(AppearanceDestination::Bookmarks);
         if (general->isVisible())
@@ -587,7 +587,7 @@ void Reader::showSettingsWriteError() {
         settingsWriteErrorDialog->raise();
         return;
     }
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     auto *notice = new ui::NoticeModal(
         this,
         {strings::get("reader.settings_write_error_description"), strings::get("reader.settings_write_error"), {}},
@@ -640,7 +640,7 @@ void Reader::showStartupNotice() {
 void Reader::showAnnotationError(const QString &message, const QString &title, const QString &name) {
     if (annotationErrorDialog || closing || lifecycleHidden || services.suspended() || !isVisible())
         return;
-    model->cancelPendingTurn();
+    session->cancelPendingTurn();
     auto *notice = new ui::NoticeModal(this, {message, title, {}}, {strings::get("common.ok"), name + "Confirm"});
     annotationErrorDialog = notice;
     notice->setObjectName(name);
@@ -669,12 +669,12 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const {
     QVector<kobalt::BookmarkRow> rows;
     const auto &list = bookmarks->bookmarks();
     const auto pages = bookmarks->resolvedPages();
-    const auto contents = model->chapters();
+    const auto contents = session->chapters();
     rows.reserve(list.size());
     for (int i = 0; i < list.size(); ++i) {
         kobalt::BookmarkRow row{list[i].position, list[i].chapter,    list[i].excerpt,
                                 list[i].created,  pages.value(i, -1), false};
-        row.current = row.page >= 0 && row.page == model->page();
+        row.current = row.page >= 0 && row.page == session->page();
         // Name the chapter the page is in now; the stored title covers a missing contents list.
         for (const auto &link : contents)
             if (link.page >= 0 && row.page >= 0 && link.page <= row.page)
@@ -699,7 +699,7 @@ void Reader::syncPinnedBookmarks() {
         const int aPage = bookmarks->pageOf(a.position), bPage = bookmarks->pageOf(b.position);
         return (aPage < 0 ? INT_MAX : aPage) < (bPage < 0 ? INT_MAX : bPage);
     });
-    const bool visible = !pins.isEmpty() && topControls->isVisible() && !model->busy() &&
+    const bool visible = !pins.isEmpty() && topControls->isVisible() && !session->busy() &&
         !lifecycleHidden && !closing && !services.suspended() && !annotationMode && !seekOpen &&
         !appearanceEdit.panelOpen() && !general->isVisible() && !menu->isVisible() && !choices->isVisible() &&
         !chapterGraph->isVisible() && !lightPopup->isVisible() && !bookmarkList->isVisible() &&
@@ -1136,7 +1136,7 @@ void Reader::openTapZones() {
     grid->setSpacing(m::control::itemGap);
     card->rows()->addLayout(grid);
     auto *group = new QButtonGroup(card);
-    const bool rtl = model->state().value("page_progression_rtl").toBool();
+    const bool rtl = session->state().value("page_progression_rtl").toBool();
     int index = 0;
     for (const auto layout : tapZones::layouts) {
         auto *button = new ui::TapZoneButton(layout, rtl && layout != tapZones::Layout::Reversed, card);

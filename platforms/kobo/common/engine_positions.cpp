@@ -1,6 +1,6 @@
 #include "engine/crengine/column_view.h"
 #include "engine_positions.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "support/strings.h"
 #include <lvdocview.h>
 #include <QRegularExpression>
@@ -408,10 +408,10 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
 }
 class NickelPositionCodec {
 public:
-    static QString decode(const ReaderModel &model, const QString &location, QString *error);
-    static QString encode(const ReaderModel &model, QString *error);
+    static QString decode(const EngineDocument &engine, const QString &location, QString *error);
+    static QString encode(const EngineDocument &engine, QString *error);
 };
-QString NickelPositionCodec::decode(const ReaderModel &model, const QString &location, QString *error) {
+QString NickelPositionCodec::decode(const EngineDocument &engine, const QString &location, QString *error) {
     auto fail = [error](const QString &message) {
         if (error)
             *error = message;
@@ -419,7 +419,7 @@ QString NickelPositionCodec::decode(const ReaderModel &model, const QString &loc
     };
     if (error)
         error->clear();
-    if (!model.engine_ || location.isEmpty() || location.size() > 8192)
+    if (!engine.engine_ || location.isEmpty() || location.size() > 8192)
         return fail(strings::get("error.no_supported_native_reading_position"));
     const int hash = location.indexOf('#');
     const auto path = QUrl::fromPercentEncoding(location.left(hash < 0 ? location.size() : hash).toUtf8());
@@ -429,7 +429,7 @@ QString NickelPositionCodec::decode(const ReaderModel &model, const QString &loc
     NativePoint point;
     const bool structural = id.startsWith("point(");
     if (structural) {
-        if (!nativePoint(model.engine_->getDocument(), path, id, point))
+        if (!nativePoint(engine.engine_->getDocument(), path, id, point))
             return fail(strings::get("error.unsupported_native_text_offset"));
         id = point.id;
         offset = point.offset;
@@ -441,7 +441,7 @@ QString NickelPositionCodec::decode(const ReaderModel &model, const QString &loc
         id.truncate(colon);
     }
     id = QUrl::fromPercentEncoding(id.toUtf8());
-    auto *doc = model.engine_->getDocument();
+    auto *doc = engine.engine_->getDocument();
     auto *body = doc->nodeFromXPath(U"/body");
     if (!body)
         return fail(strings::get("error.missing_publication_body"));
@@ -523,7 +523,7 @@ QString NickelPositionCodec::decode(const ReaderModel &model, const QString &loc
         return qstring(ldomXPointer(element, 0).toString());
     return fail(strings::get("error.native_text_position_was_not_found"));
 }
-QString NickelPositionCodec::encode(const ReaderModel &model, QString *error) {
+QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error) {
     auto fail = [error](const QString &message) {
         if (error)
             *error = message;
@@ -531,10 +531,10 @@ QString NickelPositionCodec::encode(const ReaderModel &model, QString *error) {
     };
     if (error)
         error->clear();
-    if (!model.engine_)
+    if (!engine.engine_)
         return fail(strings::get("error.no_reading_position"));
-    auto *doc = model.engine_->getDocument();
-    const auto pointer = doc->createXPointer(cre(model.anchor_));
+    auto *doc = engine.engine_->getDocument();
+    const auto pointer = doc->createXPointer(cre(engine.anchor_));
     auto *target = pointer.getNode();
     if (!target)
         return fail(strings::get("error.invalid_source_position"));

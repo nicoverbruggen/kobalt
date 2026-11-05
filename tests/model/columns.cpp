@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "check.h"
 #include "reader_inputs.h"
 #include <QGuiApplication>
@@ -6,7 +6,7 @@
 #include <QTemporaryDir>
 #include <cstdio>
 namespace {
-void openResources(kobalt::ReaderModel &model, const QMap<QString, QByteArray> &data, QJsonObject settings, QSize size,
+void openResources(kobalt::EngineDocument &model, const QMap<QString, QByteArray> &data, QJsonObject settings, QSize size,
                    kobalt::OpeningProgress progress = {}) {
     QMap<QString, qint64> sizes;
     for (auto it = data.cbegin(); it != data.cend(); ++it)
@@ -25,7 +25,7 @@ void openResources(kobalt::ReaderModel &model, const QMap<QString, QByteArray> &
     QString error;
     require(model.openResources(source, sizes, size, settings, &error, std::move(progress)), qPrintable(error));
 }
-void open(kobalt::ReaderModel &model, const QByteArray &body, const QByteArray &css = {},
+void open(kobalt::EngineDocument &model, const QByteArray &body, const QByteArray &css = {},
           QJsonObject settings = {}, QSize size = {1072, 1448}, bool rtl = false,
           kobalt::OpeningProgress progress = {}) {
     const QMap<QString, QByteArray> data{
@@ -53,7 +53,7 @@ QMap<QString, QByteArray> chapterBook(int firstColumns, bool rtl) {
 }
 void chapterProgress() {
     for (bool rtl : {false, true}) for (int firstColumns : {2, 3, 4}) {
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         openResources(model, chapterBook(firstColumns, rtl), {{"columns", 2}}, {1000, 800});
         const auto chapters = model.chapters();
         require(chapters.size() == 2 && chapters[1].page == firstColumns / 2,
@@ -117,7 +117,7 @@ void cachedColumns() {
                                {"column_spacing", layout.spacing}};
         };
         // Returns the number of full layouts during the opening.
-        const auto cached = [&](kobalt::ReaderModel &model, Layout layout) {
+        const auto cached = [&](kobalt::EngineDocument &model, Layout layout) {
             model.setDocumentCache(root.path() + "/.cache", QByteArray(64, 'c'), "columns-test", 1024 * 1024);
             int formats = 0;
             open(model, paragraph, {}, settings(layout), size, false, [&](kobalt::OpeningStage stage, int percent) {
@@ -125,26 +125,26 @@ void cachedColumns() {
             });
             return formats;
         };
-        kobalt::ReaderModel freshWide(kobalt::test::readerFonts()), freshNarrow(kobalt::test::readerFonts());
+        kobalt::EngineDocument freshWide(kobalt::test::readerFonts()), freshNarrow(kobalt::test::readerFonts());
         open(freshWide, paragraph, {}, settings(wide), size);
         open(freshNarrow, paragraph, {}, settings(narrow), size);
-        const auto column = [](kobalt::ReaderModel &model, Layout layout) {
+        const auto column = [](kobalt::EngineDocument &model, Layout layout) {
             return model.image(0).copy(layout.margin, 0, 420, 800);
         };
         require((column(freshWide, wide) == column(freshNarrow, narrow)) == !hanging,
                 "The column fixture does not show the hanging-punctuation allowance");
         {
-            kobalt::ReaderModel parsed(kobalt::test::readerFonts());
+            kobalt::EngineDocument parsed(kobalt::test::readerFonts());
             require(cached(parsed, wide) > 0 && !parsed.openedFromCache() && parsed.saveDocumentCache(),
                     "Cannot save two columns to the document cache");
         }
-        kobalt::ReaderModel restored(kobalt::test::readerFonts());
+        kobalt::EngineDocument restored(kobalt::test::readerFonts());
         require(cached(restored, wide) == 0 && restored.openedFromCache(),
                 "A cached two-column book with an unchanged allowance was laid out again");
         require(restored.pages() == freshWide.pages(), "Cached columns changed the page count");
         for (int page : {0, restored.pages() / 2, restored.pages() - 1})
             require(restored.image(page) == freshWide.image(page), "Cached columns differ from a fresh layout");
-        kobalt::ReaderModel changed(kobalt::test::readerFonts());
+        kobalt::EngineDocument changed(kobalt::test::readerFonts());
         const int formats = cached(changed, narrow);
         require(changed.openedFromCache() && (formats > 0) == hanging,
                 "A changed allowance reused cached columns, or an unchanged one laid them out again");
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
     chapterProgress();
     cachedColumns();
     for (bool rtl : {false, true}) for (bool dark : {false, true}) for (int count : {1, 2}) {
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         const auto paragraph = QByteArray("<p>") + QByteArray("<a href='https://example.test/'>Amber</a> birch cedar dogwood elm fir. ").repeated(100) + "</p>";
         open(model, paragraph, {}, {{"columns", count}, {"dark_mode", dark}}, {1000, 800}, rtl);
         require(model.state().value("columns").toInt() == count, "Column count did not reach the model");
@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
         require(image.size() == QSize(1000, 800), "Column rendering resized the screen");
         if (count > 1) {
             const int width = (1000 - 20 * (count - 1)) / count;
-            kobalt::ReaderModel narrow(kobalt::test::readerFonts());
+            kobalt::EngineDocument narrow(kobalt::test::readerFonts());
             open(narrow, paragraph, {}, {{"columns", 1}, {"dark_mode", dark}}, {width, 800}, rtl);
             require(model.pages() == (narrow.pages() + count - 1) / count, "Column screens lost logical pages");
             for (int i = 0; i < count; ++i)
@@ -231,13 +231,13 @@ int main(int argc, char **argv) {
     }
     for (bool rtl : {false, true}) for (bool dark : {false, true}) for (bool hanging : {false, true}) for (int count : {2}) {
         const QByteArray paragraph = "<p>" + QByteArray("Amber birch cedar dogwood elm fir. ").repeated(100) + "</p>";
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         open(model, paragraph, {}, {{"columns", count}, {"hanging_punctuation", hanging}, {"margin_pixels", 40}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {1000, 800}, rtl);
         for (int gap : {0, 20, 90}) {
             require(model.applyAppearance({{"column_spacing", gap}}), "Cannot change column spacing");
             require(model.state().value("column_spacing").toInt() == gap, "Column spacing was not retained");
             const int width = (1000 - 80 - gap * (count - 1)) / count;
-            kobalt::ReaderModel narrow(kobalt::test::readerFonts());
+            kobalt::EngineDocument narrow(kobalt::test::readerFonts());
             open(narrow, paragraph, {}, {{"hanging_punctuation", hanging}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {width, 800}, rtl);
             const auto image = model.image(0);
             for (int i = 0; i < count; ++i) {
@@ -269,14 +269,14 @@ int main(int argc, char **argv) {
                 "Landscape rotation changed the column choice or spacing");
         require(model.applyAppearance({{"margin_pixels", 60}}), "Cannot change outer margins");
         require(model.applyAppearance({{"columns", 1}}), "Cannot restore one column with outer margins");
-        kobalt::ReaderModel single(kobalt::test::readerFonts());
+        kobalt::EngineDocument single(kobalt::test::readerFonts());
         open(single, paragraph, {}, {{"hanging_punctuation", hanging}, {"margin_pixels", 60}, {"top_margin_pixels", 25}, {"bottom_margin_pixels", 35}, {"dark_mode", dark}}, {1000, 800}, rtl);
         require(model.image(0) == single.image(0), "Column settings changed single-column margins");
         require(!model.applyAppearance({{"column_spacing", -1}}) &&
                     !model.applyAppearance({{"column_spacing", kobalt::maximumMarginPixels() + 1}}),
                 "Invalid column spacing was accepted");
     }
-    kobalt::ReaderModel cramped(kobalt::test::readerFonts());
+    kobalt::EngineDocument cramped(kobalt::test::readerFonts());
     open(cramped, "<p>" + QByteArray("Amber birch cedar dogwood elm fir. ").repeated(100) + "</p>", {},
          {{"columns", 2}, {"margin_pixels", 120}, {"column_spacing", 120}}, {320, 800});
     const auto crampedMatches = cramped.searchPage("Amber", 0);
@@ -287,14 +287,14 @@ int main(int argc, char **argv) {
     const QByteArray sample = "<h2>Two columns</h2><p>" + QByteArray("A reader keeps the chapter ready. Changing the size of the words should preserve the passage. We can turn the page, visit another chapter, and return to the same place. ").repeated(30) + "</p>";
     const auto captures = qEnvironmentVariable("KOBALT_TEST_COLUMN_SPACING_CAPTURE_DIR");
     for (int margin : {0, 48, 80}) {
-        kobalt::ReaderModel relative(kobalt::test::readerFonts());
+        kobalt::EngineDocument relative(kobalt::test::readerFonts());
         open(relative, sample, {}, {{"two_columns_landscape", true}, {"column_spacing_percent", 150}, {"margin_pixels", margin}}, {1000, 800});
         require(relative.state().value("columns").toInt() == 2 && relative.state().value("column_spacing").toInt() == 60,
                 "Font-relative column spacing changed with outside margins");
         if (!captures.isEmpty()) {
             require(QDir().mkpath(captures), "Cannot create spacing capture directory");
             require(relative.image(0).save(captures + QString("/font-size-margin-%1.png").arg(margin)), "Cannot save text-size sample");
-            kobalt::ReaderModel marginRelative(kobalt::test::readerFonts());
+            kobalt::EngineDocument marginRelative(kobalt::test::readerFonts());
             open(marginRelative, sample, {}, {{"columns", 2}, {"column_spacing", qRound(margin * 1.5)}, {"margin_pixels", margin}}, {1000, 800});
             require(marginRelative.image(0).save(captures + QString("/page-margin-%1.png").arg(margin)), "Cannot save margin-relative sample");
         }

@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QDir>
 #include <QGuiApplication>
 #include <QMap>
@@ -13,7 +13,7 @@ struct Probe {
     QRect rect;
 };
 
-Probe marker(kobalt::ReaderModel &model, const QString &text) {
+Probe marker(kobalt::EngineDocument &model, const QString &text) {
     QVector<kobalt::SearchHit> hits;
     for (int page = 0; page < model.pages(); ++page) {
         const auto batch = model.searchPage(text, page);
@@ -28,7 +28,7 @@ Probe marker(kobalt::ReaderModel &model, const QString &text) {
     return {hits.first().page, rect};
 }
 
-void openFixture(kobalt::ReaderModel &model, const QJsonObject &settings = {}, const QByteArray &content = {},
+void openFixture(kobalt::EngineDocument &model, const QJsonObject &settings = {}, const QByteArray &content = {},
                  const QByteArray &publisherCss = {}) {
     QMap<QString, QByteArray> data{
         {"mimetype", "application/epub+zip"},
@@ -63,7 +63,7 @@ void openFixture(kobalt::ReaderModel &model, const QJsonObject &settings = {}, c
 }
 
 QImage checkFraction() {
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     openFixture(model);
     const auto fractionBegin = marker(model, QStringLiteral("MATH-FRACTION-BEGIN"));
     const auto fractionEnd = marker(model, QStringLiteral("MATH-FRACTION-END"));
@@ -104,14 +104,14 @@ void checkMathFonts(const QString &captureDirectory) {
         for (const bool dark : {false, true}) {
             const auto settings = kobalt::qt::object(
                 {{"font_pixels", kobalt::defaultFontPixels()}, {"font_face", ""}, {"dark_mode", dark}});
-            kobalt::ReaderModel reference(kobalt::test::readerFonts());
+            kobalt::EngineDocument reference(kobalt::test::readerFonts());
             reference.setUserStyleSheet("math, math * { font-family: 'Noto Sans Math' !important; }");
             openFixture(reference, settings, formula);
             const auto expected = reference.image(0);
             for (const auto &face : {QString(), QStringLiteral("Libron"), QStringLiteral("NV Bitter")}) {
                 auto selected = settings;
                 selected["font_face"] = face;
-                kobalt::ReaderModel model(kobalt::test::readerFonts());
+                kobalt::EngineDocument model(kobalt::test::readerFonts());
                 openFixture(model, selected, formula);
                 if (!captureDirectory.isEmpty()) {
                     const auto name = QString("%1/actual-%2-%3-%4.png")
@@ -128,7 +128,7 @@ void checkMathFonts(const QString &captureDirectory) {
                             model.applyAppearance(kobalt::qt::object({{"font_face", ""}})) &&
                             model.image(0) == expected,
                         "Changing the reading font lost MathML font selection");
-                kobalt::ReaderModel preview(model.fontInputs());
+                kobalt::EngineDocument preview(model.fontInputs());
                 QString error;
                 require(preview.openPreview(model, model.viewport(), &error), qPrintable(error));
                 require(preview.image(0) == expected, "Appearance preview lost MathML font selection");
@@ -143,14 +143,14 @@ void checkMathFonts(const QString &captureDirectory) {
     kobalt::readingPpi.store(previousPpi);
 
     const auto publisher = kobalt::qt::object({{"font_face", ""}});
-    kobalt::ReaderModel generic(kobalt::test::readerFonts()), explicitMath(kobalt::test::readerFonts());
+    kobalt::EngineDocument generic(kobalt::test::readerFonts()), explicitMath(kobalt::test::readerFonts());
     const QByteArray symbols("<p style='font-family:math'>∀∈∂∇→∑∫</p>");
     explicitMath.setUserStyleSheet("p { font-family: 'Noto Sans Math' !important; }");
     openFixture(generic, publisher, symbols);
     openFixture(explicitMath, publisher, symbols);
     require(generic.image(0) == explicitMath.image(0), "CSS math family did not resolve to Noto Sans Math");
 
-    kobalt::ReaderModel named(kobalt::test::readerFonts()), namedReference(kobalt::test::readerFonts()),
+    kobalt::EngineDocument named(kobalt::test::readerFonts()), namedReference(kobalt::test::readerFonts()),
         defaultMath(kobalt::test::readerFonts());
     const QByteArray namedCss("math, math * { font-family: 'Noto Serif'; }");
     namedReference.setUserStyleSheet("math, math * { font-family: 'Noto Serif' !important; }");

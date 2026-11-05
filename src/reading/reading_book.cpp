@@ -48,7 +48,7 @@ bool skipsLayoutMemory(storage::ReadStatus status) {
 ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePath, storage::Paths paths,
                          QString identity, QByteArray digest, std::unique_ptr<ReadingBridge> bridge,
                          ReadingProgress baseline, ReadingProgress diskBaseline, QString sourceKey, ReadingHistory::UtcClock utc)
-    : model(std::move(session)), statePath(std::move(statePath)), identity_(std::move(identity)),
+    : session_(std::move(session)), statePath(std::move(statePath)), identity_(std::move(identity)),
       paths_(std::move(paths)), digest(std::move(digest)), bridge(std::move(bridge)),
       nativeCloudSync(this->bridge && !identity_.startsWith("file:///")), baseline(std::move(baseline)),
       reconciliation(std::move(diskBaseline)) {
@@ -84,7 +84,7 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     appearanceFailed.invalidate();
     if (annotationDatabaseEnabled())
         history = std::make_unique<ReadingHistory>(paths_.directory, identity_, this->digest, std::move(sourceKey),
-                                                   model->title(), model->author(), this->utc);
+                                                   session_->title(), session_->author(), this->utc);
     if (!this->bridge) {
         speed = std::make_unique<ReadingSpeed>();
         speed->restore(storage::readRecord(paths_.directory, "reading-speed", paths_.readingSpeed()).object);
@@ -166,12 +166,12 @@ void ReadingBook::observeReading(bool learnPace) {
         stopReading(true);
         return;
     }
-    if (model->renderProgress().active) {
+    if (session_->renderProgress().active) {
         pauseLocalPace();
     }
-    if (model->busy())
+    if (session_->busy())
         return;
-    if (model->image().isNull() || !model->error().isEmpty()) {
+    if (session_->image().isNull() || !session_->error().isEmpty()) {
         stopReading(true);
         return;
     }
@@ -180,14 +180,14 @@ void ReadingBook::observeReading(bool learnPace) {
             const auto now = utc();
             if (sleepingTimeout > 0 && now >= sleepingAt && now - sleepingAt >= sleepingTimeout) {
                 if (history)
-                    history->stop(completedReadingMilliseconds, model->state().value("position").toString());
+                    history->stop(completedReadingMilliseconds, session_->state().value("position").toString());
                 sessionBaseline = completedReadingMilliseconds;
             }
         }
         sleepingReading = false;
         activeReading.start();
         if (history) {
-            history->start(completedReadingMilliseconds, model->state().value("position").toString());
+            history->start(completedReadingMilliseconds, session_->state().value("position").toString());
         }
     }
     if (speed) {
@@ -202,15 +202,15 @@ void ReadingBook::observeReading(bool learnPace) {
 }
 ReadingActivity ReadingBook::readingActivity() const {
     QString error;
-    const auto nativePosition = model->savedNativePosition(&error);
-    return {model->state().value("position").toString(),
-            100.0 * model->page() / qMax(1, model->pages()),
-            model->page(),
-            model->pages(),
-            model->turnDirection(),
-            model->totalWords(),
-            model->chapterGraph(),
-            model->graphSelection(),
+    const auto nativePosition = session_->savedNativePosition(&error);
+    return {session_->state().value("position").toString(),
+            100.0 * session_->page() / qMax(1, session_->pages()),
+            session_->page(),
+            session_->pages(),
+            session_->turnDirection(),
+            session_->totalWords(),
+            session_->chapterGraph(),
+            session_->graphSelection(),
             error.isEmpty() ? nativePosition : QString()};
 }
 ReadingEstimates ReadingBook::estimates() const {
@@ -223,8 +223,8 @@ ReadingEstimates ReadingBook::estimates() const {
             return result;
     }
     const auto reading = readingMilliseconds();
-    const int chapterLeft = model->chapterPages() > 0 ? model->chapterPages() - model->chapterPage() + 1 : -1;
-    return {pace_.estimate(chapterLeft, reading), pace_.estimate(model->pages() - model->page(), reading),
+    const int chapterLeft = session_->chapterPages() > 0 ? session_->chapterPages() - session_->chapterPage() + 1 : -1;
+    return {pace_.estimate(chapterLeft, reading), pace_.estimate(session_->pages() - session_->page(), reading),
             pace_.estimate(0, reading) < 0};
 }
 void ReadingBook::sleepReading(const QJsonObject &preferences) {
@@ -243,7 +243,7 @@ void ReadingBook::stopReading(bool background, bool nativeAllowed) {
     }
     // Freeze the duration before history work so both use the same boundary.
     if (history) {
-        const auto position = model->state().value("position").toString();
+        const auto position = session_->state().value("position").toString();
         if (sleepingReading)
             history->pause(completedReadingMilliseconds, position);
         else
@@ -264,7 +264,7 @@ bool ReadingBook::checkpointReadingHistory(bool background) {
     if (!history)
         return true;
     if (activeReading.isValid())
-        history->update(readingMilliseconds(), model->state().value("position").toString());
+        history->update(readingMilliseconds(), session_->state().value("position").toString());
     return history->save(background);
 }
 struct ReadingBook::ActivitySave {
@@ -289,7 +289,7 @@ void ReadingBook::saveReadingActivity(bool durable) {
     for (const auto *key : appearance::marginKeys) save->persisted.remove(key);
     if (speed && speed->dirty()) save->speed = speed->state();
     if (history) {
-        if (activeReading.isValid()) history->update(readingMilliseconds(), model->state().value("position").toString());
+        if (activeReading.isValid()) history->update(readingMilliseconds(), session_->state().value("position").toString());
         save->history = history->snapshot();
     }
     save->durable = durable;
@@ -370,7 +370,7 @@ void ReadingBook::resumeActivityCheckpoints() {
     }, Qt::QueuedConnection);
 }
 void ReadingBook::rememberAppearance() {
-    if (model->temporaryTypography()) return;
+    if (session_->temporaryTypography()) return;
     const auto state = checkpointState();
     QJsonObject appearance;
     appearance::rememberTextLayout(appearance, state);
@@ -426,7 +426,7 @@ void ReadingBook::writeAppearance(int attempt) {
     });
 }
 void ReadingBook::appearanceCheckpointSaved(const QJsonObject &state) {
-    if (model->temporaryTypography()) return;
+    if (session_->temporaryTypography()) return;
     rememberedAppearance = {};
     appearance::rememberTextLayout(rememberedAppearance, state);
     appearance::rememberPageMargins(rememberedAppearance, state);
@@ -473,19 +473,19 @@ bool ReadingBook::offerFinish() const {
     return !finishPromptSuppressed && canFinish();
 }
 bool ReadingBook::canFinish() const {
-    if (released || (bridge && !bridge->writable()) || model->busy() || model->pages() <= 0 ||
-        !model->error().isEmpty())
+    if (released || (bridge && !bridge->writable()) || session_->busy() || session_->pages() <= 0 ||
+        !session_->error().isEmpty())
         return false;
-    const auto anchor = model->state().value("position").toString();
+    const auto anchor = session_->state().value("position").toString();
     if (anchor.isEmpty() || anchor == acceptedFinishedAnchor)
         return false;
     // Nickel asks on exit at 90%. Include the final page of very short books,
     // and the last page of the text before trailing non-linear sections.
-    return model->page() * 10 >= model->pages() * 9 || model->nextPage() == model->page();
+    return session_->page() * 10 >= session_->pages() * 9 || session_->nextPage() == session_->page();
 }
 void ReadingBook::markFinished() {
     if (canFinish())
-        acceptedFinishedAnchor = model->state().value("position").toString();
+        acceptedFinishedAnchor = session_->state().value("position").toString();
 }
 ReadingProgress ReadingBook::readProgress() const {
     return bridge ? bridge->read() : ReadingProgress{};
@@ -523,7 +523,7 @@ void ReadingBook::pollProgress() {
 void ReadingBook::acknowledge(const ReadingProgress &shown, bool moved) {
     reconciliation.acknowledge(shown);
     baseline = reconciliation.baseline();
-    acceptedFinishedAnchor = moved && shown.status == 2 ? model->state().value("position").toString() : QString();
+    acceptedFinishedAnchor = moved && shown.status == 2 ? session_->state().value("position").toString() : QString();
 }
 void ReadingBook::markNativeReading() {
     if (std::exchange(openingStatusAttempted, true)) return;
@@ -560,9 +560,9 @@ bool ReadingBook::writeNative(const QString &location, const QString &mappingErr
             return false;
         if (reconciliation.mayWrite(current)) {
             ReadingProgress verified;
-            const double percent = 100.0 * model->page() / qMax(1, model->pages());
+            const double percent = 100.0 * session_->page() / qMax(1, session_->pages());
             const bool preserveFinished = !acceptedFinishedAnchor.isEmpty() &&
-                                          acceptedFinishedAnchor == model->state().value("position").toString();
+                                          acceptedFinishedAnchor == session_->state().value("position").toString();
             diagnostic("native-save-start");
             if (bridge->write(current, timeOnly ? QString() : location, percent, preserveFinished, readingActivity(),
                               &verified, &error)) {
@@ -636,7 +636,7 @@ bool ReadingBook::rememberImageView(const QString &id, const QJsonObject &view) 
     return true;
 }
 QJsonObject ReadingBook::checkpointState() const {
-    auto state = model->state();
+    auto state = session_->state();
     state["book"] = identity_;
     state["fingerprint"] = QString::fromLatin1(digest);
     for (auto it = layoutPreferences_.begin(); it != layoutPreferences_.end(); ++it)
@@ -650,8 +650,8 @@ QJsonObject ReadingBook::checkpointState() const {
     if (!imageViews.isEmpty()) state["image_views"] = imageViews;
     // For the Android and desktop library, which shows progress without
     // opening the book.
-    if (model->pages() > 0)
-        state["percent"] = pageProgressPercent(model->page(), model->pages());
+    if (session_->pages() > 0)
+        state["percent"] = pageProgressPercent(session_->page(), session_->pages());
     state["native_writeback"] = nativeWriteback;
     state["sync_pending"] = reconciliation.pending();
     state["native_writeback_error"] = nativeWritebackError;
@@ -664,8 +664,8 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const {
     if (dictionaryChoice_.isEmpty())
         checkpoint.remove("dictionary_id");
     if (imageViews.isEmpty()) checkpoint.remove("image_views");
-    if (model->temporaryTypography())
-        appearance::copy(checkpoint, model->persistentState());
+    if (session_->temporaryTypography())
+        appearance::copy(checkpoint, session_->persistentState());
     // These describe the displayed frame, not a saved reading position. Drop
     // them from imported records too, before comparing checkpoints or applying
     // the record's byte limit. Diagnostic snapshots above keep the full frame.
@@ -755,7 +755,7 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background) {
     const auto historySnapshot = history ? history->snapshot() : ReadingHistory::Snapshot();
     const auto speedState = speed && speed->dirty() ? speed->state() : QJsonObject();
     const bool saved = writer->writeNow([paths = paths_, identity = identity_, persisted, path = statePath, state,
-                                         rememberAppearance = !model->temporaryTypography(), historySnapshot, speedState, &layoutSaved] {
+                                         rememberAppearance = !session_->temporaryTypography(), historySnapshot, speedState, &layoutSaved] {
         const bool ok = storage::writeReadingActivity(paths, identity, persisted, speedState, historySnapshot.write, path);
         if (historySnapshot.complete) historySnapshot.complete(ok);
         if (!ok)
@@ -808,7 +808,7 @@ void ReadingBook::checkpointForClose(std::function<void(bool)> done) {
         persisted.remove(key);
     for (const auto *key : appearance::marginKeys)
         persisted.remove(key);
-    const bool rememberAppearance = !model->temporaryTypography();
+    const bool rememberAppearance = !session_->temporaryTypography();
     const bool writeSpeed = speed && speed->dirty();
     const auto speedState = writeSpeed ? speed->state() : QJsonObject();
     if (history && activeReading.isValid()) history->update(readingMilliseconds(), state.value("position").toString());

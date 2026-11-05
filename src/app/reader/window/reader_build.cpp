@@ -174,7 +174,7 @@ ChapterHeader::ChapterHeader(QWidget *parent) : QPushButton(parent) {
 Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOrientation *orientation,
                kobalt::ReaderHostServices hostServices)
     : ReaderWindow(nullptr, Qt::Window | Qt::FramelessWindowHint), services(std::move(hostServices)),
-      book(std::move(openedBook)), model(book->session()), orientation(orientation) {
+      book(std::move(openedBook)), session(book->session()), orientation(orientation) {
     Q_ASSERT(services.complete());
     building.start();
     // Qt 5.2 leaves default-constructed timers looking valid.
@@ -213,10 +213,10 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
     // replace.
     const bool settingsReadable = savedSettings.status == kobalt::storage::ReadStatus::Ok ||
                                   savedSettings.status == kobalt::storage::ReadStatus::Missing;
-    if (settingsReadable && !model->temporaryTypography()) {
+    if (settingsReadable && !session->temporaryTypography()) {
         auto global = appearance::globalPreferences(preferences);
-        appearance::rememberTextLayout(global, model->state());
-        appearance::rememberPageMargins(global, model->state());
+        appearance::rememberTextLayout(global, session->state());
+        appearance::rememberPageMargins(global, session->state());
         if (global != savedSettings.object) {
             // The shared settings must be on disk before the reader uses them.
             // The window is still being built, so no input can arrive.
@@ -226,17 +226,17 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
         }
     }
     bookmarks = std::make_unique<kobalt::BookmarkSession>(
-        *model,
+        *session,
         [this] {
             return layoutKey();
         },
-        book->paths().annotations(), book->identity(), book->fingerprint(), model->title(), book->paths().database());
+        book->paths().annotations(), book->identity(), book->fingerprint(), session->title(), book->paths().database());
     highlights = std::make_unique<kobalt::HighlightSession>(
-        *model,
+        *session,
         [this] {
             return layoutKey();
         },
-        book->paths().annotations(), book->identity(), book->fingerprint(), model->title(), book->paths().database());
+        book->paths().annotations(), book->identity(), book->fingerprint(), session->title(), book->paths().database());
     highlights->changed = [this] {
         syncMarkupRequest();
         annotationFrame.clear();
@@ -292,7 +292,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
     settingsDictionaryFontFace = preferences.value("dictionary_font_face").toString();
     settingsDictionaryFontSize = preferences.value("dictionary_font_size").toInt(100);
     for (auto *face : {&settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace, &settingsDictionaryFontFace}) {
-        if (!model->fontFaces().contains(*face))
+        if (!session->fontFaces().contains(*face))
             face->clear();
         if (!face->isEmpty())
             registerPickerFonts(*face);
@@ -365,16 +365,16 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
     });
     // Keep the displayed page untouched while a turn renders. Refreshing
     // at request time sends the old page to the panel a second time.
-    this->model->updated = [this] {
+    this->session->updated = [this] {
         refresh();
     };
-    this->model->renderProgressChanged = [this] {
-        if (model->renderProgress().active) {
+    this->session->renderProgressChanged = [this] {
+        if (session->renderProgress().active) {
             book->pauseLocalPace();
         }
         refreshRenderNotice();
     };
-    this->model->turnBoundary = [this](int direction) {
+    this->session->turnBoundary = [this](int direction) {
         turnPage(direction, 0, false);
     };
     connect(QGuiApplication::primaryScreen(), &QScreen::geometryChanged, this, [this](const QRect &geometry) {
@@ -415,7 +415,7 @@ void Reader::buildReadingPage() {
         registerEditorFont(font);
     };
     dictionaryPanel->setDefinitionFont(settingsDictionaryFontFace, settingsDictionaryFontSize);
-    dictionaryPanel->setLanguage(model->state().value("language").toString());
+    dictionaryPanel->setLanguage(session->state().value("language").toString());
     dictionaryPanel->dismissed = [this] {
         dismissDictionary();
     };
@@ -460,23 +460,23 @@ void Reader::buildReadingPage() {
     linkReturn->setFixedSize(m::links::returnWidth, m::links::returnHeight);
     linkReturn->hide();
     connect(linkReturn, &QPushButton::clicked, this, [this] {
-        if (this->model->busy() || linkHistory.isEmpty() || lifecycleHidden || closing || services.suspended()) {
+        if (this->session->busy() || linkHistory.isEmpty() || lifecycleHidden || closing || services.suspended()) {
             return;
         }
         dismissLookup();
         dismissControls();
         returningFromLink = true;
-        this->model->goTo(linkHistory.last().position);
+        this->session->goTo(linkHistory.last().position);
         refresh();
     });
     searchPanel = new kobalt::SearchPanel(this, services.keyboard);
     searchPanel->requested = [this](const QString &query) {
         const auto epoch = ++searchEpoch;
         QPointer<Reader> guard(this);
-        this->model->search(query, [guard, epoch](kobalt::SearchBatch batch) {
+        this->session->search(query, [guard, epoch](kobalt::SearchBatch batch) {
             if (!guard || guard->searchEpoch != epoch || guard->lifecycleHidden)
                 return;
-            guard->searchPanel->append(batch, guard->model->pages());
+            guard->searchPanel->append(batch, guard->session->pages());
         });
     };
     searchPanel->dismissed = [this] {
@@ -486,12 +486,12 @@ void Reader::buildReadingPage() {
         // Returning ends the search trip; the next search starts from here.
         const auto start = std::exchange(searchOriginal, QString());
         closeSearch();
-        this->model->goTo(start);
+        this->session->goTo(start);
     };
     searchPanel->selected = [this](kobalt::SearchHit hit) {
         closeSearch();
         pendingSearchHit = hit;
-        this->model->goTo(hit.start);
+        this->session->goTo(hit.start);
     };
     page->held = [this](QPoint point) {
         if (beginAnnotationDrag(point, -1))
@@ -512,13 +512,13 @@ void Reader::buildReadingPage() {
         updateOrientationBlock();
     };
     page->imageHeld = [this](QPoint point) {
-        if (model->busy() || lifecycleHidden || closing || exitPending || exportRunning || annotationSaving ||
+        if (session->busy() || lifecycleHidden || closing || exitPending || exportRunning || annotationSaving ||
             services.suspended() || book->deviceTransition() ||
             appearanceEdit.panelOpen() || general->isVisible() || searchPanel->isVisible() ||
             linksActive() || !pageImageAtPoint(page->image, point))
             return false;
         // Small image-only note references keep their link/selection behavior.
-        for (const auto &link : model->pageLinks())
+        for (const auto &link : session->pageLinks())
             if (link.kind == LinkKind::Footnote)
                 for (const auto &rect : link.rectangles)
                     if (rect.contains(point)) return false;
@@ -532,7 +532,7 @@ void Reader::buildReadingPage() {
         updateOrientationBlock();
         const auto request = ++imageRequest;
         QPointer<Reader> guard(this);
-        model->imageAt(point, [guard, request](QImage image) {
+        session->imageAt(point, [guard, request](QImage image) {
             if (guard && guard->imageRequest == request && guard->imageViewer->isVisible() &&
                 !guard->lifecycleHidden && !guard->closing) {
                 const auto id = image.text("kobalt.image_id");
@@ -550,7 +550,7 @@ void Reader::buildReadingPage() {
 void Reader::startClockTimer() {
     book->onEstimatesChanged([this] {
         // A pending page already picks up the new pace in its normal paint.
-        if (closing || lifecycleHidden || model->busy() || turnPainted || !isVisible() || services.suspended()) {
+        if (closing || lifecycleHidden || session->busy() || turnPainted || !isVisible() || services.suspended()) {
             return;
         }
         if (chapterGraph->isVisible()) {
@@ -750,7 +750,7 @@ void Reader::buildToolbar() {
                    ControlIcon::FileWarning, [this] {
                        showFormattingWarning();
                    });
-    toolbarComposition.formattingWarning->setVisible(model->formattingWarning());
+    toolbarComposition.formattingWarning->setVisible(session->formattingWarning());
 
     toolbarComposition.settings = iconButton(topControls, top, "rrSettings", strings::get("reader.reader_settings"),
                                              ControlIcon::Settings, [this] {
@@ -817,25 +817,25 @@ void Reader::buildBottomControls() {
         if (closing || lifecycleHidden || services.suspended())
             return;
         QPointer<kobalt::ui::PageScrubber> scrubber(pageScrubber);
-        model->previewPage(target, bounds, [scrubber, target](QImage image) {
+        session->previewPage(target, bounds, [scrubber, target](QImage image) {
             if (scrubber)
                 scrubber->setPreview(target, std::move(image));
         });
     };
     pageScrubber->cancelled = [this] {
-        model->cancelPagePreview();
+        session->cancelPagePreview();
         seekOpen = false;
     };
     pageScrubber->accepted = [this](int target) {
-        if (model->busy() || closing || lifecycleHidden || services.suspended())
+        if (session->busy() || closing || lifecycleHidden || services.suspended())
             return;
-        if (target == model->page()) {
+        if (target == session->page()) {
             dismissControls();
             return;
         }
-        const LinkVisit origin{model->state().value("position").toString(), model->page(),
-                               model->chapterTitle().toUpper()};
-        if (!model->go(target))
+        const LinkVisit origin{session->state().value("position").toString(), session->page(),
+                               session->chapterTitle().toUpper()};
+        if (!session->go(target))
             return;
         pendingPassage = origin;
         flashAfterPagePreview = true;
@@ -1033,7 +1033,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     });
     sizeSlider->committed = [this](int value) {
         const int pixels = kobalt::halfPointPixels(value);
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || pixels != settings->fontSize())
             mutateAppearance([pixels](ReaderSession &preview) {
                 preview.style(pixels, preview.spacing());
@@ -1044,7 +1044,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
             ->setText(strings::get("reader.text_size_value").arg(QString::number(value / 2.0, 'f', value % 2)));
     });
     opticalSizeSlider->committed = [this](int value) {
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || value != settings->opticalSize())
             mutateAppearance([value](ReaderSession &preview) {
                 preview.setOpticalSize(value);
@@ -1055,14 +1055,14 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
             ->setText(strings::get("reader.text_size_value").arg(QString::number(value)));
     });
     weightSlider->committed = [this](int value) {
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || value != settings->thickness())
             mutateAppearance([value](ReaderSession &preview) {
                 preview.setThickness(value);
             });
     };
     variableWeightSlider->committed = [this](int value) {
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || value != settings->weight())
             mutateAppearance([value](ReaderSession &preview) {
                 preview.setWeight(value);
@@ -1072,7 +1072,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
         findChild<QLabel *>("rrVariableFontWeightValue")->setText(QString::number(value));
     });
     spacingSlider->committed = [this](int value) {
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || value != settings->spacing())
             mutateAppearance([value](ReaderSession &preview) {
                 preview.style(preview.fontSize(), value);
@@ -1080,7 +1080,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     };
     marginSlider->committed = [this](int value) {
         const int pixels = kobalt::readingPixels(value);
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || pixels != settings->margin())
             mutateAppearance([pixels](ReaderSession &preview) {
                 preview.style(preview.fontSize(), preview.spacing(), preview.fontFace(), pixels);
@@ -1088,7 +1088,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     };
     verticalMarginSlider->committed = [this](int value) {
         const int pixels = kobalt::readingPixels(value);
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (appearanceEdit.queued() || pixels != settings->topMargin() || pixels != settings->bottomMargin())
             mutateAppearance([pixels](ReaderSession &preview) {
                 preview.setVerticalMargins(pixels);
@@ -1097,7 +1097,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     for (auto *button : alignmentButtons) {
         const QString value = button->property("alignment").toString();
         connect(button, &QPushButton::clicked, this, [this, value] {
-            const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+            const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
             if (appearanceEdit.queued() || value != settings->alignment())
                 mutateAppearance([value](ReaderSession &preview) {
                     preview.style(preview.fontSize(), preview.spacing(), preview.fontFace(), preview.margin(), value);
@@ -1107,7 +1107,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     for (auto *button : hyphenButtons) {
         const QString value = button->property("hyphenation").toString();
         connect(button, &QPushButton::clicked, this, [this, value] {
-            const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+            const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
             if (appearanceEdit.queued() || value != settings->hyphenation())
                 mutateAppearance([value](ReaderSession &preview) {
                     preview.setHyphenation(value);
@@ -1126,7 +1126,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
                                 {"current_orientation", int(orientation->manual())},
                                 {"width", width()},
                                 {"height", height()},
-                                {"main_busy", model->busy()},
+                                {"main_busy", session->busy()},
                                 {"preview_busy", appearanceEdit.preview() && appearanceEdit.preview()->busy()},
                                 {"updates_enabled", updatesEnabled()},
                                 {"resize_pending", resizePending}},
@@ -1136,7 +1136,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
                                {{"target_orientation", value},
                                 {"width", width()},
                                 {"height", height()},
-                                {"main_busy", model->busy()},
+                                {"main_busy", session->busy()},
                                 {"preview_busy", appearanceEdit.preview() && appearanceEdit.preview()->busy()},
                                 {"updates_enabled", updatesEnabled()},
                                 {"resize_pending", resizePending}},
@@ -1171,7 +1171,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
     for (auto *card : presetCards) {
         const auto preset = card->preset();
         connect(card, &QPushButton::clicked, this, [this, preset] {
-            if (model->temporaryTypography()) {
+            if (session->temporaryTypography()) {
                 syncChromeControls();
                 return;
             }
@@ -1188,7 +1188,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
             [this, slot] {
                 if (chromePreset != kobalt::headerfooter::Preset::Custom) {
                     const auto start = page->chrome;
-                    if (model->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &start))
+                    if (session->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &start))
                         return;
                 }
                 openFieldChooser(slot);
@@ -1203,7 +1203,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
             [this, edit] {
                 auto custom = page->chrome;
                 edit(custom);
-                if (model->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &custom))
+                if (session->temporaryTypography() || !saveChrome(kobalt::headerfooter::Preset::Custom, &custom))
                     syncChromeControls();
             },
             [this] {
@@ -1217,7 +1217,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout) {
             (footer ? text.footerEnabled : text.headerEnabled) = value != kobalt::headerfooter::offSize;
             if (value != kobalt::headerfooter::offSize)
                 (footer ? text.footerSize : text.headerSize) = value;
-            if (model->temporaryTypography() || !saveChrome(chromePreset, nullptr, &text))
+            if (session->temporaryTypography() || !saveChrome(chromePreset, nullptr, &text))
                 syncChromeControls();
         };
     }
@@ -1300,8 +1300,8 @@ void Reader::buildSettings() {
     if (services.downloadableDictionaries) {
         auto *manager = static_cast<kobalt::DictionaryManager *>(dictionary.get());
         auto *dictionarySettings = settings->dictionaries;
-        dictionarySettings->setLanguage(model->state().value("language").toString());
-        manager->setLanguage(model->state().value("language").toString());
+        dictionarySettings->setLanguage(session->state().value("language").toString());
+        manager->setLanguage(session->state().value("language").toString());
         const auto catalog = kobalt::DictionaryManager::catalog();
         dictionarySettings->setCatalog(catalog);
         auto updateDictionaries = [this, manager, dictionarySettings, catalog, previous = QSet<QString>{},
@@ -1397,7 +1397,7 @@ void Reader::buildSettings() {
             stylingChoice(int(SettingsPanel::AdvancedText::Tracking)), [this](int index) {
             settingsTracking = index == 2 ? 15 : index == 1 ? 5 : 0;
             showAdvancedText(int(SettingsPanel::AdvancedText::Tracking));
-        }, model->alignment());
+        }, session->alignment());
     });
     connect(settings->hangingPunctuationButton, &QPushButton::clicked, this, [this, settings] {
         settings->showAdvancedTextChoices(SettingsPanel::AdvancedText::HangingPunctuation,
@@ -1607,7 +1607,7 @@ void Reader::connectLightGestures() {
     lightFeedback.setInterval(m::lightSwipe::feedbackMilliseconds);
     connect(&lightFeedback, &QTimer::timeout, this, [this] {
         if (lightFeedbackLevel < 0 || !takesInput() || book->deviceTransition() || annotationMode ||
-            model->busy() || general->isVisible() || topControls->isVisible() || appearanceEdit.panelOpen() ||
+            session->busy() || general->isVisible() || topControls->isVisible() || appearanceEdit.panelOpen() ||
             choices->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive() ||
             lookupPending || syncDialog || kosyncDialog || finishDialog || lightPopup->isVisible())
             return;
@@ -1618,7 +1618,7 @@ void Reader::connectLightGestures() {
             brightnessHide.start();
     });
     page->lightStarted = [this](bool warmth) {
-        if (annotationMode || !isVisible() || services.suspended() || book->deviceTransition() || this->model->busy() ||
+        if (annotationMode || !isVisible() || services.suspended() || book->deviceTransition() || this->session->busy() ||
             appearanceEdit.preview() || general->isVisible() || topControls->isVisible() || choices->isVisible() ||
             dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive() || lookupPending || syncDialog || kosyncDialog ||
             finishDialog || applyingText || lightPopup->isVisible() || exitPending)
@@ -1726,7 +1726,7 @@ void Reader::connectPageInput() {
     page->annotationDragFinished = [this](bool cancelled) { finishAnnotationDrag(cancelled); };
     page->annotationRequested = [this] {
         if (annotationMode || !isEnabled() || !isVisible() || lifecycleHidden || closing || exitPending ||
-            exportRunning || services.suspended() || book->deviceTransition() || model->busy() ||
+            exportRunning || services.suspended() || book->deviceTransition() || session->busy() ||
             appearanceEdit.panelOpen() || appearanceEdit.applying() || general->isVisible() || choices->isVisible() ||
             topControls->isVisible() || revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible() ||
             linksActive() || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible() ||
@@ -1757,7 +1757,7 @@ void Reader::connectPageInput() {
             lookupPending || appearanceEdit.preview() || general->isVisible() || choices->isVisible() ||
             topControls->isVisible())
             return;
-        turnPage(model->state().value("page_progression_rtl").toBool() ? -direction : direction, page->gestureTimestamp());
+        turnPage(session->state().value("page_progression_rtl").toBool() ? -direction : direction, page->gestureTimestamp());
     };
     page->tapped = [this](QPoint point) {
         const QPoint bodyPoint = point - QPoint(0, page->topHeight());
@@ -1825,7 +1825,7 @@ void Reader::connectPageInput() {
         }
         const int direction = action == tapZones::Action::Previous ? -1 : 1;
         const bool reverse =
-            layout == tapZones::Layout::LeftRight && model->state().value("page_progression_rtl").toBool();
+            layout == tapZones::Layout::LeftRight && session->state().value("page_progression_rtl").toBool();
         turnPage(reverse ? -direction : direction, page->gestureTimestamp());
     };
 }
@@ -1833,7 +1833,7 @@ void Reader::connectPageInput() {
 void Reader::showFontPicker() {
     if (!appearanceEdit.panelOpen() || panels->currentIndex() != 0)
         return;
-    const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+    const auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
     diagnostic("font-picker-open", {}, false);
     QVector<Choice> items{
         {strings::get("reader.publisher_fonts"), QString(), "rrFontChoice0", strings::get("reader.recommended_fonts")}};
@@ -1910,7 +1910,7 @@ void Reader::showFontPicker() {
         showFontDefaultDialog(face, instructions);
     };
     choices->selected = [this](const QString &face) {
-        const auto *current = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : model;
+        const auto *current = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
         if (!appearanceEdit.queued() && face == current->fontFace())
             return;
         diagnostic("font-preview-request", {}, false);

@@ -1,7 +1,7 @@
 #include "check.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QFile>
@@ -10,7 +10,7 @@
 #include <QTemporaryDir>
 #include <cstdio>
 
-using kobalt::ReaderModel;
+using kobalt::EngineDocument;
 namespace {
 const QSize portrait(800, 1136), landscape(1136, 800);
 QByteArray pixels(const QImage &image) {
@@ -18,7 +18,7 @@ QByteArray pixels(const QImage &image) {
     return QCryptographicHash::hash(QByteArray::fromRawData(reinterpret_cast<const char *>(image.constBits()),
                                                           image.sizeInBytes()), QCryptographicHash::Sha256);
 }
-void open(ReaderModel &model, const kobalt::test::BookFiles &files, QJsonObject settings = {}, QSize size = portrait) {
+void open(EngineDocument &model, const kobalt::test::BookFiles &files, QJsonObject settings = {}, QSize size = portrait) {
     QMap<QString, qint64> sizes;
     for (auto it = files.cbegin(); it != files.cend(); ++it)
         sizes[it.key()] = it.value().size();
@@ -30,7 +30,7 @@ void open(ReaderModel &model, const kobalt::test::BookFiles &files, QJsonObject 
     QString error;
     require(model.openResources(resources, sizes, size, settings, &error), qPrintable(error));
 }
-int reflow(ReaderModel &model, QSize size, QJsonObject settings = {}) {
+int reflow(EngineDocument &model, QSize size, QJsonObject settings = {}) {
     int formats = 0;
     require(model.applyAppearance(settings, size, [&](kobalt::OpeningStage stage, int percent) {
         if (stage == kobalt::OpeningStage::Pages && percent == 0) ++formats;
@@ -38,7 +38,7 @@ int reflow(ReaderModel &model, QSize size, QJsonObject settings = {}) {
     return formats;
 }
 void compareWithReflow(const kobalt::test::BookFiles &files, const QJsonObject &settings = {}) {
-    ReaderModel reused(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
+    EngineDocument reused(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
     open(reused, files, settings);
     open(fresh, files, settings);
     require(reused.go(reused.pages() / 2) && fresh.goTo(reused.position()), "Cannot place comparison readers");
@@ -60,7 +60,7 @@ void compareWithReflow(const kobalt::test::BookFiles &files, const QJsonObject &
 }
 // Opt-in engine micro-measurement, with loading, pagination and paint separated.
 // End-to-end performance scenarios remain in platforms/eval/scenarios.json.
-void measureLayouts(ReaderModel &model, double loadMs) {
+void measureLayouts(EngineDocument &model, double loadMs) {
     require(model.go(model.pages() / 2), "Cannot position timing book");
     auto sample = [&](QSize size, const char *label, bool cold) {
         if (cold) model.releaseImages();
@@ -86,14 +86,14 @@ void measureLayouts(ReaderModel &model, double loadMs) {
         sample(portrait, "portrait-cold", true);
     }
 }
-void roundTrip(ReaderModel &model) {
+void roundTrip(EngineDocument &model) {
     require(model.go(model.pages() / 2), "Cannot move into the book");
     const auto anchor = model.position();
     const auto count = model.pages();
     const auto image = pixels(model.image(model.page()));
     require(reflow(model, landscape) > 0, "A missing landscape layout was not computed");
     require(model.position() == anchor, "First rotation lost the source position");
-    require(model.alternateLayoutBytes() > 0 && model.alternateLayoutBytes() <= ReaderModel::maxAlternateLayoutBytes,
+    require(model.alternateLayoutBytes() > 0 && model.alternateLayoutBytes() <= EngineDocument::maxAlternateLayoutBytes,
             "Alternate layout exceeded its budget or was not retained");
     for (int i = 0; i < 3; ++i) {
         require(reflow(model, portrait) == 0, "Returning to portrait computed the book again");
@@ -133,13 +133,13 @@ int main(int argc, char **argv) {
                                                      : QJsonDocument::fromJson(settingsText, &parse).object();
         require(parse.error == QJsonParseError::NoError, "KOBALT_LAYOUT_SETTINGS is not a JSON object");
         const bool disk = qEnvironmentVariableIsSet("KOBALT_LAYOUT_DISK_CACHE");
-        const auto useCache = [&](ReaderModel &target) {
+        const auto useCache = [&](EngineDocument &target) {
             if (disk)
                 target.setDocumentCache(cacheRoot.path() + "/.cache",
                                         QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex(),
                                         "layout-timings", bytes.size());
         };
-        ReaderModel model(kobalt::test::readerFonts());
+        EngineDocument model(kobalt::test::readerFonts());
         useCache(model);
         QString error;
         QElapsedTimer timer;
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
             reflow(model, landscape);
             require(model.saveDocumentCache(), "Cannot save the landscape timing cache");
             for (int repeat = 0; repeat < 5; ++repeat) {
-                ReaderModel reopened(kobalt::test::readerFonts());
+                EngineDocument reopened(kobalt::test::readerFonts());
                 useCache(reopened);
                 int formats = 0;
                 timer.restart();
@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
     const QJsonObject hangingColumns{{"two_columns_landscape", true}, {"hanging_punctuation", true}};
     for (const auto &settings : {QJsonObject{}, QJsonObject{{"two_columns_landscape", true}}, hangingColumns,
                                QJsonObject{{"vertical_justification", "expand"}}}) {
-        ReaderModel model(kobalt::test::readerFonts());
+        EngineDocument model(kobalt::test::readerFonts());
         open(model, files, settings);
         roundTrip(model);
         open(model, kobalt::test::engineBook(false, 1, 4));
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
     {
         auto media = files;
         media["text.xhtml"].replace("<head>", "<head><style>@media (min-width:900px){p{font-size:180%;}}</style>");
-        ReaderModel rotated(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
+        EngineDocument rotated(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
         open(rotated, media);
         open(fresh, media, {}, landscape);
         require(reflow(rotated, landscape) > 0 && rotated.pages() == fresh.pages(),
@@ -219,7 +219,7 @@ int main(int argc, char **argv) {
     compareWithReflow(rightToLeft, {{"two_columns_landscape", true}});
     compareWithReflow(kobalt::test::publisherBooks({}).value("publisher.epub"));
     {
-        ReaderModel model(kobalt::test::readerFonts());
+        EngineDocument model(kobalt::test::readerFonts());
         open(model, files);
         reflow(model, landscape);
         kobalt::readingPpi.store(212);
@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
                                QJsonObject{{"line_spacing", 175}}, QJsonObject{{"hyphenation", "on"}},
                                QJsonObject{{"bold_reading", "bold"}}, QJsonObject{{"paragraph_spacing", 80}},
                                QJsonObject{{"margin_pixels", 80}}, QJsonObject{{"vertical_justification", "center"}}}) {
-        ReaderModel model(kobalt::test::readerFonts());
+        EngineDocument model(kobalt::test::readerFonts());
         open(model, files);
         reflow(model, landscape);
         require(reflow(model, portrait, settings) > 0 || settings.contains("vertical_justification"),
@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
         require(reflow(model, landscape) > 0, "Changed layout inputs reused the old landscape");
     }
     {
-        ReaderModel oversized(kobalt::test::readerFonts());
+        EngineDocument oversized(kobalt::test::readerFonts());
         open(oversized, kobalt::test::engineBook(false, 1, 20000));
         const auto anchor = oversized.position();
         require(reflow(oversized, landscape) > 0 && oversized.alternateLayoutBytes() == 0,
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
         QFile file(QString::fromLocal8Bit(argv[1]));
         require(file.open(QIODevice::ReadOnly), "Cannot open Type Tester");
         const auto bytes = file.readAll();
-        ReaderModel model(kobalt::test::readerFonts());
+        EngineDocument model(kobalt::test::readerFonts());
         QString error;
         require(model.open(bytes, portrait, {}, &error), qPrintable(error));
         roundTrip(model);
@@ -266,7 +266,7 @@ int main(int argc, char **argv) {
             QJsonObject saved;
             QByteArray before;
             {
-                ReaderModel cached(kobalt::test::readerFonts());
+                EngineDocument cached(kobalt::test::readerFonts());
                 cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
                 require(cached.open(bytes, portrait, settings, &error), qPrintable(error));
                 require(cached.go(cached.pages() / 2), "Cannot position disk-cache book");
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
                 require(cached.saveDocumentCache(), "Cannot persist a restored layout");
             }
             {
-                ReaderModel cached(kobalt::test::readerFonts());
+                EngineDocument cached(kobalt::test::readerFonts());
                 cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
                 int formats = 0;
                 require(cached.open(bytes, portrait, saved, &error, [&](kobalt::OpeningStage stage, int percent) {
@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
                 require(cached.saveDocumentCache(), "Cannot persist a landscape layout");
             }
             {
-                ReaderModel cached(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
+                EngineDocument cached(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
                 cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
                 int formats = 0;
                 require(cached.open(bytes, landscape, saved, &error, [&](kobalt::OpeningStage stage, int percent) {

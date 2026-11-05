@@ -18,7 +18,7 @@ struct BookmarkLocations;
 // running save.
 class HighlightSession final : public QObject {
 public:
-    HighlightSession(ReaderSession &model, std::function<QString()> layout, const QString &annotations,
+    HighlightSession(ReaderSession &session, std::function<QString()> layout, const QString &annotations,
                      const QString &identity, const QByteArray &fingerprint, const QString &title, const QString &database = {});
     ~HighlightSession() override;
     bool available() const {
@@ -78,7 +78,7 @@ private:
                     const QVector<Highlight> &highlights);
     void adoptSaved();
     void remember(const QVector<Highlight> &highlights);
-    ReaderSession &model_;
+    ReaderSession &session_;
     std::function<QString()> layout;
     std::unique_ptr<HighlightStore> store_;
     QString layout_, lookup_, error_;

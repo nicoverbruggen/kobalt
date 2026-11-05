@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 
 #include "check.h"
 #include "reader_inputs.h"
@@ -38,7 +38,7 @@ std::shared_ptr<kobalt::ResourceCache> resources(const QByteArray &indent, bool 
         std::make_shared<std::atomic_bool>(false));
 }
 
-int offset(kobalt::ReaderModel &model) {
+int offset(kobalt::EngineDocument &model) {
     const auto first = model.searchPage("Startmarker", 0).hits;
     const auto last = model.searchPage("Endmarker", 0).hits;
     require(first.size() == 1 && last.size() == 1, "Indentation fixture must fit on one page");
@@ -85,17 +85,17 @@ int main(int argc, char **argv) {
                                                      .arg(QString::fromLatin1(indent))
                                                      .arg(dark);
                             QMap<QString, qint64> sizes;
-                            kobalt::ReaderModel direct(kobalt::test::readerFonts());
+                            kobalt::EngineDocument direct(kobalt::test::readerFonts());
                             auto directSource = resources(indent, false, sizes);
                             require(direct.openResources(directSource, sizes, size, settings, &error),
                                     qPrintable(error));
                             require(offset(direct) == expected, qPrintable("Authored indent changed: " + context));
-                            kobalt::ReaderModel inherited(kobalt::test::readerFonts());
+                            kobalt::EngineDocument inherited(kobalt::test::readerFonts());
                             auto source = resources(indent, true, sizes);
                             require(inherited.openResources(source, sizes, size, settings, &error), qPrintable(error));
                             require(offset(inherited) == expected, qPrintable("Inherited indent changed: " + context));
                             const auto image = inherited.image(0);
-                            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+                            kobalt::EngineDocument preview(kobalt::test::readerFonts());
                             require(preview.openPreview(inherited, size, &error), qPrintable(error));
                             require(offset(preview) == expected && preview.image(0) == image,
                                     qPrintable("Preview changed indentation: " + context));
@@ -106,13 +106,13 @@ int main(int argc, char **argv) {
                             if (ppi == 300 && !dark && QByteArray(unit) == "1.5em") {
                                 QTemporaryDir cache(QDir::currentPath() + "/indentation-cache-XXXXXX");
                                 require(cache.isValid(), "Cannot create the indentation cache");
-                                kobalt::ReaderModel cached(kobalt::test::readerFonts());
+                                kobalt::EngineDocument cached(kobalt::test::readerFonts());
                                 // CREngine does not cache books reported as smaller than 30 kB.
                                 cached.setDocumentCache(cache.path(), QByteArray(64, 'a'), "indentation-v1",
                                                         1024 * 1024);
                                 require(cached.openResources(source, sizes, size, settings, &error), qPrintable(error));
                                 require(cached.saveDocumentCache(), "Cannot save the indentation cache");
-                                kobalt::ReaderModel restored(kobalt::test::readerFonts());
+                                kobalt::EngineDocument restored(kobalt::test::readerFonts());
                                 restored.setDocumentCache(cache.path(), QByteArray(64, 'a'), "indentation-v1",
                                                           1024 * 1024);
                                 require(restored.openResources(source, sizes, size, settings, &error),

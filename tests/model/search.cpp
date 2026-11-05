@@ -1,5 +1,5 @@
 #include "reader_inputs.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QFile>
 #include <QGuiApplication>
 #include <QSet>
@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     require(argc == 2, "Pass the synthetic dictionary EPUB");
     QFile file(QString::fromLocal8Bit(argv[1]));
     require(file.open(QIODevice::ReadOnly), "Missing fixture");
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     require(model.open(file.readAll(), {360, 700}, {}, &error), qPrintable(error));
     const auto origin = model.position();

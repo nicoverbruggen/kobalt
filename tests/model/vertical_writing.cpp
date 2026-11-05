@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "check.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QGuiApplication>
 #include <QColor>
 #include <cstdio>
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
          "<package xmlns='http://www.idpf.org/2007/opf' version='3.0'><metadata><title>Writing modes</title><language>ja</language></metadata><manifest><item id='v' href='v.xhtml' media-type='application/xhtml+xml'/><item id='h' href='h.xhtml' media-type='application/xhtml+xml'/></manifest><spine page-progression-direction='rtl'><itemref idref='v'/><itemref idref='h'/></spine></package>"},
         {"v.xhtml", chapter("vertical-rl")},
         {"h.xhtml", chapter("horizontal-tb")}};
-    const auto open = [&](ReaderModel &reader, QString *error) {
+    const auto open = [&](EngineDocument &reader, QString *error) {
         QMap<QString, qint64> sizes;
         for (auto it = data.cbegin(); it != data.cend(); ++it)
             sizes[it.key()] = it->size();
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
             std::make_shared<std::atomic_bool>(false));
         return reader.openResources(resources, sizes, QSize(600, 800), {}, error);
     };
-    ReaderModel model(test::readerFonts());
+    EngineDocument model(test::readerFonts());
     QString error;
     require(open(model, &error), qPrintable(error));
     require(model.pages() == 2, "Separate writing modes must occupy separate pages");
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
         content.replace("</body>", "<div style='writing-mode:" + inner +
                                        "'><p>日本語横書文章</p></div><p>日本語続文章</p></body>");
         data["v.xhtml"] = content;
-        ReaderModel mixed(test::readerFonts());
+        EngineDocument mixed(test::readerFonts());
         require(open(mixed, &error), qPrintable(error));
         require(mixed.pages() == 3, "Mixed blocks must occupy three separate pages");
         for (int page = 0; page < 3; ++page) {
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         content.replace("日本語縦書文章", QByteArray("日本語<span style='writing-mode:horizontal-tb;display:") +
                                               display + "'>Horizontal</span>続文章");
         data["v.xhtml"] = content;
-        ReaderModel mixed(test::readerFonts());
+        EngineDocument mixed(test::readerFonts());
         require(open(mixed, &error), qPrintable(error));
         require(!ink(mixed.image(0)).isEmpty(), "Inline mixed content rendered an empty page");
     }
@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
                 auto content = chapter(mode);
                 content.replace("日本語縦書文章", text);
                 data["v.xhtml"] = content;
-                ReaderModel decorated(test::readerFonts());
+                EngineDocument decorated(test::readerFonts());
                 require(open(decorated, &error), qPrintable(error));
                 pages[variant] = decorated.image(0);
             }

@@ -64,17 +64,17 @@ int run(int argc, char **argv) {
         readingPpi.store(212);
         auto session = std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         auto lease = std::make_shared<SourceLease>();
-        PositionCodec firstPositions{[](const ReaderModel &model, const QString &, QString *) {
+        PositionCodec firstPositions{[](const EngineDocument &model, const QString &, QString *) {
                                          return model.position();
                                      },
-                                     [](const ReaderModel &model, QString *) {
+                                     [](const EngineDocument &model, QString *) {
                                          return "first:" + model.position();
                                      },
                                      [](const QString &location) {
                                          return location;
                                      }};
         auto secondPositions = firstPositions;
-        secondPositions.encode = [](const ReaderModel &model, QString *) {
+        secondPositions.encode = [](const EngineDocument &model, QString *) {
             return "second:" + model.position();
         };
 

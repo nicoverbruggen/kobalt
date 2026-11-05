@@ -3,7 +3,7 @@
 #include "render/image_damage.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
-#include "reader_model.h"
+#include "engine_document.h"
 #include "reader_source.h"
 #include "publication/image_policy.h"
 #include "publication/resource_cache.h"
@@ -37,7 +37,7 @@
 
 namespace kobalt {
 namespace {
-std::atomic<unsigned> liveModels{0};
+std::atomic<unsigned> liveDocuments{0};
 bool fontsReady = false;
 EngineFontInputs activeFonts;
 QVector<ReadingFont> readingFonts;
@@ -274,17 +274,17 @@ bool validAlignment(const QString &value) {
     return value == "publisher" || value == "left" || value == "justify" || value == "center" || value == "right";
 }
 }
-ReaderModel::ReaderModel(EngineFontInputs fonts) : fonts_(std::move(fonts)) {
-    ++liveModels;
+EngineDocument::EngineDocument(EngineFontInputs fonts) : fonts_(std::move(fonts)) {
+    ++liveDocuments;
 }
-ReaderModel::~ReaderModel() {
+EngineDocument::~EngineDocument() {
     sourceIndex_.reset();
     engine_.reset();
     source_.reset();
-    // Model work and destruction run on the engine worker. A preview may
-    // still use these fonts, but the last closed model must release their
+    // Document work and destruction run on the engine worker. A preview may
+    // still use these fonts, but the last closed document must release their
     // file mappings so Nickel can unmount user storage for USB.
-    if (--liveModels == 0) {
+    if (--liveDocuments == 0) {
         ShutdownFontManager();
         HyphMan::uninit();
         fontsReady = false;
@@ -296,10 +296,10 @@ ReaderModel::~ReaderModel() {
     }
 }
 
-bool ReaderModel::initializeFonts() {
-    // CREngine has one global font manager. A preview or retained model can
+bool EngineDocument::initializeFonts() {
+    // CREngine has one global font manager. A preview or retained document can
     // still use it, so a different host input cannot replace it until the last
-    // model releases its font mappings on this worker.
+    // document releases its font mappings on this worker.
     if (fontsReady)
         return activeFonts == fonts_;
     if (fonts_.sources.bundled.isEmpty() || fonts_.hyphenationDirectory.isEmpty())
@@ -344,7 +344,7 @@ bool ReaderModel::initializeFonts() {
     activeFonts = fonts_;
     return true;
 }
-QStringList ReaderModel::fontFaces() {
+QStringList EngineDocument::fontFaces() {
     if (!initializeFonts())
         return {};
     // The list leaves out document fonts. Global faces are registered only
@@ -363,7 +363,7 @@ QStringList ReaderModel::fontFaces() {
     return result;
 }
 
-QVector<ReadingFont> ReaderModel::fontCatalog() {
+QVector<ReadingFont> EngineDocument::fontCatalog() {
     if (!initializeFonts())
         return {};
     if (fontCatalogReady)
@@ -401,17 +401,17 @@ QVector<ReadingFont> ReaderModel::fontCatalog() {
     return result;
 }
 
-void ReaderModel::setDocumentCache(QString directory, QByteArray fingerprint, QByteArray policy, qint64 bytes) {
+void EngineDocument::setDocumentCache(QString directory, QByteArray fingerprint, QByteArray policy, qint64 bytes) {
     cacheDirectory_ = std::move(directory);
     cacheFingerprint_ = std::move(fingerprint);
     // Parsed pages from older density, image and double-scaled line-height
     // policies must not survive these renderer changes. The density is fixed by the host
-    // before any model opens and is shared by the main reader and previews.
+    // before any document opens and is shared by the main reader and previews.
     cachePolicy_ = std::move(policy) +
                    ":css-density-leading-v1:page-layout-v2:line-height-v2:" + QByteArray::number(readingPpi.load());
     cacheBytes_ = bytes;
 }
-QByteArray ReaderModel::documentCachePolicy() const {
+QByteArray EngineDocument::documentCachePolicy() const {
     // Detect CSS edits for cache reuse only. User CSS is never an installation asset.
     if (userStyleSheet_.isEmpty()) {
         return cachePolicy_;
@@ -419,7 +419,7 @@ QByteArray ReaderModel::documentCachePolicy() const {
     return cachePolicy_ +
            ":user-css-v1:" + QCryptographicHash::hash(userStyleSheet_, QCryptographicHash::Sha256).toHex();
 }
-bool ReaderModel::saveDocumentCache() {
+bool EngineDocument::saveDocumentCache() {
     if (!engine_ || cacheDirectory_.isEmpty() || cacheFingerprint_.isEmpty() || !resourceError().isEmpty() || !pages())
         return false;
     // Only a document opened under this book's key may write that key's file.
@@ -441,20 +441,20 @@ bool ReaderModel::saveDocumentCache() {
     }
     return true;
 }
-FontWeightAxis ReaderModel::weightAxis() const {
+FontWeightAxis EngineDocument::weightAxis() const {
     return fontWeightAxis(readingFonts, face_);
 }
-FontOpticalSizeAxis ReaderModel::opticalSizeAxis() const {
+FontOpticalSizeAxis EngineDocument::opticalSizeAxis() const {
     return fontOpticalSizeAxis(readingFonts, face_);
 }
-void ReaderModel::activateFontParameters() const {
+void EngineDocument::activateFontParameters() const {
     const auto axis = weightAxis();
-    // CREngine shares font parameters across models. Restore this model's
+    // CREngine shares font parameters across documents. Restore this document's
     // values before layout or drawing so previews cannot change another book.
     LVRendSetFontOpticalSize(opticalSizeAxis().available() ? opticalSize_ : 0);
     LVRendSetBaseFontWeight(axis.available() ? (bionic_ == "off" ? axisWeight_ : axis.defaultValue) : 400);
 }
-void ReaderModel::configure(QSize size, const QJsonObject &settings) {
+void EngineDocument::configure(QSize size, const QJsonObject &settings) {
     auto saved = settings;
     appearance::migrateLineSpacing(saved);
     // Outline thickness must not affect layout-time italic overhang measurements.
@@ -616,19 +616,19 @@ void ReaderModel::configure(QSize size, const QJsonObject &settings) {
     applyStyleSheet();
     engine_->Resize(size.width(), size.height());
 }
-int ReaderModel::page() const {
+int EngineDocument::page() const {
     return engine_ ? engine_->getCurPage() : 0;
 }
-int ReaderModel::pages() const {
+int EngineDocument::pages() const {
     return engine_ ? engine_->getPageCount() : 0;
 }
-QString ReaderModel::title() const {
+QString EngineDocument::title() const {
     return engine_ ? qstring(engine_->getTitle()) : QString();
 }
-QString ReaderModel::author() const {
+QString EngineDocument::author() const {
     return engine_ ? qstring(engine_->getAuthors()) : QString();
 }
-QImage ReaderModel::coverImage(QSize maximumSize, const QString &preferredPath, QString *usedPath) const {
+QImage EngineDocument::coverImage(QSize maximumSize, const QString &preferredPath, QString *usedPath) const {
     if (usedPath)
         usedPath->clear();
     if (maximumSize.isEmpty() || qint64(maximumSize.width()) * maximumSize.height() > 4 * 1024 * 1024) {
@@ -692,10 +692,10 @@ QImage ReaderModel::coverImage(QSize maximumSize, const QString &preferredPath, 
     return engine_ ? decode(engine_->getCoverPageImageStream()) : QImage();
 }
 
-QString ReaderModel::position() const {
+QString EngineDocument::position() const {
     return engine_ ? anchor_ : QString();
 }
-bool ReaderModel::go(int page) {
+bool EngineDocument::go(int page) {
     if (!engine_ || page < 0 || page >= pages())
         return false;
     // goToPage updates its bookmark before marking the position initialized.
@@ -707,7 +707,7 @@ bool ReaderModel::go(int page) {
     trim();
     return moved;
 }
-int ReaderModel::turnTarget(int from, int delta) const {
+int EngineDocument::turnTarget(int from, int delta) const {
     if (!engine_ || !delta || from < 0 || from >= pages())
         return from;
     const int flow = engine_->getPageFlow(from), step = delta > 0 ? 1 : -1;
@@ -724,7 +724,7 @@ int ReaderModel::turnTarget(int from, int delta) const {
     }
     return page;
 }
-bool ReaderModel::goTo(const QString &position) {
+bool EngineDocument::goTo(const QString &position) {
     if (!engine_)
         return false;
     auto pointer = engine_->getDocument()->createXPointer(cre(position));
@@ -735,20 +735,20 @@ bool ReaderModel::goTo(const QString &position) {
     trim();
     return true;
 }
-bool ReaderModel::style(int pixels, int spacing) {
+bool EngineDocument::style(int pixels, int spacing) {
     return style(pixels, spacing, face_, margin_);
 }
-bool ReaderModel::style(int pixels, int spacing, const QString &face, int margin) {
+bool EngineDocument::style(int pixels, int spacing, const QString &face, int margin) {
     return style(pixels, spacing, face, margin, alignment_);
 }
-bool ReaderModel::style(int pixels, int spacing, const QString &face, int margin, const QString &alignment) {
+bool EngineDocument::style(int pixels, int spacing, const QString &face, int margin, const QString &alignment) {
     return applyAppearance(kobalt::qt::object({{"font_pixels", pixels},
                                                {"line_spacing", spacing},
                                                {"font_face", face},
                                                {"margin_pixels", margin},
                                                {"text_alignment", alignment}}));
 }
-bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, OpeningProgress progress) {
+bool EngineDocument::applyAppearance(const QJsonObject &settings, QSize size, OpeningProgress progress) {
     const int pixels = settings.value("font_pixels").toInt(pixels_);
     const int spacing = settings.value("line_spacing").toInt(spacing_);
     const int paragraphSpacing = settings.contains("paragraph_spacing")
@@ -957,28 +957,28 @@ bool ReaderModel::applyAppearance(const QJsonObject &settings, QSize size, Openi
     engine_->Render();
     return goTo(anchor);
 }
-bool ReaderModel::setThickness(int steps) {
+bool EngineDocument::setThickness(int steps) {
     if (steps < 0 || steps > 12)
         return false;
     return applyAppearance(kobalt::qt::object({{"weight_steps", steps}}));
 }
-bool ReaderModel::setWeight(int steps) {
+bool EngineDocument::setWeight(int steps) {
     const auto axis = weightAxis();
     if (axis.available() && (steps < axis.minimum || steps > axis.maximum))
         return false;
     return applyAppearance(kobalt::qt::object({{axis.available() ? "font_weight" : "weight_steps", steps}}));
 }
-bool ReaderModel::setOpticalSize(double points) {
+bool EngineDocument::setOpticalSize(double points) {
     const auto axis = opticalSizeAxis();
     if (!axis.available() || !std::isfinite(points) || (points < axis.minimum || points > axis.maximum) ||
         points != std::floor(points))
         return false;
     return applyAppearance(kobalt::qt::object({{"font_optical_size", points}}));
 }
-bool ReaderModel::setHyphenation(const QString &mode) {
+bool EngineDocument::setHyphenation(const QString &mode) {
     return applyAppearance(kobalt::qt::object({{"hyphenation", mode}}));
 }
-void ReaderModel::applyPublisherFontFallbacks() {
+void EngineDocument::applyPublisherFontFallbacks() {
     const bool publisher = face_.isEmpty();
     const bool useDefaults = publisher && embeddedFontCount() == 0;
     const auto defaultSans = fontFaces().contains(publisherSansFontFace) ? publisherSansFontFace : "IBM Plex Sans";
@@ -998,7 +998,7 @@ void ReaderModel::applyPublisherFontFallbacks() {
     const auto fallback = fallbackFaces_[0].isEmpty() ? QString(defaultFontFace) : fallbackFaces_[0];
     engine_->setDefaultFontFace(lString8((publisher ? fallback : face_).toUtf8().constData()));
 }
-void ReaderModel::applyStyleSheet() {
+void EngineDocument::applyStyleSheet() {
     QString overrides;
     if (normalizePageMargins_) {
         overrides = "html,body,DocFragment { margin:0 !important; padding:0 !important; }\n";
@@ -1061,10 +1061,10 @@ void ReaderModel::applyStyleSheet() {
                            lString8(overrides.toUtf8().constData()) + lString8("\n") +
                            lString8(userStyleSheet_.constData()));
 }
-void ReaderModel::resize(QSize size) {
+void EngineDocument::resize(QSize size) {
     applyAppearance({}, size);
 }
-void ReaderModel::prepareDamage(int fromPage, int toPage) {
+void EngineDocument::prepareDamage(int fromPage, int toPage) {
     const auto from = cache_.value(fromPage), to = cache_.value(toPage);
     if (from.isNull() || to.isNull())
         return;
@@ -1087,25 +1087,25 @@ void usePageFormat(QImage &image, QImage::Format format) {
 #endif
 }
 }
-void ReaderModel::setPageFormat(QImage::Format format) {
+void EngineDocument::setPageFormat(QImage::Format format) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 9, 0)
     pageFormat = format == QImage::Format_RGBX8888 ? QImage::Format_RGBX8888 : QImage::Format_RGB32;
 #else
     Q_UNUSED(format);
 #endif
 }
-bool ReaderModel::preparedDamage(qint64 fromKey, qint64 toKey, QRect *damage) const {
+bool EngineDocument::preparedDamage(qint64 fromKey, qint64 toKey, QRect *damage) const {
     const auto found = damage_.constFind(qMakePair(qMin(fromKey, toKey), qMax(fromKey, toKey)));
     if (found == damage_.cend())
         return false;
     *damage = found.value();
     return true;
 }
-void ReaderModel::trim() {
+void EngineDocument::trim() {
     const int current = page(), previous = turnTarget(current, -1), next = turnTarget(current, 1);
     for (auto it = cache_.begin(); it != cache_.end();) {
         if (it.key() != current && it.key() != previous && it.key() != next) {
-            // Session and GUI images share these pixels. Only the model's last
+            // Session and GUI images share these pixels. Only the document's last
             // reference can become a draw buffer for a different page.
             QImage retired = std::move(it.value());
             it = cache_.erase(it);
@@ -1127,19 +1127,19 @@ void ReaderModel::trim() {
         else
             ++it;
 }
-void ReaderModel::setDarkMode(bool enabled) {
+void EngineDocument::setDarkMode(bool enabled) {
     applyAppearance(kobalt::qt::object({{"dark_mode", enabled}}));
 }
-bool ReaderModel::loadNextImage() {
+bool EngineDocument::loadNextImage() {
     if (!source_ || !source_->resources)
         return false;
     source_->resources->loadNextImage();
     return refreshImages();
 }
-size_t ReaderModel::alternateLayoutBytes() const {
+size_t EngineDocument::alternateLayoutBytes() const {
     return engine_ ? engine_->getDocument()->alternateLayoutBytes() : 0;
 }
-void ReaderModel::releaseImages() {
+void EngineDocument::releaseImages() {
     if (engine_)
         engine_->getDocument()->clearAlternateLayout();
     alternateViewport_ = {};
@@ -1154,11 +1154,11 @@ void ReaderModel::releaseImages() {
         imageInversion_.clear();
     }
 }
-bool ReaderModel::refreshImages() {
+bool EngineDocument::refreshImages() {
     if (!engine_ || !source_ || !source_->resources || imageRevision_ == source_->resources->imageRevision())
         return false;
     // Appearance previews share resources but keep their own rendered pages.
-    // A load in either model must invalidate placeholders in the other one.
+    // A load in either document must invalidate placeholders in the other one.
     imageRevision_ = source_->resources->imageRevision();
     imageInversion_.clear();
     cache_.clear();
@@ -1167,7 +1167,7 @@ bool ReaderModel::refreshImages() {
     engine_->clearImageCache();
     return true;
 }
-QImage ReaderModel::image(int pageNumber) {
+QImage EngineDocument::image(int pageNumber) {
     activateFontParameters();
     setExtraFontWeight(bionic_ == "off" ? weight_ : 0);
     if (!engine_ || pageNumber < 0 || pageNumber >= pages())
@@ -1229,12 +1229,12 @@ QImage ReaderModel::image(int pageNumber) {
     trim();
     return result;
 }
-QVector<ChapterLink> ReaderModel::chapters() const {
+QVector<ChapterLink> EngineDocument::chapters() const {
     if (!engine_)
         return {};
     return chapterIndex(contentsIndex_, contents_, contents_.isEmpty()).links;
 }
-quint64 ReaderModel::layoutSignature() const {
+quint64 EngineDocument::layoutSignature() const {
     if (!engine_)
         return 0;
     // CREngine's extended rendering hash tracks pagination settings, page
@@ -1251,7 +1251,7 @@ quint64 ReaderModel::layoutSignature() const {
     mix(verticalSpacingScope_ == "protection");
     return hash ? hash : 1;
 }
-const ReaderModel::ChapterIndex &ReaderModel::chapterIndex(ChapterIndex &index, const QVector<ChapterLink> &source,
+const EngineDocument::ChapterIndex &EngineDocument::chapterIndex(ChapterIndex &index, const QVector<ChapterLink> &source,
                                                            bool toc) const {
     const auto layout = layoutSignature();
     // `source` shares its data with the cached copy until it changes.
@@ -1283,7 +1283,7 @@ const ReaderModel::ChapterIndex &ReaderModel::chapterIndex(ChapterIndex &index, 
         index.order.clear();
     return index;
 }
-QVector<ChapterLink> ReaderModel::tocChapters() const {
+QVector<ChapterLink> EngineDocument::tocChapters() const {
     QVector<ChapterLink> result;
     if (!engine_)
         return result;
@@ -1301,7 +1301,7 @@ QVector<ChapterLink> ReaderModel::tocChapters() const {
     visit(engine_->getToc(), 0);
     return result;
 }
-void ReaderModel::setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph) {
+void EngineDocument::setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph) {
     if (!engine_)
         return;
     // An unresolved native list must not hide the publication's usable TOC.
@@ -1314,7 +1314,7 @@ void ReaderModel::setChapters(QVector<ChapterLink> contents, QVector<ChapterLink
     contents_ = std::move(contents);
     graph_ = std::move(graph);
 }
-QVector<ChapterLink> ReaderModel::chapterPages(QVector<ChapterLink> links) const {
+QVector<ChapterLink> EngineDocument::chapterPages(QVector<ChapterLink> links) const {
     if (!engine_)
         return {};
     for (auto &link : links) {
@@ -1323,12 +1323,12 @@ QVector<ChapterLink> ReaderModel::chapterPages(QVector<ChapterLink> links) const
     }
     return links;
 }
-QVector<ChapterLink> ReaderModel::chapterGraph() const {
+QVector<ChapterLink> EngineDocument::chapterGraph() const {
     if (!engine_)
         return {};
     return chapterIndex(graphIndex_, graph_, false).links;
 }
-int ReaderModel::chapterEndPage(const ChapterLink &next) const {
+int EngineDocument::chapterEndPage(const ChapterLink &next) const {
     if (columns_ == 1)
         return next.page;
     const auto pointer = engine_->getDocument()->createXPointer(cre(next.position));
@@ -1337,7 +1337,7 @@ int ReaderModel::chapterEndPage(const ChapterLink &next) const {
     // preceding chapter. Round its exclusive end up before counting screens.
     return column < 0 ? next.page : (column + columns_ - 1) / columns_;
 }
-ChapterSelection ReaderModel::chapterSelection(const QVector<ChapterLink> &links) const {
+ChapterSelection EngineDocument::chapterSelection(const QVector<ChapterLink> &links) const {
     auto result = chapterAround(links, anchor_);
     if (result.current >= 0) {
         const int first = links[result.current].page;
@@ -1347,7 +1347,7 @@ ChapterSelection ReaderModel::chapterSelection(const QVector<ChapterLink> &links
     }
     return result;
 }
-QString ReaderModel::chapterTitle(const QString &position) const {
+QString EngineDocument::chapterTitle(const QString &position) const {
     const auto links = chapters();
     const auto selected = chapterAround(links, position);
     if (selected.current >= 0) {
@@ -1356,7 +1356,7 @@ QString ReaderModel::chapterTitle(const QString &position) const {
     }
     return selected.next >= 0 ? strings::get("reader.front_matter") : QString();
 }
-ChapterSelection ReaderModel::chapterAround(const QVector<ChapterLink> &links, const QString &position) const {
+ChapterSelection EngineDocument::chapterAround(const QVector<ChapterLink> &links, const QString &position) const {
     ChapterSelection result;
     if (!engine_)
         return result;
@@ -1415,7 +1415,7 @@ ChapterSelection ReaderModel::chapterAround(const QVector<ChapterLink> &links, c
     }
     return result;
 }
-ChapterProgress ReaderModel::chapterProgress() const {
+ChapterProgress EngineDocument::chapterProgress() const {
     const auto links = chapters();
     if (!contents_.isEmpty()) {
         const auto selected = chapterSelection(links);
@@ -1451,7 +1451,7 @@ ChapterProgress ReaderModel::chapterProgress() const {
     progress.pages = (next ? chapterEndPage(*next) : pages()) - first;
     return progress;
 }
-QString ReaderModel::textFontFace() const {
+QString EngineDocument::textFontFace() const {
     if (!face_.isEmpty() || !engine_)
         return face_;
     ldomXPointer pointer = engine_->getBookmark(false);
@@ -1463,7 +1463,7 @@ QString ReaderModel::textFontFace() const {
     const auto font = node->getFont();
     return font.isNull() ? QString() : QString::fromUtf8(font->getTypeFace().c_str());
 }
-int ReaderModel::embeddedFontCount() const {
+int EngineDocument::embeddedFontCount() const {
     if (source_ && source_->embeddedFonts >= 0) {
         return source_->embeddedFonts;
     }
@@ -1481,7 +1481,7 @@ int ReaderModel::embeddedFontCount() const {
     }
     return families.size();
 }
-QJsonObject ReaderModel::state() const {
+QJsonObject EngineDocument::state() const {
     return kobalt::qt::object({{"language", engine_ ? qstring(engine_->getLanguage()) : QString()},
                                {"position", position()},
                                {"font_pixels", pixels_},

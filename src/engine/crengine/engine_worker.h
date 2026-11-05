@@ -7,7 +7,7 @@ class QThread;
 
 namespace kobalt {
 // Shared queue for reader sessions and their coordinate probes. Separate
-// models must not access CREngine's global fonts and caches concurrently.
+// documents must not access CREngine's global fonts and caches concurrently.
 QObject *engineWorker();
 
 struct EngineWorker {
@@ -17,6 +17,6 @@ struct EngineWorker {
 };
 // One worker serializes CREngine's process-global font state across closing
 // sessions and new openings. The state outlives the worker so retained
-// models can still be released during application destruction.
+// documents can still be released during application destruction.
 const std::shared_ptr<EngineWorker> &engineWorkerState();
 }

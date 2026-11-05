@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 
 #include "check.h"
 #include "reader_inputs.h"
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     require(cache.isValid(), "Cannot create the document cache");
     const auto key = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
     QString error;
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     model.setDocumentCache(cache.path(), key, "word-count-test", 1000000);
     require(model.open(bytes, QSize(1072, 1328), {}, &error), qPrintable(error));
     const auto anchor = model.position();
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     check(model.wordCounts());
     require(model.wordCounts().cached, "Reflow discarded logical counts");
     require(model.saveDocumentCache(), "Cannot persist the counted document");
-    kobalt::ReaderModel reopened(kobalt::test::readerFonts());
+    kobalt::EngineDocument reopened(kobalt::test::readerFonts());
     reopened.setDocumentCache(cache.path(), key, "word-count-test", 1000000);
     require(reopened.open(bytes, QSize(600, 800), model.state(), &error), qPrintable(error));
     require(reopened.openedFromCache(), "Document did not reopen from cache");
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     QFile longFile(QString::fromLocal8Bit(argv[2]));
     require(longFile.open(QIODevice::ReadOnly), "Cannot open cancellation fixture");
     const auto longBytes = longFile.readAll();
-    kobalt::ReaderModel interrupted(kobalt::test::readerFonts());
+    kobalt::EngineDocument interrupted(kobalt::test::readerFonts());
     require(interrupted.open(longBytes, QSize(600, 800), {}, &error), qPrintable(error));
     calls = 0;
     require(interrupted.wordCounts([&] {

@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "check.h"
 #include "reader_inputs.h"
 #include <QDir>
@@ -20,7 +20,7 @@ std::shared_ptr<kobalt::ResourceCache> resources(const QByteArray &body, QMap<QS
             return sink(bytes.constData(), bytes.size());
         }, std::make_shared<std::atomic_bool>(false));
 }
-QRect word(kobalt::ReaderModel &model, const QString &text) {
+QRect word(kobalt::EngineDocument &model, const QString &text) {
     const auto hits = model.searchPage(text, 0).hits;
     require(hits.size() == 1, "Paragraph fixture word is missing or duplicated");
     QRect result;
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
             "<p>Firstmarker ordinary prose.</p><p>Secondmarker ordinary prose.</p></div>", sizes);
         QTemporaryDir cache(QDir::currentPath() + "/paragraph-cache-XXXXXX");
         require(cache.isValid(), "Cannot create paragraph cache");
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         model.setDocumentCache(cache.path(), QByteArray(64, 'a'), "paragraph-gap", 1024 * 1024);
         require(model.openResources(source, sizes, size, settings, &error), qPrintable(error));
         const auto publisher = model.image(0);
@@ -69,12 +69,12 @@ int main(int argc, char **argv) {
                     "Paragraph gap does not follow the text size");
             require(word(model, "Firstmarker").left() == first.left(), "Paragraph gap changed indentation");
             require(model.position() == anchor, "Paragraph gap lost the reading anchor");
-            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            kobalt::EngineDocument preview(kobalt::test::readerFonts());
             require(preview.openPreview(model, size, &error), qPrintable(error));
             require(preview.image(0) == model.image(0), "Preview paragraph gap differs from the book");
         }
         require(model.saveDocumentCache(), "Cannot cache paragraph markers");
-        kobalt::ReaderModel restored(kobalt::test::readerFonts());
+        kobalt::EngineDocument restored(kobalt::test::readerFonts());
         restored.setDocumentCache(cache.path(), QByteArray(64, 'a'), "paragraph-gap", 1024 * 1024);
         require(restored.openResources(source, sizes, size, model.state(), &error), qPrintable(error));
         require(restored.openedFromCache() && restored.image(0) == model.image(0), "Cached paragraph layout changed");
@@ -94,12 +94,12 @@ int main(int argc, char **argv) {
             require(model.state().value("paragraph_spacing").toInt() == -1,
                     "Indentation changed the independent spacing choice");
             require(model.position() == anchor, "Indentation lost the reading anchor");
-            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            kobalt::EngineDocument preview(kobalt::test::readerFonts());
             require(preview.openPreview(model, size, &error), qPrintable(error));
             require(preview.image(0) == model.image(0), "Preview changed paragraph indentation");
         }
         require(model.saveDocumentCache(), "Cannot cache paragraph indentation");
-        kobalt::ReaderModel indented(kobalt::test::readerFonts());
+        kobalt::EngineDocument indented(kobalt::test::readerFonts());
         indented.setDocumentCache(cache.path(), QByteArray(64, 'a'), "paragraph-gap", 1024 * 1024);
         require(indented.openResources(source, sizes, size, model.state(), &error), qPrintable(error));
         require(indented.openedFromCache() && indented.image(0) == model.image(0),
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
             QByteArray("<p style='white-space:pre-wrap'>Preformatted text</p><p style='border:1px solid black'>Boxed text</p>"),
             QByteArray("<figure><p>Figure caption</p></figure><table><tr><td><p>Table text</p></td></tr></table>")}) {
             const auto special = resources(body, sizes);
-            kobalt::ReaderModel protectedBook(kobalt::test::readerFonts());
+            kobalt::EngineDocument protectedBook(kobalt::test::readerFonts());
             require(protectedBook.openResources(special, sizes, size, settings, &error), qPrintable(error));
             const auto before = protectedBook.image(0);
             require(protectedBook.applyAppearance({{"paragraph_spacing", 0}, {"paragraph_indent", 200}}) &&
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
         for (const auto *side : {"top", "right", "bottom", "left"}) {
             const auto special = resources("<div style='border-width:0;border-style:solid;border-" + QByteArray(side) +
                 "-width:1px'><p>Firstmarker ordinary prose.</p><p>Secondmarker ordinary prose.</p></div>", sizes);
-            kobalt::ReaderModel framed(kobalt::test::readerFonts());
+            kobalt::EngineDocument framed(kobalt::test::readerFonts());
             require(framed.openResources(special, sizes, size, settings, &error), qPrintable(error));
             const auto before = framed.image(0);
             require(framed.applyAppearance({{"paragraph_spacing", 0}, {"paragraph_indent", 200}}) &&

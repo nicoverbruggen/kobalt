@@ -1,5 +1,5 @@
 #include "column_view.h"
-#include "reader_model.h"
+#include "engine_document.h"
 #include "platform/api/position_codec.h"
 #include "support/strings.h"
 #include "engine_activity.h"
@@ -10,15 +10,15 @@ namespace {
 lString32 cre(const QString &s) {
     return Utf8ToUnicode(s.toUtf8().constData());
 }
-QString decodePosition(const ReaderModel &model, const PositionCodec &codec, const QString &location, QString *error) {
+QString decodePosition(const EngineDocument &engine, const PositionCodec &codec, const QString &location, QString *error) {
     if (codec)
-        return codec.decode(model, location, error);
+        return codec.decode(engine, location, error);
     if (error)
         *error = strings::get("error.no_supported_native_reading_position");
     return {};
 }
 }
-bool ReaderModel::goToPlatform(const PositionCodec &codec, const QString &location, QString *error) {
+bool EngineDocument::goToPlatform(const PositionCodec &codec, const QString &location, QString *error) {
     const auto anchor = decodePosition(*this, codec, location, error);
     if (anchor.isEmpty())
         return false;
@@ -30,7 +30,7 @@ bool ReaderModel::goToPlatform(const PositionCodec &codec, const QString &locati
     nativeLocation_ = location;
     return true;
 }
-ReaderModel::PositionTarget ReaderModel::goToPlatformNearest(const PositionCodec &codec, const QString &location,
+EngineDocument::PositionTarget EngineDocument::goToPlatformNearest(const PositionCodec &codec, const QString &location,
                                                              QString *error) {
     if (goToPlatform(codec, location, error))
         return PositionTarget::Exact;
@@ -43,7 +43,7 @@ ReaderModel::PositionTarget ReaderModel::goToPlatformNearest(const PositionCodec
     go(0);
     return PositionTarget::Book;
 }
-int ReaderModel::comparePlatformPosition(const PositionCodec &codec, const QString &location, QString *error) const {
+int EngineDocument::comparePlatformPosition(const PositionCodec &codec, const QString &location, QString *error) const {
     if (!engine_) {
         if (error) *error = strings::get("error.no_supported_native_reading_position");
         return 0;
@@ -51,7 +51,7 @@ int ReaderModel::comparePlatformPosition(const PositionCodec &codec, const QStri
     const auto anchor = decodePosition(*this, codec, location, error);
     return anchor.isEmpty() ? 0 : comparePosition(anchor, error);
 }
-int ReaderModel::comparePosition(const QString &anchor, QString *error) const {
+int EngineDocument::comparePosition(const QString &anchor, QString *error) const {
     if (!engine_) {
         if (error) *error = strings::get("error.cannot_compare_the_reading_positions");
         return 0;
@@ -66,14 +66,14 @@ int ReaderModel::comparePosition(const QString &anchor, QString *error) const {
     }
     return incoming.compare(current);
 }
-QString ReaderModel::platformPosition(const PositionCodec &codec, QString *error) const {
+QString EngineDocument::platformPosition(const PositionCodec &codec, QString *error) const {
     if (codec)
         return codec.encode(*this, error);
     if (error)
         *error = strings::get("error.no_supported_native_reading_position");
     return {};
 }
-ResolvedChapters resolveChapterTargets(const ReaderModel &model, const PositionCodec &codec,
+ResolvedChapters resolveChapterTargets(const EngineDocument &engine, const PositionCodec &codec,
                                        const QVector<ChapterTarget> &contents, const QVector<ChapterTarget> &graph) {
     if (!codec)
         return {};
@@ -83,7 +83,7 @@ ResolvedChapters resolveChapterTargets(const ReaderModel &model, const PositionC
         for (const auto &target : targets) {
             engineActivity().checkpoint();
             if (!anchors.contains(target.location))
-                anchors.insert(target.location, codec.decode(model, target.location, nullptr));
+                anchors.insert(target.location, codec.decode(engine, target.location, nullptr));
             links.append({target.title, anchors.value(target.location), -1, target.depth, target.words});
         }
         return links;

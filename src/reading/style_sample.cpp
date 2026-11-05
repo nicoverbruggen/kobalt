@@ -97,18 +97,18 @@ bool cancelled(const StyleSampleRequest &request) {
     return request.cancelled && request.cancelled->load();
 }
 // Applying an option is the costly step, so it also checks for cancellation.
-bool apply(ReaderModel &model, const StyleSampleRequest &request, const QJsonValue &value) {
+bool apply(EngineDocument &engine, const StyleSampleRequest &request, const QJsonValue &value) {
     if (cancelled(request))
         return false;
     // Qt 5.2 has no initializer-list constructor for JSON objects.
     QJsonObject settings;
     settings.insert(request.key, value);
-    return model.applyAppearance(settings);
+    return engine.applyAppearance(settings);
 }
-QStringList pageStarts(ReaderModel &model) {
+QStringList pageStarts(EngineDocument &engine) {
     QStringList starts;
-    for (int page = 0; page < qMin(model.pages(), searchedPages + 1); ++page)
-        starts.append(model.pageStart(page));
+    for (int page = 0; page < qMin(engine.pages(), searchedPages + 1); ++page)
+        starts.append(engine.pageStart(page));
     return starts;
 }
 // The first page whose start differs between options, so the spread before it
@@ -125,13 +125,13 @@ int firstChangedBreak(const QVector<QStringList> &starts) {
 }
 // The first page that the options draw differently, or -1. Page spacing moves
 // lines within a page without changing where pages start.
-int firstChangedPage(ReaderModel &model, const StyleSampleRequest &request, int completeSpreads) {
+int firstChangedPage(EngineDocument &engine, const StyleSampleRequest &request, int completeSpreads) {
     for (int page = 0; page < qMin(completeSpreads, searchedPages); ++page) {
         QImage first;
         for (const auto &value : request.values) {
-            if (!apply(model, request, value))
+            if (!apply(engine, request, value))
                 return -1;
-            const auto image = model.image(page);
+            const auto image = engine.image(page);
             if (first.isNull())
                 first = image;
             else if (image != first)
@@ -203,11 +203,11 @@ QVector<QRect> spareSpace(const QVector<QPair<int, int>> &bands, const QVector<Q
         spare.append(band(end, area.bottom() + 1));
     return spare;
 }
-QVector<QRect> paragraphGaps(ReaderModel &model, const QRect &area, const QStringList &paragraphs) {
-    const auto line = [&model](const QString &query, bool last) {
-        const auto hits = model.searchPage(query, 0).hits;
+QVector<QRect> paragraphGaps(EngineDocument &engine, const QRect &area, const QStringList &paragraphs) {
+    const auto line = [&engine](const QString &query, bool last) {
+        const auto hits = engine.searchPage(query, 0).hits;
         if (hits.isEmpty()) return QRect();
-        const auto rects = model.rangeRects(hits.first().start, hits.first().end);
+        const auto rects = engine.rangeRects(hits.first().start, hits.first().end);
         QRect result;
         for (const auto &rect : rects)
             if (result.isEmpty() || (last ? rect.top() > result.top() : rect.top() < result.top())) result = rect;
@@ -238,17 +238,17 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
     auto settings = request.settings;
     settings[request.key] = request.values.first();
     const bool pages = request.crop.isEmpty();
-    std::unique_ptr<ReaderModel> model;
+    std::unique_ptr<EngineDocument> engine;
     int page = 0;
     result.differs = false;
     for (int variant = 0; variant < (pages ? sampleVariants : 1) && !result.differs; ++variant) {
         if (cancelled(request))
             return {};
-        model = std::make_unique<ReaderModel>(fonts);
+        engine = std::make_unique<EngineDocument>(fonts);
         QMap<QString, qint64> sizes;
         QString error;
-        if (!model->openResources(sampleBook(document, variant, &sizes, request.key == "paragraph_spacing"), sizes, request.page, settings, &error) ||
-            model->pages() < 1)
+        if (!engine->openResources(sampleBook(document, variant, &sizes, request.key == "paragraph_spacing"), sizes, request.page, settings, &error) ||
+            engine->pages() < 1)
             return {};
         if (!pages) {
             result.differs = true;
@@ -256,19 +256,19 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
         }
         QVector<QStringList> starts;
         for (const auto &value : request.values) {
-            if (!apply(*model, request, value))
+            if (!apply(*engine, request, value))
                 return {};
-            starts.append(pageStarts(*model));
+            starts.append(pageStarts(*engine));
         }
         const int changedBreak = firstChangedBreak(starts);
-        int completeSpreads = model->pages() - 2;
+        int completeSpreads = engine->pages() - 2;
         for (const auto &option : starts) completeSpreads = qMin(completeSpreads, option.size() - 2);
-        const int changedPage = changedBreak < 0 ? firstChangedPage(*model, request, completeSpreads) : -1;
+        const int changedPage = changedBreak < 0 ? firstChangedPage(*engine, request, completeSpreads) : -1;
         result.differs = changedBreak > 0 || changedPage >= 0;
         page = changedBreak > 0 ? changedBreak - 1 : qMax(0, changedPage);
     }
     // Keep the selected spread within the sample.
-    result.page = qMax(0, qMin(page, model->pages() - 2));
+    result.page = qMax(0, qMin(page, engine->pages() - 2));
     const QRect area = request.readingArea.intersected(QRect(QPoint(), request.page));
     const bool detail = !request.detail.isEmpty() && !area.isEmpty();
     // The bottom edge of the reading area, with a little paper beside and below.
@@ -292,20 +292,20 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
     const int paragraphMargin = settings.value("margin_pixels").toInt();
     const QRect paragraphArea(paragraphMargin, 0, request.page.width() - 2 * paragraphMargin, request.page.height());
     if (paragraphs) {
-        if (!apply(*model, request, 0)) return {};
-        model->image(0);
-        paragraphBaseline = paragraphGaps(*model, paragraphArea, paragraphTexts);
+        if (!apply(*engine, request, 0)) return {};
+        engine->image(0);
+        paragraphBaseline = paragraphGaps(*engine, paragraphArea, paragraphTexts);
     }
     for (const auto &value : request.values) {
-        if (!apply(*model, request, value))
+        if (!apply(*engine, request, value))
             return {};
         QVector<QImage> spread;
-        for (int index = result.page; index < qMin(result.page + 2, model->pages()); ++index) {
-            const auto image = model->image(index);
+        for (int index = result.page; index < qMin(result.page + 2, engine->pages()); ++index) {
+            const auto image = engine->image(index);
             if (index == 0 && !pages) {
                 result.crops.append(image.copy(QRect(request.cropOrigin, request.crop)));
                 if (paragraphs) {
-                    const auto gaps = paragraphGaps(*model, paragraphArea, paragraphTexts);
+                    const auto gaps = paragraphGaps(*engine, paragraphArea, paragraphTexts);
                     QVector<QRect> extra;
                     if (gaps.size() == paragraphBaseline.size())
                         for (int gap = 0; gap < gaps.size(); ++gap) {
@@ -418,7 +418,7 @@ QJsonObject styleSamplePageSettings(const QJsonObject &reading) {
 void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObject *context,
                        std::function<void(StyleSample)> finished) {
     QPointer<QObject> guard(context);
-    // The sample model shares CREngine's global fonts and caches, so it is
+    // The sample document shares CREngine's global fonts and caches, so it is
     // created, used and destroyed on the reader's engine worker.
     kobalt::qt::invoke(
         engineWorker(),

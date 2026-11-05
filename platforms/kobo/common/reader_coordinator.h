@@ -1,7 +1,7 @@
 #pragma once
 #include "app/reader_interface.h"
 #include "native_dialog_overlay.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "reading/reading_progress.h"
 #include "storage/reading_history.h"
 #include <QObject>
@@ -71,7 +71,7 @@ private:
     QVector<std::function<void()>> cleanupCallbacks;
     QTimer timer;
     // These owners describe the current or last opening. After ordinary close,
-    // model is the sole retained facade and identity/timings remain for reuse
+    // session is the sole retained facade and identity/timings remain for reuse
     // and diagnostics. ReadingBook owns the session while its window is open.
     // Keep cleanup explicit: destroying this value never starts a drain.
     struct ReadingRun {
@@ -86,7 +86,7 @@ private:
         std::unique_ptr<kobalt::NativeProgress> nativeProgress;
         kobalt::ReadingProgress baseline;
         kobalt::ReadingProgress diskBaseline;
-        std::unique_ptr<kobalt::ReaderSession> model;
+        std::unique_ptr<kobalt::ReaderSession> session;
         std::unique_ptr<kobalt::ReaderOrientation> orientation;
         std::shared_ptr<kobalt::SourceLease> sourceLease;
         QByteArray expectedHash;

@@ -1,7 +1,7 @@
 #include "column_view.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
-#include "reader_model.h"
+#include "engine_document.h"
 #include "engine_activity.h"
 #include <lvdocview.h>
 #include <QRegularExpression>
@@ -9,7 +9,7 @@
 #include <QUrl>
 
 namespace kobalt {
-void ReaderModel::markKoboLinkDecorations() {
+void EngineDocument::markKoboLinkDecorations() {
     auto *document = engine_->getDocument();
     const auto attribute = document->getAttrNameIndex("data-kobalt-kobo-link");
     QVector<ldomNode *> pending{document->getRootNode()};
@@ -442,7 +442,7 @@ bool noteHtml(ldomNode *node, QString &html, NoteBudget &budget, int depth = 0) 
     return html.size() <= noteHtmlLimit;
 }
 }
-QVector<PageLink> ReaderModel::pageLinks() {
+QVector<PageLink> EngineDocument::pageLinks() {
     QVector<PageLink> result;
     if (!engine_)
         return result;
@@ -460,7 +460,7 @@ QVector<PageLink> ReaderModel::pageLinks() {
     }
     return result;
 }
-LinkDetails ReaderModel::linkDetails(const QString &source, bool preview) {
+LinkDetails EngineDocument::linkDetails(const QString &source, bool preview) {
     LinkDetails result;
     if (!engine_)
         return result;

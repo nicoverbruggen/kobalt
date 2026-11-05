@@ -31,7 +31,7 @@ QString bookmarkLayoutKey(int pages, const QJsonObject &state, const QSize &page
 // running save.
 class BookmarkSession final : public QObject {
 public:
-    BookmarkSession(ReaderSession &model, std::function<QString()> layout, const QString &annotations,
+    BookmarkSession(ReaderSession &session, std::function<QString()> layout, const QString &annotations,
                     const QString &identity, const QByteArray &fingerprint, const QString &title, const QString &database = {});
     // False when the book has no stable key. The session then does nothing.
     bool available() const {
@@ -85,7 +85,7 @@ private:
     // `before` is the error count when the save was posted.
     void finishSave(quint64 save, bool ok, const QString &error, quint64 before,
                     const QVector<Bookmark> &bookmarks, const char *reason);
-    ReaderSession &model;
+    ReaderSession &session;
     std::function<QString()> layout;
     std::unique_ptr<BookmarkStore> store;
     QString error_;

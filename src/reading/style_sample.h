@@ -1,5 +1,5 @@
 #pragma once
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QImage>
 #include <QJsonObject>
 #include <QJsonValue>

@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "reader_inputs.h"
 #include "book_fixtures.h"
 #include "engine_fixtures.h"
@@ -24,7 +24,7 @@ QByteArray read(const QString &path) {
 QByteArray escaped(const QJsonValue &value) {
     return value.toString().toHtmlEscaped().toUtf8();
 }
-QVector<SearchHit> search(ReaderModel &model, const QString &query) {
+QVector<SearchHit> search(EngineDocument &model, const QString &query) {
     QVector<SearchHit> hits;
     QSet<QString> starts;
     for (int page = 0; page < model.pages(); ++page)
@@ -112,7 +112,7 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
     files["sources.json"] = bytes;
     const auto name = language + ".epub";
     require(test::writeBook(directory, name, files), "Cannot generate literary EPUB");
-    ReaderModel model(test::readerFonts());
+    EngineDocument model(test::readerFonts());
     QString error;
     require(model.open(read(directory + '/' + name), {1264, 1680}, {}, &error), qPrintable(error));
     require(model.pages() > 1, "Literary chapters did not paginate");
@@ -161,7 +161,7 @@ void checkBook(const QJsonObject &entry, const QString &directory) {
                 "Literary source anchor changed after reflow");
     }
     const auto checkpoint = model.state();
-    ReaderModel reopened(test::readerFonts());
+    EngineDocument reopened(test::readerFonts());
     require(reopened.open(read(directory + '/' + name), {1264, 1680}, checkpoint, &error), qPrintable(error));
     require(reopened.position() == model.position(), "Literary reopen lost its source position");
     std::printf("PASS: %s literary excerpts, native TOC, search, selection, reflow and reopen\n", qPrintable(language));

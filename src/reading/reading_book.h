@@ -28,7 +28,7 @@ public:
     ~ReadingBook();
     void discardPendingSaves() { discardSaves = true; }
     ReaderSession *session() const {
-        return model.get();
+        return session_.get();
     }
     const QString &identity() const {
         return identity_;
@@ -177,7 +177,7 @@ private:
     ReadingActivity readingActivity() const;
     // `background` queues the write instead of waiting for it.
     void saveSpeed(bool force = false, bool background = false);
-    std::unique_ptr<ReaderSession> model;
+    std::unique_ptr<ReaderSession> session_;
     QString statePath, identity_;
     storage::Paths paths_;
     QByteArray digest;

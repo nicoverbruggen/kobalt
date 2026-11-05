@@ -192,13 +192,13 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         }
         authorization->setBlocked(false);
         timer.start();
-        if (run.reader || run.model) {
+        if (run.reader || run.session) {
             const bool allowed = authorization->checkNow();
             if (allowed && run.reader && !BrowserHandoff::activeFor(run.reader)) {
                 run.reader->wakeReader();
                 // A sync can finish while the device sleeps. Check after the wake paint.
                 checkProgressSoon();
-            } else if (!allowed && (run.reader || run.model) && !lifecycle->draining) {
+            } else if (!allowed && (run.reader || run.session) && !lifecycle->draining) {
                 // A deferred or unavailable check must not leave an invisible
                 // reader holding Nickel's backing store indefinitely.
                 kobalt::diagnostic("resume-authorization-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
@@ -368,7 +368,7 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening) {
         if (!assetsReady || !kobalt::ui::initializeInterfaceFonts(environment_.assets))
             return missingAssetsBeforeOpening(assetsReady);
     }
-    const bool discardRetained = run.model && nextIdentity != run.identity;
+    const bool discardRetained = run.session && nextIdentity != run.identity;
     run.identity = nextIdentity;
     run.filePath = nextPath;
     if (!writeJson(activePath, kobalt::qt::object({{"book", run.identity}}))) {
@@ -414,7 +414,7 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening) {
                 if (run.sourceLease) {
                     run.sourceLease->cancel();
                 }
-                run.model.reset();
+                run.session.reset();
                 run.sourceLease.reset();
             }
             prepareOpening(route);
@@ -578,7 +578,7 @@ void ReaderCoordinator::status(const QString &value, const QString &reason) {
                                                  {"book", run.identity},
                                                  {"native_views", nativeViews},
                                                  {"native_readers", nativeReaders},
-                                                 {"retained_book", bool(run.model) && !busy},
+                                                 {"retained_book", bool(run.session) && !busy},
                                                  {"opening_timings", run.openingTimings}}));
     nh_log("reader: %s %s", qPrintable(value), qPrintable(reason));
 }
@@ -628,7 +628,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
         }, nativeAllowed);
         return;
     }
-    run.model.reset();
+    run.session.reset();
     run.nativeProgress.reset();
     run.opening.reset();
     run.orientation.reset();
@@ -672,7 +672,7 @@ void ReaderCoordinator::release(bool endAuthorization) {
     if (run.sourceLease)
         run.sourceLease->cancel();
     hideLoading();
-    run.model.reset();
+    run.session.reset();
     run.nativeProgress.reset();
     run.nativePublication.reset();
     run.opening.reset();
@@ -807,7 +807,7 @@ void ReaderCoordinator::load() {
     }
     run.orientation->start(kobalt::shownOrientation(QGuiApplication::primaryScreen()));
     // A retained document is data, never proof that access is still allowed.
-    if (run.model && !authorization->checkNow()) {
+    if (run.session && !authorization->checkNow()) {
         if (!lifecycle->draining)
             fail(strings::get("reader_controller.native_authorization_is_unavailable"));
         return;
@@ -845,8 +845,8 @@ void ReaderCoordinator::load() {
         saved.remove("position");
         saved.remove("finished_position");
     }
-    if (!run.model)
-        run.model = std::make_unique<kobalt::ReaderSession>(environment_.fonts(), environment_.placeholderFamily());
+    if (!run.session)
+        run.session = std::make_unique<kobalt::ReaderSession>(environment_.fonts(), environment_.placeholderFamily());
     run.sourceLease = std::make_shared<kobalt::SourceLease>();
     const auto originalAppearance = saved;
     QJsonObject temporaryAppearance;
@@ -862,7 +862,7 @@ void ReaderCoordinator::load() {
     const auto size = run.interface->readingViewport(QGuiApplication::primaryScreen()->size(), preferences);
     const auto nativeLocation =
         unread ? QString() : (useNative ? run.diskBaseline.location : run.nativePublication->location());
-    run.model->open(
+    run.session->open(
         {run.identity, run.filePath, size, saved, nativeLocation, environment_.paths.layoutCache(),
          run.sourceLease, run.nativePublication->resources(run.sourceLease), positionCodec(),
          environment_.paths.documentCache(), temporaryAppearance, originalAppearance,
@@ -878,8 +878,8 @@ void ReaderCoordinator::load() {
                 fail(strings::get("reader_controller.native_publication_service_closed"));
                 return;
             }
-            run.expectedHash = run.model->sourceHash();
-            run.openingTimings["resource_cache"] = run.model->resourceStats();
+            run.expectedHash = run.session->sourceHash();
+            run.openingTimings["resource_cache"] = run.session->resourceStats();
             showReader();
         },
         [this](kobalt::OpeningStage stage, int percent) {
@@ -907,7 +907,7 @@ void ReaderCoordinator::showReader() {
     if (!run.nativeProgress->signalsChanges())
         kobalt::diagnostic("native-progress-signals-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
     auto book = std::make_unique<kobalt::ReadingBook>(
-        std::move(run.model), run.statePath, environment_.paths, run.identity, run.expectedHash,
+        std::move(run.session), run.statePath, environment_.paths, run.identity, run.expectedHash,
         kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress)), run.baseline, run.diskBaseline);
     auto services = readerHostServices();
     const auto identity = run.identity;
@@ -956,7 +956,7 @@ void ReaderCoordinator::showReader() {
             disposeForTransition([] {});
             return;
         }
-        run.model = std::move(retained);
+        run.session = std::move(retained);
         if (run.sourceLease)
             run.sourceLease->cancel();
         // The old facade dies with the window. Drain its last jobs before
@@ -964,8 +964,8 @@ void ReaderCoordinator::showReader() {
         lifecycle->draining = true;
         ++generation;
         drainReadingJobs([this, closing] {
-            if (run.model)
-                run.model->cancelSource();
+            if (run.session)
+                run.session->cancelSource();
             run.nativePublication.reset();
             run.opening.reset();
             run.orientation.reset();

@@ -1,4 +1,4 @@
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "reading/appearance_settings.h"
 #include "publication/local_resources.h"
 #include "publication/publication.h"
@@ -27,7 +27,7 @@ std::shared_ptr<ResourceCache> fixture(const QByteArray &body, QMap<QString, qin
 QByteArray read(const QString &path) {
     QFile file(path); require(file.open(QIODevice::ReadOnly), "Cannot read comparison book"); return file.readAll();
 }
-SearchHit find(ReaderModel &model, const QString &query) {
+SearchHit find(EngineDocument &model, const QString &query) {
     for (int page = 0; page < model.pages(); ++page) {
         const auto hits = model.searchPage(query, page).hits;
         if (!hits.isEmpty()) return hits.first();
@@ -38,7 +38,7 @@ void compare(const QString &path, const QString &query, const QString &output) {
     const auto bytes = read(path);
     const auto hash = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
     QString error;
-    ReaderModel model(test::readerFonts());
+    EngineDocument model(test::readerFonts());
     QFile input(path); require(input.open(QIODevice::ReadOnly), "Cannot open comparison source");
     Publication publication; require(publication.inspect(input, &error), qPrintable(error));
     input.close();
@@ -68,7 +68,7 @@ void compareLayout(const QString &path, const QString &query, const QString &out
     const auto bytes = read(path);
     const auto hash = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
     QString error;
-    ReaderModel model(test::readerFonts());
+    EngineDocument model(test::readerFonts());
     require(model.open(bytes, {1072, 1448}, {{"font_pixels", 44}, {"line_spacing_version", 1},
         {"text_alignment", "publisher"}}, &error), qPrintable(error));
     const auto hit = find(model, query);
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
         const auto source = fixture(body, sizes);
         QTemporaryDir cache(QDir::currentPath() + "/beautifier-cache-XXXXXX");
         require(cache.isValid(), "Cannot create cache");
-        ReaderModel model(test::readerFonts());
+        EngineDocument model(test::readerFonts());
         model.setDocumentCache(cache.path(), QByteArray(64, 'b'), "beautifier", 1024 * 1024);
         require(model.openResources(source, sizes, {1072, 1448}, {{"dark_mode", dark}}, &error), qPrintable(error));
         const auto before = model.image(0);
@@ -155,12 +155,12 @@ int main(int argc, char **argv) {
         require(!model.state()["beautifier_initials"].toBool(), "Beautifier is not opt-in");
         require(model.applyAppearance({{"beautifier_initials", true}, {"beautifier_spacing", true}, {"beautifier_indent", true}}), "Cannot enable beautifier");
         require(model.image(0) != before, "Beautifier did not change prose or initial");
-        ReaderModel normalInitial(test::readerFonts());
+        EngineDocument normalInitial(test::readerFonts());
         require(normalInitial.openResources(fixture(body, sizes,
             ".dropcap{font-size:1em;float:none;margin:0}"), sizes, {1072, 1448},
             {{"dark_mode", dark}, {"beautifier_initials", true}, {"beautifier_spacing", true}, {"beautifier_indent", true}}, &error), qPrintable(error));
         require(model.image(0) == normalInitial.image(0), "Text initial differs from ordinary inline text");
-        ReaderModel unnamedInitial(test::readerFonts());
+        EngineDocument unnamedInitial(test::readerFonts());
         auto unnamedBody = body;
         unnamedBody.replace("dropcap", "big");
         require(unnamedInitial.openResources(fixture(unnamedBody, sizes,
@@ -177,17 +177,17 @@ int main(int argc, char **argv) {
             model.linkDetails(styledLinks.first().source, false).target == target,
             "Beautifier changed the link source or target ID");
         require(model.saveDocumentCache(), "Cannot save beautifier cache");
-        ReaderModel restored(test::readerFonts());
+        EngineDocument restored(test::readerFonts());
         restored.setDocumentCache(cache.path(), QByteArray(64, 'b'), "beautifier", 1024 * 1024);
         require(restored.openResources(source, sizes, {1072, 1448}, model.state(), &error), qPrintable(error));
         require(restored.openedFromCache() && restored.image(0) == model.image(0), "Warm cache changed beautifier rendering");
-        ReaderModel preview(test::readerFonts());
+        EngineDocument preview(test::readerFonts());
         require(preview.openPreview(model, {1072, 1448}, &error) && preview.image(0) == model.image(0), "Preview differs");
         require(restored.applyAppearance({{"beautifier_initials", false}, {"beautifier_spacing", false}, {"beautifier_indent", false}}) && restored.image(0) == before, "Off did not restore pixels");
         require(!restored.applyAppearance({{"beautifier_initials", "on"}}), "Invalid setting accepted");
         for (const auto &special : {QByteArray("<p class='quote'>"), QByteArray("<p class='letter'>"), QByteArray("<p style='margin-top:2em'>"),
                 QByteArray("<p style='text-indent:-1em;margin-left:2em'>"), QByteArray("<p style='text-align:right'>")}) {
-            ReaderModel protectedBook(test::readerFonts());
+            EngineDocument protectedBook(test::readerFonts());
             require(protectedBook.openResources(fixture(special + "Protectedmarker" + prose + "</p>", sizes), sizes,
                 {1072, 1448}, {{"dark_mode", dark}}, &error), qPrintable(error));
             const auto original = protectedBook.image(0);
@@ -201,7 +201,7 @@ int main(int argc, char **argv) {
             QByteArray("<blockquote><p style='margin-top:1.2em'><span class='big'>Z</span>etamarker</p></blockquote>"),
             QByteArray("<p>Earlier words. <span class='big'>Z</span>etamarker") + prose + "</p>"}) {
         QMap<QString, qint64> sizes;
-        ReaderModel decorated(test::readerFonts()), reference(test::readerFonts());
+        EngineDocument decorated(test::readerFonts()), reference(test::readerFonts());
         require(decorated.openResources(fixture(body, sizes,
             ".big{float:left;font-size:200%;margin-top:-.5em;margin-bottom:-.2em}"), sizes,
             {1072, 1448}, {}, &error), qPrintable(error));
@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
     // Explicit paragraph controls take precedence over beautifier defaults.
     QMap<QString, qint64> sizes;
     const auto ordinary = fixture("<p>Firstmarker" + prose + "</p><p>Secondmarker" + prose + "</p>", sizes);
-    ReaderModel explicitLayout(test::readerFonts());
+    EngineDocument explicitLayout(test::readerFonts());
     require(explicitLayout.openResources(ordinary, sizes, {1072, 1448},
         {{"paragraph_indent", 200}, {"paragraph_spacing", 50}}, &error), qPrintable(error));
     const auto explicitImage = explicitLayout.image(0);
@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
         "Beautifier overrode explicit paragraph controls");
 
     // Each global rule changes only its own aspect of ordinary prose.
-    ReaderModel independent(test::readerFonts());
+    EngineDocument independent(test::readerFonts());
     require(independent.openResources(ordinary, sizes, {1072, 1448}, {}, &error), qPrintable(error));
     const auto unchanged = independent.image(0);
     require(independent.applyAppearance({{"beautifier_initials", false},
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
 
     // A CSS first letter uses an engine pseudo-element, not a source span.
     const auto firstLetterBody = "<p class='stickupcaps'>Firstmarker" + prose + "</p>";
-    ReaderModel largeLetter(test::readerFonts()), normalLetter(test::readerFonts());
+    EngineDocument largeLetter(test::readerFonts()), normalLetter(test::readerFonts());
     require(largeLetter.openResources(fixture(firstLetterBody, sizes,
         "p::first-letter{font-size:3em;float:left}"), sizes, {1072, 1448}, {}, &error), qPrintable(error));
     const auto largeImage = largeLetter.image(0);
@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
     const QByteArray spacedLetterBody = "<p class='subtitle'>A date before the opening</p><blockquote><p style='margin-top:1.2em'>Firstmarker</p></blockquote>";
     QTemporaryDir initialCache(QDir::currentPath() + "/initial-cache-XXXXXX");
     require(initialCache.isValid(), "Cannot create initial cache");
-    ReaderModel spacedLetter(test::readerFonts()), plainLetter(test::readerFonts());
+    EngineDocument spacedLetter(test::readerFonts()), plainLetter(test::readerFonts());
     spacedLetter.setDocumentCache(initialCache.path(), QByteArray(64, 'c'), "initial", 1024 * 1024);
     require(spacedLetter.openResources(fixture(spacedLetterBody, sizes,
         "blockquote p::first-letter{font-size:3em;float:left}"), sizes, {1072, 1448}, {}, &error), qPrintable(error));
@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
     require(spacedLetter.applyAppearance({{"beautifier_initials", true}}) && spacedLetter.image(0) == plainLetter.image(0),
         "CSS initial normalization depends on paragraph classification or class name");
     require(spacedLetter.saveDocumentCache(), "Cannot save initial cache");
-    ReaderModel cachedLetter(test::readerFonts());
+    EngineDocument cachedLetter(test::readerFonts());
     cachedLetter.setDocumentCache(initialCache.path(), QByteArray(64, 'c'), "initial", 1024 * 1024);
     require(cachedLetter.openResources(fixture(spacedLetterBody, sizes,
         "blockquote p::first-letter{font-size:3em;float:left}"), sizes, {1072, 1448}, spacedLetter.state(), &error), qPrintable(error));
@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
     require(spacedLetter.applyAppearance({{"beautifier_initials", false}}) && spacedLetter.image(0) == spacedBefore,
         "CSS initial normalization did not restore publisher styling");
     const auto image = QByteArray("<svg xmlns='http://www.w3.org/2000/svg' width='60' height='90'><rect width='60' height='90'/></svg>").toBase64();
-    ReaderModel imageInitial(test::readerFonts());
+    EngineDocument imageInitial(test::readerFonts());
     require(imageInitial.openResources(fixture("<p><span class='dropcap'><img src='data:image/svg+xml;base64," + image +
         "'/></span>Image marker" + prose + "</p>", sizes), sizes, {1072, 1448}, {}, &error), qPrintable(error));
     const auto imageBefore = imageInitial.image(0);

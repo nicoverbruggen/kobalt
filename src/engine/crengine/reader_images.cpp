@@ -1,4 +1,4 @@
-#include "reader_model.h"
+#include "engine_document.h"
 #include "column_view.h"
 #include "publication/image_policy.h"
 #include <lvdrawbuf.h>
@@ -6,7 +6,7 @@
 #include <QCryptographicHash>
 
 namespace kobalt {
-QImage ReaderModel::imageAt(QPoint point) {
+QImage EngineDocument::imageAt(QPoint point) {
     if (!engine_ || !QRect(QPoint(), size_).contains(point))
         return {};
     const auto pointer = engine_->getNodeByPoint(lvPoint(point.x(), point.y()), true);

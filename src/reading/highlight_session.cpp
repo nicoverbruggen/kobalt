@@ -13,9 +13,9 @@
 #include <limits>
 
 namespace kobalt {
-HighlightSession::HighlightSession(ReaderSession &model, std::function<QString()> layout, const QString &annotations,
+HighlightSession::HighlightSession(ReaderSession &session, std::function<QString()> layout, const QString &annotations,
                                    const QString &identity, const QByteArray &fingerprint, const QString &title, const QString &database)
-    : model_(model), layout(std::move(layout)),
+    : session_(session), layout(std::move(layout)),
       store_(std::make_unique<HighlightStore>(annotations, identity, fingerprint, title, database)) {
     if (!store_->available()) {
         store_.reset();
@@ -135,7 +135,7 @@ bool HighlightSession::exportDetails(QVector<Highlight> *rows) {
     return true;
 }
 bool HighlightSession::resolved() const {
-    return store_ && !layout_.isEmpty() && layoutRevision_ == model_.layoutRevision() && layout_ == layout();
+    return store_ && !layout_.isEmpty() && layoutRevision_ == session_.layoutRevision() && layout_ == layout();
 }
 BookmarkLocations HighlightSession::locations() const {
     return resolved() ? BookmarkLocations{pages_, order_} : BookmarkLocations{};
@@ -147,11 +147,11 @@ int HighlightSession::endPage(int index) const {
     return resolved() && index >= 0 ? pages_.value(index * 2 + 1, -1) : -1;
 }
 bool HighlightSession::sync() {
-    if (!store_ || loadFailed_ || model_.busy() || model_.pages() <= 0) {
+    if (!store_ || loadFailed_ || session_.busy() || session_.pages() <= 0) {
         return false;
     }
     const auto key = layout();
-    const auto revision = model_.layoutRevision();
+    const auto revision = session_.layoutRevision();
     if (layout_ == key && layoutRevision_ == revision) {
         return true;
     }
@@ -177,7 +177,7 @@ bool HighlightSession::sync() {
         positions << h.start << h.end;
     }
     QPointer<HighlightSession> guard(this);
-    model_.bookmarkLocations(
+    session_.bookmarkLocations(
         positions,
         [guard, key, revision, request, count = positions.size(), generation = rangesGeneration_](BookmarkLocations locations) {
             if (!guard || guard->lookupRequest_ != request) {
@@ -185,7 +185,7 @@ bool HighlightSession::sync() {
             }
             guard->lookup_.clear();
             guard->lookupCancelled_.reset();
-            if (guard->rangesGeneration_ == generation && guard->model_.layoutRevision() == revision &&
+            if (guard->rangesGeneration_ == generation && guard->session_.layoutRevision() == revision &&
                 guard->layout() == key && locations.pages.size() == count && locations.order.size() == count) {
                 guard->layout_ = key;
                 guard->layoutRevision_ = revision;
@@ -373,15 +373,15 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
     }
     QPointer<HighlightSession> guard(this);
     const auto generation = generation_;
-    const auto revision = model_.layoutRevision();
-    model_.textRange(start, end,
+    const auto revision = session_.layoutRevision();
+    session_.textRange(start, end,
                      [guard, id, generation, revision, finished, chosenEnd, sentenceEndPolicy, chosenStart, sentenceStartPolicy,
                       color, style](TextRange range) {
                          if (!guard) {
                              return;
                          }
                          if (range.text.isEmpty() || guard->generation_ != generation ||
-                             guard->model_.layoutRevision() != revision) {
+                             guard->session_.layoutRevision() != revision) {
                              if (finished) {
                                  finished(false);
                              }
@@ -426,11 +426,11 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
                              if (item.id != id)
                                  others.append({item.start, item.end});
                          }
-                         guard->model_.intersectingRanges(range.start, range.end, others,
+                         guard->session_.intersectingRanges(range.start, range.end, others,
                              [guard, list, h, index, generation, revision, finished](QVector<int> hits) mutable {
                                  if (!guard)
                                      return;
-                                 if (guard->generation_ != generation || guard->model_.layoutRevision() != revision ||
+                                 if (guard->generation_ != generation || guard->session_.layoutRevision() != revision ||
                                      !hits.isEmpty()) {
                                      if (!hits.isEmpty()) {
                                          guard->error_ = QStringLiteral("overlap");
@@ -444,19 +444,19 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
                                  }
                                  // Chapter lookup follows the start endpoint, even after a cross-page selection.
                                  const auto positions = QStringList{h.start};
-                                 guard->model_.bookmarkPages(
+                                 guard->session_.bookmarkPages(
                                      positions, [guard, list, h, index, generation, revision, finished](QVector<int> pages) mutable {
                                          if (!guard) {
                                              return;
                                          }
                                          if (pages.size() != 1 || guard->generation_ != generation ||
-                                             guard->model_.layoutRevision() != revision) {
+                                             guard->session_.layoutRevision() != revision) {
                                              if (finished) {
                                                  finished(false);
                                              }
                                              return;
                                          }
-                                         for (const auto &chapter : guard->model_.chapters()) {
+                                         for (const auto &chapter : guard->session_.chapters()) {
                                              if (chapter.page >= 0 && chapter.page <= pages[0]) {
                                                  h.chapter = chapter.title.left(512);
                                              }

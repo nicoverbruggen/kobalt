@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <lvfntman.h>
 #include <textlang.h>
 #include <hyphman.h>
@@ -85,13 +85,13 @@ void checkEnglishExceptions() {
     std::puts("PASS: all 1753 upstream US English exceptions and unchanged seagull");
 }
 // Every match of `query` in the book, in reading order.
-QVector<kobalt::SearchHit> find(kobalt::ReaderModel &model, const QString &query) {
+QVector<kobalt::SearchHit> find(kobalt::EngineDocument &model, const QString &query) {
     QVector<kobalt::SearchHit> hits;
     for (int page = 0; page < model.pages(); ++page)
         hits += model.searchPage(query, page).hits;
     return hits;
 }
-int width(kobalt::ReaderModel &model, const kobalt::SearchHit &hit) {
+int width(kobalt::EngineDocument &model, const kobalt::SearchHit &hit) {
     int result = 0;
     for (const auto &rect : model.rangeRects(hit.start, hit.end))
         result += rect.width();
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
     const QSize size(1072, 1448);
     QString error;
     {
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(english, size,
                            kobalt::qt::object(
                                {{"font_face", ""}, {"default_font_face", kobalt::test::alternateReadingFace()}}),
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
     {
         const auto path =
             QFileInfo(QString::fromLocal8Bit(argv[1])).absoluteDir().filePath("font-families.epub").toLocal8Bit();
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(read(path.constData()), size, kobalt::qt::object({{"font_face", ""}}), &error),
                 qPrintable(error));
         const auto checkFace = [&](const QString &word, const QString &expected) {
@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
             require(model.image(page) == originalPages[page], "Defaults changed a book with embedded fonts");
         }
         require(model.go(0), "Cannot locate embedded book preview");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(model, size, &error), qPrintable(error));
         require(preview.embeddedFontCount() == 1 && preview.image(0) == model.image(0),
                 "Preview lost the full publication's embedded-font gate");
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
         for (const auto *name : {"font-families.epub", "font-families-embedded.epub"}) {
             const auto path = directory.filePath(name).toLocal8Bit();
             const auto bytes = read(path.constData());
-            kobalt::ReaderModel model(kobalt::test::readerFonts());
+            kobalt::EngineDocument model(kobalt::test::readerFonts());
             require(model.open(bytes, size, fallbacks, &error), qPrintable(error));
             const auto checkFace = [&](const QString &word, const QString &face) {
                 const auto hits = find(model, word);
@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
                     "Cannot restore automatic fallbacks");
             require(model.applyAppearance(fallbacks), "Cannot change generic fallback fonts on an open book");
             checkFamilies();
-            kobalt::ReaderModel preview(kobalt::test::readerFonts());
+            kobalt::EngineDocument preview(kobalt::test::readerFonts());
             require(preview.openPreview(model, size, &error), qPrintable(error));
             for (const auto *key : kobalt::appearance::fallbackFontKeys)
                 require(preview.state().value(key) == model.state().value(key), "Preview lost a custom fallback");
@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
                 "Cannot reset fallback choices");
             checkFace("Monomarker", "IBM Plex Mono");
         }
-        kobalt::ReaderModel missing(kobalt::test::readerFonts());
+        kobalt::EngineDocument missing(kobalt::test::readerFonts());
         auto unavailable = fallbacks;
         unavailable["serif_font_face"] = QStringLiteral("Removed Personal Font");
         const auto path = directory.filePath("font-families.epub").toLocal8Bit();
@@ -273,7 +273,7 @@ int main(int argc, char **argv) {
     {
         const auto path =
             QFileInfo(QString::fromLocal8Bit(argv[1])).absoluteDir().filePath("equations.epub").toLocal8Bit();
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(read(path.constData()), size, kobalt::qt::object({{"font_pixels", 40}}), &error),
                 qPrintable(error));
         const auto image = model.image(0);
@@ -312,7 +312,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(english, size, {}, &error), qPrintable(error));
 
         // Code keeps a fixed width under the chosen reading font.
@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
     }
     {
         // A position written by an older DOM version still finds its text.
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         const auto saved =
             kobalt::qt::object({{"position", "/body/DocFragment[3]/body/p[2]/text().0"}, {"dom_version", 20210904}});
         require(model.open(english, size, saved, &error), qPrintable("Old position failed: " + error));
@@ -428,7 +428,7 @@ int main(int argc, char **argv) {
     }
     {
         // A German book uses the German dictionary.
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(read(argv[2]), size, kobalt::qt::object({{"hyphenation", "on"}}), &error),
                 qPrintable(error));
         require(text(TextLangMan::getMainLang()) == "de", "The German package language was not applied");
@@ -443,7 +443,7 @@ int main(int argc, char **argv) {
     }
     {
         // Russian uses its dictionary, including regional language tags.
-        kobalt::ReaderModel model(kobalt::test::readerFonts());
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(read(argv[3]), size, kobalt::qt::object({{"hyphenation", "on"}}), &error),
                 qPrintable(error));
         require(text(TextLangMan::getMainLang()) == "ru", "The Russian package language was not applied");
@@ -464,7 +464,7 @@ int main(int argc, char **argv) {
             {"lt-LT", "Lithuanian"}, {"lv-LV", "Latvian"},  {"pl-PL", "Polish"},   {"ru-RU", "Russian"}, {"sk-SK", "Slovak"},
             {"sl-SI", "Slovenian"},  {"uk-UA", "Ukrainian"}};
         for (auto entry = dictionaries.cbegin(); entry != dictionaries.cend(); ++entry) {
-            kobalt::ReaderModel model(kobalt::test::readerFonts());
+            kobalt::EngineDocument model(kobalt::test::readerFonts());
             const auto path = directory.filePath("hyphenation-" + entry.key() + ".epub").toLocal8Bit();
             require(model.open(read(path.constData()), QSize(320, 720),
                                kobalt::qt::object({{"hyphenation", "on"}, {"text_alignment", "justify"}}), &error),
@@ -488,7 +488,7 @@ int main(int argc, char **argv) {
         QMap<QString, QImage> pages;
         const auto directory = QFileInfo(QString::fromLocal8Bit(argv[1])).absoluteDir();
         for (const auto *language : {"ja", "ko", "zh-Hans", "zh-Hant", "zh-HK", "inline"}) {
-            kobalt::ReaderModel model(kobalt::test::readerFonts());
+            kobalt::EngineDocument model(kobalt::test::readerFonts());
             const auto path = directory.filePath(QString("cjk-%1.epub").arg(language)).toLocal8Bit();
             require(model.open(read(path.constData()), size, {}, &error), qPrintable(error));
             require(find(model, QString::fromUtf8("骨直令曜")).size() == 1, "CJK text is not searchable");
@@ -501,7 +501,7 @@ int main(int argc, char **argv) {
                 for (const auto *region : {"JP", "KR", "SC", "TC", "HK"})
                     require(model.fontFaces().contains(QString("Noto Serif CJK %1").arg(region)),
                             "CJK collection face is missing");
-                kobalt::ReaderModel preview(kobalt::test::readerFonts());
+                kobalt::EngineDocument preview(kobalt::test::readerFonts());
                 require(preview.openPreview(model, size, &error), qPrintable(error));
                 require(preview.image(0) == pages[language], "CJK preview changed glyphs");
                 model.setDarkMode(true);

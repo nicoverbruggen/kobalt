@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     require(argc == 2, "Pass the synthetic dictionary EPUB");
     QFile file(QString::fromLocal8Bit(argv[1]));
     require(file.open(QIODevice::ReadOnly), "Cannot open fixture");
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     require(model.open(file.readAll(), QSize(1072, 1300), {}, &error), qPrintable(error));
     QSet<QString> found;

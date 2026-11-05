@@ -3,12 +3,12 @@
 #include <QString>
 
 namespace kobalt {
-class ReaderModel;
+class EngineDocument;
 // Optional host position mapping. Calls run on the engine worker. No GUI
 // object, native handle or document pointer crosses this value boundary.
 struct PositionCodec {
-    QString (*decode)(const ReaderModel &, const QString &, QString *) = nullptr;
-    QString (*encode)(const ReaderModel &, QString *) = nullptr;
+    QString (*decode)(const EngineDocument &, const QString &, QString *) = nullptr;
+    QString (*encode)(const EngineDocument &, QString *) = nullptr;
     QString (*chapterStart)(const QString &) = nullptr;
     explicit operator bool() const {
         return decode && encode && chapterStart;
@@ -17,6 +17,6 @@ struct PositionCodec {
 struct ResolvedChapters {
     QVector<ChapterLink> contents, graph;
 };
-ResolvedChapters resolveChapterTargets(const ReaderModel &model, const PositionCodec &codec,
+ResolvedChapters resolveChapterTargets(const EngineDocument &engine, const PositionCodec &codec,
                                        const QVector<ChapterTarget> &contents, const QVector<ChapterTarget> &graph);
 }

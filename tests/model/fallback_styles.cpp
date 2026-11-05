@@ -1,6 +1,6 @@
 #include "check.h"
 #include "reader_inputs.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -27,7 +27,7 @@ std::vector<lUInt32> shapedPixels(LVFontRef font, const lString32 &text) {
 
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     require(model.initializeFonts(), "Cannot initialize fallback styles");
     require(fontMan->RegisterFont(
                 lString8(kobalt::test::readerAssets().file("fonts/InstrumentSerif-Regular.ttf").toUtf8().constData())),

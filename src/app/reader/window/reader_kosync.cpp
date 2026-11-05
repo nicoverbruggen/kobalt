@@ -9,7 +9,7 @@
 
 namespace kobalt::reader {
 QByteArray Reader::kosyncDocument() const {
-    return kosyncClient->filenameMatching() ? model->syncFilenameDigest() : model->syncDigest();
+    return kosyncClient->filenameMatching() ? session->syncFilenameDigest() : session->syncDigest();
 }
 void Reader::kosyncStatus(const QString &message) {
     kosyncMessage = message;
@@ -50,7 +50,7 @@ void Reader::buildKosync() {
         }
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
         kosyncStatus(strings::get(!saved ? "kosync.storage_error" :
-            enabled && model->syncFilenameDigest().isEmpty() ? "kosync.filename_unavailable" : "kosync.matching_changed"));
+            enabled && session->syncFilenameDigest().isEmpty() ? "kosync.filename_unavailable" : "kosync.matching_changed"));
     };
     kosyncPage->deviceNameChanged = [this](const QString &name) {
         const bool saved = kosyncClient->setDeviceName(name);
@@ -151,7 +151,7 @@ void Reader::buildKosync() {
 void Reader::syncKosyncWhileReading() {
     if (!kosyncStarted)
         return;
-    const auto position = model->state().value("position").toString();
+    const auto position = session->state().value("position").toString();
     if (position.isEmpty() || position == kosyncSeenPosition)
         return;
     kosyncSeenPosition = position;
@@ -225,7 +225,7 @@ void Reader::requestManualKosync() {
 void Reader::prepareKosyncPresentation(std::function<void(bool)> finished) {
     if (kosyncStarted || book->usesNativeCloudSync() || !kosyncClient->signedIn() || !kosyncAutomatic() ||
         !kosyncClient->schedule().onOpen ||
-        book->pendingProgress() || book->deviceTransition() || model->pages() <= 0 || model->temporaryTypography()) {
+        book->pendingProgress() || book->deviceTransition() || session->pages() <= 0 || session->temporaryTypography()) {
         finished(true);
         return;
     }
@@ -307,8 +307,8 @@ void Reader::synchronizeKosync(bool interactive) {
     if (!kosyncClient->signedIn() || (!interactive && !kosyncAutomatic()) || kosyncClient->busy() ||
         kosyncConnecting || kosyncAuthenticating || kosyncReaderReady ||
         kosyncDialog || closing || lifecycleHidden || exportRunning ||
-        services.suspended() || book->deviceTransition() || book->pendingProgress() || (!interactive && model->busy()) || model->temporaryTypography() ||
-        !isVisible() || model->pages() <= 0 || (!interactive && topControls->isVisible())) return;
+        services.suspended() || book->deviceTransition() || book->pendingProgress() || (!interactive && session->busy()) || session->temporaryTypography() ||
+        !isVisible() || session->pages() <= 0 || (!interactive && topControls->isVisible())) return;
     const bool opening = !kosyncStarted && !interactive;
     // Opening and waking each have their own switch. A skipped one still
     // counts as started, so periodic syncs and Sync now continue as usual.
@@ -319,7 +319,7 @@ void Reader::synchronizeKosync(bool interactive) {
         kosyncSubmitted = kosyncClock();
         return;
     }
-    if (!interactive && !opening && !kosyncProgress.needsSync(model->state().value("position").toString())) return;
+    if (!interactive && !opening && !kosyncProgress.needsSync(session->state().value("position").toString())) return;
     kosyncStarted = true;
     kosyncSubmitted = kosyncClock();
     if (interactive) kosyncBackgroundFailures = 0;
@@ -499,9 +499,9 @@ void Reader::flushKosync(std::function<void()> finished, bool enabled) {
     }
     if (!enabled || (kosyncNetwork && !kosyncNetwork->connected()) ||
         book->usesNativeCloudSync() || !kosyncClient->signedIn() || !kosyncAutomatic() ||
-        kosyncProgress.pending() || book->pendingProgress() || model->temporaryTypography() ||
-        model->pages() <= 0 || kosyncDocument().isEmpty() ||
-        model->state().value("position").toString().isEmpty()) {
+        kosyncProgress.pending() || book->pendingProgress() || session->temporaryTypography() ||
+        session->pages() <= 0 || kosyncDocument().isEmpty() ||
+        session->state().value("position").toString().isEmpty()) {
         cancelKosync();
         finished();
         return;
@@ -518,7 +518,7 @@ void Reader::flushKosync(std::function<void()> finished, bool enabled) {
 }
 void Reader::continueKosyncWhenReady(std::function<void()> ready) {
     if (book->pendingProgress() || book->deviceTransition() || closing || lifecycleHidden ||
-        services.suspended() || model->busy() || model->temporaryTypography() || exportRunning ||
+        services.suspended() || session->busy() || session->temporaryTypography() || exportRunning ||
         (!isVisible() && !kosyncOpening)) {
         kosyncReaderReady = std::move(ready);
         // A hidden or sleeping reader does not check every 100 ms: refresh()
@@ -527,7 +527,7 @@ void Reader::continueKosyncWhenReady(std::function<void()> ready) {
         if (hidden)
             kosyncReaderRetry.stop();
         if (!kosyncReaderRetry.isActive()) {
-            diagnostic("kosync-reader-wait", qt::object({{"model_busy", model->busy()},
+            diagnostic("kosync-reader-wait", qt::object({{"model_busy", session->busy()},
                 {"hidden", !isVisible()}, {"suspended", services.suspended()},
                 {"pending_progress", book->pendingProgress()}, {"device_transition", book->deviceTransition()},
                 {"exporting", exportRunning}}));
@@ -549,8 +549,8 @@ void Reader::startKosyncExchange(bool finishing) {
     }
     const auto epoch = kosyncEpoch;
     kosync::Progress snapshot;
-    snapshot.position = model->state().value("position").toString();
-    snapshot.percentage = model->pages() > 1 ? double(model->page()) / (model->pages() - 1) : 0;
+    snapshot.position = session->state().value("position").toString();
+    snapshot.percentage = session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
     // Fetch before every write, including the bounded final attempt. A failed
     // fetch cannot authorize an overwrite of another device's progress.
     kosyncClient->pull(document, [this, document, epoch, finishing, snapshot](kosync::Progress remote, const QString &error) {
@@ -567,8 +567,8 @@ void Reader::startKosyncExchange(bool finishing) {
             if (epoch != kosyncEpoch) return;
             auto local = snapshot;
             if (!finishing) {
-                local.position = model->state().value("position").toString();
-                local.percentage = model->pages() > 1 ? double(model->page()) / (model->pages() - 1) : 0;
+                local.position = session->state().value("position").toString();
+                local.percentage = session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
             }
             const auto action = kosyncProgress.observe(remote, local.position, kosyncClient->deviceId());
             if (action == kosync::Reconciler::Action::Choose) { finishKosync(strings::get("kosync.pending")); return; }
@@ -593,7 +593,7 @@ void Reader::startKosyncExchange(bool finishing) {
     if (kosyncClient->busy()) kosyncStatus(strings::get("kosync.syncing"));
 }
 void Reader::showKosyncChoice() {
-    if (!kosyncProgress.pending() || kosyncPositionFailed || kosyncPromptDeferred || kosyncDialog || closing || lifecycleHidden || !isVisible() || model->busy() ||
+    if (!kosyncProgress.pending() || kosyncPositionFailed || kosyncPromptDeferred || kosyncDialog || closing || lifecycleHidden || !isVisible() || session->busy() ||
         services.suspended() || book->deviceTransition() || book->pendingProgress() || syncDialog || finishDialog ||
         topControls->isVisible() || general->isVisible() || annotationMode || searchPanel->isVisible() ||
         dictionaryPanel->isVisible() || (imageViewer && imageViewer->isVisible()) ||
@@ -625,11 +625,11 @@ void Reader::showKosyncChoice() {
         dismiss();
     };
     connect(dialog->primaryButton(), &QPushButton::clicked, this, [this, remote, dismiss] {
-        if (model->busy() || closing || lifecycleHidden || services.suspended()) return;
+        if (session->busy() || closing || lifecycleHidden || services.suspended()) return;
         dismiss();
-        if (!model->goToSyncedPosition(remote.position, [this](const QString &error) {
+        if (!session->goToSyncedPosition(remote.position, [this](const QString &error) {
             if (error.isEmpty()) {
-                kosyncProgress.acceptRemote(model->state().value("position").toString());
+                kosyncProgress.acceptRemote(session->state().value("position").toString());
                 // Both writes are queued on the profile writer thread, which
                 // runs them in queue order, so the position lands before the
                 // sync time. Only an earlier sync time still waiting in the
@@ -661,11 +661,11 @@ void Reader::showKosyncChoice() {
     dialog->raise();
     dialog->fitCard();
     const auto epoch = kosyncEpoch;
-    const auto localChapter = model->chapterTitle();
-    const double localPercentage = model->pages() > 1 ? 100.0 * model->page() / (model->pages() - 1) : 0;
+    const auto localChapter = session->chapterTitle();
+    const double localPercentage = session->pages() > 1 ? 100.0 * session->page() / (session->pages() - 1) : 0;
     dialog->primaryButton()->setEnabled(false);
     QPointer<ui::ChoiceModal> guard(dialog);
-    model->describeSyncedPosition(remote.position, [this, guard, epoch, remote, localChapter, localPercentage](SyncedPositionDescription info) {
+    session->describeSyncedPosition(remote.position, [this, guard, epoch, remote, localChapter, localPercentage](SyncedPositionDescription info) {
         if (!guard || !guard->isVisible() || epoch != kosyncEpoch) return;
         const bool compared = info.comparison.status == PositionComparison::Status::Compared;
         const bool backward = compared && info.comparison.direction < 0;

@@ -45,7 +45,7 @@ void Reader::closeMarksActions() {
 }
 
 void Reader::openMarksActions() {
-    if (marksActions || removeDialog || annotationExportPicker || model->busy() ||
+    if (marksActions || removeDialog || annotationExportPicker || session->busy() ||
         closing || lifecycleHidden || services.suspended() || book->deviceTransition()) return;
     ui::ActionMenu *menu;
     if (bookmarkList->annotationsShown()) {
@@ -60,18 +60,18 @@ void Reader::openMarksActions() {
         const bool enabled = highlights->writable() && highlights->resolved() && !highlights->highlights().isEmpty();
         for (auto *action : menu->actions()) action->setEnabled(enabled);
     } else {
-        const int current = model->page();
+        const int current = session->page();
         const bool marked = bookmarks->marked(current);
         menu = new ui::ActionMenu(this, {},
             {ui::actionItem(strings::get(marked ? "bookmarks.remove_current" : "bookmarks.add_current"),
                             marked ? "rrBookmarkRemoveCurrent" : "rrBookmarkAddCurrent",
                             marked ? ui::ControlIcon::BookmarkRemove : ui::ControlIcon::BookmarkAdd,
                             [this, current, marked] {
-                                if (model->page() == current && bookmarks->marked(current) == marked)
+                                if (session->page() == current && bookmarks->marked(current) == marked)
                                     toggleBookmark();
                             })});
         menu->setObjectName("rrBookmarkActions");
-        menu->actions().first()->setEnabled(bookmarks->writable() && bookmarks->resolved() && model->pages() > 0);
+        menu->actions().first()->setEnabled(bookmarks->writable() && bookmarks->resolved() && session->pages() > 0);
     }
     marksActions = menu;
     menu->dismissed = [this] { closeMarksActions(); };
@@ -87,12 +87,12 @@ void Reader::openMarksActions() {
 QByteArray Reader::marksExportArchive(AnnotationExportFormat format) {
     QVector<Highlight> rows;
     return highlights->exportDetails(&rows)
-        ? annotationExportArchive(model->title(), model->author(), rows, format, QDateTime::currentDateTimeUtc(),
-                                  format == AnnotationExportFormat::Html ? exportFont(model->fontInputs()) : QByteArray()) : QByteArray();
+        ? annotationExportArchive(session->title(), session->author(), rows, format, QDateTime::currentDateTimeUtc(),
+                                  format == AnnotationExportFormat::Html ? exportFont(session->fontInputs()) : QByteArray()) : QByteArray();
 }
 
 void Reader::askExportMarks(AnnotationExportFormat format) {
-    if (removeDialog || annotationExportPicker || model->busy() || closing || lifecycleHidden || services.suspended() ||
+    if (removeDialog || annotationExportPicker || session->busy() || closing || lifecycleHidden || services.suspended() ||
         book->deviceTransition())
         return;
     if (!highlights->writable() || !highlights->resolved() || highlights->highlights().isEmpty())
@@ -102,7 +102,7 @@ void Reader::askExportMarks(AnnotationExportFormat format) {
         return;
     }
     const auto directory = services.annotationExportDirectory();
-    const auto name = annotationExportFileName(book->identity(), model->title(), format);
+    const auto name = annotationExportFileName(book->identity(), session->title(), format);
     if (directory.isEmpty() || name.isEmpty()) {
         finishMarksExport(format, false);
         return;
@@ -115,7 +115,7 @@ void Reader::askExportMarks(AnnotationExportFormat format) {
 
 void Reader::confirmMarksExport(AnnotationExportFormat format, bool replace, const QString &path, std::function<void()> accepted) {
     auto description = strings::get(replace ? "annotations.export_replace_description" : "annotations.export_description")
-        .arg(model->title().isEmpty() ? strings::get("annotations.export_untitled") : model->title(),
+        .arg(session->title().isEmpty() ? strings::get("annotations.export_untitled") : session->title(),
              QString::fromLatin1(exportFormatName(format)));
     if (!path.isEmpty()) description += "\n\n" + strings::get("annotations.export_destination").arg(path);
     auto *dialog = new ui::ChoiceModal(this,
@@ -137,7 +137,7 @@ void Reader::confirmMarksExport(AnnotationExportFormat format, bool replace, con
     connect(dialog->primaryButton(), &QPushButton::clicked, this, [this, dialog, close, accepted = std::move(accepted)] {
         if (removeDialog != dialog) return;
         close();
-        if (model->busy() || closing || lifecycleHidden || services.suspended() || book->deviceTransition()) return;
+        if (session->busy() || closing || lifecycleHidden || services.suspended() || book->deviceTransition()) return;
         accepted();
     });
     dialog->card()->fitToWidth(qMin<int>(m::notice::cardWidth, width() - 2 * m::notice::sideClearance));
@@ -172,7 +172,7 @@ void Reader::chooseMarksExport(AnnotationExportFormat format) {
     // be a graphics proxy and must not acquire a separate native window.
     auto *parent = services.nativeDialogParent ? services.nativeDialogParent() : this;
     auto *picker = new QFileDialog(parent, strings::get("annotations.export_format_title").arg(exportFormatName(format)),
-                                  annotationExportFileName(book->identity(), model->title(), format),
+                                  annotationExportFileName(book->identity(), session->title(), format),
                                   strings::get("annotations.export_filter"));
     annotationExportPicker = picker;
     picker->setObjectName("rrAnnotationExportPicker");
@@ -242,7 +242,7 @@ void Reader::buildAnnotations() {
 }
 
 void Reader::enterAnnotations() {
-    if (model->busy() || !highlights->writable() || appearanceEdit.panelOpen() || general->isVisible()) {
+    if (session->busy() || !highlights->writable() || appearanceEdit.panelOpen() || general->isVisible()) {
         return;
     }
     const bool changed = !annotationMode;
@@ -509,7 +509,7 @@ void Reader::setAnnotationBoundary(AnnotationToken token, bool start) {
 }
 
 void Reader::annotationTap(QPoint point) {
-    if (annotationSaving || model->busy() || lifecycleHidden || services.suspended() ||
+    if (annotationSaving || session->busy() || lifecycleHidden || services.suspended() ||
         annotationStart.isEmpty() || !page->annotationContains(point))
         return;
     dismissLookup(true);
@@ -517,7 +517,7 @@ void Reader::annotationTap(QPoint point) {
 }
 
 bool Reader::beginAnnotationDrag(QPoint point, int boundary) {
-    if (annotationSaving || model->busy() || lifecycleHidden || closing || services.suspended() ||
+    if (annotationSaving || session->busy() || lifecycleHidden || closing || services.suspended() ||
         (boundary >= 0 && !annotationMode && (annotationStart.isEmpty() || annotationEnd.isEmpty())) ||
         (topControls->isVisible() && !annotationMenuSelectionEnabled()))
         return false;
@@ -548,7 +548,7 @@ void Reader::loadAnnotationDragEdges() {
     annotationDragPending = true;
     const auto epoch = annotationEpoch;
     QPointer<Reader> guard(this);
-    model->annotationPageEdges([guard, epoch](AnnotationPageEdges edges) {
+    session->annotationPageEdges([guard, epoch](AnnotationPageEdges edges) {
         if (!guard || guard->annotationEpoch != epoch || !guard->annotationDragging)
             return;
         guard->annotationDragLoadingEdges = false;
@@ -580,7 +580,7 @@ void Reader::loadAnnotationDragEdges() {
             }, [guard, direction] {
                 // An adjacent saved highlight is a boundary, never an overlapping draft.
                 guard->annotationDragging = guard->annotationDragPending = false;
-                guard->model->turn(-direction);
+                guard->session->turn(-direction);
             });
     });
 }
@@ -642,7 +642,7 @@ void Reader::finishAnnotationDrag(bool cancelled) {
 }
 
 void Reader::requestAnnotationDrag() {
-    if (!annotationDragging || annotationDragPending || model->busy() || lifecycleHidden || services.suspended())
+    if (!annotationDragging || annotationDragPending || session->busy() || lifecycleHidden || services.suspended())
         return;
     if (annotationDragTurn || (annotationHandleDragging && annotationDragEdges.first.text.isEmpty()))
         return;
@@ -669,7 +669,7 @@ void Reader::requestAnnotationDrag() {
             }
             annotationDragTurn = direction;
             annotationDragPending = true;
-            if (model->turn(direction))
+            if (session->turn(direction))
                 return;
             annotationDragTurn = 0;
             annotationDragPending = false;
@@ -691,7 +691,7 @@ void Reader::requestAnnotationDrag() {
     QPointer<Reader> guard(this);
     // At most one hit test and range resolution are in flight. Intermediate
     // pointer positions are replaced by the latest point, including release.
-    model->annotationTokenAt(point, [guard, epoch, point](AnnotationToken token) {
+    session->annotationTokenAt(point, [guard, epoch, point](AnnotationToken token) {
         if (!guard || !guard->annotationDragging || guard->annotationEpoch != epoch ||
             guard->lifecycleHidden || guard->services.suspended())
             return;
@@ -741,7 +741,7 @@ void Reader::requestAnnotationDrag() {
                     ranges.append({item.start, item.end});
                     ids.append(item.id);
                 }
-            guard->model->intersectingRanges(token.start, token.end, ranges,
+            guard->session->intersectingRanges(token.start, token.end, ranges,
                 [guard, epoch, token, ids, finish, reject](QVector<int> hits) {
                     if (!guard || guard->annotationEpoch != epoch || !guard->annotationDragging)
                         return;
@@ -790,7 +790,7 @@ void Reader::resolveAnnotationTokens(AnnotationToken start, AnnotationToken end,
                                     std::function<void()> after, std::function<void()> reject) {
     const auto epoch = annotationEpoch;
     QPointer<Reader> guard(this);
-    model->annotationRange(
+    session->annotationRange(
         start.start, start.end, end.start, end.end,
         [guard, epoch, after, reject, start, end](TextRange range) {
             if (!guard || guard->annotationEpoch != epoch || guard->lifecycleHidden ||
@@ -809,7 +809,7 @@ void Reader::resolveAnnotationTokens(AnnotationToken start, AnnotationToken end,
                 }
             // Validate before publishing the draft or moving either handle.
             // Reject jumps across saved passages as well as moves into them.
-            guard->model->intersectingRanges(range.start, range.end, others,
+            guard->session->intersectingRanges(range.start, range.end, others,
                 [guard, epoch, range, after, reject, start, end](QVector<int> hits) {
                     if (!guard || guard->annotationEpoch != epoch || guard->lifecycleHidden ||
                         guard->services.suspended())
@@ -836,7 +836,7 @@ void Reader::resolveAnnotationTokens(AnnotationToken start, AnnotationToken end,
                     guard->annotationEndPolicy = range.sentenceEndPolicy;
                     guard->annotationAdjusting = false;
                     guard->syncMarkupRequest();
-                    guard->model->annotationGeometry(range.start, range.end, [guard, epoch, after](AnnotationGeometry geometry) {
+                    guard->session->annotationGeometry(range.start, range.end, [guard, epoch, after](AnnotationGeometry geometry) {
                         if (!guard || guard->annotationEpoch != epoch || guard->lifecycleHidden ||
                             guard->services.suspended())
                             return;
@@ -858,7 +858,7 @@ void Reader::prepareAnnotation(bool leave, std::function<void()> after) {
     ++annotationEpoch;
     const auto transaction = ++annotationSaveRevision;
     QPointer<Reader> guard(this);
-    model->annotationRange(
+    session->annotationRange(
         annotationStartWord.start, annotationStartWord.end, annotationEndWord.start, annotationEndWord.end,
         [guard, transaction, leave, after](TextRange range) {
             if (!guard) {
@@ -892,7 +892,7 @@ void Reader::prepareAnnotation(bool leave, std::function<void()> after) {
 }
 
 QPoint Reader::selectionLinkPoint() const {
-    for (const auto &link : model->pageLinks()) {
+    for (const auto &link : session->pageLinks()) {
         for (const auto &rect : link.rectangles)
             for (const auto &selection : draftHighlightRects)
                 if (rect.intersects(selection))
@@ -1021,7 +1021,7 @@ void Reader::updateAnnotationRects(bool showActions) {
         return;
     }
     const QString end = annotationEnd.isEmpty() ? annotationStartWord.end : annotationEnd;
-    model->annotationGeometry(annotationStart, end, [guard, epoch, showActions](AnnotationGeometry geometry) {
+    session->annotationGeometry(annotationStart, end, [guard, epoch, showActions](AnnotationGeometry geometry) {
         if (!guard || guard->annotationEpoch != epoch || guard->lifecycleHidden ||
             guard->services.suspended()) {
             return;
@@ -1071,7 +1071,7 @@ void Reader::syncMarkupRequest() {
         request.draftEnd = annotationEnd.isEmpty() ? annotationStartWord.end : annotationEnd;
     }
     annotationRequest = std::move(request);
-    model->setMarkup(annotationRequest);
+    session->setMarkup(annotationRequest);
     if (auto *preview = appearanceEdit.preview()) {
         preview->setMarkup(annotationRequest);
     }
@@ -1102,17 +1102,17 @@ void Reader::finishAnnotationPresentation() {
     if (!annotationPresentationReady || annotationPresentationCapture) {
         return;
     }
-    if (closing || lifecycleHidden || !model->error().isEmpty()) {
+    if (closing || lifecycleHidden || !session->error().isEmpty()) {
         auto finished = std::exchange(annotationPresentationReady, {});
         finished(false);
         return;
     }
-    if (model->busy() || model->image().isNull()) {
+    if (session->busy() || session->image().isNull()) {
         return;
     }
     syncMarkupRequest();
-    const auto &markup = model->markup();
-    if (markup.imageKey == model->image().cacheKey() && markup.request.saved == annotationRequest.saved) {
+    const auto &markup = session->markup();
+    if (markup.imageKey == session->image().cacheKey() && markup.request.saved == annotationRequest.saved) {
         syncAnnotations();
         auto finished = std::exchange(annotationPresentationReady, {});
         finished(true);
@@ -1120,13 +1120,13 @@ void Reader::finishAnnotationPresentation() {
     }
     annotationPresentationCapture = true;
     QPointer<Reader> guard(this);
-    model->captureMarkup([guard](bool ready) {
+    session->captureMarkup([guard](bool ready) {
         if (!guard) {
             return;
         }
         guard->annotationPresentationCapture = false;
         if (!ready) {
-            if (guard->model->busy()) {
+            if (guard->session->busy()) {
                 return;
             }
             auto finished = std::exchange(guard->annotationPresentationReady, {});
@@ -1144,7 +1144,7 @@ void Reader::finishAnnotationPresentation() {
 
 void Reader::syncAnnotations() {
     syncAnnotationControls();
-    if (!annotationPopover || model->busy()) {
+    if (!annotationPopover || session->busy()) {
         return;
     }
     // A hidden loading panel cancels its request. Wake can reveal it again
@@ -1157,7 +1157,7 @@ void Reader::syncAnnotations() {
             annotationPopover->raise();
         }
     }
-    const QString frame = layoutKey() + ':' + model->state().value("position").toString();
+    const QString frame = layoutKey() + ':' + session->state().value("position").toString();
     if (annotationViewportFrame != frame) {
         ++annotationEpoch;
         annotationViewportFrame = frame;
@@ -1167,7 +1167,7 @@ void Reader::syncAnnotations() {
     if (annotationDragTurn && annotationDragging && !annotationDragLoadingEdges) {
         annotationDragLoadingEdges = true;
         qt::later(0, this, [this] {
-            if (annotationDragging && annotationDragTurn && !model->busy())
+            if (annotationDragging && annotationDragTurn && !session->busy())
                 loadAnnotationDragEdges();
         });
     }
@@ -1179,7 +1179,7 @@ void Reader::syncAnnotations() {
         annotationActionAnchor = {};
         annotationPopover->hide();
     }
-    const ReaderSession *displayed = model;
+    const ReaderSession *displayed = session;
     if (const auto *preview = appearanceEdit.preview()) {
         if (preview->image().cacheKey() == imageKey) {
             displayed = preview;
@@ -1239,7 +1239,7 @@ void Reader::syncAnnotations() {
     const auto locations = highlights->locations();
     for (int i = 0; i < items.size(); ++i) {
         const int start = locations.pages.value(i * 2, -1), end = locations.pages.value(i * 2 + 1, -1);
-        if (items[i].id != annotationEditing && start >= 0 && start <= model->page() && end >= model->page()) {
+        if (items[i].id != annotationEditing && start >= 0 && start <= session->page() && end >= session->page()) {
             ranges.append(qMakePair(items[i].start, items[i].end));
             colors.append(colorAnnotations() ? highlightDisplayColor(items[i].color) : QString("gray"));
             styles.append(highlightDisplayStyle(items[i].style));
@@ -1249,7 +1249,7 @@ void Reader::syncAnnotations() {
         return;
     }
     QPointer<Reader> guard(this);
-    model->rangeRectGroups(ranges, [guard, epoch, colors, styles](QVector<QVector<QRect>> groups) {
+    session->rangeRectGroups(ranges, [guard, epoch, colors, styles](QVector<QVector<QRect>> groups) {
         if (!guard || guard->savedHighlightEpoch != epoch) {
             return;
         }
@@ -1334,7 +1334,7 @@ void Reader::editAnnotation(const QString &id, bool navigate) {
         annotationShowActionsPending = false;
         annotationPopover->hide();
         if (navigate) {
-            model->goTo(item.start);
+            session->goTo(item.start);
         }
         syncMarkupRequest();
         annotationFrame.clear();
@@ -1349,7 +1349,7 @@ void Reader::showSavedAnnotation(const QString &id, QRect anchor, bool navigate)
         if (item.id != id)
             continue;
         QPointer<Reader> guard(this);
-        model->annotationGeometry(item.start, item.end, [guard, epoch, id, anchor, navigate](AnnotationGeometry geometry) {
+        session->annotationGeometry(item.start, item.end, [guard, epoch, id, anchor, navigate](AnnotationGeometry geometry) {
             if (!guard || guard->annotationEpoch != epoch || guard->lifecycleHidden || guard->services.suspended())
                 return;
             QRect bounds;

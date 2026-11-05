@@ -4,7 +4,7 @@
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
 #include "reading/chapter.h"
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include "platform/api/keyboard_controller.h"
 #include <QLineEdit>
 #include <QTimer>

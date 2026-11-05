@@ -1,7 +1,7 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
 #include <QColor>
-#include "engine/crengine/reader_model.h"
+#include "engine/crengine/engine_document.h"
 #include <QGuiApplication>
 #include <cstdio>
 #include "check.h"
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
             return sink(bytes.constData(), bytes.size());
         },
         std::make_shared<std::atomic_bool>(false));
-    kobalt::ReaderModel model(kobalt::test::readerFonts());
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
     // Alignment needs all decorative blocks on one page at device density.
     require(model.openResources(resources, sizes, QSize(800, 2200),
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
                                          : bounds(aligned, 1).x() < proseBounds.x(),
                 "Body text did not override publisher alignment");
         require(model.position() == anchor, "Alignment moved the reading anchor");
-        kobalt::ReaderModel preview(kobalt::test::readerFonts());
+        kobalt::EngineDocument preview(kobalt::test::readerFonts());
         require(preview.openPreview(model, QSize(800, 2200), &error), qPrintable(error));
         const auto previewImage = preview.image(0);
         std::printf("preview: image x=%d, prose x=%d, heading x=%d\n", bounds(previewImage, 0).x(),
@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
                 return sink(bytes.constData(), bytes.size());
             },
             std::make_shared<std::atomic_bool>(false));
-        kobalt::ReaderModel page(kobalt::test::readerFonts());
+        kobalt::EngineDocument page(kobalt::test::readerFonts());
         // Leave room for the device-scaled image and authored spacing.
         settings["margin_pixels"] = margin;
         require(page.openResources(cache, pageSizes, QSize(1600, 1800), settings,

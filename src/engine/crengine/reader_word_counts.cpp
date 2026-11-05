@@ -1,5 +1,5 @@
 #include "column_view.h"
-#include "reader_model.h"
+#include "engine_document.h"
 
 #include "engine_activity.h"
 #include "reading/logical_word_counter.h"
@@ -103,7 +103,7 @@ struct Prefix {
 };
 }
 
-DocumentWordCounts ReaderModel::wordCounts(std::function<bool()> current) {
+DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current) {
     if (!engine_ || (current && !current())) {
         return {};
     }

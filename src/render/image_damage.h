@@ -3,7 +3,7 @@
 #include <QRect>
 #include <cstring>
 
-namespace kobalt::ui {
+namespace kobalt::render {
 // One rectangle bounds the changed pixels, so a text page does not turn into
 // hundreds of separate panel submissions. Row padding is not display content.
 inline QRect imageDamage(const QImage &before, const QImage &after) {

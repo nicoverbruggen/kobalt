@@ -1295,7 +1295,7 @@ void PrivateTextLabel::paintEvent(QPaintEvent *event) {
         for (const auto &rectangle : rectangles)
             region += rectangle;
         if (!highlightStyle.isEmpty())
-            paintHighlightMark(painter, rectangles, region, highlightColor, highlightStyle, darkTheme(this));
+            render::paintHighlightMark(painter, rectangles, region, highlightColor, highlightStyle, darkTheme(this));
     } else
         drawInterfaceText(painter, rect(), text(), visual);
 }

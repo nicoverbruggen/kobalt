@@ -4,7 +4,7 @@
 #include <QPainter>
 #include <QtMath>
 
-namespace kobalt::ui {
+namespace kobalt::render {
 inline int pageSweepCount(QSize size) { return qMax(size.width(), size.height()) >= 1600 ? 12 : 10; }
 inline int pageSweepStep(qreal progress, QSize size) {
     const int count = pageSweepCount(size);

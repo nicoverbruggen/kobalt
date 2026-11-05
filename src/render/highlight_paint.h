@@ -5,7 +5,7 @@
 #include <QRegion>
 #include <QString>
 
-namespace kobalt::ui {
+namespace kobalt::render {
 inline QColor highlightTint(const QString &key) {
     if (key == "yellow") {
         return QColor("#e8df9b");

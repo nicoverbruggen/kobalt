@@ -48,7 +48,7 @@ protected:
         const int top = (height() - contentHeight) / 2;
         const QRect chip((width() - diameter) / 2, top + ringExtent, diameter, diameter);
         p.setPen(QPen(ink, pen));
-        p.setBrush(highlightTint(key));
+        p.setBrush(render::highlightTint(key));
         p.drawEllipse(chip);
         if (isChecked()) {
             p.setBrush(Qt::NoBrush);
@@ -199,7 +199,7 @@ public:
         readerStyle(this, styles::font(px(23)));
     }
     void setColor(const QString &key) {
-        color = highlightTint(key);
+        color = render::highlightTint(key);
         update();
     }
 protected:
@@ -211,7 +211,7 @@ protected:
         p.setFont(interfaceFont(px(32)));
         p.setPen(ink);
         drawInterfaceText(p, sample, QStringLiteral("Abc"), Qt::AlignCenter);
-        paintHighlightMark(p, {sample}, QRegion(sample), color, style, darkTheme(this));
+        render::paintHighlightMark(p, {sample}, QRegion(sample), color, style, darkTheme(this));
         p.setFont(font());
         drawInterfaceText(p, QRect(px(6), px(62), width() - px(12), px(30)), label, Qt::AlignCenter);
         if (isChecked()) {
@@ -228,7 +228,7 @@ protected:
     }
 private:
     QString style, label;
-    QColor color = highlightTint("gray");
+    QColor color = render::highlightTint("gray");
     bool last;
 };
 class HighlightStylePicker : public QWidget {

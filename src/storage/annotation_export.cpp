@@ -151,7 +151,7 @@ QByteArray document(const QString &title, const QString &author, const QVector<H
                 "</a><div class=\"entry\"><p class=\"entry-chapter\">" + group.label.toHtmlEscaped() +
                 "</p>";
             const auto color = highlightDisplayColor(row.color);
-            const auto tint = ui::highlightTint(color).name();
+            const auto tint = render::highlightTint(color).name();
             html += "<blockquote data-style=\"" + highlightDisplayStyle(row.style) + "\" data-color=\"" + color +
                 "\" style=\"--mark:" + tint + ";--mark-ink:" + (color == "gray" ? QStringLiteral("#000000") : tint) +
                 "\">" + paragraphs(row.text, true) + "</blockquote>";

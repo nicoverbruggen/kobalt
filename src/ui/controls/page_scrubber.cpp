@@ -32,7 +32,7 @@ void paintThumbnail(QPainter &painter, const QRect &card, const QImage &image, b
     painter.drawImage(target, image);
     if (bookmarked) {
         const qreal width = fitted.width() * .036;
-        paintBookmarkRibbon(
+        render::paintBookmarkRibbon(
             painter, QRectF(target.right() - fitted.width() * .03 - width, card.top(), width, fitted.height() * .045),
             ink);
     }

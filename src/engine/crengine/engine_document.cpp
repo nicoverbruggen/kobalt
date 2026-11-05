@@ -1071,7 +1071,7 @@ void EngineDocument::prepareDamage(int fromPage, int toPage) {
     // One rectangle serves the turn in either direction.
     const auto key = qMakePair(qMin(from.cacheKey(), to.cacheKey()), qMax(from.cacheKey(), to.cacheKey()));
     if (!damage_.contains(key))
-        damage_.insert(key, kobalt::ui::imageDamage(from, to));
+        damage_.insert(key, kobalt::render::imageDamage(from, to));
 }
 namespace {
 std::atomic<int> pageFormat{QImage::Format_RGB32};

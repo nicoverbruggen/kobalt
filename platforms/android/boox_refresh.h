@@ -109,7 +109,7 @@ private:
             const int left = after.width() * slot / 3;
             const QRect column(left, 0, after.width() * (slot + 1) / 3 - left, after.height());
             if (!column.isEmpty()) {
-                changed += ui::imageDamage(before.copy(column), after.copy(column)).translated(column.topLeft());
+                changed += render::imageDamage(before.copy(column), after.copy(column)).translated(column.topLeft());
             }
         }
         return changed;

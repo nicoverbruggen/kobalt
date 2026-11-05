@@ -10,7 +10,7 @@
     } while (0)
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
-    using kobalt::ui::imageDamage;
+    using kobalt::render::imageDamage;
     QImage base(107, 73, QImage::Format_RGB32);
     base.fill(Qt::white);
     CHECK(imageDamage(base, base).isEmpty());

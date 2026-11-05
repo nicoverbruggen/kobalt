@@ -157,7 +157,7 @@ private slots:
                     QImage image(size, QImage::Format_RGB32);
                     image.fill(Qt::magenta);
                     QPainter painter(&image);
-                    ui::paintPageTurn(painter, oldPage, nextPage, progress, direction, style);
+                    render::paintPageTurn(painter, oldPage, nextPage, progress, direction, style);
                     painter.end();
                     return image;
                 };
@@ -184,7 +184,7 @@ private slots:
                 const auto frame = [&](qreal progress) {
                     QImage image(oldPage.size(), QImage::Format_RGB32);
                     QPainter painter(&image);
-                    ui::paintPageTurn(painter, oldPage, nextPage, progress, direction, pageTurn::Style::Sweep);
+                    render::paintPageTurn(painter, oldPage, nextPage, progress, direction, pageTurn::Style::Sweep);
                     return image;
                 };
                 const auto banded = frame(.21);

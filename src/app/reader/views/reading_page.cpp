@@ -506,7 +506,7 @@ void ReadingPage::setSavedHighlights(const QVector<HighlightGeometry> &groups) {
             region += r;
         }
         dirty += region;
-        const auto color = ui::highlightTint(groups[i].color);
+        const auto color = kobalt::render::highlightTint(groups[i].color);
         const QRegion visible = region - covered;
         annotationTints.append({groups[i], visible});
         covered += region;
@@ -580,7 +580,7 @@ ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     pageTurnAnimation.setEasingCurve(QEasingCurve::InOutSine);
     connect(&pageTurnAnimation, &QTimeLine::valueChanged, this, [this](qreal value) {
         if (pageAnimationStyle == pageTurn::Style::Sweep) {
-            const int step = ui::pageSweepStep(value, animationTo.size());
+            const int step = kobalt::render::pageSweepStep(value, animationTo.size());
             if (step == animationStep) return;
             animationStep = step;
         }
@@ -700,7 +700,7 @@ void ReadingPage::refreshContent(bool reading, bool now) {
                                       image.text("kobalt.animation_text_only") == "true");
     QRegion dirty((preparedFrom && preparedFrom == renderedBody.cacheKey() && renderedBody.size() == image.size()
                        ? preparedDamage
-                       : kobalt::ui::imageDamage(renderedBody, image))
+                       : kobalt::render::imageDamage(renderedBody, image))
                       .translated(0, topHeight()));
     preparedFrom = 0;
     dirty += annotationFrameDamage.translated(0, topHeight());
@@ -723,7 +723,7 @@ void ReadingPage::refreshContent(bool reading, bool now) {
         auto next = renderStrip(topHeight(), [this](QPainter &p) {
             paintHeader(p);
         });
-        dirty += kobalt::ui::imageDamage(headerPixels, next);
+        dirty += kobalt::render::imageDamage(headerPixels, next);
         headerPixels = next;
         headerState = nextHeader;
     }
@@ -731,7 +731,7 @@ void ReadingPage::refreshContent(bool reading, bool now) {
         auto next = renderStrip(bottomHeight(), [this](QPainter &p) {
             paintFooter(p);
         });
-        dirty += kobalt::ui::imageDamage(footerPixels, next).translated(0, height() - bottomHeight());
+        dirty += kobalt::render::imageDamage(footerPixels, next).translated(0, height() - bottomHeight());
         footerPixels = next;
         footerState = nextFooter;
     }
@@ -796,7 +796,7 @@ void ReadingPage::paintEvent(QPaintEvent *) {
     paintContents(painter);
     painter.restore();
     painter.translate(0, topHeight());
-    ui::paintPageTurn(painter, animationFrom, animationTo, pageTurnAnimation.currentValue(), animationTurnDirection, pageAnimationStyle);
+    kobalt::render::paintPageTurn(painter, animationFrom, animationTo, pageTurnAnimation.currentValue(), animationTurnDirection, pageAnimationStyle);
 }
 
 QImage ReadingPage::stripSnapshot(bool footer) const {
@@ -805,7 +805,7 @@ QImage ReadingPage::stripSnapshot(bool footer) const {
     const QRect ribbon = renderedRibbon.translated(0, -top);
     if (!strip.isNull() && ribbon.intersects(strip.rect())) {
         QPainter painter(&strip);
-        ui::paintBookmarkRibbon(painter, ribbon, palette().color(QPalette::WindowText));
+        kobalt::render::paintBookmarkRibbon(painter, ribbon, palette().color(QPalette::WindowText));
     }
     return strip;
 }
@@ -878,7 +878,7 @@ void ReadingPage::paintBody(QPainter &painter) const {
         for (const auto &tint : tints) {
             painter.save();
             painter.translate(0, topHeight());
-            ui::paintHighlightMark(painter, tint.mark.rectangles, tint.visible, ui::highlightTint(tint.mark.color),
+            kobalt::render::paintHighlightMark(painter, tint.mark.rectangles, tint.visible, kobalt::render::highlightTint(tint.mark.color),
                                    tint.mark.style, ui::darkTheme(this));
             painter.restore();
         }
@@ -966,7 +966,7 @@ void ReadingPage::paintContents(QPainter &painter, bool sleeping) const {
         painter.drawImage(0, height() - bottomHeight(), footerPixels);
     }
     if (!changingViewport)
-        ui::paintBookmarkRibbon(painter, renderedRibbon, palette().color(QPalette::WindowText));
+        kobalt::render::paintBookmarkRibbon(painter, renderedRibbon, palette().color(QPalette::WindowText));
     if (viewportNoticeVisible && !sleeping) {
         painter.save();
         painter.setFont(ui::interfaceFont(metrics::chrome::captionText));

@@ -4,7 +4,7 @@
 #include <QPolygonF>
 #include <QRectF>
 
-namespace kobalt::ui {
+namespace kobalt::render {
 inline void paintBookmarkRibbon(QPainter &painter, const QRectF &rect, const QColor &ink) {
     if (rect.isEmpty()) {
         return;

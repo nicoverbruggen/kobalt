@@ -1238,8 +1238,8 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
                         QRegion region;
                         for (const auto &rect : geometry[index])
                             region += rect;
-                        ui::paintHighlightMark(painter, geometry[index], region - covered,
-                                               ui::highlightTint(markup.saved[index].color), markup.saved[index].style, dark);
+                        render::paintHighlightMark(painter, geometry[index], region - covered,
+                                               render::highlightTint(markup.saved[index].color), markup.saved[index].style, dark);
                         covered += region;
                     }
                 }

@@ -661,7 +661,7 @@ void BookmarkList::redraw() {
         itemRow->setDetailLines(excerptLines[index]);
         itemRow->setDetail(excerpt);
         itemRow->setDetailHighlight(annotations && detailsReady ? (item.style.isEmpty() ? QStringLiteral("shaded") : item.style) : QString(),
-                                    ui::highlightTint(item.color), ui::px(44));
+                                    render::highlightTint(item.color), ui::px(44));
         QStringList metadata;
         if (item.created.isValid())
             metadata << QLocale().toString(item.created.toLocalTime(), "d MMM yyyy, HH:mm");

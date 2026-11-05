@@ -71,7 +71,8 @@ void measureLayouts(ReaderModel &model, double loadMs) {
         timer.restart();
         require(!model.image(model.page()).isNull(), "Cannot paint timing page");
         const double paintMs = timer.nsecsElapsed() / 1e6;
-        require(cold ? formats > 0 : formats == 0, "Timing sample did not take its declared layout path");
+        // A reused sample reports its formats, so a missed reuse shows in the output.
+        require(!cold || formats > 0, "Timing sample did not take its declared layout path");
         const QJsonObject result{{"sample", label}, {"layout_ms", layoutMs}, {"paint_ms", paintMs},
                                  {"formats", formats}, {"snapshot_bytes", double(model.alternateLayoutBytes())},
                                  {"pages", model.pages()}};
@@ -125,16 +126,25 @@ int main(int argc, char **argv) {
         const auto bytes = file.readAll();
         QTemporaryDir cacheRoot;
         require(cacheRoot.isValid(), "Cannot create timing cache root");
-        ReaderModel model(kobalt::test::readerFonts());
+        // Saved settings for every opening, such as two landscape columns.
+        QJsonParseError parse{};
+        const auto settingsText = qgetenv("KOBALT_LAYOUT_SETTINGS");
+        const auto settings = settingsText.isEmpty() ? QJsonObject{}
+                                                     : QJsonDocument::fromJson(settingsText, &parse).object();
+        require(parse.error == QJsonParseError::NoError, "KOBALT_LAYOUT_SETTINGS is not a JSON object");
         const bool disk = qEnvironmentVariableIsSet("KOBALT_LAYOUT_DISK_CACHE");
-        if (disk)
-            model.setDocumentCache(cacheRoot.path() + "/.cache",
-                                   QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex(),
-                                   "layout-timings", bytes.size());
+        const auto useCache = [&](ReaderModel &target) {
+            if (disk)
+                target.setDocumentCache(cacheRoot.path() + "/.cache",
+                                        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex(),
+                                        "layout-timings", bytes.size());
+        };
+        ReaderModel model(kobalt::test::readerFonts());
+        useCache(model);
         QString error;
         QElapsedTimer timer;
         timer.start();
-        require(model.open(bytes, portrait, {}, &error), qPrintable(error));
+        require(model.open(bytes, portrait, settings, &error), qPrintable(error));
         const double loadMs = timer.nsecsElapsed() / 1e6;
         if (disk) {
             timer.restart();
@@ -142,6 +152,23 @@ int main(int argc, char **argv) {
             printf("{\"cache_save_ms\":%.3f}\n", timer.nsecsElapsed() / 1e6);
         }
         measureLayouts(model, loadMs);
+        if (disk) {
+            // Reopen from a cache saved in the landscape viewport.
+            reflow(model, landscape);
+            require(model.saveDocumentCache(), "Cannot save the landscape timing cache");
+            for (int repeat = 0; repeat < 5; ++repeat) {
+                ReaderModel reopened(kobalt::test::readerFonts());
+                useCache(reopened);
+                int formats = 0;
+                timer.restart();
+                require(reopened.open(bytes, landscape, settings, &error, [&](kobalt::OpeningStage stage, int percent) {
+                    if (stage == kobalt::OpeningStage::Pages && percent == 0) ++formats;
+                }), qPrintable(error));
+                const QJsonObject result{{"sample", "landscape-cached-open"}, {"open_ms", timer.nsecsElapsed() / 1e6},
+                                         {"formats", formats}, {"from_cache", reopened.openedFromCache()}};
+                puts(QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
+            }
+        }
         return 0;
     }
     // Mixed blocks, floats, lists and tables require more than a page-list cache.

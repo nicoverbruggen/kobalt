@@ -66,6 +66,8 @@ bool diagnosticsActive()
 
 void diagnostic(const char *, QJsonObject, bool) { }
 
+void diagnostic(const char *, QJsonObject, DiagnosticSeverity) { }
+
 DiagnosticOperation::DiagnosticOperation(const char *name) : operation(name) { }
 
 DiagnosticOperation::~DiagnosticOperation() = default;

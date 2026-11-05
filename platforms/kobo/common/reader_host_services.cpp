@@ -198,6 +198,9 @@ ReaderHostServices readerHostServices() {
     result.keyboard = ui::makeWidgetKeyboard;
     result.syncNetwork = [] { return std::make_unique<NativeSyncNetwork>(); };
     result.kosyncSleepWake = result.kosyncWifiControl = true;
+    // The hook is optional. Without it Nickel's background requests pass.
+    if (nativeConnectWirelessSilently)
+        result.holdWifiOff = holdNativeWifiOff;
     if (const auto bindings = wifiPowerBindings(); bindings.valid())
         result.turnOffWifi = [bindings](QObject *context, const char *reason, std::function<void(bool)> done) {
             saveNativeWifiPower(context, bindings, reason, std::move(done));

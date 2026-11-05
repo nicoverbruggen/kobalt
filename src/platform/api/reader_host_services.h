@@ -128,6 +128,13 @@ struct ReaderHostServices {
     // the request. Turning Wi-Fi off can wait for child processes on the main
     // thread; the host declares that wait with `reason`, a string literal.
     std::function<void(QObject *context, const char *reason, std::function<void(bool)> done)> turnOffWifi;
+    // Optional: lets the reader keep the host's own background Wi-Fi requests,
+    // such as the connection Nickel starts after every wake, from turning
+    // Wi-Fi on. The host calls `holding` on the GUI thread before such a
+    // request and skips the request when it answers true. Connections that
+    // the reader asks for itself are not affected. Deleting the owner ends
+    // the hold.
+    std::function<void(QObject *owner, std::function<bool()> holding)> holdWifiOff;
     PresentationFactory presentation;
     // Empty in hardware builds. Keep the value layout independent of the
     // diagnostic macro used by the constructing and consuming targets.

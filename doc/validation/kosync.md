@@ -8,7 +8,7 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | --- | --- |
 | `model.kosync` | The sync client: document identity, accounts, schedule, responses, retries and hostname lookups |
 | `component.kosync-ui` | The KOSync Settings tab, the Automatic sync sheet, the password editor and the sync notice |
-| `platform.native-sync-network` | The Kobo connection controller, Wi-Fi release and the Kobo side of the Wi-Fi power saver |
+| `platform.native-sync-network` | The Kobo connection controller, Wi-Fi release, the Kobo side of the Wi-Fi power saver and the hold on Nickel's background connections |
 | `lifecycle.kosyncAccountGating` | No sync work without a usable account, and the toolbar sync button |
 | `lifecycle.kosyncBackgroundWifi` | Periodic syncs and their silent Wi-Fi connection |
 | `lifecycle.kosyncWifiRelease` | Which syncs release their Wi-Fi request when they end |

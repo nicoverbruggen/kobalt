@@ -14,6 +14,7 @@
 #include <QWindow>
 #include <QLabel>
 #include <limits>
+#include <thread>
 #include <vector>
 
 class Workflow final : public QObject {
@@ -240,11 +241,63 @@ static void wifiPowerSaver() {
     require(replies == 7 && turnedOff == 1, "a late Bluetooth answer is ignored");
     kobalt::mainthread::setViolationHandler({});
 }
-// Checks the Kobo connection controller, Wi-Fi release, signal levels, the power saver and native prompts above the reader, with fake native calls.
+static int nickelConnections = 0;
+static void countNickelConnection(void *) { ++nickelConnections; }
+// Nickel's own background connections, such as the one after every wake, pass
+// through the hook. The reader's hold skips them, except while Kobalt waits
+// for a connection of its own or Nickel's browser is open over the reader.
+static void wifiHold() {
+    kobalt::nativeConnectWirelessSilently = countNickelConnection;
+    kobalt_connect_wireless_silently(nullptr);
+    require(nickelConnections == 1, "without a reader Nickel connects as usual");
+    bool holding = true;
+    auto *reader = new QWidget;
+    kobalt::holdNativeWifiOff(reader, [&] { return holding; });
+    kobalt_connect_wireless_silently(nullptr);
+    require(nickelConnections == 1 && kobalt::nativeWifiHeldOff(), "the reader's hold skips Nickel's connection");
+    holding = false;
+    kobalt_connect_wireless_silently(nullptr);
+    require(nickelConnections == 2, "a reader that does not hold Wi-Fi off lets Nickel connect");
+    holding = true;
+    Workflow workflow;
+    bool connecting = false;
+    kobalt::NativeSyncNetworkBindings bindings;
+    bindings.workflow = &workflow;
+    bindings.ready = [] { return false; };
+    bindings.disabled = [] { return false; };
+    bindings.connecting = [&] { return connecting; };
+    bindings.request = [&](bool) { connecting = true; };
+    bindings.cancel = [&] { connecting = false; };
+    {
+        kobalt::NativeSyncNetwork network(bindings);
+        network.prepare(true, [](bool) {});
+        require(kobalt::NativeSyncNetwork::preparing(), "a running request counts as preparing");
+        kobalt_connect_wireless_silently(nullptr);
+        require(nickelConnections == 3, "Nickel's dialogs may connect while Kobalt waits for a connection");
+        network.cancel();
+        require(!kobalt::NativeSyncNetwork::preparing(), "a cancelled request no longer counts");
+        network.prepare(false, [](bool) {});
+    }
+    require(!kobalt::NativeSyncNetwork::preparing(), "a destroyed controller no longer counts");
+    kobalt_connect_wireless_silently(nullptr);
+    require(nickelConnections == 3, "the hold returns when Kobalt's request ends");
+    reader->setProperty("kobalt_native_browser", true);
+    kobalt_connect_wireless_silently(nullptr);
+    require(nickelConnections == 4, "Nickel's browser over the reader may connect");
+    reader->setProperty("kobalt_native_browser", false);
+    std::thread worker([] { kobalt_connect_wireless_silently(nullptr); });
+    worker.join();
+    require(nickelConnections == 5, "a call from another thread is passed on without asking the reader");
+    delete reader;
+    kobalt_connect_wireless_silently(nullptr);
+    require(nickelConnections == 6 && !kobalt::nativeWifiHeldOff(), "a deleted reader ends the hold");
+}
+// Checks the Kobo connection controller, Wi-Fi release, signal levels, the power saver, the hold on Nickel's background connections and native prompts above the reader, with fake native calls.
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     wifiNotifications();
     wifiPowerSaver();
+    wifiHold();
     nativePrompt();
     Workflow workflow;
     bool ready = true, disabled = false, connecting = false, interactive = false;

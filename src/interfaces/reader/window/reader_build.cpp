@@ -346,6 +346,10 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOr
             if (topControls->isVisible() && !lifecycleHidden)
                 syncNavigation();
         });
+    // With the Wi-Fi power saver, the host's own background requests must not
+    // turn Wi-Fi back on while this book is open, for example after a wake.
+    if (services.holdWifiOff)
+        services.holdWifiOff(this, [this] { return !closing && wifiPowerSaverApplies(); });
     if (services.observeWifi)
         services.observeWifi(this, [this](WifiStatus state) {
             if (menuWifi->setStatus(state.enabled, state.connected, state.strength) &&

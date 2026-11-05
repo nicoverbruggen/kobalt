@@ -1,8 +1,13 @@
 #include "native_wifi_power.h"
+#include "browser_handoff.h"
+#include "native_sync_network.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include "support/qt_compat.h"
+#include <QApplication>
 #include <QPointer>
+#include <QThread>
+#include <QWidget>
 #include <memory>
 #include <utility>
 
@@ -39,4 +44,32 @@ void saveNativeWifiPower(QObject *context, const NativeWifiPowerBindings &bindin
     qt::later(nativeWifiPowerDeadlineMs, context, [answer] { answer(BluetoothPower::Unknown); });
     bindings.bluetooth(context, answer);
 }
+void (*nativeConnectWirelessSilently)(void *);
+namespace {
+QPointer<QObject> holdOwner;
+std::function<bool()> holdDecision;
+}
+void holdNativeWifiOff(QObject *owner, std::function<bool()> holding) {
+    holdOwner = owner;
+    holdDecision = std::move(holding);
+}
+bool nativeWifiHeldOff() {
+    if (!holdOwner || !holdDecision || NativeSyncNetwork::preparing()) return false;
+    // Nickel's browser connects for the page it opens over the reader.
+    if (BrowserHandoff::activeFor(qobject_cast<QWidget *>(holdOwner.data()))) return false;
+    return holdDecision();
+}
+}
+// Nickel 4.46.23852 and 6.0.279225 call this from the routine that runs after
+// every wake, before it re-enables stylus warnings and Bluetooth devices. They
+// also call it for image downloads, the browser and store, and after USB.
+// Nickel's store sync connects through connectWireless() instead, so it is
+// not affected.
+extern "C" __attribute__((visibility("default"))) void kobalt_connect_wireless_silently(void *workflow) {
+    using namespace kobalt;
+    if (qApp && QThread::currentThread() == qApp->thread() && nativeWifiHeldOff()) {
+        diagnostic("wifi-power-saver", qt::object({{"moment", "nickel-connection"}, {"held", true}}));
+        return;
+    }
+    nativeConnectWirelessSilently(workflow);
 }

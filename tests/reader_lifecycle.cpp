@@ -4515,6 +4515,8 @@ private slots:
         int requests = 0;
         QByteArray reason;
         std::function<void(bool)> answer;
+        QPointer<QObject> holdOwner;
+        std::function<bool()> holding;
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&](ReaderHostServices &services) {
             services.syncNetwork = [network] { return std::make_unique<TestSyncNetwork>(network); };
@@ -4527,11 +4529,20 @@ private slots:
                 reason = why;
                 answer = std::move(done);
             };
+            services.holdWifiOff = [&](QObject *owner, std::function<bool()> decision) {
+                holdOwner = owner;
+                holding = std::move(decision);
+            };
         };
         CloseHost cleanup{host};
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        // The same rules keep the host's own background requests from turning
+        // Wi-Fi back on while the book is open, for example after a wake.
+        QCOMPARE(holdOwner.data(), static_cast<QObject *>(host.window()));
+        QVERIFY(holding);
+        QCOMPARE(holding(), expected);
         bool presented = false, ready = false;
         host.window()->preparePresentation([&](bool value) {
             presented = true;

@@ -88,6 +88,7 @@ void NativeSyncNetwork::prepare(bool showUi, std::function<void(bool)> done) {
     if (!workflow || !bindings.valid() || (!showUi && bindings.disabled())) { done(false); return; }
     interactive = showUi;
     finished = std::move(done);
+    setWaiting(true);
     elapsed.start();
     poll.setInterval(100);
     poll.start();
@@ -122,7 +123,15 @@ void NativeSyncNetwork::finish(bool ready) {
     requested = false;
     auto done = std::move(finished);
     finished = {};
+    setWaiting(false);
     if (done) done(ready);
+}
+namespace {
+int waitingControllers = 0;
+}
+bool NativeSyncNetwork::preparing() { return waitingControllers > 0; }
+void NativeSyncNetwork::setWaiting(bool value) {
+    if (std::exchange(waiting, value) != value) waitingControllers += value ? 1 : -1;
 }
 bool NativeSyncNetwork::radioOn() const {
     if (!workflow || !bindings.valid()) return false;
@@ -142,6 +151,7 @@ void NativeSyncNetwork::release() {
 void NativeSyncNetwork::cancel() {
     poll.stop();
     finished = {};
+    setWaiting(false);
     const bool owned = std::exchange(requested, false);
     if (owned && workflow && bindings.valid()) bindings.cancel();
 }

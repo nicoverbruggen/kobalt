@@ -7,6 +7,7 @@
 #include "platforms/kobo/common/native_authorization.h"
 #include "platforms/kobo/common/native_dictionary.h"
 #include "platforms/kobo/common/native_light.h"
+#include "platforms/kobo/common/native_wifi_power.h"
 #include "platforms/kobo/display/page_animation.h"
 #include <NickelHook.h>
 #include <QMetaType>
@@ -182,6 +183,12 @@ static nh_hook readerHooks[] = {
      .out = nh_symoutptr(nativeUnplugged),
      .desc = "Track the end of USB connection and processing",
      .optional = false},
+    {.sym = "_ZN23WirelessWorkflowManager23connectWirelessSilentlyEv",
+     .sym_new = "kobalt_connect_wireless_silently",
+     .lib = "libnickel.so.1.0.0",
+     .out = nh_symoutptr(kobalt::nativeConnectWirelessSilently),
+     .desc = "Keep Nickel's background connections off while the Wi-Fi power saver applies",
+     .optional = true},
     {.sym = "_ZNK25PrerenderToPersistManager25isAllowedToDoPrerenderingEv",
      .sym_new = "kobalt_prerender_allowed",
      .lib = "libnickel.so.1.0.0",

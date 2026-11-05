@@ -28,6 +28,10 @@ public:
     explicit NativeSyncNetwork(NativeSyncNetworkBindings bindings);
     // Whether this firmware lets Kobalt turn Wi-Fi off again after a sync.
     static bool canTurnOff();
+    // Whether any controller waits for a connection. Nickel's network dialogs
+    // for an interactive request can start background connections of their
+    // own, which the Wi-Fi power saver must let through.
+    static bool preparing();
     ~NativeSyncNetwork() override;
     bool connected() const override;
     void prepare(bool interactive, std::function<void(bool)> finished) override;
@@ -42,6 +46,7 @@ private slots:
 private:
     void finish(bool ready);
     bool radioOn() const;
+    void setWaiting(bool value);
     NativeSyncNetworkBindings bindings;
     QPointer<QObject> workflow;
     QTimer poll;
@@ -49,6 +54,7 @@ private:
     std::function<void(bool)> finished;
     bool requested = false;
     bool interactive = false;
+    bool waiting = false;
     // A silent request of this controller found the radio off. Wi-Fi is then
     // Kobalt's to turn off, whether the connection came up or not.
     bool turnedOn = false;

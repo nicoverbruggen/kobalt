@@ -68,7 +68,7 @@ KOSync receives only what it needs to find your place: an identifier for the boo
 
 ## Battery and Wi-Fi
 
-Wi-Fi uses a lot of battery on an e-reader. Kobo's software turns it on for syncs and downloads, and turns it off again after a while.
+Wi-Fi uses a lot of battery on an e-reader. Kobo's software turns it on for syncs and downloads, and a few seconds after every wake, and turns it off again after a while.
 
 ### When Wi-Fi goes off
 
@@ -96,6 +96,8 @@ Kobalt turns Wi-Fi off only when nothing needs it:
 - Kobo's software is not syncing at that moment.
 
 Turning Wi-Fi off takes a moment, so Kobalt does it while the book is still opening, before you can turn a page, or while the device goes to sleep.
+
+While a book is open, the same setting also keeps Kobo's software from turning Wi-Fi on by itself, for example a few seconds after you wake the device. The rules are the same as when a book opens. KOSync's own syncs, **Sync now**, Kobo's sync and the browser still turn Wi-Fi on when they need it.
 
 ### Bluetooth
 

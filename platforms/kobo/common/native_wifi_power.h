@@ -25,4 +25,17 @@ inline constexpr int nativeWifiPowerDeadlineMs = 1000;
 // context was deleted first.
 void saveNativeWifiPower(QObject *context, const NativeWifiPowerBindings &bindings, const char *reason,
                          std::function<void(bool)> done);
+// Nickel's WirelessWorkflowManager::connectWirelessSilently(), set by the hook.
+// Nickel calls it for its own background connections, for example a few
+// seconds after every wake. Kobalt's KOSync resolves the function itself and
+// does not pass through the hook.
+extern void (*nativeConnectWirelessSilently)(void *workflow);
+// Registers the reader whose `holding` decides whether Nickel's background
+// connections are skipped. A later owner replaces an earlier one.
+void holdNativeWifiOff(QObject *owner, std::function<bool()> holding);
+// Whether Nickel's next background connection is skipped: the owner holds Wi-Fi
+// off, Kobalt has no connection request of its own running, and Nickel's
+// browser is not open over the reader.
+bool nativeWifiHeldOff();
 }
+extern "C" __attribute__((visibility("default"))) void kobalt_connect_wireless_silently(void *workflow);

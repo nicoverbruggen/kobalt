@@ -1,6 +1,7 @@
 {
   "alice": {
-    "download": "https://mirror.cs.odu.edu/gutenberg-epub/11/pg11-images-3.epub",
+    "download": "https://web.archive.org/web/20261020211443id_/https://www.gutenberg.org/cache/epub/11/pg11-images-3.epub",
+    "archived_from": "https://www.gutenberg.org/cache/epub/11/pg11-images-3.epub",
     "source": "https://www.gutenberg.org/ebooks/11",
     "sha256": "4f81245d31380ac1d6eafb9a321e3691369bc70985736ae4bccf849a4f784036",
     "bytes": 189249,
@@ -10,7 +11,8 @@
     "rights": "Public domain in the United States; Project Gutenberg edition"
   },
   "maths": {
-    "download": "https://mirror.cs.odu.edu/gutenberg-epub/33283/pg33283-images-3.epub",
+    "download": "https://web.archive.org/web/20261018010502id_/https://www.gutenberg.org/cache/epub/33283/pg33283-images-3.epub",
+    "archived_from": "https://www.gutenberg.org/cache/epub/33283/pg33283-images-3.epub",
     "source": "https://www.gutenberg.org/ebooks/33283",
     "sha256": "a82a353c67ddedeef19267fe225ff29077fe989c8909734054fbbc78365e123b",
     "bytes": 13215877,
@@ -21,7 +23,8 @@
     "rights": "Public domain in the United States; Project Gutenberg edition"
   },
   "moby-dick": {
-    "download": "https://mirror.cs.odu.edu/gutenberg-epub/2701/pg2701-images-3.epub",
+    "download": "https://web.archive.org/web/20261022092059id_/https://www.gutenberg.org/cache/epub/2701/pg2701-images-3.epub",
+    "archived_from": "https://www.gutenberg.org/cache/epub/2701/pg2701-images-3.epub",
     "source": "https://www.gutenberg.org/ebooks/2701",
     "sha256": "1bc88e79ef7cf9d5325abe0071e6302265b708df56d3af07db124c81e84197f6",
     "bytes": 814023,
@@ -32,7 +35,8 @@
     "rights": "Public domain in the United States; Project Gutenberg edition"
   },
   "war-and-peace": {
-    "download": "https://www.gutenberg.org/cache/epub/2600/pg2600-images-3.epub",
+    "download": "https://web.archive.org/web/20261019182606id_/https://www.gutenberg.org/cache/epub/2600/pg2600-images-3.epub",
+    "archived_from": "https://www.gutenberg.org/cache/epub/2600/pg2600-images-3.epub",
     "source": "https://www.gutenberg.org/ebooks/2600",
     "sha256": "0353122c5a554193a8a777d8156e7a02d9c2014cce90b26891e2057edd30556c",
     "bytes": 1832521,

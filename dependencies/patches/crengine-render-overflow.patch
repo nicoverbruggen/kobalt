@@ -1,0 +1,53 @@
+--- a/crengine/include/lvtinydom.h
++++ b/crengine/include/lvtinydom.h
+@@ -2772,6 +2772,10 @@
+     lUInt32 _warnings_seen_bitmap;
+     ldomXRangeList _selections;
+     lUInt32 _doc_rendering_hash;
++    // Side allowances of the latest render(). Hanging punctuation and glyph
++    // overflow use them, but the text width does not include them.
++    int  _render_usable_left_overflow;
++    int  _render_usable_right_overflow;
+ 
+     // Support for partial rerendering
+     bool _rerendering_delayed; // when render props changed, but no rerendering yet (can be reset by frontend once dealt with)
+--- a/crengine/src/lvtinydom.cpp
++++ b/crengine/src/lvtinydom.cpp
+@@ -4072,6 +4072,8 @@
+ , _toc_from_cache_valid(false)
+ , _warnings_seen_bitmap(0)
+ , _doc_rendering_hash(0)
++, _render_usable_left_overflow(0)
++, _render_usable_right_overflow(0)
+ , _rerendering_delayed(false)
+ , _partial_rerendering_enabled(false)
+ , _partial_rerenderings_count(0)
+@@ -5695,6 +5697,10 @@
+ //        styleHash = styleHash * 31 + calcGlobalSettingsHash();
+ //        CRLog::debug("Style hash before setRenderProps: %x", styleHash);
+ //    } //bool propsChanged =
++    // The render context must include these allowances, so a cached or retained
++    // layout made with other allowances is laid out again.
++    _render_usable_left_overflow = usable_left_overflow;
++    _render_usable_right_overflow = usable_right_overflow;
+     setRenderProps( width, dy, showCover, y0, def_font, def_interline_space, props );
+ 
+     // update styles
+@@ -19899,6 +19905,8 @@
+     lUInt32 stylesheetHash = (((_ua_stylesheet.getHash() * 31) + calcHash(_def_style))*31 + calcHash(_def_font))*31 + getFontFamilyFontsHash();
+     // Prefix weights change advances and pagination even though CSS is unchanged.
+     stylesheetHash = stylesheetHash * 31 + getProps()->getIntDef("kobalt.bionic.mode", 0);
++    // Paragraphs keep the side allowances they were laid out with.
++    stylesheetHash = (stylesheetHash * 31 + _render_usable_left_overflow) * 31 + _render_usable_right_overflow;
+     //calcStyleHash( getRootNode(), styleHash );
+     _hdr.render_style_hash = styleHash;
+     _hdr.stylesheet_hash = stylesheetHash;
+@@ -19931,6 +19939,8 @@
+     lUInt32 stylesheetHash = (((_ua_stylesheet.getHash() * 31) + calcHash(_def_style))*31 + calcHash(_def_font))*31 + getFontFamilyFontsHash();
+     // Prefix weights change advances and pagination even though CSS is unchanged.
+     stylesheetHash = stylesheetHash * 31 + getProps()->getIntDef("kobalt.bionic.mode", 0);
++    // Paragraphs keep the side allowances they were laid out with.
++    stylesheetHash = (stylesheetHash * 31 + _render_usable_left_overflow) * 31 + _render_usable_right_overflow;
+     //calcStyleHash( getRootNode(), styleHash );
+     // printf("checkRenderContext: _nodeStyleHash after  %x\n", _nodeStyleHash);
+     // printf("checkRenderContext: Style hash %x!=%x\n", styleHash, _hdr.render_style_hash);

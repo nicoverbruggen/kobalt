@@ -115,7 +115,7 @@ void roundTrip(ReaderModel &model) {
     require(model.alternateLayoutBytes() == 0, "An idle book retained an alternate layout");
 }
 }
-// Checks that a retained portrait or landscape layout is reused only when it matches and renders like a full reflow.
+// Checks that a retained portrait or landscape layout, also two columns with hanging punctuation, is reused only when it matches and renders like a full reflow.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     if (qEnvironmentVariableIsSet("KOBALT_LAYOUT_TIMINGS")) {
@@ -153,7 +153,9 @@ int main(int argc, char **argv) {
                 "<table><tr><td>A reader in a table.</td><td>More words.</td></tr></table></section>";
     const auto files = kobalt::test::publisherPackage("en", "Orientation layouts",
         {{"text.xhtml", kobalt::test::publisherHtml(body)}}, "<itemref idref='text.xhtml'/>");
-    for (const auto &settings : {QJsonObject{}, QJsonObject{{"two_columns_landscape", true}},
+    // Hanging punctuation gives two columns a side allowance that one column does not have.
+    const QJsonObject hangingColumns{{"two_columns_landscape", true}, {"hanging_punctuation", true}};
+    for (const auto &settings : {QJsonObject{}, QJsonObject{{"two_columns_landscape", true}}, hangingColumns,
                                QJsonObject{{"vertical_justification", "expand"}}}) {
         ReaderModel model(kobalt::test::readerFonts());
         open(model, files, settings);
@@ -163,6 +165,7 @@ int main(int argc, char **argv) {
     }
     compareWithReflow(files);
     compareWithReflow(files, {{"two_columns_landscape", true}});
+    compareWithReflow(files, hangingColumns);
     compareWithReflow(files, {{"weight_steps", 3}, {"dark_mode", true}});
     for (const auto &variant : {QByteArray("writing-mode:vertical-rl"), QByteArray("writing-mode:vertical-lr"),
                                QByteArray("direction:rtl"), QByteArray()}) {
@@ -229,32 +232,51 @@ int main(int argc, char **argv) {
         QString error;
         require(model.open(bytes, portrait, {}, &error), qPrintable(error));
         roundTrip(model);
-        QTemporaryDir directory;
-        require(directory.isValid(), "Cannot create cached-layout profile");
-        const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
-        QJsonObject saved;
-        QByteArray before;
-        {
-            ReaderModel cached(kobalt::test::readerFonts());
-            cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
-            require(cached.open(bytes, portrait, {}, &error), qPrintable(error));
-            require(cached.go(cached.pages() / 2), "Cannot position disk-cache book");
-            require(reflow(cached, landscape) > 0 && reflow(cached, portrait) == 0, "Disk-backed layout was not reused");
-            before = pixels(cached.image(cached.page()));
-            saved = cached.state();
-            require(cached.saveDocumentCache(), "Cannot persist a restored layout");
-        }
-        {
-            ReaderModel cached(kobalt::test::readerFonts());
-            cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
-            int formats = 0;
-            require(cached.open(bytes, portrait, saved, &error, [&](kobalt::OpeningStage stage, int percent) {
-                if (stage == kobalt::OpeningStage::Pages && percent == 0) ++formats;
-            }), qPrintable(error));
-            require(cached.openedFromCache() && formats == 0 && pixels(cached.image(cached.page())) == before,
-                    "Persisted restored layout was invalid or changed pixels");
-            require(reflow(cached, landscape) > 0 && reflow(cached, portrait) == 0,
-                    "A reopened disk cache could not retain another viewport");
+        for (const auto &settings : {QJsonObject{}, hangingColumns}) {
+            QTemporaryDir directory;
+            require(directory.isValid(), "Cannot create cached-layout profile");
+            const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+            QJsonObject saved;
+            QByteArray before;
+            {
+                ReaderModel cached(kobalt::test::readerFonts());
+                cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
+                require(cached.open(bytes, portrait, settings, &error), qPrintable(error));
+                require(cached.go(cached.pages() / 2), "Cannot position disk-cache book");
+                require(reflow(cached, landscape) > 0 && reflow(cached, portrait) == 0, "Disk-backed layout was not reused");
+                before = pixels(cached.image(cached.page()));
+                saved = cached.state();
+                require(cached.saveDocumentCache(), "Cannot persist a restored layout");
+            }
+            {
+                ReaderModel cached(kobalt::test::readerFonts());
+                cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
+                int formats = 0;
+                require(cached.open(bytes, portrait, saved, &error, [&](kobalt::OpeningStage stage, int percent) {
+                    if (stage == kobalt::OpeningStage::Pages && percent == 0) ++formats;
+                }), qPrintable(error));
+                require(cached.openedFromCache() && formats == 0 && pixels(cached.image(cached.page())) == before,
+                        "Persisted restored layout was invalid or changed pixels");
+                require(reflow(cached, landscape) > 0 && reflow(cached, portrait) == 0,
+                        "A reopened disk cache could not retain another viewport");
+                // Save the landscape layout, so the next opening uses its side allowance.
+                require(reflow(cached, landscape) == 0, "A reopened disk cache did not return to landscape");
+                before = pixels(cached.image(cached.page()));
+                saved = cached.state();
+                require(cached.saveDocumentCache(), "Cannot persist a landscape layout");
+            }
+            {
+                ReaderModel cached(kobalt::test::readerFonts()), fresh(kobalt::test::readerFonts());
+                cached.setDocumentCache(directory.path() + "/.cache", fingerprint, "alternate-layout-test", bytes.size());
+                int formats = 0;
+                require(cached.open(bytes, landscape, saved, &error, [&](kobalt::OpeningStage stage, int percent) {
+                    if (stage == kobalt::OpeningStage::Pages && percent == 0) ++formats;
+                }), qPrintable(error));
+                require(cached.openedFromCache() && formats == 0 && pixels(cached.image(cached.page())) == before,
+                        "A cached landscape layout was laid out again or changed pixels");
+                require(fresh.open(bytes, landscape, saved, &error), qPrintable(error));
+                require(pixels(fresh.image(fresh.page())) == before, "A cached landscape layout differs from a fresh one");
+            }
         }
     }
     puts("PASS: alternate viewport reuse, geometry, invalidation, position and idle release");

@@ -18,3 +18,4 @@ crengine-vertical-justification.patch
 crengine-position-name-lookup.patch
 crengine-image-proportions.patch
 crengine-alternate-layout.patch
+crengine-render-overflow.patch

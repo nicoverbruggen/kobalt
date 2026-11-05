@@ -3,9 +3,11 @@
 #include "reader_inputs.h"
 #include <QGuiApplication>
 #include <QDir>
+#include <QTemporaryDir>
 #include <cstdio>
 namespace {
-void openResources(kobalt::ReaderModel &model, const QMap<QString, QByteArray> &data, QJsonObject settings, QSize size) {
+void openResources(kobalt::ReaderModel &model, const QMap<QString, QByteArray> &data, QJsonObject settings, QSize size,
+                   kobalt::OpeningProgress progress = {}) {
     QMap<QString, qint64> sizes;
     for (auto it = data.cbegin(); it != data.cend(); ++it)
         sizes[it.key()] = it.value().size();
@@ -21,17 +23,18 @@ void openResources(kobalt::ReaderModel &model, const QMap<QString, QByteArray> &
     if (!settings.contains("top_margin_pixels")) settings["top_margin_pixels"] = 0;
     if (!settings.contains("bottom_margin_pixels")) settings["bottom_margin_pixels"] = 0;
     QString error;
-    require(model.openResources(source, sizes, size, settings, &error), qPrintable(error));
+    require(model.openResources(source, sizes, size, settings, &error, std::move(progress)), qPrintable(error));
 }
 void open(kobalt::ReaderModel &model, const QByteArray &body, const QByteArray &css = {},
-          QJsonObject settings = {}, QSize size = {1072, 1448}, bool rtl = false) {
+          QJsonObject settings = {}, QSize size = {1072, 1448}, bool rtl = false,
+          kobalt::OpeningProgress progress = {}) {
     const QMap<QString, QByteArray> data{
         {"mimetype", "application/epub+zip"},
         {"META-INF/container.xml", "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>"},
         {"book.opf", QByteArray("<package xmlns='http://www.idpf.org/2007/opf' version='3.0'><metadata><title>Columns</title></metadata><manifest><item id='c' href='c.xhtml' media-type='application/xhtml+xml'/></manifest><spine") + (rtl ? " page-progression-direction='rtl'" : "") + "><itemref idref='c'/></spine></package>"},
         {"c.xhtml", "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0}" + css +
                           "</style></head><body>" + body + "</body></html>"}};
-    openResources(model, data, settings, size);
+    openResources(model, data, settings, size, std::move(progress));
 }
 QMap<QString, QByteArray> chapterBook(int firstColumns, bool rtl) {
     const auto html = [](const char *name, int count) {
@@ -96,11 +99,66 @@ void chapterProgress() {
         }
     }
 }
+// A cached two-column layout keeps the hanging-punctuation allowance it was
+// laid out with. Both settings give 420-pixel columns, so only the allowance
+// (40 or 2 pixels) tells the two layouts apart.
+void cachedColumns() {
+    const QByteArray paragraph = "<p style='text-align:justify'>" +
+        QByteArray("\xe2\x80\x9c" "Amber," "\xe2\x80\x9d" " said birch. Cedar, dogwood, elm and fir; "
+                   "\xe2\x80\x9c" "quite so." "\xe2\x80\x9d" " ").repeated(200) + "</p>";
+    const QSize size(1000, 800);
+    struct Layout { int margin, spacing; };
+    const Layout wide{40, 80}, narrow{78, 4};
+    for (bool hanging : {false, true}) {
+        QTemporaryDir root;
+        require(root.isValid(), "Cannot create a column cache directory");
+        const auto settings = [&](Layout layout) {
+            return QJsonObject{{"columns", 2}, {"hanging_punctuation", hanging}, {"margin_pixels", layout.margin},
+                               {"column_spacing", layout.spacing}};
+        };
+        // Returns the number of full layouts during the opening.
+        const auto cached = [&](kobalt::ReaderModel &model, Layout layout) {
+            model.setDocumentCache(root.path() + "/.cache", QByteArray(64, 'c'), "columns-test", 1024 * 1024);
+            int formats = 0;
+            open(model, paragraph, {}, settings(layout), size, false, [&](kobalt::OpeningStage stage, int percent) {
+                if (stage == kobalt::OpeningStage::Pages && percent == 0) ++formats;
+            });
+            return formats;
+        };
+        kobalt::ReaderModel freshWide(kobalt::test::readerFonts()), freshNarrow(kobalt::test::readerFonts());
+        open(freshWide, paragraph, {}, settings(wide), size);
+        open(freshNarrow, paragraph, {}, settings(narrow), size);
+        const auto column = [](kobalt::ReaderModel &model, Layout layout) {
+            return model.image(0).copy(layout.margin, 0, 420, 800);
+        };
+        require((column(freshWide, wide) == column(freshNarrow, narrow)) == !hanging,
+                "The column fixture does not show the hanging-punctuation allowance");
+        {
+            kobalt::ReaderModel parsed(kobalt::test::readerFonts());
+            require(cached(parsed, wide) > 0 && !parsed.openedFromCache() && parsed.saveDocumentCache(),
+                    "Cannot save two columns to the document cache");
+        }
+        kobalt::ReaderModel restored(kobalt::test::readerFonts());
+        require(cached(restored, wide) == 0 && restored.openedFromCache(),
+                "A cached two-column book with an unchanged allowance was laid out again");
+        require(restored.pages() == freshWide.pages(), "Cached columns changed the page count");
+        for (int page : {0, restored.pages() / 2, restored.pages() - 1})
+            require(restored.image(page) == freshWide.image(page), "Cached columns differ from a fresh layout");
+        kobalt::ReaderModel changed(kobalt::test::readerFonts());
+        const int formats = cached(changed, narrow);
+        require(changed.openedFromCache() && (formats > 0) == hanging,
+                "A changed allowance reused cached columns, or an unchanged one laid them out again");
+        require(changed.pages() == freshNarrow.pages(), "Cached columns kept the old page count");
+        for (int page : {0, changed.pages() / 2, changed.pages() - 1})
+            require(changed.image(page) == freshNarrow.image(page), "Cached columns kept stale geometry");
+    }
 }
-// Checks each column against a single-column render, screen counts, gutters, selection, search, links and reading order.
+}
+// Checks each column against a single-column render, screen counts, gutters, selection, search, links, reading order and cache reuse with hanging punctuation.
 int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     chapterProgress();
+    cachedColumns();
     for (bool rtl : {false, true}) for (bool dark : {false, true}) for (int count : {1, 2}) {
         kobalt::ReaderModel model(kobalt::test::readerFonts());
         const auto paragraph = QByteArray("<p>") + QByteArray("<a href='https://example.test/'>Amber</a> birch cedar dogwood elm fir. ").repeated(100) + "</p>";
@@ -255,5 +313,5 @@ int main(int argc, char **argv) {
         require(!relative.applyAppearance({{"column_spacing_percent", 99}}) && !relative.applyAppearance({{"column_spacing_percent", 301}}),
                 "Invalid relative column spacing was accepted");
     }
-    std::puts("PASS: one and two columns preserve text, geometry, chapter progress and screen navigation");
+    std::puts("PASS: one and two columns preserve text, geometry, chapter progress, cached layouts and screen navigation");
 }

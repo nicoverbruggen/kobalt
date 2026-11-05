@@ -34,16 +34,13 @@ public:
         const int available = qMax(minimumWidth * columns, w - 2 * sideMargin);
         gutter = columns > 1 ? qMin(spacing, (available - minimumWidth * columns) / (columns - 1)) : 0;
         width = columns > 1 ? qMax(1, (available - gutter * (columns - 1)) / columns) : w;
-        const int previousOverflow = overflow;
+        // CREngine gives these side margins to each paragraph as its usable overflow.
+        // Its render context includes them (crengine-render-overflow.patch), so a
+        // changed allowance lays the book out again, and a cached or retained layout
+        // with the same allowance is reused.
         overflow = hangingPunctuation && columns > 1 ? qMin(sideMargin, gutter / 2) : 0;
         LVDocView::setPageMargins(columns > 1 ? lvRect(overflow, margins.top, overflow, margins.bottom) : margins);
         LVDocView::Resize(columnWidth(), h);
-        if (overflow != previousOverflow && getDocument()) {
-            // CREngine retains each paragraph's usable overflow in its layout.
-            // Its render hash tracks text width, which has deliberately stayed the same.
-            getDocument()->forceReinitStyles();
-            requestRender();
-        }
     }
     int getPageCount() { return (LVDocView::getPageCount() + columns - 1) / columns; }
     int getCurPage(bool internal = false) {

@@ -7118,13 +7118,14 @@ private slots:
         QCOMPARE(store.highlights().size(), 1999);
     }
 
-    // Checks that the footer, progress bar, Stats, sleep snapshot and saved book percent agree at the first, a middle and the last page.
+    // Checks that the footer, progress bar, Stats, sleep snapshot and saved book percent agree at the first, a middle and the last page, and that a book marked as finished sleeps at 100%.
     void progressPercentagesAgree_data()
     {
         QTest::addColumn<int>("position");
         QTest::newRow("first") << 0;
         QTest::newRow("middle") << 1;
         QTest::newRow("last") << 2;
+        QTest::newRow("finished") << 3;
     }
 
     void progressPercentagesAgree()
@@ -7148,9 +7149,11 @@ private slots:
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QVERIFY(host.session()->pages() > 7);
+        const int pages = host.session()->pages();
         const int target = position == 0 ? 0
-                : position == 2          ? host.session()->pages() - 1
-                                         : host.session()->pages() / 7;
+                : position == 2          ? pages - 1
+                : position == 3          ? pages - 1 - pages / 20
+                                         : pages / 7;
         if (host.session()->page() != target)
             QVERIFY(host.session()->go(target));
         QTRY_VERIFY(!host.session()->busy());
@@ -7172,10 +7175,17 @@ private slots:
         stats->click();
         QTRY_VERIFY(!graph->isVisible());
         QTRY_VERIFY(host.window()->readyForPresentation());
+        // A book marked as finished is done; the reading views keep the page.
+        if (position == 3) {
+            host.book()->markFinished();
+            QVERIFY(host.book()->finishedHere());
+        }
+        const int sleepPercent = position == 3 ? 100 : percent;
+        QVERIFY(position != 3 || percent < 100);
         const auto snapshot = host.window()->powerScreenSnapshot();
         QVERIFY(!snapshot.image.isNull());
-        QCOMPARE(snapshot.percent, percent);
-        QCOMPARE(snapshot.progress, strings::get("sleep.percent_read").arg(percent));
+        QCOMPARE(snapshot.percent, sleepPercent);
+        QCOMPARE(snapshot.progress, strings::get("sleep.percent_read").arg(sleepPercent));
         host.window()->checkpoint();
         const auto identity =
                 QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();

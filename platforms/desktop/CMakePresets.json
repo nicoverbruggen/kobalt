@@ -68,7 +68,7 @@
       "name": "mac",
       "configurePreset": "mac",
       "output": { "outputOnFailure": true },
-      "execution": { "jobs": 2, "noTestsAction": "error" }
+      "execution": { "jobs": 6, "noTestsAction": "error" }
     },
     { "name": "mac-light", "inherits": "mac", "filter": { "include": { "label": "light" } } },
     { "name": "mac-fast", "inherits": "mac", "filter": { "include": { "label": "fast" } } },

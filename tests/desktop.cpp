@@ -761,14 +761,21 @@ QString screenshotDevice(int preset) {
     return preset ? test::screenshotDevices().at(preset - 1) : QString("fill");
 }
 
-// One row for each gallery variant: every viewport, with the themes that
-// test::screenshotThemes declares for it.
+// The gallery variants: every viewport, with the themes that
+// test::screenshotThemes declares for it. A gallery capture uses every
+// variant. A test run uses one row per profile, both themes and 150% text,
+// because the behaviour does not depend on the remaining combinations;
+// KOBALT_TEST_ALL_VARIANTS=1 runs them all.
 void screenshotVariants() {
     QTest::addColumn<int>("preset");
     QTest::addColumn<bool>("dark");
+    const bool all = !captureDirectory.isEmpty() || qEnvironmentVariableIntValue("KOBALT_TEST_ALL_VARIANTS") == 1;
+    const QStringList representative{"1-light", "1-large", "2-dark", "3-light", "4-dark", "5-light"};
     for (int preset : {1, 2, 3, 4, 5})
-        for (const auto &theme : test::screenshotThemes(screenshotDevice(preset)))
-            QTest::newRow(qPrintable(QString::number(preset) + '-' + theme)) << preset << (theme == "dark");
+        for (const auto &theme : test::screenshotThemes(screenshotDevice(preset))) {
+            const auto tag = QString::number(preset) + '-' + theme;
+            if (all || representative.contains(tag)) QTest::newRow(qPrintable(tag)) << preset << (theme == "dark");
+        }
 }
 
 QString screenshotTheme(bool dark) {

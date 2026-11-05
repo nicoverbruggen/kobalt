@@ -1,8 +1,8 @@
 {
-  "sdk_image": "ghcr.io/nicoverbruggen/kobuild@sha256:013a0509703e6499529a438659ea3a8d0a18d3eedaf24fdfea548840878008b3",
+  "sdk_image": "ghcr.io/nicoverbruggen/kobuild@sha256:bb32726522eec89ea849ca85916d6819d492c8dfdcf3855c868bfa96dc21964c",
   "qt_version": "6.11.3",
-  "qtbase_revision": "5a1194b2d368e2d72c230205c464b04a2f23eccd",
-  "qtsensors_revision": "fecaa82dcc63b5703b4e0b88b9da1b929a654531",
+  "qtbase_revision": "138f955f0b5e50e4a6c2ee1e78a2279db52ae9e3",
+  "qtsensors_revision": "30f06d8b10eb1e5f3d7d592fb2802bebee1ea541",
   "ndk_version": "27.2.12479018",
   "llvm_source": "https://android.googlesource.com/toolchain/llvm-project/+/d8003a456d14a3deb8054cdaa529ffbf02d9b262",
   "llvm_build_recipe": "https://android.googlesource.com/toolchain/llvm_android/+/31a1d3747b77b10185c0adf03ae6036b474719c7",
@@ -30,7 +30,7 @@
     "libssl_3.so"
   ],
   "notices": {
-    "Qt-Android-Third-Party": "2b8b5386aee33395b90fb0e4f08b18e7799aab471f26affedab530839a25fefa",
+    "Qt-Android-Third-Party": "fbb0370baed3aa2bea82a42e56ee3f92ea7aa8d3979076c1f16f1851f98a154b",
     "Android-Cxx-Runtime": "a3837ba46f3d39bb69f84d03bbdc3764ee9b6c95f7c0dce062cded23e275d939",
     "SQLite": "592db1199aab67aafe4515db9808b420db122083807c5329b2f061951e79acbe"
   },

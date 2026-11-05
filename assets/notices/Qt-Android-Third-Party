@@ -1,8 +1,8 @@
 Third-party notices for the Qt 6.11.3 modules in Kobalt for Android
 
 Source: the prepared Android SDK SPDX inventory and the matching Qt source exports.
-Qt base: 5a1194b2d368e2d72c230205c464b04a2f23eccd
-Qt Sensors: fecaa82dcc63b5703b4e0b88b9da1b929a654531
+Qt base: 138f955f0b5e50e4a6c2ee1e78a2279db52ae9e3
+Qt Sensors: 30f06d8b10eb1e5f3d7d592fb2802bebee1ea541
 
 The module inventory includes upstream code conditional on other platforms. These notices do not imply that all such code is active on Android. Qt itself is covered by the separate Qt license texts.
 
@@ -71,7 +71,7 @@ Source: Qt source tree
 Full license text: section 7
 
 
-Freetype 2 (2.14.3)
+Freetype 2 (2.15.0)
 ========================================================================
 Copyright (c) 2007-2014 Adobe Systems Incorporated
 Copyright (c) 2004-2026 Albert Chin-A-Young
@@ -148,7 +148,7 @@ Source: http://www.freetype.org
 Full license text: section 8
 
 
-HarfBuzz-NG (14.4.0)
+HarfBuzz-NG (14.6.0)
 ========================================================================
 Copyright © 2010-2022  Google, Inc.
 Copyright © 2015-2020  Ebrahim Byagowi
@@ -207,7 +207,7 @@ Full license text: section 14
 Full license text: section 15
 
 
-LibPNG (1.6.58)
+LibPNG (1.6.59)
 ========================================================================
 Copyright (c) 1995-2026 The PNG Reference Library Authors
 Copyright (c) 2000-2026 Cosmin Truta
@@ -255,9 +255,9 @@ Source: Qt source tree
 Full license text: section 18
 
 
-MD4C (0.5.3)
+MD4C (0.6.0)
 ========================================================================
-Copyright © 2016-2024 Martin Mitáš
+Copyright © 2016-2026 Martin Mitáš
 License: MIT License
 Source: https://github.com/mity/md4c
 
@@ -291,7 +291,7 @@ Source: https://www.khronos.org/
 Full license text: section 20
 
 
-PCRE2 (10.48)
+PCRE2 (10.49)
 ========================================================================
 Copyright (c) 1997-2007 University of Cambridge
 Copyright (c) 2007-2024 Philip Hazel
@@ -302,7 +302,7 @@ Source: http://www.pcre.org/
 Full license text: section 21
 
 
-PCRE2 - Stack-less Just-In-Time Compiler (10.48)
+PCRE2 - Stack-less Just-In-Time Compiler (10.49)
 ========================================================================
 Copyright Zoltan Herczeg
 License: BSD 2-clause "Simplified" License
@@ -391,7 +391,7 @@ Source: Qt source tree
 Full license text: section 29
 
 
-SQLite (3.53.4)
+SQLite (3.54.0)
 ========================================================================
 The authors disclaim copyright to the source code. However, a license can be obtained if needed.
 License: SQLite Blessing
@@ -2289,7 +2289,7 @@ License text 19
 ========================================================================
 # The MIT License (MIT)
 
-Copyright © 2016-2024 Martin Mitáš
+Copyright © 2016-2026 Martin Mitáš
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the “Software”),

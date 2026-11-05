@@ -46,9 +46,6 @@ public:
     PreviewState previewState() const {
         return previewState_;
     }
-    ApplyState applyState() const {
-        return applyState_;
-    }
     bool applying() const {
         return applyState_ == ApplyState::Running;
     }

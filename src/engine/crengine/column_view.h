@@ -9,7 +9,6 @@ class ColumnView final : public LVDocView {
 public:
     ColumnView() : LVDocView(32, true) {}
     void setColumns(int count) { columns = count; }
-    int columnCount() const { return columns; }
     int columnWidth() const { return width + 2 * overflow; }
     void setHangingPunctuation(bool enabled) { hangingPunctuation = enabled; }
     int columnOffset(int column) {

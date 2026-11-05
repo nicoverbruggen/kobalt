@@ -45,7 +45,6 @@ public:
     bool previewReady() const {
         return ready;
     }
-    bool previewsReady() const;
     QRect previewBounds() const;
     QRect barBounds() const;
     QRect panelBounds() const;

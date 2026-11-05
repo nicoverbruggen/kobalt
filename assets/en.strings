@@ -1067,9 +1067,7 @@
 "annotations.export_filter" = "ZIP archives (*.zip)";
 /* Arguments: %1 */
 "annotations.export_saved" = "Annotations exported to %1";
-"annotations.retry_save" = "Retry save";
 "annotations.cancel_selection" = "Clear selection";
-"annotations.discard_and_stop" = "Discard selection and stop highlighting";
 "annotations.stop" = "Stop highlighting";
 "annotations.empty" = "No annotations yet";
 "annotations.loading" = "Finding pages…";

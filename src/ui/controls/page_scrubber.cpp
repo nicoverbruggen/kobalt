@@ -580,10 +580,6 @@ void PageScrubber::clearPreview() {
     preceding->update();
     following->update();
 }
-bool PageScrubber::previewsReady() const {
-    return previewReady() && (candidate == 0 || !preceding->image.isNull()) &&
-           (candidate == totalPages - 1 || !following->image.isNull());
-}
 void PageScrubber::showCurrentPage() {
     if (!isVisible() || !isEnabled() || selecting())
         return;

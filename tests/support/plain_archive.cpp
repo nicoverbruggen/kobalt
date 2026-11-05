@@ -1,9 +1,9 @@
+#include "plain_archive.h"
+#include "publication/publication.h"
+#include "publication/resource_cache.h"
+#include "publication/zip_resource.h"
 #include "support/diagnostics.h"
-#include "native_archive.h"
-#include "publication.h"
 #include "support/qt_compat.h"
-#include "resource_cache.h"
-#include "zip_resource.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QNetworkReply>
@@ -114,9 +114,6 @@ QNetworkReply *PlainArchive::request(const QString &name) {
 bool PlainArchive::canStreamPlainImage(const QString &name) const {
     return guiThread() && data_ && data_->sizes.contains(name);
 }
-}
-bool plainArchiveAvailable() {
-    return PlainArchive::available();
 }
 std::unique_ptr<ResourceArchive> openPlainArchive(const QString &path) {
     auto archive = std::make_unique<PlainArchive>();

@@ -98,17 +98,10 @@ private:
 class BackButton : public Button {
 public:
     using Button::Button;
-    void setLabelOffset(int pixels) {
-        labelOffset = pixels;
-        update();
-    }
     QSize sizeHint() const override;
 
 protected:
     void paintEvent(QPaintEvent *) override;
-
-private:
-    int labelOffset = 0;
 };
 
 class ElidingButton : public Button {
@@ -270,13 +263,6 @@ public:
     }
     void setCircular(bool value) { circular = value; update(); }
     void setGrayPress(bool value) { grayPress = value; update(); }
-    void setInverted(bool value) {
-        if (inverted == value) {
-            return;
-        }
-        inverted = value;
-        update();
-    }
     void setGlyph(ControlIcon icon) {
         if (glyph != icon) {
             glyph = icon;
@@ -285,14 +271,6 @@ public:
     }
     void setRule(Edges edges) {
         rule = edges;
-        update();
-    }
-    void setMaximumLabelLines(int lines) {
-        lines = qBound(1, lines, 2);
-        if (maximumLabelLines == lines)
-            return;
-        maximumLabelLines = lines;
-        updateGeometry();
         update();
     }
     void setTrailingInset(int pixels) {
@@ -314,10 +292,8 @@ private:
     int iconPixels;
     Edges rule;
     bool dropdownIndicator = false;
-    bool inverted = false;
     bool circular = false;
     bool grayPress = false;
-    int maximumLabelLines = 1;
     int trailingInset = metrics::chrome::inset;
 };
 QPushButton *makeButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,

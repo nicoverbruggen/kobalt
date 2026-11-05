@@ -83,8 +83,7 @@ add_library(kobalt-core OBJECT ${shared} display.cpp
     "${source}/publication/publication.cpp" "${source}/publication/zip_resource.cpp"
     "${source}/publication/resource_cache.cpp" "${source}/publication/local_resources.cpp"
     "${source}/publication/image_policy.cpp" "${source}/publication/layout_compatibility.cpp"
-    "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
-    "${source}/publication/plain_archive.cpp")
+    "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp")
 target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kobalt-core SYSTEM PUBLIC
     "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
@@ -546,6 +545,10 @@ if(BUILD_TESTING)
             set_target_properties(kobalt-${name}-tests PROPERTIES AUTOMOC OFF)
             target_include_directories(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/tests/support")
             target_compile_options(kobalt-${name}-tests PRIVATE -Wall -Wextra -Werror)
+            # PlainArchive stands in for Nickel's archive in checks of the native resource path.
+            if(check MATCHES "^(plain_archive|reading_book|bookmark_session|highlight_session|reader_session)$")
+                target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/tests/support/plain_archive.cpp")
+            endif()
             if(check STREQUAL "native_sync_network")
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/native_sync_network.cpp"
                     "${KOBALT_ROOT}/platforms/kobo/common/native_sync_network.h"

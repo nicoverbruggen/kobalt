@@ -16,7 +16,6 @@
 #include <QVariant>
 #include <QStringList>
 #include <utility>
-#include <limits>
 
 namespace kobalt::ui {
 namespace m = metrics;
@@ -189,7 +188,7 @@ void BackButton::paintEvent(QPaintEvent *) {
     const int available = qMax(0, width() - m::navigation::labelLeft - m::navigation::labelRight - contentsMargins().right());
     const auto label = elideInterfaceText(text(), painter.font(), available);
     painter.setPen(ink);
-    drawOpticalText(painter, QRectF(m::navigation::labelLeft, center - height() / 2.0 + labelOffset, available, height()), label);
+    drawOpticalText(painter, QRectF(m::navigation::labelLeft, center - height() / 2.0, available, height()), label);
 
 }
 TapZoneButton::TapZoneButton(tapZones::Layout layout, bool rightToLeft, QWidget *parent)
@@ -563,24 +562,8 @@ void DismissButton::paintEvent(QPaintEvent *) {
     controlIcon(ControlIcon::Close, pressed ? paper : ink).paint(&painter, bounds);
 }
 namespace {
-QStringList cellLabelLines(const QString &text, const QFont &font, int available, int maximumLines) {
-    if (maximumLines == 1 || interfaceTextWidth(text, font) <= available)
-        return {elideInterfaceText(text, font, available)};
-    int split = -1, bestWidth = std::numeric_limits<int>::max();
-    for (int i = 1; i < text.size() - 1; ++i) {
-        if (!text.at(i).isSpace())
-            continue;
-        const int width = qMax(interfaceTextWidth(text.left(i).trimmed(), font),
-                               interfaceTextWidth(text.mid(i + 1).trimmed(), font));
-        if (width < bestWidth) {
-            bestWidth = width;
-            split = i;
-        }
-    }
-    if (split < 0)
-        return {elideInterfaceText(text, font, available)};
-    return {elideInterfaceText(text.left(split).trimmed(), font, available),
-            elideInterfaceText(text.mid(split + 1).trimmed(), font, available)};
+QStringList cellLabelLines(const QString &text, const QFont &font, int available) {
+    return {elideInterfaceText(text, font, available)};
 }
 }
 CellButton::CellButton(ControlIcon icon, QWidget *parent, int iconPixels)
@@ -603,7 +586,7 @@ int CellButton::widthForLabel(int maximumWidth) const {
     QFont label = interfaceFont(m::chrome::countText);
     label.setCapitalization(QFont::AllUppercase);
     const int reserve = m::chrome::inset + trailingInset + m::chrome::selectorGap + iconPixels;
-    const auto lines = cellLabelLines(text().toUpper(), label, qMax(0, maximumWidth - reserve), maximumLabelLines);
+    const auto lines = cellLabelLines(text().toUpper(), label, qMax(0, maximumWidth - reserve));
     int width = 0;
     for (const auto &line : lines)
         width = qMax(width, interfaceTextWidth(line, label));
@@ -613,8 +596,8 @@ void CellButton::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     const bool pressed = isEnabled() && isDown();
     const bool active = isEnabled() && (isChecked() || (pressed && !grayPress));
-    const auto paper = palette().color(inverted ? QPalette::WindowText : QPalette::Window);
-    const auto ink = palette().color(inverted ? QPalette::Window : QPalette::WindowText);
+    const auto paper = palette().color(QPalette::Window);
+    const auto ink = palette().color(QPalette::WindowText);
     if (circular) {
         painter.setRenderHint(QPainter::Antialiasing);
         const qreal inset = int(m::control::border) / 2.0;
@@ -649,7 +632,7 @@ void CellButton::paintEvent(QPaintEvent *) {
     painter.setFont(label);
     painter.setPen(color);
     const int available = qMax(0, width() - m::chrome::inset - trailingInset - m::chrome::selectorGap - iconPixels);
-    const auto lines = cellLabelLines(text().toUpper(), label, available, maximumLabelLines);
+    const auto lines = cellLabelLines(text().toUpper(), label, available);
     const int lineHeight = interfaceLineHeight(label);
     const int top = (height() - int(lines.size()) * lineHeight) / 2;
     int labelWidth = 0;

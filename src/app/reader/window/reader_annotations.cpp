@@ -304,28 +304,6 @@ void Reader::showAnnotationModeNotice() {
     annotationModeHide.start();
 }
 
-void Reader::finishAnnotations() {
-    if (annotationSaving) {
-        return;
-    }
-    if (annotationStart.isEmpty() || !annotationDirty) {
-        leaveAnnotations();
-        return;
-    }
-    QVector<AnnotationAction> actions;
-    if (!annotationEnd.isEmpty()) {
-        actions.append(
-            {"rrAnnotationSave", ui::ControlIcon::SaveHighlight, strings::get("annotations.retry_save"), [this] {
-                 prepareAnnotation(true);
-             }});
-    }
-    actions.append(
-        {"rrAnnotationDiscard", ui::ControlIcon::ClearSelection, strings::get("annotations.discard_and_stop"), [this] {
-             leaveAnnotations();
-         }});
-    annotationActionsFor(actions, topControls->geometry(), false);
-}
-
 void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRect anchor, bool compactActions,
                                   const QString &paletteColor, std::function<void(QString)> colorChanged,
                                   const QString &selectedStyle, std::function<void(QString)> styleChanged) {
@@ -485,27 +463,6 @@ void Reader::clearAnnotationDraft() {
     syncMarkupRequest();
     annotationFrame.clear();
     syncAnnotations();
-}
-
-void Reader::setAnnotationBoundary(AnnotationToken token, bool start) {
-    annotationDirty = true;
-    annotationPopover->hide();
-    if (start) {
-        annotationStart = token.start;
-        annotationStartWord = annotationEndWord = token;
-        annotationStartPolicy = annotationEndPolicy = !token.punctuation;
-    } else {
-        annotationEnd = token.end;
-        annotationEndWord = token;
-        annotationEndPolicy = !token.punctuation;
-    }
-    if (annotationEnd.isEmpty()) {
-        annotationAdjusting = false;
-        syncMarkupRequest();
-        updateAnnotationRects();
-    } else {
-        prepareAnnotation();
-    }
 }
 
 void Reader::annotationTap(QPoint point) {

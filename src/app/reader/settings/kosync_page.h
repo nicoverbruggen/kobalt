@@ -25,8 +25,6 @@ public:
     QString server() const { return server_; }
     QString username() const { return username_; }
     QString takePassword();
-    // Opens the Automatic sync sheet.
-    ui::CaptionButton *automaticButton() const { return automaticButton_; }
     void dismissEditor();
     QPointer<ui::ModalOverlay> editorDialog;
     std::function<void()> loginRequested, logoutRequested, syncRequested;

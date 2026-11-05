@@ -19,7 +19,7 @@ inline constexpr int hideMilliseconds = 850;
 inline constexpr int feedbackMilliseconds = 150;
 }
 namespace spacing {
-inline constexpr Px tight{8}, row{16}, section{24}, gutter{48};
+inline constexpr Px row{16}, section{24}, gutter{48};
 }
 namespace text {
 inline constexpr TextPx small{32}, secondary{30}, explanation{32}, body{36};
@@ -29,7 +29,7 @@ namespace control {
 inline constexpr Px border{2}; // Two pixels at 300 ppi, one at the Nia's 212 ppi.
 inline constexpr Px minimumHeight{60}, padding{4};
 inline constexpr TextPx captionValueText{24};
-inline constexpr Px captionWidth{280}, valueWidth{84}, captionGap{8}, captionRight{12};
+inline constexpr Px captionWidth{280}, captionGap{8}, captionRight{12};
 inline constexpr Px rowGap{16}, sectionGap{8}, itemGap{16}, fontPickerGap{16};
 inline constexpr Px segmentHeight{48}, segmentVerticalPadding{12}, segmentHorizontalPadding{16};
 inline constexpr Px stepSize{72}, stepIconInset{10};
@@ -96,12 +96,11 @@ inline constexpr Px dot{40}, dotGap{24}, square{34}, squareGap{14}, logoWidth{14
 inline constexpr int delayMilliseconds = 1000, dotMilliseconds = 300, segmentMilliseconds = 180;
 }
 namespace settings {
-inline constexpr PxMargins displayMargins{16, 24, 16, 24}, screenMargins{16, 24, 16, 24};
-inline constexpr PxMargins miscellaneousMargins{16, 24, 16, 24};
-inline constexpr Px columnGap{28}, rowGap{16}, screenGap{16}, miscellaneousGap{24};
+inline constexpr PxMargins displayMargins{16, 24, 16, 24};
+inline constexpr Px rowGap{16};
 inline constexpr int tabBorder = 1;
 inline constexpr Px tabHeight{56}, tabVerticalPadding{8}, tabHorizontalPadding{24};
-inline constexpr Px optionHeight{116}, displayOptionHeight{116};
+inline constexpr Px optionHeight{116};
 inline constexpr Px checkboxSize{40}, checkboxTop{4}, labelLeft{0}, toggleWidth{80}, toggleHeight{48}, toggleGap{24};
 inline constexpr Px descriptionTop{48}, descriptionBottom{16};
 }
@@ -129,14 +128,10 @@ inline constexpr Px bottom{88}, compactBottom{80};
 namespace choices {
 inline constexpr Px pickerHeader{112}, pickerRow{144};
 inline constexpr Px fontArrowSize{40};
-inline constexpr Px textInset{28};
-inline constexpr Px fontTop{0}, fontReservedHeight{96}, fontRowHeight{72}, fontSectionHeight{56};
-inline constexpr Px fontDropdownHeight{600}, fontButtonHeight{72};
+inline constexpr Px fontRowHeight{72};
+inline constexpr Px fontButtonHeight{72};
 inline constexpr Px fontButtonLeft{24}, fontButtonWidthReserve{104}, fontArrowRight{38};
 inline constexpr Px sampleBase{34}, sampleInkHeight{25}, sampleMinimum{28}, sampleMaximum{48};
-inline int fontRows(int height) {
-    return qMax(1, (height - fontReservedHeight) / fontRowHeight);
-}
 }
 namespace list {
 inline constexpr Px oneLine{96}, twoLines{146}, threeLines{168};
@@ -261,7 +256,6 @@ inline const QRectF failureBrand{100, 139, 202, 58};
 inline const QRectF failureIcon{183, 255, 36, 36};
 inline const QRectF failureLabel{28, 301, 346, 32};
 inline const QRectF failureDetail{28, 341, 346, 48};
-inline const QRectF fallbackButton{28, 407, 346, 44};
 inline const QRectF backButton{28, 459, 346, 44};
 inline const QRectF handoffIcon{183, 384, 36, 36};
 inline const QRectF handoffLabel{28, 429, 346, 28};

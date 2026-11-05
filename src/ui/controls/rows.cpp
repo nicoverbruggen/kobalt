@@ -205,11 +205,6 @@ void ListRow::setActionIcon(ControlIcon icon) {
         static_cast<CellButton *>(action)->setGlyph(icon);
     }
 }
-void ListRow::setActionRule(bool value) {
-    if (action)
-        static_cast<CellButton *>(action)->setRule(value ? Edges(Qt::LeftEdge) | Qt::BottomEdge
-                                                         : Edges(Qt::BottomEdge));
-}
 QSize ListRow::sizeHint() const {
     const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
     if (lines > 3)

@@ -180,9 +180,6 @@ ReaderBookRoute readerBookRoute(const void *volume, QString *identity, QString *
 ReaderBookRoute readerBookCandidateRoute(const void *volume, QString *identity, QString *path) {
     return bookRoute(volume, identity, path, false);
 }
-bool eligibleReaderBook(const void *volume, QString *identity, QString *path) {
-    return readerBookRoute(volume, identity, path) == ReaderBookRoute::Direct;
-}
 void configureBookMenu(std::function<bool()> available, std::function<bool()> preferred) {
     auto &callbacks = menuCallbacks();
     callbacks.ready = std::move(available);

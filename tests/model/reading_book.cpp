@@ -16,7 +16,7 @@
 #include "publication/native_resources.h"
 #include "support/qt_compat.h"
 #include "publication/resource_server.h"
-#include "publication/native_archive.h"
+#include "plain_archive.h"
 #include <QEventLoop>
 #include <QDir>
 #include <QDateTime>

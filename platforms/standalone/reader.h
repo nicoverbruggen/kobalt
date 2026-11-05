@@ -21,7 +21,6 @@ public:
     void open(const QString &path, QSize pixels, QString sourceKey = {}, bool restartAtStart = false);
     void close();
     QJsonObject lastBook() const;
-    bool forgetLastBook();
     // The state the reader saved for the book at this path.
     QJsonObject savedState(const QString &path) const;
     // Reset only this book's checkpoint. Annotations and global preferences stay intact.

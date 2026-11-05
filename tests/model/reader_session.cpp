@@ -3,7 +3,7 @@
 #include "sync/kosync.h"
 #include "app/messages/opening_message.h"
 #include "publication/native_resources.h"
-#include "publication/native_archive.h"
+#include "plain_archive.h"
 #include "publication/resource_server.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"

@@ -11,8 +11,6 @@ ReaderBookRoute readerBookRoute(const void *volume, QString *identity = nullptr,
 // opening performs full inspection after its loading view has painted.
 ReaderBookRoute readerBookCandidateRoute(const void *volume, QString *identity = nullptr, QString *path = nullptr);
 void rememberNativeBook(const QString &identity, const QString &path, bool protectedBook);
-// The library menu requires full inspection before offering a Kobalt choice.
-bool eligibleReaderBook(const void *volume, QString *identity = nullptr, QString *path = nullptr);
 void configureBookMenu(std::function<bool()> available, std::function<bool()> preferred);
 bool readerChoice(const void *volume, bool preferred);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)

@@ -1,4 +1,4 @@
-#include "publication/native_archive.h"
+#include "plain_archive.h"
 #include "publication/layout_compatibility.h"
 #include "publication/resource_cache.h"
 #include "publication/publication.h"

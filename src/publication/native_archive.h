@@ -19,6 +19,4 @@ public:
 // Invoked synchronously, at most once, after publication inspection. The server
 // does not retain this callback or any borrowed native arguments it captures.
 using OpenArchive = std::function<std::unique_ptr<ResourceArchive>()>;
-bool plainArchiveAvailable();
-std::unique_ptr<ResourceArchive> openPlainArchive(const QString &path);
 }

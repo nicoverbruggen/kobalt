@@ -1499,11 +1499,6 @@ void Reader::dismissDictionary() {
     updateLinkReturn();
 }
 
-void Reader::lookupWord(QPoint point) {
-    if (beginAnnotationDrag(point, -1))
-        finishAnnotationDrag(false);
-}
-
 void Reader::lookupSelection() {
     if (annotationStart.isEmpty() || annotationEnd.isEmpty())
         return;

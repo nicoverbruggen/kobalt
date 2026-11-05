@@ -140,7 +140,6 @@ private:
     void enterAnnotations();
     void leaveAnnotations();
     void showAnnotationModeNotice();
-    void finishAnnotations();
     void annotationTap(QPoint point);
     void loadAnnotationDragEdges();
     int annotationDragPageDirection(QPoint point) const;
@@ -153,7 +152,6 @@ private:
                                 bool startPolicy, bool endPolicy, std::function<void()> after = {},
                                 std::function<void()> reject = {});
     void prepareAnnotation(bool leave = false, std::function<void()> after = {});
-    void setAnnotationBoundary(kobalt::AnnotationToken token, bool start);
     void clearAnnotationDraft();
     bool annotationMenuSelectionEnabled() const;
     void syncAnnotationControls();
@@ -489,7 +487,6 @@ private:
     bool lookupPending = false;
     void dismissLookup(bool keepGesture = false);
     void dismissDictionary();
-    void lookupWord(QPoint point);
     void lookupSelection();
     void resizeText();
     // The host's cutout and corner bands for the current size.

@@ -37,9 +37,6 @@ public:
     QLabel *titleLabel() const {
         return heading;
     }
-    QLabel *helperLabel() const {
-        return helper;
-    }
     void setText(const QString &text) {
         if (helper->text() == text) {
             return;

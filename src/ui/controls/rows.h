@@ -65,7 +65,6 @@ public:
     void setDetailFont(const QFont &font);
     void setMetadataFont(const QFont &font);
     QPushButton *addAction(const QString &name, const QString &accessibleName);
-    void setActionRule(bool value);
     void setActionIcon(ControlIcon icon);
     QSize sizeHint() const override;
     QLabel *titleLabel() const {

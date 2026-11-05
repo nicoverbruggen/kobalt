@@ -2,7 +2,7 @@
 #include "annotation_session_checks.h"
 #include "storage/profile_database.h"
 #include "app/messages/opening_message.h"
-#include "publication/native_archive.h"
+#include "plain_archive.h"
 #include "publication/native_resources.h"
 #include "publication/resource_server.h"
 #include "reader_inputs.h"

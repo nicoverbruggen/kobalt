@@ -60,9 +60,6 @@ QJsonObject ReaderController::lastBook() const {
         return {};
     return book;
 }
-bool ReaderController::forgetLastBook() {
-    return storage::writeRecord(paths.directory, "last-book", paths.directory + "/last-book.json", {}, 256 * 1024);
-}
 QJsonObject ReaderController::savedState(const QString &path) const {
     // Known exception: the library reads a book's progress on the main thread.
     mainthread::AllowBlocking allow("library progress");

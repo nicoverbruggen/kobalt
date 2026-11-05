@@ -1761,9 +1761,6 @@ void SettingsPanel::invalidateStylingSamples(int unchanged) {
             stylingRequested(stylingFeature);
     }
 }
-void SettingsPanel::clearStylingSamples() {
-    stylingSamples.clear();
-}
 void SettingsPanel::dismissFontChoices() {
     if (!fontDialog)
         return;

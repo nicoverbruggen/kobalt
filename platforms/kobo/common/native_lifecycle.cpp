@@ -260,10 +260,6 @@ void NativeLifecycle::standbyResumed() {
     if (diagnosticsActive()) diagnostic("standby-resumed", {}, false);
 }
 void NativeLifecycle::usbPlugged() {
-    expectingUsbPrompt = true;
-    qt::later(5000, this, [this] {
-        expectingUsbPrompt = false;
-    });
     // Nickel's signal can be called directly inside its library, bypassing a
     // PLT hook. Wait until its slots have created the confirmation dialog.
     qt::later(0, this, [this] {

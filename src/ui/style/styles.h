@@ -83,13 +83,4 @@ inline QString popup() {
         .arg(int(metrics::control::border))
         .arg(int(metrics::control::outlinedHorizontalPadding));
 }
-inline QString dropdownChoice(bool selected, bool divider) {
-    return QString("QPushButton{border-radius:0;border:none;background:%1;}")
-               .arg(selected ? "palette(window-text)" : "palette(window)") +
-           QString("QPushButton{color:%1;text-align:left;padding:0 %2px;min-height:0;}")
-               .arg(selected ? "palette(window)" : "palette(window-text)")
-               .arg(int(metrics::choices::textInset)) +
-           (divider ? QString("QPushButton{border-top:%1px solid palette(mid);}").arg(int(metrics::control::border))
-                    : QString());
-}
 }

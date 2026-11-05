@@ -50,9 +50,6 @@ public:
         return usbPending || exported;
     }
     bool draining = false;
-    bool usbPromptExpected() const {
-        return expectingUsbPrompt;
-    }
     std::function<void(Shutdown)> preparePowerScreen;
     std::function<void()> sleep, sleepViewReady, wake, beforeWake, cancelWake, usbPrompt;
     std::function<bool()> sleepWorkPending;
@@ -93,7 +90,6 @@ private:
     void queueSleepViewCheck();
     bool sleepHandoffPending = false;
     QTimer sleepViewCheck;
-    bool expectingUsbPrompt = false;
     bool savingBeforeSleep = false;
     bool batteryLow_ = false;
     bool connected_ = false, asleep = false, usbPending = false, exported = false, poweringOff = false;

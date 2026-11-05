@@ -25,6 +25,13 @@ jobs=${JOBS:-2}
 image=$(sh "$root/platforms/sdk-image.sh" "${target%%-*}")
 engine=${CONTAINER_ENGINE:-docker}
 sdk_id=$("$engine" image inspect "$image" --format '{{.Id}}')
+# A package that completes is recorded for the validation guard.
+record() {
+    [[ "$mode" == --check ]] || "${CMAKE_COMMAND:-cmake}" "-DMODE=$1" "-DRUN=kobo:$target" "-DDIAGNOSTICS=$diagnostics" \
+        "-DVERSION=$requested_version" -P "$root/platforms/validation-record.cmake" || true
+}
+requested_version=${KOBALT_RELEASE_VERSION:-}
+record begin
 info=$("${CMAKE_COMMAND:-cmake}" -P "$root/platforms/source-info.cmake")
 # The shared dependency cache is created on the host, so the host user owns it.
 # Containers mount it at one fixed path, the path stored in its CMake files.
@@ -78,3 +85,4 @@ fi
             echo "Build and package: $((SECONDS - started)) seconds"
         fi
     ' kobalt-build "$target" "$jobs" "$commit" "$modified" "$sdk_id" "$diagnostics" "$mode"
+record record

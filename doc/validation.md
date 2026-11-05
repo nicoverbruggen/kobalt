@@ -35,7 +35,7 @@ The optional Kobo target `kobalt-qt5-refresh-tests` drives the production Qt5 re
 | Light app checks | `cmake --build --preset mac-light-tests` | `ctest --preset mac-light` |
 | Light gallery | `cmake --build --preset mac-light-screenshots` | `build/screenshots/mac-light/index.html`, relative to the repository root |
 | Fast checks | `cmake --build --preset mac-fast-tests` | `ctest --preset mac-fast` |
-| All native checks | `cmake --build --preset mac-tests` | `ctest --preset mac` |
+| All native checks | `cmake --build --preset mac-tests` | `ctest --preset mac`, or `cmake -DPRESET=mac -P ../validation-record.cmake` to build, run and [record](#validation-guard) the pass |
 | Integration checks | `cmake --build --preset mac-tests` | `ctest --preset mac-integration` |
 | Screenshot gallery | `cmake --build --preset mac-screenshots` | `build/screenshots/mac/index.html`, relative to the repository root |
 | Interactive app | `cmake --build --preset mac` | Open `build/desktop-mac/Kobalt.app` manually |
@@ -53,6 +53,24 @@ The `resource.resource-provider` check identifies fonts from their decoded bytes
 `lifecycle.progressPercentagesAgree` compares the reading footer, progress bar, Stats, sleep snapshot and saved Library percentage at the first, intermediate and last pages. The progress model checks rounding, unknown and single-page lengths, out-of-range positions and large page counts.
 
 The bookmark and highlight session checks run their shared editing, reflow and reopening cases in separate JSON and SQLite processes. The highlight overlap check covers sequential edits both without an explicit storage wait and after queued writes and their detail-cache updates finish. It compares creation times at the stores’ UTC ISO second precision and keeps passage content and endpoint metadata exact. SQLite write-abort fixtures check failed add, removal, merge, appearance and passage edits, rollback to saved records, and retry. Malformed rows must block session edits without being discarded. Close checks reload the final queued edit and its payload from a new connection. The database crash fixture retains bookmarks, annotations and reading positions in the write-ahead log, including Unicode and embedded NUL text.
+
+## Validation guard
+
+The full native suite, the full gallery and Kobo packages take minutes. A pass stays valid until a build-relevant file changes. `platforms/validation-record.cmake` records passes and reports them.
+
+To run the full native suite and record a pass, run this from the repository root:
+
+```sh
+cmake -DPRESET=mac -P platforms/validation-record.cmake
+```
+
+It builds `mac-tests`, runs `ctest --preset mac` and records the run if it passes. It exits with the status of the step that failed. Use `-DPRESET=linux` on Linux. Add `-DARGS="-L;model"` to run and record that selection instead. `-DJUNIT=<file>` also writes a JUnit report. A plain `ctest --preset mac` run is not recorded, because CTest has no step that runs after its results are known. The launcher's full-suite action and the release profile of [Release evaluation](release-evaluation.md) run the full suite through this command, so their passes count. The full `screenshots` target records itself when a complete capture finishes. Captures filtered with `KOBALT_GALLERY_SCENE` or `KOBALT_GALLERY_CASE` are not recorded. `platforms/kobo/build.sh` records each package that it builds, with its target, logging choice and explicit `KOBALT_RELEASE_VERSION`. A publication build, which sets `KOBALT_RELEASE_VERSION`, also records its commit, because the package shows it. A validation build does not, so a new commit of the same sources does not need a new package. `--check` builds are not recorded.
+
+A record contains the run, its options, a tree hash and the time. The tree hash covers tracked files and untracked files that Git does not ignore. It leaves out `doc/`, all other Markdown files, `.claude/` and `build/`. The same content gives the same hash whether it is committed, staged or only in the working tree. If a file changes while the run is in progress, the run is not recorded. Records stay in `build/validation/` of the worktree that ran.
+
+To see whether the current tree passed a run, use `cmake -DMODE=check -DRUN=ctest:mac -P platforms/validation-record.cmake`. Other run names are `gallery:mac`, `kobo:qt5` and the other Kobo targets. `-DMODE=hash` prints the tree hash.
+
+The Claude Code hook in `.claude/settings.json` uses the same script before each Bash command. It refuses a full `ctest --preset mac` or `linux`, the recording command above, a full gallery build and a Kobo package build when the record shows that this tree already passed. Its message names focused label runs instead. To run one anyway, put `KOBALT_REVALIDATE=1` before the command. Runs with `-L`, `-R`, `-E`, `-N` or another test selection, filtered galleries, `--check` builds and the launcher's own tests always proceed. The hook allows a command that it cannot read with certainty, and a run whose output directory is missing.
 
 ## Native dialog input
 

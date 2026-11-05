@@ -44,8 +44,8 @@ QVector<Step> plan(Action action, const QString &platform) {
     if (action == Desktop) {
         steps.append({"cmake", {"--build", "--preset", platform}, desktop});
     } else if (action == Headless) {
-        steps.append({"cmake", {"--build", "--preset", platform + "-tests"}, desktop});
-        steps.append({"ctest", {"--preset", platform, "--output-on-failure"}, desktop});
+        // Builds the tests, runs the full suite and records a pass for the validation guard.
+        steps.append({"cmake", {"-DPRESET=" + platform, "-P", root + "/platforms/validation-record.cmake"}, desktop});
     } else {
         steps.append({"cmake", {"--build", "--preset", platform + "-light-tests"}, desktop});
         steps.append({"cmake", {"-DOUTPUT=" + root + "/build/screenshot-books",
@@ -215,7 +215,8 @@ int selfTest(Launcher &launcher) {
     }
     for (const auto &platform : {QString("mac"), QString("linux")}) {
         if (plan(Desktop, platform).last().arguments.last() != platform ||
-            plan(Headless, platform).last().program != "ctest" ||
+            plan(Headless, platform).last().arguments !=
+                QStringList{"-DPRESET=" + platform, "-P", root + "/platforms/validation-record.cmake"} ||
             !plan(Visible, platform).last().arguments.contains("-DTEST_ARGUMENTS=--watch") ||
             plan(Kobo5, platform).last().arguments.last() != "qt5" ||
             plan(Kobo6, platform).last().arguments.last() != "qt6") return 1;

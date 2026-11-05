@@ -683,7 +683,11 @@ if(BUILD_TESTING)
         KOBALT_TEST_HYPHENATION_CORPUS="${KOBALT_ROOT}/tests/fixtures/hyphenation/ushyphex.tex")
     target_compile_definitions(kobalt-multilingual-tests PRIVATE
         KOBALT_TEST_ZIP="${KOBALT_TEST_ZIP}" KOBALT_TEST_CORPUS="${KOBALT_ROOT}/tests/fixtures/public-domain")
+    # A full capture that completes is recorded for the validation guard.
+    # Captures filtered by KOBALT_GALLERY_SCENE or KOBALT_GALLERY_CASE are not.
     add_custom_target(screenshots
+        COMMAND "${CMAKE_COMMAND}" -DMODE=begin "-DRUN=gallery:${KOBALT_DESKTOP_PLATFORM}"
+            -P "${KOBALT_ROOT}/platforms/validation-record.cmake"
         COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${KOBALT_ROOT}/build/screenshot-books"
             "-DREFERENCES=${KOBALT_ROOT}/tests/fixtures/screenshot-books.json"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/prepare-screenshot-books.cmake"
@@ -691,6 +695,8 @@ if(BUILD_TESTING)
             "-DTEST_ARGUMENTS=--screenshots;${KOBALT_ROOT}/build/screenshots/${KOBALT_DESKTOP_PLATFORM}"
             "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp" "-DTEST_TIMEOUT=600"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake"
+        COMMAND "${CMAKE_COMMAND}" -DMODE=record "-DRUN=gallery:${KOBALT_DESKTOP_PLATFORM}"
+            -P "${KOBALT_ROOT}/platforms/validation-record.cmake"
         DEPENDS kobalt-desktop-tests USES_TERMINAL VERBATIM)
     # Timings come from one process at a time; KOBALT_PERF_FILTER and
     # KOBALT_PERF_REPETITIONS narrow or lengthen a run. taskpolicy keeps the

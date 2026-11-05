@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "guard=\"$CLAUDE_PROJECT_DIR/platforms/validation-record.cmake\"; command -v cmake > /dev/null && [ -f \"$guard\" ] || exit 0; cmake -DMODE=hook -P \"$guard\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

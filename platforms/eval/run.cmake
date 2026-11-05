@@ -296,7 +296,14 @@ kobalt_wait_for_builds("${root}")
 set(tests_exit "")
 if("tests" IN_LIST PARTS)
     step(tests)
-    execute_process(COMMAND ctest --preset ${test_preset} --output-junit "${partial}/tests.xml"
+    # The full suite runs through the subject's validation record, so a pass
+    # counts for the validation guard. An older subject without it runs CTest.
+    set(tests_command ctest --preset ${test_preset} --output-junit "${partial}/tests.xml")
+    if(test_preset STREQUAL desktop_platform AND EXISTS "${source}/platforms/validation-record.cmake")
+        set(tests_command "${CMAKE_COMMAND}" -DPRESET=${test_preset} "-DJUNIT=${partial}/tests.xml"
+            -P "${source}/platforms/validation-record.cmake")
+    endif()
+    execute_process(COMMAND ${tests_command}
         WORKING_DIRECTORY "${desktop}" RESULT_VARIABLE tests_exit OUTPUT_FILE "${partial}/tests.log"
         ERROR_FILE "${partial}/tests.log")
     finish(tests)

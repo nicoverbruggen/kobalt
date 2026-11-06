@@ -46,7 +46,7 @@ Each test has one area label in addition to its group and lane labels. An area r
 | [Progress and statistics](validation/progress.md) | `progress` | Progress percentages, chapter progress, finish prompts, progress choices, pace and word counts |
 | [Storage and history](validation/storage.md) | `storage` | Profile storage, saves at close, record writers, migrations, reading history and the main-thread guard |
 | [Sleep, USB and power](validation/sleep.md) | `sleep` | Sleep screens, sleep and wake, USB, shutdown and power screens |
-| [Kobo adapters](validation/kobo.md) | `kobo` | Startup recovery, Nickel adapters, native dialogs and Qt5 compatibility |
+| [Kobo adapters](validation/kobo.md) | `kobo` | Startup recovery, Nickel adapters, native dialogs and Qt5 compatibility; pewter, the fake Nickel, in the Kobo SDKs |
 | [Diagnostics](validation/diagnostics.md) | `diagnostics` | Diagnostic logs, crash reports and standby diagnostics |
 | [Settings and controls](validation/settings.md) | `settings` | Settings drafts and persistence, appearance settings and shared controls |
 | [Widget keyboard](validation/keyboard.md) | `keyboard` | Keyboard layouts, case, accents and lifetime |

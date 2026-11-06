@@ -173,7 +173,8 @@ A book whose Nickel content ID is not a `file:///` path came through Nickel's sy
 - `platform.native-progress` and `model.reading-progress`: progress signals and position rules.
 - `platform.nickel-event-save`: the event save under a competing writer.
 - `platform.nickel-reading-save`, `lifecycle.closeWaitsForNativeTimeBeforePosition` and `lifecycle.sleepWaitsForNativeTimeBeforePosition`: the order and failure handling of time and position writes.
-- Firmware behavior, such as the upload format and the analytics conditions, cannot be checked by the native tests. Check it on a device or an emulated Nickel after a firmware or code change, against a local sync server: the stored row after sleep and close, the `PUT .../state` body, and the `AnalyticsEvents` rows and their upload.
+- `pewter.progress`, in both Kobo SDKs: the status at opening, the position and progress write, the recent book at close, and their failure paths, as described above. It runs the firmware adapters against [pewter](validation/kobo.md#pewter-the-fake-nickel), a fake Nickel, with `bash platforms/kobo/build.sh qt5 --check` and `qt6 --check`.
+- Firmware behavior, such as the upload format and the analytics conditions, cannot be checked by the native tests or pewter. Check it on a device or an emulated Nickel after a firmware or code change, against a local sync server: the stored row after sleep and close, the `PUT .../state` body, and the `AnalyticsEvents` rows and their upload.
 
 When a Nickel symbol that Kobalt resolves at run time is missing on a new firmware, the matching write is skipped or refused. The required ones are listed in each `Api::ready()` in the native files. Optional ones, such as `Volume::setCurrentChapterProgress`, are checked where they are used.
 

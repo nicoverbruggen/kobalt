@@ -8,7 +8,7 @@ Use `KOBALT_GALLERY_CASE=androidPageAnimations` to capture only the Android page
 
 ## Qt5 refresh adapter
 
-The optional Kobo target `kobalt-qt5-refresh-tests` drives the production Qt5 refresh adapter through both policy-list ABIs. It is not a CTest test. From `platforms/kobo/` in the prepared Qt5 SDK, configure with `cmake --preset qt5 -DKOBALT_BUILD_DISPLAY_TESTS=ON`, then build with `cmake --build --preset qt5 --target kobalt-qt5-refresh-tests`. Run it against firmware Qt5 libraries with a headless platform.
+The Kobo test `display.qt5-refresh` drives the production Qt5 refresh adapter through both policy-list ABIs, against the firmware Qt 5.2.1 libraries of the prepared Qt5 image. `bash platforms/kobo/build.sh qt5 --check` builds and runs it with the [Kobo adapter tests](kobo.md#pewter-the-fake-nickel).
 
 ## Device results and limits
 

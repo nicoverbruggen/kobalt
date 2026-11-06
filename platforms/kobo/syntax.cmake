@@ -296,9 +296,12 @@ foreach(sdk qt5 qt6)
     set(${sdk}-eval_c_sources ${c_sources})
     set(${sdk}-eval_test_sources "")
 endforeach()
-# KOBALT_BUILD_DISPLAY_TESTS adds this Qt5-only check program.
-set(qt5_test_sources "${root}/tests/model/qt5_refresh.cpp")
-set(qt6_test_sources "")
+# KOBALT_BUILD_TESTS adds the pewter tests to both lanes and the Qt5-only
+# refresh check program.
+set(pewter "${root}/tests/pewter")
+set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp")
+set(qt5_test_sources "${root}/tests/model/qt5_refresh.cpp" ${pewter_sources} "${pewter}/nickel_qt5.cpp")
+set(qt6_test_sources ${pewter_sources} "${pewter}/nickel_qt6.cpp")
 
 # AUTOMOC output is not available here. An empty file is enough for a syntax
 # check; -Wno-undefined-internal accepts the missing moc definitions.
@@ -404,6 +407,8 @@ endforeach()
 set(defines_reading_timer.cpp -DKOBALT_READING_CLOCK_BOOTTIME=1)
 set(defines_annotation_database.cpp -DKOBALT_SQLITE_ANNOTATIONS_DEFAULT=1)
 set(defines_diagnostics.cpp -DKOBALT_VERBOSE_DIAGNOSTICS=1)
+# The pewter tests use the device build's view of the adapter headers.
+set(defines_progress.cpp -DKOBALT_READER_HARDWARE)
 
 # One stamp per lane and source, and one phony target per lane. Ninja reruns
 # a source when it, a header in its depfile or its response file changes. The

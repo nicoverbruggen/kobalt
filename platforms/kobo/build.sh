@@ -71,14 +71,19 @@ fi
     --volume "$cache:/dependency-cache" \
     --workdir /work/platforms/kobo "$image" bash -euc '
         started=$SECONDS
-        cmake --preset "$1" \
+        tests=()
+        [[ "$7" != --check ]] || tests=(-DKOBALT_BUILD_TESTS=ON)
+        cmake --preset "$1" ${tests[@]+"${tests[@]}"} \
             -DKOBALT_SDK_ID="$5" -DKOBALT_DEPENDENCY_JOBS="$2" -DKOBALT_COMMIT="$3" -DKOBALT_COMMIT_MODIFIED="$4" \
             -DKOBALT_VERBOSE_DIAGNOSTICS="$6" -DKOBALT_DEPENDENCY_CACHE=/dependency-cache
         echo "Configure: $((SECONDS - started)) seconds"
         started=$SECONDS
         if [[ "$7" == --check ]]; then
-            cmake --build --preset "$1" --target kobalt --parallel "$2"
+            cmake --build --preset "$1" --target kobalt kobo-tests --parallel "$2"
             echo "Compile and link check: $((SECONDS - started)) seconds"
+            started=$SECONDS
+            ctest --test-dir "/work/build/kobo-$1" --output-on-failure
+            echo "Adapter tests: $((SECONDS - started)) seconds"
         else
             cmake --build --preset "$1" --parallel "$2"
             cmake --build --preset "$1" --target check-package

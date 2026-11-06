@@ -8,6 +8,7 @@ mkdir -p build
 scratch=$(mktemp -d "$root/build/release-check.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 cmake "-DTEST_TMP_ROOT=$scratch" -P platforms/strings-test.cmake
+cmake "-DTEST_TMP_ROOT=$scratch" -P platforms/test-validation-record.cmake
 cat > "$scratch/version.cmake" <<'CMAKE'
 include("$ENV{KOBALT_TEST_ROOT}/platforms/release-version.cmake")
 kobalt_release_version(actual v1.0-beta.4)
@@ -56,6 +57,49 @@ for target in qt5 qt6; do
         [[ $(cat "$scratch/ci/build/release/Kobalt-$target.zip") == "$expected" ]]
     done
 done
+# Run the native wrapper with fake tools, including its container command.
+# Tags cannot request reduced coverage; branches keep the everyday mode.
+mkdir -p "$scratch/native/platforms/ci" "$scratch/native/dependencies" "$scratch/native-bin"
+cp platforms/ci/native-tests.sh "$scratch/native/platforms/ci/"
+cp dependencies/cache.cmake "$scratch/native/dependencies/"
+cp platforms/sdk-image.sh "$scratch/native/platforms/"
+cat > "$scratch/native-bin/cmake" <<'SH'
+#!/bin/bash
+if [[ $1 == -P ]]; then printf '%s/cache\n' "$KOBALT_NATIVE_FIXTURE"; fi
+SH
+cat > "$scratch/native-bin/ctest" <<'SH'
+#!/bin/bash
+printf '%s\n' "$KOBALT_TEST_ALL_VARIANTS" > "$KOBALT_NATIVE_FIXTURE/variants"
+exit "${KOBALT_NATIVE_FAILURE:-0}"
+SH
+cat > "$scratch/native-bin/docker" <<'SH'
+#!/bin/bash
+set -eu
+[[ $1 != pull ]] || exit 0
+[[ $1 == run ]]
+shift
+environment=()
+while [[ $1 != bash ]]; do
+    if [[ $1 == -e ]]; then environment+=("$2"); shift; fi
+    shift
+done
+env "${environment[@]}" "$@"
+SH
+chmod +x "$scratch/native-bin/"*
+export KOBALT_NATIVE_FIXTURE="$scratch/native"
+for ref in refs/heads/develop refs/heads/main refs/tags/v1.0-beta.6 refs/tags/v1.0; do
+    [[ $ref != refs/tags/* ]] && expected=0 || expected=1
+    GITHUB_REF=$ref KOBALT_TEST_ALL_VARIANTS=$((1 - expected)) JOBS=2 \
+        CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
+        PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh"
+    [[ $(cat "$scratch/native/variants") == "$expected" ]]
+done
+if GITHUB_REF=refs/tags/v1.0 KOBALT_NATIVE_FAILURE=7 JOBS=2 \
+    CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
+    PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh"; then
+    echo 'Native CI ignored a failed test suite' >&2; exit 1
+fi
+echo 'PASS: native CI coverage selection and failure propagation'
 # Source manifests must have disjoint names and complete checksums.
 jq -es '([.[0]|keys[]] + [.[1]|keys[]]) as $keys | ($keys|length)==($keys|unique|length) and (all(.[]|to_entries[]; (.key|test("^[a-z0-9-]+$")) and (.value.url|startswith("https://")) and (.value.sha256|test("^[a-f0-9]{64}$"))))' dependencies/manifest.json dependencies/release-sources.json > /dev/null
 # Fail closed before consulting tools or producing an APK when secrets are absent.

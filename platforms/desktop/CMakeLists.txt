@@ -221,6 +221,10 @@ add_executable(kobalt-eval-compare EXCLUDE_FROM_ALL "${KOBALT_ROOT}/platforms/ev
 target_link_libraries(kobalt-eval-compare PRIVATE Qt6::Gui)
 
 if(BUILD_TESTING)
+    add_test(NAME build.validationRecord COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}"
+        -P "${KOBALT_ROOT}/platforms/test-validation-record.cmake")
+    set_tests_properties(build.validationRecord PROPERTIES LABELS "fast;build" TIMEOUT 60)
     add_test(NAME build.cachePolicy COMMAND "${CMAKE_COMMAND}"
         "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cache-policy-test"
         "-DPOLICY_FILE=${KOBALT_ROOT}/platforms/cache-policy.cmake"

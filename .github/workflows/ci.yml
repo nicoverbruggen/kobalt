@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Build and run the full native test suite
+      - name: Build and run native tests (all variants on tags)
         run: bash platforms/ci/native-tests.sh
 
   build-kobo:

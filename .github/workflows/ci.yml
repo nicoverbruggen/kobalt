@@ -49,6 +49,10 @@ jobs:
           TARGET: ${{ matrix.target }}
           KOBALT_RELEASE_VERSION: ${{ needs.validation.outputs.version }}
         run: bash platforms/ci/build.sh "$TARGET"
+      - name: Build and run the Kobo adapter tests
+        env:
+          TARGET: ${{ matrix.target }}
+        run: bash platforms/kobo/build.sh "$TARGET" --check
       - uses: actions/upload-artifact@v7
         with:
           name: kobalt-${{ matrix.target }}

@@ -10,6 +10,7 @@
 #include "platforms/kobo/common/native_authorization.h"
 #include "platforms/kobo/common/native_light.h"
 #include "platforms/kobo/common/native_dictionary.h"
+#include "platforms/kobo/common/native_keyboard.h"
 #include "platforms/kobo/common/native_wifi_power.h"
 #include <NickelHook.h>
 #include <QCryptographicHash>
@@ -31,6 +32,12 @@ bool firmwareSupported()
 
 using namespace kobalt::nickel_qt5;
 static nh_hook readerHooks[] = {
+    { .sym = "_ZN10VirtualKey11repaintFastEb",
+      .sym_new = "kobalt_keyboard_repaint",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nativeKeyboardRepaint),
+      .desc = "Theme Kobalt keyboard key repaints",
+      .optional = true },
     { .sym = "read",
       .sym_new = "kobalt_touch_read",
       .lib = "/usr/local/Kobo/generic/libkevdevtouch.so",

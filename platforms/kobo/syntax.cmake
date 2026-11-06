@@ -299,7 +299,7 @@ endforeach()
 # KOBALT_BUILD_TESTS adds the pewter tests. The Qt5 lane also has the Qt5
 # refresh check.
 set(pewter "${root}/tests/pewter")
-set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp")
+set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp" "${pewter}/keyboard.cpp")
 set(qt5_test_sources ${pewter_sources} "${pewter}/nickel_qt5.cpp" "${pewter}/refresh_qt5.cpp")
 set(qt6_test_sources ${pewter_sources} "${pewter}/nickel_qt6.cpp")
 
@@ -307,10 +307,11 @@ set(qt6_test_sources ${pewter_sources} "${pewter}/nickel_qt6.cpp")
 # check; -Wno-undefined-internal accepts the missing moc definitions.
 set(moc "${work}/moc")
 file(MAKE_DIRECTORY "${moc}")
-set(moc_sources ${qt5_cxx_sources} ${qt6_cxx_sources} "${root}/src/scenario/player.cpp")
+set(moc_sources ${qt5_cxx_sources} ${qt6_cxx_sources} ${qt5_test_sources} ${qt6_test_sources}
+    "${root}/src/scenario/player.cpp")
 list(REMOVE_DUPLICATES moc_sources)
 foreach(source IN LISTS moc_sources)
-    file(STRINGS "${source}" lines REGEX "^#include \"[^\"]+\\.moc\"")
+    file(STRINGS "${source}" lines REGEX "^#include \"([^\"]+\\.moc|moc_[^\"]+\\.cpp)\"")
     foreach(line IN LISTS lines)
         string(REGEX REPLACE "^#include \"([^\"]+)\".*" "\\1" name "${line}")
         if(NOT EXISTS "${moc}/${name}")
@@ -400,7 +401,7 @@ foreach(lane qt5 qt6 qt5-eval qt6-eval)
     write_response_file("${work}/${lane}/c.rsp" ${lane_target} ${warnings} -Wno-missing-field-initializers
         -fvisibility=hidden ${lane_defines} ${kobalt_includes} ${lane_qt} ${${sdk}_system_includes})
     write_response_file("${work}/${lane}/test.rsp" ${lane_target} ${warnings} ${qt_defines} -DKOBALT_PAGE_ANIMATIONS
-        "-I${root}" "-I${root}/src" "-I${root}/tests/support" ${lane_qt} ${${sdk}_cxx_library} ${${sdk}_system_includes})
+        "-I${root}" "-I${root}/src" "-I${root}/tests/support" "-I${moc}" ${lane_qt} ${${sdk}_cxx_library} ${${sdk}_system_includes})
 endforeach()
 
 # Per-source definitions of platforms/kobo/CMakeLists.txt with its defaults.

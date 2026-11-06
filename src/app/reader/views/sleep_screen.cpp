@@ -139,9 +139,8 @@ struct RibbonLines
 
 // A bookmark hanging from the top edge, with a notch cut into its end.
 void paintBookmark(QPainter &painter, const QRect &ribbon, const Content &content,
-                   const QColor &fill)
+                   const QColor &fill, const QColor &ink)
 {
-    const QColor ink(Qt::white);
     const qreal outline = int(sleepMetrics::ribbonOutline);
     const qreal left = ribbon.left(), right = ribbon.left() + ribbon.width(), top = ribbon.top();
     const qreal bottom = ribbon.top() + ribbon.height(), middle = (left + right) / 2,
@@ -293,11 +292,8 @@ QImage sleepScreenImage(QImage page, const QString &progress, const QString &rem
     case sleep::Tile::None:
         break;
     case sleep::Tile::Bookmark:
-        // The ribbon is dark in both themes and keeps a white outline, so it
-        // stands out from any page or cover.
-        paintBookmark(painter, area, content,
-                      dark && !poweredOff ? ui::themeColors(dark).sleepPaper
-                                          : ui::themeColors(true).paper);
+        // Keep a contrasting outline over either a page or a cover.
+        paintBookmark(painter, area, content, paper, ink);
         break;
     }
     painter.end();

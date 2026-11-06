@@ -3579,6 +3579,14 @@ private slots:
             QVERIFY(QRect(QPoint(), size).contains(area));
             QVERIFY(sleeping != charging);
             QVERIFY(sleeping != poweredOff);
+            if (tile == sleep::Tile::Bookmark) {
+                const QPoint fill = area.topLeft() + QPoint(area.width() / 2, 1);
+                const QPoint outline = area.topLeft() + QPoint(0, 1);
+                QCOMPARE(sleeping.pixelColor(fill), ui::themeColors(dark).sleepPaper);
+                QCOMPARE(sleeping.pixelColor(outline), ui::themeColors(dark).ink);
+                QCOMPARE(charging.pixelColor(fill), ui::themeColors(dark).sleepPaper);
+                QCOMPARE(poweredOff.pixelColor(fill), ui::themeColors(true).paper);
+            }
             // A battery update refreshes only the tile's area, so nothing outside it may change.
             for (int y = 0; y < size.height(); ++y) {
                 for (int x = 0; x < size.width(); ++x) {

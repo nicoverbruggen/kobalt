@@ -12,6 +12,8 @@ A completed frame that closes the active panel while keeping the reading control
 
 Use `KOBALT_GALLERY_CASE=androidPageAnimations` to capture only the Android page-animation views. The display-rate lookup uses the window handle with a primary-screen fallback, so it stays compatible with the prepared Qt 5.2.1 Kobo SDK.
 
+The widget keyboard batches key release with the editor change. On MediaTek in the light theme, ordinary edits confined to the visible keyboard and its editor use one partial update. Whole-keyboard changes, unrelated panel damage and dark cleanup keep their existing policies. The model checks cover the damage boundary; `pewter.qt5-refresh` checks the combined submission through both policy-list ABIs. Physical typing latency and ghosting require a device check.
+
 ## Qt5 refresh adapter
 
 The Kobo test `pewter.qt5-refresh`, in `tests/pewter/refresh_qt5.cpp`, drives the production Qt5 refresh adapter through both policy-list ABIs, against the firmware Qt 5.2.1 libraries of the prepared Qt5 image. `bash platforms/kobo/build.sh qt5 --check` builds and runs it with the [Kobo adapter tests](kobo.md#pewter-the-fake-nickel).

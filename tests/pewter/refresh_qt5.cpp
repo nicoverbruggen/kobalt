@@ -227,5 +227,30 @@ int main(int argc, char **argv)
         require(updates.size() == 1 && updates[0][5] == 1,
                 "Navigation split an explicit full cleanup");
     }
+    for (bool legacy : { true, false }) {
+        setReaderRefreshWindow(&reader);
+        reader.setProperty("reader_dark", false);
+        const QRect keyboard(0, 280, 300, 120), editor(20, 20, 250, 40), key(100, 300, 40, 40);
+        reader.setProperty("reader_keyboard_bounds", keyboard);
+        reader.setProperty("reader_keyboard_editor_bounds", editor);
+        const quint64 policy = (legacy ? quint64(1) << 10 : quint64(1) << 38) | (1U << 3);
+        const QRegion edits = QRegion(key) + editor;
+        updates.clear();
+        flushes = 0;
+        expectImmediate = 0;
+        if (legacy)
+            flushReader32(&store, edits, reader.windowHandle(), {},
+                          { { key, quint32(policy) }, { editor, quint32(policy) } });
+        else
+            flushReader(&store, edits, reader.windowHandle(), {},
+                        { { key, policy }, { editor, policy } });
+        require(flushes == 1 && updates.size() == 1 && updates[0][5] == 0,
+                "Keyboard key and field must submit one partial update through both Qt5 ABIs");
+        const auto bounds = edits.boundingRect();
+        require(updates[0][0] == uint32_t(bounds.top()) && updates[0][1] == uint32_t(bounds.left())
+                        && updates[0][2] == uint32_t(bounds.width())
+                        && updates[0][3] == uint32_t(bounds.height()),
+                "Keyboard edit update lost key or field damage");
+    }
     std::puts("PASS: Qt5 flush ABIs preserve sweeps and keep MTK tab feedback partial");
 }

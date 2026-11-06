@@ -314,6 +314,15 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
     } else {
         keyboardPixels.clear();
     }
+    if (!dark && !pageTurn && !direction && compatible && ordinaryControls
+        && refreshBackend(readerWindow) == RefreshBackend::Mtk
+        && keyboardEditDamage(region, keyboardBounds,
+                              readerWindow->property("reader_keyboard_editor_bounds").toRect())) {
+        const QRect bounds = region.boundingRect();
+        const auto policy = (ordinaryPolicy(false, wide) & ~(heuristic | full)) | partialMode;
+        submit(QRegion(bounds), { { bounds, policy } });
+        return;
+    }
     const bool progressDamage = !progressUpdate.isEmpty()
             && progressUpdate.contains(region.boundingRect())
             && std::all_of(policies.cbegin(), policies.cend(),

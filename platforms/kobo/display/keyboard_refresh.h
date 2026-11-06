@@ -4,6 +4,16 @@
 #include <cstring>
 
 namespace kobalt {
+// Typing changes the key and its editor in the same completed paint. One
+// partial update keeps them together without driving the unchanged gap in
+// full mode. Opening or restyling the entire keyboard keeps its normal policy.
+inline bool keyboardEditDamage(const QRegion &damage, const QRect &keyboard, const QRect &editor)
+{
+    return !damage.isEmpty() && !keyboard.isEmpty() && !editor.isEmpty()
+            && !QRegion(keyboard).subtracted(damage).isEmpty()
+            && damage.subtracted(QRegion(keyboard) + editor).isEmpty();
+}
+
 // Nickel can add a mode-only keyboard entry alongside Qt's text policy.
 // Complete its waveform so it does not bypass the reader's damage splitting.
 inline quint64 completeKeyboardWaveform(const QRect &damage, const QRect &keyboard, quint64 policy,

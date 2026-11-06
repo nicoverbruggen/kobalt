@@ -130,7 +130,7 @@ public:
             layout->addWidget(rowWidgets[row], 1);
             for (int column = 0; column < qMax(letterRows[row].size(), symbolRows[row].size());
                  ++column) {
-                auto *key = new QPushButton(panel);
+                auto *key = new Button(panel);
                 key->setObjectName(QStringLiteral("widgetKey%1_%2").arg(row).arg(column));
                 key->setFocusPolicy(Qt::NoFocus);
                 key->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -148,7 +148,7 @@ public:
         auto *actions = new QHBoxLayout;
         layout->addLayout(actions);
         shift = new ShiftButton(panel);
-        symbols = new QPushButton(panel);
+        symbols = new Button(panel);
         symbols->setAccessibleName(strings::get("keyboard.symbols"));
         shift->setObjectName("widgetKeyboardShift");
         symbols->setObjectName("widgetKeyboardSymbols");
@@ -175,7 +175,7 @@ public:
             symbolPage = enabled;
             render();
         });
-        auto *space = new QPushButton(strings::get("keyboard.space"), panel);
+        auto *space = new Button(strings::get("keyboard.space"), panel);
         erase = new Button(panel);
         done = new Button(strings::get("keyboard.done"), panel);
         for (const auto &item :
@@ -357,6 +357,10 @@ private:
             if (!guard)
                 return true;
         }
+        if (object == editor && panel && panel->isVisible() && window
+            && (event->type() == QEvent::Move || event->type() == QEvent::Resize))
+            window->setProperty("reader_keyboard_editor_bounds",
+                                QRect(editor->mapTo(window, QPoint()), editor->size()));
         if (object == panel) {
             if (event->type() == QEvent::Hide) {
                 closeAccents();
@@ -369,6 +373,9 @@ private:
                 const auto host = window;
                 const auto owner = panel;
                 const QRect bounds(panel->mapTo(host, QPoint()), panel->size());
+                host->setProperty("reader_keyboard_editor_bounds",
+                                  editor ? QRect(editor->mapTo(host, QPoint()), editor->size())
+                                         : QRect());
                 host->setProperty("reader_keyboard_widget", QVariant::fromValue<QObject *>(owner));
                 if (host && owner
                     && host->property("reader_keyboard_widget").value<QObject *>() == owner)
@@ -412,7 +419,7 @@ private:
         const int rows = (count + columns - 1) / columns;
         for (int index = 0; index < choices.size(); ++index) {
             const auto value = choices.mid(index, 1);
-            auto *choice = new QPushButton(value, popup);
+            auto *choice = new Button(value, popup);
             choice->setObjectName(QStringLiteral("widgetAccent%1")
                                           .arg(uint(choices[index].unicode()), 4, 16, QChar('0')));
             choice->setProperty("keyboard.accent", value);
@@ -447,6 +454,7 @@ private:
     {
         const auto host = window;
         if (host && owner && host->property("reader_keyboard_widget").value<QObject *>() == owner) {
+            host->setProperty("reader_keyboard_editor_bounds", QRect());
             host->setProperty("reader_keyboard_widget", QVariant());
             if (host && !host->property("reader_keyboard_widget").value<QObject *>())
                 host->setProperty("reader_keyboard_bounds", QRect());

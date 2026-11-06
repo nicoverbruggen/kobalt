@@ -3849,6 +3849,17 @@ int main(int argc, char **argv)
     }
     {
         const QRect keyboard(0, 900, 1072, 548), key(927, 1235, 95, 95), query(0, 0, 595, 112);
+        require(kobalt::keyboardEditDamage(QRegion(key) + query, keyboard, query)
+                        && kobalt::keyboardEditDamage(key, keyboard, query)
+                        && kobalt::keyboardEditDamage(query, keyboard, query),
+                "Key and field edits must share one partial keyboard update");
+        require(!kobalt::keyboardEditDamage(QRegion(key).united(query).boundingRect(), keyboard,
+                                            query)
+                        && !kobalt::keyboardEditDamage(keyboard, keyboard, query)
+                        && !kobalt::keyboardEditDamage(key, {}, query)
+                        && !kobalt::keyboardEditDamage(QRegion(key) + QRect(0, 400, 20, 20),
+                                                       keyboard, query),
+                "Keyboard opening and unrelated panel damage must keep the original refresh policy");
         constexpr quint64 modes = 2 | 4 | 8, ordinary = (quint64(1) << 38) | 8;
         using kobalt::completeKeyboardWaveform;
         require(completeKeyboardWaveform(key, keyboard, 8, ordinary, modes) == ordinary,

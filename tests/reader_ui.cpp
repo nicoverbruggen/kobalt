@@ -732,6 +732,7 @@ private slots:
         QVERIFY(panel && panel->isVisible());
         QVERIFY(host.rect().contains(panel->geometry()));
         QCOMPARE(host.property("reader_keyboard_bounds").toRect(), panel->geometry());
+        QCOMPARE(host.property("reader_keyboard_editor_bounds").toRect(), editor.geometry());
         auto *firstKey = panel->findChild<QPushButton *>("widgetKey1_0");
         QVERIFY(firstKey);
         QCOMPARE(firstKey->font().family(), ui::interfaceFont().family());
@@ -844,6 +845,7 @@ private slots:
         QCOMPARE(submitted, 1);
         QVERIFY(panel->isHidden());
         QVERIFY(host.property("reader_keyboard_bounds").toRect().isEmpty());
+        QVERIFY(host.property("reader_keyboard_editor_bounds").toRect().isEmpty());
         QTest::mouseClick(&editor, Qt::LeftButton);
         QVERIFY(panel->isVisible());
         QVERIFY(keyboard->show());
@@ -853,12 +855,14 @@ private slots:
         QCOMPARE(host.property("reader_keyboard_bounds").toRect(), panel->geometry());
         host.hide();
         QVERIFY(host.property("reader_keyboard_bounds").toRect().isEmpty());
+        QVERIFY(host.property("reader_keyboard_editor_bounds").toRect().isEmpty());
         host.show();
         QPointer<QWidget> guardedPanel(panel);
         keyboard.reset();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QVERIFY(!guardedPanel);
         QVERIFY(host.property("reader_keyboard_bounds").toRect().isEmpty());
+        QVERIFY(host.property("reader_keyboard_editor_bounds").toRect().isEmpty());
     }
 
     // Checks accent popups: delayed releases, uppercase variants, drag selection, Escape, cancellation, hiding and placement.
@@ -1151,6 +1155,7 @@ private slots:
         QVERIFY(keyboard->show());
         delete nested;
         QVERIFY(host.property("reader_keyboard_bounds").toRect().isEmpty());
+        QVERIFY(host.property("reader_keyboard_editor_bounds").toRect().isEmpty());
         keyboard.reset();
         QLineEdit submitEditor(&host);
         keyboard = ui::makeWidgetKeyboard(&host, &submitEditor);
@@ -1194,6 +1199,7 @@ private slots:
         QVERIFY(!keyboard->show());
         QVERIFY(!keyboard);
         QVERIFY(host.property("reader_keyboard_bounds").toRect().isEmpty());
+        QVERIFY(host.property("reader_keyboard_editor_bounds").toRect().isEmpty());
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QVERIFY(!host.findChild<QWidget *>("widgetKeyboard"));
     }

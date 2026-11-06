@@ -218,6 +218,15 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
     } else {
         keyboardPixels.clear();
     }
+    if (!dark && !pageTurn && !direction && compatible && ordinaryControls
+        && refreshBackend(readerWindow) == RefreshBackend::Mtk
+        && keyboardEditDamage(region, keyboardBounds,
+                              readerWindow->property("reader_keyboard_editor_bounds").toRect())) {
+        const QRect bounds = region.boundingRect();
+        const auto policy = (ordinaryPolicy(false) & ~(heuristic | full)) | partialMode;
+        nativeFlush(store, QRegion(bounds), target, offset, { { bounds, policy } });
+        return;
+    }
     const bool progressDamage = !progressUpdate.isEmpty()
             && progressUpdate.contains(region.boundingRect())
             && std::all_of(flags.cbegin(), flags.cend(),

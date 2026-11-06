@@ -1,0 +1,48 @@
+--- a/crengine/include/lvfntman.h
++++ b/crengine/include/lvfntman.h
+@@ -762,6 +762,8 @@
+     int _monospaceSizeScale;
+     bool _fallbackFontSizesAdjusted;
+ public:
++    static constexpr lvsize_t MaxEmbeddedFontBytes = 16 * 1024 * 1024;
++
+     /// garbage collector frees unused fonts
+     virtual void gc() = 0;
+     /// returns most similar font
+--- a/crengine/src/lvfntman.cpp
++++ b/crengine/src/lvfntman.cpp
+@@ -8652,17 +8652,29 @@
+         if (docFragmentIdx >= 0 && _registry.addDocFragmentToFacesForFile(name8, documentId, docFragmentIdx))
+             return true;
+         name.trim(); // Remove any " " appended to avoid url override with duplicates
+-        LVStreamRef stream = container->OpenStream(name.c_str(), LVOM_READ);
+-        if (stream.isNull()) // Try again in case it is percent-encoded
+-            stream = container->OpenStream(DecodeHTMLUrlString(name).c_str(), LVOM_READ);
++        const auto openFont = [&](const lString32 &path) {
++            // Opening a resource stream can read the entire ZIP member.
++            const auto *item = container->GetObjectInfo(path);
++            if (item && item->GetSize() > MaxEmbeddedFontBytes) {
++                printf("CRE WARNING: document font '%s' ignored: file too big\n", LCSTR(path));
++                return LVStreamRef();
++            }
++            return container->OpenStream(path.c_str(), LVOM_READ);
++        };
++        LVStreamRef stream = openFont(name);
++        if (stream.isNull()) { // Try again in case it is percent-encoded.
++            const auto decoded = DecodeHTMLUrlString(name);
++            if (decoded != name)
++                stream = openFont(decoded);
++        }
+         if (stream.isNull())
+             return false;
+-        lUInt32 size = (lUInt32)stream->GetSize();
++        const lvsize_t size = stream->GetSize();
+         if (size < 100) {
+             printf("CRE WARNING: document font '%s' ignored: file too small\n", LCSTR(name));
+             return false;
+         }
+-        if (size > 25000000) {
++        if (size > MaxEmbeddedFontBytes) {
+             printf("CRE WARNING: document font '%s' ignored: file too big\n", LCSTR(name));
+             return false;
+         }

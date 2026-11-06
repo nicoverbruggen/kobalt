@@ -12,6 +12,7 @@
 #include "publication/publication.h"
 #include "support/strings.h"
 #include "publication/image_policy.h"
+#include "publication/local_resources.h"
 #include <lvstream.h>
 #include <lvstring.h>
 #include <lvimg.h>
@@ -724,6 +725,46 @@ static void checkObfuscatedFonts()
 
     const auto idpfKey = QCryptographicHash::hash("test-identifier", QCryptographicHash::Sha1);
     const auto adobeKey = QByteArray::fromHex("0123456789abcdef0123456789abcdef");
+    {
+        kobalt::EngineDocument fallback(kobalt::test::readerFonts());
+        require(fallback.open(book({}, {}, "test-identifier"), QSize(800, 1000), {}, &error),
+                qPrintable(error));
+        auto oversized = original
+                + QByteArray(LVFontManager::MaxEmbeddedFontBytes + 1 - original.size(), '\0');
+        const auto checkFallback = [&](const QByteArray &bytes, const QByteArray &algorithm,
+                                       const QByteArray &identifier) {
+            const auto archive = book(bytes, algorithm, identifier);
+            const auto matchesFallback = [&](kobalt::EngineDocument &reader) {
+                require(reader.embeddedFontCount() == 0 && !reader.image(0).isNull()
+                                && reader.image(0) == fallback.image(0),
+                        "oversized embedded fonts should use the same page as a missing font");
+            };
+            {
+                kobalt::EngineDocument reader(kobalt::test::readerFonts());
+                require(reader.open(archive, QSize(800, 1000), {}, &error), qPrintable(error));
+                matchesFallback(reader);
+            }
+            QTemporaryFile file;
+            require(file.open() && file.write(archive) == archive.size() && file.flush(),
+                    "write oversized-font EPUB");
+            kobalt::Publication publication;
+            require(publication.inspect(file, &error), qPrintable(error));
+            const auto factory = kobalt::localResourceFactory(
+                    file.fileName(), std::make_shared<kobalt::SourceLease>());
+            const auto resources = factory(publication.sizes(), {}, {});
+            kobalt::EngineDocument reader(kobalt::test::readerFonts());
+            require(reader.openResources(resources, publication.sizes(), QSize(800, 1000), {},
+                                         &error),
+                    qPrintable(error));
+            matchesFallback(reader);
+            require(resources->statistics()["transferred_bytes"].toDouble() < bytes.size(),
+                    "an oversized embedded font should not reach the resource loader");
+        };
+        checkFallback(oversized, {}, "test-identifier");
+        for (int i = 0; i < 1024; ++i)
+            oversized[i] = char(uchar(oversized[i]) ^ uchar(adobeKey[i % adobeKey.size()]));
+        checkFallback(oversized, adobeAlgorithm, "urn:uuid:01234567-89ab-cdef-0123-456789abcdef");
+    }
     for (const auto &fixture :
          { FontCase{ idpfAlgorithm, "test-identifier", {}, idpfKey, 1040 },
            FontCase{ idpfAlgorithm, "test-identifier", {}, idpfKey, 1040, "font/sfnt" },

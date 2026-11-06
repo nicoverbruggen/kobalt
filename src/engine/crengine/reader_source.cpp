@@ -227,7 +227,10 @@ private:
 class ContentContainer : public LVContainer
 {
 public:
-    explicit ContentContainer(LVContainerRef source) : source(source) { }
+    explicit ContentContainer(LVContainerRef source, QSet<QString> skippedFonts = {})
+        : source(source), skippedFonts_(std::move(skippedFonts))
+    {
+    }
 
     bool IsContainer() override { return true; }
 
@@ -251,8 +254,14 @@ public:
 
     LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
     {
+        const auto path = qstring(lString32(name));
+        if (!skippedFonts_.isEmpty()) {
+            const auto normalized = QDir::cleanPath(path);
+            if (skippedFonts_.contains(normalized.startsWith('/') ? normalized.mid(1) : normalized))
+                return {};
+        }
         auto stream = source->OpenStream(name, mode);
-        const auto suffix = QFileInfo(qstring(lString32(name))).suffix().toLower();
+        const auto suffix = QFileInfo(path).suffix().toLower();
         // Bound the temporary chapter copy; leave large or non-text resources streamed.
         constexpr lvsize_t limit = 2 * 1024 * 1024;
         if (stream.isNull() || mode != LVOM_READ
@@ -278,6 +287,9 @@ public:
 
 protected:
     LVContainerRef source;
+
+private:
+    QSet<QString> skippedFonts_;
 };
 
 class SectionContainer : public ContentContainer
@@ -319,8 +331,11 @@ private:
 
 } // namespace
 
-bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error)
+bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
+                                      QSet<QString> *skippedFonts)
 {
+    if (skippedFonts)
+        skippedFonts->clear();
     auto fail = [error](const QString &message) {
         *error = message;
         return false;
@@ -371,13 +386,16 @@ bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error)
     }
     if (!container || at != end)
         return fail(strings::get("error.missing_epub_container"));
+    if (skippedFonts)
+        *skippedFonts = publication.skippedFonts();
     return true;
 }
 
 bool EngineDocument::open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,
                           OpeningProgress progress)
 {
-    if (!supportedArchive(bytes, error))
+    QSet<QString> skippedFonts;
+    if (!supportedArchive(bytes, error, &skippedFonts))
         return false;
     auto source = std::make_shared<ReaderSource>();
     source->bytes = std::move(bytes);
@@ -387,7 +405,8 @@ bool EngineDocument::open(QByteArray bytes, QSize size, const QJsonObject &saved
         *error = strings::get("error.the_reading_engine_could_not_open_this_epub");
         return false;
     }
-    return openSource(std::move(source), size, saved, error, std::move(progress));
+    return openSource(std::move(source), size, saved, error, std::move(progress), nullptr, {},
+                      std::move(skippedFonts));
 }
 
 bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources,
@@ -430,7 +449,8 @@ QJsonObject EngineDocument::resourceStats() const
 
 bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size,
                                 const QJsonObject &saved, QString *error, OpeningProgress progress,
-                                OpeningResult *result, std::function<void()> coverReady)
+                                OpeningResult *result, std::function<void()> coverReady,
+                                QSet<QString> skippedFonts)
 {
     if (result)
         *result = {};
@@ -487,7 +507,8 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     } else
         properties->setString(DOC_PROP_FILE_NAME, lString32(U"publication.epub"));
     if (!source->parent) {
-        source->container = LVContainerRef(new ContentContainer(source->container));
+        source->container =
+                LVContainerRef(new ContentContainer(source->container, std::move(skippedFonts)));
     }
     OpeningCallback callback(engine_, std::move(progress));
     source_ = std::move(source);

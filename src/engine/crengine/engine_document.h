@@ -8,6 +8,7 @@
 #include <QMap>
 #include <QPair>
 #include <QRect>
+#include <QSet>
 #include "publication/resource_cache.h"
 #include "platform/api/position_codec.h"
 #include "reader_links.h"
@@ -126,7 +127,8 @@ public:
 
     const EngineFontInputs &fontInputs() const { return fonts_; }
 
-    static bool supportedArchive(const QByteArray &bytes, QString *error);
+    static bool supportedArchive(const QByteArray &bytes, QString *error,
+                                 QSet<QString> *skippedFonts = nullptr);
     // The format of new page images in this process: Format_RGB32 (the
     // default) or Format_RGBX8888. Choose the one that the screen's backing
     // store can take without converting pixels. Pages drawn earlier keep
@@ -400,7 +402,7 @@ private:
     QMap<QPair<qint64, qint64>, QRect> damage_;
     bool openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved,
                     QString *error, OpeningProgress progress = {}, OpeningResult *result = nullptr,
-                    std::function<void()> coverReady = {});
+                    std::function<void()> coverReady = {}, QSet<QString> skippedFonts = {});
     void trim();
     void applyPublisherFontFallbacks();
     void applyStyleSheet();

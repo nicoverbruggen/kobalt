@@ -10,9 +10,11 @@
 #include <QBuffer>
 #include <QUrl>
 #include <QtEndian>
+#include <lvfntman.h>
 #include <zlib.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include <algorithm>
 
 namespace kobalt {
 namespace {
@@ -75,9 +77,17 @@ bool readableFont(QByteArray bytes, const QByteArray &key, int prefixBytes)
     return opened;
 }
 
+bool declaredFontType(const QString &type)
+{
+    return type.startsWith("font/") || type.startsWith("application/x-font-")
+            || type == "application/font-sfnt" || type == "application/vnd.ms-opentype"
+            || type == "application/font-woff" || type == "application/vnd.ms-fontobject";
+}
+
 // Font obfuscation is an EPUB embedding convention, not content encryption.
 // CREngine decodes IDPF and Adobe fonts. Admit only metadata for those paths.
-bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes)
+bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes,
+                           QSet<QString> &skippedFonts)
 {
     ZipResourceIndex index;
     auto read = [&](const QString &name, qint64 maximum = 2 * 1024 * 1024) -> QByteArray {
@@ -129,8 +139,10 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
     QByteArray adobeKey;
     const QRegularExpression adobeIdentifier(
             "^(?:urn:uuid:)?(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$");
-    int matchingIdentifiers = 0, depth = 0, metadataDepth = -1, manifestDepth = -1;
-    QSet<QString> ids, paths;
+    const QRegularExpression propertySeparator("\\s+");
+    int matchingIdentifiers = 0, depth = 0, metadataDepth = -1, manifestDepth = -1, spineDepth = -1;
+    QSet<QString> ids, paths, contentIds;
+    QMap<QString, QString> declaredFonts;
     while (!package.atEnd()) {
         package.readNext();
         if (!cleanXml(package))
@@ -140,6 +152,8 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
                 metadataDepth = -1;
             if (depth == manifestDepth)
                 manifestDepth = -1;
+            if (depth == spineDepth)
+                spineDepth = -1;
             --depth;
             continue;
         }
@@ -159,6 +173,12 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
                  && package.namespaceUri() == QStringLiteral("http://www.idpf.org/2007/opf")
                  && package.name() == QStringLiteral("manifest"))
             manifestDepth = depth;
+        else if (depth == 2 && package.name() == QStringLiteral("spine")) {
+            spineDepth = depth;
+            contentIds.insert(package.attributes().value("toc").toString());
+        } else if (depth == spineDepth + 1 && spineDepth == 2
+                   && package.name() == QStringLiteral("itemref"))
+            contentIds.insert(package.attributes().value("idref").toString());
         else if (depth == metadataDepth + 1 && metadataDepth == 2
                  && package.name() == QStringLiteral("identifier")
                  && package.namespaceUri() == QStringLiteral("http://purl.org/dc/elements/1.1/")) {
@@ -195,6 +215,13 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
                 return false;
             ids.insert(id);
             paths.insert(path);
+            contentIds.insert(attributes.value("fallback").toString());
+            if (declaredFontType(attributes.value("media-type").toString().trimmed().toLower())
+                && !attributes.value("properties")
+                            .toString()
+                            .split(propertySeparator)
+                            .contains(QStringLiteral("nav")))
+                declaredFonts.insert(path, id);
         }
     }
     identifier.remove(QRegularExpression("[ \t\r\n]"));
@@ -214,8 +241,15 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
     if (!xml.readNextStartElement() || xml.name() != QStringLiteral("encryption")
         || xml.namespaceUri() != QStringLiteral("urn:oasis:names:tc:opendocument:xmlns:container"))
         return false;
+
+    struct Font
+    {
+        QString path;
+        qint64 size;
+        bool idpf;
+    };
     QSet<QString> targets;
-    qint64 remainingFontBytes = Publication::maxBytes;
+    QVector<Font> fonts;
     while (xml.readNextStartElement()) {
         if (xml.name() != QStringLiteral("EncryptedData")
             || xml.namespaceUri() != QStringLiteral("http://www.w3.org/2001/04/xmlenc#"))
@@ -252,23 +286,43 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
         const auto size = sizes.value(target, -1);
         if (methods != 1 || cipherData != 1 || references != 1 || (!idpf && !adobe)
             || !safeName(target) || target.contains('%') || !paths.contains(target)
-            || targets.contains(target) || size <= 0 || size > Publication::maxResource
-            || size > remainingFontBytes)
+            || targets.contains(target) || size <= 0)
             return false;
-        // MIME labels and extensions vary between publishers. Decode a local
-        // copy for the renderer's font parser; leave archive resources unchanged.
-        if (!readableFont(read(target, Publication::maxResource), idpf ? idpfKey : adobeKey,
-                          idpf ? 1040 : 1024))
-            return false;
-        remainingFontBytes -= size;
         targets.insert(target);
+        fonts.append(Font{ target, size, idpf });
     }
     while (!xml.atEnd()) {
         xml.readNext();
         if (!cleanXml(xml))
             return false;
     }
-    return !xml.hasError() && !targets.isEmpty();
+    if (xml.hasError() || fonts.isEmpty())
+        return false;
+
+    // Spend the validation budget on the smallest fonts first. This does not
+    // change the manifest or the publisher's CSS font order.
+    std::stable_sort(fonts.begin(), fonts.end(),
+                     [](const Font &a, const Font &b) { return a.size < b.size; });
+    qint64 remainingFontBytes = Publication::maxBytes;
+    for (const auto &font : fonts) {
+        if (font.size > LVFontManager::MaxEmbeddedFontBytes || font.size > remainingFontBytes) {
+            // Omit only a declared font that is outside the reading order and
+            // navigation. Never expose unverified obfuscated bytes to CREngine.
+            const auto id = declaredFonts.value(font.path);
+            if (id.isEmpty() || contentIds.contains(id) || font.path == packagePath
+                || font.path == "mimetype" || font.path.startsWith("META-INF/"))
+                return false;
+            skippedFonts.insert(font.path);
+            continue;
+        }
+        // MIME labels and extensions vary between publishers. Decode a local
+        // copy for the renderer's font parser; leave archive resources unchanged.
+        if (!readableFont(read(font.path, LVFontManager::MaxEmbeddedFontBytes),
+                          font.idpf ? idpfKey : adobeKey, font.idpf ? 1040 : 1024))
+            return false;
+        remainingFontBytes -= font.size;
+    }
+    return true;
 }
 } // namespace
 
@@ -293,6 +347,7 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
         *result = {};
     names_.clear();
     sizes_.clear();
+    skippedFonts_.clear();
     archive_.clear();
     directory_.clear();
     fingerprint_.clear();
@@ -404,10 +459,16 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
                                  strings::key("error.missing_publication_container"));
     // Scan the whole directory before admitting supported font metadata, so an
     // LCP license or encrypted member is rejected regardless of entry order.
-    if (unsupportedMetadata && !supportedFontMetadata(source, sizes_))
+    QSet<QString> skippedFonts;
+    if (unsupportedMetadata && !supportedFontMetadata(source, sizes_, skippedFonts))
         return inspectionFailure(
                 error, result, OpeningFailureKind::Unsupported,
                 strings::key("error.this_publication_needs_unsupported_font_or_resource_handling"));
+    skippedFonts_ = std::move(skippedFonts);
+    for (const auto &font : skippedFonts_) {
+        names_.removeOne(font);
+        sizes_.remove(font);
+    }
     names_.removeOne("mimetype");
     names_.prepend("mimetype");
     QCryptographicHash hash(QCryptographicHash::Sha256);

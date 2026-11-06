@@ -5,6 +5,7 @@
 #include <QVector>
 #include <QIODevice>
 #include <QMap>
+#include <QSet>
 
 namespace kobalt {
 // Lists archive members and checks decoded obfuscated fonts with FreeType.
@@ -21,6 +22,8 @@ public:
 
     const QStringList &names() const { return names_; }
 
+    const QSet<QString> &skippedFonts() const { return skippedFonts_; }
+
     // SHA-256 of the file length, the ZIP directory and its end record. The
     // directory holds each member's CRC-32 and sizes, so an edit to any member
     // changes it without reading the whole book.
@@ -35,6 +38,7 @@ private:
     bool protected_ = false;
     QStringList names_;
     QMap<QString, qint64> sizes_;
+    QSet<QString> skippedFonts_;
     QByteArray archive_, directory_, fingerprint_;
     int received_ = 0;
 };

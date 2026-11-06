@@ -417,7 +417,20 @@ int main(int argc, char **argv)
         files["font.otf"] = obfuscate(padded, adobeKey, 1024);
         require(inspection.inspect(zip(files), &reason), "accept a font at the resource limit");
         files["font.otf"].append('\0');
-        require(!inspection.inspect(zip(files), &reason), "reject a font over the resource limit");
+        require(inspection.inspect(zip(files), &reason)
+                        && inspection.skippedFonts().contains("font.otf")
+                        && !inspection.sizes().contains("font.otf")
+                        && !inspection.names().contains("font.otf"),
+                "omit an oversized font from the available resources");
+        const auto optionalFontPackage = files.value("book.opf");
+        files["book.opf"].replace("</package>", "<spine><itemref idref='font'/></spine></package>");
+        require(!inspection.inspect(zip(files), &reason),
+                "do not skip an obfuscated spine item labeled as a font");
+        files["book.opf"] = optionalFontPackage;
+        files["book.opf"].replace("application/vnd.ms-opentype", "application/xhtml+xml");
+        require(!inspection.inspect(zip(files), &reason),
+                "do not skip an unverified oversized item declared as XHTML");
+        files["book.opf"] = optionalFontPackage;
         files["font.otf"].chop(1);
         const auto declaration =
                 adobeMetadata.mid(adobeMetadata.indexOf("<enc:EncryptedData>"),
@@ -426,7 +439,8 @@ int main(int argc, char **argv)
         const auto addFont = [&](const QByteArray &name, const QByteArray &bytes) {
             files[QString::fromLatin1(name)] = bytes;
             files["book.opf"].replace("</manifest>",
-                                      "<item id='" + name + "' href='" + name + "'/></manifest>");
+                                      "<item id='" + name + "' href='" + name
+                                              + "' media-type='font/otf'/></manifest>");
             auto entry = declaration;
             entry.replace("font.otf", name);
             files["META-INF/encryption.xml"].replace("</encryption>", entry + "</encryption>");
@@ -437,11 +451,23 @@ int main(int argc, char **argv)
         source.setData(zip(files));
         require(source.open(QIODevice::ReadOnly) && inspection.inspect(source, &reason),
                 "accept fonts at the total inspection budget");
+        require(inspection.skippedFonts().isEmpty() && inspection.names().contains("font.otf"),
+                "a new inspection clears skipped fonts");
         source.close();
         addFont("extra.bin", adobeFont);
         source.setData(zip(files));
+        require(source.open(QIODevice::ReadOnly) && inspection.inspect(source, &reason),
+                "open a book whose fonts exceed the total inspection budget");
+        require(inspection.sizes().contains("extra.bin")
+                        && !inspection.sizes().contains("font3.bin")
+                        && inspection.skippedFonts() == QSet<QString>{ "font3.bin" },
+                "prefer the smallest font even when its declaration comes last");
+        source.close();
+        files["book.opf"].replace("</package>",
+                                  "<spine><itemref idref='font3.bin'/></spine></package>");
+        source.setData(zip(files));
         require(source.open(QIODevice::ReadOnly) && !inspection.inspect(source, &reason),
-                "reject fonts over the total inspection budget");
+                "do not skip a spine item when the total font budget is exhausted");
     }
     obfuscatedFiles["book.opf"] = validPackage;
     require(!inspection.inspect(zip(obfuscatedFiles), &reason),

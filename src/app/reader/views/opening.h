@@ -21,14 +21,4 @@ private:
     QPushButton *quit = nullptr;
 };
 
-// Final-save feedback stays over the reading page and cannot be dismissed.
-class SavingView final : public ui::ModalOverlay
-{
-public:
-    explicit SavingView(QWidget *parent);
-    void setProgress(int percent);
-
-private:
-    ui::ProgressBar *progress;
-};
 } // namespace kobalt

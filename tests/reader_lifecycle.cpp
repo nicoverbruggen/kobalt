@@ -6038,7 +6038,7 @@ private slots:
         QCOMPARE(host.progress->stopAttempts, stops);
     }
 
-    // Checks that close waits for a held profile writer, shows the saving notice only after a delay and closes once the writer is free.
+    // Checks that close waits for a held profile writer, keeps the reading page visible and closes once the writer is free.
     void closeWaitsForLocalSave()
     {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
@@ -6074,18 +6074,14 @@ private slots:
         host.window()->close();
         const auto stopped = host.book()->readingMilliseconds();
         host.window()->close();
-        QTest::qWait(250);
+        // Hold the save past the former overlay delay while processing events.
+        QElapsedTimer held;
+        held.start();
+        QTRY_VERIFY_WITH_TIMEOUT(held.elapsed() >= 1100, 2000);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSaving"));
+        QVERIFY(host.window()->isVisible());
+        QVERIFY(!host.window()->isEnabled());
         QCOMPARE(closed.count(), 0);
-        QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QWidget *>("rrSaving"), 2000);
-        auto *saving = host.window()->findChild<QWidget *>("rrSaving");
-        QVERIFY(saving->isVisible());
-        QCOMPARE(saving->findChild<QLabel *>("rrSavingTitle")->text(),
-                 strings::get("closing.saving"));
-        QVERIFY(saving->findChild<QLabel *>("rrSavingHint")->isVisible());
-        auto *modal = dynamic_cast<ui::ModalOverlay *>(saving);
-        QVERIFY(modal && modal->inputBarrier());
-        QVERIFY(modal->card()->height() < host.window()->height() / 2);
         QCOMPARE(host.book()->readingMilliseconds(), stopped);
         QVERIFY(!host.window()->flushBeforeStandby());
         released = true;
@@ -6133,7 +6129,7 @@ private slots:
         const auto stopped = host.book()->readingMilliseconds();
         if (timeSave) {
             QTRY_VERIFY(host.progress->finishDone);
-            QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QWidget *>("rrSaving"), 2000);
+            QVERIFY(!host.window()->findChild<QWidget *>("rrSaving"));
             QCOMPARE(closed.count(), 0);
             host.progress->completeFinish(false);
         }
@@ -6253,7 +6249,7 @@ private slots:
         QTRY_VERIFY(host.progress->finishDone);
         QCOMPARE(host.progress->writeAttempts, attempts);
         QCOMPARE(closed.count(), 0);
-        QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QWidget *>("rrSaving"), 2000);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrSaving"));
         QVERIFY(!host.window()->findChild<QPushButton *>("rrCloseSaveRetry"));
         host.progress->holdFinish = false;
         host.progress->completeFinish(true);

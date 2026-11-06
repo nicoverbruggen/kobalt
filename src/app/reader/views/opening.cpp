@@ -548,23 +548,4 @@ SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried
     fitCard();
 }
 
-SavingView::SavingView(QWidget *parent) : ui::ModalOverlay(parent)
-{
-    setObjectName("rrSaving");
-    setProperty("reader_standard_modal", true);
-    card()->title(strings::get("closing.saving"), "rrSavingTitle");
-    card()->message(strings::get("closing.may_take_a_while"), "rrSavingHint");
-    progress = new ui::ProgressBar(card());
-    progress->setObjectName("rrSavingProgress");
-    card()->rows()->addWidget(progress);
-    fitCard();
-    for (auto *widget : findChildren<QWidget *>())
-        platform::textRefresh(widget);
-    platform::textRefresh(this);
-}
-
-void SavingView::setProgress(int percent)
-{
-    progress->setValue(qBound(0, percent, 100));
-}
 } // namespace kobalt

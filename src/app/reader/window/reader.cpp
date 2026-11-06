@@ -172,7 +172,6 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     book->retryFailedReadingSave();
     const auto request = ++closeRequest;
     setProperty("reader_transition_save_failed", false);
-    hideSaving();
     if (closeSaveError) {
         closeSaveError->hide();
         closeSaveError->deleteLater();
@@ -435,7 +434,6 @@ void Reader::sleepReader()
         return;
     const auto sleepRequest = ++closeRequest;
     exportRunning = false;
-    hideSaving();
     setEnabled(true);
     setProperty("reader_sleep_clean_pending", true);
     session->cancelPendingTurn();
@@ -766,8 +764,8 @@ bool Reader::event(QEvent *event)
                     && !chapterGraph->isVisible() && !lightPopup->isVisible()
                     && !bookmarkList->isVisible() && !seekOpen && !session->busy()
                     && !dictionaryPanel->isVisible() && !searchPanel->isVisible() && !linksActive()
-                    && !lookupPending && !acknowledgments->isVisible() && !savingView
-                    && !closeSaveError && !services.suspended() && !overlayVisible;
+                    && !lookupPending && !acknowledgments->isVisible() && !closeSaveError
+                    && !services.suspended() && !overlayVisible;
             setProperty("reader_navigation_dismissal", dismissed);
             setProperty("reader_navigation_dismissal_plain",
                         page->image.text("kobalt.animation_text_only") == "true");
@@ -782,8 +780,7 @@ bool Reader::event(QEvent *event)
                             && !bookmarkList->isVisible() && !lightPopup->isVisible()
                             && !busyNotice->isVisible() && !syncDialog && !kosyncDialog
                             && !finishDialog && !annotationErrorDialog && !formattingWarningDialog
-                            && !settingsWriteErrorDialog && !savingView && !closeSaveError
-                            && !services.suspended()
+                            && !settingsWriteErrorDialog && !closeSaveError && !services.suspended()
                             && page->image.text("kobalt.animation_text_only") == "true");
         // These panels hold text and line controls. Changes inside them can
         // use a partial refresh; showing the whole panel keeps its policy.
@@ -1332,8 +1329,6 @@ void Reader::resizeEvent(QResizeEvent *)
         kosyncDialog->setGeometry(rect());
     if (finishDialog)
         finishDialog->setGeometry(rect());
-    if (savingView)
-        savingView->setGeometry(rect());
     if (closeSaveError)
         closeSaveError->setGeometry(rect());
     if (isVisible() && !page->image.isNull() && bodySize() != page->image.size()) {
@@ -1413,7 +1408,6 @@ void Reader::closeEvent(QCloseEvent *event)
     step.start();
     book->releaseNative(!closeWithoutSaving);
     closingTimes.add("session", step);
-    hideSaving();
     session->updated = {};
     session->renderProgressChanged = {};
     session->turnBoundary = {};
@@ -2536,33 +2530,9 @@ void Reader::finishExit()
 #endif
     book->stopReading(true);
     setEnabled(false);
-    closeSaveProgress = 0;
     closeStage.start();
     const auto request = ++closeRequest;
-    kobalt::qt::later(1000, this, [this, request] {
-        if (request == closeRequest && exportRunning && !lifecycleHidden)
-            showSaving(closeSaveProgress);
-    });
     saveExit(request);
-}
-
-void Reader::showSaving(int progress)
-{
-    closeSaveProgress = progress;
-    if (!savingView)
-        savingView = std::make_unique<SavingView>(this);
-    auto *view = savingView.get();
-    view->setGeometry(rect());
-    savingView->setProgress(progress);
-    view->show();
-    view->raise();
-}
-
-void Reader::hideSaving()
-{
-    if (savingView)
-        savingView->hide();
-    savingView.reset();
 }
 
 void Reader::saveExit(quint64 request)
@@ -2588,9 +2558,6 @@ void Reader::saveExit(quint64 request)
             failExit(request);
             return;
         }
-        closeSaveProgress = 25;
-        if (savingView)
-            showSaving(closeSaveProgress);
         session->nativePosition([this, request](const QString &location, const QString &error) {
             finishExitNative(request, location, error);
         });
@@ -2615,9 +2582,6 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
             failExit(request);
             return;
         }
-        closeSaveProgress = 50;
-        if (savingView)
-            showSaving(closeSaveProgress);
         book->writeNative(location, error);
         closingTimes.add("native", closeStage);
         closeStage.restart();
@@ -2625,7 +2589,6 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
         if (result == ReadingBook::NativeSave::Conflict) {
             exportRunning = false;
             ++closeRequest;
-            hideSaving();
             setEnabled(true);
             showProgressChoice();
             return;
@@ -2635,9 +2598,6 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
             return;
         }
         book->markRecent();
-        closeSaveProgress = 75;
-        if (savingView)
-            showSaving(closeSaveProgress);
         // Keep the verified native baseline with the final local checkpoint.
         book->checkpointForClose([this, guard, request](bool saved) {
             if (!guard || request != closeRequest || !exportRunning || lifecycleHidden)
@@ -2662,8 +2622,6 @@ void Reader::finishExitSaved(quint64 request)
         kobalt::qt::later(10, this, [this, request] { finishExitSaved(request); });
         return;
     }
-    if (savingView)
-        showSaving(100);
     closing = true;
     close();
 }
@@ -2672,7 +2630,6 @@ void Reader::transitionSaveError(std::function<void()> retry, std::function<void
 {
     if (closeSaveError)
         return;
-    hideSaving();
     setEnabled(true);
     auto *notice = new SaveErrorView(this, {}, true);
     closeSaveError = notice;
@@ -2713,7 +2670,6 @@ void Reader::failExit(quint64 request, const QString &error)
         return;
     ++closeRequest;
     exportRunning = false;
-    hideSaving();
     setEnabled(true);
     if (closeSaveError)
         return;
@@ -2765,7 +2721,6 @@ void Reader::cancelExit()
     ++closeRequest;
     exitPending = exportRunning = false;
     finishChoiceResolved = false;
-    hideSaving();
     setEnabled(true);
     closingTimes = {};
     observeReading();
@@ -2785,7 +2740,6 @@ void Reader::finishStorageSave(std::function<void(bool)> finished, bool nativeAl
     ++closeRequest;
     exitPending = exportRunning = false;
     closing = lifecycleHidden = true;
-    hideSaving();
     if (nativeAllowed)
         book->stopReading(true);
     else {
@@ -2802,7 +2756,6 @@ void Reader::revokeNativeReading()
     ++closeRequest;
     exitPending = exportRunning = false;
     closing = lifecycleHidden = true;
-    hideSaving();
     book->releaseNative(false);
 }
 

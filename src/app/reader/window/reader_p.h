@@ -735,13 +735,9 @@ private:
     void transitionSaveError(std::function<void()> retry, std::function<void()> discard);
     void failExit(quint64 request, const QString &error = {});
     void cancelExit();
-    void showSaving(int progress);
-    void hideSaving();
     bool closeSaveRetried = false, closeWithoutSaving = false;
     quint64 closeRequest = 0;
     QElapsedTimer closeStage;
-    int closeSaveProgress = 0;
-    std::unique_ptr<SavingView> savingView;
     QPointer<kobalt::ui::ChoiceModal> closeSaveError;
     std::unique_ptr<storage::RecordWriter> reportWriter, preferencesWriter;
     void saveSoon();

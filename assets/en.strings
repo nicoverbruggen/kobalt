@@ -544,8 +544,6 @@
 /* opening */
 "opening.loading" = "Opening your book";
 "opening.may_take_a_while" = "This may take a while";
-"closing.saving" = "Saving your progress…";
-"closing.may_take_a_while" = "This may take a few moments.";
 "closing.failed" = "Couldn't save your progress";
 "closing.failed_detail" = "Your progress couldn’t be saved, so the book is still open. Please try again. If this keeps happening, back up your data.";
 "closing.retry" = "Retry save and close";

@@ -109,7 +109,7 @@
 "kosync.wifi_wake_picture" = "Turn on Wi-Fi, sync, then turn it off again";
 "kosync.wifi_wake_outcome" = "Other devices stay up to date";
 "kosync.sync_now" = "Sync now";
-"kosync.manual_prompt" = "Would you like to sync progress with KOsync?";
+"kosync.manual_prompt" = "Would you like to sync progress with KOSync?";
 "kosync.manual_prompt_description" = "This button syncs progress when you choose. Automatic sync is disabled, so Kobalt will not sync on open, close, sleep or wake. Later taps sync immediately.";
 "kosync.show_password" = "Show";
 "kosync.hide_password" = "Hide";
@@ -136,7 +136,7 @@
 "kosync.connecting" = "Connecting to Wi-Fi…";
 "kosync.invalid_response" = "The sync server returned invalid progress. Your reading position was kept.";
 "kosync.invalid_account" = "Enter an HTTPS server URL, username and password. The URL cannot contain credentials, a query or a fragment.";
-"kosync.native_sync" = "This book uses Kobo’s built-in sync system. KOsync is unavailable for this copy.";
+"kosync.native_sync" = "This book uses Kobo’s built-in sync system. KOSync is unavailable for this copy.";
 "kosync.unavailable" = "Sync is unavailable for this book or account.";
 "kosync.position_error" = "This synced position could not be opened. Your position was kept and automatic sync was disabled.";
 "kosync.resume_title" = "Resume synced reading?";
@@ -1222,10 +1222,10 @@
 "kosync.last_synced" = "Last synced: %1";
 "kosync.never" = "Never";
 
-"kosync.sideload_copy" = "To use KOsync, download a DRM-free copy of the book and add it to your device separately.";
+"kosync.sideload_copy" = "To use KOSync, download a DRM-free copy of the book and add it to your device separately.";
 "kosync.learn_more" = "Learn More";
-"kosync.learn_more_title" = "Kobo sync and KOsync";
-"kosync.learn_more_description" = "Kobo-managed books use Kobo’s built-in sync, even when the file has no DRM. Kobalt leaves their progress syncing to Kobo.\n\nKOsync is a separate service for KOReader and Kobalt. To use it for this title, add a DRM-free copy to your device as a separate sideloaded book and open that copy.\n\nUse the same book file on every device. Only reading progress is synced; books, bookmarks and annotations are not transferred.";
+"kosync.learn_more_title" = "Kobo sync and KOSync";
+"kosync.learn_more_description" = "Kobo-managed books use Kobo’s built-in sync, even when the file has no DRM. Kobalt leaves their progress syncing to Kobo.\n\nKOSync is a separate service for KOReader and Kobalt. To use it for this title, add a DRM-free copy to your device as a separate sideloaded book and open that copy.\n\nUse the same book file on every device. Only reading progress is synced; books, bookmarks and annotations are not transferred.";
 
 "kosync.device_name" = "Device name";
 "kosync.device_name_saved" = "Device name saved.";

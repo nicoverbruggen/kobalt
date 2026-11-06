@@ -20,6 +20,9 @@ if [[ $1 == android ]]; then
     cp "$package" "$package.signing.txt" build/release/
 else
     verbose=$(bash platforms/ci/diagnostics.sh "$version")
+    # The adapter tests run first, with the package's logging, so the package
+    # build reuses their objects.
+    KOBALT_VERBOSE_DIAGNOSTICS=$verbose bash platforms/kobo/build.sh "$1" --check
     KOBALT_VERBOSE_DIAGNOSTICS=$verbose bash platforms/kobo/build.sh "$1"
     suffix=
     [[ $verbose != ON ]] || suffix=-diagnostic

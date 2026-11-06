@@ -25,6 +25,7 @@
 #include "platforms/android/boox_frame_queue.h"
 #include "app/library/library_view.h"
 #include "library/library_store.h"
+#include "library/book_metadata.h"
 #include "reading/reading_density.h"
 #include "reading/appearance_settings.h"
 #include "storage/profile_database.h"
@@ -10213,12 +10214,25 @@ private slots:
             QVERIFY(hint->font().pixelSize() >= int(ui::px(22)));
         QVERIFY(capture(fixture, name + "-loading-cover-slow", view));
         view->hide();
+        QFile source(book);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const auto metadata = library::readBookMetadata(source);
+        QVERIFY(!metadata.cover.isNull());
+        auto handoff = createEmbeddedOpening(reader, desktop::readerHostServices().presentation);
+        handoff->window()->setGeometry(reader->rect());
+        handoff->setCover(metadata.cover);
+        handoff->showFallback(OpeningFallback::Protected);
+        handoff->window()->show();
+        handoff->window()->raise();
+        QVERIFY(capture(fixture, name + "-loading-handoff-cover", handoff->window()));
+        handoff.reset();
         auto baseline = createEmbeddedOpening(reader, desktop::readerHostServices().presentation);
         baseline->window()->setGeometry(reader->rect());
         baseline->setCover({});
         baseline->setProgress(45);
         baseline->window()->show();
         baseline->window()->raise();
+        QVERIFY(baseline->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
         QVERIFY(capture(fixture, name + "-loading-no-cover", baseline->window()));
     }
 

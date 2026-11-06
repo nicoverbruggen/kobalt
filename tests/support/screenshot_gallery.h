@@ -203,6 +203,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "reading", "Reading" },
         { "loading-cover", "Opening a book with its cover" },
         { "loading-cover-slow", "Opening a book: delayed hint" },
+        { "loading-handoff-cover", "Opening in Nickel with the book cover" },
         { "loading-no-cover", "Opening a book without a cover" },
         { "saving", "Saving reading progress" },
         { "save-failed", "Saving failed" },

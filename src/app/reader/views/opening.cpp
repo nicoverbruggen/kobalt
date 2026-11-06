@@ -21,10 +21,46 @@
 #include <QProgressBar>
 #include <QPainter>
 #include <QScreen>
+#include <QImageReader>
+#include <QFile>
+#include <QRunnable>
+#include <QThreadPool>
+#include <atomic>
 #include "reading/reading_density.h"
 
 namespace kobalt {
 namespace {
+struct CoverRead
+{
+    std::atomic_bool cancelled{ false }, finished{ false };
+    QImage image;
+};
+
+class CoverJob final : public QRunnable
+{
+public:
+    QString path;
+    std::shared_ptr<CoverRead> result;
+
+    void run() override
+    {
+        if (result->cancelled.load())
+            return;
+        QFile file(path);
+        if (file.open(QIODevice::ReadOnly) && file.size() > 0 && file.size() <= 16 * 1024 * 1024) {
+            QImageReader reader(&file);
+            const auto size = reader.size();
+            if (size.isValid() && qint64(size.width()) * size.height() <= 64 * 1024 * 1024) {
+                if (size.width() > 2048 || size.height() > 2048)
+                    reader.setScaledSize(size.scaled(QSize(2048, 2048), Qt::KeepAspectRatio));
+                if (!result->cancelled.load())
+                    result->image = reader.read();
+            }
+        }
+        result->finished.store(true, std::memory_order_release);
+    }
+};
+
 class OpeningDialog final : public QDialog
 {
 public:
@@ -50,6 +86,17 @@ public:
         brand = new ui::InterfaceLabel(strings::get("app.wordmark"), this);
         brand->setObjectName("rrOpeningBrand");
         brand->setAlignment(Qt::AlignCenter);
+        coverPoll.setInterval(10);
+        connect(&coverPoll, &QTimer::timeout, this, [this] {
+            if (!coverRead || !coverRead->finished.load(std::memory_order_acquire))
+                return;
+            coverPoll.stop();
+            auto image = std::move(coverRead->image);
+            coverRead.reset();
+            // A publication cover delivered meanwhile takes precedence over a thumbnail.
+            if (cover.isNull() && !image.isNull())
+                setCover(std::move(image));
+        });
         label = new ui::InterfaceLabel(strings::get("opening.loading"), this);
         label->setObjectName("rrOpeningLabel");
         label->setAlignment(Qt::AlignCenter);
@@ -91,11 +138,32 @@ public:
 
     void setCover(QImage image)
     {
-        if (fallback)
+        // An early cache miss is not proof that the publication has no cover.
+        if (image.isNull())
             return;
         cover = std::move(image);
-        brand->setVisible(cover.isNull());
+        showBrand();
         update();
+    }
+
+    ~OpeningDialog() override
+    {
+        if (coverRead)
+            coverRead->cancelled.store(true);
+    }
+
+    void loadCover(const QString &path)
+    {
+        if (path.isEmpty())
+            return;
+        if (coverRead)
+            coverRead->cancelled.store(true);
+        coverRead = std::make_shared<CoverRead>();
+        auto *job = new CoverJob;
+        job->path = path;
+        job->result = coverRead;
+        QThreadPool::globalInstance()->start(job);
+        coverPoll.start();
     }
 
     void showFallback(OpeningFallback state)
@@ -115,7 +183,7 @@ public:
         detail->show();
         hint->setText(QLocale().toUpper(strings::get("opening.continuing")));
         hint->setVisible(automatic);
-        brand->setVisible(automatic);
+        showBrand();
         label->setVisible(automatic);
         detail->setVisible(automatic);
         if (automatic) {
@@ -199,28 +267,23 @@ protected:
                 scheduleAfterPaint(std::move(firstPaint));
             }
         }
-        if (fallback && !automatic)
-            return;
         painter.translate(origin());
         painter.scale(scale(), scale());
         const auto ink = palette().color(QPalette::WindowText);
-        if (!fallback && !cover.isNull()) {
+        if (!cover.isNull()) {
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
             const auto size =
                     QSizeF(cover.size()).scaled(opening::cover.size(), Qt::KeepAspectRatio);
             const QRectF bounds(
                     opening::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
             painter.drawImage(bounds, cover);
-        } else {
-            ui::paintBrandIcon(painter,
-                               fallback && !automatic ? opening::failureBrandIcon : opening::icon,
-                               ink);
+        } else if (!fallback || automatic) {
+            ui::paintBrandIcon(painter, opening::icon, ink);
         }
-        if (fallback) {
-            const QRectF bounds = automatic ? opening::handoffIcon : opening::failureIcon;
+        if (fallback && cover.isNull() && automatic) {
             ui::paintOpeningIcon(
                     painter, protectedIcon ? ui::ControlIcon::Lock : ui::ControlIcon::FileWarning,
-                    bounds, ink);
+                    opening::handoffIcon, ink);
         }
     }
 
@@ -299,6 +362,12 @@ protected:
     }
 
 private:
+    void showBrand()
+    {
+        brand->setVisible(cover.isNull() && (!fallback || automatic));
+        update();
+    }
+
     // Most openings never fail. Laying out this card's text before the first
     // paint delayed every loading screen, so it is built on first use.
     ui::ChoiceModal *failure()
@@ -345,6 +414,8 @@ private:
     }
 
     QImage cover;
+    std::shared_ptr<CoverRead> coverRead;
+    QTimer coverPoll;
     QLabel *brand, *label, *hint, *detail;
     ui::ChoiceModal *failureDialog = nullptr;
     bool storageFailure = false;
@@ -396,6 +467,12 @@ public:
     {
         if (dialog)
             dialog->setCover(std::move(cover));
+    }
+
+    void loadCover(const QString &path) override
+    {
+        if (dialog)
+            dialog->loadCover(path);
     }
 
     void setProgress(int percent) override

@@ -840,7 +840,7 @@ void Window::openBook(const QString &path)
     setPreviewControlsEnabled(false);
     deviceFrame->previous->setEnabled(false);
     deviceFrame->next->setEnabled(false);
-    start->showOpening();
+    start->showOpening(absolute);
     stack->setCurrentWidget(start);
     controller.open(absolute, pixels(), {}, restart);
 }

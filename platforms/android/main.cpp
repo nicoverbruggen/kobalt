@@ -384,7 +384,7 @@ private:
         // Library books are read in place; the reader opens a cached copy.
         pendingKey = key;
         pendingPath = cachePath(key);
-        showOpening();
+        showOpening(key);
         android::openLibraryBook(key, pendingPath, book.size, book.modified);
     }
 
@@ -398,9 +398,9 @@ private:
 
     QString pendingKey, pendingPath;
 
-    void showOpening()
+    void showOpening(const QString &key = {})
     {
-        start->showOpening();
+        start->showOpening(key);
         new android::CanvasRefresh(start->openingCanvas(), android::refreshAvailable,
                                    submitRefresh);
     }
@@ -417,7 +417,8 @@ private:
             start->showLibrary();
             return;
         }
-        if (path == pendingPath && !pendingKey.isEmpty()) {
+        const bool openingPrepared = path == pendingPath && !pendingKey.isEmpty();
+        if (openingPrepared) {
             openedKey = std::exchange(pendingKey, {});
         } else {
             // Document picking and Android Open With use the same library path.
@@ -435,7 +436,9 @@ private:
         failedOpening = false;
         android::setPageButtonsAvailable(false);
         openingHandoff.stop();
-        showOpening();
+        // Keep the cached cover already shown while the Library copy was prepared.
+        if (!openingPrepared)
+            showOpening(openedKey);
         layout->setCurrentWidget(start);
         // Keep the canvas laid out behind the opaque loader as insets change.
         layout->setStackingMode(QStackedLayout::StackAll);

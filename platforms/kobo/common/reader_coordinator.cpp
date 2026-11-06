@@ -422,6 +422,9 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
                                                    readerHostServices().presentation);
         ignoreNativeFontScale(run.loading->window());
     }
+    // The cached image belongs to Nickel and needs no publication service.
+    // Start before eligibility checks so a handoff can keep the same cover.
+    run.loading->loadCover(nativeReaderCoverPath(run.opening->volume()));
     run.openingStage = kobalt::OpeningStage::Content;
     run.openingPercent = -1;
     run.progressPainted = -1000;

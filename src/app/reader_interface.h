@@ -18,6 +18,8 @@ public:
     virtual QDialog *window() const = 0;
     virtual void setProgress(int percent) = 0;
     virtual void setCover(QImage cover) = 0;
+    // Decode an existing host cover without waiting for publication opening.
+    virtual void loadCover(const QString &path) = 0;
     // Run after the first visible frame, before expensive opening work starts.
     virtual void afterFirstPaint(std::function<void()> callback) = 0;
     // Replace temporary system faces after the bundled interface fonts load.

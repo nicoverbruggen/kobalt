@@ -205,7 +205,7 @@ StartScreen::~StartScreen()
     store.changed = {};
 }
 
-void StartScreen::showOpening()
+void StartScreen::showOpening(const QString &bookKey)
 {
     // Recreate the view to reset progress and the delayed hint for each book.
     if (openingSurface) {
@@ -222,6 +222,7 @@ void StartScreen::showOpening()
     auto *body = new QVBoxLayout(content);
     body->setContentsMargins(0, 0, 0, 0);
     opening = createEmbeddedOpening(content, presentation);
+    opening->loadCover(store.coverPath(store.index().books.value(bookKey).cover));
     connect(opening->window(), &QDialog::rejected, this, &StartScreen::exitRequested);
     body->addWidget(opening->window());
     openingSurface->setContent(content);

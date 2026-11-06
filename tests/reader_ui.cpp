@@ -3393,7 +3393,7 @@ private slots:
         QCOMPARE(paints.count, 0);
     }
 
-    // Checks opening-screen cover proportions and placement above the status, the brand without a cover and a late cover after a fallback.
+    // Checks cover placement, immediate branding, cached covers and covers retained or delivered during handoff.
     void openingCoverLayout()
     {
         for (const QSize screen : { QSize(1072, 1448), QSize(1448, 1072), QSize(600, 800) }) {
@@ -3440,13 +3440,42 @@ private slots:
                          view->palette().color(QPalette::Window));
             }
             opening->setCover({});
-            QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
             opening->showFallback(OpeningFallback::Protected);
             QImage late(200, 300, QImage::Format_RGB32);
             late.fill(Qt::red);
             opening->setCover(late);
-            QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
             QVERIFY(!view->findChild<QProgressBar *>("rrOpeningProgress")->isVisible());
+
+            // A cached cover can arrive after the routing decision, without a session.
+            QTemporaryDir directory;
+            QVERIFY(directory.isValid());
+            const auto path = directory.filePath("cover.png");
+            QVERIFY(late.save(path));
+            auto cached = createEmbeddedOpening(&owner, test::makeHostPresentation);
+            cached->window()->setGeometry(owner.rect());
+            cached->window()->show();
+            cached->showFallback(OpeningFallback::Remembered);
+            cached->loadCover(path);
+            const qreal scale = qMin(screen.width() / ui::metrics::opening::referenceWidth,
+                                     screen.height() / ui::metrics::opening::referenceHeight);
+            const QPoint center(
+                    screen.width() / 2,
+                    qRound((screen.height() - ui::metrics::opening::referenceHeight * scale) / 2
+                           + ui::metrics::opening::cover.center().y() * scale));
+            QTRY_COMPARE(cached->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
+            QVERIFY(!cached->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+
+            auto unavailable = createEmbeddedOpening(&owner, test::makeHostPresentation);
+            unavailable->window()->setGeometry(owner.rect());
+            unavailable->window()->show();
+            unavailable->setCover({});
+            QVERIFY(unavailable->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            unavailable->showFallback(OpeningFallback::Protected);
+            unavailable->setCover(late);
+            QCOMPARE(unavailable->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
+            QVERIFY(!unavailable->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
         }
     }
 

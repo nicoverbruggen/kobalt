@@ -6,6 +6,7 @@
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/display/keyboard_refresh.h"
 #include "platforms/kobo/display/panel_damage.h"
+#include "platforms/kobo/display/navigation_refresh.h"
 #include "platforms/kobo/display/page_animation_hook.h"
 #include "platforms/kobo/display/page_transition.h"
 #include "platforms/kobo/display/refresh_policy.h"
@@ -121,6 +122,8 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
     const bool dark = readerWindow->property("reader_dark").toBool();
     const bool pageTurn = readerWindow->property("reader_page_turn").toBool();
     readerWindow->setProperty("reader_page_turn", false);
+    const bool navigationDismissal = readerWindow->property("reader_navigation_dismissal").toBool();
+    readerWindow->setProperty("reader_navigation_dismissal", false);
     // The reader asks for one full flash to clear ghosting: after the menu
     // closes, and at some chapter starts. It replaces that turn's animation.
     const bool controlsOpening = readerWindow->property("reader_controls_opening").toBool();
@@ -180,6 +183,17 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         return (entry.second & ~(heuristic | full | partialMode))
                 == (ordinaryPolicy(dark) & ~(heuristic | full | partialMode));
     });
+    if (navigationDismissal && !pageTurn && !direction
+        && refreshBackend(readerWindow) == RefreshBackend::Mtk
+        && submitNavigationDismissal(
+                flags, region, navigationRefreshRegion(readerWindow), ordinaryPolicy(dark),
+                repairPolicy(dark), heuristic | full | partialMode, partialMode, full,
+                bit(Qt::WA_KoboEpdScreenFlush),
+                !dark && readerWindow->property("reader_navigation_dismissal_plain").toBool(),
+                [&](const QRegion &damage, const FlushFlags &policies) {
+                    nativeFlush(store, damage, target, offset, policies);
+                }))
+        return;
     if (controlsOpening && compatible && ordinaryControls
         && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
         keyboardPixels.clear();
@@ -208,6 +222,19 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             && progressUpdate.contains(region.boundingRect())
             && std::all_of(flags.cbegin(), flags.cend(),
                            [&](const auto &entry) { return progressUpdate.contains(entry.first); });
+    auto submitControls = [&](const QRegion &damage, const FlushFlags &policies) {
+        if (!dark && !pageTurn && !direction && compatible
+            && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
+            submitNavigationRefresh(policies, damage, navigationRefreshRegion(readerWindow),
+                                    ordinaryPolicy(false), heuristic | full | partialMode,
+                                    partialMode, bit(Qt::WA_KoboEpdScreenFlush),
+                                    [&](const QRegion &part, const FlushFlags &selected) {
+                                        nativeFlush(store, part, target, offset, selected);
+                                    });
+        } else {
+            nativeFlush(store, damage, target, offset, policies);
+        }
+    };
     auto completedFlush = [&](const QRegion &damage, const FlushFlags &policies) {
         cancelPageAnimation();
         if (direction && compatible && policies.size() == 1
@@ -280,7 +307,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                 }
             }
             if (changed) {
-                nativeFlush(store, damage, target, offset, partial);
+                submitControls(damage, partial);
                 return;
             }
         }
@@ -292,7 +319,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             nativeFlush(store, QRegion(screen), target, offset, { { screen, policies[0].second } });
             return;
         }
-        nativeFlush(store, damage, target, offset, policies);
+        submitControls(damage, policies);
     };
     QRegion policyCoverage;
     bool uniform = compatible && (region.rectCount() > 1 || flags.size() > 1);

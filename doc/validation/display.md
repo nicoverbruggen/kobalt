@@ -4,6 +4,12 @@ Label `display`. Build `mac-tests`, then run `ctest --preset mac -L display` fro
 
 These checks cover page animations, refresh policies and regions, pixel damage, paint batching, the Library theme surface and the BOOX frame transport. `platform.page-animation` and `platform.page-transition-native` check policy and submission with fake display calls. The `boox` checks use the Android frame transport and queue.
 
+`ui.navigationPressKeepsDamageInItsTab` checks that pressing or cancelling each bottom tab repaints only that tab's column, with a panel open or closed and in both themes. It uses a native backing store so a graphics proxy cannot hide broad repaint requests.
+
+`ui.navigationRefreshKeepsOverlayAndPanelPolicies` checks that a combined panel and navigation update keeps full refresh outside the visible tabs. Overlays and hidden navigation do not receive the tabs' partial policy. The Qt5 adapter check exercises the same split through both firmware policy-list ABIs. This optimization applies only to ordinary light-theme controls on MediaTek displays; dark cleanup, page turns and other backends retain their policies.
+
+Closing a panel with its selected tab publishes a one-shot dismissal after the panel leaves the screen. The display adapter submits the restored panel area and deselected tab together. Proven text-only pages use partial mode; image and dark cleanup retain the stronger policy. The helper and Qt5 adapter checks cover combined submission, one-shot consumption and repair precedence. `lifecycle.navigationDismissalWaitsForPanel` checks immediate and delayed appearance dismissal and distinguishes closing a panel from switching tabs.
+
 Use `KOBALT_GALLERY_CASE=androidPageAnimations` to capture only the Android page-animation views. The display-rate lookup uses the window handle with a primary-screen fallback, so it stays compatible with the prepared Qt 5.2.1 Kobo SDK.
 
 ## Qt5 refresh adapter

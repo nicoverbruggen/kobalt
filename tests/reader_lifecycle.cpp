@@ -1108,6 +1108,91 @@ private slots:
                  3);
     }
 
+    void navigationDismissalWaitsForPanel_data()
+    {
+        QTest::addColumn<QString>("tabName");
+        QTest::addColumn<QString>("panelName");
+        QTest::addColumn<bool>("edit");
+        QTest::newRow("chapters") << "rrNavChapters" << "rrChoices" << false;
+        QTest::newRow("stats") << "rrNavStats" << "rrChapterGraph" << false;
+        QTest::newRow("text") << "rrNavText" << "rrMenu" << false;
+        QTest::newRow("edited-text") << "rrNavText" << "rrMenu" << true;
+    }
+
+    // Publishes dismissal only after the panel closes, including an applied appearance edit.
+    void navigationDismissalWaitsForPanel()
+    {
+        QFETCH(QString, tabName);
+        QFETCH(QString, panelName);
+        QFETCH(bool, edit);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        auto *tab = host.window()->findChild<QPushButton *>(tabName);
+        auto *panel = host.window()->findChild<QWidget *>(panelName);
+        QVERIFY(tab);
+        QVERIFY(panel);
+        // Switching from another panel must not request a dismissal refresh.
+        auto *other = host.window()->findChild<QPushButton *>(
+                tabName == "rrNavStats" ? "rrNavChapters" : "rrNavStats");
+        QVERIFY(other);
+        QVERIFY(click(canvas, other));
+        QTRY_VERIFY(other->isChecked());
+        QVERIFY(click(canvas, tab));
+        QTRY_VERIFY(panel->isVisible() && tab->isChecked());
+        QVERIFY(!host.window()->property("reader_navigation_dismissal").toBool());
+        if (edit) {
+            auto *larger = sizeStep(host);
+            QVERIFY(larger);
+            QTRY_VERIFY(larger->isVisible() && larger->isEnabled());
+            QVERIFY(click(canvas, larger));
+            QTRY_VERIFY(inspectReader(host)["preview_ready"].toBool()
+                        && !inspectReader(host)["preview_busy"].toBool());
+        }
+
+        struct DismissalProbe : QObject
+        {
+            QWidget *panel = nullptr;
+            QPushButton *tab = nullptr;
+            bool premature = false;
+            int publications = 0;
+
+            bool eventFilter(QObject *object, QEvent *event) override
+            {
+                if (event->type() == QEvent::DynamicPropertyChange
+                    && static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()
+                            == "reader_navigation_dismissal"
+                    && object->property("reader_navigation_dismissal").toBool()) {
+                    ++publications;
+                    premature |= panel->isVisible() || tab->isChecked();
+                }
+                return false;
+            }
+        } probe;
+
+        probe.panel = panel;
+        probe.tab = tab;
+        host.window()->installEventFilter(&probe);
+        QVERIFY(click(canvas, tab));
+        QTRY_VERIFY(!panel->isVisible() && !tab->isChecked() && !host.session()->busy());
+        QTRY_COMPARE(probe.publications, 1);
+        QVERIFY(!probe.premature);
+        // The desktop has no Kobo adapter to consume the one-shot property.
+        host.window()->setProperty("reader_navigation_dismissal", false);
+        QEvent update(QEvent::UpdateRequest);
+        QCoreApplication::sendEvent(host.window(), &update);
+        QVERIFY(!host.window()->property("reader_navigation_dismissal").toBool());
+        QCOMPARE(probe.publications, 1);
+    }
+
     void uneditedPanelTransitions_data()
     {
         QTest::addColumn<QString>("start");

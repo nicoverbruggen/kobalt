@@ -748,6 +748,34 @@ bool Reader::event(QEvent *event)
             return true;
     }
     if (event->type() == QEvent::UpdateRequest && isVisible()) {
+        setProperty("reader_navigation_dismissal", false);
+        if (pendingNavigationDismissal) {
+            // A same-tab close can wait for an appearance edit to finish.
+            // Publish only the frame that actually removes the panel.
+            if (!pendingNavigationDismissal->isVisible()) {
+                const auto overlays = popups();
+                const bool overlayVisible =
+                        std::any_of(overlays.cbegin(), overlays.cend(), [](const QWidget *widget) {
+                            return widget && widget->isVisible();
+                        });
+                const bool dismissed = navigation && navigation->isVisible()
+                        && topControls->isVisible() && !appearanceEdit.panelOpen()
+                        && !general->isVisible() && !choices->isVisible()
+                        && !chapterGraph->isVisible() && !lightPopup->isVisible()
+                        && !bookmarkList->isVisible() && !seekOpen && !session->busy()
+                        && !dictionaryPanel->isVisible() && !searchPanel->isVisible()
+                        && !linksActive() && !lookupPending && !acknowledgments->isVisible()
+                        && !savingView && !closeSaveError && !services.suspended()
+                        && !overlayVisible;
+                setProperty("reader_navigation_dismissal", dismissed);
+                setProperty("reader_navigation_dismissal_plain",
+                            page->image.text("kobalt.animation_text_only") == "true");
+                pendingNavigationDismissal.clear();
+            } else if (!appearanceEdit.applying() && !appearanceEdit.finishPending()
+                       && !session->busy()) {
+                pendingNavigationDismissal.clear();
+            }
+        }
         // Only the plain reading bars can cross an unchanged text page
         // with a partial refresh. Other panels may contain color.
         setProperty("reader_plain_controls",
@@ -1779,9 +1807,23 @@ void Reader::configureNavigation()
 
 void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
+    pendingNavigationDismissal.clear();
+    setProperty("reader_navigation_dismissal", false);
+    using Nav = kobalt::NavigationDestination;
+    if (destination == Nav::Chapters && choices->isVisible() && !choosingTypography)
+        pendingNavigationDismissal = choices;
+    else if (destination == Nav::Stats && chapterGraph->isVisible())
+        pendingNavigationDismissal = chapterGraph;
+    else if (destination == Nav::Light && lightPopup->isVisible())
+        pendingNavigationDismissal = lightPopup;
+    else if (menu->isVisible()
+             && ((destination == Nav::Text && panels->currentIndex() == 0)
+                 || (destination == Nav::Layout && panels->currentIndex() != 0)))
+        pendingNavigationDismissal = menu;
+    else if (destination == Nav::Seek && seekOpen)
+        pendingNavigationDismissal = pageScrubber;
     session->cancelPendingTurn();
     bookmarkList->hide();
-    using Nav = kobalt::NavigationDestination;
     if (destination != Nav::Seek) {
         pageScrubber->cancel();
     }
@@ -2206,6 +2248,8 @@ void Reader::showControls()
 
 void Reader::dismissControls()
 {
+    pendingNavigationDismissal.clear();
+    setProperty("reader_navigation_dismissal", false);
     if (pageScrubber)
         pageScrubber->cancel();
     hideRevealedLinks();

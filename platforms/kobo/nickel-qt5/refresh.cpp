@@ -5,6 +5,7 @@
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/display/keyboard_refresh.h"
 #include "platforms/kobo/display/panel_damage.h"
+#include "platforms/kobo/display/navigation_refresh.h"
 #include "platforms/kobo/display/page_animation_hook.h"
 #include "platforms/kobo/display/page_transition.h"
 #include "platforms/kobo/display/refresh_policy.h"
@@ -180,6 +181,8 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
     const bool dark = readerWindow->property("reader_dark").toBool();
     const bool pageTurn = readerWindow->property("reader_page_turn").toBool();
     readerWindow->setProperty("reader_page_turn", false);
+    const bool navigationDismissal = readerWindow->property("reader_navigation_dismissal").toBool();
+    readerWindow->setProperty("reader_navigation_dismissal", false);
     // The reader asks for one full flash to clear ghosting: after the menu
     // closes, and at some chapter starts. It replaces that turn's animation.
     const bool controlsOpening = readerWindow->property("reader_controls_opening").toBool();
@@ -278,6 +281,15 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
                 return (entry.second & ~(heuristic | full | partialMode))
                         == (ordinaryPolicy(dark, wide) & ~(heuristic | full | partialMode));
             });
+    if (navigationDismissal && !pageTurn && !direction
+        && refreshBackend(readerWindow) == RefreshBackend::Mtk
+        && submitNavigationDismissal(
+                policies, region, navigationRefreshRegion(readerWindow), ordinaryPolicy(dark, wide),
+                repairPolicy(dark, wide), heuristic | full | partialMode, partialMode, full,
+                bit(128),
+                !dark && readerWindow->property("reader_navigation_dismissal_plain").toBool(),
+                submit))
+        return;
     if (controlsOpening && compatible && ordinaryControls
         && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
         keyboardPixels.clear();
@@ -306,6 +318,16 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
             && progressUpdate.contains(region.boundingRect())
             && std::all_of(policies.cbegin(), policies.cend(),
                            [&](const auto &entry) { return progressUpdate.contains(entry.first); });
+    auto submitControls = [&](const QRegion &damage, const FlushFlags &chosen) {
+        if (!dark && !pageTurn && !direction && compatible
+            && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
+            submitNavigationRefresh(chosen, damage, navigationRefreshRegion(readerWindow),
+                                    ordinaryPolicy(false, wide), heuristic | full | partialMode,
+                                    partialMode, bit(128), submit);
+        } else {
+            submit(damage, chosen);
+        }
+    };
     auto completedFlush = [&](const QRegion &damage, const FlushFlags &chosen) {
         cancelPageAnimation();
         // Policy width selects the Qt ABI, not whether the display can sweep.
@@ -378,7 +400,7 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
                 }
             }
             if (changed) {
-                submit(damage, partial);
+                submitControls(damage, partial);
                 return;
             }
         }
@@ -390,7 +412,7 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
             submit(QRegion(screen), { { screen, chosen[0].second } });
             return;
         }
-        submit(damage, chosen);
+        submitControls(damage, chosen);
     };
     QRegion policyCoverage;
     bool uniform = compatible && (region.rectCount() > 1 || policies.size() > 1);

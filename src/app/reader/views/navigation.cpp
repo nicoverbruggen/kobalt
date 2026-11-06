@@ -152,6 +152,7 @@ private:
 BottomNavigation::BottomNavigation(QWidget *parent) : ui::Panel(parent, Qt::TopEdge)
 {
     setObjectName("rrBottomNavigation");
+    setProperty("reader_navigation_bar", true);
     auto *rows = new QVBoxLayout(this);
     rows->setContentsMargins(0, toolbarBorder, 0, 0);
     rows->setSpacing(0);
@@ -202,8 +203,14 @@ BottomNavigation::BottomNavigation(QWidget *parent) : ui::Panel(parent, Qt::TopE
         tab->setObjectName(QString("rrNav%1").arg(names[i]));
         row->addWidget(tab, 1);
         tabs.append(tab);
-        connect(tab, &QPushButton::pressed, this, [this] { update(); });
-        connect(tab, &QPushButton::released, this, [this] { update(); });
+        // The tab paints its own feedback. Only its extension into the panel
+        // rule belongs to this widget; repainting the bar flashes every tab.
+        const auto updateTabBand = [this, tab] {
+            if (panelOpen)
+                update(QRect(tab->mapTo(this, QPoint()).x(), 0, tab->width(), toolbarBorder));
+        };
+        connect(tab, &QPushButton::pressed, this, updateTabBand);
+        connect(tab, &QPushButton::released, this, updateTabBand);
         connect(tab, &QPushButton::clicked, this, [this, i] {
             if (activated)
                 activated(NavigationDestination(i));

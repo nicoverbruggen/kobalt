@@ -15,6 +15,7 @@ namespace {
 using Update = std::array<uint32_t, 18>;
 std::vector<Update> updates;
 int flushes = 0;
+int expectImmediate = -1;
 bool available = true;
 
 int ioctl(int, unsigned long request, void *argument)
@@ -32,6 +33,9 @@ void flush(QBackingStore *, const QRegion &region, QWindow *, const QPoint &, co
 {
     ++flushes;
     for (const auto &entry : flags) {
+        if (expectImmediate >= 0)
+            require(bool(entry.second & 1) == bool(expectImmediate),
+                    "Navigation submission lost its immediate flush flag or changed an unsplit call");
         const auto rect = entry.first;
         require(region.contains(rect), "Native flush policy lies outside submitted damage");
         Update update{ uint32_t(rect.top()),
@@ -148,5 +152,80 @@ int main(int argc, char **argv)
             available = true;
             reader.setProperty("reader_mono_repairs", QVariant::fromValue(QRegion()));
         }
-    std::puts("PASS: both Qt5 flush ABIs sweep i.MX text and preserve excluded updates");
+    QWidget navigation(&reader);
+    navigation.setProperty("reader_navigation_bar", true);
+    navigation.setGeometry(0, 340, 300, 60);
+    navigation.show();
+    reader.setProperty("reader_refresh_backend", "hwtcon");
+    const QRect panelAndBar(0, 200, 300, 200);
+    for (bool legacy : { true, false }) {
+        setReaderRefreshWindow(&reader);
+        reader.setProperty("reader_dark", false);
+        const quint64 policy = (legacy ? quint64(1) << 10 : quint64(1) << 38) | (1U << 3);
+        auto submit = [&] {
+            if (legacy)
+                flushReader32(&store, panelAndBar, reader.windowHandle(), {},
+                              { { panelAndBar, quint32(policy) } });
+            else
+                flushReader(&store, panelAndBar, reader.windowHandle(), {},
+                            { { panelAndBar, policy } });
+        };
+        updates.clear();
+        flushes = 0;
+        expectImmediate = 1;
+        submit();
+        require(flushes == 2 && updates.size() == 2,
+                "MTK did not separate the panel and navigation refresh modes");
+        QRegion coverage;
+        for (const auto &update : updates) {
+            const QRect rect{ int(update[1]), int(update[0]), int(update[2]), int(update[3]) };
+            require(coverage.intersected(rect).isEmpty(), "MTK navigation damage overlaps");
+            coverage += rect;
+            require(update[5] == (navigation.geometry().contains(rect) ? 0U : 1U),
+                    "MTK flashed unchanged tab pixels or downgraded the panel refresh");
+        }
+        require(coverage == QRegion(panelAndBar), "MTK navigation split lost painted pixels");
+        for (bool plain : { true, false }) {
+            reader.setProperty("reader_navigation_dismissal", true);
+            reader.setProperty("reader_navigation_dismissal_plain", plain);
+            updates.clear();
+            flushes = 0;
+            submit();
+            require(flushes == 1 && updates.size() == 1,
+                    "Panel dismissal and tab deselection were submitted separately");
+            require(updates[0][5] == (plain ? 0U : 1U),
+                    "Dismissal did not preserve text-only versus image cleanup mode");
+            require(!reader.property("reader_navigation_dismissal").toBool(),
+                    "Navigation dismissal was not consumed");
+            updates.clear();
+            flushes = 0;
+            submit();
+            require(flushes == 2 && updates.size() == 2,
+                    "An unrelated paint reused the navigation dismissal transaction");
+        }
+        QWidget overlay(&reader);
+        overlay.setGeometry(navigation.geometry());
+        overlay.show();
+        overlay.raise();
+        expectImmediate = 0;
+        updates.clear();
+        submit();
+        require(updates.size() == 1 && updates[0][5] == 1,
+                "An overlay inherited the navigation partial refresh");
+        overlay.hide();
+        navigation.hide();
+        updates.clear();
+        submit();
+        require(updates.size() == 1 && updates[0][5] == 1,
+                "Hidden navigation changed the refresh policy");
+        navigation.show();
+        reader.setProperty("reader_navigation_dismissal", true);
+        reader.setProperty("reader_navigation_dismissal_plain", true);
+        reader.setProperty("reader_full_flash", true);
+        updates.clear();
+        submit();
+        require(updates.size() == 1 && updates[0][5] == 1,
+                "Navigation split an explicit full cleanup");
+    }
+    std::puts("PASS: Qt5 flush ABIs preserve sweeps and keep MTK tab feedback partial");
 }

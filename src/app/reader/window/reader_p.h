@@ -699,6 +699,7 @@ private:
     bool showNotice(const ReaderNotice &notice) override;
     void showFormattingWarning();
     bool flashAfterMenu = false, flashAfterPagePreview = false;
+    QPointer<QWidget> pendingNavigationDismissal;
     void requestFlash(const char *reason);
     bool turnPainted = false;
     // Reading activity queues a due batch without a periodic wake timer.

@@ -137,6 +137,8 @@ public:
 
     int navigationTop() const { return bar->y(); }
 
+    bool isVisible() const { return bar->isVisible(); }
+
     int contentBottom(QSize size) const
     {
         return size.height() - safeBottom - BottomNavigation::barHeight();

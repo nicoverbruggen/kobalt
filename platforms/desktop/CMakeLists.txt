@@ -371,7 +371,7 @@ if(BUILD_TESTING)
         KOBALT_FONT_DIRECTORY="${KOBALT_ASSETS}/fonts" KOBALT_INSTALLED_FONTS)
     add_dependencies(kobalt-tests kobalt-reader-lifecycle-tests)
     foreach(check teardownRemovesApplicationFilter shutdownFinalSaveTimesOut
-            backgroundWriteFailureRetriesWithoutCountingPause backgroundCheckpointStopsBeforeOtherCallbacks standaloneReadingHistory uneditedPanelTransitions lightReplacesDefaultMenu appearanceApplyOnNavigation appearanceRelayoutPreservesPassage
+            backgroundWriteFailureRetriesWithoutCountingPause backgroundCheckpointStopsBeforeOtherCallbacks standaloneReadingHistory navigationDismissalWaitsForPanel uneditedPanelTransitions lightReplacesDefaultMenu appearanceApplyOnNavigation appearanceRelayoutPreservesPassage
             overflowClosesCurrentPanel appearanceSettingsRetainsDraft appearanceWriteFailureRetainsDraft
             appearanceSleepRetainsDraft appearanceFailedPreviewDismisses appearanceApplyFailureCanExit
             appearanceCloseDuringPreview appearanceSleepDuringFirstEdit appearanceDragsDuringPreview
@@ -515,6 +515,8 @@ if(BUILD_TESTING)
             openingCoverLayout
             openingFirstPaintCallback
             readingStripChangesLeaveBodyUnpainted
+            navigationPressKeepsDamageInItsTab
+            navigationRefreshKeepsOverlayAndPanelPolicies
             chapterPageSurvivesLongTitles
             batteryTextAlignment
             annotationPaintPreservesText
@@ -705,7 +707,7 @@ if(BUILD_TESTING)
         "dictionary:^(desktop\\.dictionary.*|model\\.dictionary-store|platform\\.nickel-dictionary-selection)$"
         "images:^(desktop\\.imageViewer|engine\\.(image-proportions|svg-limits)|resource\\.image-policy)$"
         "viewport:^(platform\\.reader-orientation|desktop\\.(viewport.*|bookmarkRibbonSafeArea|fullWidthPanels)|engine\\.alternate-layout|lifecycle\\.(rotationOwnership|sleepRequestFreezesOrientationBeforeHandoff|close.*Orientation.*)|ui\\.libraryCanvasFollowsViewport|model\\.touch-rotation)$"
-        "display:^(platform\\.page-(animation|transition-native)|desktop\\.(pageAnimationCompatibility|androidPageAnimations|boox.*)|ui\\.(pageTurnFrames|boox.*|libraryThemeSurface|.*Paints.*|openingFirstPaintCallback|continuationHintClears|hidingSelectionMenuKeepsDamageCompact)|model\\.(screen-refresh|page-refresh-regions|image-damage|page-pixels)|lifecycle\\.appearanceOpeningDoesNotRepaintToolbar)$"
+        "display:^(platform\\.page-(animation|transition-native)|desktop\\.(pageAnimationCompatibility|androidPageAnimations|boox.*)|ui\\.(pageTurnFrames|boox.*|libraryThemeSurface|.*Paints.*|openingFirstPaintCallback|continuationHintClears|hidingSelectionMenuKeepsDamageCompact|navigationPressKeepsDamageInItsTab|navigationRefreshKeepsOverlayAndPanelPolicies)|model\\.(screen-refresh|page-refresh-regions|image-damage|page-pixels)|lifecycle\\.(appearanceOpeningDoesNotRepaintToolbar|navigationDismissalWaitsForPanel))$"
         "chrome:^(lifecycle\\.(readingTimeStatus|clock.*|minuteClock|idleTimers|timeRemainingFormatShared|exit.*)|model\\.header-footer|desktop\\.(headerFooter.*|batteryPercentageOnly|largeInterfaceScale.*|desktopControls)|ui\\.(chapterPageSurvivesLongTitles|batteryTextAlignment|readingStripChangesLeaveBodyUnpainted))$"
         "library:^(desktop\\.(library.*|restartFinishedBooks)|ui\\.library.*|model\\.library)$"
         "input:^(ui\\.(paged.*|pageTurnTapFilter|pageTurnFilterSeparatesInputClocks|hold.*|fontHoldCancellation|canvas.*|cancelledCanvasTouchRestoresSlider|listPressFeedback|optionAndSwatchPressFeedback)|desktop\\.(navigation|hardwarePageButtons\\..*|wordSelection\\..*|touchCursor.*|annotationTwoFingerTapConsumesWholeSequence|annotationRightClickRejectsChords)|lifecycle\\.(pageTurnTimingIgnoresNoopNavigation|pageButtonsAfterTouchUseDeliveryTime|pageGestureBurstIgnoresRapidTurns|remoteKeyActivityRequiresActiveReading))$"

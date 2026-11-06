@@ -27,6 +27,8 @@
 #include "ui/style/theme.h"
 #include "app/reader/views/opening.h"
 #include "app/reader/views/reading_page.h"
+#include "app/reader/views/navigation.h"
+#include "platforms/kobo/display/navigation_refresh.h"
 #include "app/reader/settings/header_footer_panel.h"
 #include "app/reader/panels/bookmark_list.h"
 #include "platforms/standalone/canvas.h"
@@ -2946,6 +2948,181 @@ private slots:
         requests.clear();
         list.showBookmarks({ complete });
         QVERIFY(requests.isEmpty());
+    }
+
+    void navigationPressKeepsDamageInItsTab_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("panelOpen");
+        QTest::addColumn<bool>("selected");
+        for (bool dark : { false, true })
+            for (bool open : { false, true })
+                for (bool selected : { false, true })
+                    QTest::newRow(qPrintable(QString("dark-%1-panel-%2-selected-%3")
+                                                     .arg(dark)
+                                                     .arg(open)
+                                                     .arg(selected)))
+                            << dark << open << selected;
+    }
+
+    // Checks that pressing or cancelling a tab leaves unrelated toolbar pixels unpainted.
+    void navigationPressKeepsDamageInItsTab()
+    {
+        QFETCH(bool, dark);
+        QFETCH(bool, panelOpen);
+        QFETCH(bool, selected);
+        QWidget owner;
+        owner.resize(1072, 1448);
+        owner.setProperty("reader_dark", dark);
+        owner.setPalette(ui::readerPalette(owner.palette(), dark));
+        reader::BottomNavigation bar(&owner);
+        bar.setReturnLabel({}, {});
+        bar.setGeometry(0, owner.height() - bar.barHeight(), owner.width(), bar.barHeight());
+        bar.setPanelOpen(panelOpen);
+        bar.select(-1, true, true);
+        bar.show();
+        owner.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&owner));
+        QCoreApplication::processEvents();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+        PaintRegions paints;
+        bar.installEventFilter(&paints);
+        for (const char *name : { "rrNavChapters", "rrNavSeek", "rrNavText", "rrNavLayout",
+                                  "rrNavLight", "rrNavStats" }) {
+            auto *tab = bar.findChild<QPushButton *>(name);
+            QVERIFY(tab && tab->isVisible());
+            tab->setChecked(selected);
+            tab->setFocus();
+            QCoreApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+            const auto before = bar.grab().toImage();
+            const QRect column(tab->mapTo(&bar, QPoint()).x(), 0, tab->width(), bar.height());
+            paints.painted = {};
+            QTest::mousePress(tab, Qt::LeftButton);
+            QCoreApplication::processEvents();
+            QVERIFY(tab->isDown());
+            QVERIFY2(paints.painted.subtracted(column).isEmpty(),
+                     "Pressing one tab repaints the rest of the navigation bar");
+            paints.painted = {};
+            // Cancel outside the tab so its pressed fill must be cleared.
+            QTest::mouseMove(tab, QPoint(-10, -10));
+            QTest::mouseRelease(tab, Qt::LeftButton, Qt::NoModifier, QPoint(-10, -10));
+            QCoreApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+            QVERIFY(!tab->isDown());
+            QVERIFY2(paints.painted.subtracted(column).isEmpty(),
+                     "Cancelling one tab repaints the rest of the navigation bar");
+            QCOMPARE(bar.grab().toImage(), before);
+            tab->setChecked(false);
+        }
+    }
+
+    // Checks partial tab refresh coverage without changing panel or overlay cleanup policies.
+    void navigationRefreshKeepsOverlayAndPanelPolicies()
+    {
+        QWidget owner;
+        owner.resize(300, 400);
+        QWidget bar(&owner);
+        bar.setProperty("reader_navigation_bar", true);
+        bar.setGeometry(0, 340, 300, 60);
+        QWidget overlay(&owner);
+        overlay.setGeometry(100, 320, 100, 80);
+        owner.show();
+        bar.show();
+        overlay.show();
+        overlay.raise();
+        const auto navigation = navigationRefreshRegion(&owner);
+        QCOMPARE(navigation, QRegion(bar.geometry()).subtracted(overlay.geometry()));
+        using Policies = QVector<QPair<QRect, quint64>>;
+        constexpr quint64 text = 16, repair = 32, full = 2, partial = 1, modes = 3;
+        const QRect combined(0, 200, 300, 200);
+        const auto selected =
+                partialNavigationRefresh(Policies{ { combined, text | full } }, combined,
+                                         navigation, text | full, modes, partial);
+        QRegion coverage, partialCoverage;
+        for (const auto &entry : selected) {
+            QVERIFY(coverage.intersected(entry.first).isEmpty());
+            coverage += entry.first;
+            if (entry.second == (text | partial))
+                partialCoverage += entry.first;
+            else
+                QCOMPARE(entry.second, text | full);
+        }
+        QCOMPARE(coverage, QRegion(combined));
+        QCOMPARE(partialCoverage, navigation);
+        coverage = {};
+        partialCoverage = {};
+        submitNavigationRefresh(
+                Policies{ { combined, text | full }, { bar.geometry(), text | full } }, combined,
+                navigation, text | full, modes, partial, 64,
+                [&](const QRegion &damage, const Policies &policies) {
+                    QVERIFY(coverage.intersected(damage).isEmpty());
+                    coverage += damage;
+                    const bool tabs = damage.subtracted(navigation).isEmpty();
+                    QVERIFY(tabs || damage.intersected(navigation).isEmpty());
+                    for (const auto &entry : policies) {
+                        QVERIFY(damage.contains(entry.first));
+                        QCOMPARE(entry.second, text | (tabs ? partial : full) | quint64(64));
+                    }
+                    if (tabs)
+                        partialCoverage += damage;
+                });
+        QCOMPARE(coverage, QRegion(combined));
+        QCOMPARE(partialCoverage, navigation);
+        const Policies clean{ { combined, repair | full } };
+        QCOMPARE(partialNavigationRefresh(clean, combined, navigation, text | full, modes, partial),
+                 clean);
+        int unchangedCalls = 0;
+        submitNavigationRefresh(clean, combined, navigation, text | full, modes, partial, 64,
+                                [&](const QRegion &damage, const Policies &policies) {
+                                    ++unchangedCalls;
+                                    QCOMPARE(damage, QRegion(combined));
+                                    QCOMPARE(policies, clean);
+                                });
+        QCOMPARE(unchangedCalls, 1);
+        for (bool plain : { true, false }) {
+            int calls = 0;
+            const bool handled = submitNavigationDismissal(
+                    Policies{ { combined, text | full } }, combined, navigation, text | full,
+                    repair | full, modes, partial, full, 64, plain,
+                    [&](const QRegion &damage, const Policies &policies) {
+                        ++calls;
+                        QCOMPARE(damage, QRegion(combined));
+                        QCOMPARE(policies.size(), 1);
+                        QCOMPARE(policies[0].second, text | (plain ? partial : full) | quint64(64));
+                    });
+            QVERIFY(handled);
+            QCOMPARE(calls, 1);
+        }
+        const Policies mixed{ { QRect(0, 200, 300, 140), repair | full },
+                              { bar.geometry(), text | full } };
+        int mixedCalls = 0;
+        QVERIFY(submitNavigationDismissal(
+                mixed, combined, navigation, text | full, repair | full, modes, partial, full, 64,
+                true, [&](const QRegion &damage, const Policies &policies) {
+                    ++mixedCalls;
+                    QCOMPARE(damage, QRegion(combined));
+                    QCOMPARE(policies.size(), mixed.size());
+                    for (int i = 0; i < policies.size(); ++i) {
+                        QCOMPARE(policies[i].first, mixed[i].first);
+                        QCOMPARE(policies[i].second, mixed[i].second | quint64(64));
+                    }
+                }));
+        QCOMPARE(mixedCalls, 1);
+        bool unfamiliarSubmitted = false;
+        QVERIFY(!submitNavigationDismissal(
+                Policies{ { combined, quint64(128) | full } }, combined, navigation, text | full,
+                repair | full, modes, partial, full, 64, true,
+                [&](const QRegion &, const Policies &) { unfamiliarSubmitted = true; }));
+        QVERIFY(!unfamiliarSubmitted);
+        // A masked overlay covers only its painted/input region, not its gaps.
+        overlay.setMask(QRegion(0, 0, 100, 40));
+        QCOMPARE(navigationRefreshRegion(&owner),
+                 QRegion(bar.geometry()).subtracted(QRect(100, 340, 100, 20)));
+        overlay.hide();
+        QCOMPARE(navigationRefreshRegion(&owner), QRegion(bar.geometry()));
+        bar.hide();
+        QVERIFY(navigationRefreshRegion(&owner).isEmpty());
     }
 
     void hidingSelectionMenuKeepsDamageCompact_data()

@@ -178,18 +178,13 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
                 run.reader->checkpoint();
             else
                 run.reader->sleepReader();
-        } else if (busy || run.fallbackAlert)
+        } else if (run.fallbackAlert) {
             disposeForTransition([] { });
-        else if (!lifecycle->storageBlocked() && !lifecycle->shuttingDown()
-                 && ui::initializeInterfaceFonts(environment_.assets))
-            homeSleep->prepare(bindings_.enabled());
+        }
     };
     lifecycle->sleepViewReady = [this] {
-        if (run.reader && !busy) {
+        if (run.reader && !busy)
             run.reader->sleepViewReady();
-        } else if (!run.reader && !busy && !lifecycle->storageBlocked()) {
-            homeSleep->present();
-        }
     };
     lifecycle->beforeWake = [this] {
         homeSleep->clear();
@@ -244,11 +239,9 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         homeSleep->clear();
         if (mode == NativeLifecycle::Shutdown::Reboot)
             return;
-        if (run.reader && !busy && !BrowserHandoff::activeFor(run.reader))
+        if (run.reader && run.reader->isVisible() && !busy
+            && !BrowserHandoff::activeFor(run.reader))
             homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
-        else if (!run.reader && !busy && !run.fallbackAlert
-                 && ui::initializeInterfaceFonts(environment_.assets))
-            homeSleep->prepare(bindings_.enabled(), true);
     };
     lifecycle->prepareShutdown = [this](std::function<void()> ready) {
         homeAfterClose = false;
@@ -262,12 +255,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
             ready();
         });
         if (run.reader && !busy)
-            run.reader->prepareShutdown(
-                    [this] {
-                        homeSleep->persistPowerOff(run.identity);
-                        disposeForTransition([] { });
-                    },
-                    lifecycle->batteryLowShutdown());
+            run.reader->prepareShutdown([this] { disposeForTransition([] { }); },
+                                        lifecycle->batteryLowShutdown());
         else
             disposeForTransition([] { });
     };

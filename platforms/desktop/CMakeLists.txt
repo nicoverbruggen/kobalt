@@ -380,13 +380,13 @@ if(BUILD_TESTING)
             pageTurnTimingIgnoresNoopNavigation pageButtonsAfterTouchUseDeliveryTime pageGestureBurstIgnoresRapidTurns exitThroughReaderAndReopen exitGuardUsesTapTime staleSearchReplyIgnored searchSurvivesReflow
             searchHighlightClearsOnReflow
             sleepRequestFreezesOrientationBeforeHandoff closePublishesHeldOrientationBeforeBackgroundPaint
-            closeRestoresOrientationBeforeBackgroundPaint rotationOwnership customSleepScreenIsOptIn
-            closedReaderRetainsSleepScreen usbRetainsBackdropBeforeReleasingReader persistedSleepScreenRejectsStaleAndDamagedFrames
+            closeRestoresOrientationBeforeBackgroundPaint rotationOwnership readerUsesSelectedSleepScreen
+            closedReaderDoesNotSaveSleepScreen usbDoesNotSaveSleepScreen persistedSleepScreenRejectsStaleAndDamagedFrames
             homeSleepScreenRequiresUnambiguousLastBook nativeOpeningStatus
             sleepScreenUpdatesWhilePluggedIn sleepScreenDimsOnlyItsOwnedPage sleepTilesRepaintOnlyTheirArea
             sleepSnapshotMatchesTheDisplayedPage
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
-            sleepScreenModesKeepTheStockDefaultAndMigrateTheOptIn sleepCoverFitsWithoutCroppingOrDimming
+            sleepScreenDefaultsMigrateOnce sleepPngOverlaysUseEitherFolder sleepSettingsShowWhereToAddPngs sleepOverlayUsesTheDimmedPage sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus readingTimeStatus remoteKeyActivityRequiresActiveReading
             finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock idleTimers wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave
             progressChoiceKeepAndGo progressChoiceWaitsForSettings finishedSyncWithoutPositionKeepsLocalReading
@@ -714,7 +714,7 @@ if(BUILD_TESTING)
         "fonts:^(desktop\\.(publisherFontDefault|fontPagingClearsCaptions|kfFontVariants|opticalSize)|ui\\.fontSelectionDoesNotToggle|model\\.font-axes|platform\\.(font-sources|system-fonts)|resource\\.resource-provider)$"
         "progress:^(lifecycle\\.(progress.*|finish.*|nativeProgressWaitsForSleep)|model\\.(reading-pace|reading-speed|reading-progress|chapter-progress|logical-word-counter)|engine\\.document-word-count|platform\\.(native-progress|nickel-reading-pace-cache))$"
         "storage:^(model\\.(storage-assets|android-assets|profile-storage|record-writer|main-thread|reading-history)|session\\.reading-book|lifecycle\\.(closeWaitsFor.*|closeRetriesRequiredNativeSaves|closeWithUnusableSettings|sleepWaitsForNativeTimeBeforePosition|background.*|standaloneReadingHistory|revokedNativeDrainRetainsLocalSave|quitAfterFailedLocalSaveRetry|appearanceRetryCooldown|recoveryNoticeAfterFirstPage|activityBatchesAndLowBattery)|desktop\\.(sameProcessReadersDoNotRecoverEachOther|standaloneHistorySourceKeys)|platform\\.nickel-(event|reading)-save)$"
-        "sleep:^(lifecycle\\.(sleep.*|customSleepScreenIsOptIn|closedReaderRetainsSleepScreen|usb.*|persistedSleepScreen.*|homeSleepScreen.*|pageTurnsResumeWhenReaderIsShownAfterSleep|shutdownFinalSaveTimesOut|teardownRemovesApplicationFilter)|platform\\.(shutdown|sleep-persistence|kobo-power-screen|usb-removal|native-lifecycle)|desktop\\.deviceEmulation|model\\.engine-activity)$"
+        "sleep:^(lifecycle\\.(sleep.*|readerUsesSelectedSleepScreen|closedReaderDoesNotSaveSleepScreen|usb.*|persistedSleepScreen.*|homeSleepScreen.*|pageTurnsResumeWhenReaderIsShownAfterSleep|shutdownFinalSaveTimesOut|teardownRemovesApplicationFilter)|platform\\.(shutdown|sleep-persistence|kobo-power-screen|usb-removal|native-lifecycle)|desktop\\.deviceEmulation|model\\.engine-activity)$"
         "diagnostics:^(model\\.(diagnostics|crash-reports)|desktop\\.(diagnostics|storageDiagnostics)|platform\\.standby-(input|diagnostics))$"
         "kobo:^(platform\\.(startup-recovery|native-startup-wait|screensaver-loader|native-dialog-overlay|nickel-.*)|lifecycle\\.nativeOpeningStatus|model\\.qt-compat)$"
         "settings:^(desktop\\.(settings|lightDarkModeShortcut)|lifecycle\\.(appearance.*|uneditedPanelTransitions|overflowClosesCurrentPanel)|model\\.appearance-settings|component\\.(ui|acknowledgments)|ui\\.(regularIconWeight|connectedModalFooter))$"

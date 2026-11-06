@@ -78,54 +78,6 @@ void paintSleepBattery(QPainter &painter, const Battery &battery, int left, int 
     painter.setFont(previous);
 }
 
-// A battery that stands as tall as the given letters, from their baseline to
-// the top of their ascenders. Its width is its thickness.
-Battery uprightBattery(int percent, qreal letterHeight)
-{
-    auto battery = sleepBattery(percent);
-    battery.body = letterHeight / ui::batteryWidth(1);
-    battery.iconWidth = qCeil(battery.body);
-    return battery;
-}
-
-// Stands the icon upright between inkTop and baseline, with the percentage on
-// its right, centered on the ink of the letters beside it.
-void paintUprightBattery(QPainter &painter, const Battery &battery, int left, qreal inkTop,
-                         qreal baseline, const Content &content, const QColor &ink,
-                         const QColor &paper)
-{
-    const qreal length = baseline - inkTop;
-    const QPointF center(left + battery.body / 2, (inkTop + baseline) / 2);
-    const bool valid = content.batteryPercent >= 0 && content.batteryPercent <= 100;
-    const qreal scale = battery.body / int(ui::metrics::panel::batteryBodyHeight);
-    const qreal bodyLength = scale * int(ui::metrics::panel::batteryBodyWidth);
-    painter.save();
-    // A quarter turn to the left puts the terminal on top and fills the level
-    // from the bottom. The bolt is drawn afterwards so it stays upright.
-    painter.translate(center);
-    painter.rotate(-90);
-    ui::paintBattery(painter, QRectF(-length / 2, -battery.body / 2, bodyLength, battery.body),
-                     valid ? content.batteryPercent : -1, false, ink, paper);
-    painter.restore();
-    if (content.status == SleepStatus::Charging) {
-        // Center the bolt on the body, not on the body and terminal together.
-        ui::paintBatteryBolt(painter, center + QPointF(0, (length - bodyLength) / 2), scale, ink,
-                             paper);
-    }
-    // Place the percentage so the middle of its ink meets the middle of the
-    // status letters, rather than centering line boxes of different fonts.
-    const QRectF letters = ui::interfaceInkBounds(battery.text, battery.font);
-    const qreal textBaseline = center.y() - (letters.top() + letters.bottom()) / 2;
-    const QFont previous = painter.font();
-    painter.setFont(battery.font);
-    ui::drawInterfaceText(painter,
-                          QRect(left + battery.iconWidth + battery.gap,
-                                qRound(textBaseline - ui::interfaceLineAscent(battery.font)),
-                                battery.textWidth, ui::interfaceLineHeight(battery.font)),
-                          battery.text, Qt::AlignLeft | Qt::AlignTop);
-    painter.setFont(previous);
-}
-
 void paintCard(QPainter &painter, const QRect &card, const Content &content, const QColor &ink,
                const QColor &paper)
 {
@@ -161,72 +113,6 @@ void paintCard(QPainter &painter, const QRect &card, const Content &content, con
         ui::drawInterfaceText(painter, QRect(left, top, width, detailHeight),
                               ui::elideInterfaceText(content.remaining, detail, width));
     }
-}
-
-// A strip along the bottom edge. The read part of its top rule is thicker.
-void paintBand(QPainter &painter, const QRect &band, const Content &content, const QColor &ink,
-               const QColor &paper)
-{
-    painter.fillRect(band, paper);
-    painter.fillRect(QRect(band.left(), band.top(), band.width(), int(sleepMetrics::border)), ink);
-    if (content.percent >= 0) {
-        painter.fillRect(QRect(band.left(), band.top(),
-                               band.width() * qMin(content.percent, 100) / 100,
-                               int(sleepMetrics::bandRule)),
-                         ink);
-    }
-    painter.setPen(QPen(ink, int(sleepMetrics::border)));
-    const int padding = qMin(int(sleepMetrics::bandPadding), band.width() / 16);
-    const int gap = sleepMetrics::bandGap;
-    const int top = band.top() + int(sleepMetrics::bandRule);
-    const int height = band.height() - int(sleepMetrics::bandRule);
-    const int left = band.left() + padding;
-    const int width = band.width() - 2 * padding;
-    const QFont caption = ui::captionFont(sleepMetrics::captionText);
-    QStringList lines{ content.progress.toUpper() };
-    if (!content.remaining.isEmpty())
-        lines << content.remaining.toUpper();
-    const int captionHeight = ui::interfaceLineHeight(caption);
-    // Elide against the column's limit and align right in it. Eliding to the
-    // measured width can drop the last letter when the advance is fractional.
-    const int captionLimit = width / 2;
-    int captionWidth = 0;
-    for (auto &line : lines) {
-        line = ui::elideInterfaceText(line, caption, captionLimit);
-        captionWidth =
-                qMax(captionWidth, qMin(captionLimit, ui::interfaceTextWidth(line, caption)));
-    }
-    painter.setFont(caption);
-    int y = top
-            + (height - int(lines.size()) * captionHeight
-               - int(lines.size() - 1) * int(sleepMetrics::lineGap))
-                    / 2;
-    for (const auto &line : lines) {
-        ui::drawInterfaceText(painter,
-                              QRect(left + width - captionLimit, y, captionLimit, captionHeight),
-                              line, Qt::AlignRight | Qt::AlignVCenter);
-        y += captionHeight + int(sleepMetrics::lineGap);
-    }
-    const QFont title = ui::brandFont(sleepMetrics::bandTitleText);
-    const int titleTop = top + (height - ui::interfaceLineHeight(title)) / 2;
-    const int baseline = titleTop + ui::interfaceLineAscent(title);
-    const auto statusText = sleepStatusText(content.status);
-    const qreal inkTop = baseline + ui::interfaceInkBounds(statusText, title).top();
-    int available = width - captionWidth - gap;
-    Battery battery;
-    if (content.showsBattery()) {
-        // The battery sits as far from the status as the status sits from the edge.
-        battery = uprightBattery(content.batteryPercent, baseline - inkTop);
-        available -= padding + battery.width();
-    }
-    painter.setFont(title);
-    const auto status = ui::elideInterfaceText(statusText, title, qMax(0, available));
-    const int statusWidth = qMin(qMax(0, available), ui::interfaceTextWidth(status, title));
-    ui::drawInterfaceText(
-            painter, QRect(left, titleTop, statusWidth, ui::interfaceLineHeight(title)), status);
-    if (content.showsBattery())
-        paintUprightBattery(painter, battery, left + statusWidth + padding, inkTop, baseline,
-                            content, ink, paper);
 }
 
 // The ribbon's lines from its top edge. The height never depends on the
@@ -356,10 +242,8 @@ QImage sleepCoverBackground(const QImage &cover, QSize size)
 QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile)
 {
     switch (tile) {
-    case sleep::Tile::Band: {
-        const int height = qMin(int(sleepMetrics::bandHeight), size.height() / 4);
-        return { 0, size.height() - height, size.width(), height };
-    }
+    case sleep::Tile::None:
+        return {};
     case sleep::Tile::Bookmark: {
         const int width = qMin(int(sleepMetrics::ribbonWidth), size.width() / 3);
         const int right = qMin(int(sleepMetrics::ribbonRight), size.width() / 10);
@@ -379,17 +263,23 @@ QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile)
              qMin(int(sleepMetrics::width), size.width() - 2 * inset), height };
 }
 
+void dimSleepPage(QImage &page, bool dark)
+{
+    QPainter painter(&page);
+    painter.fillRect(page.rect(), ui::themeColors(dark).sleepDim);
+}
+
 QImage sleepScreenImage(QImage page, const QString &progress, const QString &remaining, bool dark,
                         int batteryPercent, SleepStatus status, bool dimPage, sleep::Tile tile,
                         int percent)
 {
-    if (page.isNull()) {
-        return {};
-    }
+    if (page.isNull())
+        return page;
+    if (dimPage)
+        dimSleepPage(page, dark);
+    if (tile == sleep::Tile::None)
+        return page;
     QPainter painter(&page);
-    if (dimPage) {
-        painter.fillRect(page.rect(), ui::themeColors(dark).sleepDim);
-    }
     const bool poweredOff = status == SleepStatus::PoweredOff;
     const QColor paper =
             poweredOff ? ui::themeColors(true).paper : ui::themeColors(dark).sleepPaper;
@@ -400,8 +290,7 @@ QImage sleepScreenImage(QImage page, const QString &progress, const QString &rem
     case sleep::Tile::Card:
         paintCard(painter, area, content, ink, paper);
         break;
-    case sleep::Tile::Band:
-        paintBand(painter, area, content, ink, paper);
+    case sleep::Tile::None:
         break;
     case sleep::Tile::Bookmark:
         // The ribbon is dark in both themes and keeps a white outline, so it

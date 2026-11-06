@@ -12,6 +12,7 @@
 #include "publication/publication.h"
 #include "publication/layout_compatibility.h"
 #include "storage/layout_cache.h"
+#include "storage/sleep_snapshot.h"
 #include <QFile>
 #include <QFileInfo>
 #include <QFontInfo>
@@ -1286,6 +1287,27 @@ void ReaderSession::coverImage(QSize maximumSize, std::function<void(QImage, QFi
                             const bool valid = guard->lease_ == lease && lease && !lease->revoked();
                             finished(valid ? std::move(image) : QImage(),
                                      valid ? source : QFileInfo());
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
+void ReaderSession::sleepOverlay(const QStringList &directories,
+                                 std::function<void(QImage)> finished)
+{
+    const auto lease = lease_;
+    const QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [guard, lease, directories, finished = std::move(finished)] {
+                auto image = lease && !lease->revoked() ? storage::loadSleepOverlay(directories)
+                                                        : QImage();
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, lease, image = std::move(image), finished]() mutable {
+                            if (guard && guard->lease_ == lease && lease && !lease->revoked())
+                                finished(std::move(image));
                         },
                         Qt::QueuedConnection);
             },

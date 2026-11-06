@@ -188,6 +188,10 @@ ReaderHostServices readerHostServices()
         return QStringLiteral("/mnt/onboard/Kobalt/Annotations");
     };
 
+    result.sleepOverlayDirectories = QStringList{
+        QStringLiteral(KOBALT_CONFIG_DIR "/screensaver"),
+        QStringLiteral("/mnt/onboard/.adds/screensaver"),
+    };
     result.deviceName = syncDeviceModel();
     result.colorDisplay = [] { return pageAnimationPanel() == AnimationPanel::Color; };
     result.downloadableDictionaries = false;

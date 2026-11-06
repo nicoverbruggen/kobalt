@@ -1,8 +1,12 @@
 #pragma once
 #include "reading/sleep_screen.h"
+#include <QStringList>
 class QImageWriter;
 
 namespace kobalt::storage {
+// Picks one usable transparent PNG from the supplied directories.
+QImage loadSleepOverlay(const QStringList &directories);
+
 // A disposable PNG, or metadata referring to the native full-size cover.
 // Both are atomically replaced and bounded. The token identifies Nickel's
 // committed last-read record, not an application release.

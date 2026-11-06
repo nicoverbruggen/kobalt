@@ -11,7 +11,9 @@
 #include <QElapsedTimer>
 #include <QDateTime>
 #include <QPainter>
+#include <algorithm>
 #include <cmath>
+#include <random>
 
 namespace kobalt::storage {
 namespace {
@@ -157,6 +159,37 @@ bool writeSleepSnapshot(const QString &path, const sleep::Snapshot &snapshot, co
 {
     mainthread::BlockingOperation blockingOperation("sleep-snapshot-write");
     return persistSnapshot(path, snapshot, token, nullptr);
+}
+
+QImage loadSleepOverlay(const QStringList &directories)
+{
+    QStringList candidates;
+    for (const auto &directory : directories) {
+        if (directory.isEmpty())
+            continue;
+        for (const auto &file :
+             QDir(directory).entryInfoList({ QStringLiteral("*.png") },
+                                           QDir::Files | QDir::Readable | QDir::NoSymLinks)) {
+            if (file.size() > 0 && file.size() <= maxBytes)
+                candidates.append(file.absoluteFilePath());
+        }
+    }
+    if (candidates.isEmpty())
+        return {};
+    std::mt19937 random(std::random_device{}());
+    std::shuffle(candidates.begin(), candidates.end(), random);
+    for (const auto &path : candidates) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly) || file.size() > maxBytes)
+            continue;
+        QImageReader reader(&file, "png");
+        if (!validSize(reader.size()))
+            continue;
+        auto image = reader.read();
+        if (validSize(image.size()) && image.hasAlphaChannel())
+            return image;
+    }
+    return {};
 }
 
 void removeSleepSnapshot(const QString &path)

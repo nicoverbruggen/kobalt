@@ -4,6 +4,7 @@
 #include "profile_database.h"
 #include "bookmark_store.h"
 #include "reading/appearance_settings.h"
+#include "reading/sleep_screen.h"
 #include "support/diagnostics.h"
 #include <QDir>
 #include <QFileInfo>
@@ -401,6 +402,10 @@ bool writeReadingActivity(const Paths &paths, const QString &identity, const QJs
     });
 }
 
+namespace {
+constexpr auto sleepDefaultsMigrated = "sleep_defaults_migrated";
+}
+
 JsonRead readPreferences(const QString &path)
 {
     auto read = readJsonFile(path);
@@ -409,6 +414,11 @@ JsonRead readPreferences(const QString &path)
     if (read.object.contains("schema") && read.object.value("schema").toDouble(-1) != 1)
         return { {}, ReadStatus::Unsupported };
     auto clean = appearance::cleanPreferences(read.object);
+    if (!clean.value(sleepDefaultsMigrated).toBool()) {
+        if (sleep::mode(clean) == sleep::Mode::Stock)
+            clean[sleep::preferenceKey] = sleep::value(sleep::Mode::Cover);
+        clean[sleepDefaultsMigrated] = true;
+    }
     clean["schema"] = 1;
     if (clean != read.object && !writeJson(path, clean))
         diagnostic("settings-cleanup-unsaved", {}, DiagnosticSeverity::Error);
@@ -424,6 +434,7 @@ bool writePreferences(const QString &path, const QJsonObject &object)
         || (object.contains("schema") && object.value("schema").toDouble(-1) != 1))
         return false;
     auto clean = appearance::cleanPreferences(object);
+    clean[sleepDefaultsMigrated] = true;
     clean["schema"] = 1;
     return writeJson(path, clean);
 }

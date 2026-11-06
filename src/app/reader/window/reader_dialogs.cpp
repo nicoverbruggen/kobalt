@@ -916,6 +916,8 @@ QString sleepLabel(sleep::Mode mode)
         return strings::get("settings.sleep_cover");
     case sleep::Mode::Page:
         return strings::get("settings.sleep_page");
+    case sleep::Mode::Overlay:
+        return strings::get("settings.sleep_overlay");
     }
     return {};
 }
@@ -929,6 +931,8 @@ QString sleepExplanation(sleep::Mode mode)
         return strings::get("settings.sleep_cover_description");
     case sleep::Mode::Page:
         return strings::get("settings.sleep_page_description");
+    case sleep::Mode::Overlay:
+        return strings::get("settings.sleep_overlay_description");
     }
     return {};
 }
@@ -938,8 +942,8 @@ QString sleepTileLabel(sleep::Tile tile)
     switch (tile) {
     case sleep::Tile::Card:
         return strings::get("settings.sleep_tile_card");
-    case sleep::Tile::Band:
-        return strings::get("settings.sleep_tile_band");
+    case sleep::Tile::None:
+        return strings::get("settings.sleep_tile_none");
     case sleep::Tile::Bookmark:
         return strings::get("settings.sleep_tile_bookmark");
     }
@@ -951,8 +955,8 @@ QString sleepTileExplanation(sleep::Tile tile)
     switch (tile) {
     case sleep::Tile::Card:
         return strings::get("settings.sleep_tile_card_description");
-    case sleep::Tile::Band:
-        return strings::get("settings.sleep_tile_band_description");
+    case sleep::Tile::None:
+        return strings::get("settings.sleep_tile_none_description");
     case sleep::Tile::Bookmark:
         return strings::get("settings.sleep_tile_bookmark_description");
     }
@@ -974,6 +978,7 @@ void Reader::showSleepScreen()
     sleepScreenButton->setCaption(sleepScreenButton->isEnabled()
                                           ? sleepLabel(sleep::mode(preferences)).toUpper()
                                           : strings::get("settings.unsupported_caption"));
+    sleepTileButton->setVisible(sleep::mode(preferences) != sleep::Mode::Stock);
     sleepTileButton->setCaption(sleepTileButton->isEnabled()
                                         ? sleepTileLabel(sleep::tile(preferences)).toUpper()
                                         : strings::get("settings.unsupported_caption"));
@@ -984,6 +989,8 @@ void Reader::closeSleepScreen()
     if (!sleepPopup) {
         return;
     }
+    if (sleep::mode(preferences) != sleep::Mode::Overlay)
+        sleepOverlay = {};
     sleepPopup->hide();
     sleepPopup->deleteLater();
     sleepPopup.clear();
@@ -1010,7 +1017,8 @@ void Reader::openSleepScreen()
     for (const auto mode : sleep::modes) {
         if (mode == sleep::mode(preferences))
             current = int(options.size());
-        options.append({ sleep::value(mode), sleepLabel(mode), sleepExplanation(mode) });
+        const bool enabled = mode != sleep::Mode::Overlay || !sleepOverlay.isNull();
+        options.append({ sleep::value(mode), sleepLabel(mode), sleepExplanation(mode), enabled });
     }
     openSleepChoice("rrSleepScreen", "rrSleep_", strings::get("settings.sleep_screen"), options,
                     current, [this](int index) {
@@ -1020,6 +1028,14 @@ void Reader::openSleepScreen()
                         if (saveSleepPreferences(next))
                             prepareSleepCover();
                     });
+    if (sleepOverlay.isNull())
+        prepareSleepOverlay();
+}
+
+void Reader::updateSleepOverlayOption()
+{
+    if (auto *option = sleepPopup->findChild<QWidget *>("rrSleep_overlay"))
+        option->setEnabled(!sleepOverlay.isNull());
 }
 
 void Reader::openSessionTimeout()
@@ -1097,7 +1113,8 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix,
     choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
     for (const auto &option : options)
-        choices->add(optionPrefix + option.value, option.label, option.explanation);
+        choices->add(optionPrefix + option.value, option.label, option.explanation)
+                ->setEnabled(option.enabled);
     choices->setCurrent(current);
     choices->chosen = [this, chosen = std::move(chosen)](int index) {
         chosen(index);

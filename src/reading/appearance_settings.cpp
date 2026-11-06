@@ -112,9 +112,6 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     preferences = globalPreferences(std::move(preferences));
     if (preferences.contains("schema") && preferences.value("schema").toDouble(-1) != 1)
         return preferences;
-    if (!preferences.contains(sleep::preferenceKey)
-        && preferences.value("kobalt_sleep_screen").isBool())
-        preferences[sleep::preferenceKey] = sleep::value(sleep::mode(preferences));
     preferences.remove("kobalt_sleep_screen");
     // Smart Wi-Fi power saving is not final yet. Until beta 7 its setting is
     // never saved, and a saved one is removed, so the saver stays off.
@@ -172,8 +169,8 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         preferences["vertical_spacing_scope"] =
                 verticalSpacingScope(preferences.value("vertical_spacing_scope"));
     choice("marks_sort", { "position", "newest", "oldest" });
-    choice("sleep_screen", { "stock", "cover", "page" });
-    choice("sleep_tile", { "card", "band", "bookmark" });
+    choice("sleep_screen", { "stock", "cover", "page", "overlay" });
+    choice("sleep_tile", { "card", "bookmark", "none" });
     choice("time_remaining_format", { "detailed", "approximate" });
     if (preferences.contains(sessionTimeout::preferenceKey)
         && !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))

@@ -74,6 +74,8 @@ struct ReaderHostServices
     // Optional host-resolved high-resolution cover. The reader decodes it on
     // its worker and falls back to the publication cover if it is unusable.
     QString coverImagePath;
+    // Optional host paths for user-supplied sleep PNGs.
+    QStringList sleepOverlayDirectories;
     // Optional host reader-selection preference. Both callbacks are supplied
     // together; a successful write affects future book openings.
     std::function<bool()> automaticBookOpening;

@@ -354,6 +354,8 @@ public:
     void coverImage(QSize maximumSize, std::function<void(QImage, QFileInfo)> finished,
                     QString preferredPath);
 
+    void sleepOverlay(const QStringList &directories, std::function<void(QImage)> finished);
+
     QString chapterTitle() const { return frame.state.value("chapter_title").toString(); }
 
     int chapterPage() const { return frame.state.value("chapter_page").toInt(); }

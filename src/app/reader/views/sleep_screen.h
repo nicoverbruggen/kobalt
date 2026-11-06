@@ -18,6 +18,7 @@ QImage sleepCoverBackground(const QImage &cover, QSize size);
 // The area a tile covers. It does not depend on the status, so a battery
 // update can repaint and refresh only this area.
 QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile = sleep::Tile::Card);
+void dimSleepPage(QImage &page, bool dark);
 // Takes ownership of one background and paints in place. The caller
 // releases the completed frame to the host before the device suspends.
 // percent is the reading progress for tiles that draw it; -1 leaves it out.

@@ -180,7 +180,6 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     }
     if (pageScrubber)
         pageScrubber->cancel();
-    auto backdrop = usb ? powerScreenSnapshot() : sleep::Snapshot{};
     sleepImage = {};
     presentation->clearSleepScreen();
     session->cancelPendingTurn();
@@ -193,15 +192,11 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     clockTimer->stop();
     setEnabled(false);
     auto completed = std::make_shared<bool>(false);
-    auto complete = [this, request, usb, finished, backdrop](const QString &location,
-                                                             const QString &error, bool mapped) {
+    auto complete = [this, request, usb, finished](const QString &location, const QString &error,
+                                                   bool mapped) {
         if (request != closeRequest)
             return;
-        saveTransition(request, usb, location, error, mapped, [this, usb, finished, backdrop] {
-            if (usb)
-                presentation->saveSleepScreen(backdrop);
-            finished();
-        });
+        saveTransition(request, usb, location, error, mapped, finished);
     };
     // Bound the engine mapping wait, not required storage acknowledgements.
     // USB must not release a session that still owns unsaved reading time.
@@ -346,6 +341,27 @@ void Reader::prepareSleepCover()
             services.coverImagePath);
 }
 
+void Reader::prepareSleepOverlay()
+{
+    if (sleepOverlayLoading || !presentation->supportsSleepScreen()
+        || services.sleepOverlayDirectories.isEmpty())
+        return;
+    sleepOverlayLoading = true;
+    const QPointer<Reader> guard(this);
+    session->sleepOverlay(services.sleepOverlayDirectories, [guard](QImage image) {
+        if (!guard)
+            return;
+        guard->sleepOverlayLoading = false;
+        const bool choosing = guard->sleepPopup
+                && guard->sleepPopup->objectName() == QStringLiteral("rrSleepScreenPopup");
+        if (!choosing && sleep::mode(guard->preferences) != sleep::Mode::Overlay)
+            return;
+        guard->sleepOverlay = std::move(image);
+        if (choosing)
+            guard->updateSleepOverlayOption();
+    });
+}
+
 sleep::Snapshot Reader::powerScreenSnapshot()
 {
     if (exportRunning)
@@ -353,7 +369,7 @@ sleep::Snapshot Reader::powerScreenSnapshot()
     if (lifecycleHidden && !sleepImage.isNull())
         return { sleepImage,     sleepOrientation, sleepProgress,
                  sleepRemaining, darkTheme,        sleep::mode(preferences),
-                 false,          sleepPercent,     sleep::tile(preferences) };
+                 false,          sleepPercent,     activeSleepTile };
     return captureSleepScreen();
 }
 
@@ -369,14 +385,19 @@ sleep::Snapshot Reader::captureSleepScreen()
     if (scenario::sleepPersistenceOptions().mode >= 0)
         mode = sleep::Mode(scenario::sleepPersistenceOptions().mode);
 #endif
-    if (mode == sleep::Mode::Stock || !presentation->supportsSleepScreen() || !foreground
-        || pixels <= 0 || pixels > 4 * 1024 * 1024 || !readyForPresentation()
+    if (mode == sleep::Mode::Stock || !presentation->supportsSleepScreen() || !isVisible()
+        || !foreground || pixels <= 0 || pixels > 4 * 1024 * 1024 || !readyForPresentation()
         || appearanceEdit.panelOpen() || session->temporaryTypography())
         return {};
     const bool useCover = mode == sleep::Mode::Cover && !sleepCover.isNull();
     auto frame = useCover ? sleepCoverBackground(sleepCover, page->size()) : page->snapshot(true);
     if (frame.isNull())
         return {};
+    const bool useOverlay = mode == sleep::Mode::Overlay && !sleepOverlay.isNull();
+    if (useOverlay) {
+        dimSleepPage(frame, darkTheme);
+        sleep::drawOverlay(frame, sleepOverlay);
+    }
     // A book marked as finished is done, wherever its last page sits.
     const int percent =
             book->finishedHere() ? 100 : pageProgressPercent(session->page(), session->pages());
@@ -387,7 +408,7 @@ sleep::Snapshot Reader::captureSleepScreen()
                                             remainingTime::approximate(preferences)),
                               darkTheme,
                               mode,
-                              !useCover,
+                              !useCover && !useOverlay,
                               percent,
                               sleep::tile(preferences) };
     if (useCover && sleepCoverSource.isFile()) {
@@ -424,6 +445,7 @@ void Reader::sleepReader()
     sleepProgress = snapshot.progress;
     sleepRemaining = snapshot.remaining;
     sleepPercent = snapshot.percent;
+    activeSleepTile = snapshot.tile;
     sleepBattery = services.battery();
     const auto status = sleepBattery.fullyCharged ? SleepStatus::Charged
             : sleepBattery.charging               ? SleepStatus::Charging
@@ -537,7 +559,9 @@ void Reader::updateSleepBattery()
                                              : SleepStatus::Sleeping;
     // Paint over the card in the retained frame. Reusing the composed background
     // avoids another cover decode or another dimming pass while asleep.
-    const auto tile = sleep::tile(preferences);
+    const auto tile = activeSleepTile;
+    if (tile == sleep::Tile::None)
+        return;
     sleepImage = sleepScreenImage(std::move(sleepImage), sleepProgress, sleepRemaining, darkTheme,
                                   battery.percent, status, false, tile, sleepPercent);
     if (!isVisible()) {
@@ -585,6 +609,8 @@ void Reader::wakeReader()
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
     lifecycleHidden = false;
+    if (sleep::mode(preferences) == sleep::Mode::Overlay)
+        prepareSleepOverlay();
     QTimer::singleShot(0, this, [this] { synchronizeKosync(); });
     if (finishDialog)
         finishDialog->show();
@@ -1354,11 +1380,14 @@ void Reader::closeEvent(QCloseEvent *event)
         finishExit();
         return;
     }
-    QElapsedTimer sleepDispatch;
-    sleepDispatch.start();
-    if (!closeWithoutSaving)
+#ifdef KOBALT_SCENARIO_PLAYER
+    if (!closeWithoutSaving && scenario::sleepPersistenceOptions().mode >= 0) {
+        QElapsedTimer sleepDispatch;
+        sleepDispatch.start();
         presentation->saveSleepScreen(exitSleepSnapshot);
-    closingTimes.add("sleep_dispatch", sleepDispatch);
+        closingTimes.add("sleep_dispatch", sleepDispatch);
+    }
+#endif
     exitSleepSnapshot = {};
     setProperty("reader_exit_clean_pending", true);
     setProperty("reader_preparing_handoff", true);
@@ -2484,10 +2513,14 @@ void Reader::finishExit()
     }
     exportRunning = true;
     dismissProgressChoice();
-    QElapsedTimer sleepCapture;
-    sleepCapture.start();
-    exitSleepSnapshot = captureSleepScreen();
-    closingTimes.add("sleep_capture", sleepCapture);
+#ifdef KOBALT_SCENARIO_PLAYER
+    if (scenario::sleepPersistenceOptions().mode >= 0) {
+        QElapsedTimer sleepCapture;
+        sleepCapture.start();
+        exitSleepSnapshot = captureSleepScreen();
+        closingTimes.add("sleep_capture", sleepCapture);
+    }
+#endif
     book->stopReading(true);
     setEnabled(false);
     closeSaveProgress = 0;

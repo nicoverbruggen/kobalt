@@ -97,8 +97,7 @@ namespace sleep {
 inline constexpr Px inset{ 48 }, bottom{ 96 }, width{ 620 }, padding{ 36 }, gap{ 20 }, lineGap{ 8 },
         border{ 2 };
 inline constexpr Px titleText{ 60 }, detailText{ 32 }, batteryText{ 28 }, batteryGap{ 12 };
-inline constexpr Px bandHeight{ 188 }, bandPadding{ 64 }, bandRule{ 12 }, bandTitleText{ 80 },
-        bandGap{ 28 }, captionText{ 26 };
+inline constexpr Px captionText{ 26 };
 inline constexpr Px ribbonWidth{ 280 }, ribbonRight{ 104 }, ribbonTop{ 120 }, ribbonPadding{ 22 },
         ribbonNotch{ 70 };
 inline constexpr Px ribbonOutline{ 4 }, ribbonPercentText{ 104 }, ribbonRule{ 70 }, ribbonGap{ 22 };

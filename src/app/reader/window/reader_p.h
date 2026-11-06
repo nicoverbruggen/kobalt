@@ -337,7 +337,9 @@ private:
     bool progressCheckDeferred = false;
     bool exitPending = false, exportRunning = false;
     bool lifecycleHidden = false;
-    QImage sleepImage, sleepCover;
+    QImage sleepImage, sleepCover, sleepOverlay;
+    bool sleepOverlayLoading = false;
+    sleep::Tile activeSleepTile = sleep::Tile::Bookmark;
     QFileInfo sleepCoverSource;
     sleep::Snapshot exitSleepSnapshot;
     QString sleepProgress, sleepRemaining;
@@ -548,6 +550,8 @@ private:
     void applyDarkMode(bool enabled);
     void applyBoldReading(bool enabled);
     void prepareSleepCover();
+    void prepareSleepOverlay();
+    void updateSleepOverlayOption();
     sleep::Snapshot captureSleepScreen();
     void updateSleepBattery();
     void showSleepScreen();
@@ -558,6 +562,7 @@ private:
     struct SleepOption
     {
         QString value, label, explanation;
+        bool enabled = true;
     };
 
     // Sleep and session choices share one popup.

@@ -167,12 +167,22 @@ int main(int argc, char **argv)
 #ifdef Q_OS_LINUX
     // Noto Sans Math may be installed system-wide. This fixture must begin
     // without it in Qt, then prove the private face is registered on demand.
+    // The configuration has no font folders. It keeps fontconfig's rule that
+    // names sans-serif as the default family: without a default family, Qt's
+    // fixed system font has no family, and rich text with <pre> crashes.
     QTemporaryDir fontEnvironment;
     require(fontEnvironment.isValid(), "Cannot isolate the component font environment");
     const auto fontConfig = fontEnvironment.filePath("fonts.conf");
     QFile config(fontConfig);
     require(config.open(QIODevice::WriteOnly), "Cannot create the component font configuration");
-    require(config.write("<fontconfig></fontconfig>\n") > 0,
+    require(config.write(
+                    "<fontconfig><match target=\"pattern\">"
+                    "<test qual=\"all\" name=\"family\" compare=\"not_eq\"><string>sans-serif</string></test>"
+                    "<test qual=\"all\" name=\"family\" compare=\"not_eq\"><string>serif</string></test>"
+                    "<test qual=\"all\" name=\"family\" compare=\"not_eq\"><string>monospace</string></test>"
+                    "<edit name=\"family\" mode=\"append_last\"><string>sans-serif</string></edit>"
+                    "</match></fontconfig>\n")
+                    > 0,
             "Cannot write the component font configuration");
     config.close();
     qputenv("FONTCONFIG_FILE", fontConfig.toUtf8());

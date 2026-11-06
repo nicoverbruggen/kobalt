@@ -32,8 +32,19 @@ jobs:
       - name: Check release helpers
         run: bash platforms/ci/test.sh
 
-  build-kobo:
+  native-tests:
     needs: validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build and run the full native test suite
+        run: bash platforms/ci/native-tests.sh
+
+  build-kobo:
+    needs: [validation, native-tests]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -57,7 +68,7 @@ jobs:
           compression-level: 0
 
   build-android:
-    needs: validation
+    needs: [validation, native-tests]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

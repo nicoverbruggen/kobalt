@@ -102,7 +102,7 @@ The additional native integration groups reuse the same production objects. Run 
 
 ## Linux
 
-Use a prepared native Qt 6.11 or newer Qt 6 SDK with Core, Gui, Widgets, Network and Sql. Headless checks also need Test, matching GuiPrivate headers, and the minimal platform plugin. Desktop builds use sensorless orientation by default. Set `-DKOBALT_DESKTOP_SENSORS=ON` with a matching Qt Sensors module to run the real sensor adapter and sensor-specific integration assertions. Manual rotation and sensorless lifecycle checks run in the default build. Kobo and Android keep real sensor support. Install CMake 3.22 or later, Ninja, a C/C++ compiler, make, patch, pkg-config, Git, zip, and libpng/zlib development packages. Never build Qt modules as part of the application build. Distribution Qt packages are supported when they meet these requirements; keep all Qt components from the same SDK.
+Use a prepared native Qt 6.11 or newer Qt 6 SDK with Core, Gui, Widgets, Network and Sql. The kobuild Linux image provides one; [GitHub builds](#github-builds-and-tagged-releases) describes how to run the suite in it. Headless checks also need Test, matching GuiPrivate headers, and the minimal platform plugin. Desktop builds use sensorless orientation by default. Set `-DKOBALT_DESKTOP_SENSORS=ON` with a matching Qt Sensors module to run the real sensor adapter and sensor-specific integration assertions. Manual rotation and sensorless lifecycle checks run in the default build. Kobo and Android keep real sensor support. Install CMake 3.22 or later, Ninja, a C/C++ compiler, make, patch, pkg-config, Git, zip, and libpng/zlib development packages. Never build Qt modules as part of the application build. Distribution Qt packages are supported when they meet these requirements; keep all Qt components from the same SDK.
 
 Run from `platforms/desktop/`:
 
@@ -139,8 +139,8 @@ The Kobo target selects the suspend-inclusive boot clock for reading duration on
 The `qt5` and `qt6` presets consume prepared kobuild SDKs, including Sensors. Compiler, sysroot and Qt repairs belong in kobuild. Pull the selected SDK images before building:
 
 ```sh
-docker pull ghcr.io/nicoverbruggen/kobuild:qt5-v0.4.0
-docker pull ghcr.io/nicoverbruggen/kobuild:qt6-v0.4.0
+docker pull ghcr.io/nicoverbruggen/kobuild:qt5-v0.5.0
+docker pull ghcr.io/nicoverbruggen/kobuild:qt6-v0.5.0
 bash platforms/kobo/build.sh qt5
 bash platforms/kobo/build.sh qt6
 ```
@@ -162,7 +162,7 @@ Run `bash platforms/kobo/build.sh qt5-diagnostic` for firmware 4, or `qt6-diagno
 The Android project builds a signed debug APK through Qt's standard CMake `apk` target. It uses the prepared multi-architecture kobuild image; Docker selects its native host variant. Both variants target Android `arm64-v8a`.
 
 ```sh
-docker pull ghcr.io/nicoverbruggen/kobuild:android-v0.4.0
+docker pull ghcr.io/nicoverbruggen/kobuild:android-v0.5.0
 bash platforms/android/build.sh
 ```
 
@@ -206,7 +206,9 @@ Stop and reap run-owned helper processes and remove temporary profiles, staging 
 
 ## GitHub builds and tagged releases
 
-`.github/workflows/ci.yml` builds Qt5, Qt6 and a signed Android release APK on branch pushes and tags. Helper checks validate version inputs, source pins and missing-key failures. Kobo jobs check the system archive member, numeric root ownership and executable permissions. Desktop application builds, native tests and screenshot galleries run locally through the Mac or Linux presets; they are not CI jobs.
+`.github/workflows/ci.yml` builds Qt5, Qt6 and a signed Android release APK on branch pushes and tags. Helper checks validate version inputs, source pins and missing-key failures. Before the package builds, the `native-tests` job builds and runs the full native suite on Linux with `platforms/ci/native-tests.sh`, in the pinned kobuild Linux image `linux-v0.5.0`. The Kobo and Android jobs wait for it. Each Kobo job then runs the [Kobo adapter tests](validation/kobo.md#pewter-the-fake-nickel) before it builds its package, and checks the system archive member, numeric root ownership and executable permissions. Desktop application builds and screenshot galleries run locally through the Mac or Linux presets; they are not CI jobs.
+
+To run the CI suite locally in the same image, run `bash platforms/ci/native-tests.sh` from the repository root. It pulls the pinned image. Set `KOBALT_LINUX_IMAGE` to use another prepared image without pulling, such as a local kobuild build, and `JOBS` to set the parallelism. Outputs go to `build/desktop-linux/` and dependencies to the shared dependency cache.
 
 A tag such as `v1.0-beta.4` supplies the displayed version and Android version name. Package filenames stay fixed across releases so download links remain compatible: `Kobalt-qt5.zip`, `Kobalt-qt6.zip`, `Kobalt-android-arm64.apk` and `Kobalt-sources.tar.gz`. Branch builds use the version in `assets/manifest.json`. CI checks that a triggering tag identifies the checked-out commit. Local builds can set `KOBALT_RELEASE_VERSION` to test the same path without editing the tracked asset manifest.
 

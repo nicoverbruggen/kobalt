@@ -6,6 +6,12 @@ These checks cover progress percentages, chapter progress, native progress, prog
 
 On Kobo, Nickel's sync and USB signals start a progress check. A failed read repeats at the next checks, up to three times after each signal. A one-minute read is only the fallback when those signals cannot be connected. The test bridge has no change signals, so the `lifecycle` checks use that fallback.
 
+The progress checks include a changed native position with an unchanged or older nonzero timestamp and an unread reset that clears the timestamp and location. Each check reads the current committed native row. The reader must offer a conflict choice, and choosing the local position must allow the next save. A choice from an earlier alert must not acknowledge a different current position.
+
+Same-timestamp KEPUB span locations that drop a positive character offset to zero or omit it keep the precise local position and allow the next save without a choice. Model and session checks retain conflicts for other changed positions, timestamps and statuses, and for normalization of an unacknowledged position. A genuine same-timestamp move to the same span start has the same representation and follows this rule.
+
+Lifecycle checks also cover closing after an offset round trip or a conflict choice, saving a kept local position at the next sleep without a page turn, and delaying a progress choice until the image viewer closes.
+
 These checks do not establish physical Kobo or Android behavior.
 
 ## Clara BW reading time

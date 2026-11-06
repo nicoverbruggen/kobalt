@@ -19,6 +19,7 @@
 #include "ui/style/scale.h"
 #include "app/reader/views/reading_page.h"
 #include "app/reader/views/kosync_notice.h"
+#include "app/reader/views/image_viewer.h"
 #include "app/reader/views/sleep_screen.h"
 #include "platforms/standalone/canvas.h"
 #include "platforms/desktop/services.h"
@@ -4477,6 +4478,8 @@ private slots:
         host.window()->wakeReader();
         QTRY_VERIFY(dialog && dialog->isVisible());
         choice->click();
+        if (markFinished || exitRequested)
+            QVERIFY(host.window()->closingTiming().started.isValid());
         QTRY_VERIFY(!dialog);
         if (markFinished || exitRequested) {
             QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
@@ -6452,6 +6455,25 @@ private slots:
             QVERIFY(host.progress->current == before);
         }
         QCOMPARE(stored(), anchor);
+        if (outcome == "saved") {
+            host.window()->wakeReader();
+            QTRY_VERIFY(!host.session()->busy());
+            QCOMPARE(host.session()->state().value("position").toString(), anchor);
+            host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7",
+                                     host.progress->current.modified + 100, 1, true });
+            host.window()->progressTick();
+            QWidget *card = nullptr;
+            QTRY_VERIFY((card = host.window()->findChild<QWidget *>("rrSyncedPosition"))
+                        && card->isVisible());
+            auto *keep = card->findChild<QPushButton *>("rrKeepPosition");
+            QVERIFY(keep);
+            QTest::mouseClick(keep, Qt::LeftButton);
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+            QTRY_VERIFY(!host.session()->busy());
+            host.window()->sleepReader();
+            QCOMPARE(host.progress->writes, writes + 2);
+            QCOMPARE(host.progress->current.location, expected);
+        }
     }
 
     // Checks that a failed appearance save stops after three attempts, page turns and background saves do not retry it, and a commit does.
@@ -6925,21 +6947,34 @@ private slots:
     void progressChoiceKeepAndGo_data()
     {
         QTest::addColumn<bool>("go");
-        QTest::newRow("keep") << false;
-        QTest::newRow("go") << true;
+        QTest::addColumn<bool>("sameTimestamp");
+        QTest::addColumn<bool>("roundTrip");
+        QTest::addColumn<bool>("closeBook");
+        QTest::newRow("keep") << false << false << false << false;
+        QTest::newRow("go") << true << false << false << false;
+        QTest::newRow("equal-time-keep") << false << true << false << false;
+        QTest::newRow("equal-time-go") << true << true << false << false;
+        QTest::newRow("offset-round-trip") << false << true << true << false;
+        QTest::newRow("offset-round-trip-close") << false << true << true << true;
+        QTest::newRow("equal-time-keep-close") << false << true << false << true;
     }
 
     void progressChoiceKeepAndGo()
     {
         QFETCH(bool, go);
+        QFETCH(bool, sameTimestamp);
+        QFETCH(bool, roundTrip);
+        QFETCH(bool, closeBook);
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         const auto identity =
                 QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
         host.progress = std::make_shared<test::HostProgress>();
-        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.progress->current = { identity,
+                                   roundTrip ? "OEBPS/c1.xhtml#kobo.1.1:105" : "OEBPS/c1.xhtml",
+                                   100, 1, true };
         host.positions = nickel::positionCodec();
-        QSignalSpy opened(&host, &ReaderFixture::opened);
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
         host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         Canvas canvas(host.window(), nativeSize);
@@ -6953,9 +6988,33 @@ private slots:
         host.window()->progressTick();
         QTest::qWait(200);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+        QString mappingError;
+        const auto precise = host.session()->savedNativePosition(&mappingError);
+        QVERIFY2(mappingError.isEmpty(), qPrintable(mappingError));
+        if (roundTrip) {
+            const auto anchor = host.session()->state().value("position").toString();
+            host.progress->publish({ identity, "OEBPS/c1.xhtml#kobo.1.1:0", 100, 1, true });
+            if (closeBook) {
+                host.window()->close();
+                QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 3000);
+                QCOMPARE(host.progress->writes, 1);
+                QCOMPARE(host.progress->current.location, precise);
+                return;
+            }
+            host.window()->progressTick();
+            QCoreApplication::processEvents();
+            QVERIFY(!host.book()->pendingProgress());
+            QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+            QCOMPARE(host.session()->state().value("position").toString(), anchor);
+            return;
+        }
         // Another device saved a position later in the book.
-        host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
-        host.window()->progressTick();
+        host.progress->publish(
+                { identity, "OEBPS/c3.xhtml#kobo.8.1:7", sameTimestamp ? 100 : 200, 1, true });
+        if (closeBook)
+            host.window()->close();
+        else
+            host.window()->progressTick();
         QWidget *card = nullptr;
         QTRY_VERIFY_WITH_TIMEOUT((card = host.window()->findChild<QWidget *>("rrSyncedPosition"))
                                          && card->isVisible(),
@@ -6968,6 +7027,12 @@ private slots:
                 card->findChild<QPushButton *>(go ? "rrGoToSyncedPosition" : "rrKeepPosition");
         QVERIFY(choice);
         QVERIFY(click(canvas, choice));
+        if (closeBook) {
+            QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 3000);
+            QCOMPARE(host.progress->writes, 1);
+            QCOMPARE(host.progress->current.location, precise);
+            return;
+        }
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QTRY_VERIFY(!host.session()->busy());
         if (go)
@@ -6981,8 +7046,16 @@ private slots:
     }
 
     // Checks that a newer synced position waits while Settings covers the page, and asks once Settings closes.
+    void progressChoiceWaitsForSettings_data()
+    {
+        QTest::addColumn<bool>("image");
+        QTest::newRow("settings") << false;
+        QTest::newRow("image") << true;
+    }
+
     void progressChoiceWaitsForSettings()
     {
+        QFETCH(bool, image);
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         const auto identity =
@@ -7000,12 +7073,24 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QTRY_VERIFY(!host.session()->busy());
         host.window()->progressTick();
-        auto *page = host.window()->findChild<QWidget *>("rrPage");
-        QVERIFY(page);
-        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
-        QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
-        auto *close = host.window()->findChild<QPushButton *>("rrSettingsClose");
+        QPushButton *close = nullptr;
+        if (image) {
+            auto *viewer = static_cast<ImageViewer *>(
+                    host.window()->findChild<QWidget *>("rrImageViewer"));
+            QVERIFY(viewer);
+            viewer->open();
+            QImage picture(200, 200, QImage::Format_RGB32);
+            picture.fill(Qt::white);
+            viewer->setImage(picture);
+            close = viewer->findChild<QPushButton *>("rrImageClose");
+        } else {
+            auto *page = host.window()->findChild<QWidget *>("rrPage");
+            QVERIFY(page);
+            QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+            QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+            close = host.window()->findChild<QPushButton *>("rrSettingsClose");
+        }
         QTRY_VERIFY(close && close->isVisible());
         // The platform reports a newer position while Settings is open.
         host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });

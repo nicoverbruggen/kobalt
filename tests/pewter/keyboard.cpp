@@ -136,6 +136,15 @@ int main(int argc, char **argv)
     require(frame->property("script").toInt() == Symbols,
             "language change did not rebuild keyboard");
     require(frame->isVisible(), "language change hid keyboard");
+    controller = frame->findChild<SearchKeyboardController *>();
+    emit controller->languageChanged(Latin);
+    editor.clearFocus();
+    keyboard.hide();
+    QCoreApplication::processEvents();
+    require(!frame->isVisible(), "a queued language change reopened a dismissed keyboard");
+    require(keyboard.show(), "the dismissed keyboard did not reopen explicitly");
+    require(frame->property("script").toInt() == Latin,
+            "explicit reopening lost the pending language choice");
     keyboard.hide();
     {
         kobalt::NativeKeyboard temporary(&host, &editor);

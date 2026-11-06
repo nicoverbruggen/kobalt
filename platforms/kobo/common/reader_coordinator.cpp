@@ -215,7 +215,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
                 // reader holding Nickel's backing store indefinitely.
                 kobalt::diagnostic("resume-authorization-unavailable", {},
                                    kobalt::DiagnosticSeverity::Warning);
-                disposeForTransition([this] { status("authorization-unavailable"); });
+                // An unverified account must not receive native progress or time writes.
+                disposeForTransition([this] { status("authorization-unavailable"); }, false);
             }
         }
     };

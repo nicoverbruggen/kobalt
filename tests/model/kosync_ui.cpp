@@ -334,6 +334,10 @@ int main(int argc, char **argv)
                 "success automatically dismisses after at least 1.5 seconds");
         QCoreApplication::processEvents();
         require(notice.isVisible() && completions == 0, "success does not disappear immediately");
+        host.hide();
+        host.show();
+        require(notice.isVisible() && dismissal->isActive(),
+                "a restored parent keeps the success notice dismissal armed");
         dismissal->stop();
         QMetaObject::invokeMethod(dismissal, "timeout", Qt::DirectConnection);
         require(completions == 1 && !notice.isVisible(),

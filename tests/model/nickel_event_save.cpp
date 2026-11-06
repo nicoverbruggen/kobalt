@@ -79,6 +79,30 @@ int main(int argc, char **argv)
                     && query.value(0).toInt() == 1,
             "Failed transaction ownership changed saved events");
     query.finish();
+    // BEGIN IMMEDIATE can succeed while another connection is reading, but
+    // COMMIT must wait for that reader. A failed commit must release our lock.
+    {
+        auto reader = QSqlDatabase::addDatabase("QSQLITE", "late-event-reader");
+        reader.setDatabaseName(path);
+        require(reader.open(), "Open reader across event commit");
+        QSqlQuery reading(reader);
+        require(reading.exec("BEGIN") && reading.exec("SELECT * FROM events") && reading.next(),
+                "Hold a shared lock across event commit");
+        require(!kobalt::nickel::saveNativeEvents(
+                        [&] { return query.exec("BEGIN IMMEDIATE"); },
+                        [&] { return query.exec("INSERT INTO events VALUES (3)"); },
+                        [&](bool commit) { return query.exec(commit ? "COMMIT" : "ROLLBACK"); }),
+                "A shared reader unexpectedly allowed the event commit");
+        reading.finish();
+        require(reading.exec("ROLLBACK"), "Release event reader");
+        reader.close();
+    }
+    QSqlDatabase::removeDatabase("late-event-reader");
+    require(save(0), "Failed event commit left a transaction that blocked every retry");
+    require(query.exec("SELECT COUNT(*) FROM events WHERE id=3") && query.next()
+                    && query.value(0).toInt() == 0,
+            "A failed event commit was not rolled back");
+    query.finish();
     bool rolledBack = false;
     require(!kobalt::nickel::saveNativeEvents([] { return true; }, [] { return false; },
                                               [&](bool commit) {

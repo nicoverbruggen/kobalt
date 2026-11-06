@@ -91,13 +91,15 @@ bool DatabaseAdapter::endTransaction(QString name, bool commit)
     const bool ended = query.exec(rollback ? QStringLiteral("ROLLBACK") : QStringLiteral("COMMIT"));
     if (ended)
         pewter::setTransactionOpen(false);
-    return ended && !rollback;
+    return ended && !(commit && pewter::options().commitFails);
 }
 
 Volume VolumeManager::getById(const QString &id, const QString &database)
 {
     record("VolumeManager::getById", { { "id", id }, { "database", database } });
-    return Volume(new VolumeData{ id, pewter::loadContent(pewter::nickelDatabase(), id) });
+    const auto cached = pewter::options().cachedVolume;
+    return Volume(new VolumeData{
+            id, cached.isEmpty() ? pewter::loadContent(pewter::nickelDatabase(), id) : cached });
 }
 
 bool VolumeManager::updateFields(const QString &id, const QMap<QString, QVariant> &fields,
@@ -147,6 +149,8 @@ template <class T>
 Cache<T> *Repository::refreshCache(const QString &database)
 {
     record("Repository::refreshCache", { { "database", database } });
+    if (pewter::options().refreshClearsCache)
+        pewter::options().cachedVolume.clear();
     return nullptr;
 }
 

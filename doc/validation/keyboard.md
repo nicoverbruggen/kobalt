@@ -2,7 +2,9 @@
 
 Label `keyboard`. Build `mac-tests`, then run `ctest --preset mac -L keyboard` from `platforms/desktop/`. `ctest --preset mac -N -L keyboard` lists its tests.
 
-These checks cover the widget keyboard layouts, Shift and Caps Lock, accents, symbols, placement and lifetime. The shared keyboard factory uses Qt Widgets on Kobo and desktop. Android keeps its native keyboard. `component.kosync-ui`, in [KOSync](kosync.md), also types through the real widget keyboard in the account editors.
+These checks cover the widget keyboard layouts, Shift and Caps Lock, accents, symbols, placement and lifetime. Desktop uses the widget keyboard. Kobo uses Nickel's keyboard through the native adapter. Android keeps its native keyboard. `component.kosync-ui`, in [KOSync](kosync.md), also types through the real widget keyboard in the account editors.
+
+The [Pewter keyboard checks](kobo.md#native-allocations) exercise both Kobo adapters. They cover language changes queued before dismissal: the keyboard must stay hidden and use the chosen language when explicitly reopened.
 
 The rounded-corner checks inspect the composited keyboard, because a capture of the isolated widget fills the exposed corners with that widget's own palette.
 

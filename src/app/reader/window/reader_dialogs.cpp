@@ -221,7 +221,7 @@ bool Reader::progressBlocked() const
             || chapterGraph->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible()
             || linksActive() || lookupPending || appearanceEdit.panelOpen()
             || appearanceEdit.applying() || general->isVisible() || choices->isVisible()
-            || acknowledgments->isVisible();
+            || acknowledgments->isVisible() || imageViewer->isVisible();
 }
 
 void Reader::dismissProgressChoice()
@@ -301,6 +301,7 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
         if (progressBlocked())
             return;
         book->acknowledge(shown, false);
+        savedNativeAnchor.clear();
         dismissProgressChoice();
         save(false, true);
         refresh();
@@ -329,6 +330,7 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
                 return;
             }
             book->acknowledge(shown, true);
+            savedNativeAnchor.clear();
             dismissProgressChoice();
             save(false, true);
         });

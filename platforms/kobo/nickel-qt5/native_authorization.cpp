@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "native_account.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "platforms/kobo/common/native_authorization.h"
 #include "support/diagnostics.h"
@@ -72,18 +73,15 @@ struct Api
 
     // Firmware 4 exports no accessor for the signed-in user. Read its ID from
     // committed data. A signed-out device has no row and gives an empty ID.
-    QString account() const
+    nickel_qt5::AccountRead account() const
     {
-        QString result;
+        nickel_qt5::AccountRead result;
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", "kobalt-authorization-account");
             db.setDatabaseName(connection(dbName(device()), false).databaseName());
-            db.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
-            if (db.open()) {
-                QSqlQuery query(db);
-                if (query.exec("SELECT UserID FROM user") && query.next())
-                    result = query.value(0).toString();
-            }
+            db.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=0");
+            if (db.open())
+                result = nickel_qt5::readAccount(db);
             db.close();
         }
         QSqlDatabase::removeDatabase("kobalt-authorization-account");
@@ -157,7 +155,10 @@ bool NativeAuthorization::begin(const QString &book)
     end();
     if (!connected_ || book.isEmpty() || !api().databaseOpen())
         return false;
-    account_ = api().account();
+    const auto account = api().account();
+    if (!account.valid)
+        return false;
+    account_ = account.identity;
     book_ = book;
     generation_ = ++activeGeneration;
     active = this;
@@ -176,6 +177,8 @@ void NativeAuthorization::end()
     account_.clear();
     pending_ = queued_ = invalidated_ = false;
     generation_ = 0;
+    accountRetries_ = 0;
+    ++accountCheck_;
 #ifndef KOBALT_READER_HARDWARE
     testNextCheck = TestCheck::Native;
 #endif
@@ -241,6 +244,8 @@ void NativeAuthorization::requestCheck()
     if (book_.isEmpty() || invalidated_)
         return;
     pending_ = true;
+    accountRetries_ = 3;
+    ++accountCheck_;
     if (blocked_ || queued_ || checking_)
         return;
     queued_ = true;
@@ -282,7 +287,23 @@ bool NativeAuthorization::checkNow()
     checking_ = true;
     const auto epoch = generation_;
     const auto &native = api();
-    if (native.account() != account_)
+    const auto account = nickel_qt5::checkAccount(native.account(), account_);
+    if (account == nickel_qt5::AccountCheck::Deferred) {
+        checking_ = false;
+        pending_ = true;
+        diagnostic("authorization-check-deferred");
+        if (accountRetries_ > 0) {
+            --accountRetries_;
+            const auto check = accountCheck_;
+            kobalt::qt::later(100, this, [this, epoch, check] {
+                if (epoch == generation_ && check == accountCheck_ && pending_ && !blocked_)
+                    checkNow();
+            });
+        }
+        return false;
+    }
+    accountRetries_ = 0;
+    if (account == nickel_qt5::AccountCheck::Changed)
         consume(Reason::Account, {}, epoch);
     if (!invalidated_ && epoch == generation_) {
         const auto volume = native.get(book_, native.dbName(native.device()));

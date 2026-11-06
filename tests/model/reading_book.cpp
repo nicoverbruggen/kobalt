@@ -1486,6 +1486,66 @@ int main(int argc, char **argv)
         require(snapshot.value("nickel_progress").toObject() == calls.current.json()
                         && snapshot.value("native_writeback") == QStringLiteral("verified"),
                 "Verified native baseline changed");
+        calls.current.location = "chapter.xhtml#remote:0";
+        const int beforeEqualTimeSave = calls.writes;
+        require(!book.writeNative("position", {})
+                        && book.nativeSaveResult() == ReadingBook::NativeSave::Conflict
+                        && calls.writes == beforeEqualTimeSave,
+                "Equal-time native change became an unrecoverable save failure");
+        book.acknowledge(book.candidate(), false);
+        require(book.writeNative("position", {})
+                        && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+                        && calls.writes == beforeEqualTimeSave + 1,
+                "Keeping the local position did not recover equal-time writeback");
+        require(book.checkpoint(&snapshot)
+                        && snapshot.value("native_writeback_error").toString().isEmpty(),
+                "Recovered writeback retained an error");
+        calls.current.location = "chapter.xhtml#older:4";
+        --calls.current.modified;
+        const int beforeOlderSave = calls.writes;
+        require(calls.current.modified > 0 && !book.writeNative("position", {})
+                        && book.nativeSaveResult() == ReadingBook::NativeSave::Conflict
+                        && calls.writes == beforeOlderSave,
+                "Older authoritative native position became an unrecoverable save failure");
+        book.acknowledge(book.candidate(), false);
+        require(book.writeNative("position", {})
+                        && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+                        && calls.writes == beforeOlderSave + 1,
+                "Keeping local progress did not recover an older authoritative position");
+        calls.current.location.clear();
+        calls.current.status = 0;
+        calls.current.modified = 0;
+        const int beforeUnreadSave = calls.writes;
+        require(!book.writeNative("position", {})
+                        && book.nativeSaveResult() == ReadingBook::NativeSave::Conflict
+                        && calls.writes == beforeUnreadSave,
+                "Unread native reset became an unrecoverable save failure");
+        book.acknowledge(book.candidate(), false);
+        require(book.writeNative("position", {})
+                        && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+                        && calls.writes == beforeUnreadSave + 1,
+                "Keeping local progress did not recover an unread reset");
+        // A same-time KEPUB offset round trip must preserve the exact local
+        // anchor and allow the next native save without a conflict choice.
+        const auto localPosition = book.session()->state().value("position").toString();
+        const QString precise = "chapter.xhtml#kobo.50.2:105";
+        for (const auto &normalized : { QStringLiteral("chapter.xhtml#kobo.50.2:0"),
+                                        QStringLiteral("chapter.xhtml#kobo.50.2") }) {
+            require(book.writeNative(precise, {}), "Cannot establish a precise native baseline");
+            calls.current.location = normalized;
+            book.observeProgress();
+            require(!book.pendingProgress()
+                            && book.session()->state().value("position").toString()
+                                    == localPosition,
+                    "Dropped native offset moved local progress or opened a choice");
+            const int beforeRoundTripSave = calls.writes;
+            require(book.writeNative(precise, {})
+                            && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+                            && calls.writes == beforeRoundTripSave + 1 && calls.location == precise
+                            && book.session()->state().value("position").toString()
+                                    == localPosition,
+                    "Normalized native baseline blocked or changed the precise local save");
+        }
         const auto committed = calls.current;
         calls.failWrite = true;
         require(book.writeNative("position-two", {}),

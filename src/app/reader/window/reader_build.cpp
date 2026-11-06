@@ -536,6 +536,7 @@ void Reader::buildReadingPage()
         observeReading();
         page->cleanRefresh(true);
         updateOrientationBlock();
+        progressTick();
     };
     page->imageHeld = [this](QPoint point) {
         if (session->busy() || lifecycleHidden || closing || exitPending || exportRunning

@@ -1381,6 +1381,7 @@ void Reader::closeEvent(QCloseEvent *event)
         stopping.start();
         book->stopReading(true);
         closingTimes.add("session", stopping);
+        diagnostic("exit-session-stopped", { { "elapsed_ms", double(stopping.elapsed()) } });
         if (appearanceEdit.panelOpen() || general->isVisible())
             dismissControls();
         finishExit();
@@ -2518,6 +2519,9 @@ void Reader::finishExit()
         showFinishChoice();
         return;
     }
+    if (!closingTimes.started.isValid())
+        closingTimes.started.start();
+    diagnostic("exit-save-ready", { { "elapsed_ms", double(closingTimes.started.elapsed()) } });
     exportRunning = true;
     dismissProgressChoice();
 #ifdef KOBALT_SCENARIO_PLAYER
@@ -2549,15 +2553,21 @@ void Reader::saveExit(quint64 request)
         failExit(request, strings::get("annotations.change_not_saved"));
         return;
     }
-    book->checkpointForClose([this, request](bool saved) {
+    diagnostic("exit-checkpoint-start", { { "pending_wait_ms", double(closeStage.elapsed()) } });
+    QElapsedTimer checkpointTimer;
+    checkpointTimer.start();
+    book->checkpointForClose([this, request, checkpointTimer](bool saved) {
         if (request != closeRequest || !exportRunning || lifecycleHidden)
             return;
+        diagnostic("exit-checkpoint-end",
+                   { { "elapsed_ms", double(checkpointTimer.elapsed()) }, { "saved", saved } });
         closingTimes.add("checkpoint", closeStage);
         closeStage.restart();
         if (!saved) {
             failExit(request);
             return;
         }
+        diagnostic("exit-native-queued");
         session->nativePosition([this, request](const QString &location, const QString &error) {
             finishExitNative(request, location, error);
         });

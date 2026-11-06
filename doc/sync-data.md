@@ -33,7 +33,7 @@ The page turn must never wait for storage. All writes to Nickel's database use N
 
 `NativeProgress` (`platforms/kobo/common/native_progress.h`, `nickel-qt5/native_progress.cpp`, `nickel-qt6/native_progress.cpp`) reads the book row on a separate read-only SQLite connection with a 100 ms busy timeout: `ContentID`, `ChapterIDBookmarked`, `DateLastRead`, `ReadStatus`, `___PercentRead`, `ReadStateSynced`, `FirstTimeReading`, `RestOfBookEstimate`, `CurrentChapterEstimate`, `CurrentChapterProgress` and, on Qt 6, `___NumPages`.
 
-It checks for a newer position after Nickel's signals: the sync manager's `finished()` and `userProfileUpdated()`, and USB `doneProcessing()` and unplug. A signal that arrives while the device sleeps is checked at wake. Only when these signals cannot be connected does a one-minute check repeat it, and Kobalt logs `native-progress-signals-unavailable`. If another device moved the position, the reader asks before it moves (see [Progress sync](reader/sync.md)).
+It checks for a changed committed position after Nickel's signals: the sync manager's `finished()` and `userProfileUpdated()`, and USB `doneProcessing()` and unplug. A signal that arrives while the device sleeps is checked at wake. Only when these signals cannot be connected does a one-minute check repeat it, and Kobalt logs `native-progress-signals-unavailable`. If another device moved the position, the reader asks before it moves (see [Progress sync](reader/sync.md)).
 
 ## What Kobalt writes to Nickel
 
@@ -82,7 +82,7 @@ On Qt 5, step 5 also writes the current chapter's own row for a KEPUB book, as N
 
 Nickel turns the start and end into the analytics events `OpenContent` and `LeaveContent`. `LeaveContent` carries the progress at the end of the session, `SecondsRead`, `PagesTurned` and `IdleTime`. Nickel adds title, author, content type and format, `Origin`, `Monetization` and `ViewType`.
 
-Nickel keeps these events in memory until `EventEngine::savePendingEvents` writes them to the `AnalyticsEvents` table. That function clears its buffer even when the save fails, and on firmware 4.46 it saves nothing unless it runs on the event engine's own thread. Kobalt calls it on that thread after a session starts and after it ends. It first takes Nickel's default-database transaction, waiting at most 2 seconds, and skips the save if it cannot, so the buffer survives until the next save (`saveNativeEvents` in `platforms/kobo/common/native_event_save.h`). Nickel also saves the buffer on a timer and at shutdown.
+Nickel keeps these events in memory until `EventEngine::savePendingEvents` writes them to the `AnalyticsEvents` table. That function clears its buffer even when the save fails, and on firmware 4.46 it saves nothing unless it runs on the event engine's own thread. Kobalt calls it on that thread after a session starts and after it ends. It first takes Nickel's default-database transaction, waiting at most 2 seconds, and skips the save if it cannot, so the buffer survives until the next save (`saveNativeEvents` in `platforms/kobo/common/native_event_save.h`). If the outer commit fails, Kobalt rolls back its own transaction so later native saves can begin. This cleanup cannot restore events that Nickel already removed from its buffer. Nickel also saves the buffer on a timer and at shutdown.
 
 ## What Nickel uploads
 

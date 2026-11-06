@@ -326,6 +326,30 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     const auto before = persisted(error);
     if (!expected.valid || !(snapshot(before) == expected))
         return fail(strings::get("error.nickel_progress_changed_before_saving"));
+    // Only an owned transaction may be released for one cache refresh. Recheck
+    // the committed row after reacquiring the lock before using a fresh Volume.
+    const auto cacheMatchesExpected = [&expected](const QVariantMap &values) {
+        const auto cached = snapshot(values);
+        return cached.samePosition(expected)
+                && (cached.modified == expected.modified
+                    || cached.modified == expected.modified / 1000 * 1000);
+    };
+    bool currentCache;
+    {
+        const auto preflight = native.get(book, db);
+        currentCache = cacheMatchesExpected(native.values(&preflight));
+    }
+    if (!currentCache) {
+        if (!native.end(db, false))
+            return fail(strings::get("error.nickel_s_cached_progress_is_not_current"));
+        transaction.owned = false;
+        native.refresh(db);
+        if (!native.begin(db))
+            return fail(strings::get("error.nickel_database_is_busy_local_position_was_retained"));
+        transaction.owned = true;
+        if (!(snapshot(persisted(error)) == expected))
+            return fail(strings::get("error.nickel_progress_changed_before_saving"));
+    }
     // Detach a fresh native value and let Nickel create its bookmark fields.
     // Persist only those changed fields, never an opening-time Volume snapshot.
     auto volume = native.get(book, db);
@@ -333,12 +357,8 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     // Firmware 4's getDbValues keeps the milliseconds that a native library
     // action stores. Firmware 5 formats the value to whole seconds. Accept both;
     // the committed-row comparison above stays exact.
-    const auto cached = snapshot(original);
-    if (!cached.samePosition(expected)
-        || (cached.modified != expected.modified
-            && cached.modified != expected.modified / 1000 * 1000)) {
+    if (!cacheMatchesExpected(original))
         return fail(strings::get("error.nickel_s_cached_progress_is_not_current"));
-    }
     auto stamp = QDateTime::fromMSecsSinceEpoch(
             qMax(QDateTime::currentMSecsSinceEpoch(), expected.modified + 1000), Qt::UTC);
     if (!timeOnly)

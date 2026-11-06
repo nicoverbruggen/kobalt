@@ -81,7 +81,10 @@ void KosyncNotice::complete()
 
 void KosyncNotice::hideEvent(QHideEvent *event)
 {
-    successTimer.stop();
+    // A hidden parent can return while this completed notice still covers it.
+    // Only an explicit dismissal cancels the timer.
+    if (isHidden())
+        successTimer.stop();
     ui::NoticeModal::hideEvent(event);
 }
 } // namespace kobalt::reader

@@ -20,8 +20,9 @@ struct ReadingProgress
     static ReadingProgress fromJson(const QJsonObject &value);
 };
 
-// One reconciler belongs to one book opening. Only an explicit choice accepts
-// a different position. A choice about an older alert cannot accept a later one.
+// One reconciler belongs to one book opening. A different position needs a choice,
+// except when Nickel drops an acknowledged KEPUB span's offset at the same time.
+// A choice about an older alert cannot accept a later one.
 class ProgressReconciler
 {
 public:

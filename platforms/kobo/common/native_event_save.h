@@ -12,6 +12,10 @@ bool saveNativeEvents(Begin begin, Flush flush, End end)
         return false;
     const bool saved = flush();
     const bool committed = end(saved);
+    // A failed COMMIT can leave our transaction open, for example while a
+    // reader holds a shared lock. Release it before another flush can begin.
+    if (saved && !committed)
+        end(false);
     return saved && committed;
 }
 } // namespace kobalt::nickel

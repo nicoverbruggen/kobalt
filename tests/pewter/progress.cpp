@@ -1,4 +1,4 @@
-#include "pewter.h"
+#include "nickel.h"
 #include "platforms/kobo/common/native_progress.h"
 #include "reading/reading_bridge.h"
 #include "support/main_thread.h"
@@ -155,13 +155,13 @@ void writePartway(NativeProgress &progress)
     QString error;
     ReadingProgress verified;
     require(write(progress, position, 15, false, &error, &verified), qPrintable(error));
-    requireNames(
-            boundaries(),
-            (QList<QByteArray>{ "DatabaseAdapter::beginTransaction", "VolumeManager::getById",
-                                "VolumeManager::updateFields", "DatabaseAdapter::endTransaction",
-                                "BookmarkSyncManagerBase::syncReadingState",
-                                "BookmarkSyncManager::sendBookmark" }),
-            "a save fills a fresh Volume, updates, commits, then asks for the upload");
+    requireNames(boundaries(),
+                 (QList<QByteArray>{ "DatabaseAdapter::beginTransaction", "VolumeManager::getById",
+                                     "VolumeManager::getById", "VolumeManager::updateFields",
+                                     "DatabaseAdapter::endTransaction",
+                                     "BookmarkSyncManagerBase::syncReadingState",
+                                     "BookmarkSyncManager::sendBookmark" }),
+                 "a save fills a fresh Volume, updates, commits, then asks for the upload");
     for (const auto &setter :
          { "VolumeManager::updateBookmark", "Content::setReadStatus",
            "Content::setFirstTimeReading", "Content::setPercentRead",
@@ -345,6 +345,48 @@ void refuseFailures(NativeProgress &progress)
     pewter::options().syncEligible = true;
 }
 
+void recoverStaleCache(NativeProgress &progress)
+{
+    auto stale = pewter::row(book);
+    stale.insert("ChapterIDBookmarked", "OEBPS/chapter9.xhtml#kobo.1.1");
+    pewter::options().cachedVolume = stale;
+    QString error;
+    require(DatabaseAdapter::beginTransaction("KoboReader.sqlite"),
+            "the test opens another native transaction");
+    require(!write(progress, position, 30, false, &error),
+            "a nested native transaction must refuse the save");
+    require(pewter::transactionOpen() && !pewter::find("Repository::refreshCache")
+                    && !pewter::find("DatabaseAdapter::endTransaction"),
+            "cache recovery touched another native transaction");
+    require(DatabaseAdapter::endTransaction("KoboReader.sqlite", false),
+            "the test releases its native transaction");
+    error.clear();
+    require(write(progress, position, 30, false, &error),
+            "a stale cached Volume must recover in the same save");
+    const auto names = pewter::callNames();
+    require(names.count("Repository::refreshCache") == 1
+                    && names.count("VolumeManager::updateFields") == 1
+                    && names.count("BookmarkSyncManager::sendBookmark") == 1,
+            "cache recovery repeated its refresh, write or upload");
+    require(!pewter::find("Repository::refreshCache")->inTransaction,
+            "the cache refresh ran inside a transaction");
+    const auto before = pewter::row(book);
+    pewter::options().cachedVolume = stale;
+    pewter::options().refreshClearsCache = false;
+    error.clear();
+    require(!write(progress, position, 30, false, &error),
+            "a cache that stays stale must refuse the save");
+    require(pewter::callNames().count("Repository::refreshCache") == 1,
+            "a persistent stale cache caused repeated refreshes");
+    require(!pewter::find("VolumeManager::updateFields"), "a stale cache gets no update");
+    requireRefusedWrite(before, "a stale cache leaves committed progress intact");
+    QSqlQuery lock(pewter::database());
+    require(lock.exec("BEGIN IMMEDIATE"), "a stale-cache failure releases its transaction");
+    require(lock.exec("ROLLBACK"), "the test releases its lock");
+    pewter::options().cachedVolume.clear();
+    pewter::options().refreshClearsCache = true;
+}
+
 void markRecent(NativeProgress &progress)
 {
     pewter::clearCalls();
@@ -371,6 +413,7 @@ int main(int argc, char **argv)
     require(NativeProgress::available(), "the adapter resolves every Nickel function it requires");
     NativeProgress progress(book);
     markReading(progress);
+    recoverStaleCache(progress);
     writePartway(progress);
     writeLastPage(progress);
     writeFinished(progress);

@@ -51,6 +51,8 @@ private:
     void consume(Reason reason, const QString &book, quint64 generation);
     QString book_, account_;
     quint64 generation_ = 0;
+    quint64 accountCheck_ = 0;
+    int accountRetries_ = 0;
     bool connected_ = false, blocked_ = false, pending_ = false;
     bool queued_ = false, checking_ = false, invalidated_ = false;
 };

@@ -177,8 +177,9 @@ void NativeKeyboard::commit()
 void NativeKeyboard::changeScript(KeyboardScript value)
 {
     script = int(value);
+    ready = false;
     kobalt::qt::later(0, this, [this] {
-        if (host && host->isVisible() && create())
+        if (host && host->isVisible() && frame && frame->isVisible())
             show();
     });
 }

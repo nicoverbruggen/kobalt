@@ -186,10 +186,8 @@ int main(int argc, char **argv)
     unrelated.book = "another book";
     unrelated.modified = 4000;
     choices.observe(unrelated);
-    choices.observe(first);
     choices.observe({});
-    require(choices.candidate() == second,
-            "Unrelated, stale or invalid update replaced the candidate");
+    require(choices.candidate() == second, "Unrelated or invalid update replaced the candidate");
     auto third = second;
     third.location = "chapter.xhtml#p:18";
     third.modified = 3000;
@@ -215,8 +213,121 @@ int main(int argc, char **argv)
     choices.acknowledge(finished);
     require(choices.mayWrite(finished), "Finished choice remained unresolved");
     choices.observe(third);
-    require(!choices.pending() && !choices.mayWrite(third),
-            "Stale persisted state was authorized for overwrite");
+    require(choices.pending() && !choices.mayWrite(third),
+            "An older committed position did not retain an explicit choice");
+    choices.acknowledge(finished);
+    require(choices.pending() && !choices.mayWrite(third),
+            "A stale alert acknowledged a different current position");
+    choices.acknowledge(third);
+    require(choices.mayWrite(third),
+            "An older current position remained unwritable after a choice");
+    // The displayed position can stay the same while its committed date moves back.
+    ProgressReconciler redatedChoice(first);
+    auto shown = second;
+    shown.modified = 2000;
+    redatedChoice.observe(shown);
+    auto redated = shown;
+    redated.modified = 1500;
+    redatedChoice.observe(redated);
+    redatedChoice.acknowledge(shown);
+    require(!redatedChoice.pending() && redatedChoice.mayWrite(redated),
+            "The same position required another choice after its timestamp moved back");
+    // A different nonzero offset still needs a choice at the same DateLastRead.
+    auto exact = first;
+    exact.location = "chapter.xhtml#kobo.50.2:105";
+    auto normalized = exact;
+    normalized.location = "chapter.xhtml#kobo.50.2:17";
+    ProgressReconciler equalTime(exact);
+    equalTime.observe(normalized);
+    require(equalTime.pending() && !equalTime.mayWrite(normalized),
+            "Equal-time position change did not offer a conflict choice");
+    equalTime.acknowledge(exact);
+    require(equalTime.pending() && !equalTime.mayWrite(normalized),
+            "An old equal-time choice accepted an unseen position");
+    equalTime.acknowledge(normalized);
+    require(!equalTime.pending() && equalTime.mayWrite(normalized),
+            "Acknowledged equal-time position remained unwritable");
+    equalTime.observe(normalized);
+    require(!equalTime.pending(), "Equal-time duplicate reopened the conflict");
+    // Nickel can return a saved KEPUB span without its character offset.
+    for (const auto &location : { QStringLiteral("chapter.xhtml#kobo.50.2:0"),
+                                  QStringLiteral("chapter.xhtml#kobo.50.2") }) {
+        auto collapsed = exact;
+        collapsed.location = location;
+        ProgressReconciler roundTrip(exact);
+        roundTrip.observe(collapsed);
+        require(!roundTrip.pending() && roundTrip.mayWrite(collapsed)
+                        && roundTrip.baseline() == collapsed,
+                "Dropped KEPUB offset blocked the next precise save");
+        roundTrip.observe(collapsed);
+        require(!roundTrip.pending(), "Repeated offset normalization reopened a conflict");
+        roundTrip.observe(exact);
+        require(roundTrip.pending(), "A new precise offset was silently accepted");
+    }
+    // Normalization applies only to the acknowledged position, not a pending one.
+    auto pendingOffset = exact;
+    pendingOffset.location = "chapter.xhtml#kobo.51.1:9";
+    auto pendingStart = pendingOffset;
+    pendingStart.location = "chapter.xhtml#kobo.51.1:0";
+    ProgressReconciler unseen(exact);
+    unseen.observe(pendingOffset);
+    unseen.observe(pendingStart);
+    require(unseen.pending() && !unseen.mayWrite(pendingStart),
+            "Normalization acknowledged an unseen native position");
+    for (const auto &location :
+         { QStringLiteral("chapter.xhtml#kobo.50.3:0"), QStringLiteral("other.xhtml#kobo.50.2:0"),
+           QStringLiteral("chapter.xhtml#kobo.50.2:1"),
+           QStringLiteral("chapter.xhtml#kobo.50.2:00"),
+           QStringLiteral("chapter.xhtml#kobo.50.2:-1") }) {
+        auto changed = exact;
+        changed.location = location;
+        ProgressReconciler strict(exact);
+        strict.observe(changed);
+        require(strict.pending(), "A different native location was treated as normalization");
+    }
+    for (const auto &location :
+         { QStringLiteral("chapter.xhtml#paragraph:105"),
+           QStringLiteral("chapter.xhtml#kobo.x.2:105"),
+           QStringLiteral("chapter.xhtml#point(/1/4/2:105)"), QStringLiteral("#kobo.50.2:105"),
+           QStringLiteral("chapter.xhtml#kobo.50.2:0") }) {
+        auto source = exact;
+        source.location = location;
+        auto changed = source;
+        changed.location = location.left(location.lastIndexOf(':')) + ":0";
+        if (changed.location == source.location)
+            changed.location.chop(2);
+        ProgressReconciler strict(source);
+        strict.observe(changed);
+        require(strict.pending(), "A non-KEPUB or zero offset was silently normalized");
+    }
+    auto changedMetadata = exact;
+    changedMetadata.location = "chapter.xhtml#kobo.50.2:0";
+    ++changedMetadata.modified;
+    ProgressReconciler newerOffset(exact);
+    newerOffset.observe(changedMetadata);
+    require(newerOffset.pending(), "A newer span-start position was silently accepted");
+    changedMetadata.modified = exact.modified;
+    changedMetadata.status = 2;
+    ProgressReconciler changedStatus(exact);
+    changedStatus.observe(changedMetadata);
+    require(changedStatus.pending(), "A changed reading status was silently normalized");
+    ProgressReconciler resetWhileReading(first);
+    resetWhileReading.observe(unread);
+    require(resetWhileReading.pending() && !resetWhileReading.mayWrite(unread),
+            "An unread reset became an unrecoverable stale save failure");
+    resetWhileReading.acknowledge(resetWhileReading.candidate());
+    require(!resetWhileReading.pending() && resetWhileReading.mayWrite(unread),
+            "Keeping local progress did not acknowledge the unread reset");
+    auto stalePosition = first;
+    --stalePosition.modified;
+    stalePosition.location = "chapter.xhtml#p:1";
+    ProgressReconciler staleNormal(first);
+    staleNormal.observe(stalePosition);
+    require(staleNormal.pending() && !staleNormal.mayWrite(stalePosition),
+            "An older authoritative position bypassed the conflict choice");
+    staleNormal.acknowledge(stalePosition);
+    require(staleNormal.mayWrite(stalePosition),
+            "An older authoritative position remained unwritable after a choice");
     ProgressReconciler failedRead({ "synthetic", {}, 0, 0, false });
     failedRead.observe(first);
     require(failedRead.pending(), "Recovered native position was silently accepted");

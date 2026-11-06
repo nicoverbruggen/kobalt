@@ -30,6 +30,8 @@ struct Options
     bool updateFails = false; // VolumeManager::updateFields refuses
     bool commitFails = false; // DatabaseAdapter::endTransaction(commit) rolls back
     bool syncEligible = true; // BookmarkSyncManagerBase::syncReadingState
+    QVariantMap cachedVolume; // getById returns this stale row until refreshCache
+    bool refreshClearsCache = true;
 };
 
 // Creates a fresh KoboReader.sqlite in `directory` and resets the options and

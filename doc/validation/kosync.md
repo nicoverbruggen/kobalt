@@ -22,6 +22,8 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 
 `session.reader-session`, in [Startup and reading](reading.md), checks the sync digests and position imports of an opened book.
 
+The completed sync notice keeps its dismissal timer when its parent hides and returns. An explicit dismissal still cancels the timer. `component.kosync-ui` checks both cases.
+
 ## Captures
 
 Set `KOBALT_KOSYNC_MANUAL_CAPTURE` to an absolute PNG path to capture the Syncing notice in `lifecycle.kosyncManualConnection`. Set `KOBALT_KOSYNC_CHOICE_CAPTURE` to an absolute output prefix to capture the forward and backward progress-choice dialogs in the [real server check](#real-server-check).

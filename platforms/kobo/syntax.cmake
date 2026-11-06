@@ -296,11 +296,11 @@ foreach(sdk qt5 qt6)
     set(${sdk}-eval_c_sources ${c_sources})
     set(${sdk}-eval_test_sources "")
 endforeach()
-# KOBALT_BUILD_TESTS adds the pewter tests to both lanes and the Qt5-only
-# refresh check program.
+# KOBALT_BUILD_TESTS adds the pewter tests. The Qt5 lane also has the Qt5
+# refresh check.
 set(pewter "${root}/tests/pewter")
 set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp")
-set(qt5_test_sources "${root}/tests/model/qt5_refresh.cpp" ${pewter_sources} "${pewter}/nickel_qt5.cpp")
+set(qt5_test_sources ${pewter_sources} "${pewter}/nickel_qt5.cpp" "${pewter}/refresh_qt5.cpp")
 set(qt6_test_sources ${pewter_sources} "${pewter}/nickel_qt6.cpp")
 
 # AUTOMOC output is not available here. An empty file is enough for a syntax

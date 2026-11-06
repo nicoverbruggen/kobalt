@@ -227,16 +227,18 @@ if(KOBALT_BUILD_TESTS)
     set_tests_properties(pewter.progress PROPERTIES LABELS "pewter;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
 
+    # The Qt5 refresh check fakes the display driver call itself and does not
+    # use pewter's Nickel.
     if(KOBALT_QT_MAJOR EQUAL 5)
-        add_executable(kobalt-qt5-refresh-tests "${KOBALT_ROOT}/tests/model/qt5_refresh.cpp"
+        add_executable(kobalt-qt5-refresh-tests "${pewter}/refresh_qt5.cpp"
             nickel-qt5/refresh.cpp display/page_animation.cpp)
         target_include_directories(kobalt-qt5-refresh-tests PRIVATE "${KOBALT_ROOT}" "${source}"
             "${KOBALT_ROOT}/tests/support")
         target_compile_definitions(kobalt-qt5-refresh-tests PRIVATE KOBALT_PAGE_ANIMATIONS)
         target_compile_options(kobalt-qt5-refresh-tests PRIVATE -Wall -Wextra -Werror)
         target_link_libraries(kobalt-qt5-refresh-tests PRIVATE Qt5::Widgets ${CMAKE_DL_LIBS} pthread)
-        add_test(NAME display.qt5-refresh COMMAND kobalt-qt5-refresh-tests)
-        set_tests_properties(display.qt5-refresh PROPERTIES LABELS "display;qt5"
+        add_test(NAME pewter.qt5-refresh COMMAND kobalt-qt5-refresh-tests)
+        set_tests_properties(pewter.qt5-refresh PROPERTIES LABELS "pewter;display;qt5"
             ENVIRONMENT "${test_environment}" TIMEOUT 120)
         list(APPEND tests kobalt-qt5-refresh-tests)
     endif()

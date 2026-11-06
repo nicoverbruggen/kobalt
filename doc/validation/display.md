@@ -8,7 +8,7 @@ Use `KOBALT_GALLERY_CASE=androidPageAnimations` to capture only the Android page
 
 ## Qt5 refresh adapter
 
-The Kobo test `display.qt5-refresh` drives the production Qt5 refresh adapter through both policy-list ABIs, against the firmware Qt 5.2.1 libraries of the prepared Qt5 image. `bash platforms/kobo/build.sh qt5 --check` builds and runs it with the [Kobo adapter tests](kobo.md#pewter-the-fake-nickel).
+The Kobo test `pewter.qt5-refresh`, in `tests/pewter/refresh_qt5.cpp`, drives the production Qt5 refresh adapter through both policy-list ABIs, against the firmware Qt 5.2.1 libraries of the prepared Qt5 image. `bash platforms/kobo/build.sh qt5 --check` builds and runs it with the [Kobo adapter tests](kobo.md#pewter-the-fake-nickel).
 
 ## Device results and limits
 

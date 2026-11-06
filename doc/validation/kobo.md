@@ -16,6 +16,12 @@ Pewter, in `tests/pewter/`, defines the Nickel classes and functions that the ad
 
 The tests run under `qemu-arm` with the Qt libraries of each image: firmware 4's Qt 5.2.1 and C++ library in the Qt5 image, and Qt 6.5 in the Qt6 image. The C library is the image's cross C library, because the image's `qemu-arm` crashes in the glibc 2.19 loader of firmware 4. A test run takes less than a second; a check after a small change takes a few seconds per SDK. Pewter checks what Kobalt asks Nickel to do. It does not check that Nickel behaves the same way, so its functions follow the firmware behavior documented in Sync data, never copied firmware code. Update pewter when a firmware changes a function that Kobalt calls. Tolino devices, reading sessions, reading time and Wi-Fi are not covered yet.
 
+### What pewter is and is not
+
+Pewter is a validation tool. It exists only to check that Kobalt's firmware adapters call Nickel correctly. It is not a replacement for Nickel, it does not reproduce Nickel's behavior beyond what these checks need, and it is never part of a Kobalt package: only the test programs link it.
+
+Pewter contains no code from Kobo or Nickel. Its classes and functions carry the names and signatures of the Nickel functions that Kobalt's adapters call, because the adapters find those functions by name; the adapters contain the same names. The behavior of each fake function is written from the observed effects that [Sync data](../sync-data.md) documents, not from firmware code. The only Kobo code in Kobalt's toolchain is Kobo's open-source Qt release, used in the Qt6 SDK and credited in the [Acknowledgements](../acknowledgements.md#adapted-code-and-kobo-integration) under its license terms. Pewter does not use it.
+
 ## Device gaps
 
 These checks leave device gaps. Full loader removal and restart after a failed startup need a device. Native callback delivery, settings injection and book opening after a slow startup need firmware validation. The dialog checks do not exercise firmware update downloads or installation.

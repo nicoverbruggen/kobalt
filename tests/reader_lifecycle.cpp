@@ -1113,10 +1113,14 @@ private slots:
         QTest::addColumn<QString>("tabName");
         QTest::addColumn<QString>("panelName");
         QTest::addColumn<bool>("edit");
-        QTest::newRow("chapters") << "rrNavChapters" << "rrChoices" << false;
-        QTest::newRow("stats") << "rrNavStats" << "rrChapterGraph" << false;
-        QTest::newRow("text") << "rrNavText" << "rrMenu" << false;
-        QTest::newRow("edited-text") << "rrNavText" << "rrMenu" << true;
+        QTest::addColumn<QString>("closeControl");
+        QTest::newRow("chapters-tab") << "rrNavChapters" << "rrChoices" << false << "rrNavChapters";
+        QTest::newRow("chapters-close")
+                << "rrNavChapters" << "rrChoices" << false << "rrContentsClose";
+        QTest::newRow("stats") << "rrNavStats" << "rrChapterGraph" << false << "rrNavStats";
+        QTest::newRow("text") << "rrNavText" << "rrMenu" << false << "rrNavText";
+        QTest::newRow("layout") << "rrNavLayout" << "rrMenu" << false << "rrNavLayout";
+        QTest::newRow("edited-text") << "rrNavText" << "rrMenu" << true << "rrNavText";
     }
 
     // Publishes dismissal only after the panel closes, including an applied appearance edit.
@@ -1125,6 +1129,7 @@ private slots:
         QFETCH(QString, tabName);
         QFETCH(QString, panelName);
         QFETCH(bool, edit);
+        QFETCH(QString, closeControl);
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
@@ -1181,7 +1186,9 @@ private slots:
         probe.panel = panel;
         probe.tab = tab;
         host.window()->installEventFilter(&probe);
-        QVERIFY(click(canvas, tab));
+        auto *close = host.window()->findChild<QPushButton *>(closeControl);
+        QVERIFY(close);
+        QVERIFY(click(canvas, close));
         QTRY_VERIFY(!panel->isVisible() && !tab->isChecked() && !host.session()->busy());
         QTRY_COMPARE(probe.publications, 1);
         QVERIFY(!probe.premature);
@@ -1302,7 +1309,7 @@ private slots:
         }
     }
 
-    // Checks that Light replaces the default menu view, closing Light restores it, and other tabs or dismissal do not reopen it.
+    // Checks that Light replaces the default view, its tab restores that view, and outside taps return to reading.
     void lightReplacesDefaultMenu_data()
     {
         QTest::addColumn<bool>("dark");
@@ -1435,7 +1442,7 @@ private slots:
         }
         QTRY_VERIFY(!light->isVisible());
         QVERIFY(!tab->isChecked());
-        const bool restoring = action == "tab" || action == "outside";
+        const bool restoring = action == "tab";
         if (restoring) {
             QTRY_COMPARE(stats->isVisible(), menuView == "stats");
             QTRY_COMPARE(seek->isVisible() && seek->barBounds().height() > 0, menuView == "seek");
@@ -1447,7 +1454,7 @@ private slots:
             QCOMPARE(defaultShows.count, 0);
             QTRY_COMPARE(stats->isVisible(), action == "Stats");
             QTRY_COMPARE(seek->isVisible() && seek->barBounds().height() > 0, action == "Seek");
-            if (action == "dismiss") {
+            if (action == "dismiss" || action == "outside") {
                 QVERIFY(!toolbar->isVisible());
                 QVERIFY(!host.window()->findChild<QWidget *>("rrBottomNavigation")->isVisible());
                 QVERIFY(clickAt(canvas, paper));

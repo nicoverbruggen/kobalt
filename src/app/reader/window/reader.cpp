@@ -749,32 +749,28 @@ bool Reader::event(QEvent *event)
     }
     if (event->type() == QEvent::UpdateRequest && isVisible()) {
         setProperty("reader_navigation_dismissal", false);
-        if (pendingNavigationDismissal) {
-            // A same-tab close can wait for an appearance edit to finish.
-            // Publish only the frame that actually removes the panel.
-            if (!pendingNavigationDismissal->isVisible()) {
-                const auto overlays = popups();
-                const bool overlayVisible =
-                        std::any_of(overlays.cbegin(), overlays.cend(), [](const QWidget *widget) {
-                            return widget && widget->isVisible();
-                        });
-                const bool dismissed = navigation && navigation->isVisible()
-                        && topControls->isVisible() && !appearanceEdit.panelOpen()
-                        && !general->isVisible() && !choices->isVisible()
-                        && !chapterGraph->isVisible() && !lightPopup->isVisible()
-                        && !bookmarkList->isVisible() && !seekOpen && !session->busy()
-                        && !dictionaryPanel->isVisible() && !searchPanel->isVisible()
-                        && !linksActive() && !lookupPending && !acknowledgments->isVisible()
-                        && !savingView && !closeSaveError && !services.suspended()
-                        && !overlayVisible;
-                setProperty("reader_navigation_dismissal", dismissed);
-                setProperty("reader_navigation_dismissal_plain",
-                            page->image.text("kobalt.animation_text_only") == "true");
-                pendingNavigationDismissal.clear();
-            } else if (!appearanceEdit.applying() && !appearanceEdit.finishPending()
-                       && !session->busy()) {
-                pendingNavigationDismissal.clear();
-            }
+        const bool panelVisible = navigation && navigation->isVisible() && topControls->isVisible()
+                && navigationActive >= 0;
+        // Compare completed frames, not the action that requested a close.
+        // Appearance edits keep their panel until the asynchronous apply ends.
+        const bool panelClosed = navigationPanelPainted && !panelVisible;
+        navigationPanelPainted = panelVisible;
+        if (panelClosed) {
+            const auto overlays = popups();
+            const bool overlayVisible =
+                    std::any_of(overlays.cbegin(), overlays.cend(), [](const QWidget *widget) {
+                        return widget && widget->isVisible();
+                    });
+            const bool dismissed = navigation && navigation->isVisible() && topControls->isVisible()
+                    && !appearanceEdit.panelOpen() && !general->isVisible() && !choices->isVisible()
+                    && !chapterGraph->isVisible() && !lightPopup->isVisible()
+                    && !bookmarkList->isVisible() && !seekOpen && !session->busy()
+                    && !dictionaryPanel->isVisible() && !searchPanel->isVisible() && !linksActive()
+                    && !lookupPending && !acknowledgments->isVisible() && !savingView
+                    && !closeSaveError && !services.suspended() && !overlayVisible;
+            setProperty("reader_navigation_dismissal", dismissed);
+            setProperty("reader_navigation_dismissal_plain",
+                        page->image.text("kobalt.animation_text_only") == "true");
         }
         // Only the plain reading bars can cross an unchanged text page
         // with a partial refresh. Other panels may contain color.
@@ -1022,19 +1018,6 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
                         kobalt::ui::mousePosition(static_cast<QMouseEvent *>(event)).toPoint());
             return true;
         };
-        if (inWindow && isVisible() && lightPopup->isVisible()) {
-            QPointF point;
-            if (!pressPoint(point))
-                return QWidget::eventFilter(watched, event);
-            const QRect panelRect(lightPopup->mapToGlobal(QPoint()), lightPopup->size());
-            const QRect toolbarRect(topControls->mapToGlobal(QPoint()), topControls->size());
-            if (!panelRect.contains(point.toPoint()) && !toolbarRect.contains(point.toPoint())
-                && !(navigation && navigation->contains(point.toPoint()))) {
-                dismissing = true;
-                lightPopup->hide();
-                showControls();
-            }
-        }
         if (inWindow && isVisible() && choosingTypography && choices->isVisible()
             && !fontDefaultDialog) {
             QPointF point;
@@ -1807,21 +1790,7 @@ void Reader::configureNavigation()
 
 void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
-    pendingNavigationDismissal.clear();
-    setProperty("reader_navigation_dismissal", false);
     using Nav = kobalt::NavigationDestination;
-    if (destination == Nav::Chapters && choices->isVisible() && !choosingTypography)
-        pendingNavigationDismissal = choices;
-    else if (destination == Nav::Stats && chapterGraph->isVisible())
-        pendingNavigationDismissal = chapterGraph;
-    else if (destination == Nav::Light && lightPopup->isVisible())
-        pendingNavigationDismissal = lightPopup;
-    else if (menu->isVisible()
-             && ((destination == Nav::Text && panels->currentIndex() == 0)
-                 || (destination == Nav::Layout && panels->currentIndex() != 0)))
-        pendingNavigationDismissal = menu;
-    else if (destination == Nav::Seek && seekOpen)
-        pendingNavigationDismissal = pageScrubber;
     session->cancelPendingTurn();
     bookmarkList->hide();
     if (destination != Nav::Seek) {
@@ -2104,6 +2073,7 @@ void Reader::syncNavigation()
                 : chapterGraph->isVisible() ? int(Nav::Stats)
                 : seekOpen                  ? int(Nav::Seek)
                                             : -1;
+        navigationActive = active;
         const auto position = session->state().value("position").toString();
         if (imageSuggestionPosition != position) {
             imageSuggestionPosition = position;
@@ -2248,7 +2218,6 @@ void Reader::showControls()
 
 void Reader::dismissControls()
 {
-    pendingNavigationDismissal.clear();
     setProperty("reader_navigation_dismissal", false);
     if (pageScrubber)
         pageScrubber->cancel();

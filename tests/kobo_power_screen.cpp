@@ -174,8 +174,17 @@ private slots:
                 QStringLiteral(KOBALT_TEST_ASSET_ROOT), QStringLiteral(KOBALT_VERSION))));
     }
 
+    void homeSleepUsesSavedBackdropAndInvalidatesOnOpening_data()
+    {
+        QTest::addColumn<bool>("card");
+        QTest::newRow("default-bookmark") << false;
+        QTest::newRow("explicit-card") << true;
+    }
+
     void homeSleepUsesSavedBackdropAndInvalidatesOnOpening()
     {
+        QFETCH(bool, card);
+        const auto tile = card ? kobalt::sleep::Tile::Card : kobalt::sleep::Tile::Bookmark;
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const kobalt::storage::Paths paths{ directory.path() };
@@ -200,8 +209,14 @@ private slots:
             snapshot.orientation = Qt::PortraitOrientation;
             snapshot.progress = "42% read";
             snapshot.mode = kobalt::sleep::Mode::Page;
-            QVERIFY(kobalt::storage::writeJson(paths.preferences(),
-                                               { { "schema", 1 }, { "sleep_screen", "page" } }));
+            QJsonObject preferences{ { "schema", 1 }, { "sleep_screen", "page" } };
+            if (card)
+                preferences["sleep_tile"] = "card";
+            QVERIFY(kobalt::storage::writeJson(paths.preferences(), preferences));
+            const auto expected = [&](kobalt::reader::SleepStatus status, int battery) {
+                return kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress, {},
+                                                       false, battery, status, true, tile);
+            };
             {
                 kobalt::nickel::HomeSleepScreen screen(paths, nullptr);
                 screen.remember(snapshot, "book");
@@ -217,21 +232,15 @@ private slots:
             auto *frame = power.findChild<QWidget *>("rrSleepFrame");
             QVERIFY(frame);
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
-                     kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress, {}, false,
-                                                      67, kobalt::reader::SleepStatus::Charging,
-                                                      true));
+                     expected(kobalt::reader::SleepStatus::Charging, 67));
             kobalt::battery = { 88, false, false };
             kobalt::batteryChanged();
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
-                     kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress, {}, false,
-                                                      88, kobalt::reader::SleepStatus::Sleeping,
-                                                      true));
+                     expected(kobalt::reader::SleepStatus::Sleeping, 88));
             kobalt::battery = { 100, true, true };
             kobalt::batteryChanged();
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
-                     kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress, {}, false,
-                                                      100, kobalt::reader::SleepStatus::Charged,
-                                                      true));
+                     expected(kobalt::reader::SleepStatus::Charged, 100));
             screen.clear();
             // A later book invalidates persisted data even without a hook,
             // for example after a database change while Nickel was stopped.
@@ -257,9 +266,7 @@ private slots:
             frame = power.findChild<QWidget *>("rrSleepFrame");
             QVERIFY(frame);
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
-                     kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress, {}, false,
-                                                      67, kobalt::reader::SleepStatus::PoweredOff,
-                                                      true));
+                     expected(kobalt::reader::SleepStatus::PoweredOff, 100));
             screen.clear();
             QVERIFY(QFile::remove(paths.sleepScreen()));
             screen.prepare(true);
@@ -278,13 +285,18 @@ private slots:
     void powerOffUsesPreparedBackdrop_data()
     {
         QTest::addColumn<bool>("dark");
-        QTest::newRow("light") << false;
-        QTest::newRow("dark") << true;
+        QTest::addColumn<bool>("card");
+        QTest::newRow("light-default-bookmark") << false << false;
+        QTest::newRow("dark-default-bookmark") << true << false;
+        QTest::newRow("light-explicit-card") << false << true;
+        QTest::newRow("dark-explicit-card") << true << true;
     }
 
     void powerOffUsesPreparedBackdrop()
     {
         QFETCH(bool, dark);
+        QFETCH(bool, card);
+        const auto tile = card ? kobalt::sleep::Tile::Card : kobalt::sleep::Tile::Bookmark;
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         MainWindowView window;
@@ -302,6 +314,9 @@ private slots:
         snapshot.remaining = "37 min to go";
         snapshot.dark = dark;
         snapshot.mode = kobalt::sleep::Mode::Page;
+        snapshot.percent = 42;
+        if (card)
+            snapshot.tile = kobalt::sleep::Tile::Card;
         screen.preparePowerOff(snapshot);
         // No storage is needed after preparation, including during shutdown.
         QVERIFY(directory.remove());
@@ -311,21 +326,22 @@ private slots:
         QVERIFY(frame);
         const auto expected = kobalt::reader::sleepScreenImage(
                 snapshot.image, snapshot.progress, snapshot.remaining, dark, 67,
-                kobalt::reader::SleepStatus::PoweredOff, true);
+                kobalt::reader::SleepStatus::PoweredOff, true, tile, 42);
         const auto rendered = frame->grab().toImage().convertToFormat(QImage::Format_RGB32);
         QCOMPARE(rendered, expected);
         QCOMPARE(rendered,
                  kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress,
                                                   snapshot.remaining, !dark, 67,
-                                                  kobalt::reader::SleepStatus::PoweredOff, true));
-        const auto card = kobalt::reader::sleepScreenCardRect(rendered.size(), true);
-        QCOMPARE(rendered.pixel(card.left() + 4, card.top() + 4), qRgb(0, 0, 0));
-        QCOMPARE(rendered.pixel(card.left(), card.top() + 10), qRgb(255, 255, 255));
+                                                  kobalt::reader::SleepStatus::PoweredOff, true,
+                                                  tile, 42));
+        const auto area = kobalt::reader::sleepScreenCardRect(rendered.size(), true, tile);
+        QCOMPARE(rendered.pixel(area.center().x(), area.top() + 4), qRgb(0, 0, 0));
+        QCOMPARE(rendered.pixel(area.left(), area.top() + 10), qRgb(255, 255, 255));
         const auto capture = qEnvironmentVariable("KOBALT_POWER_CAPTURE_ROOT");
         if (!capture.isEmpty()) {
             QVERIFY(QDir().mkpath(capture));
-            QVERIFY(rendered.save(capture
-                                  + (dark ? "/power-off-dark.png" : "/power-off-light.png")));
+            QVERIFY(rendered.save(capture + "/power-off-"
+                                  + QString::fromLatin1(QTest::currentDataTag()) + ".png"));
         }
         QCOMPARE(kobalt::reader::sleepStatusText(kobalt::reader::SleepStatus::PoweredOff),
                  QString("Powered off"));

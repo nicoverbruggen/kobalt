@@ -3,6 +3,7 @@
 #include "storage/record_writer.h"
 #include "storage/reading_history.h"
 #include "storage/bookmark_store.h"
+#include "reading/sleep_screen.h"
 #ifndef KOBALT_TEST_NO_LIBRARY
 #  include "library/library_index.h"
 #endif
@@ -406,8 +407,12 @@ int main(int argc, char **argv)
                         && bytes(backups + "kosync.json.bak") == accountBytes
                         && bytes(backups + "kobalt.sqlite.bak") == databaseBytes,
                 "A backup changed the original bytes or got the wrong name");
-        require(storage::readJsonFile(recover.preferences()).object
-                                == QJsonObject{ { "schema", 1 } }
+        const auto defaults = storage::readJsonFile(recover.preferences());
+        require(defaults.status == ReadStatus::Ok
+                        && defaults.object
+                                == QJsonObject{ { "schema", 1 }, { "sleep_defaults_migrated", true } }
+                        && sleep::mode(defaults.object) == sleep::Mode::Cover
+                        && sleep::tile(defaults.object) == sleep::Tile::Bookmark
                         && !QFile::exists(recover.syncAccount()),
                 "Recovery did not start again from defaults");
         require(storage::writeBookState(recover, "fresh", { { "book", "fresh" } }),

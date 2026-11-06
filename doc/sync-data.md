@@ -165,7 +165,7 @@ These tables compare what Nickel's own reader and Kobalt write and send for the 
 
 ## Books that Nickel's sync carries
 
-A book whose Nickel content ID is not a `file:///` path came through Nickel's sync: a Kobo store book, or a book from a replacement server such as BookOrbit or Grimmory. `ReadingBook::usesNativeCloudSync` is true for it. Kobalt then leaves the position exchange to Nickel's sync and does not use KOSync for that book.
+A book whose Nickel content ID is not a `file:///` path came through Nickel's sync: a Kobo store book, a Kobo Cloud upload or a book from a replacement server such as BookOrbit or Grimmory. `ReadingBook::usesNativeCloudSync` is true for it. Kobalt leaves the position exchange to Nickel for these books. On Qt6, the native Kobo Cloud volume flag identifies the copy for the Sync tab and excludes it from KOSync. USB-sideloaded copies keep their local file identity and remain eligible for KOSync.
 
 ## Verification
 

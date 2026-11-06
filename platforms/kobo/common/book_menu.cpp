@@ -111,6 +111,17 @@ bool previewBook(const void *volume)
     return values && values(volume).value("Accessibility").toInt() == 6;
 }
 
+bool isKoboCloudBook(const void *volume)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    static const auto isCloud = symbol<bool (*)(const void *)>("_ZNK6Volume11isKoboCloudEv");
+    return volume && isCloud && isCloud(volume);
+#else
+    Q_UNUSED(volume);
+    return false;
+#endif
+}
+
 void rememberNativeBook(const QString &identity, const QString &path, bool protectedBook)
 {
     const QFileInfo file(path);
@@ -154,9 +165,15 @@ static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString 
         return Route::Protected;
 #endif
     auto filename = localReaderBookPath(id);
-    const bool downloaded = filename.isEmpty();
-    if (downloaded) {
+    if (filename.isEmpty()) {
         filename = downloadedReaderBookPath(id);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        if (isKoboCloudBook(volume)) {
+            static const auto nativePath = symbol<QString (*)(const void *)>(
+                    "_ZN13VolumeManager17getVolumeFilePathERK6Volume");
+            filename = nativePath ? nativePath(volume) : QString();
+        }
+#endif
     }
     if (filename.isEmpty() || !QFileInfo(filename).isFile()) {
         return Route::Unsupported;

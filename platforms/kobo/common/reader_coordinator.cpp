@@ -986,6 +986,7 @@ void ReaderCoordinator::showReader()
     if (!scenarioOpening && run.opening)
         scenarioOpening = run.opening->copy();
 #endif
+    const bool koboCloud = run.opening && kobalt::isKoboCloudBook(run.opening->volume());
     run.opening.reset();
     run.nativeProgress->changeAvailable = [this] { checkProgressSoon(); };
     if (!run.nativeProgress->signalsChanges())
@@ -995,7 +996,8 @@ void ReaderCoordinator::showReader()
             std::move(run.session), run.statePath, environment_.paths, run.identity,
             run.expectedHash,
             kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress)),
-            run.baseline, run.diskBaseline);
+            run.baseline, run.diskBaseline, QString(), kobalt::ReadingHistory::UtcClock(),
+            koboCloud);
     auto services = readerHostServices();
     const auto identity = run.identity;
     services.presentation = [this, identity](QWidget *reader) {

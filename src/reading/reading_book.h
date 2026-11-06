@@ -26,7 +26,7 @@ public:
     ReadingBook(std::unique_ptr<ReaderSession> session, QString statePath, storage::Paths paths,
                 QString identity, QByteArray digest, std::unique_ptr<ReadingBridge> bridge,
                 ReadingProgress baseline, ReadingProgress diskBaseline, QString sourceKey = {},
-                ReadingHistory::UtcClock utc = {});
+                ReadingHistory::UtcClock utc = {}, bool koboCloud = false);
     ~ReadingBook();
 
     void discardPendingSaves() { discardSaves = true; }
@@ -45,8 +45,10 @@ public:
     bool hasNativeProgress() const { return bool(bridge); }
 
     // Downloaded native-library titles use that platform's cloud sync.
-    // Sideloaded file identities keep native local progress and use KOsync.
+    // Sideloaded file identities keep native local progress and use KOSync.
     bool usesNativeCloudSync() const { return nativeCloudSync; }
+
+    bool isKoboCloudBook() const { return koboCloudBook; }
 
     // A sideloaded EPUB file that is not a kepub.
     bool plainEpub() const
@@ -202,7 +204,7 @@ private:
     storage::Paths paths_;
     QByteArray digest;
     std::unique_ptr<ReadingBridge> bridge;
-    const bool nativeCloudSync;
+    const bool nativeCloudSync, koboCloudBook;
     bool released = false, openingStatusAttempted = false, discardSaves = false;
     ReadingProgress baseline;
     ProgressReconciler reconciliation;

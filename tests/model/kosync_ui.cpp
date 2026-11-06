@@ -766,6 +766,15 @@ int main(int argc, char **argv)
     panel.settingsPages->setCurrentIndex(int(reader::SettingsPage::Display));
     require(!reopenedHelp || !reopenedHelp->isVisible(), "leaving Sync dismisses its explanation");
     tab->click();
+    page->setNativeCloudSync(true, true);
+    panel.fitContent(window.size());
+    QApplication::processEvents();
+    require(disclaimer->isVisible() && disclaimer->text().contains("Kobo Cloud")
+                    && disclaimer->text().contains("KOSync") && !sync->isVisible()
+                    && !automatic->isVisible(),
+            "Kobo Cloud books explain why KOSync is unavailable");
+    require(disclaimer->visibleRegion().boundingRect() == disclaimer->rect(),
+            "Kobo Cloud explanation fits on one page");
     page->setNativeCloudSync(false);
     page->setAccount("https://sync.example/prefix", "reader", true, true);
     require(server->isVisible() && sync->isVisible() && automatic->isVisible(),

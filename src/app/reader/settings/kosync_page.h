@@ -19,7 +19,7 @@ public:
     void setSchedule(const kosync::Schedule &schedule);
     // Which platform moments the Automatic sync sheet offers.
     void setScheduleFeatures(bool sleepWake, bool wifi);
-    void setNativeCloudSync(bool enabled);
+    void setNativeCloudSync(bool enabled, bool koboCloud = false);
     void setLastSync(const QDateTime &time);
     void setDeviceName(const QString &name, const QString &defaultName);
     void setFilenameMatching(bool enabled);

@@ -5,6 +5,7 @@ class QMenu;
 
 namespace kobalt {
 bool previewBook(const void *volume);
+bool isKoboCloudBook(const void *volume);
 enum class ReaderBookRoute { Unsupported, Direct, Protected, Failed, Remembered };
 ReaderBookRoute readerBookRoute(const void *volume, QString *identity = nullptr,
                                 QString *path = nullptr);

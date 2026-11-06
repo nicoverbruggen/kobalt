@@ -137,6 +137,7 @@
 "kosync.invalid_response" = "The sync server returned invalid progress. Your reading position was kept.";
 "kosync.invalid_account" = "Enter an HTTPS server URL, username and password. The URL cannot contain credentials, a query or a fragment.";
 "kosync.native_sync" = "This book uses Kobo’s built-in sync system. KOSync is unavailable for this copy.";
+"kosync.kobo_cloud" = "This book uses Kobo Cloud to sync reading progress. KOSync is unavailable for this copy.";
 "kosync.unavailable" = "Sync is unavailable for this book or account.";
 "kosync.position_error" = "This synced position could not be opened. Your position was kept and automatic sync was disabled.";
 "kosync.resume_title" = "Resume synced reading?";

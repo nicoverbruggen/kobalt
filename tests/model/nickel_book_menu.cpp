@@ -21,6 +21,10 @@
 namespace {
 QVariantMap fields;
 QString identity;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+QString cloudPath;
+bool cloudBook = false;
+#endif
 bool available = true, preferred = true, preview = false, enabled = true;
 int openings = 0;
 
@@ -81,6 +85,21 @@ bool isLcp(const void *) NICKEL_SYMBOL("_ZNK7Content9isLcpEpubEv");
 bool isLcp(const void *)
 {
     return false;
+}
+
+bool isKoboCloud(const void *) NICKEL_SYMBOL("_ZNK6Volume11isKoboCloudEv");
+
+bool isKoboCloud(const void *)
+{
+    return cloudBook;
+}
+
+QString nativeVolumePath(const void *)
+        NICKEL_SYMBOL("_ZN13VolumeManager17getVolumeFilePathERK6Volume");
+
+QString nativeVolumePath(const void *)
+{
+    return cloudPath;
 }
 #endif
 void *device() NICKEL_SYMBOL("_ZN6Device16getCurrentDeviceEv");
@@ -216,6 +235,32 @@ int main(int argc, char **argv)
                 "candidate cannot bypass protection metadata");
     }
     require(query.exec("DELETE FROM tolino_contentItem"), "clear synthetic purchase");
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const auto usbIdentity = identity;
+    identity = "cloud-upload-id";
+    cloudBook = true;
+    cloudPath = directory.path() + "/" + identity;
+    require(QFile::copy(path, cloudPath), "copy extensionless Kobo Cloud EPUB fixture");
+    QString resolved;
+    using Route = kobalt::ReaderBookRoute;
+    require(kobalt::readerBookCandidateRoute(&fields, nullptr, &resolved) == Route::Direct
+                    && resolved == cloudPath,
+            "Kobo Cloud candidate uses the path resolved by Nickel");
+    require(kobalt::readerBookRoute(&fields) == Route::Direct,
+            "Kobo Cloud DRM-free EPUB passes full inspection");
+    require(query.exec("INSERT INTO content_keys VALUES ('cloud-upload-id')"),
+            "Kobo Cloud protected-book fixture");
+    require(kobalt::readerBookRoute(&fields) == Route::Protected,
+            "Kobo Cloud does not bypass protection checks");
+    require(query.exec("DELETE FROM content_keys WHERE volumeid = 'cloud-upload-id'"),
+            "remove the Cloud key-presence fixture");
+    cloudPath = directory.path() + "/missing.epub";
+    require(kobalt::readerBookCandidateRoute(&fields) == Route::Unsupported,
+            "Kobo Cloud book needs a downloaded file");
+    identity = usbIdentity;
+    cloudBook = false;
+    require(kobalt::readerBookRoute(&fields) == Route::Direct, "sideload still uses the USB path");
+#endif
     for (const auto &table :
          { QStringLiteral("content_keys"), QStringLiteral("tolino_drmKeysKobo") }) {
         query.prepare("INSERT INTO " + table + " VALUES (?)");

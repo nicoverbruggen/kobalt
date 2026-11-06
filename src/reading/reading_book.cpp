@@ -59,14 +59,15 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
                          storage::Paths paths, QString identity, QByteArray digest,
                          std::unique_ptr<ReadingBridge> bridge, ReadingProgress baseline,
                          ReadingProgress diskBaseline, QString sourceKey,
-                         ReadingHistory::UtcClock utc)
+                         ReadingHistory::UtcClock utc, bool koboCloud)
     : session_(std::move(session)),
       statePath(std::move(statePath)),
       identity_(std::move(identity)),
       paths_(std::move(paths)),
       digest(std::move(digest)),
       bridge(std::move(bridge)),
-      nativeCloudSync(this->bridge && !identity_.startsWith("file:///")),
+      nativeCloudSync(this->bridge && (koboCloud || !identity_.startsWith("file:///"))),
+      koboCloudBook(this->bridge && koboCloud),
       baseline(std::move(baseline)),
       reconciliation(std::move(diskBaseline))
 {

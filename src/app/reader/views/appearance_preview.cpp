@@ -28,11 +28,6 @@ AppearancePreview::AppearancePreview(QWidget *parent) : QWidget(parent)
     // It paints its whole rectangle. Without this, an update of the page behind it
     // repaints it too, and each repaint is a visible e-ink update.
     setAttribute(Qt::WA_OpaquePaintEvent);
-    textHeader = new ui::ListHeader(this);
-    textHeader->setObjectName("rrTextPreviewHeader");
-    textHeader->setShaded(true);
-    textHeader->setCaptions(strings::get("reader.appearance_preview").toUpper());
-    textHeader->hide();
     hide();
 }
 
@@ -49,7 +44,17 @@ void AppearancePreview::setContent(Content next)
             && same(content.footer, next.footer) && same(content.body, next.body)
             && content.text == next.text && content.cropTop == next.cropTop;
     content = std::move(next);
-    textHeader->setVisible(content.text);
+    // Created on first use: a hidden child repaints the Layout preview once more when
+    // it first appears, and each repaint is a visible e-ink update.
+    if (content.text && !textHeader) {
+        textHeader = new ui::ListHeader(this);
+        textHeader->setObjectName("rrTextPreviewHeader");
+        textHeader->setShaded(true);
+        textHeader->setCaptions(strings::get("reader.appearance_preview").toUpper());
+        textHeader->setGeometry(0, 0, width(), textHeader->sizeHint().height());
+    }
+    if (textHeader)
+        textHeader->setVisible(content.text);
     if (!unchanged)
         update();
 }
@@ -181,7 +186,8 @@ void AppearancePreview::paintText(QPainter &painter)
 
 void AppearancePreview::resizeEvent(QResizeEvent *)
 {
-    textHeader->setGeometry(0, 0, width(), textHeader->sizeHint().height());
+    if (textHeader)
+        textHeader->setGeometry(0, 0, width(), textHeader->sizeHint().height());
 }
 
 void AppearancePreview::paintEvent(QPaintEvent *)

@@ -2300,6 +2300,14 @@ int main(int argc, char **argv)
                                             &backwardDamage)
                     && forwardDamage == backwardDamage,
             "Prepared damage was not reusable in both turn directions");
+    const auto beforePreview = model.position();
+    require(!model.imageFromAnchor().isNull(), "Anchored preview was not drawn");
+    require(model.position() == beforePreview && model.image(3).cacheKey() == damageFrom.cacheKey(),
+            "Anchored preview changed the reading page");
+    require(model.preparedDamage(damageFrom.cacheKey(), damageTo.cacheKey(), &forwardDamage)
+                    && model.preparedDamage(damageTo.cacheKey(), damageFrom.cacheKey(),
+                                            &backwardDamage),
+            "Anchored preview discarded prepared page-turn damage");
     require(model.style(42, 140) && model.pages() > pages, "Typography did not reflow");
     require(!model.preparedDamage(damageFrom.cacheKey(), damageTo.cacheKey(), &forwardDamage)
                     && !model.preparedDamage(damageTo.cacheKey(), damageFrom.cacheKey(),

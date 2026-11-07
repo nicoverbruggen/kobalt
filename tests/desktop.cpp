@@ -1695,6 +1695,36 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
     QCOMPARE(fixture.state().value("vertical_spacing_scope").toString(), QString("protection"));
 }
 
+void cancelledAppearancePreview()
+{
+    Fixture fixture;
+    QVERIFY(fixture.prepared);
+    const auto files = test::publisherPackage(
+            "en", "Preview cancellation",
+            { { "text.xhtml",
+                test::publisherHtml("<h1>A short page</h1><p>Keep this passage.</p>") } },
+            "<itemref idref=\"text.xhtml\"/>");
+    QVERIFY(writeBook(fixture.directory.path(), "preview-cancel.epub", files));
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(fixture.directory.path() + "/preview-cancel.epub");
+    QTRY_COMPARE(opened.count(), 1);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    const auto position = fixture.state().value("position");
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrNavText"));
+    const auto release = std::make_shared<QSemaphore>();
+    qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
+    const auto unblock = qScopeGuard([release] { release->release(); });
+    QVERIFY(fixture.press("rrNavText"));
+    QTRY_VERIFY(fixture.state().value("appearance_preview_pending").toBool());
+    QVERIFY(fixture.press("rrNavSeek"));
+    QVERIFY(fixture.press("rrNavText"));
+    release->release();
+    QTRY_VERIFY(!fixture.state().value("appearance_preview_pending").toBool());
+    QVERIFY(fixture.visible("rrAppearancePreview"));
+    QCOMPARE(fixture.state().value("position"), position);
+}
+
 // The appearance preview has laid out and drawn the newest change.
 bool previewSettled(Fixture &fixture)
 {
@@ -4091,6 +4121,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     void features()
     {
+        cancelledAppearancePreview();
+        if (QTest::currentTestFailed())
+            return;
         Fixture fixture;
         QVERIFY(fixture.prepared);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);

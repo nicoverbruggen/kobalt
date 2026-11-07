@@ -1422,6 +1422,7 @@ QImage EngineDocument::imageFromAnchor(bool stayInChapter)
     auto *entry = list->get(pageIndex);
     const int savedStart = entry->start, savedHeight = entry->height;
     const auto kept = cache_.value(pageIndex);
+    const auto keptDamage = damage_;
     cache_.remove(pageIndex);
     entry->start = start;
     entry->height = height;
@@ -1431,6 +1432,7 @@ QImage EngineDocument::imageFromAnchor(bool stayInChapter)
     cache_.remove(pageIndex);
     if (!kept.isNull())
         cache_.insert(pageIndex, kept);
+    damage_ = keptDamage;
     return result;
 }
 

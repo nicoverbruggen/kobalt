@@ -298,6 +298,8 @@ void Reader::syncAppearancePreview()
     if (!layoutOpen)
         appearancePreviewAxis = Axis::None;
     if ((!layoutOpen && !textOpen) || !appearancePreviewFits()) {
+        // Navigation can cancel this request without changing the reading image.
+        previewPageRequested = 0;
         appearancePreview->hide();
         return;
     }

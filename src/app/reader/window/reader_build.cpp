@@ -1043,6 +1043,17 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
     spacingSlider = appearance.spacingSlider;
     marginSlider = appearance.marginSlider;
     verticalMarginSlider = appearance.verticalMarginSlider;
+    marginPreview = new kobalt::reader::MarginPreview(this);
+    marginPreview->followPanel(menu, [this] { syncMarginPreview(); });
+    connect(panels, &QStackedWidget::currentChanged, this, [this] { syncMarginPreview(); });
+    const auto previewMargins = [this](kobalt::ui::SettingSlider *slider,
+                                       kobalt::reader::MarginPreview::Axis axis) {
+        // The guides appear with the next page. A drag or a press draws once, when it is ready.
+        slider->adjusting = [this, axis] { marginPreviewAxis = axis; };
+        connect(slider, &QSlider::valueChanged, this, [this] { syncMarginPreview(); });
+    };
+    previewMargins(marginSlider, kobalt::reader::MarginPreview::Axis::Horizontal);
+    previewMargins(verticalMarginSlider, kobalt::reader::MarginPreview::Axis::Vertical);
     alignmentButtons = appearance.alignmentButtons;
     hyphenButtons = appearance.hyphenButtons;
     rotationButtons = appearance.rotationButtons;

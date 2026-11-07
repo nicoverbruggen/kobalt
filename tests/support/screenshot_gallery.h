@@ -37,7 +37,8 @@ inline QString screenshotGroup(const QString &scene)
     if (scene.startsWith("annotation") || scene == "annotating" || scene.startsWith("bookmark")
         || scene.startsWith("pinned-bookmark"))
         return "Bookmarks and annotations";
-    if (scene.startsWith("vertical-") || scene == "layout" || scene.startsWith("header-footer"))
+    if (scene.startsWith("vertical-") || scene == "layout" || scene.startsWith("margin-preview")
+        || scene.startsWith("header-footer"))
         return "Layout";
     if (scene.startsWith("fonts") || scene.startsWith("text") || scene.startsWith("bionic")
         || scene.startsWith("embedded-"))
@@ -171,6 +172,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "header-footer-large", "Headers and footers: enlarged text" },
         { "header-footer-off", "Headers and footers: disabled" },
         { "layout", "Page layout" },
+        { "margin-preview-horizontal", "Horizontal margin preview" },
+        { "margin-preview-vertical", "Vertical margin preview" },
         { "beautifier-off", "Recommended book normalization" },
         { "beautifier-rules", "Custom book normalization" },
         { "beautifier-full", "Full book normalization" },

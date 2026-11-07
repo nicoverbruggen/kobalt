@@ -48,6 +48,10 @@ public:
 
     bool viewportTransition() const { return changingViewport; }
 
+    const QImage &headerImage() const { return headerPixels; }
+
+    const QImage &footerImage() const { return footerPixels; }
+
     // What the header and footer show. `notice`, such as an error, replaces
     // the footer's slots while it is set. It never adds a footer, because
     // that would change the page height.

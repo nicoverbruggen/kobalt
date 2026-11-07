@@ -11,6 +11,8 @@ class SettingSlider : public QSlider
 public:
     SettingSlider(QWidget *parent, int minimum, int maximum, int step = 1);
     std::function<void(int)> committed;
+    // Runs before a drag or a plus or minus press changes the value.
+    std::function<void()> adjusting;
 
     bool interacting() const { return tracking; }
     enum class MarkerMode { Positions, Stops, Checkpoints };

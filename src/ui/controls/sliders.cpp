@@ -60,6 +60,8 @@ void SettingSlider::setMarkerLabels(const QStringList &labels)
 
 void SettingSlider::nudge(int steps)
 {
+    if (adjusting)
+        adjusting();
     setValue(qBound(minimum(), value() + steps * singleStep(), maximum()));
     if (committed)
         committed(value());
@@ -204,6 +206,8 @@ int SettingSlider::positionForValue(int value) const
 
 void SettingSlider::moveTo(qreal x)
 {
+    if (adjusting)
+        adjusting();
     if (markerMode == MarkerMode::Checkpoints && markers.size() > 1) {
         const int span = qMax(1, width() - 2 * metrics::control::sliderInset);
         const double position =

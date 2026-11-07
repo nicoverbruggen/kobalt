@@ -2962,6 +2962,8 @@ void Reader::save(bool snapshot, bool background, bool persist)
     state["preview_settings"] =
             appearanceEdit.ready() ? appearanceEdit.preview()->state() : QJsonObject();
     state["typography_panel"] = menu->isVisible();
+    state["margin_preview_fits"] = marginPreviewFits();
+    state["margin_preview_pending"] = marginPageRequested != 0 && marginPageKey != marginPageRequested;
     state["annotation_dragging"] = annotationDragging;
     state["bookmarked"] = page->bookmarked;
     state["bookmark_count"] = bookmarks->available() ? int(bookmarks->bookmarks().size()) : -1;

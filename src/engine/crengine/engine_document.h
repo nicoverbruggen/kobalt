@@ -243,6 +243,9 @@ public:
     void setDarkMode(bool enabled);
     void resize(QSize size);
     QImage image(int page);
+    // One screen that starts at the reading position instead of a page break. Near the
+    // end of a chapter it starts earlier, so that a full screen stays in the chapter.
+    QImage imageFromAnchor();
     bool loadNextImage();
     // The idle book keeps its active layout, not images or an alternate layout.
     void releaseImages();

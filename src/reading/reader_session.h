@@ -192,6 +192,8 @@ public:
     // the latest request can finish; navigation, reflow and cancellation drop it.
     void previewPage(int page, QSize bounds, std::function<void(QImage)> finished);
     void cancelPagePreview();
+    // One screen of text in the current layout that starts at the reading position.
+    void anchoredPage(std::function<void(QImage)> finished);
     // One worker job resolves all eligible passages. Stale replies contain no indices.
     void intersectingRanges(const QString &start, const QString &end,
                             QVector<QPair<QString, QString>> ranges,

@@ -1366,6 +1366,72 @@ bool EngineDocument::refreshImages()
     return true;
 }
 
+QImage EngineDocument::imageFromAnchor()
+{
+    if (!engine_ || pages() <= 0)
+        return {};
+    const int current = page();
+    auto *document = engine_->getDocument();
+    auto *list = engine_->getPageList();
+    const auto anchor = document->createXPointer(cre(anchor_));
+    if (columns_ != 1 || anchor.isNull() || engine_->isVerticalText())
+        return image(current);
+    const int pageIndex = engine_->getBookmarkPage(anchor);
+    if (pageIndex < 0 || pageIndex >= list->length()
+        || (list->get(pageIndex)->flags & RN_PAGE_TYPE_COVER))
+        return image(current);
+    const int screen = size_.height() - topMargin_ - bottomMargin_;
+    auto chapterLimits = [&] {
+        const auto links = chapters();
+        const auto around = chapterAround(links, anchor_);
+        int first = 0;
+        int last = list->get(list->length() - 1)->start + list->get(list->length() - 1)->height;
+        if (around.current >= 0 && links[around.current].page >= 0
+            && links[around.current].page < list->length())
+            first = list->get(links[around.current].page)->start;
+        if (around.next >= 0 && links[around.next].page >= 0
+            && links[around.next].page < list->length())
+            last = list->get(links[around.next].page)->start;
+        return qMakePair(first, last);
+    }();
+    int start = anchor.toPoint().y;
+    if (start < 0 || screen <= 0)
+        return image(current);
+    if (chapterLimits.second - start < screen && chapterLimits.second > chapterLimits.first) {
+        const int wanted = qMax(chapterLimits.first, chapterLimits.second - screen);
+        const auto line =
+                document->createXPointer(lvPoint(0, wanted), PT_DIR_SCAN_FORWARD_LOGICAL_FIRST);
+        const int y = line.isNull() ? -1 : line.toPoint().y;
+        if (y >= 0 && y < start)
+            start = y;
+    }
+    // Stop after the last whole line, the same way that a page break does.
+    int height = qMin(screen, chapterLimits.second - start);
+    const auto last = document->createXPointer(lvPoint(0, start + height - 1),
+                                               PT_DIR_SCAN_BACKWARD_LOGICAL_FIRST);
+    lvRect box;
+    if (!last.isNull() && last.getRect(box) && box.bottom > start) {
+        const int whole = box.bottom <= start + height ? box.bottom - start : box.top - start;
+        if (whole > 0)
+            height = whole;
+    }
+    // Page drawing reads the start and the height from the page list. Lend this
+    // entry for one draw, on the worker that owns the layout.
+    auto *entry = list->get(pageIndex);
+    const int savedStart = entry->start, savedHeight = entry->height;
+    const auto kept = cache_.value(pageIndex);
+    cache_.remove(pageIndex);
+    entry->start = start;
+    entry->height = height;
+    auto result = image(pageIndex);
+    entry->start = savedStart;
+    entry->height = savedHeight;
+    cache_.remove(pageIndex);
+    if (!kept.isNull())
+        cache_.insert(pageIndex, kept);
+    return result;
+}
+
 QImage EngineDocument::image(int pageNumber)
 {
     activateFontParameters();

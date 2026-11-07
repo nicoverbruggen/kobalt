@@ -732,6 +732,22 @@ struct Fixture
         return recognized;
     }
 
+    // Presses, moves and holds so that a check or capture can see the drag in progress.
+    bool holdDrag(QWidget *target, QPoint from, QPoint to, const std::function<bool()> &whileHeld)
+    {
+        auto *reader = window.readerWindow();
+        auto *canvas = window.findChild<QGraphicsView *>();
+        if (!reader || !canvas || !target)
+            return false;
+        const auto start = canvas->mapFromScene(target->mapTo(reader, from));
+        const auto end = canvas->mapFromScene(target->mapTo(reader, to));
+        QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, start);
+        QTest::mouseMove(canvas->viewport(), end);
+        const bool result = whileHeld();
+        QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, end);
+        return result;
+    }
+
     bool selectWord(QWidget *target, QPoint position)
     {
         auto *reader = window.readerWindow();
@@ -1679,6 +1695,81 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
     QCOMPARE(fixture.state().value("vertical_spacing_scope").toString(), QString("protection"));
 }
 
+struct MarginPreviewPaints : QObject
+{
+    int count = 0;
+
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        count += event->type() == QEvent::Paint;
+        return false;
+    }
+};
+
+// The toolbar and the panel cover the page's margins. A margin control shows the
+// whole page between them, and it leaves when the Layout tab closes.
+void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString &)> &scene)
+{
+    const auto settled = [&] {
+        const auto state = fixture.state();
+        return !state.value("preview_busy").toBool() && !state.value("busy").toBool()
+                && !state.value("margin_preview_pending").toBool();
+    };
+    // A short space keeps the panel as it is, without an unreadable page.
+    // The saved state follows the panel's geometry a moment after the tab opens.
+    QTRY_COMPARE(fixture.visible("rrMarginPreview"),
+                 fixture.state().value("margin_preview_fits").toBool());
+    const bool fits = fixture.visible("rrMarginPreview");
+    QVERIFY(fixture.press("rrWider"));
+    QTRY_VERIFY(settled());
+    QCOMPARE(fixture.visible("rrMarginPreview"), fits);
+    QVERIFY(scene("margin-preview-horizontal"));
+    QVERIFY(fixture.press("rrNarrower"));
+    QTRY_VERIFY(settled());
+    // A drag only moves the slider. The page lays out again after the release.
+    auto *slider = qobject_cast<QSlider *>(fixture.widget("rrMargins"));
+    QVERIFY(slider);
+    const int restored = slider->value();
+    const int y = slider->height() / 2;
+    QVERIFY(fixture.holdDrag(slider, { slider->width() / 2, y },
+                             { slider->width() * 3 / 4, y }, [&] {
+                                 return slider->value() != restored
+                                         && slider->value() % 12 == 0
+                                         && fixture.visible("rrMarginPreview") == fits
+                                         && !fixture.state().value("preview_busy").toBool();
+                             }));
+    QTRY_VERIFY(settled());
+    while (slider->value() > restored) {
+        QVERIFY(fixture.press("rrNarrower"));
+        QTRY_VERIFY(settled());
+    }
+    QCOMPARE(slider->value(), restored);
+    for (int step = 0; step < 4; ++step) {
+        QVERIFY(fixture.press("rrVerticalMarginsMore"));
+        QTRY_VERIFY(settled());
+    }
+    QVERIFY(scene("margin-preview-vertical"));
+    for (int step = 0; step < 4; ++step) {
+        QVERIFY(fixture.press("rrVerticalMarginsLess"));
+        QTRY_VERIFY(settled());
+    }
+    QVERIFY(fixture.press("rrNavText"));
+    QTRY_VERIFY(!fixture.visible("rrMarginPreview"));
+    // Each paint is a visible e-ink update, so the preview adds none to opening the tab.
+    MarginPreviewPaints paints, panelPaints;
+    fixture.widget("rrMarginPreview")->installEventFilter(&paints);
+    fixture.widget("rrHeaderFooter")->installEventFilter(&panelPaints);
+    QVERIFY(fixture.press("rrNavLayout"));
+    QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
+    QTRY_VERIFY(settled());
+    QCOMPARE(fixture.visible("rrMarginPreview"), fits);
+    QTest::qWait(50);
+    QVERIFY2(paints.count <= panelPaints.count,
+             qPrintable(QString("%1 > %2").arg(paints.count).arg(panelPaints.count)));
+    fixture.widget("rrMarginPreview")->removeEventFilter(&paints);
+    fixture.widget("rrHeaderFooter")->removeEventFilter(&panelPaints);
+}
+
 // The same real-widget tour supplies integration checks and screenshot scenes.
 void tour(Fixture &fixture, const QString &name, bool screenshots)
 {
@@ -1734,6 +1825,9 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     if (!screenshots)
         QVERIFY(fixture.press("rrWider"));
     QVERIFY(scene("layout"));
+    marginPreviewTour(fixture, scene);
+    if (QTest::currentTestFailed())
+        return;
     QVERIFY(fixture.press("rrHeaderFooter"));
     QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
     if (screenshots) {
@@ -9718,6 +9812,8 @@ const QSet<QString> primaryScreens{ "library-home",
                                     "text",
                                     "fonts",
                                     "layout",
+                                    "margin-preview-horizontal",
+                                    "margin-preview-vertical",
                                     "settings",
                                     "bookmarks",
                                     "search-empty",
@@ -10211,6 +10307,16 @@ private slots:
         QVERIFY(scene("rrFont", "rrChoices", "fonts"));
         QVERIFY(fixture.press("rrFontClose"));
         QVERIFY(scene("rrNavLayout", "rrHeaderFooter", "layout"));
+        // A phone in landscape has no room for a readable page; a six-inch screen in portrait has.
+        if (preset == 5)
+            QVERIFY(!fixture.state().value("margin_preview_fits").toBool());
+        if (preset == 1)
+            QVERIFY(fixture.state().value("margin_preview_fits").toBool());
+        marginPreviewTour(fixture, [&](const QString &suffix) {
+            return capture(fixture, name + '-' + suffix);
+        });
+        if (QTest::currentTestFailed())
+            return;
         QVERIFY(scene("rrSettings", "rrGeneralSettings", "settings"));
         QVERIFY(fixture.press("rrSettingsClose"));
         if (!fixture.visible("rrBookmarks"))

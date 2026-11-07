@@ -108,6 +108,7 @@ void Reader::refresh()
     const auto nextImage = session->image();
     const auto previousPageImage = page->image.cacheKey();
     showPageImage(nextImage);
+    syncMarginPreview();
     syncLinkDiscovery();
     bookmarkList->setExcerptFont(bookFace());
     syncAnnotations();
@@ -272,6 +273,82 @@ void Reader::showChapterText()
     const auto text = page->headerText();
     header->setText(text.isEmpty() ? values.chapter : text);
     header->setAccessibleName(header->text());
+}
+
+QRect Reader::marginPreviewSpace() const
+{
+    const int top = topControls->geometry().bottom() + 1;
+    return { 0, top, width(), menu->geometry().top() - top };
+}
+
+bool Reader::marginPreviewFits() const
+{
+    // A short space, such as a phone in landscape, gives a page too small to read.
+    constexpr int minimumHeight = 200;
+    return marginPreviewSpace().height() >= ui::px(minimumHeight);
+}
+
+void Reader::syncMarginPreview()
+{
+    using Axis = kobalt::reader::MarginPreview::Axis;
+    const bool layoutOpen = menu->isVisible()
+            && panels->currentIndex() == int(kobalt::reader::AppearancePage::Layout);
+    if (!layoutOpen)
+        marginPreviewAxis = Axis::None;
+    if (!layoutOpen || !marginPreviewFits()) {
+        marginPreview->hide();
+        return;
+    }
+    auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()
+                                                                       : session;
+    const int side = kobalt::readingPixels(marginSlider->value());
+    const int vertical = kobalt::readingPixels(verticalMarginSlider->value());
+    kobalt::reader::MarginPreview::Content content;
+    content.page = page->size();
+    content.bodyTop = page->topHeight();
+    content.bodyHeight = bodySize().height();
+    content.header = page->showHeader() ? page->headerImage() : QImage();
+    content.footer = page->showFooter() || page->showProgress() ? page->footerImage() : QImage();
+    content.horizontalMargin = side;
+    content.verticalMargin = vertical;
+    content.axis = marginPreviewAxis;
+    marginPreview->setGeometry(marginPreviewSpace());
+    if (!marginPreview->isVisible())
+        marginPreview->stackUnder(menu);
+    const bool dragging = marginSlider->interacting() || verticalMarginSlider->interacting();
+    const bool settled = !dragging && !settings->busy() && settings->margin() == side
+            && settings->topMargin() == vertical && settings->bottomMargin() == vertical
+            && settings->image().size() == bodySize();
+    if (!settled)
+        marginPageRequested = 0;
+    // One change is one screen update. The picture stays during a drag and while
+    // a layout runs, so that nothing draws an in-between state.
+    if (settled && !appearanceEdit.edited()) {
+        // An unedited page already starts at the reading position.
+        content.body = settings->image();
+    } else if (settled && marginPageKey == settings->image().cacheKey()) {
+        content.body = marginPage;
+    } else {
+        if (settled && marginPageRequested != settings->image().cacheKey()) {
+            const qint64 key = settings->image().cacheKey();
+            marginPageRequested = key;
+            const QPointer<Reader> guard(this);
+            // The page starts at the bookmark, so the same text stays in place at every
+            // margin. Real page breaks would move it.
+            settings->anchoredPage([guard, key](QImage image) {
+                if (!guard || guard->marginPageRequested != key)
+                    return;
+                guard->marginPageKey = key;
+                guard->marginPage = std::move(image);
+                guard->syncMarginPreview();
+            });
+        }
+        if (marginPreview->isVisible())
+            return;
+        content.body = settings->image();
+    }
+    marginPreview->setContent(std::move(content));
+    marginPreview->show();
 }
 
 void Reader::showPageImage(const QImage &nextImage)

@@ -23,6 +23,7 @@
 #include "storage/annotation_export.h"
 #include "app/reader/views/reading_page.h"
 #include "app/reader/views/image_viewer.h"
+#include "app/reader/views/margin_preview.h"
 #include "app/reader/panels/choice_screen.h"
 #include "app/reader/panels/chapter_graph.h"
 #include "app/reader/settings/acknowledgments.h"
@@ -320,6 +321,9 @@ private:
     bool syncFontPicker();
     void showChapterText();
     void showPageImage(const QImage &nextImage);
+    QRect marginPreviewSpace() const;
+    bool marginPreviewFits() const;
+    void syncMarginPreview();
     void paintTurn();
     void syncAppearanceControls(bool pickingFont);
     void fitAppearance();
@@ -404,6 +408,12 @@ private:
     kobalt::Acknowledgments *acknowledgments;
     QStackedWidget *panels;
     QLabel *previewLabel;
+    kobalt::reader::MarginPreview *marginPreview = nullptr;
+    kobalt::reader::MarginPreview::Axis marginPreviewAxis =
+            kobalt::reader::MarginPreview::Axis::None;
+    // The page drawn from the bookmark, for the frame with this image key.
+    QImage marginPage;
+    qint64 marginPageKey = 0, marginPageRequested = 0;
     kobalt::ui::PageScrubber *pageScrubber = nullptr;
     QPushButton *resetDefaults, *chapterButton;
     QStackedWidget *settingsPages;

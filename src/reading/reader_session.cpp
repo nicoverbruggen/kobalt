@@ -1465,6 +1465,38 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
             Qt::QueuedConnection);
 }
 
+void ReaderSession::anchoredPage(std::function<void(QImage)> finished)
+{
+    cancelPagePreview();
+    if (running || retiring || !lease_ || lease_->revoked())
+        return;
+    const auto request = newestPreview->load();
+    const auto token = newestPreview;
+    const auto latest = newest;
+    const auto job = revision;
+    const auto lease = lease_;
+    const auto engine = engine_;
+    QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [engine, guard, finished, request, token, latest, job, lease] {
+                if (token->load() != request || latest->load() != job || lease->revoked())
+                    return;
+                EngineJob activity;
+                DiagnosticOperation operation("margin-preview-page");
+                const auto image = engine->imageFromAnchor();
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, image, finished, token, latest, job, request, lease] {
+                            if (guard && token->load() == request && latest->load() == job
+                                && !lease->revoked())
+                                finished(image);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
 void ReaderSession::nativePosition(std::function<void(QString, QString)> finished)
 {
     auto engine = engine_;

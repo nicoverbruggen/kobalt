@@ -13,6 +13,7 @@
 #include "app/reader_interface.h"
 #include "app/reader_window.h"
 #include "ui/controls/page_scrubber.h"
+#include <QtGui/private/qeventpoint_p.h>
 #include "ui/dialogs/modals.h"
 #include "ui/style/fonts.h"
 #include "ui/style/metrics.h"
@@ -2505,6 +2506,313 @@ private slots:
         test::skipPageTurnWindow();
         host.window()->pageButton(1);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 3);
+    }
+
+    // Checks both page navigation and reflow while a contact is held.
+    void pageFrameDuringHold_data()
+    {
+        QTest::addColumn<bool>("reflow");
+        QTest::addColumn<bool>("samePosition");
+        QTest::addColumn<bool>("backward");
+        QTest::addColumn<bool>("touch");
+        for (bool touch : { false, true }) {
+            const QByteArray prefix = touch ? "touch-" : "mouse-";
+            QTest::newRow((prefix + "page").constData()) << false << false << false << touch;
+            QTest::newRow((prefix + "layout").constData()) << true << false << false << touch;
+            QTest::newRow((prefix + "same-position-forward").constData())
+                    << false << true << false << touch;
+            QTest::newRow((prefix + "same-position-backward").constData())
+                    << false << true << true << touch;
+        }
+    }
+
+    // Checks that a new page or layout cannot turn an overlapping long hold into another page turn.
+    void pageFrameDuringHold()
+    {
+        QFETCH(bool, reflow);
+        QFETCH(bool, samePosition);
+        QFETCH(bool, backward);
+        QFETCH(bool, touch);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        if (samePosition) {
+            auto files = test::engineBook();
+            files["OEBPS/c1.xhtml"] =
+                    test::publisherHtml("<p>" + QByteArray("alpha ").repeated(20)
+                                        + "</p><div style=\"padding-bottom:4000px\">t</div><p>"
+                                        + QByteArray("reader ").repeated(60) + "</p>");
+            QVERIFY(test::writeBook(directory.path(), "same-position.epub", files));
+        }
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(samePosition ? directory.filePath("same-position.epub") : fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        QVERIFY(host.session()->pages() > 4);
+        const int origin = samePosition && !backward ? 1 : 2;
+        QVERIFY(host.session()->go(origin));
+        QTRY_VERIFY(!host.session()->busy());
+        const QPoint point(page->width() * 9 / 10, page->height() / 2);
+        auto *device = QTest::createTouchDevice();
+        const auto send = [&](QEvent::Type type, ulong timestamp) {
+            if (touch) {
+                const bool down = type == QEvent::MouseButtonPress;
+                QEventPoint contact(0, down ? QEventPoint::Pressed : QEventPoint::Released, point,
+                                    page->mapToGlobal(point));
+                QMutableEventPoint::setPosition(contact, point);
+                QTouchEvent event(down ? QEvent::TouchBegin : QEvent::TouchEnd, device,
+                                  Qt::NoModifier, { contact });
+                event.setTimestamp(timestamp);
+                QApplication::sendEvent(page, &event);
+                return;
+            }
+            QMouseEvent event(type, point, page->mapToGlobal(point), Qt::LeftButton,
+                              type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton,
+                              Qt::NoModifier);
+            event.setTimestamp(timestamp);
+            QApplication::sendEvent(page, &event);
+        };
+        int imageLookups = 0;
+        const auto imageHeld = page->imageHeld;
+        page->imageHeld = [&](QPoint point) {
+            ++imageLookups;
+            return imageHeld(point);
+        };
+        const auto position = host.session()->state().value("position");
+        const auto image = page->image.cacheKey();
+        const auto layout = host.session()->layoutRevision();
+        if (reflow) {
+            auto appearance = host.session()->state();
+            appearance["font_pixels"] = appearance.value("font_pixels").toInt() + 4;
+            host.session()->apply(appearance);
+        } else {
+            QVERIFY(host.session()->go(samePosition ? (backward ? 1 : 2) : 3));
+        }
+        // The worker's new frame cannot be delivered until after this press.
+        send(QEvent::MouseButtonPress, 1000);
+        QTRY_VERIFY(!host.session()->busy() && page->image.cacheKey() != image);
+        QCOMPARE(host.session()->layoutRevision() != layout, reflow);
+        const auto destination = host.session()->page();
+        if (!reflow)
+            QCOMPARE(destination, samePosition ? (backward ? 1 : 2) : 3);
+        if (samePosition)
+            QCOMPARE(host.session()->state().value("position"), position);
+        send(QEvent::MouseButtonRelease, 1709);
+        QVERIFY(!host.session()->busy());
+        QCOMPARE(imageLookups, 0);
+        QCOMPARE(host.session()->page(), destination);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrDictionary")->isVisible());
+        // A fresh short tap still turns the page, with no duplicate-filter masking.
+        send(QEvent::MouseButtonPress, 2000);
+        send(QEvent::MouseButtonRelease, 2085);
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == destination + 1);
+    }
+
+    // Checks decoded-image frames both before hold recognition and while the word-selection reply is queued.
+    void pageImageDuringHold_data()
+    {
+        QTest::addColumn<QString>("stage");
+        for (const auto *stage : { "before-threshold", "token-pending", "geometry-pending",
+                                   "dictionary-open", "selection-open" })
+            QTest::newRow(stage) << QString(stage);
+    }
+
+    // Checks that a deferred image keeps the first lookup on unchanged text and never navigates.
+    void pageImageDuringHold()
+    {
+        QFETCH(QString, stage);
+        const bool pendingSelection = stage == "token-pending";
+        const bool delayedPublication = stage == "geometry-pending" || stage == "dictionary-open"
+                || stage == "selection-open";
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        auto files = test::engineBook(true);
+        files["OEBPS/c1.xhtml"] = test::publisherHtml(
+                "<p style=\"margin:0;text-indent:0\">" + QByteArray("reader ").repeated(35)
+                + "</p><p><img src=\"colors.png\" width=\"128\" height=\"64\"/></p>");
+        // Local resources defer images above 256 KiB. Noise keeps this PNG
+        // above that threshold without a network service or a sleep.
+        QImage image(400, 400, QImage::Format_RGB32);
+        quint32 noise = 1;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                noise = noise * 1664525u + 1013904223u;
+                image.setPixel(x, y, 0xff000000u | (noise & 0xffffffu));
+            }
+        files["OEBPS/colors.png"].clear();
+        QBuffer buffer(&files["OEBPS/colors.png"]);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QVERIFY(files["OEBPS/colors.png"].size() > 256 * 1024);
+        QVERIFY(test::writeBook(directory.path(), "hold-image.epub", files));
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.preferences(), { { "highlight_help_seen", true } }));
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+
+        struct ResumeEngine
+        {
+            ~ResumeEngine() { engineActivity().pause(false); }
+        } resume;
+
+        host.configureServices = [](ReaderHostServices &) { engineActivity().pause(true); };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(directory.filePath("hold-image.epub"), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        QVERIFY(!host.session()->busy());
+        QVERIFY(host.session()->resourceStats().value("pending_images").toInt() > 0);
+        const auto imageKey = page->image.cacheKey();
+        const auto layout = host.session()->layoutRevision();
+        const auto position = host.session()->state().value("position");
+        const QPoint point(page->width() / 2, page->topHeight() + 100);
+        const auto send = [&](QEvent::Type type, ulong timestamp) {
+            QMouseEvent event(type, point, page->mapToGlobal(point), Qt::LeftButton,
+                              type == QEvent::MouseButtonRelease ? Qt::NoButton : Qt::LeftButton,
+                              Qt::NoModifier);
+            event.setTimestamp(timestamp);
+            QApplication::sendEvent(page, &event);
+        };
+        auto *dictionary = host.window()->findChild<QWidget *>("rrDictionary");
+        QVERIFY(dictionary);
+        bool started = false;
+        const auto drag = page->annotationDragStarted;
+        page->annotationDragStarted = [&](QPoint point, int boundary) {
+            started = true;
+            return drag(point, boundary);
+        };
+        const auto publish = host.session()->updated;
+
+        struct RestoreNotification
+        {
+            ReaderSession *session;
+            std::function<void()> previous;
+
+            ~RestoreNotification() { session->updated = previous; }
+        } restoreNotification{ host.session(), publish };
+
+        bool tokenBoundaryReached = false, imageBeforeToken = false;
+        if (pendingSelection) {
+            host.session()->updated = [&] {
+                imageBeforeToken = !tokenBoundaryReached;
+                publish();
+            };
+            // This marker is queued before the held contact requests its token.
+            // Publishing before the marker therefore proves the token is pending.
+            host.session()->annotationTokenAt(
+                    {}, [&](AnnotationToken) { tokenBoundaryReached = true; });
+        }
+        QRect sheet, firstHandle, lastHandle;
+        if (delayedPublication) {
+            if (stage == "selection-open")
+                page->annotationRequested();
+            // Hold back only the image's GUI notification. The engine can resolve
+            // text against its unchanged layout while the old pixels stay visible.
+            bool captured = false;
+            host.session()->updated = [&] { captured = true; };
+            engineActivity().pause(false);
+            QTRY_VERIFY(captured);
+            QCOMPARE(page->image.cacheKey(), imageKey);
+            host.session()->updated = publish;
+            engineActivity().pause(true);
+            send(QEvent::MouseButtonPress, 1000);
+            send(QEvent::MouseButtonRelease, 1709);
+            QVERIFY(started);
+            if (stage == "geometry-pending") {
+                // A new draft changes the markup generation before its geometry
+                // reply installs handles. Probe successive worker/GUI boundaries
+                // until that observable state is reached, rather than counting replies.
+                const auto generation = host.session()->markupGeneration();
+                bool probed = false, geometryPending = false;
+                const auto probe = [&](const auto &next, int remaining) -> void {
+                    host.session()->annotationTokenAt({}, [&, next, remaining](AnnotationToken) {
+                        if (host.session()->markupGeneration() == generation && remaining > 0) {
+                            next(next, remaining - 1);
+                            return;
+                        }
+                        geometryPending = host.session()->markupGeneration() > generation
+                                && page->annotationHandleRect(true).isEmpty()
+                                && page->annotationHandleRect(false).isEmpty()
+                                && !page->annotationContains(point - QPoint(0, page->topHeight()))
+                                && !dictionary->isVisible();
+                        if (geometryPending)
+                            publish();
+                        probed = true;
+                    });
+                };
+                probe(probe, 8);
+                engineActivity().pause(false);
+                QTRY_VERIFY(probed);
+                QVERIFY2(geometryPending,
+                         "Image must arrive after draft creation and before geometry");
+            } else {
+                engineActivity().pause(false);
+                if (stage == "dictionary-open") {
+                    QTRY_VERIFY(dictionary->isVisible());
+                    sheet = dictionary->geometry();
+                } else {
+                    QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+                    page->tapped(point);
+                    auto *actions = host.window()->findChild<QWidget *>("rrAnnotationPopover");
+                    QVERIFY(actions);
+                    QTRY_VERIFY(actions->isVisible());
+                    auto *card = actions->findChild<QWidget *>("rrModalCard");
+                    QVERIFY(card);
+                    sheet = card->geometry();
+                }
+                firstHandle = page->annotationHandleRect(true);
+                lastHandle = page->annotationHandleRect(false);
+                QVERIFY(!firstHandle.isEmpty() && !lastHandle.isEmpty());
+                QCOMPARE(page->image.cacheKey(), imageKey);
+                publish();
+            }
+        } else {
+            send(QEvent::MouseButtonPress, 1000);
+            if (pendingSelection) {
+                QTRY_VERIFY(started);
+                send(QEvent::MouseButtonRelease, 1709);
+            }
+            engineActivity().pause(false);
+        }
+        QTRY_VERIFY(page->image.cacheKey() != imageKey);
+        if (pendingSelection) {
+            QTRY_VERIFY(tokenBoundaryReached);
+            QVERIFY2(imageBeforeToken, "Image must arrive before the queued token boundary");
+        }
+        QCOMPARE(host.session()->layoutRevision(), layout);
+        QCOMPARE(host.session()->state().value("position"), position);
+        if (!delayedPublication && !pendingSelection)
+            send(QEvent::MouseButtonRelease, 1709);
+        if (stage == "selection-open") {
+            auto *actions = host.window()->findChild<QWidget *>("rrAnnotationPopover");
+            QVERIFY(actions->isVisible());
+            auto *card = actions->findChild<QWidget *>("rrModalCard");
+            QVERIFY(card);
+            QCOMPARE(card->geometry(), sheet);
+        } else {
+            QTRY_VERIFY(dictionary->isVisible());
+            QCOMPARE(host.window()->findChild<QLabel *>("rrDictionaryWord")->text(),
+                     QString("reader"));
+            if (stage == "dictionary-open")
+                QCOMPARE(dictionary->geometry(), sheet);
+        }
+        if (!firstHandle.isEmpty()) {
+            QCOMPARE(page->annotationHandleRect(true), firstHandle);
+            QCOMPARE(page->annotationHandleRect(false), lastHandle);
+        }
+        QCOMPARE(host.session()->state().value("position"), position);
     }
 
     void pageGestureBurstIgnoresRapidTurns()

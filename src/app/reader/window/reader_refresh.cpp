@@ -203,10 +203,10 @@ void Reader::syncFrameState()
     }
     // A preview has a different frame from the book and cannot start a
     // lookup. Do not cancel its panel-dismiss gesture when that frame updates.
-    // A new frame, such as a loaded image, must not look up the old text.
-    // It must not drop a tap or swipe in progress either.
+    // A new page or layout invalidates the held text, but not the gesture.
+    // A decoded image keeps the text geometry and its pending lookup.
     if (!appearanceEdit.panelOpen()
-        && (session->busy() || session->image().cacheKey() != page->image.cacheKey()))
+        && (session->busy() || annotationViewportFrame != annotationViewportKey()))
         dismissLookup(true);
     if (!session->busy() && !pendingPassage.position.isEmpty()) {
         // Accept the visit only after the engine confirms a different passage.

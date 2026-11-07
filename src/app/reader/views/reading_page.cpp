@@ -670,6 +670,8 @@ ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     setAttribute(Qt::WA_AcceptTouchEvents);
     setAttribute(Qt::WA_OpaquePaintEvent);
     textRefresh(this);
+    holdTimer.setParent(this);
+    holdTimer.setObjectName("rrHoldTimer");
     holdTimer.setSingleShot(true);
     holdTimer.setInterval(metrics::lookup::holdMilliseconds);
     connect(&holdTimer, &QTimer::timeout, this, [this] { triggerHold(); });
@@ -681,6 +683,8 @@ void ReadingPage::triggerHold()
         return;
     consumed = true;
     brightnessGesture.cancel();
+    if (holdTarget == HoldTarget::Stale)
+        return;
     if (imageHeld && imageHeld(origin.toPoint() - QPoint(0, topHeight())))
         return;
     if (annotationInputEnabled && annotationDragStarted) {
@@ -1231,6 +1235,7 @@ void ReadingPage::beginPointer(QPointF point, const QInputEvent *event)
     tracking = true;
     pressTime = quint32(event->timestamp());
     moved = consumed = false;
+    holdTarget = HoldTarget::Current;
     origin = latest = point;
     if (!revealedLinks.isEmpty()) {
         pressRevealedLink(point.toPoint() - QPoint(0, topHeight()));

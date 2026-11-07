@@ -177,6 +177,7 @@ private:
     void updateAnnotationRects(bool showActions = false);
     void paintAnnotationDraft();
     void syncAnnotations();
+    QString annotationViewportKey() const;
     void syncMarkupRequest();
     void finishAnnotationPresentation();
     void editAnnotation(const QString &id, bool navigate = true);

@@ -3,6 +3,8 @@
 - Hold a word for 500 ms to look it up in an installed dictionary. The definition opens in a sheet across the screen, on the half away from the word. On a screen shorter than 3.4 inches, the sheet grows to up to 62% of the height so a definition has room, but it never covers the word.
 - Dictionary lookup accepts individual Han characters in Chinese and Japanese text. It uses Unicode boundaries, not a Japanese morphological dictionary, so it does not infer compound words.
 
+If the page or text layout changes during a hold, Kobalt discards the old lookup target. The long hold does not turn a page or open the reading menu; release and hold the word on the new page. A decoded image that leaves the text layout unchanged preserves the hold and any word selection already in progress. Short taps and swipes keep their normal navigation behavior during page updates. Cancelling the contact prevents later lookup and navigation from it.
+
 ## Downloaded dictionaries
 
 Dictionary downloads are disabled on Kobo, and its settings omit the Lookup tab. Kobo lookup uses Nickel's installed dictionaries, including dictionaries in `.kobo/custom-dict`. Standard and custom dictionaries remain separate choices when they share a language suffix. Custom choices keep Nickel's custom label and are saved by file path, so installing or removing the standard dictionary does not change the selected custom dictionary. Lookup uses the installed entry shown in the selector even when Nickel lists an uninstalled standard dictionary with the same language suffix. The Kobo reader does not start the download manager or use dictionaries previously downloaded through Kobalt.

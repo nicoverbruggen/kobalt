@@ -99,8 +99,13 @@ public:
     // Ends the current touch: no lookup, tap, swipe or light change follows.
     void cancelHold();
 
-    // Stops only the lookup that a long hold would start. A tap or swipe still completes.
-    void stopHold() { holdTimer.stop(); }
+    // Invalidates the held text/image, not the contact. Source time decides at
+    // release: a long hold is consumed; a short tap or a swipe can still complete.
+    void invalidateHoldTarget()
+    {
+        holdTarget = HoldTarget::Stale;
+        holdTimer.stopTimeout();
+    }
 
     // A vertical drag along the left edge changes brightness and one along
     // the right edge changes warmth, when each edge is enabled. `lightStarted`
@@ -194,6 +199,8 @@ private:
     QTimer viewportNoticeTimer;
     int headerRightWidth() const;
     ui::HoldTimer holdTimer;
+    enum class HoldTarget { Current, Stale };
+    HoldTarget holdTarget = HoldTarget::Stale;
     QVector<QRect> selection, revealedLinks, draftAnnotations, savedAnnotations,
             candidateAnnotations;
     QRegion draftContour, annotationColorRegion;

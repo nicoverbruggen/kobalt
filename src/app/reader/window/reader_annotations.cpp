@@ -1263,6 +1263,16 @@ void Reader::finishAnnotationPresentation()
     });
 }
 
+QString Reader::annotationViewportKey() const
+{
+    // Preview frames have separate geometry and cannot start a lookup.
+    if (appearanceEdit.panelOpen())
+        return "preview:" + QString::number(page->image.cacheKey());
+    return QString::number(session->layoutRevision()) + ':' + layoutKey() + ':'
+            + QString::number(session->page()) + ':'
+            + session->state().value("position").toString();
+}
+
 void Reader::syncAnnotations()
 {
     syncAnnotationControls();
@@ -1279,7 +1289,7 @@ void Reader::syncAnnotations()
             annotationPopover->raise();
         }
     }
-    const QString frame = layoutKey() + ':' + session->state().value("position").toString();
+    const QString frame = annotationViewportKey();
     if (annotationViewportFrame != frame) {
         ++annotationEpoch;
         annotationViewportFrame = frame;
@@ -1296,11 +1306,8 @@ void Reader::syncAnnotations()
     syncMarkupRequest();
     const QString tintFrame = frame + (colorAnnotations() ? ":color" : ":mono");
     const auto imageKey = page->image.cacheKey();
-    if (annotationImageKey != imageKey) {
-        ++annotationEpoch;
-        annotationActionAnchor = {};
-        annotationPopover->hide();
-    }
+    // Decoding an image changes pixels, not text geometry. Keep a pending
+    // selection and its actions; the viewport key above invalidates stale text.
     const ReaderSession *displayed = session;
     if (const auto *preview = appearanceEdit.preview()) {
         if (preview->image().cacheKey() == imageKey) {
@@ -1315,6 +1322,7 @@ void Reader::syncAnnotations()
             annotationFrame != tintFrame && markup.request == annotationRequest;
     if ((annotationImageKey != imageKey || annotationPresentationReady || unchangedMarkup)
         && markup.imageKey == imageKey && markup.request.saved == annotationRequest.saved) {
+        const bool unchangedViewport = annotationFrame == tintFrame;
         ++savedHighlightEpoch;
         annotationImageKey = imageKey;
         annotationFrame = tintFrame;
@@ -1324,8 +1332,13 @@ void Reader::syncAnnotations()
         }
         const bool matchingDraft = markup.request.draftStart == annotationRequest.draftStart
                 && markup.request.draftEnd == annotationRequest.draftEnd;
-        draftHighlightRects = matchingDraft ? markup.draft.rectangles : QVector<QRect>{};
-        draftHighlightGeometry = matchingDraft ? markup.draft : AnnotationGeometry{};
+        // A decoded image may carry markup captured before the current selection.
+        // Its text geometry is unchanged, so keep the resolved draft until fresh
+        // markup arrives. A different viewport must still clear the old geometry.
+        if (matchingDraft || !unchangedViewport) {
+            draftHighlightRects = matchingDraft ? markup.draft.rectangles : QVector<QRect>{};
+            draftHighlightGeometry = matchingDraft ? markup.draft : AnnotationGeometry{};
+        }
         page->installAnnotationFrame(draftHighlightRects, markup.saved,
                                      draftHighlightGeometry.vertical, &draftHighlightGeometry);
         if (showActions) {

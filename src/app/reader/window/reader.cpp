@@ -1672,7 +1672,7 @@ void Reader::dismissLookup(bool keepGesture)
     ++lookupEpoch;
     lookupPending = false;
     if (keepGesture)
-        page->stopHold();
+        page->invalidateHoldTarget();
     else
         page->cancelHold();
     brightnessHide.stop();

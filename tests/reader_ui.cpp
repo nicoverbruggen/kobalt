@@ -46,6 +46,7 @@
 #include "support/strings.h"
 #include "engine/crengine/engine_document.h"
 #include <QApplication>
+#include <QtGui/private/qeventpoint_p.h>
 #include <QFontDatabase>
 #include <QLocale>
 #include <QScopeGuard>
@@ -594,6 +595,122 @@ private slots:
         timer.start(&press);
         timer.stop();
         QVERIFY(!timer.finish(&release));
+        timer.start(&press);
+        timer.stopTimeout();
+        QCOMPARE(timer.finish(&release), due);
+        timer.start(&press);
+        timer.stopTimeout();
+        timer.stop();
+        QVERIFY(!timer.finish(&release));
+    }
+
+    // Checks that invalidating a hold target preserves duration, movement and cancellation rules for both input paths.
+    void holdInvalidatedTarget_data()
+    {
+        QTest::addColumn<bool>("touch");
+        QTest::addColumn<quint32>("pressed");
+        QTest::addColumn<quint32>("released");
+        QTest::addColumn<QPoint>("travel");
+        QTest::addColumn<bool>("cancel");
+        QTest::addColumn<int>("taps");
+        QTest::addColumn<int>("swipes");
+        for (bool touch : { false, true }) {
+            const QByteArray prefix = touch ? "touch-" : "pointer-";
+            const auto row = [&](const char *name, quint32 press, quint32 release, QPoint travel,
+                                 bool cancel, int taps, int swipes) {
+                QTest::newRow((prefix + name).constData())
+                        << touch << press << release << travel << cancel << taps << swipes;
+            };
+            row("short", 1000, 1499, {}, false, 1, 0);
+            row("threshold", 1000, 1500, {}, false, 0, 0);
+            row("queued-long", 1000, 1709, {}, false, 0, 0);
+            row("wrapped", 0xfffffff0u, 0x2b5u, {}, false, 0, 0);
+            row("jitter", 1000, 1709, { 10, 10 }, false, 0, 0);
+            row("moved", 1000, 1709, { 50, 0 }, false, 0, 0);
+            row("swipe", 1000, 1709, { -180, 0 }, false, 0, 1);
+            row("cancel", 1000, 1709, {}, true, 0, 0);
+        }
+    }
+
+    // Checks that a stale long hold never navigates or selects old text and that the next hold still works.
+    void holdInvalidatedTarget()
+    {
+        QFETCH(bool, touch);
+        QFETCH(quint32, pressed);
+        QFETCH(quint32, released);
+        QFETCH(QPoint, travel);
+        QFETCH(bool, cancel);
+        QFETCH(int, taps);
+        QFETCH(int, swipes);
+        ui::setDensity(300);
+        ReadingPage page(nullptr, [] { });
+        page.resize(600, 800);
+        int actualTaps = 0, actualSwipes = 0, holds = 0, images = 0;
+        page.tapped = [&](QPoint) { ++actualTaps; };
+        page.swiped = [&](int) { ++actualSwipes; };
+        page.held = [&](QPoint) { ++holds; };
+        page.imageHeld = [&](QPoint) {
+            ++images;
+            return false;
+        };
+        auto *device = QTest::createTouchDevice();
+        const auto send = [&](bool down, quint32 timestamp, QPoint point) {
+            if (!touch) {
+                pointerEvent(&page, down ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease,
+                             timestamp, point);
+                return;
+            }
+            QEventPoint contact(0, down ? QEventPoint::Pressed : QEventPoint::Released, point,
+                                page.mapToGlobal(point));
+            QMutableEventPoint::setPosition(contact, point);
+            QTouchEvent event(down ? QEvent::TouchBegin : QEvent::TouchEnd, device, Qt::NoModifier,
+                              { contact });
+            event.setTimestamp(timestamp);
+            QApplication::sendEvent(&page, &event);
+        };
+        const QPoint point(300, 400);
+        send(true, pressed, point);
+        page.invalidateHoldTarget();
+        page.invalidateHoldTarget(); // Repeated frame notifications must not change the outcome.
+        if (cancel) {
+            QTouchEvent event(QEvent::TouchCancel, device);
+            QApplication::sendEvent(&page, &event);
+        }
+        send(false, released, point + travel);
+        QCOMPARE(actualTaps, taps);
+        QCOMPARE(actualSwipes, swipes);
+        QCOMPARE(holds, 0);
+        QCOMPARE(images, 0);
+        send(true, 3000, point);
+        send(false, 3709, point);
+        QCOMPARE(holds, 1);
+        QCOMPARE(images, 1);
+        QCOMPARE(actualTaps, taps);
+        QCOMPARE(actualSwipes, swipes);
+    }
+
+    // Checks that source time, not a timeout during blocked painting, decides an invalidated hold.
+    void holdInvalidationStopsTimer()
+    {
+        ReadingPage page(nullptr, [] { });
+        page.resize(600, 800);
+        int taps = 0, holds = 0;
+        page.tapped = [&](QPoint) { ++taps; };
+        page.held = [&](QPoint) { ++holds; };
+        auto *timer = page.findChild<QTimer *>("rrHoldTimer");
+        QVERIFY(timer);
+        QSignalSpy fired(timer, &QTimer::timeout);
+        timer->setInterval(20);
+        pointerEvent(&page, QEvent::MouseButtonPress, 1000, { 300, 400 });
+        page.invalidateHoldTarget();
+        QVERIFY(!fired.wait(50));
+        pointerEvent(&page, QEvent::MouseButtonRelease, 1010, { 300, 400 });
+        QCOMPARE(taps, 1);
+        pointerEvent(&page, QEvent::MouseButtonPress, 2000, { 300, 400 });
+        page.invalidateHoldTarget();
+        pointerEvent(&page, QEvent::MouseButtonRelease, 2030, { 300, 400 });
+        QCOMPARE(taps, 1);
+        QCOMPARE(holds, 0);
     }
 
     void holdTimerDoesNotRepeatOnRelease()

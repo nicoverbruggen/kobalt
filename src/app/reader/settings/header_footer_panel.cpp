@@ -265,8 +265,8 @@ QSize SlotMap::sizeHint() const
     const int strips = 2 * headerFooterMetrics::mapEdgeInset
             + slotBoxHeight(headerfooter::maximumSize, false)
             + slotBoxHeight(headerfooter::maximumSize, true) + progressSpace();
-    // Two lines with a line gap above and below them. A third line would
-    // push the sheet past the screen on a Clara BW.
+    // Two lines with a line gap above and below them. The sheet and its size
+    // sliders fit on one page on a Clara BW only with this short space.
     const int body = 3 * headerFooterMetrics::mapLineGap + headerFooterMetrics::mapLineHeight;
     return { headerFooterMetrics::mapRowHeight * 4,
              qMax(2 * int(headerFooterMetrics::mapRowHeight), strips + body)
@@ -511,7 +511,7 @@ HeaderFooterView::HeaderFooterView(QWidget *parent) : ui::Panel(parent, Qt::TopE
     contentRows = new QVBoxLayout(content);
     // Room under the title's divider and below the last row.
     QMargins margins = metrics::panel::contentMargins;
-    margins.setBottom(2 * metrics::spacing::section);
+    margins.setBottom(metrics::spacing::section);
     contentRows->setContentsMargins(margins);
     hide();
 }

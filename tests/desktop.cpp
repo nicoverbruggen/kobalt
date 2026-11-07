@@ -10307,6 +10307,15 @@ private slots:
         QVERIFY(scene("rrFont", "rrChoices", "fonts"));
         QVERIFY(fixture.press("rrFontClose"));
         QVERIFY(scene("rrNavLayout", "rrHeaderFooter", "layout"));
+        // The customization sheet and its size sliders fit on one page on a Clara BW.
+        if (QByteArray(QTest::currentDataTag()) == "1-light") {
+            QVERIFY(fixture.press("rrHeaderFooter"));
+            QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+            QVERIFY(fixture.visible("rrHeaderFooterClose"));
+            QVERIFY(!fixture.visible("rrHeaderFooterNext"));
+            QVERIFY(fixture.press("rrHeaderFooterClose"));
+            QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
+        }
         // A phone in landscape has no room for a readable page; a six-inch screen in portrait has.
         if (preset == 5)
             QVERIFY(!fixture.state().value("margin_preview_fits").toBool());

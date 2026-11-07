@@ -276,13 +276,13 @@ namespace headerFooter {
 // The slot map is a short page: one-line slot rows, their text at the top
 // and bottom edges as on the page, and a few lines between them.
 inline constexpr Px mapRowHeight{ list::oneLine }, mapLineHeight{ 4 };
-inline constexpr Px mapLineGap{ spacing::section }, mapLineInset{ list::inset }, mapEdgeInset{ 10 };
+inline constexpr Px mapLineGap{ 12 }, mapLineInset{ list::inset }, mapEdgeInset{ 10 };
 // Each slot is a dashed box around its text, so it reads as something to tap.
 inline constexpr Px slotGap{ 8 }, slotPadding{ 8 }, slotDash{ 4 }, mapSideInset{ 7 };
 inline constexpr TextPx valueText{ control::captionValueText }, emptyText{ chrome::captionText };
 // Preset miniatures: a page, then its name in a block as tall as a segment,
 // which grows with large text.
-inline constexpr Px miniatureWidth{ 184 }, selectedBorder{ 5 };
+inline constexpr Px miniatureWidth{ 120 }, selectedBorder{ 5 };
 inline constexpr Px miniatureTop{ spacing::section }, nameGap{ spacing::row };
 inline constexpr TextPx nameHeight{ control::segmentHeight.design() };
 inline constexpr Px namePadding{ control::segmentHorizontalPadding };

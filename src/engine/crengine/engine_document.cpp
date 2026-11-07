@@ -1366,7 +1366,7 @@ bool EngineDocument::refreshImages()
     return true;
 }
 
-QImage EngineDocument::imageFromAnchor()
+QImage EngineDocument::imageFromAnchor(bool stayInChapter)
 {
     if (!engine_ || pages() <= 0)
         return {};
@@ -1382,10 +1382,12 @@ QImage EngineDocument::imageFromAnchor()
         return image(current);
     const int screen = size_.height() - topMargin_ - bottomMargin_;
     auto chapterLimits = [&] {
-        const auto links = chapters();
-        const auto around = chapterAround(links, anchor_);
         int first = 0;
         int last = list->get(list->length() - 1)->start + list->get(list->length() - 1)->height;
+        if (!stayInChapter)
+            return qMakePair(first, last);
+        const auto links = chapters();
+        const auto around = chapterAround(links, anchor_);
         if (around.current >= 0 && links[around.current].page >= 0
             && links[around.current].page < list->length())
             first = list->get(links[around.current].page)->start;

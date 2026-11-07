@@ -414,6 +414,7 @@ private:
     // The page drawn from the bookmark, for the frame with this image key.
     QImage marginPage;
     qint64 marginPageKey = 0, marginPageRequested = 0;
+    bool marginPageForText = false;
     kobalt::ui::PageScrubber *pageScrubber = nullptr;
     QPushButton *resetDefaults, *chapterButton;
     QStackedWidget *settingsPages;

@@ -1465,7 +1465,7 @@ void ReaderSession::previewPage(int page, QSize bounds, std::function<void(QImag
             Qt::QueuedConnection);
 }
 
-void ReaderSession::anchoredPage(std::function<void(QImage)> finished)
+void ReaderSession::anchoredPage(bool stayInChapter, std::function<void(QImage)> finished)
 {
     cancelPagePreview();
     if (running || retiring || !lease_ || lease_->revoked())
@@ -1479,12 +1479,12 @@ void ReaderSession::anchoredPage(std::function<void(QImage)> finished)
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, finished, request, token, latest, job, lease] {
+            [engine, guard, stayInChapter, finished, request, token, latest, job, lease] {
                 if (token->load() != request || latest->load() != job || lease->revoked())
                     return;
                 EngineJob activity;
                 DiagnosticOperation operation("margin-preview-page");
-                const auto image = engine->imageFromAnchor();
+                const auto image = engine->imageFromAnchor(stayInChapter);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, image, finished, token, latest, job, request, lease] {

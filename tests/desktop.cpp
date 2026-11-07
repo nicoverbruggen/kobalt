@@ -1753,7 +1753,12 @@ void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString 
         QVERIFY(fixture.press("rrVerticalMarginsLess"));
         QTRY_VERIFY(settled());
     }
+    // The Text tab shows the same space with text at its true size.
     QVERIFY(fixture.press("rrNavText"));
+    QTRY_VERIFY(fixture.visible("rrFont"));
+    QTRY_COMPARE(fixture.visible("rrMarginPreview"),
+                 fixture.state().value("margin_preview_fits").toBool());
+    QVERIFY(fixture.press("rrNavStats"));
     QTRY_VERIFY(!fixture.visible("rrMarginPreview"));
     // Each paint is a visible e-ink update, so the preview adds none to opening the tab.
     MarginPreviewPaints paints, panelPaints;

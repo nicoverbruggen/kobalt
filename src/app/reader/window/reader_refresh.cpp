@@ -293,11 +293,19 @@ void Reader::syncMarginPreview()
     using Axis = kobalt::reader::MarginPreview::Axis;
     const bool layoutOpen = menu->isVisible()
             && panels->currentIndex() == int(kobalt::reader::AppearancePage::Layout);
+    const bool textOpen = menu->isVisible()
+            && panels->currentIndex() == int(kobalt::reader::AppearancePage::Typography);
     if (!layoutOpen)
         marginPreviewAxis = Axis::None;
-    if (!layoutOpen || !marginPreviewFits()) {
+    if ((!layoutOpen && !textOpen) || !marginPreviewFits()) {
         marginPreview->hide();
         return;
+    }
+    // Each kind of preview draws its own bookmark page.
+    if (marginPageForText != textOpen) {
+        marginPageForText = textOpen;
+        marginPageKey = marginPageRequested = 0;
+        marginPage = {};
     }
     auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()
                                                                        : session;
@@ -307,24 +315,34 @@ void Reader::syncMarginPreview()
     content.page = page->size();
     content.bodyTop = page->topHeight();
     content.bodyHeight = bodySize().height();
-    content.header = page->showHeader() ? page->headerImage() : QImage();
-    content.footer = page->showFooter() || page->showProgress() ? page->footerImage() : QImage();
+    if (!textOpen) {
+        content.header = page->showHeader() ? page->headerImage() : QImage();
+        content.footer =
+                page->showFooter() || page->showProgress() ? page->footerImage() : QImage();
+    }
     content.horizontalMargin = side;
     content.verticalMargin = vertical;
     content.axis = marginPreviewAxis;
+    content.text = textOpen;
+    content.cropTop = qMax(0, settings->topMargin() - int(ui::px(16)));
     marginPreview->setGeometry(marginPreviewSpace());
     if (!marginPreview->isVisible())
         marginPreview->stackUnder(menu);
     const bool dragging = marginSlider->interacting() || verticalMarginSlider->interacting();
+    // An edit that waits for its preview session has not reached these settings yet.
     const bool settled = !dragging && !settings->busy() && settings->margin() == side
             && settings->topMargin() == vertical && settings->bottomMargin() == vertical
-            && settings->image().size() == bodySize();
+            && settings->image().size() == bodySize()
+            && (!appearanceEdit.edited() || appearanceEdit.ready());
     if (!settled)
         marginPageRequested = 0;
+    // An unedited page already starts at the reading position. A short page has too little
+    // text to judge, so the Text preview continues with the text that follows it.
+    const bool usePage = settled && !appearanceEdit.edited()
+            && (!textOpen || marginPreview->fillsTextCrop(settings->image(), content.cropTop));
     // One change is one screen update. The picture stays during a drag and while
     // a layout runs, so that nothing draws an in-between state.
-    if (settled && !appearanceEdit.edited()) {
-        // An unedited page already starts at the reading position.
+    if (usePage) {
         content.body = settings->image();
     } else if (settled && marginPageKey == settings->image().cacheKey()) {
         content.body = marginPage;
@@ -334,8 +352,8 @@ void Reader::syncMarginPreview()
             marginPageRequested = key;
             const QPointer<Reader> guard(this);
             // The page starts at the bookmark, so the same text stays in place at every
-            // margin. Real page breaks would move it.
-            settings->anchoredPage([guard, key](QImage image) {
+            // setting. Real page breaks would move it.
+            settings->anchoredPage(!textOpen, [guard, key](QImage image) {
                 if (!guard || guard->marginPageRequested != key)
                     return;
                 guard->marginPageKey = key;
@@ -343,7 +361,7 @@ void Reader::syncMarginPreview()
                 guard->syncMarginPreview();
             });
         }
-        if (marginPreview->isVisible())
+        if (marginPreview->isVisible() && marginPreview->showsText() == textOpen)
             return;
         content.body = settings->image();
     }

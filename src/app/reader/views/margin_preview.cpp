@@ -1,6 +1,7 @@
 #include "margin_preview.h"
 #include "support/diagnostics.h"
 #include "support/strings.h"
+#include "ui/controls/rows.h"
 #include "ui/controls/text.h"
 #include "ui/style/fonts.h"
 #include "ui/style/private_text.h"
@@ -27,6 +28,11 @@ MarginPreview::MarginPreview(QWidget *parent) : QWidget(parent)
     // It paints its whole rectangle. Without this, an update of the page behind it
     // repaints it too, and each repaint is a visible e-ink update.
     setAttribute(Qt::WA_OpaquePaintEvent);
+    textHeader = new ui::ListHeader(this);
+    textHeader->setObjectName("rrTextPreviewHeader");
+    textHeader->setShaded(true);
+    textHeader->setCaptions(strings::get("reader.margin_preview").toUpper());
+    textHeader->hide();
     hide();
 }
 
@@ -40,8 +46,10 @@ void MarginPreview::setContent(Content next)
             && content.bodyHeight == next.bodyHeight && content.axis == next.axis
             && content.horizontalMargin == next.horizontalMargin
             && content.verticalMargin == next.verticalMargin && same(content.header, next.header)
-            && same(content.footer, next.footer) && same(content.body, next.body);
+            && same(content.footer, next.footer) && same(content.body, next.body)
+            && content.text == next.text && content.cropTop == next.cropTop;
     content = std::move(next);
+    textHeader->setVisible(content.text);
     if (!unchanged)
         update();
 }
@@ -93,6 +101,88 @@ const QImage &MarginPreview::scaled(ScaledImage &cache, const QImage &source, QS
     return cache.image;
 }
 
+namespace {
+QFont captionFont()
+{
+    QFont font = ui::interfaceFont(ui::metrics::chrome::captionText);
+    font.setLetterSpacing(QFont::AbsoluteSpacing, ui::metrics::chrome::captionSpacing);
+    return font;
+}
+
+bool blankRow(const QImage &image, int y, QRgb paper)
+{
+    for (int x = 0; x < image.width(); ++x)
+        if (image.pixel(x, y) != paper)
+            return false;
+    return true;
+}
+} // namespace
+
+void MarginPreview::paintCaption(QPainter &painter, int right) const
+{
+    // The caption takes only spare space, and only when it fits. Its left edge
+    // matches the panel's labels below.
+    const QFont font = captionFont();
+    const QString caption = strings::get("reader.margin_preview").toUpper();
+    const int left = ui::metrics::panel::contentMargins.left();
+    const int top = ui::px(pagePadding);
+    if (left + ui::interfaceTextWidth(caption, font) + top > right)
+        return;
+    painter.save();
+    painter.setFont(font);
+    painter.setPen(ui::themeColors(this).ink);
+    ui::drawInterfaceText(painter, QRect(left, top, right - left, ui::interfaceLineHeight(font)),
+                          caption, Qt::AlignLeft | Qt::AlignVCenter);
+    painter.restore();
+}
+
+QRect MarginPreview::textCard() const
+{
+    const int top = textHeader->sizeHint().height();
+    int available = qMax(0, height() - top);
+    if (content.body.isNull() || available <= 0)
+        return { 0, top, width(), available };
+    // End at the gap under the last whole line, so that no line is cut in half.
+    const QRgb paper = content.body.pixel(0, content.cropTop);
+    int last = qMin(content.cropTop + available, content.body.height()) - 1;
+    while (last > content.cropTop && !blankRow(content.body, last, paper))
+        --last;
+    return { 0, top, width(), qMax(1, last + 1 - content.cropTop) };
+}
+
+bool MarginPreview::fillsTextCrop(const QImage &body, int cropTop) const
+{
+    if (body.isNull() || height() <= 0)
+        return false;
+    const int bottom = qMin(cropTop + height(), body.height()) - 1;
+    const QRgb paper = body.pixel(0, cropTop);
+    // Look for text in the lower part of the crop.
+    for (int y = bottom; y > cropTop + height() * 2 / 3; --y)
+        if (!blankRow(body, y, paper))
+            return true;
+    return false;
+}
+
+void MarginPreview::paintText(QPainter &painter)
+{
+    // The header names the preview, like a section in Settings. The sample has the rest.
+    const int top = textHeader->sizeHint().height();
+    painter.fillRect(0, top, width(), height() - top,
+                     content.body.isNull() ? ui::themeColors(this).paper
+                                           : QColor(content.body.pixel(0, content.cropTop)));
+    const QRect card = textCard();
+    if (card.isEmpty() || content.body.isNull())
+        return;
+    // One image pixel per interface pixel: this is the text's true size.
+    painter.drawImage(card.topLeft(), content.body,
+                      QRect(0, content.cropTop, card.width(), card.height()));
+}
+
+void MarginPreview::resizeEvent(QResizeEvent *)
+{
+    textHeader->setGeometry(0, 0, width(), textHeader->sizeHint().height());
+}
+
 void MarginPreview::paintEvent(QPaintEvent *)
 {
     DiagnosticOperation operation("margin-preview-paint");
@@ -100,28 +190,16 @@ void MarginPreview::paintEvent(QPaintEvent *)
     QPainter painter(this);
     // The same gray behind a white page as the Styling samples, so it reads as a sample.
     painter.fillRect(rect(), ui::sectionColor(this));
+    if (content.text) {
+        paintText(painter);
+        return;
+    }
     const qreal factor = scale();
     if (factor <= 0)
         return;
     const QRect bounds = pageBounds();
     painter.fillRect(bounds, colors.paper);
-    // The caption takes only the space beside the page, and only when it fits.
-    QFont captionFont = ui::interfaceFont(ui::metrics::chrome::captionText);
-    captionFont.setLetterSpacing(QFont::AbsoluteSpacing, ui::metrics::chrome::captionSpacing);
-    const QString caption = strings::get("reader.margin_preview").toUpper();
-    // Its left edge matches the panel's labels below.
-    const int captionLeft = ui::metrics::panel::contentMargins.left();
-    const int captionTop = ui::px(pagePadding);
-    if (captionLeft + ui::interfaceTextWidth(caption, captionFont) + captionTop <= bounds.left()) {
-        painter.save();
-        painter.setFont(captionFont);
-        painter.setPen(colors.ink);
-        ui::drawInterfaceText(painter,
-                              QRect(captionLeft, captionTop, bounds.left() - captionLeft,
-                                    ui::interfaceLineHeight(captionFont)),
-                              caption, Qt::AlignLeft | Qt::AlignVCenter);
-        painter.restore();
-    }
+    paintCaption(painter, bounds.left());
     painter.setClipRect(bounds);
 
     const auto logicalHeight = [factor](const QImage &image) {

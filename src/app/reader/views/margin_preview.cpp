@@ -1,5 +1,9 @@
 #include "margin_preview.h"
 #include "support/diagnostics.h"
+#include "support/strings.h"
+#include "ui/controls/text.h"
+#include "ui/style/fonts.h"
+#include "ui/style/private_text.h"
 #include "ui/style/metrics.h"
 #include "ui/style/theme.h"
 #include <QEvent>
@@ -94,11 +98,30 @@ void MarginPreview::paintEvent(QPaintEvent *)
     DiagnosticOperation operation("margin-preview-paint");
     const auto colors = ui::themeColors(this);
     QPainter painter(this);
-    painter.fillRect(rect(), colors.paper);
+    // The same gray behind a white page as the Styling samples, so it reads as a sample.
+    painter.fillRect(rect(), ui::sectionColor(this));
     const qreal factor = scale();
     if (factor <= 0)
         return;
     const QRect bounds = pageBounds();
+    painter.fillRect(bounds, colors.paper);
+    // The caption takes only the space beside the page, and only when it fits.
+    QFont captionFont = ui::interfaceFont(ui::metrics::chrome::captionText);
+    captionFont.setLetterSpacing(QFont::AbsoluteSpacing, ui::metrics::chrome::captionSpacing);
+    const QString caption = strings::get("reader.margin_preview").toUpper();
+    // Its left edge matches the panel's labels below.
+    const int captionLeft = ui::metrics::panel::contentMargins.left();
+    const int captionTop = ui::px(pagePadding);
+    if (captionLeft + ui::interfaceTextWidth(caption, captionFont) + captionTop <= bounds.left()) {
+        painter.save();
+        painter.setFont(captionFont);
+        painter.setPen(colors.ink);
+        ui::drawInterfaceText(painter,
+                              QRect(captionLeft, captionTop, bounds.left() - captionLeft,
+                                    ui::interfaceLineHeight(captionFont)),
+                              caption, Qt::AlignLeft | Qt::AlignVCenter);
+        painter.restore();
+    }
     painter.setClipRect(bounds);
 
     const auto logicalHeight = [factor](const QImage &image) {

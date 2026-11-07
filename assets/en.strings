@@ -646,6 +646,7 @@
 "settings.paragraph_gap" = "Spacing";
 "settings.paragraph_indent" = "First-line indent";
 "settings.paragraph_adjustments_value" = "Gap %1 · Indent %2";
+"reader.margin_preview" = "Preview";
 "reader.margins" = "Horizontal margins: ";
 "reader.vertical_margins" = "Vertical margins: ";
 /* Arguments: %1, %2 */

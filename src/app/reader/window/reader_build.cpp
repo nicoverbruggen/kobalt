@@ -75,7 +75,7 @@ protected:
                     QRectF(content.adjusted(-padding, -2 * padding, padding, 2 * padding))
                             .adjusted(inset, inset, -inset, -inset);
             painter.setPen(QPen(palette().color(QPalette::WindowText), metrics::control::border));
-            painter.setBrush(palette().color(QPalette::Window));
+            painter.setBrush(ui::themeColors(this).paper);
             painter.drawRoundedRect(bounds, bounds.width() / 2, bounds.width() / 2);
             painter.setPen(QPen(ui::dividerColor(this), metrics::control::border));
             const qreal dividerInset = bounds.width() / 4;

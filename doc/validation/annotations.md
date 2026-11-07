@@ -8,6 +8,8 @@ SQLite is the default backend, with an explicit legacy JSON override as document
 
 Physical-device touch and e-ink refresh still need device validation.
 
+The pinned-bookmark checks require an opaque theme background inside each shortcut capsule, including after switching themes. Rounded corners and gaps between columns remain transparent. The gallery includes a contrasting backdrop so a transparent interior cannot hide over a blank page margin.
+
 ## Export
 
 `model.highlight-store` builds the export archives, and `desktop.annotations` exports through the reader with both the Kobo default folder and the save picker. Headless Qt uses its widget file picker for these checks. Native Mac save sheets, Android document-provider writes and Nickel's import scan still need platform validation.

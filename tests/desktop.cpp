@@ -2206,7 +2206,32 @@ void checkPinnedBookmarks(int preset, bool dark)
             QCoreApplication::processEvents();
             const auto frame = fixture.window.readerWindow()->grab().toImage();
             QCOMPARE(frame.pixelColor(bar->pos() + QPoint(2, 2)), QColor("#515151"));
+            const QPoint inside(first->x() - ui::px(6), first->geometry().center().y());
+            QCOMPARE(frame.pixelColor(bar->pos() + inside), QColor(dark ? Qt::black : Qt::white));
+            QVERIFY(capture(fixture, name + "-pinned-bookmark-background"));
             backdrop.hide();
+            // A transparent style sheet can replace the palette brush after a theme change.
+            // Check both transitions, then leave the original theme for the remaining cases.
+            for (int toggle = 0; toggle < 2; ++toggle) {
+                QVERIFY(fixture.press("rrSettings"));
+                if (!fixture.visible("rrDisplayOptions"))
+                    QVERIFY(fixture.press("rrSettingsDisplay"));
+                QVERIFY(revealSettingsOption(fixture, "rrDarkMode"));
+                QVERIFY(fixture.press("rrDarkMode"));
+                const bool nextDark = toggle == 0 ? !dark : dark;
+                QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), nextDark);
+                QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
+                QVERIFY(fixture.press("rrSettingsClose"));
+                QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+                backdrop.show();
+                bar->raise();
+                QCoreApplication::processEvents();
+                const auto themedFrame = fixture.window.readerWindow()->grab().toImage();
+                QCOMPARE(themedFrame.pixelColor(bar->pos() + inside),
+                         QColor(nextDark ? Qt::black : Qt::white));
+                QCOMPARE(themedFrame.pixelColor(bar->pos() + QPoint(2, 2)), QColor("#515151"));
+                backdrop.hide();
+            }
 
             QVERIFY(capture(fixture, name + "-pinned-bookmark-single"));
             QVERIFY(fixture.press("rrNavStats"));

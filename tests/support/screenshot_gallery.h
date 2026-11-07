@@ -127,6 +127,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "pinned-bookmark-name", "Edit the bookmark name" },
         { "pinned-bookmark-list", "Pinned and ordinary bookmarks" },
         { "pinned-bookmark-single", "Single bookmark shortcut" },
+        { "pinned-bookmark-background", "Bookmark shortcut over contrasting content" },
         { "pinned-bookmark-eight", "Eight bookmark shortcuts" },
         { "pinned-bookmark-four", "Four bookmark shortcuts" },
         { "pinned-bookmark-actions", "Bookmark actions" },

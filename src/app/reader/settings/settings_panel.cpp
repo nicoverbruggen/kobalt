@@ -705,6 +705,40 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                   strings::get("settings.dictionary_font_size"), [] { });
     systemRows->addWidget(dictionaryFontButton);
     systemRows->addWidget(dictionaryFontSizeButton);
+    if (inputs.readerStandbySupported) {
+        section(systemPage, systemRows, "rrSystemAdvancedSection",
+                strings::get("settings.section_advanced"));
+        disableStandbyOption = check(systemPage, "rrDisableReaderStandby",
+                                     strings::get("settings.disable_reader_standby"),
+                                     strings::get("settings.disable_reader_standby_description"));
+        systemRows->addWidget(disableStandbyOption);
+        standbyDialog = new ui::ChoiceModal(
+                parent,
+                { strings::get("settings.disable_reader_standby_warning"),
+                  strings::get("settings.disable_reader_standby_title"),
+                  {} },
+                { strings::get("common.cancel"), "rrKeepReaderStandby" },
+                { strings::get("settings.disable_reader_standby"), "rrConfirmDisableStandby" });
+        standbyDialog->setObjectName("rrStandbyConfirmation");
+        standbyDialog->setDimmed(true);
+        connect(disableStandbyOption, &QCheckBox::clicked, this, [this](bool checked) {
+            if (!checked)
+                return;
+            // An unanswered confirmation must never enable the preference.
+            disableStandbyOption->setChecked(false);
+            standbyDialog->fitCard();
+            standbyDialog->show();
+            standbyDialog->raise();
+            standbyDialog->secondaryButton()->setFocus();
+        });
+        connect(standbyDialog->secondaryButton(), &QPushButton::clicked, this,
+                [this] { dismissStandbyConfirmation(); });
+        connect(standbyDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+            disableStandbyOption->setChecked(true);
+            dismissStandbyConfirmation();
+        });
+        standbyDialog->dismissed = [this] { dismissStandbyConfirmation(); };
+    }
     systemRows->addStretch(1);
     aboutPage = new AboutPage(settingsPages);
     settingsPages->addWidget(aboutPage);
@@ -768,6 +802,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                                denseGraphOption,
                                                hideTabLabelsOption,
                                                wifiPowerSaverOption,
+                                               disableStandbyOption,
                                                automaticOpeningOption,
                                                minimalAnnotationOption };
     for (auto *option : options) {
@@ -1022,6 +1057,7 @@ void SettingsPanel::showOptionsPage(int page)
 SettingsPanel::~SettingsPanel()
 {
     delete restoreDialog;
+    delete standbyDialog;
     delete fontDialog;
 }
 
@@ -1996,11 +2032,20 @@ void SettingsPanel::dismissRestore()
     resetDefaults->setFocus();
 }
 
+void SettingsPanel::dismissStandbyConfirmation()
+{
+    if (!standbyDialog || standbyDialog->isHidden())
+        return;
+    standbyDialog->hide();
+    disableStandbyOption->setFocus();
+}
+
 void SettingsPanel::hideEvent(QHideEvent *event)
 {
     // The next opening starts on the section list.
     sectionOpen = false;
     dismissRestore();
+    dismissStandbyConfirmation();
     dismissFontChoices();
     if (stylingHidden)
         stylingHidden();

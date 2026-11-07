@@ -1,5 +1,7 @@
 # Storage compatibility
 
+`disable_reader_standby` is an optional global Boolean. Missing or invalid values use false. True prevents automatic reader standby on supported Kobo hosts while the reader is visible and active. Explicit sleep, closing, USB export and shutdown retain their normal behavior. Other hosts preserve the preference but do not apply it. This keeps settings schema 1.
+
 Kobalt separates saved reading data from disposable rendering caches. Storage formats are versioned independently of application releases. Hosts choose the storage directory; `storage::Paths` owns the shared filenames. JSON uses UTF-8. Writes use `QSaveFile` to replace a complete file atomically.
 
 ## Saved reading data

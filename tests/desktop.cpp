@@ -1709,8 +1709,7 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QTRY_VERIFY(fixture.visible("rrSettingsPages") || fixture.visible("rrSettingsRail"));
     QVERIFY(scene("settings"));
     if (screenshots) {
-        for (const auto *tab :
-             { "Display", "Controls", "Defaults", "Styling", "System", "Kosync" }) {
+        for (const auto *tab : { "Display", "Controls", "Defaults", "Styling", "Kosync" }) {
             QVERIFY(fixture.press(qPrintable(QString("rrSettings") + tab)));
             capturePages(fixture, name + "-settings-" + QString(tab).toLower(),
                          "rrSettingsOptions");
@@ -6806,8 +6805,79 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_face"), originalFace);
     }
 
-    // Checks Settings choices through the canvas: when each is saved, values after reopening, Keep defaults and a failed save.
-    void settings_data() { bookmarks_data(); }
+    void settingsStandby_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("supported");
+        QTest::newRow("light-supported") << false << true;
+        QTest::newRow("dark-supported") << true << true;
+        QTest::newRow("unsupported") << false << false;
+    }
+
+    void settingsStandby()
+    {
+        QFETCH(bool, dark);
+        QFETCH(bool, supported);
+        Fixture fixture(dark, false, false, true, false, false,
+                        [supported](ReaderHostServices &services) {
+                            services.readerStandbySupported = supported;
+                        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrDisableReaderStandby"));
+        QCOMPARE(bool(option), supported);
+        if (!supported) {
+            QVERIFY(!fixture.widget("rrSystemAdvancedSection"));
+            return;
+        }
+        QVERIFY(revealSettingsOption(fixture, "rrDisableReaderStandby"));
+        QVERIFY(!option->isChecked());
+        QVERIFY(fixture.press("rrDisableReaderStandby"));
+        QTRY_VERIFY(fixture.visible("rrStandbyConfirmation"));
+        QVERIFY(!option->isChecked());
+        QVERIFY(fixture.press("rrKeepReaderStandby"));
+        QVERIFY(!fixture.visible("rrStandbyConfirmation"));
+        QVERIFY(!option->isChecked());
+        QVERIFY(fixture.press("rrDisableReaderStandby"));
+        QVERIFY(fixture.press("rrConfirmDisableStandby"));
+        QVERIFY(option->isChecked());
+        QVERIFY(!fixture.visible("rrStandbyConfirmation"));
+        QVERIFY(!storage::readJson(fixture.paths.preferences())
+                         .value("disable_reader_standby")
+                         .toBool());
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("disable_reader_standby"),
+                     QJsonValue(true));
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(!fixture.window.readerWindow());
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 2);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrDisableReaderStandby"));
+        option = qobject_cast<QCheckBox *>(fixture.widget("rrDisableReaderStandby"));
+        QVERIFY(option && option->isChecked());
+        QVERIFY(!fixture.visible("rrStandbyConfirmation"));
+        QVERIFY(fixture.press("rrDisableReaderStandby"));
+        QVERIFY(!option->isChecked());
+        QVERIFY(!fixture.visible("rrStandbyConfirmation"));
+        // Closing Settings with an unanswered warning must not disable standby.
+        QVERIFY(fixture.press("rrDisableReaderStandby"));
+        QTRY_VERIFY(fixture.visible("rrStandbyConfirmation"));
+        auto *close = qobject_cast<QPushButton *>(fixture.widget("rrSettingsClose"));
+        QVERIFY(close);
+        close->click();
+        QTRY_VERIFY(!fixture.visible("rrStandbyConfirmation"));
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("disable_reader_standby"),
+                     QJsonValue(false));
+    }
 
     void dictionarySafeArea()
     {
@@ -7393,6 +7463,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrBrightnessNotice"));
         page->lightFinished(false);
     }
+
+    // Checks Settings choices through the canvas: when each is saved, values after reopening, Keep defaults and a failed save.
+    void settings_data() { bookmarks_data(); }
 
     void settings()
     {
@@ -9452,6 +9525,32 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void standbySettings_data() { screenshotVariants(); }
+
+    void standbySettings()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        const auto name = screenshotVariant(preset, dark);
+        capturePages(fixture, name + "-settings-system", "rrSettingsOptions");
+        QVERIFY(revealSettingsOption(fixture, "rrDisableReaderStandby"));
+        QVERIFY(fixture.press("rrDisableReaderStandby"));
+        QTRY_VERIFY(fixture.visible("rrStandbyConfirmation"));
+        QVERIFY(capture(fixture, name + "-settings-standby-confirmation"));
+        QVERIFY(fixture.press("rrKeepReaderStandby"));
+        QTRY_VERIFY(!fixture.visible("rrStandbyConfirmation"));
+    }
 
     void viewportTransition_data() { screenshotVariants(); }
 

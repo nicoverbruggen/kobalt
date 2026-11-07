@@ -1110,6 +1110,11 @@
 "settings.section_default_global_font" = "Default global font";
 "settings.section_user_interface" = "User Interface";
 "settings.section_dictionary_ui" = "Dictionary UI";
+"settings.section_advanced" = "Advanced";
+"settings.disable_reader_standby" = "Disable standby";
+"settings.disable_reader_standby_description" = "Keeps the device awake while reading. Uses more battery power.";
+"settings.disable_reader_standby_title" = "Disable standby while reading?";
+"settings.disable_reader_standby_warning" = "Disabling standby can significantly reduce battery life. It may help with intermittent freezes or missed page turns on some devices, but is generally not recommended. You can still put the device to sleep. Are you sure you want to disable standby?";
 "settings.dictionary_font" = "Dictionary font";
 "settings.dictionary_font_size" = "Dictionary font size";
 "settings.dictionary_font_small" = "Small";

@@ -2853,6 +2853,11 @@ void Reader::runIdleSave(bool beforeStandby)
 
 bool Reader::flushBeforeStandby()
 {
+    // Refuse only reader standby. Sleep, USB export and closing must still
+    // drain their saves and let the host suspend or release the reader.
+    if (services.readerStandbySupported && preferences.value(disableReaderStandbyKey).toBool(false)
+        && isVisible() && !lifecycleHidden && !closing && !exportRunning && !services.suspended())
+        return false;
     // Standby pauses Qt timers. Let the visible confirmation dismiss first.
     auto *notice = dynamic_cast<KosyncNotice *>(kosyncDialog.data());
     if (!lifecycleHidden && notice && notice->completing())

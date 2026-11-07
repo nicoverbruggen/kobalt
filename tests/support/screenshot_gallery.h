@@ -239,6 +239,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "styling-hanging-punctuation", "Hanging punctuation: off" },
         { "styling-hanging-punctuation-on", "Hanging punctuation: on" },
         { "settings-system", "System settings" },
+        { "settings-standby-confirmation", "Disable reader standby confirmation" },
         { "session-timeout", "New session after sleep" },
         { "settings-time-remaining-format", "Time remaining format" },
         { "stats", "Reading statistics" },

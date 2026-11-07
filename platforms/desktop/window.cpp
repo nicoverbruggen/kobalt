@@ -278,6 +278,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
                   auto services = readerHostServices();
                   services.nativeDialogParent = [this] { return this; };
                   services.devicePreview = [this] { return screenPreset != 0; };
+                  services.readerStandbySupported = screenPreset != 0;
                   // An emulated sleep or power-off suspends the reader as on Kobo.
                   services.suspended = [this, host = services.suspended] {
                       return deviceAsleep || poweredOff || (host && host());

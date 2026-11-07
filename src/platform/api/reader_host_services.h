@@ -69,6 +69,9 @@ struct ReaderHostServices
     std::function<bool()> colorDisplay;
     // Optional desktop query. Device previews retain simulated status chrome.
     std::function<bool()> devicePreview;
+    // The host asks flushBeforeStandby before suspending an active reader,
+    // or previews a device that does.
+    bool readerStandbySupported = false;
     bool systemRotation = false;
     bool downloadableDictionaries = true;
     // Optional host-resolved high-resolution cover. The reader decodes it on

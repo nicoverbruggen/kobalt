@@ -1,5 +1,7 @@
 # Sleep, USB and power checks
 
+`lifecycle.readerStandbySetting` checks the default, disabled, invalid and unsupported preference states. It verifies that explicit sleep and a hidden or closed reader are not held awake by the preference. These controlled host checks do not measure hardware standby or battery life.
+
 Label `sleep`. Build `mac-tests`, then run `ctest --preset mac -L sleep` from `platforms/desktop/`. `ctest --preset mac -N -L sleep` lists its tests.
 
 These checks cover sleep screens and snapshots, sleep and wake, session timeouts, USB export, shutdown, power-off screens and the native lifecycle adapter. The `lifecycle` checks drive the production reader with controlled host callbacks and an injected clock. The `platform` checks drive the production Kobo adapters with controlled Nickel signals, substitute native window types and a real profile database.

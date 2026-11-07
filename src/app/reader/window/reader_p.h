@@ -61,6 +61,7 @@ class QVBoxLayout;
 namespace kobalt::reader {
 // Global preference for the Wi-Fi power saver. Missing means on.
 inline constexpr const char *wifiPowerSaverKey = "turn_off_wifi_on_open";
+inline constexpr const char *disableReaderStandbyKey = "disable_reader_standby";
 
 // Input and accessibility target only. The cached header image supplies its
 // pixels and invalidates only the part whose text changed.
@@ -375,6 +376,7 @@ private:
     QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
               *hideTabLabelsOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
+    QCheckBox *disableStandbyOption = nullptr;
     QPushButton *autoRotateOption;
     bool hideNativeStatus() const;
     QJsonObject preferences;

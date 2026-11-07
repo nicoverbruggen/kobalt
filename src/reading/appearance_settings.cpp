@@ -133,6 +133,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     for (const auto *key : { "dark_mode",
                              "light_dark_mode_shortcut",
                              "hide_tab_labels",
+                             "disable_reader_standby",
                              "inherit_text_layout",
                              "two_columns_landscape",
                              "page_animations",

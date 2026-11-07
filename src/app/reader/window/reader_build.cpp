@@ -1315,6 +1315,7 @@ void Reader::buildSettings()
     settingsInputs.automaticBookOpeningSupported =
             services.automaticBookOpening && services.setAutomaticBookOpening;
     settingsInputs.wifiPowerSaverSupported = bool(services.turnOffWifi);
+    settingsInputs.readerStandbySupported = services.readerStandbySupported;
 #ifndef KOBALT_READER_HARDWARE
     settingsInputs.debugProgressAvailable = true;
 #endif
@@ -1397,6 +1398,7 @@ void Reader::buildSettings()
     automaticOpeningOption = settings->automaticOpeningOption;
     hideTabLabelsOption = settings->hideTabLabelsOption;
     wifiPowerSaverOption = settings->wifiPowerSaverOption;
+    disableStandbyOption = settings->disableStandbyOption;
     settings->showPowerManagement(wifiPowerSaverVisible());
     hideTabLabelsOption->setVisible(!services.phoneLayout);
     linkIndicatorOption = settings->linkIndicatorOption;

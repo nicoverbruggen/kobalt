@@ -306,6 +306,8 @@ void Reader::openSettings()
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     if (wifiPowerSaverOption)
         wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(false));
+    if (disableStandbyOption)
+        disableStandbyOption->setChecked(preferences.value(disableReaderStandbyKey).toBool(false));
     for (auto *face : { &settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace,
                         &settingsDictionaryFontFace })
         if (!session->fontFaces().contains(*face))
@@ -627,6 +629,7 @@ void Reader::applySettings()
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
+    static_cast<SettingsPanel *>(general)->dismissStandbyConfirmation();
     // Edits made before the preview opened have no session yet. Apply them
     // together with these settings once the preview holds them.
     if (appearanceEdit.queued()
@@ -645,6 +648,8 @@ void Reader::applySettings()
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
     if (wifiPowerSaverOption)
         next[wifiPowerSaverKey] = wifiPowerSaverOption->isChecked();
+    if (disableStandbyOption)
+        next[disableReaderStandbyKey] = disableStandbyOption->isChecked();
     next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
     for (const auto *key : appearance::fallbackFontKeys)
         next[key] = settingsFontFaces.value(key).toString();

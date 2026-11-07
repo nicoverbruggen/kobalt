@@ -42,6 +42,7 @@ struct SettingsPanelInputs
     bool automaticBookOpeningSupported = false;
     // The host can turn Wi-Fi off when a book opens, or previews a host that can.
     bool wifiPowerSaverSupported = false;
+    bool readerStandbySupported = false;
 };
 
 // Qt parents own every widget. Reader installs policy callbacks after construction.
@@ -51,6 +52,7 @@ public:
     SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs);
     ~SettingsPanel() override;
     void dismissRestore();
+    void dismissStandbyConfirmation();
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                          const QString &current, const QString &emptyLabel,
                          std::function<void(const QString &)> chosen);
@@ -107,6 +109,7 @@ public:
     ui::DescribedOption *hideTabLabelsOption = nullptr;
     QWidget *powerSection = nullptr;
     ui::DescribedOption *wifiPowerSaverOption = nullptr;
+    ui::DescribedOption *disableStandbyOption = nullptr;
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
     ui::DescribedOption *lightDarkModeOption = nullptr;
@@ -166,6 +169,7 @@ private:
     void fitRail(int availableHeight = 0);
     AboutPage *aboutPage = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog;
+    QPointer<ui::ChoiceModal> standbyDialog;
     QHash<int, StyleSample> stylingSamples;
     // The open styling sheet, if any, and the option its preview shows.
     QPointer<QWidget> stylingPreview;

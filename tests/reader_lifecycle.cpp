@@ -5296,6 +5296,58 @@ private slots:
                  qPrintable("Timer events while idle: " + events.seen.join(", ")));
     }
 
+    void readerStandbySetting_data()
+    {
+        QTest::addColumn<QJsonValue>("saved");
+        QTest::addColumn<bool>("supported");
+        QTest::addColumn<bool>("disabled");
+        QTest::newRow("default") << QJsonValue() << true << false;
+        QTest::newRow("enabled") << QJsonValue(false) << true << false;
+        QTest::newRow("disabled") << QJsonValue(true) << true << true;
+        QTest::newRow("invalid") << QJsonValue("true") << true << false;
+        QTest::newRow("unsupported") << QJsonValue(true) << false << false;
+    }
+
+    void readerStandbySetting()
+    {
+        QFETCH(QJsonValue, saved);
+        QFETCH(bool, supported);
+        QFETCH(bool, disabled);
+        auto paths = testPaths();
+        QJsonObject preferences{ { "schema", 1 } };
+        if (!saved.isNull())
+            preferences["disable_reader_standby"] = saved;
+        QVERIFY(storage::writeJson(paths.preferences(), preferences));
+        bool suspended = false;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.readerStandbySupported = supported;
+            services.suspended = [&] { return suspended; };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        QTRY_VERIFY(!host.book()->savesPending());
+        QTRY_COMPARE(host.window()->flushBeforeStandby(), !disabled);
+        // Explicit sleep must still reach the native suspend path.
+        suspended = true;
+        QTRY_VERIFY(host.window()->flushBeforeStandby());
+        suspended = false;
+        QTRY_COMPARE(host.window()->flushBeforeStandby(), !disabled);
+        host.window()->hide();
+        QTRY_VERIFY(host.window()->flushBeforeStandby());
+        host.window()->show();
+        QTRY_COMPARE(host.window()->flushBeforeStandby(), !disabled);
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+    }
+
     // Checks when opening a book asks the host to turn Wi-Fi off: each account and schedule, the saver setting and Bluetooth.
     void wifiPowerSaver_data()
     {

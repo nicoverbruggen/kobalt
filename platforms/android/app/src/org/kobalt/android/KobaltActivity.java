@@ -443,7 +443,7 @@ public class KobaltActivity extends QtActivity {
     public void exitReader() { finishAndRemoveTask(); }
     @Override protected void onDestroy() {
         ready = false;
-        if (booxRefresh != null) booxRefresh.cancel();
+        if (booxRefresh != null) booxRefresh.close();
         request.incrementAndGet();
         importer.shutdownNow();
         super.onDestroy();

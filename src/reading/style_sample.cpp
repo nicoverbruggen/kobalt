@@ -274,6 +274,7 @@ QVector<QRect> paragraphGaps(EngineDocument &engine, const QRect &area,
 StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &request)
 {
     StyleSample result;
+    result.cropRatio = request.cropRatio;
     if (request.values.isEmpty() || request.page.isEmpty())
         return result;
     const auto document =

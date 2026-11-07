@@ -551,6 +551,7 @@ void Reader::renderStylingSamples(int requested)
             request.cropOrigin = { 0, 0 };
             request.crop = { request.page.width(), samplePixels(300) };
             request.marginGuides = true;
+            request.cropRatio = ratio;
         }
         request.thumbnail = panel->stylingPageSize(request.page, vertical);
         if (vertical) {

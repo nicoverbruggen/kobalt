@@ -33,6 +33,9 @@ struct StyleSampleRequest
     QSize crop;
     QPoint cropOrigin;
     bool marginGuides = false;
+    // Image pixels per interface pixel in the crops. Book samples render at the
+    // size of the reading page, whose pixels are interface pixels.
+    qreal cropRatio = 1;
     // Page spacing only: the reading area within the page, and the size of a
     // full-resolution view of its bottom edge on the page that changes.
     QRect readingArea;
@@ -52,6 +55,7 @@ struct StyleSample
     QVector<QVector<QImage>> spreads;
     // One crop per option when the request asked for crops.
     QVector<QImage> crops;
+    qreal cropRatio = 1;
     // Text edges in crop pixels, or an empty rectangle when no guides are needed.
     QRect cropReadingArea;
     // Extra paragraph gaps within each crop, excluding ordinary line leading.

@@ -131,6 +131,7 @@ public:
     {
         pages = sample.spreads.value(choice);
         lines = sample.crops.value(choice);
+        linesRatio = sample.cropRatio;
         gaps = sample.cropGaps.value(choice);
         cropReadingArea = sample.cropReadingArea;
         setProperty("paragraph_gap_count", gaps.size());
@@ -175,11 +176,11 @@ protected:
         const qreal ratio = qMax<qreal>(1, devicePixelRatio());
         const int padding = ui::px(20);
         if (!lines.isNull()) {
-            // One device pixel per image pixel keeps the sample's glyphs sharp,
-            // unless the reading line is wider than the sheet. Paper in the
+            // Show the sample at its own scale, unless the reading line is wider than
+            // the sheet. Book samples then match the reading page. Paper in the
             // page's colour keeps the lines clear of the frame.
             const int paperHeight = ui::px(24);
-            QSize size(qRound(lines.width() / ratio), qRound(lines.height() / ratio));
+            QSize size(qRound(lines.width() / linesRatio), qRound(lines.height() / linesRatio));
             const QSize space(qMax(1, width() - 2 * int(ui::px(24))),
                               qMax(1, height() - 2 * padding - 2 * paperHeight));
             if (size.width() > space.width() || size.height() > space.height()) {
@@ -266,6 +267,7 @@ protected:
 private:
     QVector<QImage> pages;
     QImage lines, edge;
+    qreal linesRatio = 1;
     QRect cropReadingArea;
     QRectF readingArea;
     QRect edgeArea;
@@ -1595,24 +1597,23 @@ QSize SettingsPanel::stylingPageSize(QSize readingPage, bool edge) const
 QSize SettingsPanel::stylingCropSize(QSize readingPage, int horizontalMargin) const
 {
     // Whole lines, so the spaces at both ends of a line stay visible. The
-    // preview scales them down only when the line is wider than the sheet.
-    const qreal ratio = qMax<qreal>(1, devicePixelRatio());
+    // preview scales them down only when the line is wider than the sheet. The reading
+    // page's pixels are interface pixels at every screen scale.
     const int text = qMax(1, readingPage.width() - 2 * horizontalMargin);
-    const qreal scale = qMin<qreal>(1, stylingSampleWidth(parentWidget()) * ratio / text);
-    return { text, qMin(readingPage.height(), qRound(ui::px(300) * ratio / scale)) };
+    const qreal scale = qMin<qreal>(1, qreal(stylingSampleWidth(parentWidget())) / text);
+    return { text, qMin(readingPage.height(), qRound(ui::px(300) / scale)) };
 }
 
 QSize SettingsPanel::stylingTextPageSize(QSize readingPage, int horizontalMargin) const
 {
     // Reflow wide reading lines for the capped modal instead of shrinking their
     // glyphs. Keep the book's margins and the paper beside the cropped text.
-    const qreal ratio = qMax<qreal>(1, devicePixelRatio());
-    if (readingPage.width() <= ui::px(1264) * ratio)
+    if (readingPage.width() <= ui::px(1264))
         return readingPage;
     const int side = qMin(horizontalMargin, int(ui::px(16)));
     readingPage.setWidth(qMin(readingPage.width(),
-                              qRound(stylingSampleWidth(parentWidget()) * ratio)
-                                      + 2 * horizontalMargin - 2 * side));
+                              stylingSampleWidth(parentWidget()) + 2 * horizontalMargin
+                                      - 2 * side));
     return readingPage;
 }
 

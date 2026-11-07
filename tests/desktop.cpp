@@ -11216,13 +11216,13 @@ private slots:
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrNavText"));
         QVERIFY(fixture.press("rrLarger"));
-        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(previewSettled(fixture));
         QVERIFY(capture(fixture, name + "-text-size-preview"));
         QVERIFY(fixture.press("rrHeavier"));
-        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(previewSettled(fixture));
         QVERIFY(capture(fixture, name + "-text-weight-preview"));
         QVERIFY(fixture.press("rrLooser"));
-        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(previewSettled(fixture));
         QVERIFY(capture(fixture, name + "-text-spacing-preview"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsDisplay"));

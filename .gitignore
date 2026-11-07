@@ -1,6 +1,7 @@
 /build/
 /platforms/*/CMakeUserPresets.json
 /.cache/
+/.claude/
 /vendor/
 /worktrees/
 __pycache__/

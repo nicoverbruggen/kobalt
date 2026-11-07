@@ -14,7 +14,7 @@
 # The screenshots target and platforms/kobo/build.sh call MODE=begin before
 # their work and MODE=record after it. The launcher and platforms/eval/run.cmake
 # run the full suite through PRESET. MODE=hook is the Claude Code PreToolUse
-# hook in .claude/settings.json. It reads the hook input from stdin.
+# hook configured locally in .claude/settings.json. It reads hook input from stdin.
 #
 # Records live in build/validation/ of the worktree that ran. The tree hash
 # covers tracked and untracked files that Git does not ignore, except doc/,

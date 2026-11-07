@@ -1627,7 +1627,8 @@ void Reader::buildNotices()
     brightnessNotice->hide();
     brightnessHide.setObjectName("rrBrightnessHideTimer");
     brightnessHide.setSingleShot(true);
-    brightnessHide.setInterval(metrics::lightSwipe::hideMilliseconds);
+    brightnessHide.setTimerType(Qt::PreciseTimer);
+    brightnessHide.setInterval(metrics::lightSwipe::finalPercentageMilliseconds);
     connect(&brightnessHide, &QTimer::timeout, brightnessNotice, &QWidget::hide);
     annotationModeNotice = new ui::AnnotationModeNotice(this);
     annotationModeNotice->setObjectName("rrAnnotationModeNotice");

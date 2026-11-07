@@ -16,6 +16,7 @@ inline constexpr Px width{ 580 }, height{ 252 }, inset{ 64 }, iconWidth{ 140 }, 
         gap{ 48 };
 inline constexpr Px percentText{ 78 }, captionText{ 32 }, captionGap{ 16 };
 inline constexpr int hideMilliseconds = 850;
+inline constexpr int finalPercentageMilliseconds = 1500;
 // Wait for a pause in the swipe before changing e-ink feedback.
 inline constexpr int feedbackMilliseconds = 150;
 } // namespace lightSwipe

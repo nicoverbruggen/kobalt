@@ -347,13 +347,19 @@ public:
     }
 
     int shows = 0, hides = 0, flashes = 0;
+    qint64 lastVisibleMilliseconds = 0;
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override
     {
         if (object == notice) {
-            shows += event->type() == QEvent::Show;
-            hides += event->type() == QEvent::Hide;
+            if (event->type() == QEvent::Show) {
+                ++shows;
+                visibleTime.start();
+            } else if (event->type() == QEvent::Hide) {
+                ++hides;
+                lastVisibleMilliseconds = visibleTime.isValid() ? visibleTime.elapsed() : 0;
+            }
         } else if (event->type() == QEvent::DynamicPropertyChange
                    && static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()
                            == "reader_full_flash"
@@ -365,6 +371,7 @@ protected:
 
 private:
     QWidget *notice;
+    QElapsedTimer visibleTime;
 };
 
 struct Fixture
@@ -7050,6 +7057,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_VERIFY(notice->isVisible());
             QTRY_COMPARE(value->text(), QString::number(final) + '%');
             QTRY_VERIFY(!notice->isVisible());
+            QVERIFY2(events.lastVisibleMilliseconds >= 1500,
+                     "A quick swipe must show its final percentage for at least 1.5 seconds");
         } else {
             QVERIFY(runLightTimers(reader));
             QVERIFY(!notice->isVisible());

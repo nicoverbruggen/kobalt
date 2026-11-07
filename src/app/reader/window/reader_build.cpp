@@ -20,7 +20,6 @@
 #include "ui/panel_timing.h"
 #include "storage/reader_storage.h"
 #include "app/reader/settings/settings_panel.h"
-#include "build_info.h"
 #include "render/page_refresh_regions.h"
 #include "reading/appearance_settings.h"
 #include "reading/page_navigation.h"
@@ -1308,11 +1307,6 @@ void Reader::buildSettings()
 {
     kobalt::reader::SettingsPanelInputs settingsInputs;
     settingsInputs.keyboard = services.keyboard;
-    const auto release = QStringLiteral(KOBALT_VERSION);
-    settingsInputs.release = release.mid(release.startsWith('v') ? 1 : 0);
-    settingsInputs.commit = QString::fromLatin1(kobaltCommit) + (KOBALT_COMMIT_MODIFIED ? "*" : "");
-    settingsInputs.commitVisible = kobaltCommit[0] != '\0';
-    settingsInputs.qtMajor = QT_VERSION >> 16;
     settingsInputs.downloadableDictionaries = services.downloadableDictionaries;
     settingsInputs.animationSupport = services.animationSupport();
     settingsInputs.lightSupported = services.lightAvailable();

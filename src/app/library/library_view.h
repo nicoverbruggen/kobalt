@@ -16,6 +16,7 @@ class LoadingIndicator;
 } // namespace kobalt::ui
 
 namespace kobalt::library {
+class AboutScreen;
 class BookPages;
 class FolderPage;
 class SortSheet;
@@ -69,6 +70,7 @@ private:
     SortSheet *sortSheet = nullptr;
     ui::ActionMenu *moreSheet = nullptr;
     FolderPage *folderPage = nullptr;
+    AboutScreen *about = nullptr;
     ui::ModalOverlay *overlay = nullptr;
     QTimer *throttle;
     bool scanning = false, searching = false, dark = false;
@@ -81,6 +83,7 @@ private:
     void showMenu(ui::ActionMenu *menu, const char *name);
     void confirmRemove(const QString &key);
     void showFolders();
+    void showAbout();
     void closeOverlay();
     QWidget *buildEmpty();
     void setSearching(bool value);

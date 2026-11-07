@@ -165,15 +165,19 @@ Acknowledgments::Acknowledgments(QWidget *parent) : QFrame(parent)
     ui::readerStyle(url, styles::caption(chrome::numberText));
     text = new LicenseText(this);
     pager = new ui::PagerBar(this, "rrAcknowledgments");
-    connect(back, &QPushButton::clicked, this, [this] {
-        if (entry >= 0) {
-            entry = -1;
-            redraw();
-        } else if (finished)
-            finished();
-    });
+    connect(back, &QPushButton::clicked, this, &Acknowledgments::goBack);
     connect(pager->previous, &QPushButton::clicked, this, [this] { turnPage(-1); });
     connect(pager->next, &QPushButton::clicked, this, [this] { turnPage(1); });
+}
+
+void Acknowledgments::goBack()
+{
+    if (entry >= 0) {
+        entry = -1;
+        redraw();
+    } else if (finished) {
+        finished();
+    }
 }
 
 void Acknowledgments::open()

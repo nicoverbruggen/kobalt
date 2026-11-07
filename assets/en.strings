@@ -156,6 +156,7 @@
 
 /* library */
 "library.title" = "Library";
+"library.about" = "About Kobalt";
 /* Arguments: %1 */
 "library.count" = "%1 books";
 "library.count_one" = "1 book";

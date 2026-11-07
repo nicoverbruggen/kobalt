@@ -38,6 +38,8 @@ public:
     explicit Acknowledgments(QWidget *parent);
     std::function<void()> finished;
     void open();
+    // Return from a license to the projects, then to the owning About view.
+    void goBack();
 
 protected:
     void paintEvent(QPaintEvent *event) override;

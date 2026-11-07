@@ -69,6 +69,7 @@ signals:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    bool eventFilter(QObject *object, QEvent *event) override;
 
 private:
     std::unique_ptr<ReaderOpeningView> opening;
@@ -80,6 +81,7 @@ private:
     KeyboardFactory keyboard;
     // The text scale the library was built with.
     qreal builtTextScale = 1;
+    bool libraryRepairPending = false;
     bool dark = false, hostScaled = false, singleBooksAreCopies = false;
 
     struct Scale

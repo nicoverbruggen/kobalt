@@ -4049,6 +4049,65 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!touchPointer());
     }
 
+    // The Library canvas paints the About credits and routes Back without opening a reader.
+    void libraryAbout()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
+        QVERIFY(start && start->libraryShown());
+        auto *view = start->library();
+        QTRY_VERIFY(view->isVisible() && view->width() > 600);
+        view->findChild<QPushButton *>("libraryMore")->click();
+        view->findChild<QPushButton *>("libraryMoreAbout")->click();
+        auto *about = view->findChild<QWidget *>("libraryAbout");
+        QTRY_VERIFY(about && about->isVisible());
+        QVERIFY(!fixture.window.readerWindow());
+        QCoreApplication::processEvents();
+        start->libraryCanvas()->viewport()->repaint();
+        about->findChild<QPushButton *>("rrOpenAcknowledgments")->click();
+        auto *credits = about->findChild<QWidget *>("rrAcknowledgments");
+        QTRY_VERIFY(credits && credits->isVisible());
+        auto *firstProject = credits->findChild<QPushButton *>("rrAcknowledgment0");
+        QVERIFY(firstProject);
+        QTRY_VERIFY(firstProject->updatesEnabled());
+        QVERIFY(credits->rect().contains(firstProject->geometry()));
+        auto *creditPage = credits->findChild<QLabel *>("rrAcknowledgmentsPage");
+        auto *creditNext = credits->findChild<QPushButton *>("rrAcknowledgmentsNext");
+        QVERIFY(creditPage && creditNext);
+        QSet<QString> seen;
+        while (!seen.contains(creditPage->text())) {
+            seen.insert(creditPage->text());
+            int visibleProjects = 0;
+            for (auto *row : credits->findChildren<QPushButton *>())
+                if (row->isVisible() && row->property("reader_entry").isValid()) {
+                    ++visibleProjects;
+                    QTRY_VERIFY(row->updatesEnabled());
+                    QVERIFY(credits->rect().contains(row->geometry()));
+                }
+            QVERIFY(visibleProjects > 0);
+            if (!creditNext->isVisible() || !creditNext->isEnabled())
+                break;
+            QVERIFY(seen.size() < 30);
+            creditNext->click();
+        }
+        credits->findChild<QPushButton *>("rrAcknowledgment0")->click();
+        auto *license = credits->findChild<QWidget *>("rrLicenseText");
+        QTRY_VERIFY(license->isVisible() && license->updatesEnabled());
+        QVERIFY(start->dismissModal());
+        QVERIFY(credits->isVisible());
+        QVERIFY(!license->isVisible());
+        QVERIFY(start->dismissModal());
+        QVERIFY(!credits->isVisible());
+        QVERIFY(about->isVisible());
+        QVERIFY(start->dismissModal());
+        QVERIFY(!about->isVisible());
+        QVERIFY(start->libraryShown());
+        QVERIFY(!start->dismissModal());
+        QCOMPARE(opened.count(), 0);
+    }
+
     // Checks that keys and preview page buttons page the Library grid and list, but not behind its menu or a notice.
     void libraryPageButtons()
     {
@@ -10979,6 +11038,50 @@ private slots:
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         captureReturnPressed(fixture, name);
+    }
+
+    // Captures the Library About screen without creating a reader or opening a book.
+    void libraryAbout_data() { screenshotVariants(); }
+
+    void libraryAbout()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
+        auto *view = start->library();
+        QTRY_COMPARE(view->size(), librarySize(preset));
+        view->findChild<QPushButton *>("libraryMore")->click();
+        view->findChild<QPushButton *>("libraryMoreAbout")->click();
+        QTRY_VERIFY(view->findChild<QWidget *>("libraryAbout")->isVisible());
+        QVERIFY(!fixture.window.readerWindow());
+        const auto name = screenshotDevice(preset) + '-' + screenshotTheme(dark) + "-library-about";
+        auto *next = view->findChild<QPushButton *>("libraryAboutNext");
+        auto *counter = view->findChild<QLabel *>("libraryAboutPage");
+        QVERIFY(next && counter);
+        for (int page = 1; page <= 20; ++page) {
+            QVERIFY(capture(fixture, name + (page == 1 ? QString() : '-' + QString::number(page))));
+            if (!next->isVisible() || !next->isEnabled())
+                break;
+            QVERIFY(page < 20);
+            const auto previous = counter->text();
+            next->click();
+            QTRY_VERIFY(counter->text() != previous);
+        }
+        view->findChild<QPushButton *>("rrOpenAcknowledgments")->click();
+        auto *first = view->findChild<QPushButton *>("rrAcknowledgment0");
+        QTRY_VERIFY(first && first->isVisible() && first->updatesEnabled());
+        QVERIFY(capture(fixture,
+                        screenshotDevice(preset) + '-' + screenshotTheme(dark)
+                                + "-library-acknowledgments"));
+        first->click();
+        auto *license = view->findChild<QWidget *>("rrLicenseText");
+        QTRY_VERIFY(license && license->isVisible() && license->updatesEnabled());
+        QVERIFY(capture(fixture,
+                        screenshotDevice(preset) + '-' + screenshotTheme(dark)
+                                + "-library-license"));
     }
 
     void library_data() { screenshotVariants(); }

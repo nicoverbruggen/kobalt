@@ -9,6 +9,7 @@
 #include "ui/style/theme.h"
 #include "ui/panel_timing.h"
 #include "settings_panel.h"
+#include "app/about/about_page.h"
 #include "reading/reading_density.h"
 #include "app/reader/panels/dictionary_panel.h"
 #include "reading/appearance_settings.h"
@@ -705,73 +706,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     systemRows->addWidget(dictionaryFontButton);
     systemRows->addWidget(dictionaryFontSizeButton);
     systemRows->addStretch(1);
-    auto *aboutPage = new QWidget(settingsPages);
-    aboutPage->setObjectName("rrAbout");
+    aboutPage = new AboutPage(settingsPages);
     settingsPages->addWidget(aboutPage);
-    auto *aboutLayout = new QGridLayout(aboutPage);
-    aboutLayout->setContentsMargins(metrics::about::margins);
-    auto *aboutContent = new QWidget(aboutPage);
-    aboutContent->setObjectName("rrAboutContent");
-    aboutLayout->addWidget(aboutContent, 0, 0, Qt::AlignCenter);
-    auto *aboutRows = new QVBoxLayout(aboutContent);
-    aboutRows->setContentsMargins(0, 0, 0, 0);
-    aboutRows->setSpacing(metrics::about::gap);
-    auto *logo = new kobalt::ui::BrandIcon(aboutPage);
-    logo->setObjectName("rrAboutLogo");
-    logo->setFixedSize(metrics::about::logoSize, metrics::about::logoSize);
-    aboutRows->addWidget(logo, 0, Qt::AlignHCenter);
-    auto *wordmark = new ui::InterfaceLabel(strings::get("app.wordmark"), aboutPage);
-    wordmark->setObjectName("rrAboutWordmark");
-    wordmark->setAlignment(Qt::AlignCenter);
-    readerStyle(wordmark, styles::brand(metrics::about::wordmarkText));
-    aboutRows->addWidget(wordmark);
-    // A short rule above and below sets the build apart from the name and the description.
-    const auto buildRule = [&](const char *name) {
-        auto *rule = new QFrame(aboutPage);
-        rule->setObjectName(name);
-        rule->setFixedSize(metrics::about::ruleWidth, metrics::control::border);
-        readerStyle(rule, "border:none;background:palette(light);");
-        aboutRows->addWidget(rule, 0, Qt::AlignHCenter);
-    };
-    // The rules keep more room on their outer side than next to the build lines.
-    aboutRows->addSpacing(metrics::about::sectionGap);
-    buildRule("rrAboutBuildTop");
-    auto *build = new QVBoxLayout;
-    build->setSpacing(metrics::about::buildGap);
-    aboutRows->addLayout(build);
-    // "Version 0.4 (Qt6)", then the short commit with "*" for uncommitted changes.
-    const auto release = inputs.release;
-    auto *version = new ui::InterfaceLabel(
-            strings::get("about.version").arg(release).arg(inputs.qtMajor), aboutPage);
-    version->setObjectName("rrAboutVersion");
-    version->setAlignment(Qt::AlignCenter);
-    build->addWidget(version);
-    auto *commit = new ui::InterfaceLabel(inputs.commit, aboutPage);
-    commit->setObjectName("rrAboutCommit");
-    commit->setAlignment(Qt::AlignCenter);
-    build->addWidget(commit);
-    commit->setVisible(inputs.commitVisible);
-    buildRule("rrAboutBuildBottom");
-    aboutRows->addSpacing(metrics::about::sectionGap);
-    auto *description = new ui::InterfaceLabel(strings::get("about.description"), aboutPage);
-    aboutDescription = description;
-    description->setObjectName("rrAboutDescription");
-    description->setWordWrap(true);
-    description->setAlignment(Qt::AlignCenter);
-    description->setFixedWidth(metrics::about::textWidth);
-    readerStyle(description, styles::font(metrics::text::body));
-    description->ensurePolished();
-    // Measure at the displayed width so Qt cannot clip wrapped lines.
-    description->setFixedHeight(description->heightForWidth(metrics::about::textWidth));
-    aboutRows->addWidget(description, 0, Qt::AlignHCenter);
-    // The paragraph sits evenly between the rule and the button.
-    aboutRows->addSpacing(metrics::about::buttonGap);
-    auto *aboutActions = kobalt::ui::horizontalRow();
-    aboutRows->addLayout(aboutActions);
-    aboutActions->addStretch(1);
-    openAcknowledgments = actionButton(aboutPage, aboutActions, "rrOpenAcknowledgments",
-                                       strings::get("acknowledgments.acknowledgments"));
-    aboutActions->addStretch(1);
+    auto *aboutLayout = static_cast<QGridLayout *>(aboutPage->layout());
+    openAcknowledgments = aboutPage->acknowledgmentsButton;
     if (inputs.debugProgressAvailable) {
         auto *debugRow = kobalt::ui::horizontalRow();
         aboutLayout->addLayout(debugRow, 0, 0, Qt::AlignRight | Qt::AlignBottom);
@@ -907,13 +845,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsTabs->setAlignment(Qt::AlignTop);
     styleTabs(false);
     fitRail();
-    ui::readerStyle(description, ui::styles::font(chrome::labelText));
-    ui::readerStyle(version, ui::styles::font(chrome::labelText));
-    ui::readerStyle(commit, ui::styles::font(metrics::about::commitText));
-    // The same outlined button as the password field's Show and Hide.
-    ui::readerStyle(openAcknowledgments,
-                    ui::styles::outlined() + "QPushButton{" + ui::styles::font(chrome::labelText)
-                            + "}");
     hide();
 }
 
@@ -1009,14 +940,7 @@ int SettingsPanel::fitContent(QSize availableSize)
     content->ensurePolished();
     auto *rows = content->layout();
     const auto measure = [&](int width) {
-        aboutDescription->setFixedWidth(
-                qMax(1, qMin<int>(metrics::about::textWidth, width - ui::px(32))));
-        aboutDescription->setMinimumHeight(0);
-        aboutDescription->setMaximumHeight(QWIDGETSIZE_MAX);
-        aboutDescription->setFixedHeight(
-                aboutDescription->heightForWidth(aboutDescription->width()));
-        // Update the nested layout before reading the outer page's cached minimum.
-        aboutDescription->parentWidget()->layout()->activate();
+        aboutPage->fitWidth(width);
         return qMax(rows->minimumSize().height(),
                     rows->hasHeightForWidth() ? rows->totalHeightForWidth(width)
                                               : rows->sizeHint().height());
@@ -1069,8 +993,8 @@ int SettingsPanel::fitContent(QSize availableSize)
     // Keep the About description off the logo/build page on short screens.
     // Tall screens retain the existing centered layout.
     if (overflow && settingsPages->currentIndex() == int(SettingsPage::About)) {
-        const int split = aboutDescription->mapTo(settingsPages, QPoint()).y()
-                - int(metrics::about::sectionGap);
+        const int split =
+                aboutPage->descriptionTop() + aboutPage->y() - int(metrics::about::sectionGap);
         if (split > 0 && split <= pageHeight && contentHeight - split <= pageHeight)
             optionPages = { { 0, split }, { split, contentHeight } };
     }

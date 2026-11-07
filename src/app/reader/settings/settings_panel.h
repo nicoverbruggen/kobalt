@@ -14,6 +14,10 @@
 #include <QVector>
 #include <QPointer>
 
+namespace kobalt {
+class AboutPage;
+}
+
 namespace kobalt::reader {
 // Settings tabs, in the order of the stacked pages.
 enum class SettingsPage {
@@ -30,9 +34,6 @@ enum class SettingsPage {
 struct SettingsPanelInputs
 {
     KeyboardFactory keyboard;
-    QString release, commit;
-    int qtMajor = 0;
-    bool commitVisible = false;
     PageAnimationSupport animationSupport = PageAnimationSupport::Unavailable;
     bool lightSupported = false, warmthSupported = false;
     bool debugProgressAvailable = false;
@@ -163,7 +164,7 @@ private:
     int optionPage = 0, pageHeight = 0;
     void showOptionsPage(int page);
     void fitRail(int availableHeight = 0);
-    QLabel *aboutDescription = nullptr;
+    AboutPage *aboutPage = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog;
     QHash<int, StyleSample> stylingSamples;
     // The open styling sheet, if any, and the option its preview shows.

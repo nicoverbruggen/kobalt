@@ -6,7 +6,9 @@
 #include "ui/style/metrics.h"
 #include "ui/style/theme.h"
 #include "support/strings.h"
+#include <QApplication>
 #include <QDialog>
+#include <QTimer>
 #include <QResizeEvent>
 #include <QVBoxLayout>
 
@@ -19,6 +21,7 @@ StartScreen::StartScreen(PresentationFactory presentation, library::Store &store
       textScale(std::move(textScale))
 {
     setObjectName("androidStart");
+    qApp->installEventFilter(this);
     showLibrary();
 }
 
@@ -200,8 +203,32 @@ void StartScreen::resizeEvent(QResizeEvent *event)
         openingSurface->fitContent();
 }
 
+bool StartScreen::eventFilter(QObject *object, QEvent *event)
+{
+    if (view && (event->type() == QEvent::Resize || event->type() == QEvent::Show)) {
+        auto *widget = qobject_cast<QWidget *>(object);
+        if (widget && (widget == view || view->isAncestorOf(widget)) && !libraryRepairPending) {
+            libraryRepairPending = true;
+            QTimer::singleShot(0, this, [this] {
+                libraryRepairPending = false;
+                if (!view)
+                    return;
+                // As in the reader host, proxy resize can disable painting on
+                // newly created children. Preserve deliberate update disables.
+                for (auto *child : view->findChildren<QWidget *>())
+                    if (!child->updatesEnabled()
+                        && !child->testAttribute(Qt::WA_ForceUpdatesDisabled)
+                        && child->parentWidget() && child->parentWidget()->updatesEnabled())
+                        child->setUpdatesEnabled(true);
+            });
+        }
+    }
+    return QStackedWidget::eventFilter(object, event);
+}
+
 StartScreen::~StartScreen()
 {
+    qApp->removeEventFilter(this);
     store.changed = {};
 }
 

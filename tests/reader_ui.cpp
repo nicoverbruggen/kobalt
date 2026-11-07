@@ -9,6 +9,8 @@
 #include <QDynamicPropertyChangeEvent>
 #include "assets/bundled_fonts.h"
 #include "app/library/library_view.h"
+#include "app/about/about_page.h"
+#include "app/reader/settings/acknowledgments.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/highlight_palette.h"
 #include "ui/controls/options.h"
@@ -1690,6 +1692,144 @@ private slots:
         checkButton("libraryFoldersRescan", false);
         QTRY_COMPARE(added, 2);
         QCOMPARE(rescanned, 1);
+    }
+
+    // About opens without a book, keeps its metadata and controls reachable, and unwinds nested Back actions.
+    void libraryAbout_data() { variants(); }
+
+    void libraryAbout()
+    {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        for (qreal scale : { 1.0, 1.5 }) {
+            ui::setLargeText(scale);
+            const auto resetScale = qScopeGuard([] { ui::setLargeText(1); });
+            library::Index index;
+            library::LibraryView view(index, {});
+            view.setDark(dark);
+            view.resize(ui::px(1072), ui::px(1448));
+            view.show();
+            int opened = 0;
+            view.openBook = [&](const QString &) { ++opened; };
+            view.openFile = [&] { ++opened; };
+            const auto showAbout = [&] {
+                view.findChild<QPushButton *>("libraryMore")->click();
+                auto *menu = dynamic_cast<ui::ActionMenu *>(
+                        view.findChild<QWidget *>("libraryMoreSheet"));
+                QVERIFY(menu);
+                QCOMPARE(menu->actions().last()->objectName(), QString("libraryMoreAbout"));
+                QCOMPARE(menu->actions().last()->accessibleName(), QString("About Kobalt"));
+                menu->actions().last()->click();
+                QVERIFY(!menu->isVisible());
+            };
+            showAbout();
+            auto *about = view.findChild<QWidget *>("libraryAbout");
+            QVERIFY(about && about->isVisible());
+            const auto captureDirectory = qEnvironmentVariable("KOBALT_CAPTURE_MODALS");
+            if (!captureDirectory.isEmpty() && scale == 1 && ppi == 300) {
+                QVERIFY(QDir().mkpath(captureDirectory));
+                QVERIFY(view.grab().save(captureDirectory
+                                         + (dark ? "/about-dark.png" : "/about-light.png")));
+            }
+            AboutPage reference;
+            reference.ensurePolished();
+            for (const auto *name : { "rrAboutVersion", "rrAboutCommit" }) {
+                auto *shown = about->findChild<QLabel *>(name);
+                auto *expected = reference.findChild<QLabel *>(name);
+                QVERIFY(shown && expected);
+                QCOMPARE(shown->text(), expected->text());
+                QCOMPARE(shown->font(), expected->font());
+            }
+            for (const auto size :
+                 { QSize(1072, 1448), QSize(1448, 1072), QSize(600, 1000), QSize(1000, 600) }) {
+                view.resize(ui::px(size.width()), ui::px(size.height()));
+                QCoreApplication::processEvents();
+                QCOMPARE(about->geometry(), view.rect());
+                QCOMPARE(about->palette().color(QPalette::Window),
+                         QColor(ui::themeColors(dark).paper));
+                auto *back = about->findChild<QPushButton *>("libraryAboutBack");
+                QVERIFY(about->rect().contains(back->geometry()));
+                auto *title = about->findChild<QWidget *>("libraryAboutTitle");
+                QVERIFY(title);
+                const auto inkCenter = [dark](const QImage &image) {
+                    int top = image.height(), bottom = -1;
+                    const int paper = dark ? 0 : 255;
+                    for (int y = 0; y < image.height(); ++y)
+                        for (int x = 0; x < image.width(); ++x)
+                            if (qAbs(qGray(image.pixel(x, y)) - paper) > 96) {
+                                top = qMin(top, y);
+                                bottom = qMax(bottom, y);
+                            }
+                    return (top + bottom) / 2.0;
+                };
+                const auto arrow = back->grab().toImage();
+                // Ignore the Back cell's trailing vertical divider.
+                const auto arrowInk = arrow.copy(0, 0, arrow.width() - ui::px(8), arrow.height());
+                const qreal centerDifference =
+                        qAbs(inkCenter(title->grab().toImage()) - inkCenter(arrowInk));
+                QVERIFY2(centerDifference <= ui::px(2),
+                         qPrintable(QString("Title/arrow ink centers differ by %1 pixels")
+                                            .arg(centerDifference)));
+                auto *body = about->findChild<QWidget *>("rrAbout");
+                QVERIFY(body);
+                auto *clip = body->parentWidget();
+                const auto exposed = [clip](QWidget *widget) {
+                    return clip->rect().contains(
+                            QRect(widget->mapTo(clip, QPoint()), widget->size()));
+                };
+                auto *next = about->findChild<QPushButton *>("libraryAboutNext");
+                auto *previous = about->findChild<QPushButton *>("libraryAboutPrevious");
+                while (previous->isVisible() && previous->isEnabled())
+                    previous->click();
+                bool versionSeen = false, commitSeen = false, actionSeen = false, buildSeen = false;
+                for (int turns = 0; turns < 20; ++turns) {
+                    versionSeen |= exposed(about->findChild<QWidget *>("rrAboutVersion"));
+                    commitSeen |= exposed(about->findChild<QWidget *>("rrAboutCommit"));
+                    actionSeen |= exposed(about->findChild<QWidget *>("rrOpenAcknowledgments"));
+                    buildSeen |= exposed(about->findChild<QWidget *>("rrAboutVersion"))
+                            && exposed(about->findChild<QWidget *>("rrAboutCommit"));
+                    if (!next->isVisible() || !next->isEnabled())
+                        break;
+                    view.pageButton(1);
+                }
+                QVERIFY2(
+                        versionSeen && commitSeen && actionSeen && buildSeen,
+                        qPrintable(
+                                QString("%1x%2 scale %3: version %4, commit %5, action %6; body %7x%8, clip %9x%10")
+                                        .arg(size.width())
+                                        .arg(size.height())
+                                        .arg(scale)
+                                        .arg(versionSeen)
+                                        .arg(commitSeen)
+                                        .arg(actionSeen)
+                                        .arg(body->width())
+                                        .arg(body->height())
+                                        .arg(clip->width())
+                                        .arg(clip->height())));
+            }
+            auto *acknowledgments = dynamic_cast<Acknowledgments *>(
+                    about->findChild<QWidget *>("rrAcknowledgments"));
+            QVERIFY(acknowledgments);
+            about->findChild<QPushButton *>("rrOpenAcknowledgments")->click();
+            QVERIFY(acknowledgments->isVisible());
+            acknowledgments->findChild<QPushButton *>("rrAcknowledgment0")->click();
+            QVERIFY(acknowledgments->findChild<QWidget *>("rrLicenseText")->isVisible());
+            QVERIFY(view.dismiss());
+            QVERIFY(acknowledgments->isVisible());
+            QVERIFY(!acknowledgments->findChild<QWidget *>("rrLicenseText")->isVisible());
+            QVERIFY(view.dismiss());
+            QVERIFY(!acknowledgments->isVisible());
+            QVERIFY(about->isVisible());
+            QVERIFY(view.dismiss());
+            QVERIFY(!about->isVisible());
+            QVERIFY(!view.dismiss());
+            QCOMPARE(opened, 0);
+            QVERIFY(index.books.isEmpty() && index.folders.isEmpty());
+            showAbout();
+            about->findChild<QPushButton *>("libraryAboutBack")->click();
+            QVERIFY(!about->isVisible());
+        }
     }
 
     // Checks the list layout: toolbar-to-pager bounds, even row dividers, hit targets to each row's last pixel and the pager's space as books change.

@@ -792,9 +792,13 @@ bool Reader::event(QEvent *event)
                    && !choices->isVisible()) {
             partialPanel = menu;
         }
-        setProperty("reader_partial_controls",
-                    partialPanel ? QRect(partialPanel->mapTo(this, QPoint()), partialPanel->size())
-                                 : QRect());
+        QRect partialControls =
+                partialPanel ? QRect(partialPanel->mapTo(this, QPoint()), partialPanel->size())
+                             : QRect();
+        // A margin change redraws the preview above the panel without a flash.
+        if (partialPanel == menu && marginPreview->isVisible())
+            partialControls |= marginPreview->geometry();
+        setProperty("reader_partial_controls", partialControls);
     }
     return QWidget::event(event);
 }

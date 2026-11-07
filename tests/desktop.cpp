@@ -3973,6 +3973,41 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
         auto *canvas = fixture.window.findChild<QGraphicsView *>();
         QVERIFY(canvas);
+
+        // Observe delivery rather than waiting for an operating-system tooltip timer.
+        class TooltipProbe : public QWidget
+        {
+        public:
+            using QWidget::QWidget;
+            int deliveries = 0;
+
+            bool event(QEvent *event) override
+            {
+                if (event->type() == QEvent::ToolTip) {
+                    ++deliveries;
+                    return true;
+                }
+                return QWidget::event(event);
+            }
+        };
+
+        auto *screens = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
+        QVERIFY(screens && start);
+        TooltipProbe readerProbe(fixture.window.readerWindow());
+        TooltipProbe libraryProbe(start);
+        TooltipProbe toolbarProbe(screens);
+        TooltipProbe unrelatedProbe;
+        for (int preset : { 0, 1, 2, 3, 0 }) {
+            screens->setCurrentIndex(preset);
+            for (auto *probe : { &readerProbe, &libraryProbe, &toolbarProbe, &unrelatedProbe }) {
+                const int before = probe->deliveries;
+                QEvent tooltip(QEvent::ToolTip);
+                QApplication::sendEvent(probe, &tooltip);
+                QCOMPARE(probe->deliveries, before + int(preset == 0 || probe == &unrelatedProbe));
+            }
+        }
+        screens->setCurrentIndex(1);
         const QPoint point = canvas->viewport()->rect().center();
         QMouseEvent hoverEvent(QEvent::MouseMove, point, canvas->viewport()->mapToGlobal(point),
                                Qt::NoButton, Qt::NoButton, Qt::NoModifier);
@@ -3992,7 +4027,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QEvent leave(QEvent::Leave);
         QApplication::sendEvent(&fixture.window, &leave);
         QVERIFY(!QApplication::overrideCursor());
-        auto *screens = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
         screens->setCurrentIndex(0);
         QTest::mouseMove(canvas->viewport(), point + QPoint(1, 0));
         QVERIFY(!QApplication::overrideCursor());

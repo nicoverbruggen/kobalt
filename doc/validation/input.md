@@ -12,6 +12,8 @@ The UI and reader-window checks keep selected assertions from `tests/android/and
 
 The `pressFeedback` gallery case drives the production reader and Library canvases. Capture it alone with `KOBALT_GALLERY_CASE=pressFeedback`; see [Building](../building.md#headless-tests-and-screenshots). Its color palette uses the existing host color-display capability.
 
+The desktop touch-pointer check also verifies that device previews suppress hover tooltips in the reader, Library and preview controls. Fill window and unrelated windows keep normal tooltip delivery.
+
 ## Limits
 
 These headless checks do not establish physical Kobo or Android touch behavior, touch-driver behavior or physical key delivery. Native operating-system cursor display and physical touch interaction still need manual checks.

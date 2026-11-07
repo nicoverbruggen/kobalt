@@ -948,6 +948,17 @@ void Window::setTouchCursor(bool visible, bool pressed)
 bool Window::eventFilter(QObject *object, QEvent *event)
 {
     const auto type = event->type();
+    if (type == QEvent::ToolTip && screenPreset) {
+        auto *widget = qobject_cast<QWidget *>(object);
+        auto *reader = controller.window();
+        if (widget
+            && (widget->window() == this || widget == start || start->isAncestorOf(widget)
+                || (reader && (widget == reader || reader->isAncestorOf(widget))))) {
+            QToolTip::hideText();
+            event->ignore();
+            return true;
+        }
+    }
     if (type == QEvent::Enter || type == QEvent::Leave || type == QEvent::MouseMove
         || type == QEvent::MouseButtonPress || type == QEvent::MouseButtonRelease
         || (type == QEvent::Hide && object == this)) {

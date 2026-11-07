@@ -349,12 +349,13 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
             kobalt::ui::sliderRow(pageLayout, pageRows, "rrVerticalMargins",
                                   "rrVerticalMarginsValue", strings::get("reader.vertical_margins"),
                                   "rrVerticalMarginsLess", "rrVerticalMarginsMore", 0, 120, 3, {});
+    // A drag snaps to these presets. The plus and minus buttons keep steps of 3.
     QVector<int> marginMarks;
-    for (int value = 0; value <= 120; value += 3) {
+    for (int value = 0; value <= 120; value += 12) {
         marginMarks.append(value);
     }
-    marginSlider->setMarkers(marginMarks);
-    verticalMarginSlider->setMarkers(marginMarks);
+    marginSlider->setMarkers(marginMarks, ui::SettingSlider::MarkerMode::Stops);
+    verticalMarginSlider->setMarkers(marginMarks, ui::SettingSlider::MarkerMode::Stops);
     typeRows->addSpacing(metrics::control::sectionGap);
     kobalt::ui::SegmentedRow alignment(typography, typeRows, "rrAlignment",
                                        strings::get("reader.alignment"));

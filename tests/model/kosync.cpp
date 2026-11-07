@@ -426,7 +426,7 @@ void failureChecks(const QString &path)
                                                      .toHex()),
                 "diagnostics omit credentials, hashes, paths, redirects, bodies and identities");
     };
-    for (const auto pair :
+    for (const auto &pair :
          { std::make_pair(QNetworkReply::HostNotFoundError, "kosync.dns_error"),
            std::make_pair(QNetworkReply::ConnectionRefusedError, "kosync.connection_refused"),
            std::make_pair(QNetworkReply::RemoteHostClosedError, "kosync.connection_closed"),
@@ -446,7 +446,7 @@ void failureChecks(const QString &path)
         wait(client);
         check(pair.second, "read-position");
     }
-    for (const auto pair :
+    for (const auto &pair :
          { std::make_pair(401, "kosync.auth_error"), std::make_pair(403, "kosync.forbidden"),
            std::make_pair(404, "kosync.route_error"), std::make_pair(405, "kosync.route_error"),
            std::make_pair(302, "kosync.redirect_error"), std::make_pair(429, "kosync.rate_limited"),

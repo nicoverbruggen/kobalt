@@ -514,6 +514,7 @@ if(BUILD_TESTING)
             progressPaintsOnlyChangedPixels
             openingProgressPaintsAfterTheEventLoop
             openingCoverLayout
+            openingCoverUpgrade
             openingFirstPaintCallback
             readingStripChangesLeaveBodyUnpainted
             navigationPressKeepsDamageInItsTab
@@ -722,7 +723,7 @@ if(BUILD_TESTING)
         "kobo:^(platform\\.(startup-recovery|native-startup-wait|screensaver-loader|native-dialog-overlay|nickel-.*)|lifecycle\\.nativeOpeningStatus|model\\.qt-compat)$"
         "settings:^(desktop\\.(settings|lightDarkModeShortcut)|lifecycle\\.(appearance.*|uneditedPanelTransitions|overflowClosesCurrentPanel)|model\\.appearance-settings|component\\.(ui|acknowledgments)|ui\\.(regularIconWeight|connectedModalFooter))$"
         "layout:^(engine\\..*|corpus\\..*|desktop\\.(columns|globalLayout|advancedText|verticalJustification|stylesheet)|model\\.layout-(cache|compatibility))$"
-        "reading:^(desktop\\.(startup|reading|errors|features)|ui\\.openingCoverLayout|session\\.reader-session|model\\.(local-resources|zip-resource|resource-cache|plain-archive))$"
+        "reading:^(desktop\\.(startup|reading|errors|features)|ui\\.openingCover(Layout|Upgrade)|session\\.reader-session|model\\.(local-resources|zip-resource|resource-cache|plain-archive))$"
         "build:^build\\..*$")
     get_property(registered_tests DIRECTORY PROPERTY TESTS)
     foreach(test IN LISTS registered_tests)

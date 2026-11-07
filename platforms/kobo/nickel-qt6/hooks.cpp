@@ -1,4 +1,5 @@
 #include "hooks.h"
+#include "platforms/kobo/common/native_tile_cover.h"
 #include "platforms/kobo/common/book_menu.h"
 #include "refresh.h"
 #include "platforms/kobo/common/native_lifecycle.h"
@@ -34,6 +35,30 @@ bool firmwareSupported()
 
 using namespace kobalt::nickel_qt6;
 static nh_hook readerHooks[] = {
+    { .sym = "_ZN10PixmapView8setImageERK6QImageRK7QString",
+      .sym_new = "kobalt_tile_set_image",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nativeTileSetImage),
+      .desc = "Reuse native tile covers during opening",
+      .optional = true },
+    { .sym = "_ZN16VolumePixmapView10setContentERK6VolumeRK7QString",
+      .sym_new = "kobalt_tile_set_content",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nativeTileSetContent),
+      .desc = "Reuse native tile covers during opening",
+      .optional = true },
+    { .sym = "_ZN13BookCoverView13onImageLoadedERK7QString",
+      .sym_new = "kobalt_tile_image_loaded",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nativeTileImageLoaded),
+      .desc = "Reuse native tile covers during opening",
+      .optional = true },
+    { .sym = "_ZN16VolumePixmapView16loadDefaultCoverEv",
+      .sym_new = "kobalt_tile_default_cover",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nativeTileDefaultCover),
+      .desc = "Reuse native tile covers during opening",
+      .optional = true },
     { .sym = "_ZN10VirtualKey11repaintFastEb",
       .sym_new = "kobalt_keyboard_repaint",
       .lib = "libnickel.so.1.0.0",

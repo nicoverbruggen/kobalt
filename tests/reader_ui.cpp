@@ -3560,6 +3560,20 @@ private slots:
         for (const QSize screen : { QSize(1072, 1448), QSize(1448, 1072), QSize(600, 800) }) {
             QWidget owner;
             owner.resize(screen);
+            {
+                auto seeded = createEmbeddedOpening(&owner, test::makeHostPresentation);
+                auto *view = seeded->window();
+                view->setGeometry(owner.rect());
+                QImage seed(80, 120, QImage::Format_RGB32);
+                seed.fill(Qt::blue);
+                view->setProperty("kobalt_tile_cover_probe", true);
+                seeded->setCover(seed);
+                owner.show();
+                view->show();
+                QTRY_COMPARE(view->property("kobalt_first_cover_key").toString(),
+                             QString::number(seed.cacheKey()));
+                QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            }
             auto opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
             auto *view = opening->window();
             view->setGeometry(owner.rect());
@@ -3567,6 +3581,11 @@ private slots:
             view->show();
             QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
             for (const QSize size : { QSize(200, 300), QSize(300, 100), QSize(100, 400) }) {
+                // Each shape is a separate opening, not a lower-quality replacement.
+                opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
+                view = opening->window();
+                view->setGeometry(owner.rect());
+                view->show();
                 QImage cover(size, QImage::Format_RGB32);
                 cover.fill(Qt::red);
                 opening->setCover(cover);
@@ -3638,6 +3657,40 @@ private slots:
             QCOMPARE(unavailable->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
             QVERIFY(!unavailable->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
         }
+    }
+
+    void openingCoverUpgrade()
+    {
+        QWidget owner;
+        owner.resize(600, 800);
+        const qreal scale = qMin(owner.width() / ui::metrics::opening::referenceWidth,
+                                 owner.height() / ui::metrics::opening::referenceHeight);
+        const QPoint center(
+                owner.width() / 2,
+                qRound((owner.height() - ui::metrics::opening::referenceHeight * scale) / 2
+                       + ui::metrics::opening::cover.center().y() * scale));
+        QImage thumbnail(100, 150, QImage::Format_RGB32);
+        thumbnail.fill(Qt::blue);
+        QImage full(400, 600, QImage::Format_RGB32);
+        full.fill(Qt::red);
+        auto opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
+        opening->window()->setGeometry(owner.rect());
+        opening->setCover(full);
+        owner.show();
+        opening->window()->show();
+        opening->setCover(thumbnail);
+        QCOMPARE(opening->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
+
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("full.png");
+        QVERIFY(full.save(path));
+        auto cached = createEmbeddedOpening(&owner, test::makeHostPresentation);
+        cached->window()->setGeometry(owner.rect());
+        cached->setCover(thumbnail);
+        cached->window()->show();
+        cached->loadCover(path);
+        QTRY_COMPARE(cached->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
     }
 
     void openingFirstPaintCallback()

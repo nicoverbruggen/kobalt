@@ -223,7 +223,15 @@ if(KOBALT_BUILD_TESTS)
     target_compile_options(kobalt-pewter-tests PRIVATE -Wall -Wextra -Werror)
     target_link_libraries(kobalt-pewter-tests PRIVATE pewter kobalt-test-code ${kobalt_libraries})
     add_test(NAME pewter.progress COMMAND kobalt-pewter-tests)
-    set(tests kobalt-pewter-tests)
+    add_executable(kobalt-tile-cover-tests "${pewter}/tile_cover.cpp")
+    set_target_properties(kobalt-tile-cover-tests PROPERTIES ENABLE_EXPORTS ON)
+    target_include_directories(kobalt-tile-cover-tests PRIVATE "${KOBALT_ROOT}" "${source}")
+    target_compile_options(kobalt-tile-cover-tests PRIVATE -Wall -Wextra -Werror)
+    target_link_libraries(kobalt-tile-cover-tests PRIVATE kobalt-test-code ${kobalt_libraries})
+    add_test(NAME pewter.tile-cover COMMAND kobalt-tile-cover-tests)
+    set_tests_properties(pewter.tile-cover PROPERTIES LABELS "pewter;kobo;qt${KOBALT_QT_MAJOR}"
+        ENVIRONMENT "${test_environment}" TIMEOUT 120)
+    set(tests kobalt-pewter-tests kobalt-tile-cover-tests)
     set_tests_properties(pewter.progress PROPERTIES LABELS "pewter;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
 

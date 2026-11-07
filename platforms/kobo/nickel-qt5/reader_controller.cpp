@@ -1,6 +1,7 @@
 #include "platforms/kobo/common/standby_diagnostics.h"
 #include "support/qt_compat.h"
 #include "hooks.h"
+#include "platforms/kobo/common/native_tile_cover.h"
 #include "platforms/kobo/common/startup_recovery.h"
 #include "platforms/kobo/common/book_menu.h"
 #include "opening_context.h"
@@ -469,6 +470,7 @@ int initialize()
     kobalt::diagnostic("installation", kobalt::qt::object({ { "temporary", false } }));
 #  endif
 #endif
+    kobalt::initializeNativeTileCoverProbe();
     auto *startup = new Startup(qApp);
     beginOpening = [startup](const void *volume,
                              const kobalt::nickel_qt5::OpeningContext &context) {

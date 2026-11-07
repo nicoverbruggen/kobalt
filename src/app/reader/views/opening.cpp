@@ -1,3 +1,4 @@
+#include "support/diagnostics.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/text.h"
@@ -93,9 +94,7 @@ public:
             coverPoll.stop();
             auto image = std::move(coverRead->image);
             coverRead.reset();
-            // A publication cover delivered meanwhile takes precedence over a thumbnail.
-            if (cover.isNull() && !image.isNull())
-                setCover(std::move(image));
+            setCover(std::move(image));
         });
         label = new ui::InterfaceLabel(strings::get("opening.loading"), this);
         label->setObjectName("rrOpeningLabel");
@@ -140,6 +139,14 @@ public:
     {
         // An early cache miss is not proof that the publication has no cover.
         if (image.isNull())
+            return;
+        // Compare the source pixels per painted pixel after fitting the cover.
+        // A late thumbnail must not replace a sharper image delivered earlier.
+        const auto density = [](const QImage &candidate) {
+            const auto area = ui::metrics::opening::cover.size();
+            return qMax(candidate.width() / area.width(), candidate.height() / area.height());
+        };
+        if (!cover.isNull() && density(image) < density(cover))
             return;
         cover = std::move(image);
         showBrand();
@@ -263,6 +270,13 @@ protected:
         painter.fillRect(rect(), palette().color(QPalette::Window));
         if (!painted) {
             painted = true;
+            if (property("kobalt_tile_cover_probe").toBool()) {
+                setProperty("kobalt_first_cover_key", QString::number(cover.cacheKey()));
+                diagnostic("tile-cover-probe-first-paint",
+                           qt::object({ { "width", cover.width() },
+                                        { "height", cover.height() },
+                                        { "image_key", QString::number(cover.cacheKey()) } }));
+            }
             if (firstPaint) {
                 scheduleAfterPaint(std::move(firstPaint));
             }

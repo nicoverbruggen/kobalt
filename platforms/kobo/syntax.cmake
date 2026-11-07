@@ -299,7 +299,7 @@ endforeach()
 # KOBALT_BUILD_TESTS adds the pewter tests. The Qt5 lane also has the Qt5
 # refresh check.
 set(pewter "${root}/tests/pewter")
-set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp" "${pewter}/keyboard.cpp" "${pewter}/native_ui.cpp")
+set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp" "${pewter}/keyboard.cpp" "${pewter}/native_ui.cpp" "${pewter}/tile_cover.cpp")
 set(qt5_test_sources ${pewter_sources} "${pewter}/nickel_qt5.cpp" "${pewter}/refresh_qt5.cpp")
 set(qt6_test_sources ${pewter_sources} "${pewter}/nickel_qt6.cpp")
 

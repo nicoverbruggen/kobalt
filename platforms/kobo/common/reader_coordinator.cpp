@@ -1,3 +1,4 @@
+#include "native_tile_cover.h"
 #include "reading/appearance_settings.h"
 #include "reader_coordinator.h"
 #include "home_sleep_screen.h"
@@ -422,6 +423,16 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
         run.loading = run.interface->createOpening(background, preferences,
                                                    readerHostServices().presentation);
         ignoreNativeFontScale(run.loading->window());
+    }
+    if (nativeTileCoverProbeEnabled()) {
+        const auto image = nativeTileCoverProbeImage(run.opening->volume());
+        run.loading->window()->setProperty("kobalt_tile_cover_probe", true);
+        run.loading->setCover(image);
+        diagnostic("tile-cover-probe-seeded",
+                   qt::object({ { "generation", double(generation) },
+                                { "width", image.width() },
+                                { "height", image.height() },
+                                { "image_key", QString::number(image.cacheKey()) } }));
     }
     // The cached image belongs to Nickel and needs no publication service.
     // Start before eligibility checks so a handoff can keep the same cover.

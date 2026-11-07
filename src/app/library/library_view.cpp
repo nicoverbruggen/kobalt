@@ -1245,7 +1245,7 @@ void LibraryView::rebuild(bool keepPage)
     const auto &settings = index.settings;
     const bool noLibrary = index.folders.isEmpty() && index.visibleCount() == 0 && !scanning;
     empty->setVisible(noLibrary);
-    if (noLibrary)
+    if (noLibrary && !(about && about->isVisible()))
         empty->raise();
     const auto text = searching ? query->text() : QString();
     const bool home = settings.view == View::Home;

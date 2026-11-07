@@ -125,5 +125,7 @@ void AboutScreen::arrange()
     pager->setBlankArea(
             { chrome::inset, top + used, qMax(1, width() - 2 * int(chrome::inset)), room - used });
     credits->setGeometry(rect());
+    if (credits->isVisible())
+        credits->raise();
 }
 } // namespace kobalt::library

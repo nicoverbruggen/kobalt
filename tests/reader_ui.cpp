@@ -1746,6 +1746,9 @@ private slots:
                 view.resize(ui::px(size.width()), ui::px(size.height()));
                 QCoreApplication::processEvents();
                 QCOMPARE(about->geometry(), view.rect());
+                auto *hit = view.childAt(view.rect().center());
+                QVERIFY2(hit && (hit == about || about->isAncestorOf(hit)),
+                         "About must remain above the empty Library after resizing");
                 QCOMPARE(about->palette().color(QPalette::Window),
                          QColor(ui::themeColors(dark).paper));
                 auto *back = about->findChild<QPushButton *>("libraryAboutBack");
@@ -1811,10 +1814,28 @@ private slots:
             auto *acknowledgments = dynamic_cast<Acknowledgments *>(
                     about->findChild<QWidget *>("rrAcknowledgments"));
             QVERIFY(acknowledgments);
+            view.resize(ui::px(1072), ui::px(1448));
+            QCoreApplication::processEvents();
+            showAbout();
             about->findChild<QPushButton *>("rrOpenAcknowledgments")->click();
             QVERIFY(acknowledgments->isVisible());
+            view.resize(ui::px(1000), ui::px(600));
+            QCoreApplication::processEvents();
+            auto *hint = about->findChild<QWidget *>("libraryAboutContinuationHint");
+            QVERIFY(hint && hint->isVisible());
+            const auto creditsFrame = about->grab().toImage();
+            hint->hide();
+            QCOMPARE(about->grab().toImage(), creditsFrame);
             acknowledgments->findChild<QPushButton *>("rrAcknowledgment0")->click();
             QVERIFY(acknowledgments->findChild<QWidget *>("rrLicenseText")->isVisible());
+            view.resize(ui::px(1072), ui::px(1448));
+            QCoreApplication::processEvents();
+            view.resize(ui::px(1000), ui::px(600));
+            QCoreApplication::processEvents();
+            QVERIFY(hint->isVisible());
+            const auto licenseFrame = about->grab().toImage();
+            hint->hide();
+            QCOMPARE(about->grab().toImage(), licenseFrame);
             QVERIFY(view.dismiss());
             QVERIFY(acknowledgments->isVisible());
             QVERIFY(!acknowledgments->findChild<QWidget *>("rrLicenseText")->isVisible());

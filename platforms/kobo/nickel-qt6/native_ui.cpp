@@ -120,9 +120,7 @@ int nativePageButtonDirection(QKeyEvent *event)
 bool nativeReaderSleepScreenAvailable()
 {
     const auto currentDevice = symbol<const void *(*)()>("_ZN6Device16getCurrentDeviceEv");
-    const auto tolino = symbol<bool (*)(const void *)>("_ZNK6Device8isTolinoEv");
-    const auto *device = currentDevice ? currentDevice() : nullptr;
-    return device && tolino && !tolino(device);
+    return currentDevice && currentDevice();
 }
 
 QString nativeReaderCoverPath(const void *volume)

@@ -238,3 +238,19 @@ bool N3PowerWorkflowManager::pinCodeInputDialogVisible() const
 {
     return false;
 }
+
+QString Content::getImageId() const
+{
+    return static_cast<const Volume *>(this)->data->values.value("ImageID").toString();
+}
+
+bool Image::isDefaultCoverImage(const QString &imageId)
+{
+    return imageId == QStringLiteral("default");
+}
+
+QString Image::getFileName(const Device &, const Volume &volume, const QString &type)
+{
+    pewter::record("Image::getFileName", { { "type", type } });
+    return QStringLiteral("/covers/") + volume.getImageId() + QStringLiteral("-") + type;
+}

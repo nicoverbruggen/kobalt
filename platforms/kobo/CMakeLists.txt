@@ -251,5 +251,13 @@ if(KOBALT_BUILD_TESTS)
     set_tests_properties(pewter.keyboard PROPERTIES LABELS "pewter;keyboard;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment};QT_QPA_FONTDIR=${KOBALT_ASSETS}/fonts" TIMEOUT 120)
     list(APPEND tests kobalt-native-keyboard-tests)
+    add_executable(kobalt-native-ui-tests "${pewter}/native_ui.cpp")
+    set_target_properties(kobalt-native-ui-tests PROPERTIES AUTOMOC OFF ENABLE_EXPORTS ON)
+    target_include_directories(kobalt-native-ui-tests PRIVATE "${KOBALT_ROOT}" "${source}")
+    target_link_libraries(kobalt-native-ui-tests PRIVATE pewter kobalt-test-code ${kobalt_libraries})
+    add_test(NAME pewter.native-ui COMMAND kobalt-native-ui-tests)
+    set_tests_properties(pewter.native-ui PROPERTIES LABELS "pewter;sleep;qt${KOBALT_QT_MAJOR}"
+        ENVIRONMENT "${test_environment}" TIMEOUT 120)
+    list(APPEND tests kobalt-native-ui-tests)
     add_custom_target(kobo-tests DEPENDS ${tests})
 endif()

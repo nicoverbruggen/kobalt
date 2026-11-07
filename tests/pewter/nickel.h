@@ -28,6 +28,7 @@ enum ReadingStatus { };
 class Content
 {
 public:
+    QString getImageId() const;
     void setReadStatus(ReadingStatus status);
     void setFirstTimeReading(const QVariant &value);
     void setPercentRead(const QVariant &value);
@@ -67,6 +68,13 @@ public:
     static Device *getCurrentDevice();
     const QString &getDbName() const;
     bool isTolino() const;
+};
+
+class Image
+{
+public:
+    static bool isDefaultCoverImage(const QString &imageId);
+    static QString getFileName(const Device &device, const Volume &volume, const QString &type);
 };
 
 class DatabaseAdapter

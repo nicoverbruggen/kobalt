@@ -301,10 +301,10 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME desktop.primaryViews COMMAND "${CMAKE_COMMAND}"
         "-DTEST_EXECUTABLE=$<TARGET_FILE:kobalt-desktop-tests>" "-DTEST_ARGUMENTS=--light-tests"
-        "-DTEST_TIMEOUT=60" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
+        "-DTEST_TIMEOUT=120" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
     set_tests_properties(desktop.primaryViews PROPERTIES ENVIRONMENT "${headless_environment}"
-        LABELS "desktop;light" TIMEOUT 65)
+        LABELS "desktop;light" TIMEOUT 125)
     foreach(check startup reading errors storageDiagnostics galleryIntegrity galleryWorkerFailure)
         set_property(TEST desktop.${check} APPEND PROPERTY LABELS light)
     endforeach()

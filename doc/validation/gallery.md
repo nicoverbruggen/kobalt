@@ -2,7 +2,7 @@
 
 Label `gallery`. Build `mac-tests`, then run `ctest --preset mac -L gallery` from `platforms/desktop/`. `ctest --preset mac -N -L gallery` lists its tests.
 
-These checks cover gallery generation, the completeness and integrity checks, failed workers, the phone frame, the primary-view tour and screenshot-book preparation. The gallery itself is not a CTest test. Build `mac-screenshots` for the full gallery or `mac-light-screenshots` for the primary views; see [Headless tests and screenshots](../building.md#headless-tests-and-screenshots). Both produce PNGs, a checksum manifest and a local HTML gallery.
+These checks cover gallery generation, the completeness and integrity checks, failed workers, the phone frame, the primary-view tour and screenshot-book preparation. The gallery itself is not a CTest test. Build `mac-screenshots` for the full gallery or `mac-light-screenshots` for the primary views; see [Headless tests and screenshots](../building.md#headless-tests-and-screenshots). Both produce PNGs, a checksum manifest and a local HTML gallery. The primary-view test has a 120-second process limit for the complete viewport and theme matrix.
 
 ## Workers and filters
 

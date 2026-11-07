@@ -10002,6 +10002,7 @@ void checkPageAnimationCompatibility(int preset, bool dark)
         auto *option = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrPageAnimations"));
         auto *darkOption = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrDarkMode"));
         QVERIFY(option && darkOption);
+        QTRY_VERIFY(fixture.reveal(option));
         QCOMPARE(option->isEnabled(), pageAnimationsAvailable(support));
         QCOMPARE(option->accessibleDescription(),
                  strings::get(support == PageAnimationSupport::Uncertain

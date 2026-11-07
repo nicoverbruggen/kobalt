@@ -10480,6 +10480,28 @@ private slots:
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsKosync"));
         QVERIFY(capture(fixture, name + "-kosync-manual-settings"));
+        auto *syncPage = dynamic_cast<reader::KosyncPage *>(fixture.widget("rrKosyncPage"));
+        QVERIFY(syncPage);
+        syncPage->setStatus(strings::get("kosync.auth_error"), false);
+        auto *settings = static_cast<reader::SettingsPanel *>(fixture.widget("rrGeneralSettings"));
+        settings->fitContent(settings->size());
+        QCoreApplication::processEvents();
+        auto *status = syncPage->findChild<QLabel *>("rrKosyncStatus");
+        QVERIFY(status);
+        QVERIFY(status->height() >= status->heightForWidth(status->width()));
+        capturePages(fixture, name + "-kosync-failure", "rrSettingsOptions");
+        syncPage->setStatus(strings::get("kosync.no_connection"), false);
+        settings->fitContent(settings->size());
+        // Capture the same settings page with the explicit offline explanation.
+        while (auto *previous =
+                       qobject_cast<QPushButton *>(fixture.widget("rrSettingsOptionsPrevious"))) {
+            if (!previous->isVisible() || !previous->isEnabled())
+                break;
+            QVERIFY(fixture.click(previous));
+        }
+        capturePages(fixture, name + "-kosync-no-connection", "rrSettingsOptions");
+        syncPage->setStatus(strings::get("kosync.signed_in"), false);
+        settings->fitContent(settings->size());
         // A short screen pages the sheet and the list. Show the page that
         // holds a control before pressing it.
         const auto reveal = [&](const char *prefix, const char *control) {

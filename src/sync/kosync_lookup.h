@@ -21,6 +21,8 @@ public:
 
     bool busy() const { return bool(state_); }
 
+    bool timedOut() const { return timedOut_; }
+
 private:
     struct State;
     struct Job;
@@ -30,5 +32,6 @@ private:
     QTimer poll_;
     QElapsedTimer elapsed_;
     int timeout_ = 0;
+    bool timedOut_ = false;
 };
 } // namespace kobalt::kosync

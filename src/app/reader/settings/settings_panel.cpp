@@ -978,6 +978,7 @@ int SettingsPanel::fitContent(QSize availableSize)
     auto *rows = content->layout();
     const auto measure = [&](int width) {
         aboutPage->fitWidth(width);
+        kosync->fitWidth(width);
         return qMax(rows->minimumSize().height(),
                     rows->hasHeightForWidth() ? rows->totalHeightForWidth(width)
                                               : rows->sizeHint().height());

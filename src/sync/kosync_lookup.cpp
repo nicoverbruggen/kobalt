@@ -78,6 +78,7 @@ HostLookup::HostLookup(Resolver resolver)
         const bool finished = state_->finished.load(std::memory_order_acquire);
         if (!finished && elapsed_.elapsed() < timeout_)
             return;
+        timedOut_ = !finished;
         const auto result = finished ? state_->result : failedLookup();
         auto done = std::move(done_);
         cancel();
@@ -96,6 +97,7 @@ void HostLookup::start(const QString &host, int timeout, Done done)
     state_ = std::make_shared<State>();
     done_ = std::move(done);
     timeout_ = timeout;
+    timedOut_ = false;
     elapsed_.start();
     auto *job = new Job;
     job->state = state_;

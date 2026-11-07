@@ -19,12 +19,25 @@ public:
         setRequest(request);
         setUrl(request.url());
         setAttribute(QNetworkRequest::HttpStatusCodeAttribute,
-                     error == QNetworkReply::NoError ? status : 0);
+                     error == QNetworkReply::NoError || status >= 300 ? status : 0);
         if (error != QNetworkReply::NoError)
             setError(error, "fixture transport failure");
         open(QIODevice::ReadOnly);
         if (!held)
             QTimer::singleShot(0, this, [this] { finish(); });
+    }
+
+    void hostileMetadata()
+    {
+        const QByteArray secret = "PRIVATE-SENTINEL";
+        if (error() != NoError)
+            setError(error(), QString::fromLatin1(secret));
+        setRawHeader(
+                "Location",
+                "https://PRIVATE-SENTINEL:password@elsewhere.invalid/private?token=PRIVATE-SENTINEL");
+        setRawHeader("Set-Cookie", secret);
+        setAttribute(QNetworkRequest::RedirectionTargetAttribute,
+                     QUrl("https://elsewhere.invalid/PRIVATE-SENTINEL?token=PRIVATE-SENTINEL"));
     }
 
     void finish()

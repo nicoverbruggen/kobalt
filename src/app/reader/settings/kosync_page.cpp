@@ -303,6 +303,18 @@ void KosyncPage::setStatus(const QString &status, bool busy)
     logout_->setEnabled(!busy && signedIn_);
 }
 
+void KosyncPage::fitWidth(int width)
+{
+    // Measure the wrapped message before the pager uses the row's size hint.
+    auto *rows = syncInformation_->layout();
+    rows->invalidate();
+    syncInformation_->setFixedHeight(qMax(rows->minimumSize().height(),
+                                          rows->hasHeightForWidth()
+                                                  ? rows->totalHeightForWidth(width)
+                                                  : rows->sizeHint().height()));
+    layout()->invalidate();
+}
+
 void KosyncPage::edit(int field)
 {
     if (editorDialog || !makeKeyboard_)

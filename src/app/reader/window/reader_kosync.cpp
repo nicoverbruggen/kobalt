@@ -8,6 +8,18 @@
 #include <QLocale>
 
 namespace kobalt::reader {
+namespace {
+QString unavailableConnection(const char *stage)
+{
+    const auto message = strings::get("kosync.no_connection");
+    diagnostic("kosync-network-unavailable",
+               qt::object({ { "stage", stage },
+                            { "code", "kosync.no_connection" },
+                            { "guidance", message } }));
+    return message;
+}
+} // namespace
+
 QByteArray Reader::kosyncDocument() const
 {
     return kosyncClient->filenameMatching() ? session->syncFilenameDigest() : session->syncDigest();
@@ -140,8 +152,13 @@ void Reader::buildKosync()
     kosyncOpeningGrace.setObjectName("rrKosyncOpeningGrace");
     kosyncDeadline.setSingleShot(true);
     connect(&kosyncDeadline, &QTimer::timeout, this, [this] {
+        const auto code = kosyncConnecting ? "kosync.connection_timeout"
+                : kosyncReaderReady        ? "kosync.reader_timeout"
+                                           : "kosync.timeout_error";
         diagnostic("kosync-deadline",
-                   qt::object({ { "connecting", kosyncConnecting },
+                   qt::object({ { "code", code },
+                                { "guidance", strings::get(code) },
+                                { "connecting", kosyncConnecting },
                                 { "request_busy", kosyncClient->busy() },
                                 { "suspended", services.suspended() },
                                 { "reader_waiting", bool(kosyncReaderReady) } }));
@@ -154,11 +171,10 @@ void Reader::buildKosync()
         if (kosyncConnecting)
             ++kosyncBackgroundFailures;
         kosyncConnecting = false;
-        const bool authenticating = std::exchange(kosyncAuthenticating, false);
+        kosyncAuthenticating = false;
         kosyncClient->cancel();
         kosyncFlushWaiting = false;
-        finishKosync(
-                strings::get(authenticating ? "kosync.network_error" : "kosync.saved_locally"));
+        finishKosync(strings::get(code));
     });
     kosyncOpeningGrace.setSingleShot(true);
     connect(&kosyncOpeningGrace, &QTimer::timeout, this, [this] {
@@ -421,7 +437,7 @@ void Reader::synchronizeKosync(bool interactive)
         // the position stays local until the next connected sync.
         if (!kosyncClient->schedule().wakeWifi
             || kosyncBackgroundFailures >= kosync::backgroundConnectionLimit) {
-            finishKosync(strings::get("kosync.saved_locally"));
+            finishKosync(unavailableConnection("periodic"));
             return;
         }
         prepareKosyncNetwork(false, [this] { startKosyncExchange(false); });
@@ -454,7 +470,7 @@ void Reader::prepareKosyncNetwork(bool interactive, std::function<void()> ready)
         if (!interactive)
             kosyncBackgroundFailures = connected ? 0 : kosyncBackgroundFailures + 1;
         if (!connected) {
-            const auto message = strings::get("kosync.network_error");
+            const auto message = unavailableConnection("preparation");
             finishKosync(message);
             if (interactive && !general->isVisible() && !closing && !lifecycleHidden) {
                 page->notice = message;
@@ -593,6 +609,9 @@ void Reader::finishKosync(const QString &message)
     kosyncPage->setStatus(message, false);
     updateKosyncToolbar();
     if (!finishing && !closing && !lifecycleHidden && !exportRunning) {
+        // A failure can need more lines than the preceding Syncing message.
+        if (general->isVisible())
+            fitSettings();
         if (opening && message != strings::get("kosync.up_to_date")
             && message != strings::get("kosync.pending"))
             page->notice = message;
@@ -615,11 +634,17 @@ void Reader::flushKosync(std::function<void()> finished, bool enabled)
         cancelKosync();
         kosyncReleaseWifi = release;
     }
-    if (!enabled || (kosyncNetwork && !kosyncNetwork->connected()) || book->usesNativeCloudSync()
-        || !kosyncClient->signedIn() || !kosyncAutomatic() || kosyncProgress.pending()
-        || book->pendingProgress() || session->temporaryTypography() || session->pages() <= 0
-        || kosyncDocument().isEmpty() || session->state().value("position").toString().isEmpty()) {
+    if (!enabled || book->usesNativeCloudSync() || !kosyncClient->signedIn() || !kosyncAutomatic()
+        || kosyncProgress.pending() || book->pendingProgress() || session->temporaryTypography()
+        || session->pages() <= 0 || kosyncDocument().isEmpty()
+        || session->state().value("position").toString().isEmpty()) {
         cancelKosync();
+        finished();
+        return;
+    }
+    if (kosyncNetwork && !kosyncNetwork->connected()) {
+        cancelKosync();
+        kosyncStatus(unavailableConnection("final"));
         finished();
         return;
     }
@@ -688,7 +713,7 @@ void Reader::startKosyncExchange(bool finishing)
                 if (epoch != kosyncEpoch)
                     return;
                 if (!error.isEmpty()) {
-                    finishKosync(strings::get("kosync.saved_locally"));
+                    finishKosync(error);
                     return;
                 }
                 if (finishing && (book->pendingProgress() || book->deviceTransition())) {
@@ -729,11 +754,12 @@ void Reader::startKosyncExchange(bool finishing)
                                     return;
                                 if (pushError.isEmpty())
                                     kosyncProgress.uploaded(local.position);
-                                const auto status = !pushError.isEmpty() ? "kosync.saved_locally"
-                                        : kosyncClient->recordSyncSuccess()
-                                        ? "kosync.up_to_date"
-                                        : "kosync.storage_error";
-                                finishKosync(strings::get(status));
+                                finishKosync(
+                                        !pushError.isEmpty()
+                                                ? pushError
+                                                : strings::get(kosyncClient->recordSyncSuccess()
+                                                                       ? "kosync.up_to_date"
+                                                                       : "kosync.storage_error"));
                             });
                     if (kosyncClient->busy())
                         kosyncStatus(strings::get("kosync.syncing"));

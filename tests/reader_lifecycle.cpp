@@ -188,6 +188,7 @@ private:
 struct KosyncHttpState
 {
     int requests = 0;
+    int readStatus = 200, uploadStatus = 200;
     bool hold = false;
     QList<QPointer<test::KosyncReply>> held;
 };
@@ -210,8 +211,9 @@ protected:
                                               { "timestamp", 1 } })
                            .toJson(QJsonDocument::Compact);
         }
-        auto *reply = new test::KosyncReply(request, body, 200, QNetworkReply::NoError, this,
-                                            state->hold);
+        auto *reply = new test::KosyncReply(
+                request, body, operation == PutOperation ? state->uploadStatus : state->readStatus,
+                QNetworkReply::NoError, this, state->hold);
         if (state->hold)
             state->held.append(reply);
         return reply;
@@ -5261,7 +5263,7 @@ private slots:
         complete(false);
         QVERIFY(manual->isEnabled());
         auto *page = static_cast<ReadingPage *>(window->findChild<QWidget *>("rrPage"));
-        QCOMPARE(page->notice, strings::get("kosync.network_error"));
+        QCOMPARE(page->notice, strings::get("kosync.no_connection"));
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         manual->click();
         QCOMPARE(network->requests, 2);
@@ -5271,6 +5273,62 @@ private slots:
         window->sleepReader();
         QCOMPARE(network->requests, 2);
         QVERIFY(!kosync::Client(paths.syncAccount()).manualExplanation());
+    }
+
+    void kosyncFailure_data()
+    {
+        QTest::addColumn<bool>("upload");
+        QTest::newRow("read") << false;
+        QTest::newRow("upload") << true;
+    }
+
+    // A failed read or upload keeps its explanation visible and leaves progress unchanged.
+    void kosyncFailure()
+    {
+        QFETCH(bool, upload);
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "fixture" },
+                                     { "automatic", false } }));
+        auto http = std::make_shared<KosyncHttpState>();
+        http->readStatus = upload ? 200 : 401;
+        http->uploadStatus = 401;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [http](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto position = host.session()->state().value("position");
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        host.window()->findChild<QPushButton *>("rrSettingsKosync")->click();
+        auto *status = host.window()->findChild<QLabel *>("rrKosyncStatus");
+        QVERIFY(status);
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        QTRY_COMPARE(status->text(), strings::get("kosync.auth_error"));
+        QCOMPARE(http->requests, upload ? 2 : 1);
+        QCOMPARE(host.session()->state().value("position"), position);
+        QVERIFY(!showsSyncTime(host.window()));
+        auto *next = host.window()->findChild<QPushButton *>("rrSettingsOptionsNext");
+        for (int page = 0; page < 10 && next && next->isVisible() && next->isEnabled()
+             && status->visibleRegion().boundingRect() != status->rect();
+             ++page) {
+            next->click();
+            QCoreApplication::processEvents();
+        }
+        QTRY_COMPARE(status->visibleRegion().boundingRect(), status->rect());
+        QVERIFY(status->height() >= status->heightForWidth(status->width()));
     }
 
     // Checks Sync now in Settings: no deadline while a connection waits for permission, then the Syncing notice and its Cancel.
@@ -5346,6 +5404,9 @@ private slots:
             network->completed = {};
             network->connected = connection == "connected";
             completed(network->connected);
+            if (!network->connected)
+                QCOMPARE(host.window()->findChild<QLabel *>("rrKosyncStatus")->text(),
+                         strings::get("kosync.no_connection"));
         }
         if (connection != "permission") {
             QPointer<QWidget> popup = host.window()->findChild<QWidget *>("rrKosyncOpening");
@@ -5481,7 +5542,7 @@ private slots:
         // counts from the skipped opening sync, and Wait keeps the sync local.
         readOn(15);
         QCOMPARE(status->text(),
-                 minutes < 0 ? QString("unchanged") : strings::get("kosync.saved_locally"));
+                 minutes < 0 ? QString("unchanged") : strings::get("kosync.no_connection"));
         QCOMPARE(network->requests, 0);
         host.window()->sleepReader();
         host.window()->wakeReader();
@@ -5867,7 +5928,7 @@ private slots:
         status->setText("unchanged");
         readOn(5);
         QCOMPARE(network->requests, requests);
-        QCOMPARE(status->text(), strings::get("kosync.saved_locally"));
+        QCOMPARE(status->text(), strings::get("kosync.no_connection"));
         // Time alone does not sync: a refresh long after the interval, without
         // a new position, does nothing.
         status->setText("unchanged");
@@ -5886,12 +5947,12 @@ private slots:
         sheet->findChild<QPushButton *>("rrKosyncAutomaticClose")->click();
         QCOMPARE(kosync::Client(paths.syncAccount()).schedule().minutes, 0);
         readOn(1);
-        QCOMPARE(status->text(), strings::get("kosync.saved_locally"));
+        QCOMPARE(status->text(), strings::get("kosync.no_connection"));
         status->setText("unchanged");
         readOn(0.4);
         QCOMPARE(status->text(), QString("unchanged"));
         readOn(0.2);
-        QCOMPARE(status->text(), strings::get("kosync.saved_locally"));
+        QCOMPARE(status->text(), strings::get("kosync.no_connection"));
         QCOMPARE(network->requests, requests);
     }
 
@@ -6102,7 +6163,7 @@ private slots:
         // at its budget.
         QVERIFY(host.window()->pendingNetworkSync());
         QCOMPARE(requests, 0);
-        QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("kosync.saved_locally"), 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("kosync.timeout_error"), 3000);
         QCOMPARE(requests, 0);
         QCOMPARE(network->requests, 0);
         QCOMPARE(network->releases, 0);
@@ -8273,7 +8334,7 @@ private:
         QPointer<QWidget> popup = host.window()->findChild<QWidget *>("rrKosyncOpening");
         QVERIFY(popup);
         if (state == "deadline") {
-            QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("kosync.saved_locally"), 11000);
+            QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("kosync.reader_timeout"), 11000);
         } else if (state == "cancel") {
             host.window()->show();
             QVERIFY(click(canvas, popup->findChild<QPushButton *>("rrKosyncCancel")));
@@ -8385,6 +8446,8 @@ private:
             QTRY_VERIFY(!popup || !popup->isVisible());
             QCOMPARE(network->cancellations, 1);
             QCOMPARE(attempts.count(), 0);
+            QCOMPARE(host.window()->findChild<QLabel *>("rrKosyncStatus")->text(),
+                     strings::get("kosync.connection_timeout"));
         } else {
             QVERIFY(click(canvas, popup->findChild<QPushButton *>("rrKosyncCancel")));
             QCOMPARE(network->cancellations, 1);
@@ -8402,7 +8465,7 @@ private:
             QTRY_VERIFY(!host.session()->busy());
             QCoreApplication::processEvents();
             QCOMPARE(network->requests, 1);
-            QCOMPARE(status->text(), strings::get("kosync.saved_locally"));
+            QCOMPARE(status->text(), strings::get("kosync.no_connection"));
             QCOMPARE(attempts.count(), 0);
             if (scenario == "login") {
                 // Editing credentials exposes Sign in even for the saved account.

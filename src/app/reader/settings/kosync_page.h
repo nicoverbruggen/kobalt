@@ -24,6 +24,7 @@ public:
     void setDeviceName(const QString &name, const QString &defaultName);
     void setFilenameMatching(bool enabled);
     void setStatus(const QString &status, bool busy);
+    void fitWidth(int width);
 
     QString server() const { return server_; }
 

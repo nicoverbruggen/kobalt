@@ -238,6 +238,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "kosync-manual-toolbar", "Manual sync toolbar" },
         { "kosync-manual-prompt", "Manual sync explanation" },
         { "kosync-manual-settings", "Manual sync settings" },
+        { "kosync-failure", "Sync failure guidance" },
+        { "kosync-no-connection", "Sync without a connection" },
         { "kosync-automatic-off", "Automatic sync off" },
         { "kosync-automatic", "Automatic sync" },
         { "kosync-interval", "Sync while reading" },

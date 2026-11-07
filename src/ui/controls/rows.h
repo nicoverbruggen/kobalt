@@ -9,6 +9,7 @@
 namespace kobalt::ui {
 // Plain-text lists share line spacing, dividers and accessory geometry.
 // Labels remain widgets so callers can keep their accessibility and test names.
+// Horizontal contents margins inset the text and icons without shrinking the hit area.
 class ListRow : public Button
 {
 public:

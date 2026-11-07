@@ -1474,6 +1474,7 @@ int main(int argc, char **argv)
         QApplication::processEvents();
         require(choices.currentPage() == 0 && previous->isEnabled(),
                 "Contents pager did not change the visible page");
+        contents->findChild<QPushButton *>("chapter0Toggle")->click();
         auto *parent = contents->findChild<QLabel *>("chapter0Title");
         auto *nested = contents->findChild<QLabel *>("chapter1Title");
         require(parent && nested
@@ -1540,7 +1541,8 @@ int main(int argc, char **argv)
         next->click();
         require(choices.currentPage() == 0, "Next did not wrap to the first contents page");
         previous->click();
-        require(currentButton->grab().toImage().pixel(4, 4) == selectedPaper,
+        require(contents->findChild<QPushButton *>("chapter34")->grab().toImage().pixel(4, 4)
+                        == selectedPaper,
                 "Wrapping changed the selected chapter highlight");
         choices.resize(1448, 1072);
         QApplication::processEvents();
@@ -1557,7 +1559,147 @@ int main(int argc, char **argv)
             require(!button->objectName().startsWith("chapter") || !button->isVisible(),
                     "Empty contents retained a navigable chapter");
     }
-    std::puts("PASS: chapter row highlights, paging and navigation in light and dark themes");
+    // Checks nested visibility, independent heading actions and source identities after filtering.
+    for (bool dark : { false, true }) {
+        QWidget host;
+        host.resize(1072, 1448);
+        host.setProperty("reader_dark", dark);
+        kobalt::ui::readerStyle(&host, kobalt::ui::styles::reader());
+        host.show();
+        kobalt::ChapterContents contents(&host);
+        contents.resize(host.size());
+        const QVector<kobalt::Choice> chapters{
+            { "Part A", "part-a", "a", {}, 2, 0 },
+            { "Heading", {}, "heading", {}, 4, -1 },
+            { "Duplicate", "same", "current", {}, 8, 12 },
+            { "Duplicate", "same", "duplicate", {}, 8, 12 },
+            { "Other chapter", "other", "other", {}, 4, 20 },
+            { "Part B", "part-b", "b", {}, 2, 30 },
+            { "Last chapter", "last", "last", {}, 4, 31 },
+        };
+        auto button = [&](const QString &name) { return contents.findChild<QPushButton *>(name); };
+        auto shown = [&](const QString &name) {
+            auto *control = button(name);
+            return control && control->isVisibleTo(&contents);
+        };
+        QString selected;
+        contents.selected = [&](const QString &value) { selected = value; };
+        contents.showChapters("Nested book", chapters, "current");
+        require(shown("current") && shown("duplicate") && !shown("last"),
+                "Contents did not expand only the current chapter's ancestors");
+        require(button("current")->isChecked() && !button("duplicate")->isChecked(),
+                "Duplicate destinations confused the current chapter identity");
+        require(button("current")->x() == 0 && button("current")->width() == contents.width(),
+                "A leaf chapter does not own its full row hit area");
+        require(contents.findChild<QLabel *>("currentNumber")->mapTo(&contents, QPoint()).x()
+                        == contents.findChild<QLabel *>("aNumber")->mapTo(&contents, QPoint()).x(),
+                "Full-width chapter rows shifted the number column");
+        const auto chapterImage = contents.grab().toImage();
+        const int activeY = button("current")->geometry().center().y();
+        require(chapterImage.pixelColor(0, activeY)
+                                == contents.palette().color(QPalette::WindowText)
+                        && chapterImage.pixelColor(contents.width() - 1, activeY)
+                                == contents.palette().color(QPalette::WindowText),
+                "The current leaf chapter does not fill its empty disclosure gutter");
+        const int separator = button("duplicate")->geometry().bottom();
+        require(chapterImage.pixelColor(0, separator) == kobalt::ui::dividerColor(&contents)
+                        && chapterImage.pixelColor(contents.width() - 1, separator)
+                                == kobalt::ui::dividerColor(&contents),
+                "A leaf chapter's separator does not span the whole panel");
+        require(!button("heading")->isEnabled() && button("headingToggle")->isEnabled(),
+                "A heading without a destination cannot expand its children");
+        require(button("headingToggle")->isChecked()
+                        && button("headingToggle")->accessibleName().contains("Heading")
+                        && !shown("currentToggle"),
+                "Disclosure state, label or leaf visibility is wrong");
+        require(button("aToggle")->geometry().right() < button("a")->geometry().left(),
+                "Disclosure and title hit areas overlap");
+        button("aToggle")->click();
+        require(!shown("current") && shown("a") && shown("b") && selected.isEmpty(),
+                "Collapsing a group navigated or kept descendants visible");
+        button("aToggle")->click();
+        require(shown("current") && button("headingToggle")->isChecked(),
+                "Reopening a group forgot its nested expansion state");
+        button("headingToggle")->click();
+        require(!shown("current") && shown("other"),
+                "Collapsing an unavailable heading hid a sibling");
+        button("bToggle")->click();
+        require(shown("last") && contents.findChild<QLabel *>("lastNumber")->text() == "07"
+                        && contents.findChild<QLabel *>("lastPage")->text() == "32",
+                "Filtering changed source numbering or page captions");
+        button("last")->click();
+        require(selected == "last", "A recycled row selected its old destination");
+        button("a")->click();
+        require(selected == "part-a", "A parent title toggled instead of navigating");
+        contents.resize(720, 700);
+        require(shown("aToggle") && !button("headingToggle")->isChecked(),
+                "Resize reset chapter expansion");
+        contents.showChapters("Nested book", chapters, {}, kobalt::ChapterGroups::All);
+        require(shown("current") && button("aToggle")->isChecked()
+                        && button("headingToggle")->isChecked(),
+                "All chapters left a current-page group collapsed");
+        button("rrContentsNext")->click();
+        require(shown("last") && button("bToggle")->isChecked(),
+                "All chapters left a later-page group collapsed");
+        contents.showChapters("No collapsing", chapters, "current", kobalt::ChapterGroups::Off);
+        require(shown("current") && button("a")->x() == 0 && !shown("aToggle")
+                        && !shown("headingToggle"),
+                "Off retained disclosure controls or collapsed chapters");
+        contents.showChapters("Nested book", chapters, {});
+        require(!shown("heading") && !shown("last") && contents.currentPage() == 0,
+                "Reopening without a current entry retained expansion state");
+
+        QVector<kobalt::Choice> many;
+        for (int i = 0; i < 80; ++i)
+            many.append({ QString::number(i),
+                          QString::number(i),
+                          QString("many%1").arg(i),
+                          {},
+                          i % 2,
+                          i });
+        contents.showChapters("Paged groups", many, "many79");
+        require(shown("many79"), "The current child did not open on its visible page");
+        if (!shown("many78Toggle"))
+            button("rrContentsPrevious")->click();
+        require(shown("many78Toggle"), "The preceding page lost the current chapter's parent");
+        button("many78Toggle")->click();
+        require(shown("many78") && !shown("many79"),
+                "Last-page collapse lost its parent or left its child visible");
+        contents.resize(1448, 1072);
+        const auto caption = contents.findChild<QLabel *>("rrContentsPage")->text().split(" of ");
+        require(caption.size() == 2 && caption[0].toInt() <= caption[1].toInt(),
+                "Filtered contents resize left an invalid page");
+        contents.showChapters("One group", many.mid(0, 2), {});
+        require(!shown("rrContentsNext"), "Collapsed contents retained an unnecessary pager");
+        const int twoRows = kobalt::ui::metrics::chrome::actionHeight
+                + kobalt::ui::metrics::contents::stripHeight
+                + 2 * kobalt::ui::metrics::list::oneLine;
+        contents.resize(720, twoRows);
+        auto group = many.mid(0, 4);
+        group[2].depth = group[3].depth = 1;
+        contents.showChapters("Pager threshold", group, {});
+        button("many0Toggle")->click();
+        require(shown("rrContentsNext"), "Expanding did not reserve space for the pager");
+        button("rrContentsNext")->click();
+        require(contents.currentPage() == 1, "Expanded contents did not page");
+        button("rrContentsPrevious")->click();
+        button("many0Toggle")->click();
+        require(!shown("rrContentsNext") && contents.currentPage() == 0,
+                "Collapsing did not reclaim the pager space");
+        contents.showChapters("Empty", {}, {});
+        for (auto *control : contents.findChildren<QPushButton *>())
+            require(!control->isVisibleTo(&contents) || !control->objectName().endsWith("Toggle"),
+                    "An empty list retained a disclosure button");
+        contents.showChapters("Current group", chapters, "a");
+        const auto groupImage = contents.grab().toImage();
+        const int groupY = button("a")->geometry().center().y();
+        require(groupImage.pixelColor(0, groupY) == contents.palette().color(QPalette::Window)
+                        && groupImage.pixelColor(contents.width() - 1, groupY)
+                                == contents.palette().color(QPalette::WindowText),
+                "The current group's highlight covered its separate disclosure cell");
+    }
+    std::puts(
+            "PASS: chapter groups, row highlights, paging and navigation in light and dark themes");
     {
         namespace chapterMetrics = kobalt::ui::metrics::chapters;
         namespace chrome = kobalt::ui::metrics::chrome;

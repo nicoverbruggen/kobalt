@@ -353,6 +353,68 @@ private slots:
         QCOMPARE(selected, 1);
     }
 
+    // Checks that disclosure taps toggle groups and disclosure swipes only page the list.
+    void pagedChapterGroups_data() { variants(); }
+
+    void pagedChapterGroups()
+    {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        auto *chapters = new ChapterContents(nullptr);
+        chapters->setProperty("reader_dark", dark);
+        Canvas canvas(chapters, QSize(ui::px(1072), ui::px(1448)));
+        canvas.resize(536, 724);
+        canvas.show();
+        QVector<Choice> choices;
+        for (int i = 0; i < 60; ++i)
+            choices.append({ QString::number(i),
+                             QString::number(i),
+                             QString("chapter%1").arg(i),
+                             {},
+                             i % 2,
+                             i });
+        int selected = 0;
+        chapters->selected = [&](const QString &) { ++selected; };
+        chapters->showChapters("Groups", choices, "chapter0", ChapterGroups::All);
+        QCoreApplication::processEvents();
+        auto *leaf = chapters->findChild<QPushButton *>("chapter1");
+        QVERIFY(leaf);
+        QCOMPARE(leaf->x(), 0);
+        QCOMPARE(leaf->width(), chapters->width());
+        const auto leafPoint =
+                canvas.mapFromScene(leaf->mapTo(chapters, QPoint(ui::px(10), leaf->height() / 2)));
+        QTest::mousePress(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, leafPoint);
+        QVERIFY(leaf->isDown());
+        const auto pressed = leaf->grab().toImage();
+        QCOMPARE(pressed.pixelColor(2, 2), ui::themeColors(leaf).pressedPaper);
+        QCOMPARE(pressed.pixelColor(leaf->width() - 3, 2), ui::themeColors(leaf).pressedPaper);
+        QTest::mouseRelease(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, leafPoint);
+        QCOMPARE(selected, 1);
+        selected = 0;
+        auto disclosure = [&] { return chapters->findChild<QPushButton *>("chapter0Toggle"); };
+        QVERIFY(disclosure() && disclosure()->isChecked());
+        QVERIFY(click(canvas, disclosure()));
+        QVERIFY(!disclosure()->isChecked());
+        QCOMPARE(chapters->currentPage(), 0);
+        QCOMPARE(selected, 0);
+        QVERIFY(click(canvas, disclosure()));
+        QVERIFY(disclosure()->isChecked());
+        const auto from = canvas.mapFromScene(disclosure()->geometry().center());
+        const auto to = from + QPoint(160, 0);
+        QTest::mousePress(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, from);
+        QTest::mouseMove(canvas.viewport(), to);
+        QTest::mouseRelease(canvas.viewport(), Qt::LeftButton, Qt::NoModifier, to);
+        QCoreApplication::processEvents();
+        QVERIFY(chapters->currentPage() > 0);
+        QCOMPARE(selected, 0);
+        QVERIFY(click(canvas, chapters->findChild<QPushButton *>("rrContentsNext")));
+        QCOMPARE(chapters->currentPage(), 0);
+        QVERIFY(disclosure()->isChecked());
+        QVERIFY(click(canvas, chapters->findChild<QPushButton *>("chapter0")));
+        QCOMPARE(selected, 1);
+    }
+
     // Checks that list swipes respect nested pagers, disabled arrows, small or vertical moves, held rows and gesture controls.
     void pagedSwipesRespectControls()
     {

@@ -21,13 +21,16 @@ struct Choice
     QStringList fontFiles = {};
 };
 
+enum class ChapterGroups { Current, All, Off };
+
 // The chapter list covers the header's action row with its own Chapters bar.
 // Its close cell and the Chapters tab both close it.
 class ChapterContents : public ui::Panel
 {
 public:
     explicit ChapterContents(QWidget *parent);
-    void showChapters(const QString &title, QVector<Choice> choices, const QString &current);
+    void showChapters(const QString &title, QVector<Choice> choices, const QString &current,
+                      ChapterGroups groups = ChapterGroups::Current);
     void setPosition(const QString &text);
 
     int currentPage() const { return page; }
@@ -40,11 +43,18 @@ protected:
     void resizeEvent(QResizeEvent *) override;
 
 private:
-    void arrange();
+    void arrange(int anchor = -1);
     void redraw();
+    void rebuildVisible();
+    void toggleGroup(int index);
+    int itemIndex(int row) const;
+    bool hasChildren(int index) const;
     int pageCount() const;
     QVector<Choice> items;
+    QVector<int> parents, visible;
+    QVector<bool> expanded;
     QVector<QPushButton *> buttons;
+    QVector<QPushButton *> disclosures;
     QVector<QLabel *> labels;
     QString current;
     QLabel *title, *position, *summary, *pageHeading, *empty;
@@ -52,6 +62,7 @@ private:
     ui::CellButton *close;
     ui::PagerBar *pager;
     int page = 0, rows = 1;
+    bool collapsible = true;
 };
 
 class ChoiceScreen : public kobalt::ui::Panel
@@ -65,7 +76,8 @@ public:
     void setFontAppearance(const ui::SampleAppearance &appearance);
     explicit ChoiceScreen(QWidget *parent);
     void showChoices(const QString &heading, QVector<Choice> choices, const QString &current = {},
-                     Mode presentation = Mode::Chapters);
+                     Mode presentation = Mode::Chapters,
+                     ChapterGroups groups = ChapterGroups::Current);
     void setDropdownGeometry(const QRect &bounds);
     void setChapterPosition(const QString &text);
     void selectValue(const QString &value);

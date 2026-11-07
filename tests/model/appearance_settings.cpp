@@ -12,6 +12,18 @@ using namespace kobalt;
 // Checks appearance settings: defaults, invalid values, migrations, global and book precedence, new-book inheritance and which changes need a new layout.
 int main()
 {
+    for (const auto *mode : { "current", "all", "off" }) {
+        const auto cleaned = appearance::cleanPreferences(
+                { { "chapter_groups", mode }, { "future_option", 42 } });
+        require(cleaned.value("chapter_groups").toString() == mode
+                        && cleaned.value("future_option").toInt() == 42,
+                "Chapter group cleanup lost a saved choice or an unknown field");
+        require(appearance::same({}, cleaned), "Chapter expansion invalidated the book layout");
+    }
+    for (const auto &invalid : { QJsonValue("invalid"), QJsonValue(true), QJsonValue(1) })
+        require(!appearance::cleanPreferences({ { "chapter_groups", invalid } })
+                         .contains("chapter_groups"),
+                "Invalid chapter group choice did not fall back to Current section");
     require(!remainingTime::approximate({}), "Older preferences did not retain detailed estimates");
     for (const auto *format : { "detailed", "approximate" }) {
         const auto preferences = appearance::cleanPreferences(

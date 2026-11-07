@@ -585,6 +585,9 @@ private:
     void showMenuView();
     void openMenuView();
     void closeMenuView();
+    void showChapterGroups();
+    void openChapterGroups();
+    void closeChapterGroups();
     void showNavigationBarButtons();
     void openNavigationBarButtons();
     void closeNavigationBarButtons();
@@ -639,9 +642,9 @@ private:
                               *sleepTileButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> sleepPopup;
     kobalt::ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
-                              *navigationBarButton = nullptr;
+                              *navigationBarButton = nullptr, *chapterGroupsButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup, navigationBarPopup,
-            menuViewPopup, tappableLinksPopup;
+            menuViewPopup, tappableLinksPopup, chapterGroupsPopup;
     kobalt::ui::CaptionButton *menuViewButton = nullptr, *tappableLinksButton = nullptr;
     int settingsColumnSpacing = defaultColumnSpacingPercent;
     int settingsWordSpacing = 100;

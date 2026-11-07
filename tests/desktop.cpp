@@ -188,6 +188,7 @@ bool createBook(const QString &directory, const QString &filename = "text.epub")
             "<container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\">"
             "<rootfiles><rootfile full-path=\"book.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>";
     QString manifest, spine, navigation;
+    QStringList chapterEntries;
     const bool illustrated = filename == "later-images.epub";
     const bool nonlinear = filename == "publisher-non-linear.epub";
     const bool vertical = filename == "formatting-unsupported-writing.epub";
@@ -219,12 +220,20 @@ bool createBook(const QString &directory, const QString &filename = "text.epub")
         spine += QString("<itemref idref=\"c%1\"%2/>")
                          .arg(chapter)
                          .arg(nonlinear && chapter == 2 ? " linear=\"no\"" : "");
-        navigation +=
+        chapterEntries.append(
                 QString("<navPoint id=\"n%1\" playOrder=\"%1\"><navLabel><text>Chapter %1</text>"
                         "</navLabel><content src=\"%2\"/></navPoint>")
                         .arg(chapter)
-                        .arg(name);
+                        .arg(name));
     }
+    navigation = chapterEntries.join(QString());
+    if (filename == "nested-chapters.epub")
+        navigation = "<navPoint id='part1'><navLabel><text>Part I: The journey</text></navLabel>"
+                     "<content src='c1.xhtml'/>"
+                + chapterEntries[0] + chapterEntries[1]
+                + "</navPoint><navPoint id='part2'><navLabel><text>Part II: The return</text>"
+                  "</navLabel><content src='c3.xhtml'/>"
+                + chapterEntries[2] + "</navPoint>";
     if (illustrated)
         manifest += "<item id=\"image\" href=\"image.png\" media-type=\"image/png\"/>";
     files["book.opf"] =
@@ -1312,6 +1321,139 @@ void openPrologueBody(Fixture &fixture)
     QVERIFY(fixture.press("rrChapter1"));
     QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
     advanceIntoBody(fixture);
+}
+
+// Exercises the real EPUB hierarchy, disclosure hit areas, navigation and reopening.
+void chapterGroups(Fixture &fixture, const QString &name = {})
+{
+    const auto previousBook = captureBook;
+    captureBook = { { "title", "Nested chapter fixture" },
+                    { "fixture", "Synthetic EPUB with two chapter groups" } };
+    const auto restoreBook = qScopeGuard([previousBook] { captureBook = previousBook; });
+    const auto revealChapter = [&](const char *chapter) {
+        for (int page = 0; page < 5 && !fixture.visible(chapter); ++page)
+            if (!fixture.press("rrContentsNext"))
+                return false;
+        return fixture.visible(chapter);
+    };
+    QVERIFY(createBook(fixture.directory.path(), "nested-chapters.epub"));
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(fixture.directory.filePath("nested-chapters.epub"));
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_VERIFY(fixture.visible("rrContents"));
+    QCOMPARE(fixture.state().value("chapters").toInt(), 5);
+    QVERIFY(fixture.visible("rrChapter1"));
+    QVERIFY(!fixture.visible("rrChapter4"));
+    const auto initialPage = fixture.state().value("page");
+    const auto graph = fixture.state().value("word_counts").toObject().value("positions");
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-chapters-groups"));
+    QVERIFY(fixture.press("rrChapter0Toggle"));
+    QVERIFY(!fixture.visible("rrChapter1") && !fixture.visible("rrChapter2"));
+    QCOMPARE(fixture.state().value("page"), initialPage);
+    QCOMPARE(fixture.state().value("chapters").toInt(), 5);
+    QCOMPARE(fixture.state().value("word_counts").toObject().value("positions"), graph);
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-chapters-groups-collapsed"));
+    QVERIFY(fixture.press("rrChapter3Toggle"));
+    QVERIFY(fixture.visible("rrChapter4"));
+    QVERIFY(fixture.press("rrChapter4"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(!fixture.visible("rrContents"));
+    QVERIFY(fixture.state().value("page").toInt() > initialPage.toInt());
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_VERIFY(fixture.visible("rrChapter4"));
+    QVERIFY(!fixture.visible("rrChapter1"));
+    QVERIFY(fixture.widget("rrChapter3Toggle")->property("checked").toBool());
+    QVERIFY(fixture.press("rrChapter0"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QCOMPARE(fixture.state().value("page"), initialPage);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsControls"));
+    auto *groups = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrChapterGroups"));
+    QVERIFY(groups);
+    QCOMPARE(groups->caption(), strings::get("settings.chapter_groups_current").toUpper());
+    QVERIFY(fixture.widget("rrTapZones")->y()
+            < fixture.widget("rrControlsChapterListSection")->y());
+    QVERIFY(fixture.widget("rrControlsChapterListSection")->y() < groups->y());
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-settings-chapter-navigation", "rrSettingsOptions");
+    QVERIFY(fixture.press("rrChapterGroups"));
+    QTRY_VERIFY(fixture.visible("rrChapterGroupsPopup"));
+    QVERIFY(fixture.widget("rrChapterGroups_current")->property("checked").toBool());
+    QVERIFY(fixture.widget("rrChapterGroups_current")->y()
+            < fixture.widget("rrChapterGroups_all")->y());
+    QVERIFY(fixture.widget("rrChapterGroups_all")->y()
+            < fixture.widget("rrChapterGroups_off")->y());
+    const auto *preferenceTitle = fixture.widget("rrChapterGroupsTitle");
+    const auto *preferenceHint = fixture.widget("rrChapterGroupsHint");
+    QVERIFY(preferenceHint->y() > preferenceTitle->geometry().bottom() + ui::px(8));
+    QCOMPARE(preferenceHint->font().pixelSize(),
+             ui::textPx(ui::metrics::chrome::labelText.design() - 2));
+    QVERIFY(preferenceHint->font().pixelSize() < preferenceTitle->font().pixelSize());
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-chapter-groups-preference"));
+    QVERIFY(fixture.press("rrChapterGroups_all"));
+    QTRY_VERIFY(!fixture.visible("rrChapterGroupsPopup"));
+    QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("chapter_groups").toString(),
+                 QString("all"));
+    QCOMPARE(groups->caption(), strings::get("settings.chapter_groups_all").toUpper());
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QVERIFY(revealChapter("rrChapter4"));
+    QVERIFY(revealChapter("rrChapter1"));
+    QVERIFY(fixture.press("rrContentsClose"));
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(!fixture.window.readerWindow());
+    fixture.window.openBook(fixture.directory.filePath("nested-chapters.epub"));
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QVERIFY(revealChapter("rrChapter4"));
+    QVERIFY(revealChapter("rrChapter1"));
+    QVERIFY(fixture.press("rrContentsClose"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsControls"));
+    QVERIFY(fixture.press("rrChapterGroups"));
+    QTRY_VERIFY(fixture.visible("rrChapterGroupsPopup"));
+    QVERIFY(fixture.press("rrChapterGroups_current"));
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_VERIFY(fixture.visible("rrChapter1"));
+    QVERIFY(!fixture.visible("rrChapter4"));
+    QVERIFY(fixture.press("rrContentsClose"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsControls"));
+    QVERIFY(fixture.press("rrChapterGroups"));
+    QTRY_VERIFY(fixture.visible("rrChapterGroupsPopup"));
+    QVERIFY(fixture.press("rrChapterGroups_off"));
+    QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("chapter_groups").toString(),
+                 QString("off"));
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QVERIFY(revealChapter("rrChapter4"));
+    QVERIFY(revealChapter("rrChapter0"));
+    QVERIFY(!fixture.visible("rrChapter0Toggle"));
+    QVERIFY(!fixture.visible("rrChapter3Toggle"));
+    QCOMPARE(fixture.widget("rrChapter0")->x(), 0);
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-chapters-no-collapse", "rrContents");
+    QVERIFY(fixture.press("rrContentsClose"));
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(!fixture.window.readerWindow());
+    fixture.window.openBook(fixture.directory.filePath("nested-chapters.epub"));
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 3, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QVERIFY(!fixture.visible("rrChapter0Toggle"));
+    QVERIFY(revealChapter("rrChapter4"));
 }
 
 bool revealSettingsOption(Fixture &fixture, const char *name)
@@ -2797,6 +2939,18 @@ class DesktopTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void chapterGroups_data() { variants(); }
+
+    void chapterGroups()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        ::chapterGroups(fixture);
+    }
 
     void viewportTransition()
     {
@@ -9584,6 +9738,18 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void chapterGroups_data() { screenshotVariants(); }
+
+    void chapterGroups()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        ::chapterGroups(fixture, screenshotVariant(preset, dark));
+    }
 
     void standbySettings_data() { screenshotVariants(); }
 

@@ -371,6 +371,7 @@ void Reader::openSettings()
     showTappableLinks();
     minimalAnnotationOption->setChecked(minimalAnnotationMode());
     showNavigationBarButtons();
+    showChapterGroups();
     showMenuView();
     if (services.automaticBookOpening)
         automaticOpeningOption->setChecked(services.automaticBookOpening());

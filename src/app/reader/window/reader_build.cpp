@@ -1392,6 +1392,7 @@ void Reader::buildSettings()
     tapZonesButton = settings->tapZonesButton;
     tappableLinksButton = settings->tappableLinksButton;
     navigationBarButton = settings->navigationBarButton;
+    chapterGroupsButton = settings->chapterGroupsButton;
     menuViewButton = settings->menuViewButton;
     connect(menuViewButton, &QPushButton::clicked, this, [this] { openMenuView(); });
     minimalAnnotationOption = settings->minimalAnnotationOption;
@@ -1537,6 +1538,7 @@ void Reader::buildSettings()
     connect(sleepTileButton, &QPushButton::clicked, this, [this] { openSleepTile(); });
     connect(tappableLinksButton, &QPushButton::clicked, this, [this] { openTappableLinks(); });
     connect(tapZonesButton, &QPushButton::clicked, this, [this] { openTapZones(); });
+    connect(chapterGroupsButton, &QPushButton::clicked, this, [this] { openChapterGroups(); });
     connect(navigationBarButton, &QPushButton::clicked, this,
             [this] { openNavigationBarButtons(); });
     connect(pageNavigationButton, &QPushButton::clicked, this, [this] { openPageNavigation(); });

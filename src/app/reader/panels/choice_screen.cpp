@@ -287,14 +287,14 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
 }
 
 void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices,
-                               const QString &current, Mode presentation)
+                               const QString &current, Mode presentation, ChapterGroups groups)
 {
     mode = presentation;
     fontPager->setBlankArea({});
     if (mode == Mode::Chapters) {
         setEdges({});
         contents->setGeometry(rect());
-        contents->showChapters(heading, std::move(choices), current);
+        contents->showChapters(heading, std::move(choices), current, groups);
         redraw();
         show();
         raise();

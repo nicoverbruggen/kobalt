@@ -11,10 +11,39 @@
 #include "ui/style/styles.h"
 #include "ui/style/fonts.h"
 #include <QPainter>
+#include <algorithm>
 
 namespace kobalt {
 namespace contents = ui::metrics::contents;
 namespace chrome = ui::metrics::chrome;
+
+namespace {
+// A sibling of the title row, so unresolved headings still have an action.
+class ChapterDisclosure final : public ui::Button
+{
+public:
+    explicit ChapterDisclosure(QWidget *parent) : ui::Button(parent)
+    {
+        setCheckable(true);
+        setFocusPolicy(Qt::StrongFocus);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        const auto ink = palette().color(QPalette::WindowText);
+        painter.fillRect(rect(),
+                         isDown() ? ui::themeColors(this).pressedPaper
+                                  : palette().color(QPalette::Window));
+        ui::paintEdges(painter, rect(), ui::Edges(Qt::RightEdge) | Qt::BottomEdge,
+                       ui::dividerColor(this));
+        const int side = chrome::cellIcon;
+        ui::controlIcon(isChecked() ? ui::ControlIcon::Minus : ui::ControlIcon::Plus, ink)
+                .paint(&painter, QRect((width() - side) / 2, (height() - side) / 2, side, side));
+    }
+};
+} // namespace
 
 ChapterContents::ChapterContents(QWidget *parent) : Panel(parent)
 {
@@ -71,20 +100,69 @@ void ChapterContents::setPosition(const QString &text)
 
 int ChapterContents::pageCount() const
 {
-    return qMax(1, (int(items.size()) + rows - 1) / rows);
+    return qMax(1, (int(visible.size()) + rows - 1) / rows);
+}
+
+bool ChapterContents::hasChildren(int index) const
+{
+    return index >= 0 && index + 1 < parents.size() && parents[index + 1] == index;
+}
+
+int ChapterContents::itemIndex(int row) const
+{
+    return row >= 0 && row < rows ? visible.value(page * rows + row, -1) : -1;
+}
+
+void ChapterContents::rebuildVisible()
+{
+    visible.clear();
+    QVector<bool> shown(items.size(), false);
+    for (int i = 0; i < items.size(); ++i) {
+        const int parent = parents[i];
+        shown[i] = parent < 0 || (shown[parent] && expanded[parent]);
+        if (shown[i])
+            visible.append(i);
+    }
+}
+
+void ChapterContents::toggleGroup(int index)
+{
+    if (!collapsible || !hasChildren(index))
+        return;
+    expanded[index] = !expanded[index];
+    rebuildVisible();
+    arrange(index);
+    redraw();
+    for (int row = 0; row < disclosures.size(); ++row)
+        if (itemIndex(row) == index)
+            disclosures[row]->setFocus(Qt::OtherFocusReason);
 }
 
 void ChapterContents::showChapters(const QString &title, QVector<Choice> choices,
-                                   const QString &current)
+                                   const QString &current, ChapterGroups groups)
 {
     setAccessibleDescription(title);
     items = std::move(choices);
     this->current = current;
-    page = 0;
-    arrange();
-    for (int i = 0; i < items.size(); ++i)
+    parents.clear();
+    collapsible = groups != ChapterGroups::Off;
+    expanded = QVector<bool>(items.size(), groups != ChapterGroups::Current);
+    QVector<int> stack;
+    int selected = -1;
+    for (int i = 0; i < items.size(); ++i) {
+        const int depth = qMax(0, items[i].depth);
+        while (!stack.isEmpty() && qMax(0, items[stack.last()].depth) >= depth)
+            stack.removeLast();
+        parents.append(stack.isEmpty() ? -1 : stack.last());
+        stack.append(i);
         if (!current.isEmpty() && items[i].name == current)
-            page = i / rows;
+            selected = i;
+    }
+    for (int parent = selected < 0 ? -1 : parents[selected]; parent >= 0; parent = parents[parent])
+        expanded[parent] = true;
+    rebuildVisible();
+    page = 0;
+    arrange(selected);
     redraw();
     show();
     raise();
@@ -106,15 +184,19 @@ void ChapterContents::paintEvent(QPaintEvent *event)
                      width(), ui::metrics::control::border, ui::dividerColor(this));
 }
 
-void ChapterContents::arrange()
+void ChapterContents::arrange(int anchor)
 {
-    const int first = page * rows, top = chrome::actionHeight + contents::stripHeight,
-              available = height() - top;
+    if (anchor < 0)
+        anchor = itemIndex(0);
+    const int top = chrome::actionHeight + contents::stripHeight, available = height() - top;
     // Leave room for the pager only when the list needs more than one page.
     rows = qMax(1, available / ui::metrics::list::oneLine);
-    if (items.size() > rows)
+    if (visible.size() > rows)
         rows = qMax(1, (available - chrome::actionHeight) / ui::metrics::list::oneLine);
-    page = first / rows;
+    const int first = visible.indexOf(anchor);
+    if (first >= 0)
+        page = first / rows;
+    page = qBound(0, page, pageCount() - 1);
     // The Chapters bar takes the place of the header's action row.
     const int barHeight = chrome::actionHeight - chrome::heavyRule,
               titleLeft = chrome::cellWidth + chrome::inset;
@@ -142,19 +224,23 @@ void ChapterContents::redraw()
                             pagesKnown ? strings::get("chapter_contents.page") : QString());
     pager->setPage(page, pageCount(), {}, true);
     const int used = chrome::actionHeight + contents::stripHeight
-            + qMin(rows, qMax(0, int(items.size()) - page * rows))
+            + qMin(rows, qMax(0, int(visible.size()) - page * rows))
                     * int(ui::metrics::list::oneLine);
     pager->setBlankArea({ chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used });
-    while (buttons.size() < qMin(rows, int(items.size()))) {
+    while (buttons.size() < qMin(rows, int(visible.size()))) {
         const int row = buttons.size();
         auto *button = new ui::ListRow(this);
+        auto *disclosure = new ChapterDisclosure(this);
         buttons.append(button);
+        disclosures.append(disclosure);
         labels.append(button->titleLabel());
         connect(button, &QPushButton::clicked, this, [this, row] {
-            const int index = page * rows + row;
-            if (index < items.size() && !items[index].value.isEmpty() && selected)
+            const int index = itemIndex(row);
+            if (index >= 0 && !items[index].value.isEmpty() && selected)
                 selected(items[index].value);
         });
+        connect(disclosure, &QPushButton::clicked, this,
+                [this, row] { toggleGroup(itemIndex(row)); });
     }
     int rootDepth = items.isEmpty() ? 0 : qMax(0, items.first().depth);
     for (const auto &item : items)
@@ -164,12 +250,20 @@ void ChapterContents::redraw()
             ? ui::interfaceTextWidth(QString::number(lastPage + 1), ui::captionFont())
             : 0;
     const int digits = qMax(2, int(QString::number(items.size()).size()));
+    const bool grouped = collapsible
+            && std::any_of(parents.cbegin(), parents.cend(),
+                           [](int parent) { return parent >= 0; });
+    const int cellWidth = grouped ? int(chrome::cellWidth) : 0;
     for (int row = 0; row < buttons.size(); ++row) {
-        const int index = page * rows + row;
+        const int index = itemIndex(row);
         auto *button = buttons[row];
+        auto *disclosure = disclosures[row];
         auto *label = labels[row];
-        button->setVisible(row < rows && index < items.size());
-        if (row >= rows || index >= items.size())
+        button->setVisible(index >= 0);
+        disclosure->setVisible(collapsible && hasChildren(index));
+        button->setObjectName({});
+        disclosure->setObjectName({});
+        if (index < 0)
             continue;
         const auto &item = items[index];
         const bool active = item.name == current;
@@ -183,9 +277,21 @@ void ChapterContents::redraw()
         button->setEnabled(!item.value.isEmpty());
         button->setCheckable(true);
         button->setChecked(active);
-        button->setGeometry(
-                0, chrome::actionHeight + contents::stripHeight + row * ui::metrics::list::oneLine,
-                width(), ui::metrics::list::oneLine);
+        const int rowLeft = hasChildren(index) ? cellWidth : 0;
+        button->setContentsMargins(cellWidth - rowLeft, 0, 0, 0);
+        button->setGeometry(rowLeft,
+                            chrome::actionHeight + contents::stripHeight
+                                    + row * ui::metrics::list::oneLine,
+                            qMax(1, width() - rowLeft), ui::metrics::list::oneLine);
+        disclosure->setGeometry(0, button->y(), cellWidth, button->height());
+        disclosure->setObjectName(item.name + "Toggle");
+        disclosure->setChecked(expanded[index]);
+        disclosure->setAccessibleName(strings::get(expanded[index]
+                                                           ? "chapter_contents.collapse_group"
+                                                           : "chapter_contents.expand_group")
+                                              .arg(item.label));
+        disclosure->setAccessibleDescription(strings::get(
+                expanded[index] ? "chapter_contents.expanded" : "chapter_contents.collapsed"));
         auto *itemRow = static_cast<ui::ListRow *>(button);
         itemRow->setTitle(item.label);
         label->setObjectName(item.name + "Title");

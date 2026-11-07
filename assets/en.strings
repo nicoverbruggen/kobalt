@@ -229,6 +229,10 @@
 /* chapter_contents */
 "chapter_contents.chapter_destination_unavailable" = "Chapter destination unavailable";
 "chapter_contents.current_chapter" = "Current chapter";
+"chapter_contents.collapse_group" = "Collapse %1";
+"chapter_contents.expand_group" = "Expand %1";
+"chapter_contents.expanded" = "Expanded";
+"chapter_contents.collapsed" = "Collapsed";
 "chapter_contents.next_chapters" = "Next chapters";
 "chapter_contents.no_chapters_available" = "No chapters available";
 "chapter_contents.previous_chapters" = "Previous chapters";
@@ -760,6 +764,15 @@
 "settings.section_appearance" = "Appearance";
 "settings.section_screen" = "Screen refresh";
 "settings.section_navigation" = "Navigation";
+"settings.section_chapter_list" = "Chapter List";
+"settings.chapter_groups" = "Collapsible chapters";
+"settings.chapter_groups_hint" = "Choose whether chapter groups can collapse and how they open.";
+"settings.chapter_groups_current" = "Current section";
+"settings.chapter_groups_current_description" = "Expand the current chapter's parent groups. Default.";
+"settings.chapter_groups_all" = "All chapters";
+"settings.chapter_groups_all_description" = "Expand every group to show the full chapter list.";
+"settings.chapter_groups_off" = "Off";
+"settings.chapter_groups_off_description" = "Show every chapter without expand or collapse buttons.";
 "settings.section_frontlight" = "Frontlight";
 "settings.section_new_books" = "New Book";
 "settings.section_book_content" = "Book content";

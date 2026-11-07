@@ -134,7 +134,8 @@ public:
     ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr,
                       *sleepTileButton = nullptr, *menuViewButton = nullptr;
     ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
-                      *navigationBarButton = nullptr, *tappableLinksButton = nullptr;
+                      *navigationBarButton = nullptr, *tappableLinksButton = nullptr,
+                      *chapterGroupsButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;

@@ -1394,6 +1394,98 @@ void Reader::openPageNavigation()
     pageNavigationPopup->setFocus();
 }
 
+void Reader::showChapterGroups()
+{
+    chapterGroupsButton->setCaption(
+            strings::get(preferences.value("chapter_groups").toString() == "off"
+                                 ? "settings.chapter_groups_off"
+                                 : preferences.value("chapter_groups").toString() == "all"
+                                 ? "settings.chapter_groups_all"
+                                 : "settings.chapter_groups_current")
+                    .toUpper());
+}
+
+void Reader::closeChapterGroups()
+{
+    if (!chapterGroupsPopup) {
+        return;
+    }
+    chapterGroupsPopup->hide();
+    chapterGroupsPopup->deleteLater();
+    chapterGroupsPopup.clear();
+}
+
+void Reader::openChapterGroups()
+{
+    if (chapterGroupsPopup) {
+        return;
+    }
+    namespace chrome = metrics::chrome;
+    chapterGroupsPopup = new ui::ModalOverlay(this);
+    chapterGroupsPopup->setObjectName("rrChapterGroupsPopup");
+    chapterGroupsPopup->setDimmed(true);
+    chapterGroupsPopup->setGeometry(rect());
+    chapterGroupsPopup->installEventFilter(this);
+    chapterGroupsPopup->dismissed = [this] { closeChapterGroups(); };
+    auto *card = chapterGroupsPopup->card();
+    card->rows()->setContentsMargins(2, 2, 2, 2);
+    card->rows()->setSpacing(0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.top());
+    auto *title = card->title(strings::get("settings.chapter_groups"), "rrChapterGroupsTitle");
+    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(ui::px(12));
+    auto *hint = card->message(strings::get("settings.chapter_groups_hint"), "rrChapterGroupsHint");
+    // Half a point is about two design pixels at 300 ppi.
+    readerStyle(hint, styles::font(ui::textPx(chrome::labelText.design() - 2)));
+    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
+    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    const int cardWidth =
+            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
+    auto *choices = new ui::RadioList(card);
+    choices->setObjectName("rrChapterGroupsChoices");
+    choices->setMinimumRowHeight(chrome::listActionHeight);
+    choices->setTopDivider(true);
+    const QStringList modes{ "current", "all", "off" };
+    const auto current = preferences.value("chapter_groups").toString("current");
+    for (const auto &mode : modes) {
+        choices->add("rrChapterGroups_" + mode,
+                     strings::get(mode == "off"           ? "settings.chapter_groups_off"
+                                          : mode == "all" ? "settings.chapter_groups_all"
+                                                          : "settings.chapter_groups_current"),
+                     strings::get(mode == "off" ? "settings.chapter_groups_off_description"
+                                          : mode == "all"
+                                          ? "settings.chapter_groups_all_description"
+                                          : "settings.chapter_groups_current_description"));
+        if (mode == current)
+            choices->setCurrent(choices->options().size() - 1);
+    }
+    choices->chosen = [this, modes](int index) {
+        auto next = preferences;
+        next["chapter_groups"] = modes[index];
+        if (writePreferences(next)) {
+            preferences = next;
+            showChapterGroups();
+            settingsError->clear();
+            settingsError->hide();
+        } else {
+            settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
+            settingsError->show();
+        }
+        closeChapterGroups();
+    };
+    card->rows()->addWidget(choices);
+    choices->setFixedHeight(choices->heightForWidth(cardWidth - 4));
+    card->fitToWidth(cardWidth);
+    chapterGroupsPopup->centerCard();
+    for (auto *widget : chapterGroupsPopup->findChildren<QWidget *>()) {
+        textRefresh(widget);
+    }
+    textRefresh(chapterGroupsPopup);
+    chapterGroupsPopup->show();
+    chapterGroupsPopup->raise();
+    chapterGroupsPopup->setFocus();
+}
+
 void Reader::showNavigationBarButtons()
 {
     const auto mode = pageNavigation::barButtons(preferences);

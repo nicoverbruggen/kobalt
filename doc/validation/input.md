@@ -14,6 +14,8 @@ The `pressFeedback` gallery case drives the production reader and Library canvas
 
 The desktop touch-pointer check also verifies that device previews suppress hover tooltips in the reader, Library and preview controls. Fill window and unrelated windows keep normal tooltip delivery.
 
+Chapter-group checks cover separate disclosure and title hit areas, disclosure swipes through the graphics canvas, nested visibility and navigation through a synthetic EPUB. The component checks also cover destination-less headings, duplicate destinations, source numbering, paging, resizing and full-width row hit areas. The `chapterGroups` gallery case captures expanded and collapsed groups, the collapsible chapter preference, its Off mode and the Navigation and Links settings in the existing viewport and appearance variants.
+
 ## Limits
 
 These headless checks do not establish physical Kobo or Android touch behavior, touch-driver behavior or physical key delivery. Native operating-system cursor display and physical touch interaction still need manual checks.

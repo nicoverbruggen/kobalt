@@ -179,6 +179,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     choice("header_footer", { "default", "alternative_a", "alternative_b", "phone", "custom" });
     choice("default_menu_view", { "none", "seek", "stats" });
     choice("navigation_bar_buttons", { "chapters", "pages" });
+    choice("chapter_groups", { "current", "all", "off" });
     choice("page_navigation", { "taps_and_swipes", "taps_only", "swipes_only", "buttons_only" });
     choice("tap_zones", { "left_right", "reversed", "top_bottom", "one_handed" });
     choice("screen_refresh", { "smart", "1", "chapter", "6", "10", "20", "manual" });

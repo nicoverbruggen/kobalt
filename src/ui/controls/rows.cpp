@@ -323,6 +323,8 @@ bool ListRow::event(QEvent *event)
     }
     if (title && event->type() == QEvent::DynamicPropertyChange)
         syncLabelStyles();
+    if (title && event->type() == QEvent::ContentsRectChange)
+        arrange();
     return result;
 }
 
@@ -382,7 +384,8 @@ void ListRow::arrange()
     if (!title || arranging || synchronizing)
         return;
     arranging = true;
-    const int end = width() - (action ? int(metrics::chrome::cellWidth) : 0) - metrics::list::inset;
+    const int end = width() - contentsMargins().right()
+            - (action ? int(metrics::chrome::cellWidth) : 0) - metrics::list::inset;
     const int lead = hasLeadingIcon ? int(metrics::control::iconSize + metrics::chrome::selectorGap)
             : leadingText.isEmpty() ? 0
                                     : int(metrics::list::leadingWidth);
@@ -391,7 +394,7 @@ void ListRow::arrange()
             ? qMax(trailingCaption->reservedWidth, trailing->textWidth(trailingCaption->text))
             : accessory.kind() == Accessory::Kind::None ? 0
                                                         : int(metrics::chrome::cellIcon);
-    const int start = metrics::list::inset + lead + indentation;
+    const int start = contentsMargins().left() + metrics::list::inset + lead + indentation;
     const int textWidth =
             qMax(0, end - start - trail - (trail ? int(metrics::contents::pageGap) : 0));
     const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
@@ -416,7 +419,8 @@ void ListRow::arrange()
     }
     leading->setVisible(!hasLeadingIcon && !leadingText.isEmpty());
     leading->setText(leadingText);
-    leading->setGeometry(metrics::list::inset, 0, lead, height() - metrics::control::border);
+    leading->setGeometry(contentsMargins().left() + metrics::list::inset, 0, lead,
+                         height() - metrics::control::border);
     trailing->setVisible(trailingCaption != nullptr);
     trailing->setText(trailingCaption ? trailingCaption->text : QString());
     trailing->setGeometry(qMax(start, end - trail), top, qMax(0, qMin(trail, end - start)),
@@ -446,11 +450,14 @@ void ListRow::paintEvent(QPaintEvent *)
         painter.save();
         if (!isEnabled())
             painter.setOpacity(.4);
-        icon().paint(&painter, QRect(metrics::list::inset, (height() - side) / 2, side, side),
+        icon().paint(&painter,
+                     QRect(contentsMargins().left() + metrics::list::inset, (height() - side) / 2,
+                           side, side),
                      Qt::AlignCenter, QIcon::Normal, current ? QIcon::On : QIcon::Off);
         painter.restore();
     }
-    const int end = width() - (action ? int(metrics::chrome::cellWidth) : 0) - metrics::list::inset;
+    const int end = width() - contentsMargins().right()
+            - (action ? int(metrics::chrome::cellWidth) : 0) - metrics::list::inset;
     if (accessory.kind() == Accessory::Kind::Chevron
         || accessory.kind() == Accessory::Kind::Check) {
         painter.setRenderHint(QPainter::Antialiasing);

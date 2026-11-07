@@ -6,6 +6,8 @@ Kobalt separates saved reading data from disposable rendering caches. Storage fo
 
 ## Saved reading data
 
+`chapter_groups` is an optional global string with values `current`, `all` and `off`. Missing or invalid values use Current section. The choice controls whether chapter groups can collapse and which groups open expanded. It does not change book layout, chapter statistics or reading positions. Settings schema 1 stays unchanged.
+
 `reader-settings.json` holds global preferences with `schema: 1`. Unversioned settings are upgraded atomically. Recognized retired settings are converted or removed, invalid known values fall back to their defaults, and unknown keys are preserved. Unsupported future versions block writes until profile preparation moves them aside, as described in [Unusable saved data](#unusable-saved-data). `config.json` remains the small Kobo enable/disable configuration.
 
 The retired `native_hide_status_bar` preference is removed when settings are normalized. The Mac screen preset controls status visibility. This keeps settings schema 1.

@@ -18,6 +18,8 @@ Non-linear content starts on its own page: spine items marked `linear="no"`, foo
 
 Chapters uses the EPUB's table of contents on every platform. Counting and chapter navigation do not require Nickel's chapter layouts or word-count parser.
 
+Nested chapter groups have a plus or minus in a separate cell on the left. Tap that cell to expand or collapse the group. Tap the title to open the chapter. A heading without a destination can still expand its children. Settings > Controls > Chapter List > Collapsible chapters selects Current section, All chapters or Off. Off shows the full indented list without disclosure buttons. Current section is the default and opens the current chapter's ancestors while keeping other groups collapsed. All chapters opens every group and keeps the disclosure buttons available. Expansion stays while paging or resizing the panel and resets when Chapters opens again. Chapter numbers and page numbers keep their original values. Collapsing groups does not change reading progress or Stats.
+
 ## Links and footnotes
 
 - Standard Ebooks Kobo link wrappers use their publisher border without a second default underline. Ordinary links retain their default underline. Publisher link colors and decorations remain available.

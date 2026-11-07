@@ -16,6 +16,7 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | `lifecycle.kosyncNetwork` | The wait for a connection before HTTP |
 | `lifecycle.kosyncOpening`, `lifecycle.kosyncFinal` | Opening, close and sleep syncs against a stalled server |
 | `lifecycle.kosyncSleepSavesSyncTime` | Sleep saves the sync time, also when the sleep sync ends after the reader sleeps |
+| `lifecycle.kosyncMissingProgress` | First uploads after absent progress, with no upload on route, authentication or server errors |
 | `lifecycle.kosyncFailure` | Failed progress reads and uploads retain the specific error, fit its guidance and keep local progress |
 | `lifecycle.kosyncManualToolbar`, `lifecycle.kosyncManualConnection` | Manual sync and its Syncing notice |
 | `lifecycle.wifiPowerSaver`, `lifecycle.wifiPowerSaverAtSleep` | When the reader asks the host to turn Wi-Fi off |
@@ -24,6 +25,26 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 `session.reader-session`, in [Startup and reading](reading.md), checks the sync digests and position imports of an opened book.
 
 The completed sync notice keeps its dismissal timer when its parent hides and returns. An explicit dismissal still cancels the timer. `component.kosync-ui` checks both cases.
+
+## Progress API contract
+
+The client uses the KOReader v1 API with HTTPS, `Accept: application/vnd.koreader.v1+json`, `x-auth-user` and `x-auth-key`. The key is the MD5 of the password. A configured path prefix applies to each endpoint. Requests do not follow redirects or disable TLS checks.
+
+| Request | Successful response |
+| --- | --- |
+| `GET /users/auth` | HTTP 200 with an object containing `authorized: "OK"` |
+| `GET /syncs/progress/:document` | HTTP 200 with a progress object, or an absent-progress response below |
+| `PUT /syncs/progress` | HTTP 200 with an object whose `document` matches the uploaded digest |
+
+A progress object contains a nonempty string `progress` of at most 4096 characters, a numeric `percentage` from 0 to 1 and a string `device`. Optional `device_id` must be a string. Optional `timestamp` must be a finite number from 0 to 10^12. The client keeps the position string unchanged. Uploads send `document`, `progress`, `percentage`, `device` and `device_id`.
+
+An absent-progress response is HTTP 200 with `{}` or `[]`, or HTTP 404 with the exact JSON object `{"status":"not found"}`. Whitespace does not matter. The 404 form is accepted only for a progress GET, with no transport error other than Qt's `ContentNotFoundError`. It must fit the 16 KiB response limit and finish before the deadline. Extra fields, other JSON shapes, malformed JSON, HTML, empty bodies and other HTTP errors remain failures. The same object cannot authenticate an account or acknowledge an upload.
+
+The reference server returns an empty successful response for absent progress. The public Techy-Notes server source returns the structured 404. KOReader's API description lists HTTP 200 and 401 for progress reads, and its client treats 404 as a failed pull. Its upload path runs independently of the pull, so it can still create progress. Kobalt checks remote progress before each upload to protect remote changes. It therefore needs to recognize the structured missing-record response explicitly. This does not change conflict choices, retry budgets or upload acknowledgement checks.
+
+Sources, pinned for this comparison: [reference server](https://github.com/koreader/koreader-sync-server/blob/46ef6b84a3930b3f0265efac74899f2256c158f1/app/controllers/1/syncs_controller.lua), [KOReader API description](https://github.com/koreader/koreader/blob/9040116701c888889bd35233b23b83283be66745/plugins/kosync.koplugin/api.json), [KOReader upload and pull](https://github.com/koreader/koreader/blob/9040116701c888889bd35233b23b83283be66745/plugins/kosync.koplugin/main.lua), and [Techy-Notes server source](https://github.com/jadehawk/koreader-sync/blob/3d8948333ff6379b082bf86ca4c89aac943e5eb1/src/index.tsx). These sources establish implementation behavior, not the version deployed by a public service. KoSync.eu's missing-record response has not been verified.
+
+`model.kosync` checks absent-progress responses, first upload, malformed and ambiguous 404 responses, endpoint isolation and transport failures. `lifecycle.kosyncMissingProgress` runs Sync now through the production reader and verifies that absent progress permits an upload while route, authentication and server errors do not. Existing reconciliation checks retain remote conflict protection.
 
 ## Captures
 

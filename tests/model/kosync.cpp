@@ -463,6 +463,11 @@ void failureChecks(const QString &path)
                 "HTTP failures never replay an upload or redirect credentials");
         check(pair.second, "upload-position");
     }
+    network.status = 404;
+    network.response = R"({"status":"not found","secret":"PRIVATE-SENTINEL"})";
+    client.pull(document, [&](kosync::Progress, QString value) { done(value); });
+    wait(client);
+    check("kosync.route_error", "read-position");
     network.status = 200;
     for (const auto &body : { QByteArray("<html>PRIVATE-SENTINEL</html>"),
                               QByteArray(R"({"authorized":123,"secret":"PRIVATE-SENTINEL"})") }) {
@@ -817,8 +822,14 @@ int main(int argc, char **argv)
         ++completed;
     };
     const kosync::Progress local{ "/body/DocFragment[2]/body/p[3]/text().0", {}, {}, 0.42 };
-    for (const auto &body : { QByteArray("{}"), QByteArray("[]"), QByteArray(" \n[ \n ]\t") }) {
-        network.response = body;
+    for (const auto &response :
+         { std::make_pair(200, QByteArray("{}")), std::make_pair(200, QByteArray("[]")),
+           std::make_pair(200, QByteArray(" \n[ \n ]\t")),
+           std::make_pair(404, QByteArray(R"({"status":"not found"})")) }) {
+        network.status = response.first;
+        network.response = response.second;
+        network.failures = network.status == 404 ? 1 : 0;
+        network.transportError = QNetworkReply::ContentNotFoundError;
         const int before = network.calls;
         bool uploaded = false;
         client.pull(digest, [&](kosync::Progress remote, QString failure) {
@@ -829,6 +840,7 @@ int main(int argc, char **argv)
             if (sync.observe(remote, local.position, client.deviceId())
                 != kosync::Reconciler::Action::Upload)
                 return;
+            network.status = 200;
             network.response = "{\"document\":\"" + digest + "\",\"timestamp\":124}";
             client.push(digest, local, [&](QString failure) {
                 uploaded = failure.isEmpty();
@@ -838,8 +850,64 @@ int main(int argc, char **argv)
         wait(client);
         require(error.isEmpty() && !received.found && uploaded && network.calls == before + 2
                         && network.operation == QNetworkAccessManager::PutOperation,
-                "an empty object or array permits the first progress upload");
+                "empty progress or the structured missing-progress 404 permits the first upload");
     }
+    const auto uploadedProgress = network.payload;
+    {
+        Network peerNetwork;
+        peerNetwork.response = R"({"authorized":"OK"})";
+        kosync::Client peer(path + ".peer", nullptr, &peerNetwork);
+        peer.login("https://sync.example/prefix", "reader", "secret", done);
+        wait(peer);
+        require(error.isEmpty() && peer.deviceId() != client.deviceId(),
+                "a second reader has its own device identity");
+        peerNetwork.response = uploadedProgress;
+        peer.pull(digest, pulled);
+        wait(peer);
+        require(error.isEmpty() && received.found && received.position == local.position
+                        && received.deviceId == client.deviceId(),
+                "a second reader retrieves the first uploaded position unchanged");
+        kosync::Reconciler sync;
+        require(sync.observe(received, "different-local", peer.deviceId())
+                        == kosync::Reconciler::Action::Choose,
+                "progress created after a 404 still requires a remote conflict choice");
+        peerNetwork.status = 404;
+        peerNetwork.response = R"({"status":"not found"})";
+        peer.pull(digest, pulled);
+        wait(peer);
+        require(error.isEmpty() && !received.found
+                        && sync.observe(received, "different-local", peer.deviceId())
+                                == kosync::Reconciler::Action::Choose,
+                "a missing-progress response without a Qt error cannot clear a pending conflict");
+    }
+    network.status = 404;
+    for (const auto &body :
+         { QByteArray("{}"), QByteArray("[]"), QByteArray("not found"),
+           QByteArray("<html>Not Found</html>"), QByteArray(R"({"error":"not found"})"),
+           QByteArray(R"({"status":"Not Found"})"),
+           QByteArray(R"({"status":"not found","progress":"private"})"),
+           QByteArray(R"({"status":"not found"})") + QByteArray(17000, ' '),
+           QByteArray(R"({"status":"not found"} trailing)") }) {
+        network.response = body;
+        const int before = network.calls;
+        client.pull(digest, pulled);
+        wait(client);
+        require(!error.isEmpty() && !received.found && network.calls == before + 1,
+                "an unrecognized or oversized 404 remains a failed read without retries");
+    }
+    network.response = R"({"status":"not found"})";
+    client.login("https://another.example", "reader", "secret", done);
+    wait(client);
+    require(!error.isEmpty(), "missing-progress JSON cannot authenticate an account");
+    client.push(digest, local, done);
+    wait(client);
+    require(!error.isEmpty(), "missing-progress JSON cannot acknowledge an upload");
+    network.failures = 1;
+    network.transportError = QNetworkReply::SslHandshakeFailedError;
+    client.pull(digest, pulled);
+    wait(client);
+    require(!error.isEmpty(), "a transport failure cannot become missing progress");
+    network.status = 200;
     network.response =
             R"({"progress":"/body/DocFragment[2]/body/p[3]/text().0","percentage":0.42,"device":"KOReader","device_id":"other","timestamp":123})";
     client.pull(digest, pulled);

@@ -187,8 +187,9 @@ private:
 // replies wait in `held` until the test finishes them.
 struct KosyncHttpState
 {
-    int requests = 0;
+    int requests = 0, uploads = 0;
     int readStatus = 200, uploadStatus = 200;
+    QByteArray readBody = "{}";
     bool hold = false;
     QList<QPointer<test::KosyncReply>> held;
 };
@@ -203,8 +204,9 @@ protected:
                                  QIODevice *data) override
     {
         ++state->requests;
-        QByteArray body = "{}";
+        QByteArray body = state->readBody;
         if (operation == PutOperation) {
+            ++state->uploads;
             const auto upload =
                     QJsonDocument::fromJson(data ? data->readAll() : QByteArray()).object();
             body = QJsonDocument(QJsonObject{ { "document", upload.value("document") },
@@ -213,7 +215,10 @@ protected:
         }
         auto *reply = new test::KosyncReply(
                 request, body, operation == PutOperation ? state->uploadStatus : state->readStatus,
-                QNetworkReply::NoError, this, state->hold);
+                operation != PutOperation && state->readStatus == 404
+                        ? QNetworkReply::ContentNotFoundError
+                        : QNetworkReply::NoError,
+                this, state->hold);
         if (state->hold)
             state->held.append(reply);
         return reply;
@@ -5273,6 +5278,70 @@ private slots:
         window->sleepReader();
         QCOMPARE(network->requests, 2);
         QVERIFY(!kosync::Client(paths.syncAccount()).manualExplanation());
+    }
+
+    void kosyncMissingProgress_data()
+    {
+        QTest::addColumn<int>("statusCode");
+        QTest::addColumn<QByteArray>("body");
+        QTest::addColumn<bool>("missing");
+        QTest::newRow("empty-object") << 200 << QByteArray("{}") << true;
+        QTest::newRow("empty-array") << 200 << QByteArray("[]") << true;
+        QTest::newRow("missing-progress") << 404 << QByteArray(R"({"status":"not found"})") << true;
+        QTest::newRow("missing-route") << 404 << QByteArray("<html>Not Found</html>") << false;
+        QTest::newRow("ambiguous-404") << 404 << QByteArray("{}") << false;
+        QTest::newRow("auth-failure") << 401 << QByteArray(R"({"status":"not found"})") << false;
+        QTest::newRow("server-failure") << 500 << QByteArray(R"({"status":"not found"})") << false;
+    }
+
+    void kosyncMissingProgress()
+    {
+        QFETCH(int, statusCode);
+        QFETCH(QByteArray, body);
+        QFETCH(bool, missing);
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "fixture" },
+                                     { "automatic", false } }));
+        auto http = std::make_shared<KosyncHttpState>();
+        http->readStatus = statusCode;
+        http->readBody = body;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [http](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto position = host.session()->state().value("position");
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        host.window()->findChild<QPushButton *>("rrSettingsKosync")->click();
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        if (missing) {
+            QTRY_VERIFY(showsSyncTime(host.window()));
+            QCOMPARE(http->uploads, 1);
+            QCOMPARE(http->requests, 2);
+        } else {
+            auto *status = host.window()->findChild<QLabel *>("rrKosyncStatus");
+            QVERIFY(status);
+            QTRY_COMPARE(status->text(),
+                         strings::get(statusCode == 401           ? "kosync.auth_error"
+                                              : statusCode == 500 ? "kosync.server_error"
+                                                                  : "kosync.route_error"));
+            QCOMPARE(http->uploads, 0);
+            QCOMPARE(http->requests, 1);
+            QVERIFY(!showsSyncTime(host.window()));
+        }
+        QCOMPARE(host.session()->state().value("position"), position);
     }
 
     void kosyncFailure_data()

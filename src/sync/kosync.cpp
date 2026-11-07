@@ -750,6 +750,22 @@ void Client::sendRequest(const QByteArray &method, const QString &path, const QU
                     && transientNetworkError(reply->error())
                     && retryRequest(method, path, server, username, key, body, done, attempt))
                     return;
+                // Some compatible servers return this exact JSON object for a book
+                // without progress. Other 404s can mean a wrong route and must not
+                // permit an upload. Qt reports an HTTP 404 as ContentNotFoundError.
+                if (method == "GET" && path.startsWith("/syncs/progress/") && status == 404
+                    && !*timedOut && bytes->size() <= storage::maxJsonBytes
+                    && (reply->error() == QNetworkReply::NoError
+                        || reply->error() == QNetworkReply::ContentNotFoundError)) {
+                    QJsonParseError error;
+                    const auto document = QJsonDocument::fromJson(*bytes, &error);
+                    const auto object = document.object();
+                    if (error.error == QJsonParseError::NoError && document.isObject()
+                        && object.size() == 1 && object.value("status").toString() == "not found") {
+                        done(status, {}, {});
+                        return;
+                    }
+                }
                 if (reply->error() != QNetworkReply::NoError || status != 200
                     || bytes->size() > storage::maxJsonBytes) {
                     // Qt opens sockets on its own thread, so errno here says nothing.

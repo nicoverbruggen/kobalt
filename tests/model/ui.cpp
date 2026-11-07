@@ -3676,6 +3676,16 @@ int main(int argc, char **argv)
             require(preview && option->rect().contains(preview->geometry()),
                     "Extra large dictionary preview escapes its row");
             for (int percent : { 80, 100, 120, 140 }) {
+                auto *choice = settings.fontDialog->findChild<QAbstractButton *>(
+                        QString("rrDictionaryFontSize%1").arg(percent));
+                require(choice
+                                && choice->text()
+                                        == kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(
+                                                percent),
+                        "Standard interface text lost the dictionary size label");
+                require(choice->accessibleName()
+                                == kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(percent),
+                        "Dictionary size choice lost its accessible name");
                 auto *sample = settings.fontDialog->findChild<QWidget *>(
                         QString("rrDictionaryFontPreview%1").arg(percent));
                 auto *label = sample->findChild<QLabel *>();
@@ -3703,6 +3713,34 @@ int main(int argc, char **argv)
             }
             settings.dismissFontChoices();
         }
+        const auto savedScale = kobalt::ui::textScale();
+        const auto savedSize = reader.size();
+        for (const auto &size : { QSize(1072, 1448), QSize(720, 1600), QSize(1600, 720) }) {
+            reader.resize(size);
+            const bool phone = size != QSize(1072, 1448);
+            for (qreal scale : { 1.0, 1.25, 1.5 }) {
+                kobalt::ui::setLargeText(scale);
+                settings.showDictionaryFontSizes(100, {}, false, [](int) { });
+                app.processEvents();
+                const QStringList shortNames{ "S", "M", "L", "XL" };
+                int index = 0;
+                for (int percent : { 80, 100, 120, 140 }) {
+                    auto *choice = settings.fontDialog->findChild<QAbstractButton *>(
+                            QString("rrDictionaryFontSize%1").arg(percent));
+                    const auto name =
+                            kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(percent);
+                    const auto shown = scale == 1.5 ? QString() : phone ? shortNames[index] : name;
+                    require(choice && choice->text() == shown,
+                            "Dictionary size label does not match the screen and interface text size");
+                    require(choice->accessibleName() == name,
+                            "Dictionary size choice lost its full accessible name");
+                    ++index;
+                }
+                settings.dismissFontChoices();
+            }
+        }
+        reader.resize(savedSize);
+        kobalt::ui::setLargeText(savedScale);
         int paragraphCommits = 0, chosenGap = -2, chosenIndent = -2;
         settings.showParagraphAdjustments(-1, 60, [&](int gap, int indent) {
             ++paragraphCommits;

@@ -1173,17 +1173,21 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
     fontDialog->setFocus();
 }
 
-QString SettingsPanel::dictionaryFontSizeLabel(int percent)
+QString SettingsPanel::dictionaryFontSizeLabel(int percent, bool compact)
 {
     switch (percent) {
     case 80:
-        return strings::get("settings.dictionary_font_small");
+        return strings::get(compact ? "settings.dictionary_font_small_short"
+                                    : "settings.dictionary_font_small");
     case 120:
-        return strings::get("settings.dictionary_font_large");
+        return strings::get(compact ? "settings.dictionary_font_large_short"
+                                    : "settings.dictionary_font_large");
     case 140:
-        return strings::get("settings.dictionary_font_extra_large");
+        return strings::get(compact ? "settings.dictionary_font_extra_large_short"
+                                    : "settings.dictionary_font_extra_large");
     default:
-        return strings::get("settings.dictionary_font_standard");
+        return strings::get(compact ? "settings.dictionary_font_standard_short"
+                                    : "settings.dictionary_font_standard");
     }
 }
 
@@ -1206,9 +1210,12 @@ void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, 
     auto *choices = new ui::RadioList(card);
     choices->setMinimumRowHeight(metrics::list::oneLine);
     choices->setTopDivider(true);
+    const bool compact = isPhoneScreen(parentWidget()->size(), ui::density());
     for (int percent : appearance::dictionaryFontSizes) {
-        auto *option = choices->add(QString("rrDictionaryFontSize%1").arg(percent),
-                                    dictionaryFontSizeLabel(percent));
+        auto *option = choices->add(
+                QString("rrDictionaryFontSize%1").arg(percent),
+                ui::textScale() >= 1.5 ? QString() : dictionaryFontSizeLabel(percent, compact));
+        option->setAccessibleName(dictionaryFontSizeLabel(percent));
         const auto font = DictionaryPanel::definitionFont(family, percent);
         const int lineHeight = DictionaryPanel::definitionLineHeight(percent, customFont);
         const auto sample = strings::get("settings.dictionary_font_sample");

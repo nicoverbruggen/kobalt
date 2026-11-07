@@ -1135,6 +1135,10 @@
 "settings.dictionary_font_large" = "Large";
 "settings.dictionary_font_extra_large" = "Extra large";
 "settings.dictionary_font_sample" = "A short definition.";
+"settings.dictionary_font_small_short" = "S";
+"settings.dictionary_font_standard_short" = "M";
+"settings.dictionary_font_large_short" = "L";
+"settings.dictionary_font_extra_large_short" = "XL";
 "settings.ui_font" = "Sans-serif UI typeface";
 "settings.header_footer_font" = "Header & footer UI typeface";
 "settings.ui_mono_font" = "Monospaced UI typeface";

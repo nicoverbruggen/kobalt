@@ -62,7 +62,7 @@ public:
                                  std::function<void(int)> chosen);
     void showDictionaryFontSizes(int current, const QString &family, bool customFont,
                                  std::function<void(int)> chosen);
-    static QString dictionaryFontSizeLabel(int percent);
+    static QString dictionaryFontSizeLabel(int percent, bool compact = false);
     void showTimeRemainingFormats(const QString &current,
                                   std::function<void(const QString &)> chosen);
     static QString timeRemainingFormatLabel(const QString &format);

@@ -320,10 +320,6 @@ void KosyncPage::edit(int field)
     editorDialog->setDimmed(true);
     editorDialog->setGeometry(overlayParent_->rect());
     auto *card = editorDialog->card();
-    auto *title = card->findChild<QLabel *>("rrModalTitle");
-    title->setProperty("reader_modal_heading", true);
-    title->style()->unpolish(title);
-    title->style()->polish(title);
     auto *editor = new QLineEdit(card);
     kobalt::ui::prepareNativeEditor(editor);
     editor->setObjectName("rrKosyncInput");

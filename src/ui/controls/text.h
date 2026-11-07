@@ -21,13 +21,25 @@ class InterfaceLabel : public QLabel
 {
 public:
     using QLabel::QLabel;
+    void setBalancedWrapping(bool enabled);
     int heightForWidth(int width) const override;
     QSize sizeHint() const override;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     bool event(QEvent *event) override;
+
+private:
+    bool usesBalancedWrapping() const;
+    QString layoutText(int width) const;
+    bool balancedWrapping = false;
+    mutable int balancedWidth = -1;
+    mutable QString balancedSource, balancedText;
+    mutable QFont balancedFont;
 };
+
+// Balances each short paragraph without adding lines or changing its words.
+QString balancedInterfaceText(const QString &text, const QFont &font, int width);
 
 int wrappedInterfaceTextHeight(const QString &text, const QFont &font, int width,
                                int maximumLines = 0);

@@ -188,7 +188,8 @@ int DescribedOption::heightForWidth(int width) const
     const int textHeight = description.isEmpty() ? int(metrics::control::stepSize)
                                                  : descriptionTop() + valueHeight()
                     + wrappedInterfaceTextHeight(description, descriptionFont, textWidth)
-                    + metrics::settings::descriptionBottom;
+                    + metrics::settings::descriptionBottom
+                    + 2 * metrics::settings::descriptionPadding;
     return qMax(qMax(appearance.minimumRowHeight, textHeight),
                 preview ? previewSize.height() + px(24) : 0);
 }

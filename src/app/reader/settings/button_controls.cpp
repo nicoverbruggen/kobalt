@@ -124,14 +124,8 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
     rows->setContentsMargins(ui::metrics::control::border, ui::metrics::notice::cardMargins.top(),
                              ui::metrics::control::border, ui::metrics::control::border);
     rows->setSpacing(0);
-    auto *title = card->title(strings::get(volume ? "buttons.volume_title" : "buttons.title"));
-    title->setContentsMargins(chrome::inset, 0, chrome::inset,
-                              ui::metrics::notice::cardMargins.bottom());
-    auto *hint = card->message(
-            strings::get(volume ? "buttons.volume_description" : "buttons.description"));
-    hint->setContentsMargins(chrome::inset, 0, chrome::inset,
-                             ui::metrics::notice::cardMargins.bottom());
-    ui::readerStyle(hint, ui::styles::font(chrome::descriptionText));
+    card->heading(strings::get(volume ? "buttons.volume_title" : "buttons.title"),
+                  strings::get(volume ? "buttons.volume_description" : "buttons.description"));
     auto draft =
             std::make_shared<QJsonObject>(current.value(pageButtons::preferenceKey).toObject());
     QVector<ui::CaptionButton *> controls;
@@ -141,8 +135,6 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
     auto *overviewRows = new QVBoxLayout(overview);
     overviewRows->setContentsMargins(0, 0, 0, 0);
     overviewRows->setSpacing(0);
-    rows->removeWidget(hint);
-    overviewRows->addWidget(hint);
     auto *preview = new QWidget(overview);
     auto *previewRows = new QHBoxLayout(preview);
     previewRows->setContentsMargins(chrome::inset, ui::px(12), chrome::inset, ui::px(20));
@@ -238,13 +230,8 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
                 ui::metrics::control::border, ui::metrics::notice::cardMargins.top(),
                 ui::metrics::control::border, ui::metrics::control::border);
         picker->rows()->setSpacing(0);
-        auto *heading = picker->title(strings::get(buttons[index].labelKey.toUtf8().constData()));
-        heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                    ui::metrics::notice::cardMargins.bottom());
-        auto *hint = picker->message(strings::get("buttons.while_reading"));
-        hint->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                 ui::metrics::notice::cardMargins.bottom());
-        ui::readerStyle(hint, ui::styles::font(chrome::descriptionText));
+        picker->heading(strings::get(buttons[index].labelKey.toUtf8().constData()),
+                        strings::get("buttons.while_reading"));
         auto *choices = new ui::RadioList(picker);
         choices->setObjectName("rrButtonActionChoices");
         choices->setMinimumRowHeight(ui::metrics::list::oneLine);

@@ -175,10 +175,21 @@ WebsiteDialog::WebsiteDialog(QWidget *parent)
     content->findChild<QLabel *>("rrModalTitle")->setObjectName("rrBrowserPrompt");
     address = descriptionLabel();
     address->setObjectName("rrBrowserUrl");
-    content->rows()->removeWidget(address);
+    auto *heading = address->parentWidget();
+    auto *headingRows = static_cast<QVBoxLayout *>(heading->layout());
+    headingRows->removeWidget(address);
+    headingRows->setContentsMargins(metrics::chrome::inset, metrics::notice::cardMargins.top(),
+                                    metrics::chrome::inset, metrics::notice::headingGap);
     address->setMinimumHeight(0);
     address->setMaximumHeight(QWIDGETSIZE_MAX);
-    scroll = new WebsiteAddressScrollArea(content);
+    // Keep the scroll area in the card's body. Qt's nested height-for-width
+    // layout can undercount it when the footer switches to stacked buttons.
+    auto *addressRow = new QWidget(content);
+    auto *addressLayout = new QVBoxLayout(addressRow);
+    addressLayout->setContentsMargins(metrics::chrome::inset, 0, metrics::chrome::inset,
+                                      metrics::notice::cardMargins.bottom());
+    addressLayout->setSpacing(0);
+    scroll = new WebsiteAddressScrollArea(addressRow);
     scroll->setObjectName("rrBrowserUrlScroll");
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
@@ -189,7 +200,8 @@ WebsiteDialog::WebsiteDialog(QWidget *parent)
     address->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
     ui::readerStyle(address, ui::styles::font(chrome::descriptionText));
     scroll->setWidget(address);
-    content->rows()->insertWidget(1, scroll);
+    addressLayout->addWidget(scroll);
+    content->rows()->insertWidget(1, addressRow);
     error = new ui::InterfaceLabel(strings::get("link_panel.browser_unavailable"), content);
     error->setObjectName("rrBrowserError");
     error->setWordWrap(true);
@@ -238,15 +250,22 @@ void WebsiteDialog::arrange()
     const int width = qMin<int>(metrics::notice::cardWidth,
                                 parentWidget()->width() - 2 * metrics::notice::sideClearance);
     const auto margins = card()->rows()->contentsMargins();
-    const int textWidth = qMax(1, width - margins.left() - margins.right());
+    const auto headingMargins = scroll->parentWidget()->layout()->contentsMargins();
+    const int textWidth = qMax(1,
+                               width - margins.left() - margins.right() - headingMargins.left()
+                                       - headingMargins.right());
     address->ensurePolished();
     // Qt shows the scroll bar even for a short address that fits. Show it
     // only for an address taller than the box.
-    const int needed = qMax<int>(ui::px(60), address->heightForWidth(textWidth));
+    const int needed =
+            qMax<int>(ui::px(60),
+                      ui::wrappedInterfaceTextHeight(address->text(), address->font(), textWidth));
     const int most = qMax<int>(chrome::actionHeight, height() / 3);
     scroll->setVerticalScrollBarPolicy(needed > most ? Qt::ScrollBarAsNeeded
                                                      : Qt::ScrollBarAlwaysOff);
     scroll->setFixedHeight(qMin(most, needed));
+    scroll->parentWidget()->setFixedHeight(scroll->height() + headingMargins.top()
+                                           + headingMargins.bottom());
     card()->fitToWidth(width);
     centerCard();
 }

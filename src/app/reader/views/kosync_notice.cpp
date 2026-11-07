@@ -18,13 +18,13 @@ KosyncNotice::KosyncNotice(QWidget *parent)
 {
     auto *content = card();
     heading = content->findChild<QLabel *>("rrModalTitle");
-    const int index = content->rows()->indexOf(heading);
-    content->rows()->removeWidget(heading);
-    auto *headingRow = new ui::Panel(content);
-    descriptionLabel()->setAlignment(Qt::AlignCenter);
+    auto *header = heading->parentWidget();
+    auto *headerRows = static_cast<QVBoxLayout *>(header->layout());
+    const int index = headerRows->indexOf(heading);
+    headerRows->removeWidget(heading);
+    auto *headingRow = new QWidget(header);
     auto *row = new QHBoxLayout(headingRow);
-    const auto padding = ui::metrics::notice::cardMargins;
-    row->setContentsMargins(padding.left(), padding.top(), padding.right(), 0);
+    row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(ui::px(20));
     row->addStretch(1);
     statusIcon = new QLabel(headingRow);
@@ -36,16 +36,9 @@ KosyncNotice::KosyncNotice(QWidget *parent)
                             ui::darkTheme(this) ? QColor(Qt::white) : QColor(Qt::black))
                     .pixmap(size, size));
     row->addWidget(statusIcon, 0, Qt::AlignVCenter);
-    // The heading and description share one content block above the action.
-    heading->setProperty("reader_modal_content", false);
-    heading->setProperty("reader_modal_heading", false);
-    heading->style()->unpolish(heading);
-    heading->style()->polish(heading);
-    heading->setMinimumHeight(0);
-    heading->setMaximumHeight(QWIDGETSIZE_MAX);
     row->addWidget(heading);
     row->addStretch(1);
-    content->rows()->insertWidget(index, headingRow);
+    headerRows->insertWidget(index, headingRow);
     auto *cancel = primaryButton();
     cancel->setProperty("reader_primary_action", false);
     ui::readerStyle(cancel,

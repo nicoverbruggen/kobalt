@@ -2505,10 +2505,13 @@ private slots:
         auto *cancel = choice.secondaryButton();
         auto *remove = choice.primaryButton();
         auto *heading = card->findChild<QLabel *>("rrModalTitle");
-        QVERIFY(heading->height() >= QFontMetrics(heading->font()).height()
-                        + 2 * ui::metrics::notice::cardMargins.top());
-        QVERIFY(choice.descriptionLabel()->contentsMargins().left()
-                >= ui::metrics::notice::cardMargins.left());
+        auto *header = heading->parentWidget();
+        QCOMPARE(header, choice.descriptionLabel()->parentWidget());
+        QCOMPARE(header->layout()->contentsMargins().top(),
+                 int(ui::metrics::notice::cardMargins.top()));
+        QCOMPARE(header->layout()->contentsMargins().left(), int(ui::metrics::chrome::inset));
+        QCOMPARE(choice.descriptionLabel()->y() - heading->geometry().bottom() - 1,
+                 int(ui::metrics::notice::headingGap));
         QCOMPARE(cancel->y(), remove->y());
         QCOMPARE(cancel->geometry().right() + 1, remove->x());
         QCOMPARE(cancel->x(), 2);

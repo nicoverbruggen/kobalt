@@ -1413,8 +1413,7 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     const auto *preferenceTitle = fixture.widget("rrChapterGroupsTitle");
     const auto *preferenceHint = fixture.widget("rrChapterGroupsHint");
     QVERIFY(preferenceHint->y() > preferenceTitle->geometry().bottom() + ui::px(8));
-    QCOMPARE(preferenceHint->font().pixelSize(),
-             ui::textPx(ui::metrics::chrome::labelText.design() - 2));
+    QCOMPARE(preferenceHint->font().pixelSize(), int(ui::metrics::chrome::descriptionText));
     QVERIFY(preferenceHint->font().pixelSize() < preferenceTitle->font().pixelSize());
     if (!name.isEmpty())
         QVERIFY(capture(fixture, name + "-chapter-groups-preference"));

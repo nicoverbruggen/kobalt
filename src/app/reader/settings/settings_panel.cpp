@@ -1079,9 +1079,7 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
-    auto *heading = card->title(title, "rrSettingsFontTitle");
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                metrics::notice::cardMargins.bottom());
+    auto *heading = card->heading(title, {}, "rrSettingsFontTitle").title->parentWidget();
     auto *section = new ui::ListHeader(card);
     section->setObjectName("rrSettingsFontSection");
     section->setShaded(true);
@@ -1204,9 +1202,7 @@ void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, 
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
-    auto *heading = card->title(strings::get("settings.dictionary_font_size"));
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                metrics::notice::cardMargins.bottom());
+    card->heading(strings::get("settings.dictionary_font_size"));
     auto *choices = new ui::RadioList(card);
     choices->setMinimumRowHeight(metrics::list::oneLine);
     choices->setTopDivider(true);
@@ -1275,10 +1271,7 @@ void SettingsPanel::showHeaderFooterWeights(int current, const QFont &sampleFont
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
-    auto *heading =
-            card->title(strings::get("settings.header_footer_weight"), "rrHeaderFooterWeightTitle");
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                metrics::notice::cardMargins.bottom());
+    card->heading(strings::get("settings.header_footer_weight"), {}, "rrHeaderFooterWeightTitle");
     auto *choices = new ui::RadioList(card);
     choices->setMinimumRowHeight(metrics::list::oneLine);
     choices->setTopDivider(true);
@@ -1337,13 +1330,8 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
-    auto *heading = card->title(strings::get("reader.book_beautifier"));
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                metrics::notice::cardMargins.bottom());
-    auto *hint = card->message(strings::get("settings.beautifier_description"));
-    hint->setContentsMargins(chrome::inset, 0, chrome::inset,
-                             metrics::notice::cardMargins.bottom());
-    readerStyle(hint, styles::font(chrome::descriptionText));
+    card->heading(strings::get("reader.book_beautifier"),
+                  strings::get("settings.beautifier_description"), {}, {});
     auto *presetRow = new QWidget(card);
     auto *presetLayout = new QHBoxLayout(presetRow);
     presetLayout->setContentsMargins(chrome::inset, 0, chrome::inset,
@@ -1451,13 +1439,8 @@ void SettingsPanel::showTimeRemainingFormats(const QString &current,
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
-    auto *heading = card->title(strings::get("settings.time_remaining_format"));
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                metrics::notice::cardMargins.bottom());
-    auto *hint = card->message(strings::get("settings.time_remaining_format_description"));
-    hint->setContentsMargins(chrome::inset, 0, chrome::inset,
-                             metrics::notice::cardMargins.bottom());
-    readerStyle(hint, styles::font(chrome::descriptionText));
+    card->heading(strings::get("settings.time_remaining_format"),
+                  strings::get("settings.time_remaining_format_description"), {}, {});
     auto *choices = new ui::RadioList(card);
     choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
@@ -1500,13 +1483,8 @@ void SettingsPanel::showColumnSpacingChoices(int current, std::function<void(int
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
     rows->setSpacing(0);
-    auto *heading = card->title(strings::get("reader.column_spacing"));
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset,
-                                metrics::notice::cardMargins.bottom());
-    auto *hint = card->message(strings::get("settings.column_spacing_description"));
-    hint->setContentsMargins(chrome::inset, 0, chrome::inset,
-                             metrics::notice::cardMargins.bottom());
-    readerStyle(hint, styles::font(chrome::descriptionText));
+    card->heading(strings::get("reader.column_spacing"),
+                  strings::get("settings.column_spacing_description"), {}, {});
     auto *choices = new ui::RadioList(card);
     choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);

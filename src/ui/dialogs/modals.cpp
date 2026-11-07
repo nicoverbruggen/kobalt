@@ -19,11 +19,44 @@ namespace kobalt::ui {
 PopupCard::PopupCard(QWidget *parent)
     : Panel(parent, Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge)
 {
-    setEdgeWidth(2);
+    setEdgeWidth(metrics::notice::cardBorder);
     readerStyle(this, styles::popup());
     contentRows = new QVBoxLayout(this);
     contentRows->setContentsMargins(metrics::notice::cardMargins);
     contentRows->setSpacing(metrics::notice::cardGap);
+}
+
+PopupCard::Heading PopupCard::heading(const QString &text, const QString &description,
+                                      const QString &titleName, const QString &descriptionName)
+{
+    contentRows->setContentsMargins(metrics::notice::cardBorder, metrics::notice::cardBorder,
+                                    metrics::notice::cardBorder, metrics::notice::cardBorder);
+    contentRows->setSpacing(0);
+    auto *header = new QWidget(this);
+    header->setObjectName("rrModalHeading");
+    auto *rows = new QVBoxLayout(header);
+    rows->setContentsMargins(metrics::chrome::inset, metrics::notice::cardMargins.top(),
+                             metrics::chrome::inset, metrics::notice::cardMargins.bottom());
+    rows->setSpacing(metrics::notice::headingGap);
+    const auto label = [header, rows](const QString &value, const QString &name, bool bold) {
+        auto *result = new InterfaceLabel(value, header);
+        result->setObjectName(name);
+        result->setTextFormat(Qt::PlainText);
+        result->setWordWrap(true);
+        result->setBalancedWrapping(true);
+        result->setAlignment(Qt::AlignCenter);
+        readerStyle(result,
+                    styles::font(bold ? int(metrics::chrome::labelText)
+                                      : int(metrics::chrome::descriptionText),
+                                 bold));
+        rows->addWidget(result);
+        return result;
+    };
+    Heading result{ label(text, titleName, true), nullptr };
+    if (!description.isEmpty())
+        result.description = label(description, descriptionName, false);
+    contentRows->addWidget(header);
+    return result;
 }
 
 QLabel *PopupCard::message(const QString &text, const QString &name)
@@ -31,6 +64,7 @@ QLabel *PopupCard::message(const QString &text, const QString &name)
     auto *label = new ui::InterfaceLabel(text, this);
     label->setObjectName(name);
     label->setWordWrap(true);
+    label->setBalancedWrapping(true);
     label->setAlignment(Qt::AlignCenter);
     contentRows->addWidget(label);
     return label;
@@ -123,34 +157,10 @@ protected:
 QLabel *modalContent(PopupCard *card, const ModalContent &content)
 {
     Q_ASSERT(!content.title.trimmed().isEmpty());
-    const int border = 2;
-    card->rows()->setContentsMargins(border, border, border, border);
-    card->rows()->setSpacing(0);
-    const auto padding = metrics::notice::cardMargins;
-    readerStyle(
-            card,
-            styles::popup()
-                    + QString("QLabel[reader_modal_content=\"true\"]{padding:%1px %2px %3px %4px;} "
-                              "QLabel[reader_modal_heading=\"true\"]{border-bottom:%5px solid palette(light);}")
-                              .arg(int(padding.top()))
-                              .arg(int(padding.right()))
-                              .arg(int(padding.bottom()))
-                              .arg(int(padding.left()))
-                              .arg(int(metrics::control::border)));
     if (!content.image.isNull())
         card->image(content.image);
-    auto *title = card->title(content.title, "rrModalTitle");
-    title->setTextFormat(Qt::PlainText);
-    title->setProperty("reader_modal_content", true);
-    title->setProperty("reader_modal_heading", !content.description.isEmpty());
-    if (content.description.isEmpty())
-        return nullptr;
-    auto *description = card->message(content.description, "rrModalDescription");
-    description->setTextFormat(Qt::PlainText);
-    description->setProperty("reader_modal_content", true);
-    description->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    readerStyle(description, styles::font(metrics::chrome::descriptionText));
-    return description;
+    return card->heading(content.title, content.description, "rrModalTitle", "rrModalDescription")
+            .description;
 }
 } // namespace
 

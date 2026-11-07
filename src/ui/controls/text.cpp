@@ -194,6 +194,97 @@ QString interfaceHtml(const QString &text)
 }
 } // namespace
 
+namespace {
+QStringList interfaceLines(const QString &text, const QFont &font, int width, int limit = 0)
+{
+    QStringList result;
+    if (needsPrivateText(text, font)) {
+        QTextDocument document;
+        document.setDefaultFont(font);
+        document.setHtml(interfaceHtml(text));
+        for (const auto &line : privateExcerptLines(document, font, width, limit))
+            result.append(line.text.trimmed());
+    } else {
+        QTextLayout layout(text, font);
+        QTextOption option;
+        option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        layout.setTextOption(option);
+        layout.beginLayout();
+        while (!limit || result.size() < limit) {
+            auto line = layout.createLine();
+            if (!line.isValid())
+                break;
+            line.setLineWidth(width);
+            result.append(text.mid(line.textStart(), line.textLength()).trimmed());
+        }
+        layout.endLayout();
+    }
+    return result;
+}
+} // namespace
+
+QString balancedInterfaceText(const QString &text, const QFont &font, int width)
+{
+    if (width <= 0)
+        return text;
+    QStringList paragraphs;
+    for (const auto &paragraph : text.split('\n')) {
+        // Long prose keeps its ordinary reading layout. Modal headings and
+        // short instructions need only a bounded search over wrap widths.
+        if (paragraph.size() > 1024 || paragraph.isEmpty()) {
+            paragraphs.append(paragraph);
+            continue;
+        }
+        const auto original = interfaceLines(paragraph, font, width);
+        if (original.size() < 2 || original.size() > 8) {
+            paragraphs.append(paragraph);
+            continue;
+        }
+        int low = 1, high = width;
+        while (low < high) {
+            const int middle = low + (high - low) / 2;
+            if (interfaceLines(paragraph, font, middle, original.size() + 1).size()
+                > original.size())
+                low = middle + 1;
+            else
+                high = middle;
+        }
+        paragraphs.append(interfaceLines(paragraph, font, low).join("\n"));
+    }
+    return paragraphs.join("\n");
+}
+
+void InterfaceLabel::setBalancedWrapping(bool enabled)
+{
+    if (balancedWrapping == enabled)
+        return;
+    balancedWrapping = enabled;
+    updateGeometry();
+    update();
+}
+
+bool InterfaceLabel::usesBalancedWrapping() const
+{
+    return balancedWrapping && wordWrap() && (alignment() & Qt::AlignHCenter)
+            && !(textInteractionFlags()
+                 & (Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard))
+            && textFormat() != Qt::RichText
+            && !(textFormat() == Qt::AutoText && Qt::mightBeRichText(text()));
+}
+
+QString InterfaceLabel::layoutText(int width) const
+{
+    if (!usesBalancedWrapping())
+        return text();
+    if (balancedWidth != width || balancedSource != text() || balancedFont != font()) {
+        balancedWidth = width;
+        balancedSource = text();
+        balancedFont = font();
+        balancedText = balancedInterfaceText(text(), font(), width);
+    }
+    return balancedText;
+}
+
 int wrappedInterfaceTextHeight(const QString &text, const QFont &font, int width, int maximumLines)
 {
     if (!needsPrivateText(text, font))
@@ -319,7 +410,7 @@ void drawWrappedInterfaceText(QPainter &painter, const QRect &bounds, const QStr
 
 int InterfaceLabel::heightForWidth(int width) const
 {
-    if (!wordWrap() || !needsPrivateText(text(), font()))
+    if (!wordWrap() || (!usesBalancedWrapping() && !needsPrivateText(text(), font())))
         return QLabel::heightForWidth(width);
     const auto margins = contentsMargins();
     const int available = qMax(1, width - margins.left() - margins.right() - 2 * margin());
@@ -332,7 +423,7 @@ int InterfaceLabel::heightForWidth(int width) const
         document.layout(available);
         height = document.height();
     } else
-        height = wrappedInterfaceTextHeight(text(), font(), available);
+        height = wrappedInterfaceTextHeight(layoutText(available), font(), available);
     return height + margins.top() + margins.bottom() + 2 * margin();
 }
 
@@ -373,7 +464,7 @@ bool InterfaceLabel::event(QEvent *event)
 
 void InterfaceLabel::paintEvent(QPaintEvent *event)
 {
-    if (!needsPrivateText(text(), font()) || text().isEmpty()) {
+    if ((!usesBalancedWrapping() && !needsPrivateText(text(), font())) || text().isEmpty()) {
         QLabel::paintEvent(event);
         return;
     }
@@ -394,7 +485,7 @@ void InterfaceLabel::paintEvent(QPaintEvent *event)
         return;
     }
     if (wordWrap())
-        drawWrappedInterfaceText(painter, bounds, text(), alignment());
+        drawWrappedInterfaceText(painter, bounds, layoutText(bounds.width()), alignment());
     else
         drawInterfaceText(painter, bounds, text(), alignment());
 }

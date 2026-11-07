@@ -165,15 +165,15 @@ void BookmarkList::placePin()
     pinPopup->setCardArea(QRect(0, 0, pinPopup->width(), qMax(1, bottom)));
     const int cardWidth = qMin<int>(ui::metrics::notice::cardWidth,
                                     width() - 2 * ui::metrics::notice::sideClearance);
-    auto *title = pinPopup->card()->findChild<QLabel *>("rrModalTitle");
-    if (title)
-        title->show();
+    auto *heading = pinPopup->card()->findChild<QWidget *>("rrModalHeading");
+    if (heading)
+        heading->show();
     pinPopup->card()->fitToWidth(cardWidth);
     // On a short screen the keyboard leaves room for the name and the buttons
     // only. The title returns when the keyboard closes.
-    if (title && !bounds.isEmpty()
+    if (heading && !bounds.isEmpty()
         && pinPopup->card()->height() > bottom - 2 * int(ui::metrics::notice::sideClearance)) {
-        title->hide();
+        heading->hide();
         pinPopup->card()->fitToWidth(cardWidth);
     }
     pinPopup->centerCard();
@@ -256,10 +256,6 @@ void BookmarkList::openPin(const BookmarkRow &row)
     dialog->setDimmed(true);
     dialog->installEventFilter(this);
     auto *card = dialog->card();
-    auto *title = card->findChild<QLabel *>("rrModalTitle");
-    title->setProperty("reader_modal_heading", true);
-    title->style()->unpolish(title);
-    title->style()->polish(title);
     auto *input = new QLineEdit(card);
     kobalt::ui::prepareNativeEditor(input);
     input->setObjectName("rrPinName");
@@ -413,12 +409,7 @@ void BookmarkList::openSort()
     sortPopup->setDimmed(true);
     sortPopup->dismissed = [this] { closeSort(); };
     auto *card = sortPopup->card();
-    card->rows()->setContentsMargins(2, 2, 2, 2);
-    card->rows()->setSpacing(0);
-    card->rows()->addSpacing(ui::metrics::notice::cardMargins.top());
-    auto *title = card->title(strings::get("marks.sort_title"));
-    title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
-    card->rows()->addSpacing(ui::metrics::notice::cardMargins.bottom());
+    card->heading(strings::get("marks.sort_title"));
     auto *options = new ui::RadioList(card);
     options->setMinimumRowHeight(chrome::listActionHeight);
     options->setTopDivider(true);

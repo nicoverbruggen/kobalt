@@ -1427,6 +1427,33 @@ int main(int argc, char **argv)
         require(browserCalls == 0 && dismissals == 1, "No opened the browser");
         confirm->click();
         require(browserCalls == 1 && dismissals == 2, "Yes did not open and dismiss the link");
+        const auto savedScale = kobalt::ui::textScale();
+        kobalt::ui::setLargeText(1.5);
+        {
+            kobalt::WebsiteDialog large(&browserHost);
+            large.browserAvailable = [] { return true; };
+            large.secondaryButton()->setText("Keep reading without opening the browser");
+            large.open(address);
+            QApplication::processEvents();
+            auto *card = large.card();
+            auto *cancel = large.secondaryButton();
+            auto *heading = card->findChild<QLabel *>("rrBrowserPrompt");
+            auto *url = card->findChild<QLabel *>("rrBrowserUrl");
+            require(url->mapTo(card, QPoint()).y() - heading->mapTo(card, QPoint()).y()
+                                    - heading->height()
+                            == int(kobalt::ui::metrics::notice::headingGap),
+                    "Scrollable browser content changed the shared heading gap");
+            require(large.primaryButton()->y() < cancel->y(),
+                    "Large-text browser prompt did not stack its actions");
+            require(cancel->geometry().bottom() == card->height() - 3,
+                    "Scrollable browser content displaced the modal footer");
+            const auto pixels = card->grab().toImage();
+            const auto ink = card->palette().color(QPalette::WindowText);
+            require(pixels.pixelColor(0, cancel->geometry().center().y()) == ink
+                            && pixels.pixelColor(pixels.width() / 2, pixels.height() - 1) == ink,
+                    "Large-text browser prompt lost its footer frame");
+        }
+        kobalt::ui::setLargeText(savedScale);
     }
     for (bool dark : { false, true }) {
         QWidget host;
@@ -2497,6 +2524,32 @@ int main(int argc, char **argv)
         require(captionInk > 50,
                 "Back caption follows the native button palette instead of reader ink");
     }
+    {
+        using namespace kobalt::ui;
+        const auto font = interfaceFont(metrics::chrome::descriptionText);
+        const QString text = "Decide what this hardware button should do when you're reading.";
+        const int width = interfaceTextWidth(text, font) * 3 / 4;
+        const auto balanced = balancedInterfaceText(text, font, width);
+        const auto lines = balanced.split('\n');
+        require(lines.size() == 2, "Balancing added unnecessary lines");
+        require(balanced.simplified() == text.simplified(), "Balancing changed the words");
+        require(qAbs(interfaceTextWidth(lines[0], font) - interfaceTextWidth(lines[1], font))
+                        < width / 3,
+                "Balanced instructions leave a short orphan line");
+        for (const auto &line : lines)
+            require(interfaceTextWidth(line, font) <= width,
+                    "Balanced text exceeds its available width");
+        require(balancedInterfaceText(text, font, interfaceTextWidth(text, font)) == text,
+                "A single-line heading was changed");
+        require(balancedInterfaceText("First paragraph.\n\nSecond paragraph.", font, width)
+                        == "First paragraph.\n\nSecond paragraph.",
+                "Balancing removed an explicit paragraph break");
+        const QString japanese =
+                QString::fromUtf8("読書中にこのボタンで何をするか選んでください。");
+        auto wrapped = balancedInterfaceText(japanese, font, width / 2);
+        require(wrapped.remove('\n') == japanese, "Balancing changed text without word spaces");
+    }
+
     QWidget optionsHost;
     kobalt::ui::readerStyle(&optionsHost, kobalt::ui::styles::reader());
     kobalt::ui::DescribedOption option(
@@ -2505,7 +2558,7 @@ int main(int argc, char **argv)
     optionsHost.show();
     option.show();
     app.processEvents();
-    for (int width : { 900, 1250 }) {
+    for (int width : { 240, 900, 1250 }) {
         option.resize(width, option.heightForWidth(width));
         const auto reference = option.grab().toImage();
         int firstInk = -1, lastInk = -1;
@@ -2516,8 +2569,9 @@ int main(int argc, char **argv)
                         firstInk = y;
                     lastInk = y;
                 }
-        require(firstInk >= 4 && lastInk >= 0 && lastInk < reference.height() - 4,
-                "Setting description does not fit its requested height");
+        require(firstInk >= kobalt::ui::px(12) && lastInk >= 0
+                        && lastInk < reference.height() - kobalt::ui::px(12),
+                "Setting description is too close to a row edge");
     }
     {
         kobalt::ui::DescribedOption sample("Pages", "", &optionsHost);
@@ -2560,6 +2614,7 @@ int main(int argc, char **argv)
                         == qMax(look.minimumRowHeight,
                                 metrics::settings::descriptionTop
                                         + metrics::settings::descriptionBottom
+                                        + 2 * metrics::settings::descriptionPadding
                                         + kobalt::ui::wrappedInterfaceTextHeight(
                                                 option.accessibleDescription(), description,
                                                 textWidth)),

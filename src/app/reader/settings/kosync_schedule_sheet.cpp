@@ -575,16 +575,8 @@ void KosyncScheduleSheet::showIntervals()
     list->setGeometry(parentWidget()->rect());
     list->dismissed = [this] { dismissIntervals(); };
     auto *card = list->card();
-    card->rows()->setContentsMargins(2, 2, 2, 2);
-    card->rows()->setSpacing(0);
-    card->rows()->addSpacing(metrics::notice::cardMargins.top());
-    auto *heading = card->title(strings::get("kosync.when_reading"), "rrKosyncIntervalTitle");
-    heading->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
-    card->rows()->addSpacing(metrics::spacing::row);
-    auto *hint = card->message(strings::get("kosync.interval_description"), "rrKosyncIntervalHint");
-    ui::readerStyle(hint, ui::styles::font(chrome::descriptionText));
-    hint->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
-    card->rows()->addSpacing(metrics::notice::cardMargins.bottom());
+    card->heading(strings::get("kosync.when_reading"), strings::get("kosync.interval_description"),
+                  "rrKosyncIntervalTitle", "rrKosyncIntervalHint");
     const int cardWidth = qMin<int>(metrics::notice::cardWidth,
                                     parentWidget()->width() - 2 * metrics::notice::sideClearance);
     auto *choices = new ui::RadioList(card);

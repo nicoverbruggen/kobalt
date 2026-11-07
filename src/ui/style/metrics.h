@@ -134,6 +134,8 @@ inline constexpr Px optionHeight{ 116 };
 inline constexpr Px checkboxSize{ 40 }, checkboxTop{ 4 }, labelLeft{ 0 }, toggleWidth{ 80 },
         toggleHeight{ 48 }, toggleGap{ 24 };
 inline constexpr Px descriptionTop{ 48 }, descriptionBottom{ 16 };
+// Keep supporting text clear of the row edges when it sets the row's height.
+inline constexpr Px descriptionPadding{ 12 };
 } // namespace settings
 
 namespace about {
@@ -326,10 +328,12 @@ inline constexpr Px thumbnailWidth{ 112 }, thumbnailHeight{ 168 };
 } // namespace actionMenu
 
 namespace notice {
+// Card frames keep a two-pixel rule at every device density.
+inline constexpr int cardBorder = 2;
 inline constexpr Px backdropPitch{ 18 };
 inline constexpr Px cardWidth{ 760 }, height{ 144 }, sideClearance{ 32 };
 inline constexpr PxMargins cardMargins{ 32, 28, 32, 28 };
-inline constexpr Px cardGap{ 20 };
+inline constexpr Px cardGap{ 20 }, headingGap{ 12 };
 inline constexpr Px progressHeight{ 32 };
 
 inline QRect centered(const QSize &size)

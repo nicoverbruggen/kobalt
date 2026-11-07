@@ -496,12 +496,11 @@ private:
     quint64 linkEpoch = 0;
     bool linkPending = false, returningFromLink = false;
     bool linksActive() const;
-    QPushButton *linkIndicator = nullptr;
     kobalt::ui::Panel *linkDiscovery = nullptr;
     QLabel *linkDiscoveryIcon = nullptr, *linkDiscoveryHint = nullptr;
     QPushButton *linkDiscoveryToggle = nullptr;
     QLabel *linkDiscoveryExit = nullptr;
-    QCheckBox *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
+    QCheckBox *hideNonlinearOption = nullptr;
     bool revealingLinks = false;
     QString revealedPosition;
     void syncLinkDiscovery();

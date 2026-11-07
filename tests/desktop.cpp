@@ -1383,7 +1383,8 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QVERIFY(fixture.widget("rrControlsChapterListSection")->y() < groups->y());
     QVERIFY(groups->y() < fixture.widget("rrControlsLinksSection")->y());
     QVERIFY(fixture.widget("rrControlsLinksSection")->y() < fixture.widget("rrTappableLinks")->y());
-    QVERIFY(fixture.widget("rrTappableLinks")->y() < fixture.widget("rrShowLinkIndicator")->y());
+    QVERIFY(!fixture.widget("rrShowLinkIndicator"));
+    QVERIFY(!fixture.widget("rrLinkIndicator"));
     if (!name.isEmpty())
         capturePages(fixture, name + "-settings-chapter-navigation", "rrSettingsOptions");
     QVERIFY(fixture.press("rrChapterGroups"));
@@ -7690,6 +7691,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.prepared);
         auto preferences = storage::readJson(fixture.paths.preferences());
         preferences["native_hide_status_bar"] = false;
+        preferences["show_link_indicator"] = true;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
         fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(0);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -7704,6 +7706,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(!fixture.widget("rrSettingsUI"));
         QVERIFY(!fixture.widget("rrHideStatusBar"));
+        QVERIFY(!fixture.widget("rrShowLinkIndicator"));
+        QVERIFY(!fixture.widget("rrLinkIndicator"));
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrSessionTimeout"));
         auto *timeout = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrSessionTimeout"));
@@ -7746,24 +7750,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                  strings::get("settings.time_remaining_approximate").toUpper());
         QVERIFY(!storage::readJson(fixture.paths.preferences()).contains("time_remaining_format"));
 
-        struct Option
-        {
-            const char *tab, *name, *key;
-        };
-
-        QJsonObject expected{ { "time_remaining_format", "approximate" } };
-        for (const auto &option :
-             { Option{ "rrSettingsControls", "rrShowLinkIndicator", "show_link_indicator" },
-               Option{ "rrSettingsDefaults", "rrInheritTextLayout", "inherit_text_layout" } }) {
-            QVERIFY(fixture.press(option.tab));
-            QTRY_VERIFY(fixture.visible(option.name));
-            auto *box = fixture.window.readerWindow()->findChild<QCheckBox *>(option.name);
-            QVERIFY(box);
-            const bool previous = box->isChecked();
-            QVERIFY(fixture.press(option.name));
-            QTRY_COMPARE(box->isChecked(), !previous);
-            expected[option.key] = !previous;
-        }
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QTRY_VERIFY(fixture.visible("rrInheritTextLayout"));
+        auto *inherit =
+                fixture.window.readerWindow()->findChild<QCheckBox *>("rrInheritTextLayout");
+        QVERIFY(inherit);
+        const bool inherited = inherit->isChecked();
+        QVERIFY(fixture.press("rrInheritTextLayout"));
+        QTRY_COMPARE(inherit->isChecked(), !inherited);
+        const QJsonObject expected{ { "time_remaining_format", "approximate" },
+                                    { "inherit_text_layout", !inherited } };
         // Settings are a draft until the panel closes.
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
@@ -7777,12 +7773,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
         QCOMPARE(timeFormat->caption(),
                  strings::get("settings.time_remaining_approximate").toUpper());
-        QVERIFY(fixture.press("rrSettingsControls"));
-        QTRY_VERIFY(fixture.visible("rrShowLinkIndicator"));
-        QCOMPARE(fixture.window.readerWindow()
-                         ->findChild<QCheckBox *>("rrShowLinkIndicator")
-                         ->isChecked(),
-                 saved.value("show_link_indicator").toBool());
         QVERIFY(fixture.press("rrSettingsDefaults"));
         QTRY_VERIFY(fixture.visible("rrRestoreDefaults"));
         QVERIFY(fixture.press("rrRestoreDefaults"));
@@ -7790,16 +7780,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrKeepDefaults"));
         QTRY_VERIFY(!fixture.visible("rrRestoreConfirmation"));
         QCOMPARE(storage::readJson(fixture.paths.preferences()), saved);
-        QVERIFY(fixture.press("rrSettingsControls"));
-        QTRY_VERIFY(fixture.visible("rrShowLinkIndicator"));
-        auto *indicator =
-                fixture.window.readerWindow()->findChild<QCheckBox *>("rrShowLinkIndicator");
-        const bool previous = indicator->isChecked();
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QTRY_VERIFY(fixture.visible("rrInheritTextLayout"));
+        const bool previous = inherit->isChecked();
         {
             BlockedFile blocked(fixture.paths.preferences());
             QVERIFY(blocked.active());
-            QVERIFY(fixture.press("rrShowLinkIndicator"));
-            QCOMPARE(indicator->isChecked(), !previous);
+            QVERIFY(fixture.press("rrInheritTextLayout"));
+            QCOMPARE(inherit->isChecked(), !previous);
             QVERIFY(fixture.press("rrSettingsClose"));
             QTRY_VERIFY(fixture.visible("rrSettingsWriteError"));
             QVERIFY(blocked.restore());
@@ -7811,7 +7799,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
-                             .value("show_link_indicator")
+                             .value("inherit_text_layout")
                              .toBool(),
                      !previous);
     }

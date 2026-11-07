@@ -1897,8 +1897,6 @@ void Reader::syncLinkDiscovery()
                                          ? strings::get("reader.highlight_links").arg(count)
                                          : QString());
     linkDiscovery->setVisible(linksAvailable && revealingLinks);
-    linkIndicator->setVisible(!blocked && !controls && count > 0
-                              && preferences.value("show_link_indicator").toBool(false));
     QVector<QRect> rectangles, footnotes;
     if (revealingLinks)
         for (const auto &link : session->pageLinks()) {
@@ -1922,49 +1920,11 @@ void Reader::syncLinkDiscovery()
         widget->setProperty("link_style", style);
         kobalt::ui::readerStyle(widget, style);
     };
-    // Strip buttons keep the strip's height as their touch area and draw a
-    // compact outlined box inside it, in the strip's text size.
-    const auto stripButton = [&](QPushButton *button, int strip, int text) {
-        const int box = qMin(strip - 2 * int(metrics::links::stripButtonInset),
-                             ui::interfaceLineHeight(ui::interfaceFont(text))
-                                     + 2 * int(metrics::links::stripButtonInset));
-        restyle(button,
-                styles::outlined()
-                        + QString("QPushButton{%1min-height:0;padding:0 %2px;margin:%3px 0;}")
-                                  .arg(styles::font(text))
-                                  .arg(int(metrics::links::stripButtonPadding))
-                                  .arg(qMax(0, (strip - box) / 2)));
-        button->setFixedHeight(strip);
-    };
     const auto fits = [](int strip, int text) {
         return strip >= ui::interfaceLineHeight(ui::headerFooterFont(text));
     };
 
     const QString label = strings::get("reader.highlight_links").arg(count);
-    if (linkIndicator->isVisible()) {
-        // The indicator sits at the right of the footer, level with the page
-        // number. Without a footer it stays just above the bottom edge.
-        QRect strip = page->footerTextRect();
-        if (strip.isEmpty())
-            strip = QRect(0,
-                          height() - page->bottomHeight()
-                                  - metrics::reading::stripHeight(page->chrome.footerSize),
-                          width(), metrics::reading::stripHeight(page->chrome.footerSize));
-        strip.translate(page->mapTo(this, QPoint()));
-        const int text = page->footerTextPixels();
-        linkIndicator->setText(QString::number(count));
-        linkIndicator->setAccessibleName(label);
-        linkIndicator->setToolTip(label);
-        linkIndicator->setIcon(kobalt::ui::controlIcon(kobalt::ui::ControlIcon::Link, ink));
-        linkIndicator->setIconSize(QSize(text, text));
-        stripButton(linkIndicator, strip.height(), text);
-        linkIndicator->adjustSize();
-        linkIndicator->move(strip.right() + 1 - metrics::reading::headerSide
-                                    - linkIndicator->width(),
-                            strip.y());
-        linkIndicator->raise();
-    }
-
     auto *row = static_cast<QHBoxLayout *>(linkDiscovery->layout());
     linkDiscoveryIcon->setVisible(!revealingLinks);
     linkDiscoveryToggle->setVisible(!revealingLinks);

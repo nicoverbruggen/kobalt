@@ -501,10 +501,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     tappableLinksButton = ui::makeCaptionButton(controlsPage, nullptr, "rrTappableLinks",
                                                 strings::get("settings.tappable_links"), [] { });
     controlsRows->addWidget(tappableLinksButton);
-    linkIndicatorOption =
-            check(controlsPage, "rrShowLinkIndicator", strings::get("reader.show_link_indicator"),
-                  strings::get("reader.link_indicator_description"));
-    controlsRows->addWidget(linkIndicatorOption);
     section(controlsPage, controlsRows, "rrControlsMenuSection",
             strings::get("settings.section_reading_menu"));
     menuViewButton = ui::makeCaptionButton(controlsPage, nullptr, "rrDefaultMenuView",
@@ -798,21 +794,13 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         optionPage = 0;
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = { hideNonlinearOption,
-                                               linkIndicatorOption,
-                                               darkOption,
-                                               lightDarkModeOption,
-                                               bionicOption,
-                                               landscapeColumnsOption,
-                                               animationOption,
-                                               inheritTextLayoutOption,
-                                               edgeLightOption,
-                                               lightGestureFeedbackOption,
-                                               denseGraphOption,
-                                               hideTabLabelsOption,
-                                               wifiPowerSaverOption,
-                                               disableStandbyOption,
-                                               automaticOpeningOption,
+    QVector<ui::DescribedOption *> options = { hideNonlinearOption,        darkOption,
+                                               lightDarkModeOption,        bionicOption,
+                                               landscapeColumnsOption,     animationOption,
+                                               inheritTextLayoutOption,    edgeLightOption,
+                                               lightGestureFeedbackOption, denseGraphOption,
+                                               hideTabLabelsOption,        wifiPowerSaverOption,
+                                               disableStandbyOption,       automaticOpeningOption,
                                                minimalAnnotationOption };
     for (auto *option : options) {
         if (!option)

@@ -117,7 +117,7 @@ public:
                         *animationOption = nullptr;
     ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,
                         *denseGraphOption = nullptr;
-    ui::DescribedOption *linkIndicatorOption = nullptr, *hideNonlinearOption = nullptr;
+    ui::DescribedOption *hideNonlinearOption = nullptr;
     ui::DescribedOption *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr;
     ui::CaptionButton *defaultFontButton = nullptr, *uiFontButton = nullptr,
                       *uiMonoFontButton = nullptr, *headerFooterFontButton = nullptr,

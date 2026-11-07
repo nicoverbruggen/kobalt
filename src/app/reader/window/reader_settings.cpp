@@ -360,7 +360,6 @@ void Reader::openSettings()
                                         ? pageTurn::selected(preferences) == pageTurn::Style::Sweep
                                         : preferences.value("page_animations").toBool(false));
     bionicOption->setChecked(session->state().value("bold_reading").toString("off") == "bold");
-    linkIndicatorOption->setChecked(preferences.value("show_link_indicator").toBool(false));
     edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
     lightGestureFeedbackOption->setChecked(
             preferences.value("show_light_gesture_feedback").toBool(true));
@@ -683,7 +682,6 @@ void Reader::applySettings()
                 animationOption->isChecked() ? pageTurn::Style::Sweep : pageTurn::Style::Off);
     else
         next["page_animations"] = animationOption->isChecked();
-    next["show_link_indicator"] = linkIndicatorOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
     next["show_light_gesture_feedback"] = lightGestureFeedbackOption->isChecked();
     next["dense_stats_chart"] = denseGraphOption->isChecked();

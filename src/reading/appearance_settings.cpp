@@ -137,7 +137,6 @@ QJsonObject cleanPreferences(QJsonObject preferences)
                              "inherit_text_layout",
                              "two_columns_landscape",
                              "page_animations",
-                             "show_link_indicator",
                              "edge_light_gestures",
                              "show_light_gesture_feedback",
                              "dense_stats_chart",

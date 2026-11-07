@@ -12,6 +12,8 @@ Kobalt separates saved reading data from disposable rendering caches. Storage fo
 
 The retired `native_hide_status_bar` preference is removed when settings are normalized. The Mac screen preset controls status visibility. This keeps settings schema 1.
 
+The retired `show_link_indicator` preference is ignored. Existing saved values remain in the settings record. Settings schema 1 stays unchanged.
+
 `tappable_links` is an optional global setting with values `off`, `footnotes` and `all`. Missing or invalid values use Footnotes only. Saved choices are preserved. The value `off` is shown as Always require long press. It does not change the settings schema or parsed-book cache format.
 
 `show_light_gesture_feedback` is an optional global Boolean. Missing or invalid values use true, preserving the existing brightness and warmth popup. False hides only the gesture popup and its cleanup refresh. `edge_light_gestures` still controls whether the gestures are enabled. Both choices persist independently for all books. Settings schema 1 and reading-data formats stay unchanged.

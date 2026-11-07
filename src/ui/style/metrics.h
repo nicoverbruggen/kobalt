@@ -364,10 +364,8 @@ inline constexpr Px choiceHeight{ 72 };
 
 namespace links {
 inline constexpr Px returnWidth{ 400 }, returnHeight{ 120 }, popupWidth{ 440 }, actionHeight{ 96 };
-// Link discovery. Above the tabs its row matches the return row. The link
-// indicator sits in the footer strip and keeps the strip's full height as its
-// touch area.
-inline constexpr Px hintGap{ 24 }, stripButtonInset{ 6 }, stripButtonPadding{ 16 };
+// Link discovery above the tabs uses the same row height as the return row.
+inline constexpr Px hintGap{ 24 };
 // Revealed links: a tint and an outline around each link rectangle. Stacked
 // links keep a gap between their outlines.
 inline constexpr Px revealPadding{ 6 }, revealGap{ 6 }, revealOutline{ 2 };

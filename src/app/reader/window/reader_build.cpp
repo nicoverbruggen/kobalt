@@ -897,9 +897,6 @@ void Reader::buildOverlays()
 {
     // Link discovery takes its styles in syncLinkDiscovery: they follow the
     // place it occupies and the reading strip's text size.
-    linkIndicator = new kobalt::ui::Button({}, this);
-    linkIndicator->setObjectName("rrLinkIndicator");
-    linkIndicator->hide();
     linkDiscovery = new kobalt::ui::Panel(this);
     linkDiscovery->setObjectName("rrLinkDiscovery");
     linkDiscovery->setEdgeWidth(metrics::chrome::heavyRule);
@@ -922,10 +919,6 @@ void Reader::buildOverlays()
     linkDiscoveryExit->setObjectName("rrLinkDiscoveryExit");
     linkRow->addWidget(linkDiscoveryExit);
     linkDiscovery->hide();
-    connect(linkIndicator, &QPushButton::clicked, this, [this] {
-        showControls();
-        showRevealedLinks();
-    });
     chapterGraph = new kobalt::ChapterGraph(this);
     chapterGraph->changed = [this] { saveSoon(); };
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
@@ -1402,7 +1395,6 @@ void Reader::buildSettings()
     disableStandbyOption = settings->disableStandbyOption;
     settings->showPowerManagement(wifiPowerSaverVisible());
     hideTabLabelsOption->setVisible(!services.phoneLayout);
-    linkIndicatorOption = settings->linkIndicatorOption;
     hideNonlinearOption = settings->hideNonlinearOption;
     connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
         settings->showColumnSpacingChoices(settingsColumnSpacing, [this, settings](int percent) {

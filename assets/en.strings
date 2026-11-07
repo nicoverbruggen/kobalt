@@ -1008,8 +1008,6 @@
 /* Arguments: %1 */
 "dictionary_panel.for_language" = "For %1";
 
-"reader.show_link_indicator" = "Show link indicator while reading";
-"reader.link_indicator_description" = "Show an indicator on pages containing links. Tap it to reveal the links.";
 /* Arguments: %1 = number of links */
 "reader.highlight_links" = "Highlight links · %1";
 "reader.long_press_link" = "Long press a link to see its options.";

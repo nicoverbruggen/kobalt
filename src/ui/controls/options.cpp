@@ -35,6 +35,7 @@ void DescribedOption::mouseReleaseEvent(QMouseEvent *event)
 DescribedOption::Presentation::Presentation()
     : labelPixels(metrics::text::body),
       descriptionPixels(metrics::text::secondary),
+      descriptionPadding(metrics::settings::descriptionPadding),
       indicatorSize(metrics::settings::toggleWidth, metrics::settings::toggleHeight)
 {
 }
@@ -44,9 +45,11 @@ bool DescribedOption::Presentation::operator==(const Presentation &other) const
     return indicator == other.indicator && dividers == other.dividers
             && horizontalInset == other.horizontalInset
             && minimumRowHeight == other.minimumRowHeight && labelPixels == other.labelPixels
-            && descriptionPixels == other.descriptionPixels && indicatorSize == other.indicatorSize
-            && pressedFill == other.pressedFill && leadingIndicator == other.leadingIndicator
-            && opticalLabel == other.opticalLabel && valueBelowLabel == other.valueBelowLabel;
+            && descriptionPixels == other.descriptionPixels
+            && descriptionPadding == other.descriptionPadding
+            && indicatorSize == other.indicatorSize && pressedFill == other.pressedFill
+            && leadingIndicator == other.leadingIndicator && opticalLabel == other.opticalLabel
+            && valueBelowLabel == other.valueBelowLabel;
 }
 
 void DescribedOption::setPresentation(const Presentation &value)
@@ -188,8 +191,7 @@ int DescribedOption::heightForWidth(int width) const
     const int textHeight = description.isEmpty() ? int(metrics::control::stepSize)
                                                  : descriptionTop() + valueHeight()
                     + wrappedInterfaceTextHeight(description, descriptionFont, textWidth)
-                    + metrics::settings::descriptionBottom
-                    + 2 * metrics::settings::descriptionPadding;
+                    + metrics::settings::descriptionBottom + 2 * appearance.descriptionPadding;
     return qMax(qMax(appearance.minimumRowHeight, textHeight),
                 preview ? previewSize.height() + px(24) : 0);
 }

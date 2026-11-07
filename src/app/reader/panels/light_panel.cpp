@@ -86,6 +86,8 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
         presentation.indicatorSize = { metrics::chrome::checkSize, metrics::chrome::checkSize };
         presentation.leadingIndicator = true;
         presentation.minimumRowHeight = metrics::control::stepSize;
+        // This compact panel must fit between the toolbar and navigation.
+        presentation.descriptionPadding = 0;
         option->setPresentation(presentation);
     }
     connect(automaticBrightness, &QCheckBox::clicked, this, [this](bool enabled) {

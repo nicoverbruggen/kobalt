@@ -29,7 +29,7 @@ public:
         Indicator indicator = Indicator::Toggle;
         Edges dividers;
         int horizontalInset = 0, minimumRowHeight = 116;
-        int labelPixels, descriptionPixels;
+        int labelPixels, descriptionPixels, descriptionPadding;
         QSize indicatorSize;
         // A held row turns the list's pressed gray and fills its radio.
         bool pressedFill = true;

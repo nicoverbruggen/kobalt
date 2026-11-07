@@ -792,12 +792,12 @@ bool Reader::event(QEvent *event)
                    && !choices->isVisible()) {
             partialPanel = menu;
         }
-        QRect partialControls =
-                partialPanel ? QRect(partialPanel->mapTo(this, QPoint()), partialPanel->size())
-                             : QRect();
+        QRect partialControls = partialPanel
+                ? QRect(partialPanel->mapTo(this, QPoint()), partialPanel->size())
+                : QRect();
         // A margin change redraws the preview above the panel without a flash.
-        if (partialPanel == menu && marginPreview->isVisible())
-            partialControls |= marginPreview->geometry();
+        if (partialPanel == menu && appearancePreview->isVisible())
+            partialControls |= appearancePreview->geometry();
         setProperty("reader_partial_controls", partialControls);
     }
     return QWidget::event(event);
@@ -2966,8 +2966,9 @@ void Reader::save(bool snapshot, bool background, bool persist)
     state["preview_settings"] =
             appearanceEdit.ready() ? appearanceEdit.preview()->state() : QJsonObject();
     state["typography_panel"] = menu->isVisible();
-    state["margin_preview_fits"] = marginPreviewFits();
-    state["margin_preview_pending"] = marginPageRequested != 0 && marginPageKey != marginPageRequested;
+    state["appearance_preview_fits"] = appearancePreviewFits();
+    state["appearance_preview_pending"] =
+            previewPageRequested != 0 && previewPageKey != previewPageRequested;
     state["annotation_dragging"] = annotationDragging;
     state["bookmarked"] = page->bookmarked;
     state["bookmark_count"] = bookmarks->available() ? int(bookmarks->bookmarks().size()) : -1;

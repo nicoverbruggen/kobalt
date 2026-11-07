@@ -5,6 +5,7 @@ class QPainter;
 namespace kobalt::ui {
 class ListHeader;
 }
+
 #include <QWidget>
 #include <functional>
 
@@ -13,7 +14,7 @@ namespace kobalt::reader {
 // Layout, it is the whole page, scaled down: the toolbar and the panel cover all possible
 // vertical margins, so the reading page behind them cannot show these margins. For Text,
 // it is the text at its true size, with whole lines only.
-class MarginPreview final : public QWidget
+class AppearancePreview final : public QWidget
 {
 public:
     enum class Axis { None, Horizontal, Vertical };
@@ -31,7 +32,7 @@ public:
         int cropTop = 0;
     };
 
-    explicit MarginPreview(QWidget *parent);
+    explicit AppearancePreview(QWidget *parent);
     void setContent(Content next);
 
     bool showsText() const { return content.text; }

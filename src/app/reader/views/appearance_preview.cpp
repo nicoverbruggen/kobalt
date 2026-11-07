@@ -1,4 +1,4 @@
-#include "margin_preview.h"
+#include "appearance_preview.h"
 #include "support/diagnostics.h"
 #include "support/strings.h"
 #include "ui/controls/rows.h"
@@ -20,9 +20,9 @@ QSize deviceSize(QSize logical, qreal ratio)
 }
 } // namespace
 
-MarginPreview::MarginPreview(QWidget *parent) : QWidget(parent)
+AppearancePreview::AppearancePreview(QWidget *parent) : QWidget(parent)
 {
-    setObjectName("rrMarginPreview");
+    setObjectName("rrAppearancePreview");
     // A tap in this space still reaches the page and closes the panel.
     setAttribute(Qt::WA_TransparentForMouseEvents);
     // It paints its whole rectangle. Without this, an update of the page behind it
@@ -31,12 +31,12 @@ MarginPreview::MarginPreview(QWidget *parent) : QWidget(parent)
     textHeader = new ui::ListHeader(this);
     textHeader->setObjectName("rrTextPreviewHeader");
     textHeader->setShaded(true);
-    textHeader->setCaptions(strings::get("reader.margin_preview").toUpper());
+    textHeader->setCaptions(strings::get("reader.appearance_preview").toUpper());
     textHeader->hide();
     hide();
 }
 
-void MarginPreview::setContent(Content next)
+void AppearancePreview::setContent(Content next)
 {
     // Every repaint is a visible e-ink update. Refreshes that change nothing stay silent.
     const auto same = [](const QImage &left, const QImage &right) {
@@ -54,14 +54,14 @@ void MarginPreview::setContent(Content next)
         update();
 }
 
-void MarginPreview::followPanel(QWidget *watched, std::function<void()> changed)
+void AppearancePreview::followPanel(QWidget *watched, std::function<void()> changed)
 {
     panel = watched;
     panelChanged = std::move(changed);
     panel->installEventFilter(this);
 }
 
-bool MarginPreview::eventFilter(QObject *watched, QEvent *event)
+bool AppearancePreview::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == panel && panelChanged
         && (event->type() == QEvent::Hide || event->type() == QEvent::Resize
@@ -70,7 +70,7 @@ bool MarginPreview::eventFilter(QObject *watched, QEvent *event)
     return QWidget::eventFilter(watched, event);
 }
 
-qreal MarginPreview::scale() const
+qreal AppearancePreview::scale() const
 {
     if (content.page.isEmpty())
         return 0;
@@ -80,7 +80,7 @@ qreal MarginPreview::scale() const
                             qreal(height() - 2 * padding) / content.page.height()));
 }
 
-QRect MarginPreview::pageBounds() const
+QRect AppearancePreview::pageBounds() const
 {
     const qreal factor = scale();
     const QSize size(qRound(content.page.width() * factor), qRound(content.page.height() * factor));
@@ -88,7 +88,8 @@ QRect MarginPreview::pageBounds() const
              size.height() };
 }
 
-const QImage &MarginPreview::scaled(ScaledImage &cache, const QImage &source, QSize target) const
+const QImage &AppearancePreview::scaled(ScaledImage &cache, const QImage &source,
+                                        QSize target) const
 {
     if (cache.source != source.cacheKey() || cache.size != target) {
         const qreal ratio = devicePixelRatio();
@@ -118,12 +119,12 @@ bool blankRow(const QImage &image, int y, QRgb paper)
 }
 } // namespace
 
-void MarginPreview::paintCaption(QPainter &painter, int right) const
+void AppearancePreview::paintCaption(QPainter &painter, int right) const
 {
     // The caption takes only spare space, and only when it fits. Its left edge
     // matches the panel's labels below.
     const QFont font = captionFont();
-    const QString caption = strings::get("reader.margin_preview").toUpper();
+    const QString caption = strings::get("reader.appearance_preview").toUpper();
     const int left = ui::metrics::panel::contentMargins.left();
     const int top = ui::px(pagePadding);
     if (left + ui::interfaceTextWidth(caption, font) + top > right)
@@ -136,7 +137,7 @@ void MarginPreview::paintCaption(QPainter &painter, int right) const
     painter.restore();
 }
 
-QRect MarginPreview::textCard() const
+QRect AppearancePreview::textCard() const
 {
     const int top = textHeader->sizeHint().height();
     int available = qMax(0, height() - top);
@@ -150,7 +151,7 @@ QRect MarginPreview::textCard() const
     return { 0, top, width(), qMax(1, last + 1 - content.cropTop) };
 }
 
-bool MarginPreview::fillsTextCrop(const QImage &body, int cropTop) const
+bool AppearancePreview::fillsTextCrop(const QImage &body, int cropTop) const
 {
     if (body.isNull() || height() <= 0)
         return false;
@@ -163,7 +164,7 @@ bool MarginPreview::fillsTextCrop(const QImage &body, int cropTop) const
     return false;
 }
 
-void MarginPreview::paintText(QPainter &painter)
+void AppearancePreview::paintText(QPainter &painter)
 {
     // The header names the preview, like a section in Settings. The sample has the rest.
     const int top = textHeader->sizeHint().height();
@@ -178,14 +179,14 @@ void MarginPreview::paintText(QPainter &painter)
                       QRect(0, content.cropTop, card.width(), card.height()));
 }
 
-void MarginPreview::resizeEvent(QResizeEvent *)
+void AppearancePreview::resizeEvent(QResizeEvent *)
 {
     textHeader->setGeometry(0, 0, width(), textHeader->sizeHint().height());
 }
 
-void MarginPreview::paintEvent(QPaintEvent *)
+void AppearancePreview::paintEvent(QPaintEvent *)
 {
-    DiagnosticOperation operation("margin-preview-paint");
+    DiagnosticOperation operation("appearance-preview-paint");
     const auto colors = ui::themeColors(this);
     QPainter painter(this);
     // The same gray behind a white page as the Styling samples, so it reads as a sample.
@@ -210,8 +211,7 @@ void MarginPreview::paintEvent(QPaintEvent *)
         painter.drawImage(bounds.topLeft(), scaled(scaledHeader, content.header, target));
     }
     const int bodyTop = bounds.top() + qRound(content.bodyTop * factor);
-    const QRect body(bounds.left(), bodyTop, bounds.width(),
-                     qRound(content.bodyHeight * factor));
+    const QRect body(bounds.left(), bodyTop, bounds.width(), qRound(content.bodyHeight * factor));
     if (!content.body.isNull()) {
         painter.drawImage(body.topLeft(), scaled(scaledBody, content.body, body.size()));
     }

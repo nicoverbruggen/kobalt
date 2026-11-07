@@ -108,7 +108,7 @@ void Reader::refresh()
     const auto nextImage = session->image();
     const auto previousPageImage = page->image.cacheKey();
     showPageImage(nextImage);
-    syncMarginPreview();
+    syncAppearancePreview();
     syncLinkDiscovery();
     bookmarkList->setExcerptFont(bookFace());
     syncAnnotations();
@@ -275,43 +275,43 @@ void Reader::showChapterText()
     header->setAccessibleName(header->text());
 }
 
-QRect Reader::marginPreviewSpace() const
+QRect Reader::appearancePreviewSpace() const
 {
     const int top = topControls->geometry().bottom() + 1;
     return { 0, top, width(), menu->geometry().top() - top };
 }
 
-bool Reader::marginPreviewFits() const
+bool Reader::appearancePreviewFits() const
 {
     // A short space, such as a phone in landscape, gives a page too small to read.
     constexpr int minimumHeight = 200;
-    return marginPreviewSpace().height() >= ui::px(minimumHeight);
+    return appearancePreviewSpace().height() >= ui::px(minimumHeight);
 }
 
-void Reader::syncMarginPreview()
+void Reader::syncAppearancePreview()
 {
-    using Axis = kobalt::reader::MarginPreview::Axis;
+    using Axis = kobalt::reader::AppearancePreview::Axis;
     const bool layoutOpen = menu->isVisible()
             && panels->currentIndex() == int(kobalt::reader::AppearancePage::Layout);
     const bool textOpen = menu->isVisible()
             && panels->currentIndex() == int(kobalt::reader::AppearancePage::Typography);
     if (!layoutOpen)
-        marginPreviewAxis = Axis::None;
-    if ((!layoutOpen && !textOpen) || !marginPreviewFits()) {
-        marginPreview->hide();
+        appearancePreviewAxis = Axis::None;
+    if ((!layoutOpen && !textOpen) || !appearancePreviewFits()) {
+        appearancePreview->hide();
         return;
     }
     // Each kind of preview draws its own bookmark page.
-    if (marginPageForText != textOpen) {
-        marginPageForText = textOpen;
-        marginPageKey = marginPageRequested = 0;
-        marginPage = {};
+    if (previewPageForText != textOpen) {
+        previewPageForText = textOpen;
+        previewPageKey = previewPageRequested = 0;
+        previewPage = {};
     }
-    auto *settings = appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview()
-                                                                       : session;
+    auto *settings =
+            appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
     const int side = kobalt::readingPixels(marginSlider->value());
     const int vertical = kobalt::readingPixels(verticalMarginSlider->value());
-    kobalt::reader::MarginPreview::Content content;
+    kobalt::reader::AppearancePreview::Content content;
     content.page = page->size();
     content.bodyTop = page->topHeight();
     content.bodyHeight = bodySize().height();
@@ -322,12 +322,12 @@ void Reader::syncMarginPreview()
     }
     content.horizontalMargin = side;
     content.verticalMargin = vertical;
-    content.axis = marginPreviewAxis;
+    content.axis = appearancePreviewAxis;
     content.text = textOpen;
     content.cropTop = qMax(0, settings->topMargin() - int(ui::px(16)));
-    marginPreview->setGeometry(marginPreviewSpace());
-    if (!marginPreview->isVisible())
-        marginPreview->stackUnder(menu);
+    appearancePreview->setGeometry(appearancePreviewSpace());
+    if (!appearancePreview->isVisible())
+        appearancePreview->stackUnder(menu);
     const bool dragging = marginSlider->interacting() || verticalMarginSlider->interacting();
     // An edit that waits for its preview session has not reached these settings yet.
     const bool settled = !dragging && !settings->busy() && settings->margin() == side
@@ -335,38 +335,38 @@ void Reader::syncMarginPreview()
             && settings->image().size() == bodySize()
             && (!appearanceEdit.edited() || appearanceEdit.ready());
     if (!settled)
-        marginPageRequested = 0;
+        previewPageRequested = 0;
     // An unedited page already starts at the reading position. A short page has too little
     // text to judge, so the Text preview continues with the text that follows it.
     const bool usePage = settled && !appearanceEdit.edited()
-            && (!textOpen || marginPreview->fillsTextCrop(settings->image(), content.cropTop));
+            && (!textOpen || appearancePreview->fillsTextCrop(settings->image(), content.cropTop));
     // One change is one screen update. The picture stays during a drag and while
     // a layout runs, so that nothing draws an in-between state.
     if (usePage) {
         content.body = settings->image();
-    } else if (settled && marginPageKey == settings->image().cacheKey()) {
-        content.body = marginPage;
+    } else if (settled && previewPageKey == settings->image().cacheKey()) {
+        content.body = previewPage;
     } else {
-        if (settled && marginPageRequested != settings->image().cacheKey()) {
+        if (settled && previewPageRequested != settings->image().cacheKey()) {
             const qint64 key = settings->image().cacheKey();
-            marginPageRequested = key;
+            previewPageRequested = key;
             const QPointer<Reader> guard(this);
             // The page starts at the bookmark, so the same text stays in place at every
             // setting. Real page breaks would move it.
             settings->anchoredPage(!textOpen, [guard, key](QImage image) {
-                if (!guard || guard->marginPageRequested != key)
+                if (!guard || guard->previewPageRequested != key)
                     return;
-                guard->marginPageKey = key;
-                guard->marginPage = std::move(image);
-                guard->syncMarginPreview();
+                guard->previewPageKey = key;
+                guard->previewPage = std::move(image);
+                guard->syncAppearancePreview();
             });
         }
-        if (marginPreview->isVisible() && marginPreview->showsText() == textOpen)
+        if (appearancePreview->isVisible() && appearancePreview->showsText() == textOpen)
             return;
         content.body = settings->image();
     }
-    marginPreview->setContent(std::move(content));
-    marginPreview->show();
+    appearancePreview->setContent(std::move(content));
+    appearancePreview->show();
 }
 
 void Reader::showPageImage(const QImage &nextImage)

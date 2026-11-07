@@ -1695,7 +1695,16 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
     QCOMPARE(fixture.state().value("vertical_spacing_scope").toString(), QString("protection"));
 }
 
-struct MarginPreviewPaints : QObject
+// The appearance preview has laid out and drawn the newest change.
+bool previewSettled(Fixture &fixture)
+{
+    const auto state = fixture.state();
+    return !state.value("busy").toBool() && !state.value("preview_queued").toBool()
+            && !state.value("preview_busy").toBool()
+            && !state.value("appearance_preview_pending").toBool();
+}
+
+struct PreviewPaints : QObject
 {
     int count = 0;
 
@@ -1710,19 +1719,15 @@ struct MarginPreviewPaints : QObject
 // whole page between them, and it leaves when the Layout tab closes.
 void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString &)> &scene)
 {
-    const auto settled = [&] {
-        const auto state = fixture.state();
-        return !state.value("preview_busy").toBool() && !state.value("busy").toBool()
-                && !state.value("margin_preview_pending").toBool();
-    };
+    const auto settled = [&] { return previewSettled(fixture); };
     // A short space keeps the panel as it is, without an unreadable page.
     // The saved state follows the panel's geometry a moment after the tab opens.
-    QTRY_COMPARE(fixture.visible("rrMarginPreview"),
-                 fixture.state().value("margin_preview_fits").toBool());
-    const bool fits = fixture.visible("rrMarginPreview");
+    QTRY_COMPARE(fixture.visible("rrAppearancePreview"),
+                 fixture.state().value("appearance_preview_fits").toBool());
+    const bool fits = fixture.visible("rrAppearancePreview");
     QVERIFY(fixture.press("rrWider"));
     QTRY_VERIFY(settled());
-    QCOMPARE(fixture.visible("rrMarginPreview"), fits);
+    QCOMPARE(fixture.visible("rrAppearancePreview"), fits);
     QVERIFY(scene("margin-preview-horizontal"));
     QVERIFY(fixture.press("rrNarrower"));
     QTRY_VERIFY(settled());
@@ -1731,11 +1736,10 @@ void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString 
     QVERIFY(slider);
     const int restored = slider->value();
     const int y = slider->height() / 2;
-    QVERIFY(fixture.holdDrag(slider, { slider->width() / 2, y },
-                             { slider->width() * 3 / 4, y }, [&] {
-                                 return slider->value() != restored
-                                         && slider->value() % 12 == 0
-                                         && fixture.visible("rrMarginPreview") == fits
+    QVERIFY(fixture.holdDrag(slider, { slider->width() / 2, y }, { slider->width() * 3 / 4, y },
+                             [&] {
+                                 return slider->value() != restored && slider->value() % 12 == 0
+                                         && fixture.visible("rrAppearancePreview") == fits
                                          && !fixture.state().value("preview_busy").toBool();
                              }));
     QTRY_VERIFY(settled());
@@ -1756,22 +1760,22 @@ void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString 
     // The Text tab shows the same space with text at its true size.
     QVERIFY(fixture.press("rrNavText"));
     QTRY_VERIFY(fixture.visible("rrFont"));
-    QTRY_COMPARE(fixture.visible("rrMarginPreview"),
-                 fixture.state().value("margin_preview_fits").toBool());
+    QTRY_COMPARE(fixture.visible("rrAppearancePreview"),
+                 fixture.state().value("appearance_preview_fits").toBool());
     QVERIFY(fixture.press("rrNavStats"));
-    QTRY_VERIFY(!fixture.visible("rrMarginPreview"));
+    QTRY_VERIFY(!fixture.visible("rrAppearancePreview"));
     // Each paint is a visible e-ink update, so the preview adds none to opening the tab.
-    MarginPreviewPaints paints, panelPaints;
-    fixture.widget("rrMarginPreview")->installEventFilter(&paints);
+    PreviewPaints paints, panelPaints;
+    fixture.widget("rrAppearancePreview")->installEventFilter(&paints);
     fixture.widget("rrHeaderFooter")->installEventFilter(&panelPaints);
     QVERIFY(fixture.press("rrNavLayout"));
     QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
     QTRY_VERIFY(settled());
-    QCOMPARE(fixture.visible("rrMarginPreview"), fits);
+    QCOMPARE(fixture.visible("rrAppearancePreview"), fits);
     QTest::qWait(50);
     QVERIFY2(paints.count <= panelPaints.count,
              qPrintable(QString("%1 > %2").arg(paints.count).arg(panelPaints.count)));
-    fixture.widget("rrMarginPreview")->removeEventFilter(&paints);
+    fixture.widget("rrAppearancePreview")->removeEventFilter(&paints);
     fixture.widget("rrHeaderFooter")->removeEventFilter(&panelPaints);
 }
 
@@ -10323,9 +10327,9 @@ private slots:
         }
         // A phone in landscape has no room for a readable page; a six-inch screen in portrait has.
         if (preset == 5)
-            QVERIFY(!fixture.state().value("margin_preview_fits").toBool());
+            QVERIFY(!fixture.state().value("appearance_preview_fits").toBool());
         if (preset == 1)
-            QVERIFY(fixture.state().value("margin_preview_fits").toBool());
+            QVERIFY(fixture.state().value("appearance_preview_fits").toBool());
         marginPreviewTour(fixture, [&](const QString &suffix) {
             return capture(fixture, name + '-' + suffix);
         });

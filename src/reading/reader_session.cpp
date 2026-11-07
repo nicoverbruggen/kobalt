@@ -1483,7 +1483,7 @@ void ReaderSession::anchoredPage(bool stayInChapter, std::function<void(QImage)>
                 if (token->load() != request || latest->load() != job || lease->revoked())
                     return;
                 EngineJob activity;
-                DiagnosticOperation operation("margin-preview-page");
+                DiagnosticOperation operation("appearance-preview-page");
                 const auto image = engine->imageFromAnchor(stayInChapter);
                 kobalt::qt::invoke(
                         qApp,

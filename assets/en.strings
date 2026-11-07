@@ -764,6 +764,7 @@
 "settings.section_appearance" = "Appearance";
 "settings.section_screen" = "Screen refresh";
 "settings.section_navigation" = "Navigation";
+"settings.section_links" = "Links";
 "settings.section_chapter_list" = "Chapter List";
 "settings.chapter_groups" = "Collapsible chapters";
 "settings.chapter_groups_hint" = "Choose whether chapter groups can collapse and how they open.";

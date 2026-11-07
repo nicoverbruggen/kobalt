@@ -496,6 +496,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     chapterGroupsButton = ui::makeCaptionButton(controlsPage, nullptr, "rrChapterGroups",
                                                 strings::get("settings.chapter_groups"), [] { });
     controlsRows->addWidget(chapterGroupsButton);
+    section(controlsPage, controlsRows, "rrControlsLinksSection",
+            strings::get("settings.section_links"));
     tappableLinksButton = ui::makeCaptionButton(controlsPage, nullptr, "rrTappableLinks",
                                                 strings::get("settings.tappable_links"), [] { });
     controlsRows->addWidget(tappableLinksButton);

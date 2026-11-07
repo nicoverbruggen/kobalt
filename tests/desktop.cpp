@@ -1381,6 +1381,9 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QVERIFY(fixture.widget("rrTapZones")->y()
             < fixture.widget("rrControlsChapterListSection")->y());
     QVERIFY(fixture.widget("rrControlsChapterListSection")->y() < groups->y());
+    QVERIFY(groups->y() < fixture.widget("rrControlsLinksSection")->y());
+    QVERIFY(fixture.widget("rrControlsLinksSection")->y() < fixture.widget("rrTappableLinks")->y());
+    QVERIFY(fixture.widget("rrTappableLinks")->y() < fixture.widget("rrShowLinkIndicator")->y());
     if (!name.isEmpty())
         capturePages(fixture, name + "-settings-chapter-navigation", "rrSettingsOptions");
     QVERIFY(fixture.press("rrChapterGroups"));

@@ -488,6 +488,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     pageNavigationButton = ui::makeCaptionButton(controlsPage, nullptr, "rrPageNavigation",
                                                  strings::get("settings.page_navigation"), [] { });
     controlsRows->addWidget(pageNavigationButton);
+    buttonControlsButton = ui::makeCaptionButton(controlsPage, nullptr, "rrButtonControls",
+                                                 strings::get("buttons.hardware_title"), [] { });
+    controlsRows->addWidget(buttonControlsButton);
     tapZonesButton = ui::makeCaptionButton(controlsPage, nullptr, "rrTapZones",
                                            strings::get("settings.tap_zones"), [] { });
     controlsRows->addWidget(tapZonesButton);
@@ -828,6 +831,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           sleepTileButton,
                           sessionTimeoutButton,
                           pageNavigationButton,
+                          buttonControlsButton,
                           tapZonesButton,
                           chapterGroupsButton,
                           tappableLinksButton,
@@ -1607,9 +1611,9 @@ QSize SettingsPanel::stylingTextPageSize(QSize readingPage, int horizontalMargin
     if (readingPage.width() <= ui::px(1264))
         return readingPage;
     const int side = qMin(horizontalMargin, int(ui::px(16)));
-    readingPage.setWidth(qMin(readingPage.width(),
-                              stylingSampleWidth(parentWidget()) + 2 * horizontalMargin
-                                      - 2 * side));
+    readingPage.setWidth(
+            qMin(readingPage.width(),
+                 stylingSampleWidth(parentWidget()) + 2 * horizontalMargin - 2 * side));
     return readingPage;
 }
 

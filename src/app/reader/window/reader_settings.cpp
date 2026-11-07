@@ -1,3 +1,4 @@
+#include <QKeyEvent>
 #include "reading/remaining_time.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
@@ -600,10 +601,55 @@ void Reader::fitAppearance()
     menu->setGeometry(panelBounds(height));
 }
 
+pageButtons::Buttons Reader::buttonControls() const
+{
+    auto buttons = services.buttonControls ? services.buttonControls() : pageButtons::Buttons{};
+    for (auto &button : buttons) {
+        QKeyEvent event(QEvent::KeyPress, button.key, Qt::NoModifier);
+        const int nativeDirection = services.pageButtonDirection(&event);
+        if (nativeDirection)
+            button.defaultDirection = nativeDirection;
+    }
+    return buttons;
+}
+
+void Reader::saveButtonControls(const QJsonObject &actions)
+{
+    if (savingButtonControls || savingDarkMode >= 0)
+        return;
+    auto next = appearance::globalPreferences(preferences);
+    appearance::rememberTextLayout(next, session->state());
+    appearance::rememberPageMargins(next, session->state());
+    next[pageButtons::preferenceKey] = actions;
+    savingButtonControls = true;
+    static_cast<SettingsPanel *>(general)->buttonControlsButton->setEnabled(false);
+    if (!preferencesWriter)
+        preferencesWriter = std::make_unique<storage::RecordWriter>();
+    QPointer<Reader> guard(this);
+    preferencesWriter->post([path = book->paths().preferences(),
+                             next] { return storage::writePreferences(path, next); },
+                            [guard, actions](bool saved) {
+                                qt::invoke(
+                                        QCoreApplication::instance(),
+                                        [guard, actions, saved] {
+                                            if (!guard)
+                                                return;
+                                            guard->savingButtonControls = false;
+                                            if (saved)
+                                                guard->preferences[pageButtons::preferenceKey] =
+                                                        actions;
+                                            else
+                                                guard->showSettingsWriteError();
+                                            guard->refresh();
+                                        },
+                                        Qt::QueuedConnection);
+                            });
+}
+
 bool Reader::writePreferences(const QJsonObject &next)
 {
     // Do not replace a pending asynchronous dark-mode save.
-    if (savingDarkMode >= 0)
+    if (savingButtonControls || savingDarkMode >= 0)
         return false;
     // Known exception: a settings change waits for its write, so each caller
     // can undo the change when the write fails.
@@ -626,7 +672,7 @@ bool Reader::writePreferences(const QJsonObject &next)
 
 void Reader::applySettings()
 {
-    if (savingDarkMode >= 0 || session->temporaryTypography())
+    if (savingButtonControls || savingDarkMode >= 0 || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
@@ -764,7 +810,7 @@ void Reader::applySettings()
 
 void Reader::applyDarkMode(bool enabled)
 {
-    if (savingDarkMode >= 0 || pendingDarkMode >= 0 || session->busy()
+    if (savingButtonControls || savingDarkMode >= 0 || pendingDarkMode >= 0 || session->busy()
         || session->temporaryTypography()) {
         refresh();
         return;

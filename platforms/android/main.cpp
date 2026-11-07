@@ -172,13 +172,17 @@ public:
         qApp->installEventFilter(this);
         android::setCallbacks(
                 this, [this](const QString &path) { openBook(path); },
-                [this](int direction) {
+                [this](int direction, int volumeKey) {
                     if (!pageButtonsReady())
                         return;
                     if (layout->currentWidget() == start)
                         start->library()->pageButton(direction);
                     else
-                        controller.window()->pageButton(direction);
+                        controller.window()->physicalPageButton(volumeKey == 1 ? Qt::Key_VolumeUp
+                                                                        : volumeKey == 2
+                                                                        ? Qt::Key_VolumeDown
+                                                                        : 0,
+                                                                direction);
                 },
                 [this](const QString &uri, const QString &label) {
                     store.addFolder({ uri, label });

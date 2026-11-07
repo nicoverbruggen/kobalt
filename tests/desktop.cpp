@@ -3072,10 +3072,210 @@ void checkImageViewer(int preset, bool dark, bool screenshots)
     QCOMPARE(colorImage.pixelColor(colorImage.rect().center()), QColor("#d32f2f"));
 }
 
+// Exercise the production settings modal and preserve unrelated button profiles.
+void buttonMapping(Fixture &fixture, const QString &name, bool volume)
+{
+    const auto buttons = volume ? pageButtons::volume(3) : pageButtons::paging();
+    QVERIFY(fixture.prepared);
+    auto preferences = storage::readJson(fixture.paths.preferences());
+    preferences[pageButtons::preferenceKey] = QJsonObject{ { "future_button", "future_action" } };
+    QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsControls"));
+    QVERIFY(revealSettingsOption(fixture, "rrButtonControls"));
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-button-controls-settings"));
+    QVERIFY(fixture.press("rrButtonControls"));
+    QTRY_VERIFY(fixture.visible("rrButtonControlsPopup"));
+    auto *entry = static_cast<ui::CaptionButton *>(fixture.widget("rrButtonControls"));
+    QCOMPARE(entry->text(), strings::get("buttons.hardware_title"));
+    QCOMPARE(entry->caption(),
+             (strings::get("buttons.previous") + " / " + strings::get("buttons.next")).toUpper());
+    auto *modal = static_cast<ui::ModalOverlay *>(fixture.widget("rrButtonControlsPopup"));
+    QVERIFY(modal->rect().contains(modal->card()->geometry()));
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-button-controls", "rrButtonControlsPopup");
+    const auto first = "rrButtonAction_" + buttons.first().id;
+    QVERIFY(fixture.press(qPrintable(first)));
+    QTRY_VERIFY(fixture.visible("rrButtonActionPopup"));
+    auto *choices = dynamic_cast<ui::RadioList *>(fixture.widget("rrButtonActionChoices"));
+    QVERIFY(choices);
+    QCOMPARE(choices->options().size(), 3);
+    QVERIFY(!fixture.widget("rrButtonChooseCancel"));
+    auto *picker = static_cast<ui::ModalOverlay *>(fixture.widget("rrButtonActionPopup"));
+    QVERIFY(picker->rect().contains(picker->card()->geometry()));
+    QCOMPARE(picker->card()->width(),
+             qMin<int>(ui::metrics::notice::cardWidth,
+                       picker->width() - 2 * ui::metrics::notice::sideClearance));
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-button-actions", "rrButtonActionPopup");
+    QVERIFY(fixture.press("rrButtonChoose_none"));
+    QTRY_VERIFY(!fixture.visible("rrButtonActionPopup"));
+    QCOMPARE(static_cast<ui::CaptionButton *>(fixture.widget(qPrintable(first)))->caption(),
+             strings::get("buttons.none").toUpper());
+    auto *preview = qobject_cast<QLabel *>(
+            fixture.widget(qPrintable("rrButtonPreview_" + buttons.first().id)));
+    QVERIFY(preview);
+    QCOMPARE(preview->text(), strings::get("buttons.none"));
+    if (!name.isEmpty()) {
+        auto *previous = fixture.widget("rrButtonControlsPopupPrevious");
+        while (previous && previous->isVisible() && previous->isEnabled())
+            QVERIFY(fixture.click(previous));
+        QVERIFY(modal->rect().contains(modal->card()->geometry()));
+        capturePages(fixture, name + "-button-controls-none", "rrButtonControlsPopup");
+    }
+    QVERIFY(fixture.press("rrButtonControlsCancel"));
+    QTRY_VERIFY(!fixture.widget("rrButtonControlsPopup"));
+    QVERIFY(!storage::readJson(fixture.paths.preferences())
+                     .value(pageButtons::preferenceKey)
+                     .toObject()
+                     .contains(buttons.first().id));
+    QVERIFY(fixture.press("rrButtonControls"));
+    QVERIFY(fixture.press(qPrintable("rrButtonDiagram_" + buttons.first().id)));
+    QVERIFY(fixture.press("rrButtonChoose_none"));
+    QVERIFY(fixture.press("rrButtonControlsDone"));
+    QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
+                         .value(pageButtons::preferenceKey)
+                         .toObject()
+                         .value(buttons.first().id)
+                         .toString(),
+                 QString("none"));
+    QTRY_COMPARE(entry->caption(),
+                 (strings::get("buttons.none") + " / " + strings::get("buttons.next")).toUpper());
+    QCOMPARE(storage::readJson(fixture.paths.preferences())
+                     .value(pageButtons::preferenceKey)
+                     .toObject()
+                     .value("future_button")
+                     .toString(),
+             QString("future_action"));
+    QVERIFY(fixture.press("rrSettingsClose"));
+}
+
 class DesktopTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void buttonMapping_data() { screenshotVariants(); }
+
+    void buttonMapping()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        const bool volume = preset == 3 || preset == 5;
+        Fixture fixture(dark, false, false, true, false, false,
+                        [volume](ReaderHostServices &services) {
+                            services.pageButtons = [] { return true; };
+                            services.buttonControls = [volume] {
+                                return volume ? pageButtons::volume(3) : pageButtons::paging();
+                            };
+                        });
+        selectPreview(fixture, preset);
+        ::buttonMapping(fixture, {}, volume);
+        const auto controls = volume ? pageButtons::volume(3) : pageButtons::paging();
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(!fixture.window.readerWindow());
+        QSignalSpy reopened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(reopened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto initial = fixture.state().value("page").toInt();
+        fixture.window.readerWindow()->physicalPageButton(controls.first().key, 1);
+        QCoreApplication::processEvents();
+        QCOMPARE(fixture.state().value("page").toInt(), initial);
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->physicalPageButton(controls.last().key, 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("page").toInt(), initial + 1);
+        // A disabled reading button still pages Navigate in its native direction.
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavSeek"));
+        auto *scrubber = dynamic_cast<ui::PageScrubber *>(fixture.widget("rrPageScrubber"));
+        QVERIFY(scrubber);
+        QTRY_VERIFY(scrubber->previewReady());
+        const int selected = scrubber->selectedPage();
+        fixture.window.readerWindow()->physicalPageButton(controls.first().key, 1);
+        QTRY_COMPARE(scrubber->selectedPage(), selected + 1);
+        QCOMPARE(fixture.state().value("page").toInt(), initial + 1);
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(!fixture.window.readerWindow());
+        fixture.window.openBook(book);
+        QTRY_VERIFY(fixture.window.readerWindow());
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const int restored = fixture.state().value("page").toInt();
+        fixture.window.readerWindow()->physicalPageButton(controls.first().key, 1);
+        QCoreApplication::processEvents();
+        QCOMPARE(fixture.state().value("page").toInt(), restored);
+    }
+
+    void buttonMappingActions_data()
+    {
+        QTest::addColumn<QString>("action");
+        QTest::addColumn<int>("nativeDirection");
+        QTest::addColumn<int>("expectedDirection");
+        QTest::newRow("both-forward") << QString("next") << -1 << 1;
+        QTest::newRow("previous") << QString("previous") << 1 << -1;
+        QTest::newRow("none") << QString("none") << 1 << 0;
+        QTest::newRow("native-inverted") << QString() << 1 << 1;
+        QTest::newRow("native-rotated") << QString() << -1 << -1;
+        QTest::newRow("invalid-default") << QString("unknown") << -1 << -1;
+    }
+
+    void buttonMappingActions()
+    {
+        QFETCH(QString, action);
+        QFETCH(int, nativeDirection);
+        QFETCH(int, expectedDirection);
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.pageButtons = [] { return true; };
+            services.buttonControls = [] { return pageButtons::paging(); };
+        });
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        QJsonObject actions{ { "page_lower", "next" } };
+        if (!action.isEmpty())
+            actions["page_upper"] = action;
+        preferences[pageButtons::preferenceKey] = actions;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.turnPage(1));
+        const int initial = fixture.state().value("page").toInt();
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->physicalPageButton(Qt::Key_F23, nativeDirection);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("page").toInt(), initial + expectedDirection);
+        // Lower is independent of upper, including when both advance.
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->physicalPageButton(Qt::Key_F24, -1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("page").toInt(), initial + expectedDirection + 1);
+    }
+
+    void buttonMappingUnavailable()
+    {
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.pageButtons = [] { return false; };
+            services.buttonControls = [] { return pageButtons::Buttons{}; };
+        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        auto *entry = fixture.widget("rrButtonControls");
+        QVERIFY(entry->isHidden());
+        QVERIFY(revealSettingsOption(fixture, "rrTapZones"));
+        QVERIFY(!fixture.widget("rrButtonControlsPopup"));
+    }
 
     void chapterGroups_data() { variants(); }
 
@@ -9867,6 +10067,47 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void buttonMappingUnavailable_data() { screenshotVariants(); }
+
+    void buttonMappingUnavailable()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.pageButtons = [] { return false; };
+            services.buttonControls = [] { return pageButtons::Buttons{}; };
+        });
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(fixture.widget("rrButtonControls")->isHidden());
+        QVERIFY(revealSettingsOption(fixture, "rrTapZones"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-button-controls-unavailable"));
+    }
+
+    void buttonMapping_data() { screenshotVariants(); }
+
+    void buttonMapping()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        const bool volume = preset == 3 || preset == 5;
+        Fixture fixture(dark, false, false, true, false, false,
+                        [volume](ReaderHostServices &services) {
+                            services.pageButtons = [] { return true; };
+                            services.buttonControls = [volume] {
+                                return volume ? pageButtons::volume(3) : pageButtons::paging();
+                            };
+                        });
+        selectPreview(fixture, preset);
+        ::buttonMapping(fixture, screenshotVariant(preset, dark), volume);
+    }
 
     void chapterGroups_data() { screenshotVariants(); }
 

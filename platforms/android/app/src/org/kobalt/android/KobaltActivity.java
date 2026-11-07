@@ -14,6 +14,7 @@ import android.database.Cursor;
 import android.os.Build;
 import android.view.View;
 import android.view.KeyEvent;
+import android.view.KeyCharacterMap;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowInsetsAnimation;
@@ -49,7 +50,9 @@ public class KobaltActivity extends QtActivity {
     private int surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, surfaceCorner;
     private String pendingPath;
     private native void openBook(String path);
-    private native boolean turnPage(int direction);
+    private native boolean turnPage(int direction, int volumeKey);
+    private int volumeButtons;
+    public int volumeButtons() { return volumeButtons; }
     private native void folderChosen(String uri, String label);
     private native void surfaceResized(int width, int height, int left, int top, int right, int bottom, int corner);
     private final HashSet<Integer> pageKeys = new HashSet<>();
@@ -65,7 +68,8 @@ public class KobaltActivity extends QtActivity {
         final boolean previous = key == KeyEvent.KEYCODE_VOLUME_UP || key == KeyEvent.KEYCODE_PAGE_UP;
         if (next || previous) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                if (ready && turnPage(next ? 1 : -1)) {
+                if (ready && turnPage(next ? 1 : -1, key == KeyEvent.KEYCODE_VOLUME_UP ? 1
+                        : key == KeyEvent.KEYCODE_VOLUME_DOWN ? 2 : 0)) {
                     pageKeys.add(key);
                     return true;
                 }
@@ -79,6 +83,8 @@ public class KobaltActivity extends QtActivity {
 
     @Override public void onCreate(Bundle state) {
         // Qt can start its native thread in super.onCreate. Publish capabilities first.
+        volumeButtons = (KeyCharacterMap.deviceHasKey(KeyEvent.KEYCODE_VOLUME_UP) ? 1 : 0)
+            | (KeyCharacterMap.deviceHasKey(KeyEvent.KEYCODE_VOLUME_DOWN) ? 2 : 0);
         boox = new BooxDevice();
         booxRefresh = new BooxRefresh();
         super.onCreate(state);

@@ -70,6 +70,12 @@ public:
     // Logical forward/backward input, independent of touch swipe direction.
     virtual void pageButton(int direction) = 0;
 
+    virtual void physicalPageButton(int key, int direction)
+    {
+        pageButton(direction);
+        Q_UNUSED(key);
+    }
+
     // For the scenario player: a page key that skips the filter for rapid
     // duplicate input, so a sample measures the turn and not the filter.
     virtual void scriptedPageButton(int direction) { pageButton(direction); }

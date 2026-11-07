@@ -284,6 +284,9 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
                       return deviceAsleep || poweredOff || (host && host());
                   };
                   services.pageButtons = [this] { return screenPreset == 2; };
+                  services.buttonControls = [this] {
+                      return screenPreset == 2 ? pageButtons::paging() : pageButtons::Buttons{};
+                  };
                   services.clock = [this] {
                       return clockSource     ? clockSource()
                               : screenPreset ? QStringLiteral("09:00")
@@ -863,7 +866,7 @@ void Window::turnPage(int direction, bool hardware)
     if (!reader->isVisible() || !reader->isEnabled())
         return;
     if (hardware) {
-        reader->pageButton(direction);
+        reader->physicalPageButton(direction < 0 ? Qt::Key_F23 : Qt::Key_F24, direction);
         return;
     }
     // Only turn from the reading surface. The same keys must remain available

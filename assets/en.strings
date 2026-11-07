@@ -1317,3 +1317,22 @@
 "settings.hanging_punctuation_off_description" = "Keep punctuation within the text edges.";
 "settings.hanging_punctuation_on_description" = "Let punctuation and line-ending hyphens extend beyond the text edges.";
 "settings.hanging_punctuation_description" = "The dashed lines mark the text edges. The sample uses justified text. This preference affects all books.";
+
+/* Physical button controls */
+"buttons.title" = "Button controls";
+"buttons.upper" = "Upper button";
+"buttons.lower" = "Lower button";
+"buttons.volume_up" = "Volume up (+)";
+"buttons.volume_down" = "Volume down (−)";
+"buttons.description" = "Choose what each page button does while reading.";
+"buttons.volume_description" = "Choose what the volume buttons do while reading.";
+"buttons.navigation_hint" = "Menus, lists and page previews keep their usual button directions.";
+"buttons.previous" = "Previous page";
+"buttons.next" = "Next page";
+"buttons.none" = "Do nothing";
+"buttons.none_description" = "Ignore this button while reading.";
+"buttons.volume_title" = "Volume button controls";
+"buttons.volume_note" = "On Android, these mappings use the physical volume buttons.";
+"buttons.while_reading" = "Decide what this hardware button should do when you're reading.";
+
+"buttons.hardware_title" = "Hardware buttons";

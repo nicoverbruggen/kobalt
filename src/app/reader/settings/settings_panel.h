@@ -1,5 +1,6 @@
 #pragma once
 #include "platform/api/page_animation_support.h"
+#include "platform/api/page_buttons.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/options.h"
 #include "ui/controls/panels.h"
@@ -76,6 +77,10 @@ public:
         ParagraphSpacing
     };
     static QString paragraphSpacingLabel(int percent);
+    void updateButtonControls(const pageButtons::Buttons &buttons, const QJsonObject &preferences,
+                              bool saving);
+    void showButtonControls(const pageButtons::Buttons &buttons, const QJsonObject &current,
+                            std::function<void(QJsonObject)> chosen);
     void showBeautifier(const QJsonObject &current, std::function<void(QJsonObject)> chosen);
     void showPageSpacingChoices(int mode, int scope, std::function<void(int, int)> chosen);
     void showParagraphAdjustments(int spacing, int indent, std::function<void(int, int)> chosen);
@@ -133,6 +138,7 @@ public:
     ui::CaptionButton *paragraphSpacingButton = nullptr, *beautifierButton = nullptr;
     ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr,
                       *sleepTileButton = nullptr, *menuViewButton = nullptr;
+    ui::CaptionButton *buttonControlsButton = nullptr;
     ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                       *navigationBarButton = nullptr, *tappableLinksButton = nullptr,
                       *chapterGroupsButton = nullptr;

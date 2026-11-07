@@ -11,7 +11,7 @@
 namespace {
 QPointer<QObject> owner;
 std::function<void(QString)> openExternal;
-std::function<void(int)> volumeButton;
+std::function<void(int, int)> volumeButton;
 std::function<void(QString, QString)> chosenFolder;
 std::function<void(QSize, QMargins, int)> resizedSurface;
 std::atomic<bool> pageButtonsAvailable{ false };
@@ -19,7 +19,7 @@ std::atomic<bool> pageButtonsAvailable{ false };
 
 namespace kobalt::android {
 void setCallbacks(QObject *receiver, std::function<void(QString)> openBook,
-                  std::function<void(int)> turnPage,
+                  std::function<void(int, int)> turnPage,
                   std::function<void(QString, QString)> folderChosen,
                   std::function<void(QSize, QMargins, int)> surfaceResized)
 {
@@ -74,6 +74,11 @@ QSize libraryContentSize()
     const auto size = quint64(QNativeInterface::QAndroidApplication::context().callMethod<jlong>(
             "libraryContentSize"));
     return { int(size >> 32), int(size & 0xffffffff) };
+}
+
+int volumeButtons()
+{
+    return QNativeInterface::QAndroidApplication::context().callMethod<jint>("volumeButtons");
 }
 
 int screenDensity()
@@ -178,14 +183,14 @@ extern "C" JNIEXPORT void JNICALL Java_org_kobalt_android_KobaltActivity_surface
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_org_kobalt_android_KobaltActivity_turnPage(JNIEnv *, jobject, jint direction)
+Java_org_kobalt_android_KobaltActivity_turnPage(JNIEnv *, jobject, jint direction, jint volumeKey)
 {
     // Android's UI thread must not wait for Qt while Qt can request Android UI work.
     if (!pageButtonsAvailable.load())
         return false;
-    QMetaObject::invokeMethod(qApp, [direction] {
+    QMetaObject::invokeMethod(qApp, [direction, volumeKey] {
         if (owner && volumeButton)
-            volumeButton(direction);
+            volumeButton(direction, volumeKey);
     });
     return true;
 }

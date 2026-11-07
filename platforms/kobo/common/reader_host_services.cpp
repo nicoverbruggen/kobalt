@@ -1,3 +1,4 @@
+#include <QKeyEvent>
 #include "reader_host_services.h"
 #include "native_dictionary.h"
 #include "native_keyboard.h"
@@ -255,6 +256,11 @@ ReaderHostServices readerHostServices()
     result.observeWifi = observeNativeWifi;
     result.remoteKeyActivity = reportNativeBluetoothActivity;
     result.pageButtons = nativeReaderHasPageButtons;
+    result.buttonControls = [] {
+        if (!nativeReaderHasPageButtons())
+            return pageButtons::Buttons{};
+        return pageButtons::paging();
+    };
     result.reverseLandscapeButtons = nativeReaderReverseLandscapeButtons;
     result.pageButtonDirection = nativePageButtonDirection;
     result.fontFamilies = nativeReaderFontFamilies;

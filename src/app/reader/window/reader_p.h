@@ -105,6 +105,7 @@ public:
     void progressTick() override;
     void refreshHostPresentation() override;
     void pageButton(int direction) override;
+    void physicalPageButton(int key, int direction) override;
     void scriptedPageButton(int direction) override;
 
     bool busy() const override
@@ -604,6 +605,9 @@ private:
     void applyAutomaticOpening(bool enabled);
     void applySettings();
     bool writePreferences(const QJsonObject &next);
+    pageButtons::Buttons buttonControls() const;
+    void saveButtonControls(const QJsonObject &actions);
+    bool savingButtonControls = false;
     void showSettingsWriteError();
     void selectPanel(int index);
     void openPanel(int index);
@@ -621,7 +625,7 @@ private:
     void dismissProgressChoice();
     void showProgressChoice();
     void buildProgressChoice(const kobalt::ReadingProgress &shown, int direction, bool located);
-    void pageButton(int direction, quint32 sourceTime, bool userInput = true);
+    void pageButton(int direction, quint32 sourceTime, bool userInput = true, int physicalKey = 0);
     void turnPage(int direction, quint32 sourceTime = 0, bool userInput = true,
                   ui::InputClock clock = ui::InputClock::Pointer);
     ui::TapFilter pageTurnFilter;

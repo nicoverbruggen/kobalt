@@ -1,5 +1,6 @@
 #pragma once
 #include "page_animation_support.h"
+#include "page_buttons.h"
 #include "dictionary_service.h"
 #include "keyboard_controller.h"
 #include "sync_network.h"
@@ -107,6 +108,8 @@ struct ReaderHostServices
     // Report consumed key activity to the host. The host identifies remote
     // input and retains its own radio inactivity policy.
     std::function<void(QObject *context, QKeyEvent *event)> remoteKeyActivity;
+    // Optional physical controls. Empty means there are no mappable buttons.
+    std::function<pageButtons::Buttons()> buttonControls;
     std::function<bool()> pageButtons, reverseLandscapeButtons;
     std::function<int(QKeyEvent *)> pageButtonDirection;
     std::function<QStringList()> fontFamilies;

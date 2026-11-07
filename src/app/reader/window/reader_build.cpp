@@ -1545,6 +1545,22 @@ void Reader::buildSettings()
     connect(navigationBarButton, &QPushButton::clicked, this,
             [this] { openNavigationBarButtons(); });
     connect(pageNavigationButton, &QPushButton::clicked, this, [this] { openPageNavigation(); });
+    settings->updateButtonControls(buttonControls(), preferences, false);
+    connect(settings->buttonControlsButton, &QPushButton::clicked, this, [this, settings] {
+        const auto buttons = buttonControls();
+        if (buttons.isEmpty())
+            return;
+        settings->showButtonControls(buttons, preferences, [this](const QJsonObject &actions) {
+            saveButtonControls(actions);
+        });
+        settingsFontPopup = settings->fontDialog;
+        if (settingsFontPopup) {
+            settingsFontPopup->installEventFilter(this);
+            for (auto *widget : settingsFontPopup->findChildren<QWidget *>())
+                textRefresh(widget);
+            textRefresh(settingsFontPopup);
+        }
+    });
     connect(automaticOpeningOption, &QCheckBox::clicked, this,
             [this](bool enabled) { applyAutomaticOpening(enabled); });
     connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });

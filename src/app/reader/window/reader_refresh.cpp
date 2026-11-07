@@ -2,6 +2,7 @@
 #include "ui/controls/text.h"
 #include "ui/panel_timing.h"
 #include "reader_p.h"
+#include "app/reader/settings/settings_panel.h"
 #include "reading/appearance_settings.h"
 #include "reading/page_navigation.h"
 #include "support/strings.h"
@@ -57,6 +58,9 @@ void Reader::refresh()
     if (kosyncReaderReady && !kosyncReaderRetry.isActive() && isVisible() && !services.suspended())
         continueKosyncWhenReady(std::move(kosyncReaderReady));
     const bool darkReady = publishPendingDarkMode();
+    if (general->isVisible())
+        static_cast<SettingsPanel *>(general)->updateButtonControls(
+                buttonControls(), preferences, savingButtonControls || savingDarkMode >= 0);
     const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode)
             : pendingDarkMode >= 0        ? bool(pendingDarkMode)
                                           : session->state().value("dark_mode").toBool(false);

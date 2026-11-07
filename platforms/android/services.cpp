@@ -97,7 +97,9 @@ ReaderHostServices readerHostServices()
         const auto value = battery();
         return BatteryStatus{ value.percent, value.charging };
     };
-    result.pageButtons = [] { return true; };
+    const int buttons = volumeButtons();
+    result.pageButtons = [buttons] { return buttons != 0; };
+    result.buttonControls = [buttons] { return pageButtons::volume(buttons); };
     result.reverseLandscapeButtons = [] { return false; };
     result.pageButtonDirection = [](QKeyEvent *event) {
         switch (event->key()) {

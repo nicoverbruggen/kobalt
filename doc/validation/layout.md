@@ -8,6 +8,21 @@ These checks cover the CREngine layout groups, publisher markup, the document ca
 
 The restored `reader`, `publisher-markup`, `local-reader` and `document-word-count` checks keep the original assertions. Their focused EPUBs are generated offline in C++ with the original text, span IDs, markup and resource paths. `engine.document-cache` is a separate check, so `engine.reader` stays within the child deadline under parallel execution. `engine.reader` also links the portable Kobo position codec, but it does not load Nickel or inspect firmware symbols. Its variable-font cases need the pinned Amstelvar fixture and fail rather than skip without it.
 
+## Check a folder of EPUBs
+
+From `platforms/desktop/`, configure the [Mac preset](../building.md#mac) if needed, then run:
+
+```sh
+cmake --build --preset mac --target kobalt-local-reader-tests
+../../build/desktop-mac/kobalt-local-reader-tests --epub-folder "/path/to/books"
+```
+
+On Linux, use the `linux` preset and `build/desktop-linux/` output directory.
+
+The scan visits subfolders and checks files ending in `.epub` regardless of case. It skips symbolic links. One headless process opens the books in path order and releases each one before moving on. The test uses the local reader with fresh settings and no saved reading state or disk cache. A pass means the reader rendered a first page.
+
+The terminal lists each file, its result and the reason for any failure, then prints the totals. Exit status `0` means every book opened. Status `1` means at least one book failed. Status `2` means the scan could not run or finish. An opening that takes more than two minutes is cancelled and reported as a failure. The scan stops if the engine does not finish cancelling. If the process crashes, the last `Checking` line identifies the book in progress.
+
 Intentional cache-policy and stylesheet mismatches in the negative tests can print CREngine cache warnings. The normal-book diagnostic check still rejects unexpected warnings.
 
 The CREngine upgrade to `f335f7a` keeps the Kobalt patch stack. `engine.vertical-writing` and `engine.reader` cover the adaptations for the upstream combined text decorations and font-width support.

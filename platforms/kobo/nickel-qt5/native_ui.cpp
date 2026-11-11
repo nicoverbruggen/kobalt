@@ -107,8 +107,7 @@ int nativePageButtonDirection(QKeyEvent *event)
         return 1;
     if (key != Qt::Key_F23 && key != Qt::Key_F24)
         return 0;
-    QSettings settings("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf", QSettings::IniFormat);
-    const bool inverted = settings.value("Reading/invertPageTurnButtons", false).toBool();
+    const bool inverted = nativeInvertedPageButtons();
     return (key == Qt::Key_F24) != (inverted != nativePageButtonsRotated()) ? 1 : -1;
 }
 

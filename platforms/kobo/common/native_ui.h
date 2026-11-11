@@ -49,6 +49,12 @@ bool nativeReaderReverseLandscapeButtons();
 int nativePageButtonDirection(QKeyEvent *event);
 // True when the current rotation puts the physically lower page button on top.
 bool nativePageButtonsRotated();
+// Nickel's Reading setting that swaps the page buttons. It is read from
+// Nickel's settings file once and kept, so a page-button press does no file
+// IO. Nickel's settings cannot change while a book is open in Kobalt; a new
+// book, and anything that changes the setting itself, forgets the kept value.
+bool nativeInvertedPageButtons();
+void forgetNativeInvertedPageButtons();
 void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
                                 std::function<bool(bool)> save);
 // GUI thread only. Use the firmware font alias used by native navigation and clock controls.

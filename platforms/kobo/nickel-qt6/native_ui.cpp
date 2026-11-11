@@ -121,15 +121,12 @@ bool nativePageButtonsRotated()
 {
     // Nickel exports no rotation flag for the buttons. Its direction for the
     // upper button combines rotation with the Reading setting, so remove the
-    // setting again. Reading the file costs no more than firmware 4 does on
-    // every button press.
+    // setting again.
     QKeyEvent upper(QEvent::KeyPress, Qt::Key_F23, Qt::NoModifier);
     const int direction = nativePageButtonDirection(&upper);
     if (!direction)
         return false;
-    QSettings settings("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf", QSettings::IniFormat);
-    const bool inverted = settings.value("Reading/invertPageTurnButtons", false).toBool();
-    return (direction > 0) != inverted;
+    return (direction > 0) != nativeInvertedPageButtons();
 }
 
 bool nativeReaderSleepScreenAvailable()

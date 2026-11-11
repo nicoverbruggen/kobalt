@@ -13,6 +13,7 @@
 #include "platforms/kobo/display/page_animation.h"
 #include "window_presentation.h"
 #include <QPointer>
+#include <QSettings>
 #ifndef KOBALT_READER_HARDWARE
 #  include <QDateTime>
 #  include "support/qt_compat.h"
@@ -332,3 +333,24 @@ ReaderHostServices readerHostServices()
     return result;
 }
 } // namespace kobalt::nickel
+
+namespace kobalt {
+namespace {
+int invertedPageButtons = -1;
+} // namespace
+
+bool nativeInvertedPageButtons()
+{
+    if (invertedPageButtons < 0) {
+        QSettings settings("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf", QSettings::IniFormat);
+        invertedPageButtons =
+                settings.value("Reading/invertPageTurnButtons", false).toBool() ? 1 : 0;
+    }
+    return invertedPageButtons == 1;
+}
+
+void forgetNativeInvertedPageButtons()
+{
+    invertedPageButtons = -1;
+}
+} // namespace kobalt

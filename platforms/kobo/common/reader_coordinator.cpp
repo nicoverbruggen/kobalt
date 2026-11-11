@@ -1013,6 +1013,8 @@ void ReaderCoordinator::showReader()
                                               koboCloud),
             run.baseline, run.diskBaseline, QString(), kobalt::ReadingHistory::UtcClock(),
             nickel::bootTimeClock());
+    // Read Nickel's page-button setting again for this book.
+    forgetNativeInvertedPageButtons();
     auto services = readerHostServices();
     const auto identity = run.identity;
     services.presentation = [this, identity](QWidget *reader) {

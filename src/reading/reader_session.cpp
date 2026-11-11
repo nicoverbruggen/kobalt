@@ -2,6 +2,7 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "reader_session.h"
+#include "opening_job.h"
 #include "sync/kosync.h"
 #include "engine/crengine/engine_worker.h"
 #include "render/highlight_paint.h"
@@ -25,25 +26,6 @@
 
 namespace kobalt {
 namespace {
-QByteArray readUserStyleSheet(const QString &path)
-{
-    if (path.isEmpty() || !QFileInfo(path).isFile()) {
-        return {};
-    }
-    // Bound memory on small devices. A missing or unusable stylesheet never
-    // prevents reading, and an empty file intentionally disables custom CSS.
-    constexpr qint64 maximumBytes = 256 * 1024;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly) || file.size() > maximumBytes) {
-        return {};
-    }
-    const auto bytes = file.read(maximumBytes + 1);
-    if (file.error() != QFile::NoError || bytes.size() > maximumBytes || bytes.contains('\0')) {
-        return {};
-    }
-    return bytes;
-}
-
 struct DocumentDeleter
 {
     void operator()(EngineDocument *value) const
@@ -52,6 +34,8 @@ struct DocumentDeleter
         delete value;
     }
 };
+
+} // namespace
 
 void captureChapters(ReaderFrame &result, EngineDocument &engine)
 {
@@ -66,6 +50,7 @@ void captureChapters(ReaderFrame &result, EngineDocument &engine)
     result.graphSelection = engine.chapterSelection(result.chapterGraph);
 }
 
+namespace {
 // Counts one neighbour job from the moment it is queued until it ends.
 class NeighbourJob
 {
@@ -150,10 +135,12 @@ ReaderMarkupFrame captureFrameMarkup(EngineDocument &engine, const ReaderMarkupR
     return result;
 }
 
+} // namespace
+
 // `neighbours` is false when the caller hands the frame to the screen first
 // and prepares the neighbour pages afterwards.
-ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool neighbours = true,
-                    const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0)
+ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool neighbours,
+                    const ReaderMarkupRequest &markup, quint64 markupGeneration)
 {
     engineActivity().checkpoint();
     ReaderFrame result;
@@ -181,7 +168,6 @@ ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool
     result.error = engine.resourceError();
     return result;
 }
-} // namespace
 
 ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)
     : fonts_(std::move(fonts)), placeholderFamily_(std::move(placeholderFamily))
@@ -303,31 +289,6 @@ void ReaderSession::drain(std::function<void()> finished)
             Qt::QueuedConnection);
 }
 
-// Nickel's reader opens every saved position, falling back to the chapter or
-// the book start without a message. Log the fallback, with the chapter file
-// inside the book, so a device report can tell which position failed.
-static bool openAtPlatform(EngineDocument &engine, const PositionCodec &codec,
-                           const QString &location, QString *failure)
-{
-    QString error;
-    const auto target = engine.goToPlatformNearest(codec, location, &error);
-    if (target == EngineDocument::PositionTarget::Unavailable) {
-        if (failure)
-            *failure = error;
-        return false;
-    }
-    if (target != EngineDocument::PositionTarget::Exact) {
-        diagnostic("native-position-fallback",
-                   { { "target",
-                       target == EngineDocument::PositionTarget::Chapter ? "chapter" : "book" },
-                     { "error_code", diagnosticErrorCode(error) },
-                     { "chapter",
-                       location.left(location.indexOf('#') < 0 ? location.size()
-                                                               : location.indexOf('#')) } });
-    }
-    return true;
-}
-
 void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)> finished,
                          OpeningProgress progress, std::function<void(QImage)> coverReady,
                          std::function<void()> reusing)
@@ -413,339 +374,52 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                 },
                 Qt::QueuedConnection);
     };
+    const auto current = [latest, job, lease] {
+        return latest->load() == job && lease && !lease->revoked();
+    };
+    OpeningJob opening;
+    opening.engine = engine;
+    opening.path = path;
+    opening.size = size;
+    opening.saved = std::move(saved);
+    opening.nativeLocation = nativeLocation;
+    opening.lease = lease;
+    opening.factory = factory;
+    opening.positions = positions;
+    opening.systemFont = systemFont;
+    opening.layoutCachePath = layoutCachePath;
+    opening.documentCachePath = documentCachePath;
+    opening.userStyleSheetPath = userStyleSheetPath;
+    opening.coverPath = coverPath;
+    opening.pinnedAppearance = pinnedAppearance;
+    opening.appearanceDefaults = appearanceDefaults;
+    opening.restartAtStart = restartAtStart;
+    opening.markup = markup;
+    opening.markupGeneration = markupGeneration;
+    opening.retainedHash = retainedHash;
+    opening.retainedSettings = retainedSettings;
+    opening.retainedWarning = retainedWarning;
+    opening.retainedDetails = retainedDetails;
+    opening.progress = report;
+    opening.notifyReuse = notifyReuse;
+    if (coverReady)
+        opening.coverReady = [guard, lease, job, coverReady](QImage image) {
+            kobalt::qt::invoke(
+                    qApp,
+                    [guard, lease, job, coverReady, image = std::move(image)]() mutable {
+                        if (guard && guard->revision == job && !lease->revoked())
+                            coverReady(std::move(image));
+                    },
+                    Qt::QueuedConnection);
+        };
+    opening.current = current;
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, path, identity, size, saved, nativeLocation, lease, factory, finished,
-             report, systemFont, layoutCachePath, documentCachePath, retainedHash, retainedSettings,
-             latest, job, positions, pinnedAppearance, retainedWarning, retainedDetails,
-             userStyleSheetPath, appearanceDefaults, markup, markupGeneration, neighbourCount,
-             restartAtStart, coverReady, coverPath, notifyReuse]() mutable {
+            [guard, opening = std::move(opening), identity, finished, lease, job, current,
+             neighbourCount]() mutable {
                 EngineJob activity;
-                bool coverPublished = false;
-                const auto publishCover = [&] {
-                    if (coverPublished || !coverReady || !lease || lease->revoked())
-                        return;
-                    auto image = engine->coverImage({ 2048, 2048 }, coverPath);
-                    coverPublished = !image.isNull();
-                    kobalt::qt::invoke(
-                            qApp,
-                            [guard, lease, job, coverReady, image = std::move(image)]() mutable {
-                                if (guard && guard->revision == job && !lease->revoked())
-                                    coverReady(std::move(image));
-                            },
-                            Qt::QueuedConnection);
-                };
-                if (!coverPath.isEmpty())
-                    publishCover();
-                QElapsedTimer timer;
-                timer.start();
-                diagnostic("open-start");
-                const auto cancelled = [lease] { return !lease || lease->revoked(); };
-                OpeningResult outcome;
-                const auto interrupted = [lease] {
-                    return OpeningResult::failed(lease && lease->end() == SourceLease::End::Revoked
-                                                         ? OpeningFailureKind::Revoked
-                                                         : OpeningFailureKind::Cancelled,
-                                                 strings::key("error.opening_interrupted"));
-                };
-                const auto locate = [&](const QString &location) {
-                    QString detail;
-                    if (!openAtPlatform(*engine, positions, location, &detail))
-                        outcome = OpeningResult::failed(
-                                positions ? OpeningFailureKind::InvalidContent
-                                          : OpeningFailureKind::HostUnavailable,
-                                "opening.platform-position", detail);
-                };
-                QByteArray digest, syncDigest;
-                ReaderFrame result;
-                auto contentRejected = std::make_shared<std::atomic_bool>(false);
-                QFile file(path);
-                Publication publication;
-                qint64 directoryMs = 0, hashMs = 0, inspectionMs = 0, modelMs = 0;
-                bool cacheHit = false, cacheStored = false, retainedHit = false,
-                     savedMatches = false;
-                bool formattingWarning = false;
-                QJsonObject formattingDetails;
-                if (cancelled())
-                    outcome = interrupted();
-                else if (!factory)
-                    outcome = OpeningResult::failed(OpeningFailureKind::HostUnavailable,
-                                                    strings::key("error.opening_interrupted"));
-                else if (!file.open(QIODevice::ReadOnly))
-                    outcome = OpeningResult::failed(
-                            OpeningFailureKind::Io,
-                            strings::key("error.cannot_read_the_publication"));
-                else if (!publication.inspect(
-                                 file, nullptr,
-                                 &outcome)) { /* The inspector supplies the typed failure. */
-                } else if (!file.seek(0))
-                    outcome = OpeningResult::failed(
-                            OpeningFailureKind::Io,
-                            strings::key("error.cannot_read_the_publication"));
-                else {
-                    directoryMs = timer.elapsed();
-                    digest = publication.fingerprint();
-                    syncDigest = kosync::documentDigest(file);
-                    savedMatches = saved.value("fingerprint").toString().toLatin1() == digest;
-                    // States saved before the fingerprint hold the SHA-256 of the whole
-                    // file. Hash it once so that they keep their position and typography.
-                    const auto legacy = saved.contains("fingerprint")
-                            ? QByteArray()
-                            : saved.value("sha256").toString().toLatin1();
-                    if (!legacy.isEmpty()) {
-                        QCryptographicHash hash(QCryptographicHash::Sha256);
-                        const auto length = file.size();
-                        int previousPercent = -1;
-                        while (!file.atEnd() && !cancelled()) {
-                            const auto chunk = file.read(ResourceCache::blockBytes);
-                            if (chunk.isEmpty()) {
-                                outcome = OpeningResult::failed(
-                                        OpeningFailureKind::Io,
-                                        strings::key("error.cannot_read_the_publication"));
-                                break;
-                            }
-                            hash.addData(chunk);
-                            const int percent = int(file.pos() * 100 / length);
-                            if (percent != previousPercent) {
-                                report(OpeningStage::Content, percent);
-                                previousPercent = percent;
-                            }
-                        }
-                        if (cancelled())
-                            outcome = interrupted();
-                        else if (outcome.ready())
-                            savedMatches = hash.result().toHex() == legacy;
-                    }
-                    report(OpeningStage::Content, 100);
-                    hashMs = timer.elapsed() - directoryMs;
-                }
-                if (outcome.ready()) {
-                    const auto bionic = saved.value("bold_reading");
-                    const auto dark = saved.value("dark_mode");
-                    const auto hideNonlinear = saved.value("hide_nonlinear_fragments");
-                    const auto normalization = appearance::normalizationSettings(saved);
-                    const auto landscapeColumns = saved.value("two_columns_landscape");
-                    const auto columnSpacing = saved.value("column_spacing_percent");
-                    const auto wordSpacing = saved.value("word_spacing");
-                    const auto paragraphSpacing = saved.value("paragraph_spacing");
-                    const auto paragraphIndent = saved.value("paragraph_indent");
-                    const auto tracking = saved.value("justification_tracking");
-                    const auto hanging = saved.value("hanging_punctuation");
-                    const auto widowsOrphans = saved.value("widows_orphans");
-                    if (!savedMatches)
-                        saved = {};
-                    saved["bold_reading"] = bionic;
-                    saved["dark_mode"] = dark;
-                    saved["hide_nonlinear_fragments"] = hideNonlinear;
-                    for (const auto *key : appearance::normalizationKeys)
-                        saved[key] = normalization.value(key);
-                    saved["two_columns_landscape"] = landscapeColumns;
-                    saved["column_spacing_percent"] = columnSpacing;
-                    saved["word_spacing"] = wordSpacing;
-                    saved["paragraph_spacing"] = paragraphSpacing;
-                    saved["paragraph_indent"] = paragraphIndent;
-                    saved["justification_tracking"] = tracking;
-                    saved["hanging_punctuation"] = hanging;
-                    saved["widows_orphans"] = widowsOrphans;
-                    appearance::migrateLineSpacing(saved);
-                    if (!appearanceDefaults.isEmpty()) {
-                        appearance::applyBookDefaults(saved, appearanceDefaults);
-                    }
-                    if (!pinnedAppearance.isEmpty())
-                        appearance::copy(saved, pinnedAppearance);
-                    const bool restart = restartAtStart
-                            || !saved.value("finished_position").toString().isEmpty();
-                    // Keep the saved position until the document loads: it selects
-                    // the DOM version used by existing bookmarks and annotations.
-                    if (restart)
-                        saved.remove("imported_native_location");
-                    const auto initial = !restart && saved.value("position").toString().isEmpty()
-                            ? nativeLocation
-                            : QString();
-                    auto resources = factory(publication.sizes(), systemFont, contentRejected);
-                    if (!resources)
-                        outcome = OpeningResult::failed(
-                                OpeningFailureKind::HostUnavailable,
-                                strings::key("error.cannot_read_the_publication"));
-                    const auto userStyleSheet = readUserStyleSheet(userStyleSheetPath);
-                    // A deferred image failure or changed user CSS requires a fresh
-                    // layout, even when the publication and appearance are unchanged.
-                    retainedHit = resources && !retainedHash.isEmpty() && retainedHash == digest
-                            && engine->resourceError().isEmpty()
-                            && engine->userStyleSheet() == userStyleSheet;
-                    engine->setUserStyleSheet(userStyleSheet);
-                    // Cold opening normalizes missing, old or invalid appearance fields.
-                    // Reuse only the settings that produced this retained layout.
-                    if (!appearance::same(saved, retainedSettings))
-                        retainedHit = false;
-                    // Recheck readable content through the fresh authorized server
-                    // when the text itself is not read again. Never treat a matching
-                    // archive hash as an access decision.
-                    QString probe;
-                    for (const auto &name : publication.names()) {
-                        if (name.endsWith(".xhtml", Qt::CaseInsensitive)
-                            || name.endsWith(".html", Qt::CaseInsensitive)) {
-                            probe = name;
-                            break;
-                        }
-                    }
-                    const auto readable = [&] {
-                        if (resources->readBounded(probe, ResourceCache::budgetBytes).isEmpty()
-                            || !resources->error().isEmpty()) {
-                            outcome = OpeningResult::failed(
-                                    OpeningFailureKind::Io,
-                                    strings::key(
-                                            "error.nickel_did_not_supply_readable_publication_text"));
-                            return false;
-                        }
-                        return true;
-                    };
-                    if (retainedHit) {
-                        if (probe.isEmpty())
-                            retainedHit = false;
-                        else
-                            readable();
-                    }
-                    if (retainedHit && outcome.ready()
-                        && !engine->rebindResources(resources, publication.sizes()))
-                        retainedHit = false;
-                    if (retainedHit && outcome.ready()) {
-                        notifyReuse();
-                        publishCover();
-                        const auto modelStart = timer.elapsed();
-                        if (!engine->applyAppearance(kobalt::appearance::Patch(saved), size))
-                            outcome = OpeningResult::failed(
-                                    OpeningFailureKind::InvalidContent,
-                                    strings::key("error.cannot_restore_the_retained_appearance"));
-                        else if (restart)
-                            engine->go(0);
-                        else if (!initial.isEmpty())
-                            locate(initial);
-                        else if (!saved.value("position").toString().isEmpty()
-                                 && !engine->goTo(saved.value("position").toString()))
-                            outcome = OpeningResult::failed(
-                                    OpeningFailureKind::InvalidContent,
-                                    strings::key("error.cannot_restore_the_retained_position"));
-                        if (outcome.ready() && !cancelled()) {
-                            result = capture(*engine, positions, false, markup, markupGeneration);
-                            result.author = engine->author();
-                            result.cover = engine->coverImage({ 120, 180 });
-                            report(OpeningStage::Ready, 100);
-                        }
-                        modelMs = timer.elapsed() - modelStart;
-                    } else if (outcome.ready()) {
-                        // A cached book reads no text from Nickel either. A parsed book
-                        // reads the probed resource from memory afterwards.
-                        const bool cached =
-                                !documentCachePath.isEmpty() && !probe.isEmpty() && readable();
-                        engine->setDocumentCache(cached ? documentCachePath : QString(),
-                                                 cached ? digest : QByteArray(),
-                                                 KOBALT_LAYOUT_POLICY, file.size());
-                        const auto inspectionStart = timer.elapsed();
-                        LayoutCache cache(cancelled() ? QString() : layoutCachePath,
-                                          KOBALT_LAYOUT_POLICY);
-                        LayoutCompatibility layout;
-                        cacheHit = !cancelled() && outcome.ready() && cache.lookup(digest, &layout);
-                        // Older warning cache entries have no issue location or excerpt.
-                        // Reinspect warnings so diagnostics always contain the cause.
-                        cacheHit = cacheHit && layout.verdict == LayoutCompatibility::Supported;
-                        if (!cacheHit && !cancelled() && outcome.ready()) {
-                            layout = inspectLayout(*resources, publication.sizes());
-                            if (!cancelled())
-                                cacheStored = cache.store(digest, layout);
-                        }
-                        inspectionMs = timer.elapsed() - inspectionStart;
-                        formattingDetails =
-                                kobalt::qt::object({ { "verdict", int(layout.verdict) },
-                                                     { "resources", layout.resources },
-                                                     { "bytes", double(layout.bytes) },
-                                                     { "issue", layout.issue },
-                                                     { "resource", layout.resource },
-                                                     { "line", double(layout.line) },
-                                                     { "column", double(layout.column) },
-                                                     { "excerpt", layout.excerpt } });
-                        diagnostic("layout-compatibility", formattingDetails);
-                        if (cancelled())
-                            outcome = interrupted();
-                        else if (outcome.ready() && !resources->resumeAfterInspection()) {
-                            outcome = OpeningResult::failed(OpeningFailureKind::Io,
-                                                            layout.reasonKey());
-                        } else if (outcome.ready()) {
-                            // Incomplete inspection does not establish an unsupported
-                            // feature. Keep its details in diagnostics without a warning.
-                            formattingWarning =
-                                    layout.verdict == LayoutCompatibility::VerticalWriting
-                                    || layout.verdict
-                                            == LayoutCompatibility::RightToLeftProgression;
-                        }
-                        const auto modelStart = timer.elapsed();
-                        report(OpeningStage::Text, 0);
-                        if (outcome.ready()
-                            && engine->openResources(resources, publication.sizes(), size, saved,
-                                                     nullptr, report, &outcome, publishCover,
-                                                     notifyReuse)) {
-                            if (restart)
-                                engine->go(0);
-                            else if (!initial.isEmpty())
-                                locate(initial);
-                            if (outcome.ready()) {
-                                report(OpeningStage::Ready, 0);
-                                result = capture(*engine, positions, false, markup,
-                                                 markupGeneration);
-                                result.author = engine->author();
-                                result.cover = engine->coverImage({ 120, 180 });
-                                report(OpeningStage::Ready, 100);
-                            }
-                        }
-                        modelMs = timer.elapsed() - modelStart;
-                    }
-                }
-                if (outcome.ready() && !cancelled()) {
-                    QElapsedTimer counting;
-                    counting.start();
-                    const auto counts = engine->wordCounts([latest, job, lease] {
-                        return latest->load() == job && lease && !lease->revoked();
-                    });
-                    captureChapters(result, *engine);
-                    diagnostic("chapter-count",
-                               { { "ready", counts.total >= 0 },
-                                 { "chapters", counts.chapters.size() },
-                                 { "cache_hit", counts.cached },
-                                 { "milliseconds", double(counting.nsecsElapsed()) / 1000000 } });
-                }
-                if (outcome.ready() && !result.error.isEmpty())
-                    outcome = OpeningResult::failed(OpeningFailureKind::Io, "opening.resource-read",
-                                                    result.error);
-                if (!outcome.ready() && contentRejected->load())
-                    outcome.rememberContentRejection();
-                if (cancelled())
-                    outcome = interrupted();
-                if (retainedHit) {
-                    formattingWarning = retainedWarning;
-                    formattingDetails = retainedDetails;
-                }
-                if (outcome.ready() && formattingWarning) {
-                    formattingDetails.insert("retained_book_hit", retainedHit);
-                    diagnostic("opening-formatting-warning", formattingDetails);
-                }
-                diagnostic("opening-phases",
-                           { { "directory_ms", double(directoryMs) },
-                             { "hash_ms", double(hashMs) },
-                             { "layout_check_ms", double(inspectionMs) },
-                             { "model_load_ms", double(modelMs) },
-                             { "retained_book_hit", retainedHit },
-                             { "layout_cache_hit", cacheHit },
-                             { "layout_cache_stored", cacheStored },
-                             { "document_cache_hit",
-                               !retainedHit && outcome.ready() && engine->openedFromCache() } });
-                diagnostic("open-end",
-                           { { "elapsed_ms", timer.nsecsElapsed() / 1e6 },
-                             { "failed", !outcome.ready() },
-                             { "error_code",
-                               outcome.failure()
-                                       ? QString::fromLatin1(outcome.failure()->reason.constData())
-                                       : QString() } });
-                const bool opened = outcome.ready();
+                auto output = runOpening(opening);
+                const bool opened = output.outcome.ready();
                 // The session reports the opening done before this job draws the
                 // pages beside the first one. Count that from before the report.
                 std::unique_ptr<NeighbourJob> neighbours;
@@ -753,9 +427,11 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     neighbours = std::make_unique<NeighbourJob>(neighbourCount);
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), outcome, digest, syncDigest, identity,
-                         savedMatches, finished, lease, job, formattingWarning,
-                         formattingDetails]() mutable {
+                        [guard, result = std::move(output.frame), outcome = output.outcome,
+                         digest = output.digest, syncDigest = output.syncDigest, identity,
+                         savedMatches = output.savedMatches, finished, lease, job,
+                         formattingWarning = output.formattingWarning,
+                         formattingDetails = output.formattingDetails]() mutable {
                             if (!guard) {
                                 return;
                             }
@@ -808,15 +484,12 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         },
                         Qt::QueuedConnection);
                 // Show the first page before drawing the pages beside it, as page turns do.
-                const auto current = [latest, job, lease] {
-                    return latest->load() == job && lease && !lease->revoked();
-                };
                 if (!opened || !current())
                     return;
-                prepareNeighbours(*engine, 1, current);
+                prepareNeighbours(*opening.engine, 1, current);
                 // The neighbour pages can find images that the first frame did not count.
-                const auto resources = engine->resourceStats();
-                const auto cachedPages = engine->cachedPages();
+                const auto resources = opening.engine->resourceStats();
+                const auto cachedPages = opening.engine->cachedPages();
                 kobalt::qt::invoke(
                         qApp,
                         [guard, resources, cachedPages, job] {

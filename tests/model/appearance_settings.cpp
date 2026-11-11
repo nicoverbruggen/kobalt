@@ -1,5 +1,6 @@
 #include "reading/appearance_settings.h"
 #include "reading/features.h"
+#include "reading/opening_job.h"
 #include "reading/sleep_screen.h"
 #include "reading/session_timeout.h"
 #include "reading/remaining_time.h"
@@ -11,7 +12,7 @@
 
 using namespace kobalt;
 
-// Checks appearance settings: defaults, invalid values, migrations, global and book precedence, new-book inheritance and which changes need a new layout.
+// Checks appearance settings: defaults, invalid values, migrations, global and book precedence, new-book inheritance, which changes need a new layout and how an opening merges the saved book state.
 int main()
 {
     {
@@ -826,6 +827,103 @@ int main()
     readingPpi.store(212);
     require(appearance::benchmarkTypography().value("font_pixels").toInt() == defaultFontPixels(),
             "Benchmark profile did not follow screen density");
+    {
+        // The saved state of the book that is opening.
+        const auto saved = qt::object({ { "fingerprint", "abc" },
+                                        { "position", "chapter-two" },
+                                        { "font_pixels", 44 },
+                                        { "line_spacing", 150 },
+                                        { "line_spacing_version", 1 },
+                                        { "dark_mode", true },
+                                        { "bold_reading", true },
+                                        { "word_spacing", 120 },
+                                        { "widows_orphans", true },
+                                        { "imported_native_location", "native" } });
+        OpeningJob job;
+        job.saved = saved;
+        job.nativeLocation = "host-location";
+
+        struct Start
+        {
+            bool restart;
+            QString initial;
+        };
+
+        const auto merge = [](OpeningJob &job, bool savedMatches) {
+            OpeningState state;
+            state.savedMatches = savedMatches;
+            mergeSavedState(job, state);
+            return Start{ state.restart, state.initial };
+        };
+        auto start = merge(job, true);
+        require(job.saved.value("position").toString() == "chapter-two"
+                        && job.saved.value("font_pixels").toInt() == 44
+                        && job.saved.value("fingerprint").toString() == "abc"
+                        && job.saved.value("dark_mode").toBool()
+                        && job.saved.value("imported_native_location").toString() == "native",
+                "A matching saved state lost its position, typography or display choices");
+        require(!start.restart && start.initial.isEmpty(),
+                "A saved position must win over the host position");
+
+        // Another version of the book keeps only what does not depend on its text.
+        job.saved = saved;
+        start = merge(job, false);
+        require(!job.saved.contains("position") && !job.saved.contains("font_pixels")
+                        && !job.saved.contains("fingerprint")
+                        && !job.saved.contains("imported_native_location"),
+                "A saved state of another book version kept its position or typography");
+        require(job.saved.value("dark_mode").toBool() && job.saved.value("bold_reading").toBool()
+                        && job.saved.value("word_spacing").toInt() == 120
+                        && job.saved.value("widows_orphans").toBool(),
+                "A saved state of another book version lost its display choices");
+        for (const auto *key : appearance::normalizationKeys)
+            require(job.saved.value(key).isBool(),
+                    "A merged saved state must carry every normalization rule");
+        require(!start.restart && start.initial == "host-location",
+                "An opening without a saved position must start at the host position");
+
+        // Book defaults come before the pinned appearance, so the pin wins.
+        job.saved = saved;
+        job.appearanceDefaults = appearance::bookDefaults({});
+        job.appearanceDefaults["margin_pixels"] = 70;
+        job.pinnedAppearance = qt::object(
+                { { "font_pixels", 52 }, { "margin_pixels", 30 }, { "dark_mode", false } });
+        start = merge(job, true);
+        require(job.saved.value("font_pixels").toInt() == 52
+                        && job.saved.value("margin_pixels").toInt() == 30
+                        && !job.saved.value("dark_mode").toBool()
+                        && job.saved.value("position").toString() == "chapter-two",
+                "A pinned appearance must replace saved and default values and keep the position");
+        job.pinnedAppearance = {};
+        job.saved = saved;
+        start = merge(job, true);
+        require(job.saved.value("margin_pixels").toInt() == 70
+                        && job.saved.value("font_pixels").toInt() == 44,
+                "Book defaults must set the margins and keep saved typography");
+
+        // An old line spacing is converted while merging.
+        job.appearanceDefaults = {};
+        job.saved = qt::object({ { "position", "chapter-two" }, { "line_spacing", 122 } });
+        start = merge(job, true);
+        require(job.saved.value("line_spacing").toInt() == 150
+                        && job.saved.value("line_spacing_version").toInt() == 1,
+                "An opening must migrate the old line spacing");
+
+        // A finished book and a host restart both begin at the start.
+        job.saved = saved;
+        job.saved["finished_position"] = "the-end";
+        start = merge(job, true);
+        require(start.restart && start.initial.isEmpty()
+                        && !job.saved.contains("imported_native_location")
+                        && job.saved.value("position").toString() == "chapter-two",
+                "A finished book must restart, drop the imported location and keep its position");
+        job.saved = qt::object({ { "imported_native_location", "native" } });
+        job.restartAtStart = true;
+        start = merge(job, false);
+        require(start.restart && start.initial.isEmpty()
+                        && !job.saved.contains("imported_native_location"),
+                "A host restart must ignore the host position");
+    }
     std::puts("PASS: appearance keys, copy, comparison and typography defaults");
     return 0;
 }

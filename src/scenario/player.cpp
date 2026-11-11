@@ -4,6 +4,7 @@
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "support/qt_input.h"
+#include "ui/style/metrics.h"
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -224,6 +225,13 @@ public:
             QPoint point;
             if (!pointIn(target, pick(step.value("at"), repetition), point))
                 return name + " is covered";
+            // Tap no faster than a person after a close, so the close guard
+            // does not swallow the press. The wait comes before the sample.
+            auto *reader = dynamic_cast<ReaderWindow *>(host.reader ? host.reader() : nullptr);
+            if (reader
+                && !waitUntil([reader] { return !reader->closeGuardActive(); },
+                              2 * ui::metrics::contents::closeGuardMilliseconds))
+                return name + " stayed behind the close guard";
             events.skip();
             return click(target, point, 0) ? QString() : name + " has no window";
         }

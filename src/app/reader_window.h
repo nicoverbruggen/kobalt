@@ -80,6 +80,11 @@ public:
     // duplicate input, so a sample measures the turn and not the filter.
     virtual void scriptedPageButton(int direction) { pageButton(direction); }
 
+    // For the scenario player: a panel or pop-up closed so recently that the
+    // reader ignores a tap where its close cell was. A person cannot tap again
+    // that fast, so the player waits until this ends before its next press.
+    virtual bool closeGuardActive() const { return false; }
+
     // Whether the reading engine has work in flight, such as a layout, a render
     // or drawing the pages beside the current one.
     virtual bool busy() const { return false; }

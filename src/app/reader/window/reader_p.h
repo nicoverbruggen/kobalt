@@ -121,6 +121,8 @@ public:
     void physicalPageButton(int key, int direction) override;
     void scriptedPageButton(int direction) override;
 
+    bool closeGuardActive() const override { return closeGuarded; }
+
     bool busy() const override
     {
         return resizeTimer.isActive() || session->busy() || session->preparingNeighbours()

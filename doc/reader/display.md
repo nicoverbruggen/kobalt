@@ -1,5 +1,7 @@
 # Display refresh
 
+Loading-cover replacements use partial mode within the old and new cover bounds. Identical fitted pixels do not repaint. Qt5 requests GL16 in light mode and GLKW16 in dark mode. Qt6 uses the text waveform with partial mode and preserves the dark-mode flag. The loading controls keep their own refresh policy. These requests do not establish the physical panel's flash count or ghosting.
+
 Closing a footnote panel requests a full screen refresh to clear the popup and the selected link, as closing the dictionary does.
 
 Automatic clock and reading-estimate updates repaint only the changed header and footer pixels. They do not use the page-turn refresh policy for images or colour. The clock updates each minute in every slot, including a custom layout.

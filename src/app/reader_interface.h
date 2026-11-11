@@ -17,6 +17,7 @@ public:
     virtual ~ReaderOpeningView() = default;
     virtual QDialog *window() const = 0;
     virtual void setProgress(int percent) = 0;
+    virtual void setReopening() = 0;
     virtual void setCover(QImage cover) = 0;
     // Decode an existing host cover without waiting for publication opening.
     virtual void loadCover(const QString &path) = 0;

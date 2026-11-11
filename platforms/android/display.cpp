@@ -8,6 +8,8 @@ namespace kobalt::platform {
 // The canvas attaches these requests to the Surface before painting and flushing.
 void textRefresh(QWidget *) { }
 
+void coverRefresh(QWidget *) { }
+
 void pageRefresh(QWidget *widget, bool clean, bool partialText)
 {
     if (!widget)

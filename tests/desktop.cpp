@@ -11022,11 +11022,23 @@ private slots:
             QVERIFY(label->height() >= ui::interfaceLineHeight(label->font()));
         }
         QVERIFY(capture(fixture, name + "-loading-cover", view));
+        auto *coverSurface = view->findChild<QWidget *>("rrOpeningCover");
         auto *hint = view->findChild<QLabel *>("rrOpeningHint");
-        QTRY_VERIFY_WITH_TIMEOUT(hint->isVisible(), 5000);
+        start->setReopening();
+        QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.reopening")));
+        QVERIFY(capture(fixture, name + "-loading-cover-reopening", view));
+        QTRY_COMPARE_WITH_TIMEOUT(
+                hint->text(), QLocale().toUpper(strings::get("opening.may_take_a_while")), 5000);
         if (phonePreset(preset))
             QVERIFY(hint->font().pixelSize() >= int(ui::px(22)));
         QVERIFY(capture(fixture, name + "-loading-cover-slow", view));
+        if (!captureDirectory.isEmpty()) {
+            const auto first = QImage(captureDirectory + '/' + name + "-loading-cover.png")
+                                       .copy(coverSurface->geometry());
+            const auto slow = QImage(captureDirectory + '/' + name + "-loading-cover-slow.png")
+                                      .copy(coverSurface->geometry());
+            QCOMPARE(slow, first);
+        }
         view->hide();
         QFile source(book);
         QVERIFY(source.open(QIODevice::ReadOnly));

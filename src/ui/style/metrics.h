@@ -304,24 +304,19 @@ namespace opening {
 inline constexpr int hintDelayMilliseconds = 4000;
 inline constexpr qreal referenceWidth = 402, referenceHeight = 543;
 inline constexpr qreal brandText = 40.5, labelText = 14.25, hintText = 8;
-inline const QRectF icon{ 172, 166, 58.5, 63 };
-inline const QRectF cover{ 91, 63, 220, 330 };
+inline const QRectF icon{ 172, 160, 58.5, 63 };
+inline const QRectF cover{ 91, 57, 220, 330 };
 inline constexpr qreal iconBarHeight = 6.5, iconBarPitch = 11.3, finalBarWidth = 42.3;
-inline const QRectF brand{ 100, 248, 202, 58 };
-inline const QRectF label{ 60, 418, 282, 24 };
-inline const QRectF progress{ 102, 457, 198, 4.5 };
-inline const QRectF hint{ 60, 474, 282, 18 };
-inline constexpr qreal failureText = 23, handoffText = 19, detailText = 13;
+inline const QRectF brand{ 100, 242, 202, 58 };
+inline const QRectF label{ 60, 412, 282, 24 };
+inline const QRectF progress{ 102, 451, 198, 4.5 };
+inline const QRectF hint{ 60, 468, 282, 18 };
+inline constexpr qreal failureText = 23, handoffGap = 6, handoffIconDrop = 2;
 inline const QRectF failureBrandIcon{ 172, 58, 58.5, 63 };
 inline const QRectF failureBrand{ 100, 139, 202, 58 };
 inline const QRectF failureIcon{ 183, 255, 36, 36 };
 inline const QRectF failureLabel{ 28, 301, 346, 32 };
-inline const QRectF failureDetail{ 28, 341, 346, 48 };
 inline const QRectF backButton{ 28, 459, 346, 44 };
-inline const QRectF handoffIcon{ 183, 384, 36, 36 };
-inline const QRectF handoffLabel{ 28, 429, 346, 28 };
-inline const QRectF handoffDetail{ 28, 463, 346, 24 };
-inline const QRectF handoffHint{ 28, 499, 346, 18 };
 } // namespace opening
 
 namespace actionMenu {

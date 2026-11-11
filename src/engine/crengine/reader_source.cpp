@@ -413,14 +413,15 @@ bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources,
                                    const QMap<QString, qint64> &sizes, QSize size,
                                    const QJsonObject &saved, QString *error,
                                    OpeningProgress progress, OpeningResult *result,
-                                   std::function<void()> coverReady)
+                                   std::function<void()> coverReady,
+                                   std::function<void()> cacheReady)
 {
     auto source = std::make_shared<ReaderSource>();
     source->resources = std::move(resources);
     source->sizes = sizes;
     source->container = LVContainerRef(new ResourceContainer(source->resources, sizes));
     return openSource(std::move(source), size, saved, error, std::move(progress), result,
-                      std::move(coverReady));
+                      std::move(coverReady), {}, std::move(cacheReady));
 }
 
 bool EngineDocument::rebindResources(const std::shared_ptr<ResourceCache> &resources,
@@ -450,7 +451,7 @@ QJsonObject EngineDocument::resourceStats() const
 bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size,
                                 const QJsonObject &saved, QString *error, OpeningProgress progress,
                                 OpeningResult *result, std::function<void()> coverReady,
-                                QSet<QString> skippedFonts)
+                                QSet<QString> skippedFonts, std::function<void()> cacheReady)
 {
     if (result)
         *result = {};
@@ -522,6 +523,8 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         openedFromCache_ = loaded && cache.enabled() && engine_->getDocument()->isRendered();
     }
     openingTimes_["model_cache_hit"] = openedFromCache_;
+    if (openedFromCache_ && cacheReady)
+        cacheReady();
     if (!loaded) {
         const auto resourceFailure = resourceError();
         engine_.reset();

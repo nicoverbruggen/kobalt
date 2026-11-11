@@ -265,6 +265,12 @@ void StartScreen::setCover(QImage cover)
         opening->setCover(std::move(cover));
 }
 
+void StartScreen::setReopening()
+{
+    if (opening && currentWidget() == openingSurface)
+        opening->setReopening();
+}
+
 void StartScreen::setProgress(int percent)
 {
     if (opening && currentWidget() == openingSurface)

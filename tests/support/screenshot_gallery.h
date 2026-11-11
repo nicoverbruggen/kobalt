@@ -219,6 +219,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "menu-return-pressed", "Return button pressed" },
         { "reading", "Reading" },
         { "loading-cover", "Opening a book with its cover" },
+        { "loading-cover-reopening", "Reopening a cached book" },
         { "loading-cover-slow", "Opening a book: delayed hint" },
         { "loading-handoff-cover", "Opening in Nickel with the book cover" },
         { "loading-no-cover", "Opening a book without a cover" },

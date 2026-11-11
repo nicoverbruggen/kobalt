@@ -39,6 +39,7 @@ public:
 signals:
     void opened();
     void openingProgress(int percent);
+    void reopeningBook();
     void openingCover(QImage cover);
     void failed(QString error);
     // Emitted before shutdown can remove the reader from its canvas.

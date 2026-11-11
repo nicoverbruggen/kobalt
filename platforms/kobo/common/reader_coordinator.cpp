@@ -982,6 +982,10 @@ void ReaderCoordinator::load()
             [this](QImage cover) {
                 if (run.loading)
                     run.loading->setCover(std::move(cover));
+            },
+            [this] {
+                if (run.loading)
+                    run.loading->setReopening();
             });
 }
 

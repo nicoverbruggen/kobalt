@@ -207,7 +207,9 @@ int main(int argc, char **argv)
             drained.exec();
             session = std::move(retained);
         };
+        bool reuseReported = false;
         auto open = [&](const QString &path, bool cancelled = false) {
+            reuseReported = false;
             source = native::openLocalPublication(path);
             require(source && source->port() == 0, "Local reader requires a socket");
             auto lease = std::make_shared<SourceLease>();
@@ -235,13 +237,21 @@ int main(int argc, char **argv)
             timeout.start(15000);
             bool finished = false;
             OpeningResult outcome;
-            session->open(std::move(request), [&](OpeningResult result) {
-                finished = true;
-                outcome = std::move(result);
-                opened.quit();
-            });
+            session->open(
+                    std::move(request),
+                    [&](OpeningResult result) {
+                        finished = true;
+                        outcome = std::move(result);
+                        opened.quit();
+                    },
+                    {}, {}, [&] { reuseReported = true; });
             opened.exec();
             require(finished, "Local reader did not report its outcome");
+            if (outcome.ready())
+                require(reuseReported
+                                == (retainedHit()
+                                    || session->resourceStats()["model_cache_hit"].toBool()),
+                        "Reopening status disagrees with actual document reuse");
             return outcome;
         };
         const auto path = QString::fromLocal8Bit(argv[1]);

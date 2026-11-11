@@ -564,6 +564,8 @@
 
 /* opening */
 "opening.loading" = "Opening your book";
+"opening.preparing" = "Preparing your book";
+"opening.reopening" = "Reopening your book";
 "opening.may_take_a_while" = "This may take a while";
 "closing.failed" = "Couldn't save your progress";
 "closing.failed_detail" = "Your progress couldn’t be saved, so the book is still open. Please try again. If this keeps happening, back up your data.";
@@ -966,9 +968,8 @@
 /* Arguments: %1, %2 */
 "stats.duration_clock" = "%1:%2";
 
-"opening.native" = "Opening with Kobo's reader";
-"opening.protected" = "This book is protected.";
-"opening.continuing" = "Continuing automatically";
+"opening.native" = "Letting Kobo handle this book";
+"opening.protected" = "This book is protected";
 "opening.failed" = "Couldn't open this book";
 "opening.failed_detail" = "Kobalt couldn't read this EPUB. You can try opening it in Kobo's built-in reader.";
 "opening.storage_failed" = "Kobalt can't use its saved data";
@@ -976,7 +977,7 @@
 "opening.try_native" = "Try built-in reader";
 "opening.go_back" = "Go back";
 
-"opening.remembered" = "This book uses the built-in reader.";
+"opening.remembered" = "This book uses Kobo's reader";
 "recovery.title" = "Saved data reset";
 "benchmark.finished" = "Benchmark finished";
 "benchmark.failed" = "Benchmark failed";

@@ -1,6 +1,8 @@
 #include "nickel.h"
 #include "platforms/kobo/common/native_ui.h"
-#include <QCoreApplication>
+#include "platform/api/kobo_refresh.h"
+#include <QApplication>
+#include <QWidget>
 #include <cstdio>
 
 extern "C" void nh_log(const char *, ...) { }
@@ -11,10 +13,34 @@ extern "C" void *nh_dlhook(void *, const char *, void *)
     return nullptr;
 }
 
-// Checks sleep capability and full-size cover lookup for both Kobo and Tolino.
+// Checks native cover lookup, sleep capability and local partial cover refresh flags.
 int main(int argc, char **argv)
 {
-    QCoreApplication application(argc, argv);
+    QApplication application(argc, argv);
+    QWidget opening;
+    QWidget cover(&opening);
+    for (bool dark : { false, true }) {
+        opening.setProperty("reader_dark", dark);
+        kobalt::platform::pageRefresh(&cover, true);
+        kobalt::platform::coverRefresh(&cover);
+        require(cover.testAttribute(Qt::WA_KoboEpdUpdateModePartial),
+                "Cover replacement did not request partial mode");
+        require(!cover.testAttribute(Qt::WA_KoboEpdUpdateModeFull)
+                        && !cover.testAttribute(Qt::WA_KoboEpdUpdateModeHeuristic)
+                        && !cover.testAttribute(Qt::WA_KoboEpdWfModeGC16),
+                "Cover replacement retained a full refresh or cleanup policy");
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        require(cover.testAttribute(static_cast<Qt::WidgetAttribute>(dark ? 141 : 137))
+                        && !cover.testAttribute(static_cast<Qt::WidgetAttribute>(140)),
+                "Qt5 cover replacement did not request its non-cleanup waveform");
+#else
+        require(cover.testAttribute(Qt::WA_KoboEpdWfModeAutoText)
+                        && !cover.testAttribute(Qt::WA_KoboEpdWfModeAutoImage)
+                        && !cover.testAttribute(Qt::WA_KoboEpdWfModeGCK16)
+                        && cover.testAttribute(Qt::WA_KoboEpdFlagDarkMode) == dark,
+                "Qt6 cover replacement lost its text waveform or dark flag");
+#endif
+    }
     Volume volume(new VolumeData);
     for (bool tolino : { false, true }) {
         pewter::options().tolino = tolino;

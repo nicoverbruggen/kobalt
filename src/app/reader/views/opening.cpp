@@ -62,6 +62,86 @@ public:
     }
 };
 
+// An opaque child keeps cover damage and its refresh policy out of the loading controls.
+class OpeningCover final : public QWidget
+{
+public:
+    explicit OpeningCover(QWidget *parent) : QWidget(parent)
+    {
+        setObjectName("rrOpeningCover");
+        setAttribute(Qt::WA_OpaquePaintEvent);
+        hide();
+    }
+
+    QImage image;
+
+    void setImage(QImage next)
+    {
+        if (image == next)
+            return;
+        image = std::move(next);
+        renderImage();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QWidget::resizeEvent(event);
+        renderImage();
+    }
+
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.drawImage(QPoint(), pixels);
+    }
+
+private:
+    QImage pixels;
+    QRect imageBounds;
+
+    void renderImage()
+    {
+        if (image.isNull() || size().isEmpty())
+            return;
+        const auto ratio = devicePixelRatio();
+        QImage next(size() * ratio, QImage::Format_RGB32);
+        next.setDevicePixelRatio(ratio);
+        next.fill(palette().color(QPalette::Window));
+        const auto fitted = QSizeF(image.size()).scaled(QSizeF(size()), Qt::KeepAspectRatio);
+        const QRectF bounds((width() - fitted.width()) / 2, (height() - fitted.height()) / 2,
+                            fitted.width(), fitted.height());
+        QPainter painter(&next);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawImage(bounds, image);
+        painter.end();
+        if (pixels == next)
+            return;
+        const auto damage = imageBounds.united(bounds.toAlignedRect());
+        pixels = std::move(next);
+        imageBounds = bounds.toAlignedRect();
+        update(damage);
+    }
+};
+
+class OpeningRedirect final : public QWidget
+{
+public:
+    explicit OpeningRedirect(QWidget *parent) : QWidget(parent)
+    {
+        setObjectName("rrOpeningRedirect");
+        hide();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        ui::paintOpeningIcon(painter, ui::ControlIcon::Redirect, rect(),
+                             palette().color(QPalette::WindowText));
+    }
+};
+
 class OpeningDialog final : public QDialog
 {
 public:
@@ -84,6 +164,7 @@ public:
         setFont(ui::interfaceFont());
         // The card stylesheet otherwise uses the application font on Qt 6.
         ui::readerStyle(this, ui::styles::reader());
+        cover = new OpeningCover(this);
         brand = new ui::InterfaceLabel(strings::get("app.wordmark"), this);
         brand->setObjectName("rrOpeningBrand");
         brand->setAlignment(Qt::AlignCenter);
@@ -99,6 +180,7 @@ public:
         label = new ui::InterfaceLabel(strings::get("opening.loading"), this);
         label->setObjectName("rrOpeningLabel");
         label->setAlignment(Qt::AlignCenter);
+        redirect = new OpeningRedirect(this);
         progress = new QProgressBar(this);
         progress->setObjectName("rrOpeningProgress");
         progress->setRange(0, 100);
@@ -113,26 +195,24 @@ public:
                                       this);
         hint->setObjectName("rrOpeningHint");
         hint->setAlignment(Qt::AlignCenter);
-        hint->hide();
+        hint->setText(QLocale().toUpper(strings::get("opening.preparing")));
         hintTimer.setSingleShot(true);
         hintTimer.setTimerType(Qt::PreciseTimer);
         connect(&hintTimer, &QTimer::timeout, this, [this] {
-            if (isVisible())
-                hint->show();
+            if (isVisible()) {
+                delayed = true;
+                hint->setText(QLocale().toUpper(strings::get("opening.may_take_a_while")));
+            }
         });
         cancel = new ui::BackButton(QString(), this);
         cancel->setObjectName("rrCancelOpening");
         cancel->setAccessibleName(strings::get("common.cancel"));
         cancel->setVisible(!embedded);
         connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-        detail = new ui::InterfaceLabel(this);
-        detail->setObjectName("rrOpeningDetail");
-        detail->setAlignment(Qt::AlignCenter);
-        detail->setWordWrap(true);
-        detail->hide();
         for (auto *widget : findChildren<QWidget *>())
             platform::textRefresh(widget);
         platform::textRefresh(this);
+        platform::coverRefresh(cover);
     }
 
     void setCover(QImage image)
@@ -146,11 +226,11 @@ public:
             const auto area = ui::metrics::opening::cover.size();
             return qMax(candidate.width() / area.width(), candidate.height() / area.height());
         };
-        if (!cover.isNull() && density(image) < density(cover))
+        if (!cover->image.isNull() && density(image) < density(cover->image))
             return;
-        cover = std::move(image);
+        cover->setImage(std::move(image));
+        cover->show();
         showBrand();
-        update();
     }
 
     ~OpeningDialog() override
@@ -173,26 +253,40 @@ public:
         coverPoll.start();
     }
 
+    void setProgress(int percent)
+    {
+        auto *bar = progress;
+        const int value = qMax(bar->value(), percent);
+        if (bar->value() == value)
+            return;
+        // QProgressBar can repaint synchronously. Let this event-loop pass
+        // finish so later progress or closing can replace obsolete values.
+        const bool updates = bar->updatesEnabled();
+        if (updates)
+            bar->setUpdatesEnabled(false);
+        bar->setValue(value);
+        if (updates)
+            bar->setUpdatesEnabled(true);
+    }
+
     void showFallback(OpeningFallback state)
     {
         fallback = true;
         automatic = state == OpeningFallback::Protected || state == OpeningFallback::Remembered;
         storageFailure = state == OpeningFallback::Storage;
         const bool protectedBook = state == OpeningFallback::Protected;
-        protectedIcon = protectedBook;
         hintTimer.stop();
-        progress->hide();
+        progress->setVisible(automatic);
+        if (automatic)
+            setProgress(progress->maximum());
+        redirect->setVisible(automatic);
         cancel->hide();
         label->setText(automatic ? strings::get("opening.native") : strings::get("opening.failed"));
-        detail->setText(protectedBook       ? strings::get("opening.protected")
-                                : automatic ? strings::get("opening.remembered")
-                                            : strings::get("opening.failed_detail"));
-        detail->show();
-        hint->setText(QLocale().toUpper(strings::get("opening.continuing")));
+        hint->setText(QLocale().toUpper(
+                strings::get(protectedBook ? "opening.protected" : "opening.remembered")));
         hint->setVisible(automatic);
         showBrand();
         label->setVisible(automatic);
-        detail->setVisible(automatic);
         if (automatic) {
             if (failureDialog)
                 failureDialog->hide();
@@ -204,7 +298,8 @@ public:
             dialog->setFocus();
         }
         layoutWidgets();
-        update();
+        if (!automatic)
+            update();
     }
 
     void afterFirstPaint(std::function<void()> callback)
@@ -214,6 +309,12 @@ public:
         } else {
             firstPaint = std::move(callback);
         }
+    }
+
+    void setReopening()
+    {
+        if (!fallback && !delayed)
+            hint->setText(QLocale().toUpper(strings::get("opening.reopening")));
     }
 
     void refreshFonts()
@@ -241,14 +342,12 @@ public:
         presentation->acceptHandoff(*this, [this] { QDialog::accept(); });
     }
 
-    QProgressBar *progress;
-
 protected:
     void showEvent(QShowEvent *event) override
     {
         QDialog::showEvent(event);
         if (!fallback) {
-            hint->hide();
+            hint->show();
             hintTimer.start(ui::metrics::opening::hintDelayMilliseconds);
         }
     }
@@ -256,7 +355,6 @@ protected:
     void hideEvent(QHideEvent *event) override
     {
         hintTimer.stop();
-        hint->hide();
         QDialog::hideEvent(event);
     }
 
@@ -271,11 +369,12 @@ protected:
         if (!painted) {
             painted = true;
             if (property("kobalt_tile_cover_probe").toBool()) {
-                setProperty("kobalt_first_cover_key", QString::number(cover.cacheKey()));
-                diagnostic("tile-cover-probe-first-paint",
-                           qt::object({ { "width", cover.width() },
-                                        { "height", cover.height() },
-                                        { "image_key", QString::number(cover.cacheKey()) } }));
+                setProperty("kobalt_first_cover_key", QString::number(cover->image.cacheKey()));
+                diagnostic(
+                        "tile-cover-probe-first-paint",
+                        qt::object({ { "width", cover->image.width() },
+                                     { "height", cover->image.height() },
+                                     { "image_key", QString::number(cover->image.cacheKey()) } }));
             }
             if (firstPaint) {
                 scheduleAfterPaint(std::move(firstPaint));
@@ -284,20 +383,8 @@ protected:
         painter.translate(origin());
         painter.scale(scale(), scale());
         const auto ink = palette().color(QPalette::WindowText);
-        if (!cover.isNull()) {
-            painter.setRenderHint(QPainter::SmoothPixmapTransform);
-            const auto size =
-                    QSizeF(cover.size()).scaled(opening::cover.size(), Qt::KeepAspectRatio);
-            const QRectF bounds(
-                    opening::cover.center() - QPointF(size.width() / 2, size.height() / 2), size);
-            painter.drawImage(bounds, cover);
-        } else if (!fallback || automatic) {
+        if (cover->image.isNull() && (!fallback || automatic)) {
             ui::paintBrandIcon(painter, opening::icon, ink);
-        }
-        if (fallback && cover.isNull() && automatic) {
-            ui::paintOpeningIcon(
-                    painter, protectedIcon ? ui::ControlIcon::Lock : ui::ControlIcon::FileWarning,
-                    opening::handoffIcon, ink);
         }
     }
 
@@ -329,21 +416,16 @@ protected:
         };
         textStyle(brand, opening::brandText, false);
         const bool phone = isPhoneScreen(size(), ui::density());
-        textStyle(label,
-                  !fallback           ? opening::labelText
-                          : automatic ? opening::handoffText
-                                      : opening::failureText,
-                  !fallback || automatic, phone && !fallback ? int(ui::px(32)) : 1);
+        textStyle(label, !fallback || automatic ? opening::labelText : opening::failureText,
+                  !fallback || automatic, phone && (!fallback || automatic) ? int(ui::px(32)) : 1);
         // A caption in capitals, like the reader's other captions.
         ui::captionLabel(hint,
                          qMax(phone ? int(ui::px(22)) : 1, qRound(opening::hintText * scale())));
+        place(cover, opening::cover);
         place(hint, opening::hint);
         progress->setFixedHeight(qMax(1, qRound(opening::progress.height() * scale())));
         place(brand, fallback && !automatic ? opening::failureBrand : opening::brand);
-        place(label,
-              !fallback           ? opening::label
-                      : automatic ? opening::handoffLabel
-                                  : opening::failureLabel);
+        place(label, fallback && !automatic ? opening::failureLabel : opening::label);
         place(progress, opening::progress);
         if (phone) {
             for (auto *text : { label, hint }) {
@@ -355,17 +437,30 @@ protected:
             }
         }
 
-        if (fallback) {
-            const int pixels = qMax(1, qRound(opening::detailText * scale()));
-            detail->setFont(ui::interfaceFont(pixels));
-            ui::readerStyle(
-                    detail,
-                    QString("background:palette(window);color:palette(window-text);font-size:%1px;font-family:'%2';")
-                            .arg(pixels)
-                            .arg(ui::interfaceFontFamily()));
-            place(detail, automatic ? opening::handoffDetail : opening::failureDetail);
-            if (automatic)
-                place(hint, opening::handoffHint);
+        if (automatic) {
+            const int gap = qMax(1, qRound(opening::handoffGap * scale()));
+            int iconSize = label->font().pixelSize();
+            const int padding = 2 * qMax(1, qRound(2 * scale()));
+            int textWidth = ui::interfaceTextWidth(label->text(), label->font()) + padding;
+            const int available = width() - 2 * qMax(1, qRound(16 * scale()));
+            if (textWidth + gap + iconSize > available) {
+                const int pixels =
+                        qMax(1, int(iconSize * qreal(available - gap) / (textWidth + iconSize)));
+                textStyle(label, pixels / scale(), true);
+                iconSize = label->font().pixelSize();
+                textWidth = ui::interfaceTextWidth(label->text(), label->font()) + padding;
+            }
+            while (ui::interfaceTextWidth(hint->text(), hint->font()) > hint->width()
+                   && hint->font().pixelSize() > 1)
+                ui::captionLabel(hint, hint->font().pixelSize() - 1);
+            auto row = label->geometry();
+            row.setWidth(iconSize + gap + textWidth);
+            row.moveCenter(QPoint(width() / 2, row.center().y()));
+            redirect->setGeometry(row.left(),
+                                  row.center().y() - iconSize / 2
+                                          + qRound(opening::handoffIconDrop * scale()),
+                                  iconSize, iconSize);
+            label->setGeometry(row.left() + iconSize + gap, row.top(), textWidth, row.height());
         }
         namespace navigation = ui::metrics::navigation;
         cancel->setGeometry(navigation::backLeft, navigation::headingTop, navigation::height,
@@ -376,11 +471,7 @@ protected:
     }
 
 private:
-    void showBrand()
-    {
-        brand->setVisible(cover.isNull() && (!fallback || automatic));
-        update();
-    }
+    void showBrand() { brand->setVisible(cover->image.isNull() && (!fallback || automatic)); }
 
     // Most openings never fail. Laying out this card's text before the first
     // paint delayed every loading screen, so it is built on first use.
@@ -427,13 +518,16 @@ private:
                  (height() - ui::metrics::opening::referenceHeight * scale()) / 2 };
     }
 
-    QImage cover;
+    OpeningCover *cover;
+    bool delayed = false;
     std::shared_ptr<CoverRead> coverRead;
     QTimer coverPoll;
-    QLabel *brand, *label, *hint, *detail;
+    QProgressBar *progress;
+    QLabel *brand, *label, *hint;
+    OpeningRedirect *redirect;
     ui::ChoiceModal *failureDialog = nullptr;
     bool storageFailure = false;
-    bool fallback = false, automatic = false, protectedIcon = false;
+    bool fallback = false, automatic = false;
     std::unique_ptr<WindowPresentation> presentation;
     const bool embedded;
     QTimer hintTimer;
@@ -491,20 +585,8 @@ public:
 
     void setProgress(int percent) override
     {
-        if (!dialog)
-            return;
-        auto *bar = dialog->progress;
-        const int value = qMax(bar->value(), percent);
-        if (bar->value() == value)
-            return;
-        // QProgressBar can repaint synchronously. Let this event-loop pass
-        // finish so later progress or closing can replace obsolete values.
-        const bool updates = bar->updatesEnabled();
-        if (updates)
-            bar->setUpdatesEnabled(false);
-        bar->setValue(value);
-        if (updates)
-            bar->setUpdatesEnabled(true);
+        if (dialog)
+            dialog->setProgress(percent);
     }
 
     void afterFirstPaint(std::function<void()> callback) override
@@ -512,6 +594,12 @@ public:
         if (dialog) {
             dialog->afterFirstPaint(std::move(callback));
         }
+    }
+
+    void setReopening() override
+    {
+        if (dialog)
+            dialog->setReopening();
     }
 
     void refreshFonts() override

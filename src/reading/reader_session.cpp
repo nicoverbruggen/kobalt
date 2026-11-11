@@ -328,7 +328,8 @@ static bool openAtPlatform(EngineDocument &engine, const PositionCodec &codec,
 }
 
 void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)> finished,
-                         OpeningProgress progress, std::function<void(QImage)> coverReady)
+                         OpeningProgress progress, std::function<void(QImage)> coverReady,
+                         std::function<void()> reusing)
 {
     syncDigest_.clear();
     syncFilenameDigest_ = kosync::filenameDigest(
@@ -389,6 +390,16 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     const auto latest = newest;
     const auto job = revision;
     const auto neighbourCount = neighbourJobs;
+    const auto notifyReuse = [guard, lease, job, reusing] {
+        if (reusing)
+            kobalt::qt::invoke(
+                    qApp,
+                    [guard, lease, job, reusing] {
+                        if (guard && guard->revision == job && lease && !lease->revoked())
+                            reusing();
+                    },
+                    Qt::QueuedConnection);
+    };
     auto report = [guard, progress, lease, job](OpeningStage stage, int percent) {
         if (!progress)
             return;
@@ -406,7 +417,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
              report, systemFont, layoutCachePath, documentCachePath, retainedHash, retainedSettings,
              latest, job, positions, pinnedAppearance, retainedWarning, retainedDetails,
              userStyleSheetPath, appearanceDefaults, markup, markupGeneration, neighbourCount,
-             restartAtStart, coverReady, coverPath]() mutable {
+             restartAtStart, coverReady, coverPath, notifyReuse]() mutable {
                 EngineJob activity;
                 bool coverPublished = false;
                 const auto publishCover = [&] {
@@ -597,6 +608,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         && !engine->rebindResources(resources, publication.sizes()))
                         retainedHit = false;
                     if (retainedHit && outcome.ready()) {
+                        notifyReuse();
                         publishCover();
                         const auto modelStart = timer.elapsed();
                         if (!engine->applyAppearance(kobalt::appearance::Patch(saved), size))
@@ -668,7 +680,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         report(OpeningStage::Text, 0);
                         if (outcome.ready()
                             && engine->openResources(resources, publication.sizes(), size, saved,
-                                                     nullptr, report, &outcome, publishCover)) {
+                                                     nullptr, report, &outcome, publishCover,
+                                                     notifyReuse)) {
                             if (restart)
                                 engine->go(0);
                             else if (!initial.isEmpty())

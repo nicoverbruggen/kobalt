@@ -947,18 +947,19 @@ int main(int argc, char **argv)
             app.processEvents();
             auto *progress = window->findChild<QProgressBar *>("rrOpeningProgress");
             auto *label = window->findChild<QLabel *>("rrOpeningLabel");
-            auto *detail = window->findChild<QLabel *>("rrOpeningDetail");
+            auto *hint = window->findChild<QLabel *>("rrOpeningHint");
             require(progress && progress->isVisible() && label, "normal opening has progress");
             require(!window->findChild<QWidget *>("rrOpeningFailure"),
                     "normal opening builds no failure card");
             view->showFallback(kobalt::OpeningFallback::Protected);
             app.processEvents();
-            require(!progress->isVisible() && !window->findChild<QWidget *>("rrOpeningFailure"),
-                    "handoff has no progress or confirmation");
+            require(progress->isVisible() && progress->value() == 100
+                            && !window->findChild<QWidget *>("rrOpeningFailure"),
+                    "handoff keeps a completed progress bar without confirmation");
             require(label->text() == kobalt::strings::get("opening.native"), "handoff caption");
             view->showFallback(kobalt::OpeningFallback::Remembered);
             app.processEvents();
-            require(detail->text() == kobalt::strings::get("opening.remembered")
+            require(hint->text() == kobalt::strings::get("opening.remembered").toUpper()
                             && !window->findChild<QWidget *>("rrOpeningFailure"),
                     "remembered failure uses neutral automatic handoff");
             view->showFallback(kobalt::OpeningFallback::Failure);

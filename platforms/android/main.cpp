@@ -222,6 +222,8 @@ public:
                 });
         connect(&controller, &standalone::ReaderController::openingProgress, start,
                 &standalone::StartScreen::setProgress);
+        connect(&controller, &standalone::ReaderController::reopeningBook, start,
+                &standalone::StartScreen::setReopening);
         connect(&controller, &standalone::ReaderController::openingCover, start,
                 &standalone::StartScreen::setCover);
         connect(&controller, &standalone::ReaderController::opened, this, [this] {

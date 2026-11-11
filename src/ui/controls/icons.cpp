@@ -245,6 +245,15 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         path.cubicTo(17, 22, 7, 22, 4, 15);
         line(4, 20, 4, 15);
         line(4, 15, 9, 15);
+    } else if (icon == ControlIcon::Redirect) {
+        result.canvas = 24;
+        result.stroke = 1.5;
+        path.moveTo(5, 20);
+        path.lineTo(5, 11);
+        path.quadTo(5, 7, 9, 7);
+        path.lineTo(20, 7);
+        line(14, 1, 20, 7);
+        line(20, 7, 14, 13);
     } else if (icon == ControlIcon::ArrowDownRight) {
         result.canvas = 256;
         result.filled = true;

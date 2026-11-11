@@ -435,6 +435,13 @@ void textRefresh(QWidget *widget)
                          widget->window()->property("reader_dark").toBool());
 }
 
+void coverRefresh(QWidget *widget)
+{
+    textRefresh(widget);
+    widget->setAttribute(Qt::WA_KoboEpdUpdateModeHeuristic, false);
+    widget->setAttribute(Qt::WA_KoboEpdUpdateModePartial);
+}
+
 void pageRefresh(QWidget *widget, bool clean, bool)
 {
     const bool dark = widget->window()->property("reader_dark").toBool();

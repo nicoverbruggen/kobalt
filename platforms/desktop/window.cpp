@@ -557,6 +557,8 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     qApp->installEventFilter(this);
     connect(&controller, &standalone::ReaderController::openingProgress, start,
             &standalone::StartScreen::setProgress);
+    connect(&controller, &standalone::ReaderController::reopeningBook, start,
+            &standalone::StartScreen::setReopening);
     connect(&controller, &standalone::ReaderController::openingCover, start,
             &standalone::StartScreen::setCover);
     connect(&controller, &standalone::ReaderController::opened, this, [this] {

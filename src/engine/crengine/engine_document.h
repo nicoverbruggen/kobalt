@@ -140,7 +140,8 @@ public:
     bool openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes,
                        QSize size, const QJsonObject &saved, QString *error,
                        OpeningProgress progress = {}, OpeningResult *result = nullptr,
-                       std::function<void()> coverReady = {});
+                       std::function<void()> coverReady = {},
+                       std::function<void()> cacheReady = {});
     bool rebindResources(const std::shared_ptr<ResourceCache> &resources,
                          const QMap<QString, qint64> &sizes);
     // Set before opening. CREngine keeps parsed books and their pages in
@@ -407,7 +408,8 @@ private:
     QMap<QPair<qint64, qint64>, QRect> damage_;
     bool openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved,
                     QString *error, OpeningProgress progress = {}, OpeningResult *result = nullptr,
-                    std::function<void()> coverReady = {}, QSet<QString> skippedFonts = {});
+                    std::function<void()> coverReady = {}, QSet<QString> skippedFonts = {},
+                    std::function<void()> cacheReady = {});
     void trim();
     void applyPublisherFontFallbacks();
     void applyStyleSheet();

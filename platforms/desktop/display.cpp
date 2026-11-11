@@ -7,6 +7,8 @@ namespace kobalt::platform {
 // commands have no desktop equivalent; a device-specific adapter can add one.
 void textRefresh(QWidget *) { }
 
+void coverRefresh(QWidget *) { }
+
 void pageRefresh(QWidget *, bool, bool) { }
 
 void setReaderRefreshWindow(QWidget *) { }

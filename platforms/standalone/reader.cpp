@@ -312,6 +312,10 @@ void ReaderController::begin(const QString &path, QSize pixels)
             [guard](QImage cover) {
                 if (guard && guard->phase == Phase::Opening)
                     emit guard->openingCover(std::move(cover));
+            },
+            [guard] {
+                if (guard && guard->phase == Phase::Opening)
+                    emit guard->reopeningBook();
             });
 }
 

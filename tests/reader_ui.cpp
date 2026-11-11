@@ -3808,7 +3808,8 @@ private slots:
             late.fill(Qt::red);
             opening->setCover(late);
             QVERIFY(!view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
-            QVERIFY(!view->findChild<QProgressBar *>("rrOpeningProgress")->isVisible());
+            QVERIFY(view->findChild<QProgressBar *>("rrOpeningProgress")->isVisible());
+            QCOMPARE(view->findChild<QProgressBar *>("rrOpeningProgress")->value(), 100);
 
             // A cached cover can arrive after the routing decision, without a session.
             QTemporaryDir directory;
@@ -3841,6 +3842,97 @@ private slots:
         }
     }
 
+    void openingHandoffLayout_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("hasCover");
+        QTest::addColumn<bool>("protectedBook");
+        for (bool dark : { false, true })
+            for (bool cover : { false, true })
+                for (bool protectedBook : { false, true })
+                    QTest::newRow(
+                            qPrintable(QString("%1-%2-%3")
+                                               .arg(dark ? "dark" : "light")
+                                               .arg(cover ? "cover" : "logo")
+                                               .arg(protectedBook ? "protected" : "remembered")))
+                            << dark << cover << protectedBook;
+    }
+
+    // Native handoff keeps the normal cover, completed bar and status anchors in both themes.
+    void openingHandoffLayout()
+    {
+        QFETCH(bool, dark);
+        QFETCH(bool, hasCover);
+        QFETCH(bool, protectedBook);
+        for (const auto screen : { QSize(1072, 1448), QSize(1448, 1072), QSize(720, 1600),
+                                   QSize(1480, 720), QSize(320, 480) }) {
+            QWidget owner;
+            auto opening =
+                    createOpening(&owner, { { "dark_mode", dark } }, test::makeHostPresentation);
+            auto *view = opening->window();
+            view->resize(screen);
+            if (hasCover) {
+                QImage image(200, 300, QImage::Format_RGB32);
+                image.fill(Qt::red);
+                opening->setCover(image);
+            }
+            opening->setProgress(45);
+            view->show();
+            QCoreApplication::processEvents();
+            auto *cover = view->findChild<QWidget *>("rrOpeningCover");
+            auto *bar = view->findChild<QProgressBar *>("rrOpeningProgress");
+            auto *label = view->findChild<QLabel *>("rrOpeningLabel");
+            auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+            auto *redirect = view->findChild<QWidget *>("rrOpeningRedirect");
+            QVERIFY(redirect && !redirect->isVisible());
+            const auto coverRect = cover->geometry(), barRect = bar->geometry(),
+                       hintRect = hint->geometry();
+            const int labelCenter = label->geometry().center().y();
+            // Deliver deferred show and resize work before measuring the handoff.
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateLater);
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+            QCoreApplication::processEvents();
+            auto *cancel = view->findChild<QWidget *>("rrCancelOpening");
+            const QRegion exposedCover = cancel->isVisible()
+                    ? QRegion(cancel->geometry().intersected(coverRect).translated(
+                              -coverRect.topLeft()))
+                    : QRegion();
+            PaintRegions coverPaints;
+            cover->installEventFilter(&coverPaints);
+            opening->showFallback(protectedBook ? OpeningFallback::Protected
+                                                : OpeningFallback::Remembered);
+            QCoreApplication::processEvents();
+            QCOMPARE(cover->geometry(), coverRect);
+            // Removing an overlapping cancel button may expose part of the cover.
+            QVERIFY2(coverPaints.painted.subtracted(exposedCover).isEmpty(),
+                     qPrintable(QString("Unexpected cover damage on %1x%2")
+                                        .arg(screen.width())
+                                        .arg(screen.height())));
+            QCOMPARE(bar->geometry(), barRect);
+            QCOMPARE(hint->geometry(), hintRect);
+            QCOMPARE(label->geometry().center().y(), labelCenter);
+            QVERIFY(bar->isVisible() && hint->isVisible() && redirect->isVisible());
+            QCOMPARE(bar->value(), 100);
+            opening->setProgress(80);
+            QCOMPARE(bar->value(), 100);
+            QCOMPARE(label->text(), strings::get("opening.native"));
+            QCOMPARE(hint->text(),
+                     QLocale().toUpper(strings::get(protectedBook ? "opening.protected"
+                                                                  : "opening.remembered")));
+            QVERIFY(ui::interfaceTextWidth(hint->text(), hint->font()) <= hint->width());
+            QVERIFY(view->rect().contains(label->geometry()));
+            QVERIFY(view->rect().contains(redirect->geometry()));
+            QVERIFY(redirect->geometry().right() < label->geometry().left());
+            QVERIFY(label->geometry().bottom() < bar->geometry().top());
+            const auto row = redirect->geometry().united(label->geometry());
+            QVERIFY(qAbs(row.center().x() - view->rect().center().x()) <= 1);
+            QCOMPARE(view->findChild<QLabel *>("rrOpeningBrand")->isVisible(), !hasCover);
+            opening->showFallback(OpeningFallback::Failure);
+            QVERIFY(!redirect->isVisible() && !bar->isVisible() && !hint->isVisible());
+            QVERIFY(view->findChild<QWidget *>("rrOpeningFailure")->isVisible());
+        }
+    }
+
     void openingCoverUpgrade()
     {
         QWidget owner;
@@ -3857,6 +3949,7 @@ private slots:
         full.fill(Qt::red);
         auto opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
         opening->window()->setGeometry(owner.rect());
+        opening->setCover(thumbnail);
         opening->setCover(full);
         owner.show();
         opening->window()->show();
@@ -3871,8 +3964,122 @@ private slots:
         cached->window()->setGeometry(owner.rect());
         cached->setCover(thumbnail);
         cached->window()->show();
+        QCOMPARE(cached->window()->grab().toImage().pixelColor(center), QColor(Qt::blue));
         cached->loadCover(path);
         QTRY_COMPARE(cached->window()->grab().toImage().pixelColor(center), QColor(Qt::red));
+    }
+
+    void openingCoverDamage_data()
+    {
+        QTest::addColumn<bool>("seeded");
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("seeded-light") << true << false;
+        QTest::newRow("seeded-dark") << true << true;
+        QTest::newRow("late-light") << false << false;
+        QTest::newRow("late-dark") << false << true;
+    }
+
+    // Identical visible pixels cause no paint; sharper changed covers damage only their own area.
+    void openingCoverDamage()
+    {
+        QFETCH(bool, seeded);
+        QFETCH(bool, dark);
+        QWidget owner;
+        auto opening = createOpening(&owner, { { "dark_mode", dark } }, test::makeHostPresentation);
+        auto *view = opening->window();
+        view->resize(600, 800);
+        auto *surface = view->findChild<QWidget *>("rrOpeningCover");
+        QVERIFY(surface);
+        QImage thumbnail(100, 200, QImage::Format_RGB32);
+        thumbnail.fill(Qt::blue);
+        QImage full(400, 800, QImage::Format_RGB32);
+        full.fill(Qt::blue);
+        if (seeded)
+            opening->setCover(thumbnail);
+        PaintRegions parentPaints, coverPaints;
+        view->installEventFilter(&parentPaints);
+        surface->installEventFilter(&coverPaints);
+        view->show();
+        QCoreApplication::processEvents();
+        if (!seeded)
+            opening->setCover(thumbnail);
+        QTRY_VERIFY(coverPaints.count > 0);
+        QCoreApplication::processEvents();
+        for (const auto &image : { thumbnail, thumbnail.copy(), full, QImage() }) {
+            parentPaints.painted = coverPaints.painted = {};
+            parentPaints.count = coverPaints.count = 0;
+            opening->setCover(image);
+            QCoreApplication::processEvents();
+            QCOMPARE(coverPaints.count, 0);
+            QVERIFY(parentPaints.painted.isEmpty());
+        }
+        full.fill(Qt::red);
+        opening->setCover(full);
+        QTRY_COMPARE(coverPaints.count, 1);
+        const auto fitted =
+                QSizeF(full.size()).scaled(QSizeF(surface->size()), Qt::KeepAspectRatio);
+        const QRect expected =
+                QRectF((surface->width() - fitted.width()) / 2,
+                       (surface->height() - fitted.height()) / 2, fitted.width(), fitted.height())
+                        .toAlignedRect();
+        QCOMPARE(coverPaints.painted.boundingRect(), expected);
+        QVERIFY(parentPaints.painted.isEmpty());
+        QCOMPARE(surface->grab().toImage().pixelColor(surface->rect().center()), QColor(Qt::red));
+        parentPaints.painted = coverPaints.painted = {};
+        coverPaints.count = 0;
+        opening->setProgress(40);
+        QTRY_VERIFY(!parentPaints.painted.isEmpty());
+        QVERIFY(parentPaints.painted.intersected(surface->geometry()).isEmpty());
+        QCOMPARE(coverPaints.count, 0);
+    }
+
+    void openingMessages_data()
+    {
+        QTest::addColumn<bool>("reopening");
+        QTest::newRow("preparing") << false;
+        QTest::newRow("reopening") << true;
+    }
+
+    // Both opening paths reserve a visible status line and keep it fixed after the delay.
+    void openingMessages()
+    {
+        QFETCH(bool, reopening);
+        QWidget owner;
+        owner.resize(600, 800);
+        auto opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
+        auto *view = opening->window();
+        view->setGeometry(owner.rect());
+        QImage image(100, 150, QImage::Format_RGB32);
+        image.fill(Qt::white);
+        QPainter ink(&image);
+        ink.fillRect(QRect(20, 20, 60, 100), Qt::black);
+        ink.end();
+        opening->setCover(image);
+        owner.show();
+        view->show();
+        auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+        auto *surface = view->findChild<QWidget *>("rrOpeningCover");
+        const auto coverPixels = surface->grab().toImage();
+        QCoreApplication::processEvents();
+        PaintRegions coverPaints;
+        surface->installEventFilter(&coverPaints);
+        QVERIFY(hint->isVisible());
+        QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.preparing")));
+        if (reopening) {
+            opening->setReopening();
+            QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.reopening")));
+        }
+        const auto bounds = hint->geometry();
+        const auto group = surface->geometry().united(bounds);
+        QVERIFY(qAbs(group.center().x() - view->rect().center().x()) <= 1);
+        QVERIFY(qAbs(group.center().y() - view->rect().center().y()) <= 1);
+        QTRY_COMPARE_WITH_TIMEOUT(
+                hint->text(), QLocale().toUpper(strings::get("opening.may_take_a_while")), 5000);
+        QCOMPARE(hint->geometry(), bounds);
+        QCOMPARE(coverPaints.count, 0);
+        QCOMPARE(surface->grab().toImage(), coverPixels);
+        opening->setReopening();
+        QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.may_take_a_while")));
     }
 
     void openingFirstPaintCallback()

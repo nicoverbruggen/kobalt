@@ -25,6 +25,7 @@ public:
     ~StartScreen() override;
     void showOpening(const QString &bookKey = {});
     void setProgress(int percent);
+    void setReopening();
     void setCover(QImage cover);
     // Closes the library's topmost layer. False at the root library.
     bool dismissModal();

@@ -331,9 +331,9 @@ int main(int argc, char **argv)
                                         [&](QSqlDatabase &db) {
                                             QSqlQuery query(db);
                                             return query.exec("PRAGMA user_version") && query.next()
-                                                    && query.value(0).toInt() == 3;
+                                                    && query.value(0).toInt() == 4;
                                         }),
-            "Beta 3 migration did not create SQLite schema version 3");
+            "Beta 3 migration did not create SQLite schema version 4");
     BookmarkStore newMarks(oldPaths.annotations(), "native-beta3", {}, "Invented book",
                            oldPaths.database());
     require(newMarks.load() && newMarks.bookmarks().size() == 1
@@ -381,7 +381,7 @@ int main(int argc, char **argv)
                     && bytes(partialDatabase.path() + "/kobalt.sqlite") == partialBytes,
             "Partial schema was repaired or replaced");
     QTemporaryDir futureDatabase;
-    execute(futureDatabase.path(), "PRAGMA user_version=4");
+    execute(futureDatabase.path(), "PRAGMA user_version=5");
     const auto futureDatabaseBytes = bytes(futureDatabase.path() + "/kobalt.sqlite");
     require(storage::readBookState(storage::Paths{ futureDatabase.path() }, "new").status
                             == ReadStatus::DatabaseError
@@ -393,7 +393,7 @@ int main(int argc, char **argv)
         QTemporaryDir recovery;
         const storage::Paths recover{ recovery.path() };
         const QString backups = recovery.path() + "/backups/";
-        execute(recovery.path(), "PRAGMA user_version=4");
+        execute(recovery.path(), "PRAGMA user_version=5");
         write(recover.preferences(), "{\"schema\":1,");
         write(recover.syncAccount(), "{\"schema\":2,\"server\":\"https://sync.invented\"}");
         const auto settingsBytes = bytes(recover.preferences());
@@ -410,7 +410,8 @@ int main(int argc, char **argv)
         const auto defaults = storage::readJsonFile(recover.preferences());
         require(defaults.status == ReadStatus::Ok
                         && defaults.object
-                                == QJsonObject{ { "schema", 1 }, { "sleep_defaults_migrated", true } }
+                                == QJsonObject{ { "schema", 1 },
+                                                { "sleep_defaults_migrated", true } }
                         && sleep::mode(defaults.object) == sleep::Mode::Cover
                         && sleep::tile(defaults.object) == sleep::Tile::Bookmark
                         && !QFile::exists(recover.syncAccount()),

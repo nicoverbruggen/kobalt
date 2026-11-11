@@ -91,6 +91,11 @@ public:
                 [] { android::activity("chooseFolder"); });
         connect(start, &standalone::StartScreen::exitRequested, this, &QWidget::close);
         connect(start, &standalone::StartScreen::bookRequested, this, &Window::openLibraryBook);
+        connect(start, &standalone::StartScreen::passageRequested, this,
+                [this](const QString &key, const QString &position) {
+                    controller.setStartPosition(position);
+                    openLibraryBook(key);
+                });
         connect(start, &standalone::StartScreen::markUnreadRequested, this,
                 [this](const QString &key) {
                     const auto book = store.index().books.value(key);

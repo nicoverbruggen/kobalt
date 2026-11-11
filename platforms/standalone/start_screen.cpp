@@ -50,6 +50,10 @@ void StartScreen::buildLibrary()
     // Complete the subtree before embedding it; proxy resize can disable new children.
     canvas->setContent(view);
     view->openBook = [this](const QString &key) { emit bookRequested(key); };
+    view->openPassage = [this](const QString &key, const QString &position) {
+        emit passageRequested(key, position);
+    };
+    view->setWordsDirectory(store.profileDirectory());
     view->addFolder = [this] { emit addFolderRequested(); };
     view->openFile = [this] { emit libraryOpenRequested(); };
     view->rescan = [this] { store.scan(); };

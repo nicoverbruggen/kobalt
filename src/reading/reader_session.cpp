@@ -1381,7 +1381,7 @@ void ReaderSession::annotationRange(const QString &start, const QString &end,
 }
 
 void ReaderSession::textRange(const QString &start, const QString &end,
-                              std::function<void(TextRange)> finished)
+                              std::function<void(TextRange)> finished, bool withContext)
 {
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
@@ -1391,10 +1391,10 @@ void ReaderSession::textRange(const QString &start, const QString &end,
     const bool ready = layoutReady_;
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, latest, lease, ready, start, end, finished] {
+            [engine, guard, job, latest, lease, ready, start, end, finished, withContext] {
                 EngineJob activity;
                 const auto result = ready && latest->load() == job && lease && !lease->revoked()
-                        ? engine->textRange(start, end)
+                        ? engine->textRange(start, end, withContext)
                         : TextRange();
                 kobalt::qt::invoke(
                         qApp,

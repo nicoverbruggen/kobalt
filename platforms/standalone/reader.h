@@ -21,6 +21,11 @@ public:
     ~ReaderController() override;
     void open(const QString &path, QSize pixels, QString sourceKey = {},
               bool restartAtStart = false);
+
+    // The next opening shows this position once the book is ready, for example
+    // a saved word's passage. An unresolved position keeps the saved page.
+    void setStartPosition(QString position) { startPosition = std::move(position); }
+
     void close();
     QJsonObject lastBook() const;
     // The state the reader saved for the book at this path.
@@ -52,7 +57,8 @@ private:
     Phase phase = Phase::Idle;
     storage::Paths paths;
     EngineFontInputs fonts;
-    QString placeholder, current, pending, currentSourceKey, pendingSourceKey;
+    QString placeholder, current, pending, currentSourceKey, pendingSourceKey, startPosition,
+            openingPosition;
     std::shared_ptr<ReadingHistory::Profile> historyProfile;
     QSize pendingSize;
     bool restartAtStart = false, pendingRestartAtStart = false;

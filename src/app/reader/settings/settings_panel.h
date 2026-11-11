@@ -138,7 +138,7 @@ public:
     void showDictionaries(bool visible);
     void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
-    ui::DescribedOption *hideTabLabelsOption = nullptr;
+    ui::DescribedOption *hideTabLabelsOption = nullptr, *saveWordsOption = nullptr;
     QWidget *powerSection = nullptr;
     ui::DescribedOption *wifiPowerSaverOption = nullptr;
     ui::DescribedOption *disableStandbyOption = nullptr;

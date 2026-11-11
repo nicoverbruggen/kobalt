@@ -4,6 +4,7 @@
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
 #include "ui/controls/query_edit.h"
+#include "ui/dialogs/action_menu.h"
 #include "ui/style/theme.h"
 #include "support/strings.h"
 #include "dictionary_panel.h"
@@ -132,6 +133,20 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
         if (searchRequested && !word.isEmpty())
             searchRequested(word);
     });
+    save = new ui::CellButton(ui::ControlIcon::WordsAdd, this);
+    save->setObjectName("rrDictionarySave");
+    save->setRule(Qt::LeftEdge);
+    save->hide();
+    connect(save, &QPushButton::clicked, this, [this] {
+        if (saveToggled)
+            saveToggled(!saved);
+    });
+    actions = new ui::CellButton(ui::ControlIcon::More, this);
+    actions->setObjectName("rrDictionaryActions");
+    actions->setRule(Qt::LeftEdge);
+    actions->setAccessibleName(strings::get("dictionary_panel.actions"));
+    actions->hide();
+    connect(actions, &QPushButton::clicked, this, [this] { openActions(); });
     text = new ui::PagedText(this);
     text->setObjectName("rrDefinition");
     text->setTextFont(ui::interfaceFont(chrome::labelText));
@@ -352,6 +367,63 @@ int DictionaryPanel::definitionLineHeight(int percent, bool customFont)
     return customFont ? (height * 120 + 50) / 100 : (height > 100 ? height : 0);
 }
 
+void DictionaryPanel::openActions()
+{
+    if (actionMenu)
+        return;
+    QVector<ui::ActionMenuItem> items;
+    if (keyboard)
+        items.append(ui::actionItem(strings::get("dictionary_panel.edit_lookup"),
+                                    "rrDictionaryMenuEdit", ui::ControlIcon::EditHighlight,
+                                    [this] { editQuery(); }));
+    items.append(ui::actionItem(strings::get("dictionary_panel.search_in_book"),
+                                "rrDictionaryMenuSearch", ui::ControlIcon::Search, [this] {
+                                    if (searchRequested && !word.isEmpty())
+                                        searchRequested(word);
+                                }));
+    if (saveAvailable)
+        items.append(ui::actionItem(strings::get(saved ? "dictionary_panel.remove_from_words"
+                                                       : "dictionary_panel.save_to_words"),
+                                    "rrDictionaryMenuSave",
+                                    saved ? ui::ControlIcon::WordsSaved : ui::ControlIcon::WordsAdd,
+                                    [this] {
+                                        if (saveToggled)
+                                            saveToggled(!saved);
+                                    }));
+    // The menu stays inside the sheet, so a tap on it is not a tap outside.
+    auto *menu = new ui::ActionMenu(this, {}, items);
+    actionMenu = menu;
+    menu->setObjectName("rrDictionaryMenu");
+    menu->dismissed = [this] {
+        if (actionMenu) {
+            actionMenu->hide();
+            actionMenu->deleteLater();
+            actionMenu.clear();
+        }
+    };
+    menu->setDimmed(true);
+    menu->setGeometry(rect());
+    menu->fitCard();
+    menu->show();
+    menu->raise();
+    menu->setFocus();
+}
+
+QWidget *DictionaryPanel::saveActionButton() const
+{
+    return save->isVisible() ? save : actions;
+}
+
+void DictionaryPanel::setSaved(bool value, bool available)
+{
+    saved = value;
+    saveAvailable = available;
+    save->setGlyph(saved ? ui::ControlIcon::WordsSaved : ui::ControlIcon::WordsAdd);
+    save->setAccessibleName(strings::get(saved ? "dictionary_panel.remove_from_words"
+                                               : "dictionary_panel.save_to_words"));
+    arrange();
+}
+
 void DictionaryPanel::setLanguage(const QString &value)
 {
     language = DictionaryManager::normalizeLanguage(value);
@@ -370,6 +442,8 @@ void DictionaryPanel::resizeEvent(QResizeEvent *)
 
 void DictionaryPanel::hideEvent(QHideEvent *event)
 {
+    if (actionMenu)
+        actionMenu->dismissed();
     finishEditing(false);
     ui::Panel::hideEvent(event);
 }
@@ -451,32 +525,40 @@ void DictionaryPanel::updateDefinition()
 
 void DictionaryPanel::arrange()
 {
+    // A narrow sheet keeps the word whole: edit, search and save share one menu.
+    const bool compact = !editing && isNarrowWidth(width(), ui::density());
     headword->setVisible(!editing);
-    edit->setVisible(!editing);
+    edit->setVisible(!editing && !compact);
+    actions->setVisible(compact);
     query->setVisible(editing);
     editHint->setVisible(editing);
     submit->setVisible(editing);
-    search->setVisible(!editing);
+    search->setVisible(!editing && !compact);
+    const bool saving = !editing && saveAvailable && !compact;
+    save->setVisible(saving);
     close->setAccessibleName(strings::get(editing ? "dictionary_panel.cancel_edit"
                                                   : "dictionary_panel.close_definition"));
     dictionary->setEnabled(!editing && options.size() > 1);
     const int top = rowTop(), bottom = contentBottom();
     // The word leads the row, like a printed entry. The dictionary sits beside close.
-    // On a narrow panel the actions use compact cells, and the dictionary's name
-    // wraps or shortens before the word does, so a word of ordinary length stays whole.
-    const int cell = isNarrowWidth(width(), ui::density()) ? int(chrome::compactCellWidth)
-                                                           : int(chrome::cellWidth);
-    int selectorWidth = dictionary->sizeHint().width();
-    const int actionCells = editing ? 2 : 3;
-    const int wordRoom = width() - actionCells * cell - 2 * int(chrome::inset);
+    // Compact action cells leave room for the word. Close keeps its usual width.
+    const int cell = chrome::compactCellWidth;
+    const int closeWidth = isNarrowWidth(width(), ui::density()) ? int(chrome::compactCellWidth)
+                                                                 : int(chrome::cellWidth);
+    int selectorWidth = dictionary->sizeHint().width() - (int(chrome::cellWidth) - cell);
+    const int actionCells = editing || compact ? 2 : saving ? 4 : 3;
+    const int wordRoom = width() - (actionCells - 1) * cell - closeWidth - 2 * int(chrome::inset);
     const int wordWanted = qMin(ui::interfaceTextWidth(word, headwordFont), width() / 2);
     if (wordRoom - selectorWidth < wordWanted)
-        selectorWidth = dictionary->widthForLabel(qMax(cell, wordRoom - wordWanted));
-    const int selectorLeft = width() - cell - selectorWidth;
+        selectorWidth =
+                qMin(selectorWidth, dictionary->widthForLabel(qMax(cell, wordRoom - wordWanted)));
+    const int selectorLeft = width() - closeWidth - selectorWidth;
     dictionary->setGeometry(selectorLeft, top, selectorWidth, chrome::actionHeight);
-    close->setGeometry(width() - cell, top, cell, chrome::actionHeight);
-    const int editorLeft = selectorLeft - cell;
-    const int editLeft = editorLeft - (editing ? 0 : cell);
+    close->setGeometry(width() - closeWidth, top, closeWidth, chrome::actionHeight);
+    save->setGeometry(selectorLeft - cell, top, cell, chrome::actionHeight);
+    actions->setGeometry(selectorLeft - cell, top, cell, chrome::actionHeight);
+    const int editorLeft = selectorLeft - (saving ? 2 : 1) * cell;
+    const int editLeft = editorLeft - (editing || compact ? 0 : cell);
     edit->setGeometry(editLeft, top, cell, chrome::actionHeight);
     search->setGeometry(editorLeft, top, cell, chrome::actionHeight);
     submit->setGeometry(search->geometry());

@@ -462,6 +462,11 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     });
     start->setDark(controller.preferences().value("dark_mode").toBool(false));
     connect(start, &standalone::StartScreen::bookRequested, this, &Window::openBook);
+    connect(start, &standalone::StartScreen::passageRequested, this,
+            [this](const QString &key, const QString &position) {
+                controller.setStartPosition(position);
+                openBook(key);
+            });
     connect(start, &standalone::StartScreen::libraryOpenRequested, this, &Window::chooseBook);
     connect(start, &standalone::StartScreen::markUnreadRequested, this, [this](const QString &key) {
         if (controller.resetBook(key))

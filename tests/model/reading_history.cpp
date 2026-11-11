@@ -80,6 +80,7 @@ QByteArray bytes(const QString &directory)
 void versionTwo(const QString &directory)
 {
     sql(directory, "DROP TABLE reading_sessions");
+    sql(directory, "DROP TABLE saved_words");
     raw(directory, "PRAGMA user_version=2");
 }
 
@@ -129,7 +130,7 @@ void migration()
     require(raw(root.path(), "PRAGMA user_version").toInt() == 2, "Not a version-2 fixture");
     require(storage::readBookState(paths, identity).object == state,
             "Migration changed book state");
-    require(raw(root.path(), "PRAGMA user_version").toInt() == 3,
+    require(raw(root.path(), "PRAGMA user_version").toInt() == 4,
             "Migration did not advance schema");
     require(marks.load() && marks.bookmarks() == QVector<Bookmark>{ mark },
             "Migration changed bookmarks");
@@ -395,7 +396,7 @@ void killedMigrationLeavesOldDataRecoverable()
     journal.close();
     require(recoverProfile(root.path()),
             "Production open did not recover an interrupted migration");
-    require(sql(root.path(), "PRAGMA user_version").toInt() == 3
+    require(sql(root.path(), "PRAGMA user_version").toInt() == 4
                     && sql(root.path(),
                            "SELECT revision FROM book_state WHERE identity='preserved-book'")
                                     .toInt()

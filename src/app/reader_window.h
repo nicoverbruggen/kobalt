@@ -40,6 +40,9 @@ public:
     // Cancel revoked native work before hiding can stop the reading interval.
     virtual void revokeNativeReading() { }
 
+    // Turns to a saved position, keeping a way back to the reading position.
+    virtual void showPosition(const QString &) { }
+
     // Revocation drains local data without writing through a revoked native account.
     virtual void finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed = true)
     {

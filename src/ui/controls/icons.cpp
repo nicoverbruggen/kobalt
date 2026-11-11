@@ -199,6 +199,30 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         path.cubicTo(159.1, 160.03, 161.58, 167.41, 166.53, 172.24);
         path.cubicTo(171.49, 177.08, 177.89, 179.5, 185.75, 179.5);
         path.closeSubpath();
+    } else if (icon == ControlIcon::WordsAdd || icon == ControlIcon::WordsSaved) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("book-open"), path);
+        QTransform scale;
+        scale.scale(0.85, 0.85);
+        path = scale.map(path);
+        QPainterPath clearance, badge, mark;
+        QPainterPathStroker stroke;
+        stroke.setWidth(16);
+        stroke.setCapStyle(Qt::RoundCap);
+        stroke.setJoinStyle(Qt::RoundJoin);
+        clearance.addRoundedRect(QRectF(146, 122, 124, 124), 12, 12);
+        if (icon == ControlIcon::WordsSaved) {
+            badge.addRoundedRect(QRectF(154, 130, 108, 108), 6, 6);
+            mark.moveTo(178, 184);
+            mark.lineTo(200, 206);
+            mark.lineTo(238, 166);
+            path = path.subtracted(clearance).united(badge.subtracted(stroke.createStroke(mark)));
+        } else {
+            // Inset the outline by half its stroke to match the filled badge.
+            badge.addRoundedRect(QRectF(162, 138, 92, 92), 2, 2);
+            path = path.subtracted(clearance).united(stroke.createStroke(badge));
+        }
     } else if (icon == ControlIcon::BookmarkAdd || icon == ControlIcon::BookmarkRemove
                || icon == ControlIcon::ExportAction) {
         result.canvas = 256;
@@ -728,7 +752,8 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::PreviousChapter && icon != ControlIcon::NextChapter
             && icon != ControlIcon::Sync && icon != ControlIcon::Sort
             && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
-            && icon != ControlIcon::Bold
+            && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
+            && icon != ControlIcon::WordsSaved
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)

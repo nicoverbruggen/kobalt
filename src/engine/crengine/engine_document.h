@@ -86,6 +86,8 @@ struct TextRange
     QString chosenStart = {};
     bool sentenceStartPolicy = false;
     bool sentenceEndPolicy = false;
+    // The sentence around the range, when asked for.
+    QString context = {};
 };
 
 struct WordSelection
@@ -217,7 +219,8 @@ public:
     AnnotationToken annotationTokenAt(QPoint point);
     AnnotationToken annotationDragTokenAt(QPoint point, const QString &boundary, bool start);
     // Resolves and orders source boundaries without changing pagination or position.
-    TextRange textRange(const QString &start, const QString &end);
+    // `withContext` also reads the surrounding sentence, at most 600 characters.
+    TextRange textRange(const QString &start, const QString &end, bool withContext = false);
     // Indices of source ranges intersecting [start, end), in input order.
     // Invalid, empty and reversed ranges are ignored. No text or geometry is read.
     QVector<int> intersectingRanges(const QString &start, const QString &end,

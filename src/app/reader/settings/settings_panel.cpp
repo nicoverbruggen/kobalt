@@ -1003,6 +1003,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                   strings::get("settings.dictionary_font_size"), [] { });
     systemRows->addWidget(dictionaryFontButton);
     systemRows->addWidget(dictionaryFontSizeButton);
+    saveWordsOption = check(systemPage, "rrSaveWords", strings::get("settings.save_words"),
+                            strings::get("settings.save_words_description"));
+    systemRows->addWidget(saveWordsOption);
     if (inputs.readerStandbySupported) {
         section(systemPage, systemRows, "rrSystemAdvancedSection",
                 strings::get("settings.section_advanced"));
@@ -1160,7 +1163,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         bionicOption,           landscapeColumnsOption,     animationOption,
         edgeLightOption,        lightGestureFeedbackOption, denseGraphOption,
         hideTabLabelsOption,    wifiPowerSaverOption,       disableStandbyOption,
-        automaticOpeningOption, minimalAnnotationOption,    hideBookOnSleepOption
+        automaticOpeningOption, minimalAnnotationOption,    hideBookOnSleepOption,
+        saveWordsOption
     };
     options.append(openingCoverOption);
     options.prepend(zenModeOption);
@@ -2479,9 +2483,10 @@ void SettingsPanel::showDictionaries(bool visible)
 
 void SettingsPanel::updateFeatureOptions()
 {
-    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync" };
+    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync", "words" };
+    static_assert(sizeof(names) == sizeof(features::keys), "A feature without a name");
     QStringList hidden;
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i)
         if (featurePreferences.value(features::keys[i]).toBool(false))
             hidden.append(strings::get((QString("features.") + names[i]).toUtf8().constData()));
     disabledFeaturesButton->setCaption(
@@ -2491,6 +2496,7 @@ void SettingsPanel::updateFeatureOptions()
     navigationBarButton->setVisible(navigate);
     menuViewButton->setVisible(navigate || stats);
     denseGraphOption->setVisible(stats);
+    saveWordsOption->setVisible(features::enabled(featurePreferences, features::Words));
     findChild<QWidget *>("rrDisplayGraphsSection")->setVisible(stats);
     auto *syncTab = settingsTabButtons[int(SettingsPage::Kosync)];
     syncTab->setVisible(features::enabled(featurePreferences, features::Kosync));
@@ -2515,9 +2521,9 @@ void SettingsPanel::showDisabledFeatures()
     card->heading(strings::get("settings.disable_features"),
                   strings::get("settings.disable_features_description"));
     auto draft = std::make_shared<QJsonObject>(featurePreferences);
-    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync" };
+    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync", "words" };
     QVector<ui::DescribedOption *> options;
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i) {
         const auto *key = features::keys[i];
         const auto prefix = QString("features.") + names[i];
         auto *option = checklistOption(card, QString("rrDisableFeature_%1").arg(key),

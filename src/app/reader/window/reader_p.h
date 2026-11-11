@@ -43,6 +43,9 @@
 #include "reading/style_sample_cache.h"
 #include "storage/preview_store.h"
 #include "support/save_wait.h"
+#include "app/reader/panels/word_list.h"
+#include "app/reader/panels/word_page.h"
+#include "storage/saved_words.h"
 #include "appearance_edit_session.h"
 #include "app/reader/views/navigation.h"
 #include "platform/api/reader_host_services.h"
@@ -117,6 +120,9 @@ public:
     void wakeReader() override;
     void progressTick() override;
     void refreshHostPresentation() override;
+
+    void showPosition(const QString &position) override { goToPassage(position); }
+
     void pageButton(int direction) override;
     void physicalPageButton(int key, int direction) override;
     void scriptedPageButton(int direction) override;
@@ -475,7 +481,7 @@ private:
     QCheckBox *darkOption, *animationOption, *edgeLightOption, *lightGestureFeedbackOption,
             *denseGraphOption;
     QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
-              *hideTabLabelsOption = nullptr, *zenModeOption = nullptr;
+              *hideTabLabelsOption = nullptr, *zenModeOption = nullptr, *saveWordsOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
     QCheckBox *disableStandbyOption = nullptr;
     QPushButton *autoRotateOption;
@@ -494,6 +500,9 @@ private:
     kobalt::ui::LightSwipeNotice *brightnessNotice = nullptr;
     kobalt::ui::AnnotationModeNotice *annotationModeNotice = nullptr;
     QTimer annotationModeHide;
+    kobalt::ui::ButtonFeedback *wordNotice = nullptr;
+    void showWordNotice(const QString &text);
+    void placeWordNotice();
     bool raisingPopups = false;
     QPointer<kobalt::ui::ModalOverlay> debugDialog;
     QTimer brightnessHide;
@@ -650,6 +659,24 @@ private:
     void dismissLookup(bool keepGesture = false);
     void dismissDictionary();
     void lookupSelection();
+    // My Words. Null with the JSON diagnostic backend, which has no database.
+    std::unique_ptr<kobalt::SavedWords> savedWords;
+    kobalt::WordList *wordList = nullptr, *allWords = nullptr;
+    kobalt::WordPage *wordPage = nullptr;
+    QString lookupContext, lookupPosition;
+    // The latest lookup as the sheet's save cell would save it.
+    kobalt::SavedWord lookupSnapshot;
+    quint64 savedLookupEpoch = 0;
+    void buildWords();
+    // The annotation key that saved words share with bookmarks and highlights.
+    QString wordsBook() const;
+    QString wordsSource() const;
+    // Saves a lookup that found a definition and shows the sheet's save cell.
+    void recordLookup(const QString &query, const kobalt::DictionaryResult &result);
+    void showWords();
+    void showAllWords();
+    void reloadWords();
+    void openWord(const kobalt::SavedWord &word);
     void resizeText();
     // The host's cutout and corner bands for the current size.
     kobalt::SafeArea safeArea() const;

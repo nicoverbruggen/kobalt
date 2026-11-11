@@ -181,6 +181,9 @@ namespace chrome {
 // The status strip holds one line of status text and grows with it.
 inline constexpr TextPx statusHeight{ 60 };
 inline constexpr Px actionHeight{ 112 }, heavyRule{ 3 };
+// The strip below a bar that holds a list's choices, such as the Library's
+// sort and views or the Bookmarks list's sort and action.
+inline constexpr Px toolStripHeight{ 100 };
 
 inline int headerHeight()
 {
@@ -200,6 +203,8 @@ inline constexpr TextPx labelText{ 30 }, descriptionText{ 25 }, countText{ 28 },
 inline constexpr IconPx tabIcon{ 48 };
 inline constexpr Px tabGap{ 10 };
 inline constexpr TextPx captionText{ 22 }, numberText{ 22 };
+// The small label above a caption dropdown's value.
+inline constexpr TextPx captionLabelText{ 17 };
 inline constexpr Px captionSpacing{ 2 };
 inline constexpr Px listActionHeight{ list::twoLines }, menuActionHeight{ 128 },
         optionHeight{ list::twoLines }, checkSize{ 48 };

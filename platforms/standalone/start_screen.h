@@ -62,6 +62,8 @@ signals:
     // From the library: open one of its books, add a folder, or open and add
     // a single book.
     void bookRequested(QString key);
+    // From My Words: open a library book at a saved position.
+    void passageRequested(QString key, QString position);
     void addFolderRequested();
     void libraryOpenRequested();
     void removeBookRequested(QString key);

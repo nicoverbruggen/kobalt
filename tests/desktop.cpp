@@ -115,6 +115,8 @@
 #include <tuple>
 #include <QTimer>
 
+#include "app/reader/panels/word_list.h"
+#include "storage/saved_words.h"
 #include "engine/crengine/engine_activity.h"
 #include "engine/crengine/engine_worker.h"
 #include "support/qt_compat.h"
@@ -274,6 +276,37 @@ bool largeTextVariant()
 }
 
 // Exercise the reader's production light handlers without platform hardware.
+// Defines every word, so lookups reach My Words without an installed dictionary.
+class DefiningDictionary final : public DictionaryService
+{
+public:
+    QVector<DictionaryChoice> choices() const override
+    {
+        return { { "fixture", "English fixture", "en", true } };
+    }
+
+    bool select(const QString &, const QString &, QString *) override { return true; }
+
+    DictionaryResult lookup(const QString &, const QString &word) override
+    {
+        DictionaryResult result;
+        result.word = word;
+        result.received = result.restored = true;
+        result.dictionary = "English fixture";
+        result.dictionaryId = "fixture";
+        // A name from the book has no entry.
+        if (word != "Kaladin")
+            result.html = "<p><b>" + word.toHtmlEscaped()
+                    + "</b> A word the test dictionary defines.</p>";
+        return result;
+    }
+};
+
+void defineEveryWord(ReaderHostServices &services)
+{
+    services.dictionary = [] { return std::make_unique<DefiningDictionary>(); };
+}
+
 struct GestureLightState
 {
     bool available = true, warmthSupported = true, failChanges = false, active = false;
@@ -732,6 +765,16 @@ struct Fixture
     }
 
     bool press(const char *name) { return click(widget(name)); }
+
+    // A dictionary action: its cell, or the row of the same action in the
+    // narrow sheet's menu.
+    bool lookupAction(const char *cell, const char *row)
+    {
+        if (!visible("rrDictionaryActions"))
+            return press(cell);
+        return press("rrDictionaryActions") && QTest::qWaitFor([&] { return visible(row); }, 3000)
+                && press(row);
+    }
 
     bool bookmarkAction(const char *action)
     {
@@ -1346,6 +1389,69 @@ void advanceIntoBody(Fixture &fixture)
 
 // Creation dates are visible in the bookmark list. Store a fixed timestamp,
 // then let the app load it normally, so captures match between runs.
+// Words for My Words captures, with fixed dates. The book is closed while they
+// are written and opened again, so the reader lists them at once.
+void seedSavedWords(Fixture &fixture)
+{
+    QSignalSpy reopened(&fixture.window, &desktop::Window::bookOpened);
+    const auto current = fixture.state();
+    const auto position = current.value("position").toString();
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(fixture.window.idle());
+    const auto key = BookmarkStore::bookKey(current.value("book").toString(),
+                                            current.value("fingerprint").toString().toLatin1());
+    const auto day = QDateTime::fromString("2026-10-28T12:00:00Z", Qt::ISODate).toMSecsSinceEpoch();
+
+    struct Entry
+    {
+        const char *book, *title, *word, *chapter, *context, *definition;
+        int lookups;
+    };
+
+    const Entry entries[] = {
+        { nullptr, nullptr, "legibility", "Prologue — The Firm",
+          "Within were proofs pinned to walls, drawers full of rejected alphabets, invoices of uncertain legibility, and three machines.",
+          "<p><b>legibility</b> The quality of being clear enough to read; how easily the letters of a text can be told apart.</p>",
+          1 },
+        { nullptr, nullptr, "unembarrassed", "Prologue — The Firm",
+          "Mr. Trevelyan held, with unembarrassed seriousness, that type was not decoration but voice.",
+          "<p><b>unembarrassed</b> <i>adjective</i></p><ol><li>Not feeling or showing awkwardness, shyness or shame.</li>"
+          "<li>Free from difficulty or obstruction.</li></ol>",
+          3 },
+        { nullptr, nullptr, "Kaladin", "Prologue — The Firm",
+          "Kaladin had never trusted a typeface he could not pronounce.", "", 1 },
+        { "file-orchard", "The Glass Orchard", "espalier", "Chapter 3 — The South Wall",
+          "Along the south wall the old pears stood in espalier, their arms pinned flat to the brick.",
+          "<p><b>espalier</b> A fruit tree trained to grow flat against a wall or frame.</p>", 2 },
+    };
+    {
+        SavedWords words(fixture.paths.directory);
+        int day_offset = 0;
+        for (const auto &entry : entries) {
+            SavedWord word;
+            word.book = entry.book ? QString::fromLatin1(entry.book) : key;
+            word.word = QString::fromUtf8(entry.word);
+            word.title = entry.title ? QString::fromUtf8(entry.title)
+                                     : QStringLiteral("Trevelyan's Type Tester");
+            word.author = QStringLiteral("Aven Teral");
+            word.fingerprint =
+                    entry.book ? QString(64, 'e') : current.value("fingerprint").toString();
+            word.sourceKey = entry.book ? QStringLiteral("/missing/orchard.epub") : QString(book);
+            word.chapter = QString::fromUtf8(entry.chapter);
+            word.context = QString::fromUtf8(entry.context);
+            word.definition = QString::fromUtf8(entry.definition);
+            word.dictionary = QStringLiteral("English fixture");
+            word.position = entry.book ? QString() : position;
+            word.created = word.lookedUp = day - qint64(day_offset++) * 86400000;
+            for (int i = 0; i < entry.lookups; ++i)
+                words.record(word);
+        }
+    }
+    fixture.window.openBook(book);
+    QTRY_COMPARE(reopened.count(), 1);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+}
+
 void fixBookmarkDates(Fixture &fixture)
 {
     QSignalSpy reopened(&fixture.window, &desktop::Window::bookOpened);
@@ -2292,7 +2398,7 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     }
     QVERIFY(fixture.press("rrAnnotationsTab"));
     QTRY_VERIFY(fixture.visible("rrBookmarkListEmpty"));
-    QVERIFY(fixture.widget("rrAnnotationsTab")->x() < fixture.widget("rrBookmarksTab")->x());
+    QVERIFY(fixture.widget("rrBookmarksTab")->x() < fixture.widget("rrAnnotationsTab")->x());
     for (const auto *name : { "rrBookmarksTab", "rrAnnotationsTab" }) {
         auto *heading = fixture.widget(name);
         QVERIFY(heading);
@@ -2533,6 +2639,9 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBookmarks"));
         QVERIFY(fixture.press("rrBookmarks"));
+        // The book has a bookmark, so the list opens on Bookmarks.
+        QTRY_VERIFY(fixture.visible("rrAnnotationsTab"));
+        QVERIFY(fixture.press("rrAnnotationsTab"));
         QTRY_VERIFY(fixture.widget("rrAnnotationMore")->isVisible()
                     && fixture.widget("rrAnnotationMore")->isEnabled());
         QVERIFY(fixture.widget("rrAnnotationMore")->x() > fixture.widget("rrMarksSort")->x());
@@ -5670,20 +5779,40 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto selected = headword->text();
         QCOMPARE(action->accessibleName(), strings::get("dictionary_panel.search_in_book"));
         QVERIFY(action->text().isEmpty());
-        QVERIFY(action->isVisible());
-        QVERIFY(fixture.widget("rrDictionary")->rect().contains(action->geometry()));
-        QVERIFY(!action->geometry().intersects(fixture.widget("rrDictionaryEdit")->geometry()));
-        QCOMPARE(action->geometry().top(), fixture.widget("rrDictionaryEdit")->geometry().top());
-        QCOMPARE(action->size(), fixture.widget("rrDictionaryEdit")->size());
+        // A narrow sheet puts edit, search and save in one menu.
+        auto *menu = qobject_cast<QPushButton *>(fixture.widget("rrDictionaryActions"));
+        QVERIFY(menu);
+        const bool compact = menu->isVisible();
+        // Only the portrait phone sheet is narrow.
+        QCOMPARE(compact, preset == 3);
+        auto *cell = compact ? menu : action;
+        const auto choose = [&fixture, compact](const char *cellName, const char *menuName) {
+            if (!compact)
+                return fixture.press(cellName);
+            if (!fixture.press("rrDictionaryActions"))
+                return false;
+            return QTest::qWaitFor([&] { return fixture.visible(menuName); }, 3000)
+                    && fixture.press(menuName);
+        };
+        QVERIFY(cell->isVisible());
+        QVERIFY(action->isVisible() != compact);
+        QVERIFY(fixture.widget("rrDictionaryEdit")->isVisible() != compact);
+        QVERIFY(fixture.widget("rrDictionary")->rect().contains(cell->geometry()));
+        if (!compact) {
+            QVERIFY(!action->geometry().intersects(fixture.widget("rrDictionaryEdit")->geometry()));
+            QCOMPARE(action->geometry().top(),
+                     fixture.widget("rrDictionaryEdit")->geometry().top());
+            QCOMPARE(action->size(), fixture.widget("rrDictionaryEdit")->size());
+        }
         auto *selector = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySelect"));
         QVERIFY(selector);
-        QVERIFY(selector->width() > action->width());
-        QCOMPARE(selector->height(), action->height());
+        QVERIFY(selector->width() > cell->width());
+        QCOMPARE(selector->height(), cell->height());
         QVERIFY(selector->text().isEmpty());
-        QVERIFY(!action->geometry().intersects(selector->geometry()));
+        QVERIFY(!cell->geometry().intersects(selector->geometry()));
         QVERIFY(fixture.widget("rrDefinition")->y()
-                <= action->geometry().bottom() + 1 + int(ui::metrics::control::border));
-        QVERIFY(fixture.press("rrDictionarySearch"));
+                <= cell->geometry().bottom() + 1 + int(ui::metrics::control::border));
+        QVERIFY(choose("rrDictionarySearch", "rrDictionaryMenuSearch"));
         QTRY_VERIFY(fixture.visible("rrSearchResult0"));
         QCOMPARE(query->text(), selected);
         QVERIFY(!fixture.visible("rrDictionary"));
@@ -5695,18 +5824,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSearchBack"));
         QVERIFY(fixture.selectWord(page, point));
         QTRY_VERIFY(fixture.visible("rrDictionary"));
-        QVERIFY(fixture.press("rrDictionaryEdit"));
-        QVERIFY(!action->isVisible());
+        QVERIFY(choose("rrDictionaryEdit", "rrDictionaryMenuEdit"));
+        QVERIFY(!cell->isVisible());
         lookup->setText("  Trevelyan  ");
         QTest::keyClick(lookup, Qt::Key_Return);
-        QTRY_VERIFY(action->isVisible());
+        QTRY_VERIFY(cell->isVisible());
         QCOMPARE(headword->text(), QString("Trevelyan"));
         // Cancelling an unfinished replacement keeps the current lookup term.
-        QVERIFY(fixture.press("rrDictionaryEdit"));
+        QVERIFY(choose("rrDictionaryEdit", "rrDictionaryMenuEdit"));
         lookup->setText("discard this edit");
         QTest::keyClick(lookup, Qt::Key_Escape);
-        QTRY_VERIFY(action->isVisible());
-        QVERIFY(fixture.press("rrDictionarySearch"));
+        QTRY_VERIFY(cell->isVisible());
+        QVERIFY(choose("rrDictionarySearch", "rrDictionaryMenuSearch"));
         QCOMPARE(query->text(), QString("Trevelyan"));
         QTRY_VERIFY(fixture.visible("rrSearchResult0"));
         QTRY_VERIFY(!status->text().contains("Searching", Qt::CaseInsensitive));
@@ -5746,6 +5875,237 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void savedWords_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("disabled");
+        QTest::addColumn<bool>("switchDictionary");
+        for (bool dark : { false, true })
+            for (bool disabled : { false, true })
+                QTest::newRow(qPrintable(QString("%1-%2").arg(dark ? "dark" : "light",
+                                                              disabled ? "disabled" : "enabled")))
+                        << dark << disabled << false;
+        QTest::newRow("switch-dictionary-light") << false << false << true;
+        QTest::newRow("switch-dictionary-dark") << true << false << true;
+    }
+
+    // Checks saving a lookup, the Words tab, the word view, every book's words and confirmed removal.
+    void savedWords()
+    {
+        QFETCH(bool, dark);
+        QFETCH(bool, disabled);
+        QFETCH(bool, switchDictionary);
+
+        class SwitchingDictionary final : public DictionaryService
+        {
+        public:
+            QString selected = "fixture";
+
+            QVector<DictionaryChoice> choices() const override
+            {
+                return { { "fixture", "First dictionary", "en", true },
+                         { "alternate", "Alternate dictionary", "en", false } };
+            }
+
+            bool select(const QString &, const QString &id, QString *) override
+            {
+                selected = id;
+                return true;
+            }
+
+            DictionaryResult lookup(const QString &, const QString &word) override
+            {
+                DictionaryResult result;
+                result.word = word;
+                result.dictionary = result.dictionaryId = selected;
+                result.html = "<p>" + selected + " definition</p>";
+                result.received = result.restored = true;
+                return result;
+            }
+        };
+
+        Fixture fixture(dark, false, false, true, false, false,
+                        [switchDictionary](ReaderHostServices &services) {
+                            if (switchDictionary)
+                                services.dictionary = [] {
+                                    return std::make_unique<SwitchingDictionary>();
+                                };
+                            else
+                                defineEveryWord(services);
+                        });
+        QVERIFY(fixture.prepared);
+        if (switchDictionary) {
+            auto preferences = storage::readJson(fixture.paths.preferences());
+            preferences["save_looked_up_words"] = false;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        }
+        if (disabled) {
+            auto preferences = storage::readJson(fixture.paths.preferences());
+            preferences["disable_words"] = true;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+            selectPreview(fixture, 3);
+        }
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        const auto point = fixture.wordPoint();
+        const auto original = fixture.state().value("position");
+        QVERIFY(fixture.selectWord(page, point));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        const auto looked = qobject_cast<QLabel *>(fixture.widget("rrDictionaryWord"))->text();
+        auto *save = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySave"));
+        QVERIFY(save);
+        if (switchDictionary) {
+            QVERIFY(fixture.press("rrDictionarySelect"));
+            QTRY_VERIFY(fixture.visible("rrDictionaryChoice1"));
+            QVERIFY(fixture.press("rrDictionaryChoice1"));
+            QTRY_VERIFY(!fixture.visible("rrDictionaryChoices"));
+            QVERIFY(fixture.press("rrDictionarySave"));
+            QTRY_VERIFY(fixture.visible("rrWordNotice"));
+            bool loaded = false;
+            QVector<SavedWord> rows;
+            SavedWords words(fixture.paths.directory);
+            words.load({}, [&](bool ok, QVector<SavedWord> found) {
+                rows = std::move(found);
+                loaded = ok;
+            });
+            QTRY_VERIFY(loaded);
+            QCOMPARE(rows.size(), 1);
+            QCOMPARE(rows.first().dictionary, QString("alternate"));
+            QVERIFY(rows.first().definition.contains("alternate definition"));
+            return;
+        }
+        if (disabled) {
+            QVERIFY(save->isHidden());
+            QVERIFY(fixture.press("rrDictionaryActions"));
+            QTRY_VERIFY(fixture.visible("rrDictionaryMenu"));
+            QVERIFY(!fixture.visible("rrDictionaryMenuSave"));
+            QVERIFY(!fixture.visible("rrWordNotice"));
+            int rows = -1;
+            SavedWords words(fixture.paths.directory);
+            words.load({}, [&rows](bool ok, QVector<SavedWord> found) {
+                rows = ok ? int(found.size()) : -2;
+            });
+            QTRY_COMPARE(rows, 0);
+            return;
+        }
+        // A lookup with a definition is saved at once; the cell offers to undo it.
+        QTRY_VERIFY(save->isVisible());
+        QCOMPARE(save->accessibleName(), strings::get("dictionary_panel.remove_from_words"));
+        QVERIFY(fixture.widget("rrDictionarySearch")->geometry().right() < save->geometry().left());
+        QVERIFY(save->geometry().right() < fixture.widget("rrDictionarySelect")->geometry().left());
+        QCOMPARE(save->size(), fixture.widget("rrDictionarySearch")->size());
+        QVERIFY(save->width() < fixture.widget("rrDictionaryClose")->width());
+        QVERIFY(fixture.press("rrDictionaryClose"));
+        QTRY_VERIFY(!fixture.visible("rrDictionary"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrBookmarks"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QTRY_VERIFY(fixture.visible("rrWordsTab"));
+        QVERIFY(fixture.widget("rrAnnotationsTab")->x() < fixture.widget("rrWordsTab")->x());
+        QVERIFY(fixture.press("rrWordsTab"));
+        QTRY_VERIFY(fixture.visible("rrWord0"));
+        QCOMPARE(fixture.widget("rrWord0")->accessibleName(), looked);
+        QVERIFY(!fixture.visible("rrBookmarkListEmpty"));
+        QVERIFY(fixture.press("rrWord0"));
+        QTRY_VERIFY(fixture.visible("rrWordPage"));
+        auto *context = qobject_cast<QLabel *>(fixture.widget("rrWordPageContext"));
+        QVERIFY(context && context->isVisible() && context->text().contains("<u>"));
+        auto *passage = qobject_cast<QPushButton *>(fixture.widget("rrWordPagePassage"));
+        QVERIFY(passage && passage->isVisible());
+        QVERIFY(passage->text().startsWith(
+                strings::get("words.go_to_page").arg(QString()).trimmed()));
+        QVERIFY(fixture.press("rrWordPageBack"));
+        QTRY_VERIFY(!fixture.visible("rrWordPage"));
+        // Every book's words open over the list and return to it.
+        QVERIFY(fixture.press("rrAnnotationMore"));
+        QTRY_VERIFY(fixture.visible("rrMyWord0"));
+        QVERIFY(fixture.press("rrMyWordsBack"));
+        QTRY_VERIFY(!fixture.visible("rrMyWords"));
+        // Removal asks first; Cancel keeps the word.
+        QVERIFY(fixture.press("rrWordRemove0"));
+        QTRY_VERIFY(fixture.visible("rrRemoveWord"));
+        QVERIFY(fixture.press("rrKeepWord"));
+        QTRY_VERIFY(!fixture.visible("rrRemoveWord"));
+        QVERIFY(fixture.visible("rrWord0"));
+        QVERIFY(fixture.press("rrWordRemove0"));
+        QTRY_VERIFY(fixture.visible("rrConfirmRemoveWord"));
+        QVERIFY(fixture.press("rrConfirmRemoveWord"));
+        QTRY_VERIFY(fixture.visible("rrWordListEmpty"));
+        QVERIFY(fixture.press("rrBookmarkListClose"));
+        QTRY_VERIFY(!fixture.visible("rrBookmarkList"));
+        QCOMPARE(fixture.state().value("position"), original);
+        // Closing the list returns to the reading controls; leave them first.
+        if (fixture.visible("rrControlsTop")) {
+            QVERIFY(fixture.click(page, page->rect().center()));
+            QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+        }
+        // The sheet's cell saves the word again.
+        QVERIFY(fixture.selectWord(page, point));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        QTRY_VERIFY(save->isVisible());
+        QVERIFY(fixture.press("rrDictionarySave"));
+        QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.save_to_words"));
+        QTRY_VERIFY(fixture.visible("rrWordNotice"));
+        QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrButtonFeedbackText"))->text(),
+                 QString("Removed from My Words"));
+        auto *notice = static_cast<ui::ModalOverlay *>(fixture.widget("rrWordNotice"));
+        const QRect anchor(save->mapTo(fixture.window.readerWindow(), QPoint()), save->size());
+        QVERIFY(notice->card()->geometry().bottom() > anchor.top());
+        QVERIFY(notice->card()->geometry().bottom() < anchor.center().y());
+        auto *pointer = notice->findChild<QWidget *>("rrAnchorPointer");
+        QVERIFY(pointer && pointer->isVisible());
+        QVERIFY(qAbs(pointer->geometry().center().x() - anchor.center().x()) <= 1);
+        QVERIFY(pointer->geometry().bottom() > anchor.top());
+        QVERIFY(fixture.press("rrDictionarySave"));
+        QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.remove_from_words"));
+        QTRY_COMPARE(qobject_cast<QLabel *>(fixture.widget("rrButtonFeedbackText"))->text(),
+                     QString("Added to My Words!"));
+        QTRY_VERIFY(!fixture.visible("rrWordNotice"));
+        int rows = -1;
+        {
+            SavedWords words(fixture.paths.directory);
+            words.load({}, [&rows](bool ok, QVector<SavedWord> found) {
+                rows = ok ? int(found.size()) : -2;
+            });
+            QTRY_VERIFY(rows >= 0);
+        }
+        QCOMPARE(rows, 1);
+        // A name without a dictionary entry is not saved by itself, but the
+        // cell saves it, and the list says the reader added it.
+        auto *lookup = qobject_cast<QLineEdit *>(fixture.widget("rrDictionaryQuery"));
+        QVERIFY(lookup);
+        QVERIFY(fixture.press("rrDictionaryEdit"));
+        lookup->setText("Kaladin");
+        QTest::keyClick(lookup, Qt::Key_Return);
+        QTRY_COMPARE(qobject_cast<QLabel *>(fixture.widget("rrDictionaryWord"))->text(),
+                     QString("Kaladin"));
+        QTRY_VERIFY(save->isVisible());
+        QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.save_to_words"));
+        QVERIFY(fixture.press("rrDictionarySave"));
+        QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.remove_from_words"));
+        QVERIFY(fixture.press("rrDictionaryClose"));
+        QTRY_VERIFY(!fixture.visible("rrDictionary"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrBookmarks"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QTRY_VERIFY(fixture.visible("rrWordsTab"));
+        QVERIFY(fixture.press("rrWordsTab"));
+        bool noted = false;
+        QTRY_VERIFY([&] {
+            for (int i = 0; i < 4; ++i)
+                if (auto *row = static_cast<ui::ListRow *>(
+                            fixture.widget(qPrintable(QString("rrWord%1").arg(i)))))
+                    noted = noted
+                            || (row->isVisible() && row->accessibleName() == "Kaladin"
+                                && row->captionLabel()->text() == strings::get("words.no_entry"));
+            return noted;
+        }());
+    }
+
     // Checks dictionary book search for accented, astral, multiword and long terms, and no search while suspended or hidden.
     void dictionaryBookSearchUnicode_data() { bookmarks_data(); }
 
@@ -5781,6 +6141,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrDictionarySearch"));
             QCOMPARE(query->text(), term);
             QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+            QTRY_VERIFY(fixture.widget("rrSearchResult0")->isEnabled());
             QVERIFY(fixture.widget("rrSearchResult0")->accessibleName().contains(term));
             QCOMPARE(fixture.state().value("position"), original);
             QVERIFY(fixture.press("rrSearchBack"));
@@ -5789,6 +6150,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrDictionarySearch"));
         QCOMPARE(query->text(), longTerm);
         QTRY_VERIFY(fixture.visible("rrSearchResult0"));
+        QTRY_VERIFY(fixture.widget("rrSearchResult0")->isEnabled());
         QVERIFY(fixture.widget("rrSearchResult0")->accessibleName().contains(longTerm));
         QVERIFY(fixture.press("rrSearchBack"));
         panel->open("Hello", {}, { 100, 100, 40, 40 });
@@ -7179,7 +7541,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *annotationsTab = qobject_cast<QPushButton *>(fixture.widget("rrAnnotationsTab"));
         auto *bookmarksTab = qobject_cast<QPushButton *>(fixture.widget("rrBookmarksTab"));
         QVERIFY(annotationsTab && bookmarksTab);
-        QVERIFY(annotationsTab->isChecked());
+        // A book with a bookmark opens on Bookmarks, even with annotations.
+        QTRY_VERIFY(bookmarksTab->isChecked());
+        QVERIFY(fixture.press("rrAnnotationsTab"));
+        QTRY_VERIFY(annotationsTab->isChecked());
         QTRY_VERIFY(fixture.widget("rrAnnotationMore")->isEnabled());
         QVERIFY(!fixture.widget("rrAnnotationExportHtml"));
         QVERIFY(fixture.widget("rrAnnotationMore")->x() > fixture.widget("rrMarksSort")->x());
@@ -7385,10 +7750,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrBookmark0"));
         QVERIFY(fixture.press("rrBookmarkListClose"));
         QVERIFY(fixture.press("rrBookmarks"));
-        QVERIFY(annotationsTab->isChecked());
+        QVERIFY(bookmarksTab->isChecked());
         QVERIFY(fixture.press("rrMarksSort"));
         QVERIFY(qobject_cast<QAbstractButton *>(fixture.widget("rrMarksSort_newest"))->isChecked());
         QVERIFY(fixture.press("rrMarksSort_newest"));
+        QVERIFY(fixture.press("rrAnnotationsTab"));
         QTRY_VERIFY(fixture.visible("rrAnnotationRemove0"));
         QVERIFY(fixture.press("rrAnnotationRemove0"));
         QTRY_VERIFY(fixture.visible("rrKeepAnnotation"));
@@ -8894,8 +9260,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         saved["dense_stats_chart"] = true;
         saved["navigation_bar_buttons"] = "pages";
         QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
-        const char *keys[] = { "disable_navigate", "disable_stats", "disable_annotations",
-                               "disable_bookmarks", "disable_kosync" };
+        const char *keys[] = { "disable_navigate",  "disable_stats",  "disable_annotations",
+                               "disable_bookmarks", "disable_kosync", "disable_words" };
         for (int pass = 0; pass < 2; ++pass) {
             QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
             fixture.window.openBook(book);
@@ -8913,7 +9279,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(revealSettingsOption(fixture, "rrDisabledFeatures"));
             auto *featuresButton =
                     static_cast<ui::CaptionButton *>(fixture.widget("rrDisabledFeatures"));
-            const QString allHidden = "Navigation, Stats, Annotations, Bookmarks, KOSync";
+            const QString allHidden = "Navigation, Stats, Annotations, Bookmarks, KOSync, My Words";
             QCOMPARE(featuresButton->caption(), pass ? allHidden : QString("None"));
             QVERIFY(fixture.press("rrDisabledFeatures"));
             QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
@@ -12805,7 +13171,11 @@ private slots:
         const auto scene = [&](const char *action, const char *visible, const char *suffix) {
             if (!fixture.press(action))
                 return false;
-            if (!QTest::qWaitFor([&] { return fixture.visible(visible); }, 5000))
+            if (!QTest::qWaitFor(
+                        [&] {
+                            return fixture.visible(visible) && fixture.widget(visible)->isEnabled();
+                        },
+                        5000))
                 return false;
             return capture(fixture, name + '-' + suffix);
         };
@@ -13368,6 +13738,139 @@ private slots:
         QVERIFY(fixture.press("rrStillReading"));
     }
 
+    void myWords_data() { screenshotVariants(); }
+
+    // Captures a saved lookup, the Words tab, a word view and every book's words.
+    void myWords()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false, defineEveryWord);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        const auto name = screenshotVariant(preset, dark);
+        captureBook = { { "title", "Type Tester with saved words" },
+                        { "fixture", "seeded words with fixed dates" } };
+        const auto resetBook = qScopeGuard([] { captureBook = {}; });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        seedSavedWords(fixture);
+        if (QTest::currentTestFailed())
+            return;
+        openPrologueBody(fixture);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(fixture.selectWord(page, fixture.wordPoint()));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        // The narrow phone sheet keeps saving in its menu.
+        QTRY_VERIFY(fixture.visible("rrDictionarySave") || fixture.visible("rrDictionaryActions"));
+        QVERIFY(capture(fixture, name + "-dictionary-saved-word"));
+        auto *save = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySave"));
+        QVERIFY(save);
+        QVERIFY(fixture.lookupAction("rrDictionarySave", "rrDictionaryMenuSave"));
+        QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.save_to_words"));
+        QTRY_VERIFY(fixture.visible("rrWordNotice"));
+        QTRY_COMPARE(qobject_cast<QLabel *>(fixture.widget("rrButtonFeedbackText"))->text(),
+                     QString("Removed from My Words"));
+        QVERIFY(capture(fixture, name + "-dictionary-word-removed"));
+        fixture.widget("rrWordNotice")->hide();
+        QVERIFY(capture(fixture, name + "-dictionary-unsaved-word"));
+        QVERIFY(fixture.lookupAction("rrDictionarySave", "rrDictionaryMenuSave"));
+        QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.remove_from_words"));
+        QTRY_VERIFY(fixture.visible("rrWordNotice"));
+        QTRY_COMPARE(qobject_cast<QLabel *>(fixture.widget("rrButtonFeedbackText"))->text(),
+                     QString("Added to My Words!"));
+        QVERIFY(capture(fixture, name + "-dictionary-word-added"));
+        fixture.widget("rrWordNotice")->hide();
+        QVERIFY(fixture.press("rrDictionaryClose"));
+        QTRY_VERIFY(!fixture.visible("rrDictionary"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrBookmarks"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QTRY_VERIFY(fixture.visible("rrWordsTab"));
+        QVERIFY(fixture.press("rrWordsTab"));
+        QTRY_VERIFY(fixture.visible("rrWord0"));
+        QVERIFY(capture(fixture, name + "-words"));
+        // A short screen pages the rows; turn pages until the word is shown.
+        const auto reveal = [&fixture](const char *prefix, const QString &word) -> QWidget * {
+            for (int turn = 0; turn < 8; ++turn) {
+                // Rows are named by their index in the whole list, not on the page.
+                for (int i = 0; i < 64; ++i)
+                    if (auto *row = fixture.widget(qPrintable(QString("%1%2").arg(prefix).arg(i)));
+                        row && row->isVisible() && row->accessibleName() == word)
+                        return row;
+                auto *next = fixture.widget(qPrintable(QString("%1sNext").arg(prefix)));
+                if (!next || !next->isVisible() || !next->isEnabled() || !fixture.click(next))
+                    return nullptr;
+            }
+            return nullptr;
+        };
+        auto *unembarrassed = reveal("rrWord", "unembarrassed");
+        QVERIFY(unembarrassed);
+        QVERIFY(fixture.click(unembarrassed));
+        QTRY_VERIFY(fixture.visible("rrWordPage"));
+        QVERIFY(capture(fixture, name + "-word-page"));
+        QVERIFY(fixture.press("rrWordPageBack"));
+        QVERIFY(fixture.press("rrAnnotationMore"));
+        QTRY_VERIFY(fixture.visible("rrMyWord0"));
+        QVERIFY(capture(fixture, name + "-all-words"));
+        auto *espalier = reveal("rrMyWord", "espalier");
+        QVERIFY(espalier);
+        QVERIFY(fixture.click(espalier));
+        QTRY_VERIFY(fixture.visible("rrWordPageMissing"));
+        QVERIFY(capture(fixture, name + "-word-other-book"));
+    }
+
+    void bookmarkFeedback_data() { screenshotVariants(); }
+
+    // Visual proposals only: bookmark actions do not show this feedback yet.
+    void bookmarkFeedback()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        const auto name = screenshotVariant(preset, dark);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QVERIFY(fixture.press("rrAnnotationMore"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkAddCurrent"));
+        QVERIFY(fixture.press("rrBookmarkAddCurrent"));
+        QTRY_VERIFY(fixture.visible("rrBookmark0"));
+        ui::ButtonFeedback feedback(fixture.window.readerWindow());
+        auto *bookmarkAction = fixture.widget("rrAnnotationMore");
+        const int iconLeft = ui::metrics::chrome::inset;
+        feedback.showFor(
+                bookmarkAction, "Current page bookmarked!",
+                { ui::ButtonFeedback::AnchorSide::Left,
+                  QRect(iconLeft, 0, bookmarkAction->width() - iconLeft, bookmarkAction->height()),
+                  QPoint(0, ui::px(8)) });
+        QVERIFY(capture(fixture, name + "-bookmark-added-feedback-preview"));
+        feedback.hide();
+        QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+        QTRY_VERIFY(fixture.visible("rrPinEditor"));
+        QVERIFY(fixture.press("rrPinSave"));
+        QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkMore0"));
+        auto *row = static_cast<ui::ListRow *>(fixture.widget("rrBookmark0"));
+        auto *title = row->titleLabel();
+        const int side = title->fontMetrics().height();
+        const int center = title->height() - ui::interfaceLineHeight(title->font()) / 2;
+        feedback.showFor(title, "Bookmark pinned!",
+                         { ui::ButtonFeedback::AnchorSide::Above,
+                           QRect(0, center - side / 2, side, side),
+                           {} });
+        QVERIFY(capture(fixture, name + "-bookmark-pinned-feedback-preview"));
+    }
+
     void dictionary_data() { screenshotVariants(); }
 
     void dictionary()
@@ -13401,7 +13904,7 @@ private slots:
         panel->open("type", result, { 100, 100, 50, 40 });
         QTRY_VERIFY(panel->isVisible());
         QVERIFY(capture(fixture, name + "-definition"));
-        QVERIFY(fixture.press("rrDictionaryEdit"));
+        QVERIFY(fixture.lookupAction("rrDictionaryEdit", "rrDictionaryMenuEdit"));
         QVERIFY(capture(fixture, name + "-edit"));
         QVERIFY(fixture.press("rrDictionaryClose"));
         QVERIFY(fixture.press("rrDictionarySelect"));
@@ -13427,7 +13930,7 @@ private slots:
         result.html = "<p><b>Trevelyan</b> The family name of the author of this book.</p>";
         panel->open("Trevelyan", result, { 100, 100, 50, 40 });
         QVERIFY(capture(fixture, name + "-search-action"));
-        QVERIFY(fixture.press("rrDictionarySearch"));
+        QVERIFY(fixture.lookupAction("rrDictionarySearch", "rrDictionaryMenuSearch"));
         auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
         auto *status = qobject_cast<QLabel *>(fixture.widget("rrSearchStatus"));
         QVERIFY(query && status);

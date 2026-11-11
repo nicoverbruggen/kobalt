@@ -2063,7 +2063,9 @@ private slots:
         for (const auto size : { QSize(1072, 1448), QSize(1448, 1072), QSize(1072, 1451) }) {
             view.resize(ui::px(size.width()), ui::px(size.height()));
             QCoreApplication::processEvents();
-            QCOMPARE(pages->y(), int(ui::metrics::chrome::actionHeight) + ui::px(88));
+            QCOMPARE(pages->y(),
+                     int(ui::metrics::chrome::actionHeight)
+                             + int(ui::metrics::chrome::toolStripHeight));
             QVERIFY(pager->isVisible());
             QCOMPARE(pages->geometry().bottom() + 1, pager->y());
             const auto image = pages->grab().toImage();
@@ -2953,14 +2955,14 @@ private slots:
         b.style = "underline";
         b.color = "green";
         BookmarkRow c{ "third", "Chapter Two", "Later in the book", late.addSecs(60), 8 };
-        auto *summary = list.findChild<QLabel *>("rrBookmarkListSummary");
-        QVERIFY(summary);
-        list.showAnnotations({});
-        QCOMPARE(summary->text(), QString("0 annotations"));
-        list.showAnnotations({ a });
-        QCOMPARE(summary->text(), QString("1 annotation"));
+        // The strip names the sort order, as the Library's strip does.
+        auto *sortCaption = list.findChild<QPushButton *>("rrMarksSort");
+        QVERIFY(sortCaption);
         list.showAnnotations({ a, b });
-        QCOMPARE(summary->text(), QString("2 annotations"));
+        QCOMPARE(sortCaption->text(), strings::get("marks.sort_position"));
+        list.setSortOrder("newest");
+        QCOMPARE(sortCaption->text(), strings::get("marks.sort_newest"));
+        list.setSortOrder("position");
         QString selected, changed;
         list.selected = [&](const QString &id) { selected = id; };
         list.sortRequested = [&](const QString &value) { changed = value; };
@@ -2991,22 +2993,20 @@ private slots:
         list.showAnnotations({ c, b, a });
         QCoreApplication::processEvents();
         QCOMPARE(row()->grab().toImage(), annotationImage);
-        QCOMPARE(list.findChild<QPushButton *>("rrMarksSort")->y(),
-                 list.findChild<QPushButton *>("rrAnnotationsTab")->y());
+        // Sort is the strip's caption below the tabs, at its left edge, as in
+        // the Library. Its name is drawn in ink.
         auto *sortControl = list.findChild<QPushButton *>("rrMarksSort");
+        auto *tab = list.findChild<QPushButton *>("rrAnnotationsTab");
+        QCOMPARE(sortControl->x(), 0);
+        QVERIFY(sortControl->y() > tab->geometry().bottom());
+        QVERIFY(sortControl->width() > list.width() / 2);
         const auto sortImage = sortControl->grab().toImage();
-        const auto iconArea = QRect(sortImage.rect().center() - QPoint(ui::px(20), ui::px(20)),
-                                    QSize(ui::px(40), ui::px(40)));
-        int iconPixels = 0;
         const auto ink = colors.color(QPalette::WindowText);
-        for (int y = iconArea.top(); y <= iconArea.bottom(); ++y)
-            for (int x = iconArea.left(); x <= iconArea.right(); ++x)
-                iconPixels += sortImage.pixelColor(x, y) == ink;
-        QVERIFY(iconPixels > 10);
-        // Sort sits at the left edge, before the tabs.
-        QCOMPARE(list.findChild<QPushButton *>("rrMarksSort")->x(), 0);
-        QVERIFY(list.findChild<QPushButton *>("rrBookmarksTab")->x()
-                >= list.findChild<QPushButton *>("rrMarksSort")->geometry().right());
+        int captionPixels = 0;
+        for (int y = 0; y < sortImage.height(); ++y)
+            for (int x = 0; x < sortImage.width() / 2; ++x)
+                captionPixels += sortImage.pixelColor(x, y) == ink;
+        QVERIFY(captionPixels > 10);
         QVector<QImage> appearances;
         for (const auto *style : { "shaded", "underline", "dotted" }) {
             auto item = a;
@@ -3545,6 +3545,46 @@ private slots:
         QCOMPARE(navigationRefreshRegion(&owner), QRegion(bar.geometry()));
         bar.hide();
         QVERIFY(navigationRefreshRegion(&owner).isEmpty());
+    }
+
+    void buttonFeedbackPointsInsideButton()
+    {
+        QWidget owner;
+        owner.resize(800, 600);
+        QPushButton button("Save", &owner);
+        button.setGeometry(600, 300, 100, 100);
+        ui::ButtonFeedback feedback(&owner);
+        owner.show();
+        feedback.showFor(&button, "Added to My Words");
+        QVERIFY(feedback.isVisible());
+        QVERIFY(!feedback.inputBarrier());
+        QVERIFY(feedback.testAttribute(Qt::WA_TransparentForMouseEvents));
+        QVERIFY(feedback.card()->geometry().bottom() > button.y());
+        QVERIFY(feedback.card()->geometry().bottom() < button.geometry().center().y());
+        auto *pointer = feedback.findChild<QWidget *>("rrAnchorPointer");
+        QVERIFY(pointer && pointer->isVisible());
+        QVERIFY(pointer->geometry().bottom() > button.y());
+        QVERIFY(button.geometry().contains(pointer->geometry().center().x(),
+                                           pointer->geometry().bottom()));
+        feedback.showFor(&button, "Bookmark added!",
+                         { ui::ButtonFeedback::AnchorSide::Left, {}, {} });
+        QVERIFY(feedback.card()->geometry().right() < button.x());
+        QVERIFY(qAbs(pointer->geometry().center().y() - button.geometry().center().y()) <= 1);
+        QVERIFY(pointer->property("card_left").toBool());
+        const auto tip = pointer->geometry().topRight() + QPoint(0, pointer->height() / 2);
+        const auto before = feedback.card()->pos();
+        feedback.showFor(
+                &button, "Bookmark added!",
+                { ui::ButtonFeedback::AnchorSide::Left, {}, QPoint(ui::px(8), ui::px(8)) });
+        QCOMPARE(feedback.card()->pos(), before + QPoint(ui::px(8), ui::px(8)));
+        QCOMPARE(pointer->geometry().topRight() + QPoint(0, pointer->height() / 2), tip);
+        // A button at the top uses the same pointer below the bar.
+        button.move(600, 0);
+        feedback.showFor(&button, "Removed from My Words");
+        QVERIFY(feedback.card()->y() < button.geometry().bottom());
+        QVERIFY(feedback.card()->y() > button.geometry().center().y());
+        QVERIFY(pointer->y() < button.geometry().bottom());
+        QTRY_VERIFY(!feedback.isVisible());
     }
 
     void hidingSelectionMenuKeepsDamageCompact_data()

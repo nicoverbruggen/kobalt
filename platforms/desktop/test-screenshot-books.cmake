@@ -4,7 +4,7 @@ if(NOT "$ENV{KOBALT_TEST_TMP_ROOT}" STREQUAL "")
 endif()
 file(MAKE_DIRECTORY "${TEST_ROOT}/source")
 set(references "{}")
-foreach(name alice maths moby-dick)
+foreach(name alice maths moby-dick war-and-peace)
     file(WRITE "${TEST_ROOT}/source/${name}.epub" "Pinned ${name} fixture")
     file(SHA256 "${TEST_ROOT}/source/${name}.epub" hash)
     string(JSON references SET "${references}" "${name}"

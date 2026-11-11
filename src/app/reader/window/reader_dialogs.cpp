@@ -582,9 +582,10 @@ void Reader::openBookmarks()
 {
     const bool bookmarksEnabled = features::enabled(preferences, features::Bookmarks);
     const bool annotationsEnabled = features::enabled(preferences, features::Annotations);
-    if (!bookmarksEnabled && !annotationsEnabled)
+    const bool wordsEnabled = savedWords && features::enabled(preferences, features::Words);
+    if (!bookmarksEnabled && !annotationsEnabled && !wordsEnabled)
         return;
-    bookmarkList->setFeatures(bookmarksEnabled, annotationsEnabled);
+    bookmarkList->setFeatures(bookmarksEnabled, annotationsEnabled, wordsEnabled);
     annotationPopover->hide();
     if (!bookmarks->available())
         return;
@@ -609,7 +610,16 @@ void Reader::openBookmarks()
     const int top = navigation ? navigation->statusHeight() : 0;
     bookmarkList->setGeometry(0, top, width(),
                               (navigation ? navigation->contentBottom(size()) : height()) - top);
-    if (annotationsEnabled && (!bookmarksEnabled || !highlights->highlights().isEmpty())) {
+    // Bookmarks first, unless the book has annotations and no bookmarks. With
+    // only My Words shown, the list opens on its words.
+    if (!bookmarksEnabled && !annotationsEnabled) {
+        showWords();
+        refresh();
+        return;
+    }
+    if (annotationsEnabled
+        && (!bookmarksEnabled
+            || (bookmarks->bookmarks().isEmpty() && !highlights->highlights().isEmpty()))) {
         const bool ready = highlights->resolved() || highlights->sync();
         bookmarkList->showAnnotations(ready ? annotationRows() : QVector<BookmarkRow>(), !ready);
     } else {

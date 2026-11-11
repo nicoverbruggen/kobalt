@@ -1217,7 +1217,7 @@
 
 "settings.section_default_global_font" = "Default global font";
 "settings.section_user_interface" = "User Interface";
-"settings.section_dictionary_ui" = "Dictionary UI";
+"settings.section_dictionary_ui" = "Dictionary";
 "settings.section_advanced" = "Advanced";
 "settings.disable_reader_standby" = "Disable standby";
 "settings.disable_reader_standby_description" = "Keeps the device awake while reading. Uses more battery power.";
@@ -1544,3 +1544,47 @@
 "search_panel.current_chapter_description" = "Searches the current chapter only, including unread pages.";
 "search_panel.up_to_here_description" = "Searches all previous pages, but nothing after the page that's open.";
 "search_panel.after_here_description" = "Searches all upcoming pages, but nothing from prior pages.";
+/* My Words */
+"words.tab" = "Words";
+"words.title" = "My Words";
+"words.added" = "Added to My Words!";
+"words.removed" = "Removed from My Words";
+"words.update_failed" = "Could not update My Words";
+/* Arguments: %1 */
+"words.count" = "%1 words";
+"words.count_one" = "1 word";
+"words.empty" = "No words yet";
+"words.empty_hint" = "Words you look up in the dictionary are saved here.";
+"words.loading" = "Loading words…";
+"words.remove" = "Remove word";
+"words.all_books" = "All books";
+"words.untitled" = "Untitled book";
+"words.filter" = "Filter";
+"words.sort_alphabetical" = "A to Z";
+"words.sort_alphabetical_description" = "Words in alphabetical order.";
+"words.definition" = "Definition";
+"words.in_context" = "In context";
+/* Arguments: %1 */
+"words.go_to_page" = "Go to page %1";
+"words.open_passage" = "Open at this passage";
+"words.book_missing" = "Book not on this device";
+"words.open_book_first" = "Open this book to go to the passage.";
+"words.passage_missing" = "This passage is no longer in the book.";
+/* Arguments: %1 */
+"words.looked_up" = "looked up %1×";
+/* Arguments: %1 */
+"words.first_looked_up" = "first on %1";
+"dictionary_panel.save_to_words" = "Save to My Words";
+"dictionary_panel.remove_from_words" = "Remove from My Words";
+"settings.save_words" = "Automatically save looked-up words";
+"settings.save_words_description" = "Words that have a definition are added to My Words.";
+"library.my_words" = "My Words";
+"words.remove_prompt" = "Remove this word?";
+/* Arguments: %1 */
+"words.remove_detail" = "“%1” will be removed from My Words.";
+"words.remove_confirm" = "Remove";
+"dictionary_panel.actions" = "Lookup actions";
+"features.words" = "My Words";
+"features.words_description" = "Hides the Words tab, the dictionary's save button and My Words in the Library. Lookups are no longer saved; saved words are kept.";
+"words.no_entry" = "No dictionary entry · Added by you";
+"words.no_entry_detail" = "The dictionary had no entry for this word. You added it to My Words yourself.";

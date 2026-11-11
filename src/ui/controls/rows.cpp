@@ -219,6 +219,11 @@ void ListRow::setDetailFont(const QFont &font)
     setLabelFont(detail, 1, font);
 }
 
+void ListRow::setCaptionFont(const QFont &font)
+{
+    setLabelFont(caption, 2, font);
+}
+
 void ListRow::setMetadataFont(const QFont &font)
 {
     setLabelFont(caption, 2, font);

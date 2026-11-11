@@ -31,3 +31,5 @@ Centered choice and confirmation dialogs use the shared `PopupCard` heading for 
 Dismissal checks verify that appearance and Styling previews release their source images. Dictionary and footnote panels release their text and layout on dismissal, retain content while their parent is temporarily hidden, and populate again on reopening. These are ownership and behavior checks, not measurements of process RSS or Kobo memory.
 
 Reader teardown checks observe child-panel callbacks through window destruction, with Text and Layout previews ready or still rendering and with Settings open. They reject callbacks after reader teardown starts without relying on an allocator to detect a destroyed member. These checks cover the observed panel subscriptions, not every possible widget callback lifetime.
+
+`component.ui` checks the shared button feedback: its triangle overlaps the target button, it can appear beside a button or below one at the top of the screen, a side offset moves the card without moving the arrow tip, it lets input pass through, and it dismisses automatically.

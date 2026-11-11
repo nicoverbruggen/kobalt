@@ -35,6 +35,8 @@ public:
     int page() const { return current; }
 
     void setPage(int number);
+    // The height the laid-out text needs at the current width, with margins.
+    int contentHeight() const;
 
 protected:
     void paintEvent(QPaintEvent *) override;

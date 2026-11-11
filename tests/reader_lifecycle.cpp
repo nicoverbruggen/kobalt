@@ -3167,7 +3167,10 @@ private slots:
         auto *open = host.window()->findChild<QPushButton *>("rrSettings");
         auto *settings = host.window()->findChild<QWidget *>("rrGeneralSettings");
         QVERIFY(open && settings);
+        auto *top = host.window()->findChild<QWidget *>("rrControlsTop");
         const auto closeSettings = [&] {
+            if (!top->isVisible())
+                QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
             QTRY_VERIFY(open->isVisible() && open->isEnabled());
             QVERIFY(click(canvas, open));
             QTRY_VERIFY(settings->isVisible());
@@ -3178,16 +3181,25 @@ private slots:
             const auto openCenter = open->mapTo(host.window(), open->rect().center());
             QVERIFY(closeArea.contains(openCenter));
             QVERIFY(click(canvas, close));
-            QTRY_VERIFY(!settings->isVisible() && open->isVisible() && open->isEnabled());
+            QTRY_VERIFY(!settings->isVisible() && !top->isVisible());
         };
         closeSettings();
-        // Pressed a few milliseconds after the close: part of a double tap.
-        QTest::lastMouseTimestamp -= QTest::mouseDoubleClickInterval;
+        // Reopen the menu, then give the Settings tap the timestamp of the
+        // second half of a double tap on the close cell.
+        const auto firstCloseTime = QTest::lastMouseTimestamp;
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QTRY_VERIFY(top->isVisible());
+        QTest::lastMouseTimestamp = firstCloseTime - QTest::mouseDoubleClickInterval;
         QVERIFY(click(canvas, open));
         QTest::qWait(ui::metrics::contents::closeGuardMilliseconds + 100);
         QVERIFY(!settings->isVisible());
+        QVERIFY(top->isVisible());
         closeSettings();
+        const auto secondCloseTime = QTest::lastMouseTimestamp;
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QTRY_VERIFY(top->isVisible());
         // Pressed half a second after the close, before the guard timer ends.
+        QTest::lastMouseTimestamp = secondCloseTime;
         QVERIFY(click(canvas, open));
         QTRY_VERIFY(settings->isVisible());
     }
@@ -9253,12 +9265,9 @@ private slots:
         QTest::qWait(200);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QVERIFY(click(canvas, close));
-        // Settings closes to the menu, which also covers the page.
+        // Settings closes directly to reading.
         if (!image) {
             auto *top = host.window()->findChild<QWidget *>("rrControlsTop");
-            auto *page = host.window()->findChild<QWidget *>("rrPage");
-            QTRY_VERIFY(top->isVisible());
-            QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
             QTRY_VERIFY(!top->isVisible());
         }
         // The reader asks without another progress check.

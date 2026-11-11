@@ -371,7 +371,12 @@ protected:
         const qreal base = below ? height() : 0;
         const qreal tip = below ? 1 : height() - 1;
         QPolygonF triangle;
-        triangle << QPointF(1, base) << QPointF(width() / 2.0, tip) << QPointF(width() - 1, base);
+        if (property("card_left").toBool())
+            triangle << QPointF(0, 1) << QPointF(width() - 1, height() / 2.0)
+                     << QPointF(0, height() - 1);
+        else
+            triangle << QPointF(1, base) << QPointF(width() / 2.0, tip)
+                     << QPointF(width() - 1, base);
         painter.setPen(Qt::NoPen);
         painter.setBrush(palette().color(QPalette::Window));
         painter.drawPolygon(triangle);
@@ -380,6 +385,55 @@ protected:
     }
 };
 } // namespace
+
+ButtonFeedback::ButtonFeedback(QWidget *parent) : ModalOverlay(parent), hideTimer(this)
+{
+    setInputBarrier(false);
+    setAttribute(Qt::WA_TransparentForMouseEvents);
+    label = card()->message({}, "rrButtonFeedbackText");
+    readerStyle(label, styles::font(metrics::chrome::labelText));
+    hideTimer.setSingleShot(true);
+    hideTimer.setInterval(1500);
+    connect(&hideTimer, &QTimer::timeout, this, &QWidget::hide);
+    hide();
+}
+
+void ButtonFeedback::showFor(QWidget *button, const QString &text, const Placement &placement)
+{
+    if (!button || !button->isVisible())
+        return;
+    target = button;
+    this->placement = placement;
+    label->setText(text);
+    setGeometry(parentWidget()->rect());
+    reposition();
+    show();
+    raise();
+    hideTimer.start();
+}
+
+void ButtonFeedback::reposition()
+{
+    if (!target)
+        return;
+    const auto margins = card()->rows()->contentsMargins();
+    const int wanted =
+            interfaceTextWidth(label->text(), label->font()) + margins.left() + margins.right();
+    card()->fitToWidth(qMin<int>(wanted, width() - 2 * metrics::notice::sideClearance));
+    const QRect area = placement.area.isEmpty() ? target->rect() : placement.area;
+    QRect bounds(mapFromParent(target->mapTo(parentWidget(), area.topLeft())), area.size());
+    // Overlap the bar with the card's border as well as its triangle.
+    const int overlap = qMin(px(24), bounds.height() / 4);
+    if (placement.side != AnchorSide::Left)
+        bounds.adjust(0, overlap, 0, -overlap);
+    anchorTo(bounds, placement.side, placement.sideOffset);
+}
+
+void ButtonFeedback::hideEvent(QHideEvent *event)
+{
+    hideTimer.stop();
+    ModalOverlay::hideEvent(event);
+}
 
 ModalOverlay::ModalOverlay(QWidget *parent) : QWidget(parent)
 {
@@ -494,15 +548,34 @@ void ModalOverlay::centerCard()
         return;
     }
     const int gap = ui::px(16), inset = ui::px(24);
+    const int half = ui::px(16);
+    const int left = anchor.left() - content->width() - gap;
+    if (anchorSide == AnchorSide::Left && left >= inset) {
+        const int x = qBound(inset, left + anchorOffset.x(), anchor.left() - content->width() - 4);
+        const int y = qBound(inset, anchor.center().y() - content->height() / 2 + anchorOffset.y(),
+                             qMax(inset, height() - content->height() - inset));
+        content->move(x, y);
+        const int center =
+                qBound(y + half + 2, anchor.center().y(), content->geometry().bottom() - half - 2);
+        pointer->setProperty("card_left", true);
+        const int base = content->geometry().right() - 1;
+        pointer->setGeometry(base, center - half, anchor.left() - base, 2 * half);
+        pointer->show();
+        pointer->raise();
+        pointer->update();
+        updateInputRegion();
+        return;
+    }
+    pointer->setProperty("card_left", false);
     const int x = qBound(inset, anchor.center().x() - content->width() / 2,
                          qMax(inset, width() - content->width() - inset));
     const int below = anchor.bottom() + gap;
-    const int y = below + content->height() <= height() - inset
-            ? below
-            : anchor.top() - content->height() - gap;
+    const int above = anchor.top() - content->height() - gap;
+    const int y = anchorSide != AnchorSide::Below && above >= inset ? above
+            : below + content->height() <= height() - inset         ? below
+                                                                    : above;
     content->move(x, qBound(inset, y, qMax(inset, height() - content->height() - inset)));
     const bool cardBelow = content->y() > anchor.center().y();
-    const int half = ui::px(16);
     const int center = qBound(content->x() + half + 2, anchor.center().x(),
                               content->geometry().right() - half - 2);
     pointer->setProperty("card_below", cardBelow);

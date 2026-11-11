@@ -137,6 +137,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         preferences.remove(key);
     for (const auto *key : { "dark_mode",
                              "hide_tab_labels",
+                             "save_looked_up_words",
                              "disable_reader_standby",
                              "inherit_text_layout",
                              "two_columns_landscape",

@@ -76,6 +76,7 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
 {
     this->utc = utc ? std::move(utc)
                     : ReadingHistory::UtcClock([] { return QDateTime::currentMSecsSinceEpoch(); });
+    sourceKey_ = sourceKey;
     auto saved = storage::readBookState(paths_, identity_, this->statePath).object;
     // Privacy belongs to the publication, including after Mark as unread.
     hideBookOnSleepScreen_ = saved.value("book").toString() == identity_

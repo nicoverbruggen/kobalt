@@ -14,6 +14,10 @@ public:
     const Index &index() const { return data; }
 
     QString coverPath(const QString &name) const;
+
+    // The profile directory the index is kept in.
+    const QString &profileDirectory() const { return directory; }
+
     bool scanning() const;
 
     bool available() const { return ready; }

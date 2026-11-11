@@ -10,7 +10,15 @@
 #include "ui/dialogs/modals.h"
 #include "ui/style/fonts.h"
 #include "ui/style/styles.h"
+#include "app/reader/panels/word_list.h"
+#include "app/reader/panels/word_page.h"
 #include "library/arrangement.h"
+#include "publication/publication.h"
+#include "storage/annotation_database.h"
+#include "reading/features.h"
+#include "storage/reader_storage.h"
+#include "storage/saved_words.h"
+#include "support/main_thread.h"
 #include "reading/reading_density.h"
 #include "support/strings.h"
 #include "ui/input/hold_timer.h"
@@ -18,6 +26,7 @@
 #include <utility>
 #include <QApplication>
 #include <QCache>
+#include <QFile>
 #include <QImageReader>
 #include <QLabel>
 #include <QLineEdit>
@@ -36,7 +45,7 @@ using ui::TextPx;
 
 namespace metrics {
 // Library sizes in pixels of a 300 ppi screen, like the reader's.
-inline constexpr Px toolbarHeight{ 88 }, modeWidth{ 104 };
+inline constexpr Px modeWidth{ 104 };
 // The grid's cells hold a 2:3 cover and, for a book in progress, a bar under
 // it. The cover itself names the book. Covers aim for these widths.
 inline constexpr Px smallCover{ 200 }, mediumCover{ 260 }, largeCover{ 340 };
@@ -116,20 +125,6 @@ void drawCaption(QPainter &painter, const QRect &rect, const QString &text, Qt::
                           alignment | Qt::AlignVCenter);
 }
 
-void drawChevron(QPainter &painter, QPoint center, int size, bool down, const QColor &color)
-{
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(color, qMax(1, ui::px(3)), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    const int h = size / 2;
-    if (down)
-        painter.drawPolyline(QPolygon({ center + QPoint(-h, -h / 2), center + QPoint(0, h / 2),
-                                        center + QPoint(h, -h / 2) }));
-    else
-        painter.drawPolyline(QPolygon({ center + QPoint(-h / 2, -h), center + QPoint(h / 2, 0),
-                                        center + QPoint(-h / 2, h) }));
-    painter.restore();
-}
 } // namespace
 
 // The covers on screen, drawn as one widget so a page change repaints once.
@@ -586,56 +581,6 @@ private:
     }
 };
 
-// The toolbar's sort caption: the sort's name and a chevron, or scan progress.
-class SortButton final : public ui::Button
-{
-public:
-    explicit SortButton(QWidget *parent) : ui::Button(parent)
-    {
-        setObjectName("librarySort");
-        setFocusPolicy(Qt::NoFocus);
-    }
-
-    // Busy shows scan progress; plain names the view, with no choices to open.
-    bool open = false, busy = false, plain = false;
-    // The scan progress beside the caption, or zero when it is hidden.
-    int progressWidth = 0;
-
-    // Whether the caption fits beside scan progress this wide.
-    bool fitsBeside(int progress) const
-    {
-        return ui::interfaceTextWidth(text().toUpper(), ui::captionFont())
-                <= width() - 2 * chrome::inset - progress - ui::px(24);
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter painter(this);
-        const auto paper = palette().color(QPalette::Window),
-                   ink = palette().color(QPalette::WindowText);
-        painter.fillRect(rect(), isDown() ? palette().color(QPalette::Midlight) : paper);
-        const int left = busy && progressWidth ? chrome::inset + progressWidth + ui::px(24)
-                                               : int(chrome::inset);
-        auto font = ui::captionFont();
-        painter.setFont(font);
-        const int chevron = ui::px(18), gap = ui::px(12);
-        const bool choices = !busy && !plain;
-        const int available =
-                qMax(1, width() - left - chrome::inset - (choices ? chevron + gap : 0));
-        const auto shown =
-                painter.fontMetrics().elidedText(text().toUpper(), Qt::ElideRight, available);
-        drawCaption(painter, QRect(left, 0, available, height()), shown, Qt::AlignLeft, ink);
-        if (choices)
-            drawChevron(painter,
-                        QPoint(left + painter.fontMetrics().horizontalAdvance(shown) + gap
-                                       + chevron / 2,
-                               height() / 2),
-                        chevron, true, ink);
-        Q_UNUSED(open);
-    }
-};
-
 // Sort and filter choices, dropped over the top of the books. A short screen
 // puts each group in its own column, side by side.
 class SortSheet final : public ui::Panel
@@ -934,7 +879,9 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
             applySettings(settings);
         });
     }
-    sort = new SortButton(this);
+    sort = new ui::CaptionDropdown(this);
+    sort->setObjectName("librarySort");
+    sort->label = strings::get("library.sort_heading");
     progress = new ui::LoadingIndicator(ui::LoadingIndicator::Style::Squares, this);
     progress->setObjectName("libraryScanProgress");
     progress->hide();
@@ -987,13 +934,13 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
         sortSheet->sorts->setCurrent(int(this->index.settings.sort));
         sortSheet->filters->setCurrent(this->index.settings.hideFinished ? 1 : 0);
         sortSheet->covers->setCurrent(int(this->index.settings.coverSize));
-        const int top = chrome::actionHeight + metrics::toolbarHeight;
+        const int top = chrome::actionHeight + chrome::toolStripHeight;
         sortSheet->arrange(isShortHeight(height(), ui::density()),
                            this->index.settings.view == View::Grid);
         sortSheet->setGeometry(0, top, width(), sortSheet->sizeHint().height());
         sortSheet->show();
         sortSheet->raise();
-        static_cast<SortButton *>(sort)->open = true;
+        sort->open = true;
     });
     connect(pager->previous, &QPushButton::clicked, this, [this] {
         pages->page = pager->turnTarget(-1);
@@ -1019,7 +966,12 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
     rebuild(false);
 }
 
-LibraryView::~LibraryView() = default;
+LibraryView::~LibraryView()
+{
+    // The word store finishes its queued words before it goes.
+    mainthread::AllowBlocking allow("library save");
+    savedWords.reset();
+}
 
 void LibraryView::setKeyboardFactory(KeyboardFactory factory)
 {
@@ -1186,6 +1138,14 @@ bool LibraryView::dismiss()
         folderPage->hide();
         return true;
     }
+    if (wordPage && wordPage->isVisible()) {
+        wordPage->hide();
+        return true;
+    }
+    if (wordList && wordList->isVisible()) {
+        wordList->hide();
+        return true;
+    }
     if (searching) {
         setSearching(false);
         return true;
@@ -1197,7 +1157,7 @@ void LibraryView::closeOverlay()
 {
     if (sortSheet && sortSheet->isVisible()) {
         sortSheet->hide();
-        static_cast<SortButton *>(sort)->open = false;
+        sort->open = false;
     }
     if (moreSheet)
         moreSheet->hide();
@@ -1276,7 +1236,7 @@ void LibraryView::rebuild(bool keepPage)
         modes[i]->setChecked(settings.view == modeViews[i]);
     const char *sortNames[] = { "library.sort_opened", "library.sort_added", "library.sort_title",
                                 "library.sort_author", "library.sort_series" };
-    auto *sortButton = static_cast<SortButton *>(sort);
+    auto *sortButton = sort;
     sortButton->busy = scanning;
     // Home has its own order, so its caption names the view instead of a sort.
     sortButton->plain = home;
@@ -1291,7 +1251,7 @@ void LibraryView::rebuild(bool keepPage)
     if (pages->view == View::List) {
         // Decide whether a pager is needed before measuring the list. Otherwise
         // its previous visibility can leave an unnecessary page or stale count.
-        const int available = qMax(1, height() - chrome::actionHeight - metrics::toolbarHeight);
+        const int available = qMax(1, height() - chrome::actionHeight - chrome::toolStripHeight);
         const int capacity = qMax(1, available / minimumListRowHeight());
         pager->setVisible(pages->books.size() > capacity);
         arrange();
@@ -1327,19 +1287,19 @@ void LibraryView::arrange()
     for (int i = 0; i < modes.size(); ++i)
         modes[i]->setGeometry(width() - (modes.size() - i) * metrics::modeWidth, toolbarTop,
                               metrics::modeWidth,
-                              metrics::toolbarHeight - ui::metrics::control::border);
+                              chrome::toolStripHeight - ui::metrics::control::border);
     sort->setGeometry(0, toolbarTop, qMax(1, width() - modes.size() * metrics::modeWidth),
-                      metrics::toolbarHeight - ui::metrics::control::border);
+                      chrome::toolStripHeight - ui::metrics::control::border);
     const auto hint = progress->sizeHint();
-    auto *sortButton = static_cast<SortButton *>(sort);
+    auto *sortButton = sort;
     // As the reader's tabs drop labels that do not fit, scan progress gives
     // way to a caption that large text makes too wide to sit beside it.
     const bool squares = sortButton->busy && sortButton->fitsBeside(hint.width());
     sortButton->progressWidth = squares ? hint.width() : 0;
     progress->setVisible(squares);
-    progress->setGeometry(chrome::inset, toolbarTop + (metrics::toolbarHeight - hint.height()) / 2,
+    progress->setGeometry(chrome::inset, toolbarTop + (chrome::toolStripHeight - hint.height()) / 2,
                           hint.width(), hint.height());
-    const int top = toolbarTop + metrics::toolbarHeight;
+    const int top = toolbarTop + chrome::toolStripHeight;
     const int bottom = !pager->isHidden() ? height() - chrome::actionHeight : height();
     const int gap = pages->view == View::List ? 0 : ui::px(8);
     pages->setGeometry(0, top + gap, width(), qMax(1, bottom - top - gap));
@@ -1378,7 +1338,7 @@ void LibraryView::paintEvent(QPaintEvent *event)
     const auto &ink = ui::themeColors(dark).ink;
     painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule, ink);
     painter.fillRect(0,
-                     chrome::actionHeight + metrics::toolbarHeight - ui::metrics::control::border,
+                     chrome::actionHeight + chrome::toolStripHeight - ui::metrics::control::border,
                      width(), ui::metrics::control::border, ui::dividerColor(this));
     if (searching)
         return;
@@ -1508,29 +1468,44 @@ void LibraryView::showMoreSheet()
         return;
     }
     closeOverlay();
+    // My Words is listed while its feature is shown; Settings can change that
+    // while the Library is open in the background.
+    const bool words =
+            savedWords
+            && features::enabled(
+                    storage::readPreferences(savedWordsDirectory + "/reader-settings.json").object,
+                    features::Words);
+    if (moreSheet && moreSheetWords != words) {
+        moreSheet->deleteLater();
+        moreSheet = nullptr;
+    }
+    moreSheetWords = words;
     if (!moreSheet) {
-        moreSheet = new ui::ActionMenu(
-                this, {},
-                {
-                        ui::actionItem(strings::get("library.add_folder"), "libraryMoreAddFolder",
-                                       ui::ControlIcon::FolderPlus,
-                                       [this] {
-                                           if (addFolder)
-                                               QTimer::singleShot(0, this, addFolder);
-                                       }),
-                        ui::actionItem(strings::get("library.open_book"), "libraryMoreOpenBook",
-                                       ui::ControlIcon::Dictionary,
-                                       [this] {
-                                           if (openFile)
-                                               QTimer::singleShot(0, this, openFile);
-                                       }),
-                        ui::actionItem(
-                                strings::get("library.folders"), "libraryMoreFolders",
-                                ui::ControlIcon::Folders, [this] { showFolders(); }, true),
-                        ui::actionItem(
-                                strings::get("library.about"), "libraryMoreAbout",
-                                ui::ControlIcon::About, [this] { showAbout(); }, true),
-                });
+        QVector<ui::ActionMenuItem> items{
+            ui::actionItem(strings::get("library.add_folder"), "libraryMoreAddFolder",
+                           ui::ControlIcon::FolderPlus,
+                           [this] {
+                               if (addFolder)
+                                   QTimer::singleShot(0, this, addFolder);
+                           }),
+            ui::actionItem(strings::get("library.open_book"), "libraryMoreOpenBook",
+                           ui::ControlIcon::Dictionary,
+                           [this] {
+                               if (openFile)
+                                   QTimer::singleShot(0, this, openFile);
+                           }),
+            ui::actionItem(
+                    strings::get("library.folders"), "libraryMoreFolders", ui::ControlIcon::Folders,
+                    [this] { showFolders(); }, true),
+        };
+        if (words)
+            items.append(ui::actionItem(
+                    strings::get("library.my_words"), "libraryMoreWords", ui::ControlIcon::Note,
+                    [this] { showWords(); }, true));
+        items.append(ui::actionItem(
+                strings::get("library.about"), "libraryMoreAbout", ui::ControlIcon::About,
+                [this] { showAbout(); }, true));
+        moreSheet = new ui::ActionMenu(this, {}, items);
         moreSheet->setObjectName("libraryMoreSheet");
         moreSheet->dismissed = [this] { closeOverlay(); };
         moreSheet->setDimmed(true);
@@ -1585,5 +1560,98 @@ void LibraryView::showFolders()
     setDark(dark);
     folderPage->show();
     folderPage->raise();
+}
+
+void LibraryView::setWordsDirectory(const QString &directory)
+{
+    if (directory.isEmpty() || !annotationDatabaseEnabled())
+        return;
+    savedWords = std::make_unique<SavedWords>(directory);
+    savedWordsDirectory = directory;
+    savedWords->changed = [this] {
+        if (wordList && wordList->isVisible())
+            showWords();
+    };
+}
+
+void LibraryView::showWords()
+{
+    if (!wordList) {
+        wordList = new WordList(this, WordList::Scope::Library);
+        wordList->back = [this] { wordList->hide(); };
+        wordList->selected = [this](const SavedWord &word) { openWord(word); };
+        wordList->removeRequested = [this](const SavedWord &word) {
+            savedWords->remove(word.book, word.word);
+        };
+        wordPage = new WordPage(this);
+        wordPage->back = [this] { wordPage->hide(); };
+        wordPage->removeRequested = [this](const SavedWord &word) {
+            savedWords->remove(word.book, word.word);
+            wordPage->hide();
+        };
+        wordPage->passageRequested = [this](const SavedWord &word) {
+            const auto key = bookFor(word);
+            if (key.isEmpty() || !openPassage)
+                return;
+            wordPage->hide();
+            wordList->hide();
+            openPassage(key, word.position);
+        };
+        setDark(dark);
+    }
+    wordList->setGeometry(rect());
+    // Without an open book, words use the default reading font, and their
+    // definitions the dictionary font when Settings chose one.
+    const auto preferences =
+            storage::readPreferences(savedWordsDirectory + "/reader-settings.json").object;
+    const auto bookFamily =
+            preferences.value("default_font_face").toString(QStringLiteral("Libron"));
+    const auto dictionaryFamily = preferences.value("dictionary_font_face").toString();
+    wordList->setExcerptFont(bookFamily);
+    wordList->setGlossFont(dictionaryFamily.isEmpty() ? bookFamily : dictionaryFamily);
+    wordPage->setFonts(bookFamily, dictionaryFamily,
+                       preferences.value("dictionary_font_size").toInt(100));
+    if (!wordList->isVisible())
+        wordList->setWords(wordList->words(), wordList->words().isEmpty());
+    wordList->show();
+    wordList->raise();
+    if (wordPage->isVisible())
+        wordPage->raise();
+    QPointer<LibraryView> guard(this);
+    savedWords->load({}, [guard](bool ok, QVector<SavedWord> words) {
+        if (guard && ok && guard->wordList)
+            guard->wordList->setWords(std::move(words));
+    });
+}
+
+void LibraryView::openWord(const SavedWord &word)
+{
+    wordPage->setGeometry(rect());
+    wordPage->open(word, bookFor(word).isEmpty() ? QString() : strings::get("words.open_passage"));
+    setDark(dark);
+}
+
+QString LibraryView::bookFor(const SavedWord &word) const
+{
+    // A local file is checked by its fingerprint, which reads only the archive's
+    // directory. An Android document can only be matched by its key.
+    const auto matches = [&word](const QString &key) {
+        if (!key.startsWith('/'))
+            return true;
+        QFile file(key);
+        Publication publication;
+        QString error;
+        return file.open(QIODevice::ReadOnly) && publication.inspect(file, &error)
+                && QString::fromLatin1(publication.fingerprint()) == word.fingerprint;
+    };
+    if (index.books.contains(word.sourceKey) && matches(word.sourceKey))
+        return word.sourceKey;
+    if (word.fingerprint.isEmpty())
+        return {};
+    for (auto it = index.books.cbegin(); it != index.books.cend(); ++it)
+        if (it.key() != word.sourceKey && it.key().startsWith('/') && !word.title.isEmpty()
+            && it.value().title.compare(word.title, Qt::CaseInsensitive) == 0 && matches(it.key()))
+            return it.key();
+    return {};
 }
 } // namespace kobalt::library

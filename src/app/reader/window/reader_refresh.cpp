@@ -659,10 +659,13 @@ void Reader::syncReadingControls()
             action->setVisible(!settingsOpen);
     toolbarComposition.search->setVisible(!settingsOpen && !zen);
     const bool bookmarksShown = features::enabled(preferences, features::Bookmarks);
-    const auto marksLabel = strings::get(
-            !bookmarksShown                                                 ? "annotations.tab"
-                    : features::enabled(preferences, features::Annotations) ? "reader.bookmarks"
-                                                                            : "bookmarks.title");
+    const bool annotationsShown = features::enabled(preferences, features::Annotations);
+    const bool wordsShown = savedWords && features::enabled(preferences, features::Words);
+    const auto marksLabel = strings::get(bookmarksShown && annotationsShown ? "reader.bookmarks"
+                                                 : bookmarksShown           ? "bookmarks.title"
+                                                 : annotationsShown         ? "annotations.tab"
+                                                 : wordsShown               ? "words.title"
+                                                                            : "reader.bookmarks");
     if (toolbarComposition.bookmarks->accessibleName() != marksLabel) {
         toolbarComposition.bookmarks->setAccessibleName(marksLabel);
         toolbarComposition.bookmarks->setToolTip(marksLabel);
@@ -675,10 +678,8 @@ void Reader::syncReadingControls()
     }
     toolbarComposition.annotate->setVisible(
             !settingsOpen && !zen && features::enabled(preferences, features::Annotations));
-    toolbarComposition.bookmarks->setVisible(
-            !settingsOpen && !zen
-            && (features::enabled(preferences, features::Bookmarks)
-                || features::enabled(preferences, features::Annotations)));
+    toolbarComposition.bookmarks->setVisible(!settingsOpen && !zen
+                                             && (bookmarksShown || annotationsShown || wordsShown));
     toolbarComposition.formattingWarning->setVisible(!settingsOpen && !zen
                                                      && session->formattingWarning());
     toolbarButtons.graph->setEnabled(!session->busy() && !appearanceEdit.applying());

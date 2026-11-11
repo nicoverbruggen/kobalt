@@ -39,7 +39,7 @@ public:
     void showBookmarks(QVector<BookmarkRow> rows);
     void showAnnotations(QVector<BookmarkRow> rows, bool loading = false);
     void setSortOrder(const QString &order);
-    void setFeatures(bool bookmarks, bool annotations);
+    void setFeatures(bool bookmarks, bool annotations, bool words = false);
 
     QString sortOrder() const { return order; }
 
@@ -47,6 +47,18 @@ public:
     void setExcerptFont(const QString &family);
 
     bool annotationsShown() const { return annotations; }
+
+    // The Words tab shows `view` below this list's strip. The strip's action
+    // cell then opens every book's words.
+    void setWordsView(QWidget *view);
+    void showWords();
+    // A child panel that covers the whole list, such as every book's words,
+    // and follows its size.
+    void addCoveringPanel(QWidget *panel);
+
+    bool wordsShown() const { return words; }
+
+    std::function<void()> wordsRequested, allWordsRequested;
 
     std::function<void(bool)> tabRequested;
     std::function<void(const QString &)> selected, removeRequested;
@@ -81,8 +93,11 @@ private:
     void openRowActions(const BookmarkRow &row);
     void closePin();
     void placePin();
-    QPushButton *bookmarksTab, *annotationsTab;
-    ui::CellButton *sortButton;
+    QPushButton *bookmarksTab, *annotationsTab, *wordsTab = nullptr;
+    QWidget *wordsView = nullptr;
+    QVector<QPointer<QWidget>> coveringPanels;
+    bool words = false;
+    ui::CaptionDropdown *sortButton;
     ui::CellButton *moreButton;
     QPointer<ui::ModalOverlay> sortPopup;
     void openSort();
@@ -98,8 +113,7 @@ private:
     int listTop() const;
     int rowHeight() const;
     QFont excerptFont() const;
-    QLabel *summary, *pageHeading, *empty, *emptyHint;
-    ui::ListHeader *listHeader;
+    QLabel *empty, *emptyHint;
     ui::CellButton *close;
     ui::PagerBar *pager;
     int page = 0, rows = 1;

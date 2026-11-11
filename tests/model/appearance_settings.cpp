@@ -1,3 +1,4 @@
+#include <iterator>
 #include "reading/appearance_settings.h"
 #include "reading/page_navigation.h"
 #include "reading/features.h"
@@ -166,7 +167,7 @@ int main()
                 "Invalid time format did not fall back to detailed estimates");
     }
 
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < int(std::size(features::keys)); ++i) {
         const auto feature = features::Feature(i);
         require(features::enabled({}, feature), "A feature was hiddenFeatures by default");
         for (const auto &invalid : { QJsonValue("true"), QJsonValue(1), QJsonValue() }) {
@@ -179,6 +180,8 @@ int main()
                                            { "disable_stats", true },
                                            { "disable_annotations", true },
                                            { "disable_bookmarks", true },
+                                           { "disable_words", true },
+                                           { "save_looked_up_words", false },
                                            { "default_menu_view", "stats" },
                                            { "dense_stats_chart", true },
                                            { "navigation_bar_buttons", "pages" },
@@ -190,8 +193,15 @@ int main()
                     && !hiddenFeatures.contains("dense_stats_chart")
                     && !hiddenFeatures.contains("minimal_annotation_mode")
                     && !hiddenFeatures.contains("marks_sort")
+                    && !hiddenFeatures.contains("save_looked_up_words")
                     && hiddenFeatures.value("future_option").toInt() == 42,
             "Hidden features retained incompatible options or lost unrelated preferences");
+    // My Words shares the bookmarks' sort order, so it keeps the order alone.
+    const auto wordsShown = appearance::cleanPreferences({ { "disable_annotations", true },
+                                                           { "disable_bookmarks", true },
+                                                           { "marks_sort", "newest" } });
+    require(wordsShown.value("marks_sort") == "newest",
+            "Hiding bookmarks and annotations dropped the order My Words still uses");
     require(appearance::same({}, hiddenFeatures), "Hiding features invalidated book layout");
 
     for (bool shown : { false, true }) {

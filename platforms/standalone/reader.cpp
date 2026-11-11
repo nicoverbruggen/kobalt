@@ -121,6 +121,7 @@ void ReaderController::open(const QString &path, QSize pixels, QString sourceKey
     }
     this->restartAtStart = restartAtStart;
     currentSourceKey = std::move(sourceKey);
+    openingPosition = std::exchange(startPosition, {});
     begin(path, pixels);
 }
 
@@ -281,24 +282,26 @@ void ReaderController::begin(const QString &path, QSize pixels)
                 const double created = creating.nsecsElapsed() / 1e6;
                 QElapsedTimer waiting;
                 waiting.start();
-                window->preparePresentation(
-                        [guard, pendingWindow, lease, engine, created, waiting](bool ready) {
-                            if (!guard || !pendingWindow || guard->phase != Phase::Opening
-                                || guard->window_ != pendingWindow || guard->lease != lease) {
-                                return;
-                            }
-                            if (!ready || !lease || lease->revoked()) {
-                                guard->retire();
-                                return;
-                            }
-                            guard->phase = Phase::Reading;
-                            pendingWindow->setOpeningTiming(
-                                    guard->openingStarted,
-                                    QJsonObject{ { "engine_ms", engine },
-                                                 { "window_ms", created },
-                                                 { "wait_ms", waiting.nsecsElapsed() / 1e6 } });
-                            emit guard->opened();
-                        });
+                window->preparePresentation([guard, pendingWindow, lease, engine, created,
+                                             waiting](bool ready) {
+                    if (!guard || !pendingWindow || guard->phase != Phase::Opening
+                        || guard->window_ != pendingWindow || guard->lease != lease) {
+                        return;
+                    }
+                    if (!ready || !lease || lease->revoked()) {
+                        guard->retire();
+                        return;
+                    }
+                    guard->phase = Phase::Reading;
+                    if (!guard->openingPosition.isEmpty())
+                        pendingWindow->showPosition(std::exchange(guard->openingPosition, {}));
+                    pendingWindow->setOpeningTiming(
+                            guard->openingStarted,
+                            QJsonObject{ { "engine_ms", engine },
+                                         { "window_ms", created },
+                                         { "wait_ms", waiting.nsecsElapsed() / 1e6 } });
+                    emit guard->opened();
+                });
             },
             [guard, lastStage = OpeningStage::Content,
              painted = QElapsedTimer{}](OpeningStage stage, int percent) mutable {

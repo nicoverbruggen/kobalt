@@ -6,6 +6,7 @@
 #include "ui/controls/panels.h"
 #include "ui/dialogs/modals.h"
 #include "ui/style/theme.h"
+#include "storage/annotation_database.h"
 #include "assets/bundled_fonts.h"
 #include "reader_p.h"
 #include "dictionaries/manager.h"
@@ -267,6 +268,8 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
                                    kobalt::DiagnosticSeverity::Error);
         }
     }
+    if (kobalt::annotationDatabaseEnabled())
+        savedWords = std::make_unique<kobalt::SavedWords>(book->paths().directory);
     bookmarks = std::make_unique<kobalt::BookmarkSession>(
             *session, [this] { return layoutKey(); }, book->paths().annotations(), book->identity(),
             book->fingerprint(), session->title(), book->paths().database());
@@ -467,6 +470,8 @@ void Reader::buildReadingPage()
         dictionaryPanel->setChoices(dictionary->choices());
         dictionaryPanel->setBookFont(bookFace());
         dictionaryPanel->open(lookupText, result, lookupBounds);
+        // An edited word keeps the sentence and position of the selection.
+        recordLookup(lookupText, result);
     };
     dictionaryPanel->searchRequested = [this](const QString &query) { openSearch(query); };
     dictionaryPanel->chosen = [this](const QString &id) {
@@ -483,6 +488,7 @@ void Reader::buildReadingPage()
         dictionaryPanel->setChoices(dictionary->choices());
         dictionaryPanel->setBookFont(bookFace());
         dictionaryPanel->open(lookupText, result, lookupBounds);
+        recordLookup(lookupText, result);
     };
     linkPanel = new kobalt::LinkPanel(this);
     linkPanel->dismissed = [this] {
@@ -998,6 +1004,8 @@ void Reader::buildOverlays()
             preferences = next;
         else
             bookmarkList->setSortOrder(preferences.value("marks_sort").toString("position"));
+        if (wordList)
+            wordList->setSortOrder(bookmarkList->sortOrder());
     };
     bookmarkList->selected = [this](const QString &position) {
         if (bookmarkList->annotationsShown()) {
@@ -1038,6 +1046,7 @@ void Reader::buildOverlays()
             askRemoveBookmark(position);
         }
     };
+    buildWords();
     choices->changed = [this] {
         if (choosingTypography && choices->isVisible())
             syncNavigation();
@@ -1446,6 +1455,9 @@ void Reader::buildSettings()
     disableStandbyOption = settings->disableStandbyOption;
     settings->showPowerManagement(wifiPowerSaverVisible());
     hideTabLabelsOption->setVisible(!services.phoneLayout);
+    saveWordsOption = settings->saveWordsOption;
+    // Words are kept in the profile database; the JSON diagnostic backend has none.
+    saveWordsOption->setVisible(bool(savedWords));
     hideNonlinearOption = settings->hideNonlinearOption;
     inpageFootnotesOption = settings->inpageFootnotesOption;
     connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
@@ -1627,6 +1639,7 @@ void Reader::buildSettings()
         zenModeOption->setChecked(false);
         if (wifiPowerSaverOption)
             wifiPowerSaverOption->setChecked(false);
+        saveWordsOption->setChecked(true);
         for (const auto *key : appearance::fallbackFontKeys)
             settingsFontFaces[key] = QString();
         showSettingsFonts();

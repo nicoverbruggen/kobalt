@@ -8,6 +8,8 @@
 #include "platform/api/keyboard_controller.h"
 #include <QFont>
 #include <QLabel>
+#include "ui/dialogs/modals.h"
+#include <QPointer>
 
 namespace kobalt {
 // A sheet across the full width, fixed to the screen edge away from the word.
@@ -19,6 +21,11 @@ public:
     std::function<void(QString)> chosen;
     std::function<void(QString)> requested, searchRequested;
     std::function<void(const QFont &)> prepareEditorFont;
+    // The My Words cell: a check when the word is saved, a plus otherwise.
+    // Hidden while `available` is false, such as without a definition.
+    void setSaved(bool saved, bool available = true);
+    QWidget *saveActionButton() const;
+    std::function<void(bool)> saveToggled;
     void setChoices(QVector<DictionaryChoice> values);
     void setLanguage(const QString &language);
     // The resolved book face supplies the header and default definition text.
@@ -40,7 +47,11 @@ protected:
 private:
     ui::PagerBar *pages, *choicesPaging;
     std::unique_ptr<KeyboardController> keyboard;
-    ui::CellButton *dictionary, *close, *edit, *submit, *search;
+    // On a narrow sheet, `actions` opens a menu with edit, search and save.
+    ui::CellButton *dictionary, *close, *edit, *submit, *search, *save, *actions;
+    QPointer<ui::ModalOverlay> actionMenu;
+    void openActions();
+    bool saved = false, saveAvailable = false;
     QLineEdit *query;
     QRect selection;
     bool editing = false;

@@ -223,8 +223,9 @@ public:
                          bool startTokenPolicy = false);
     void annotationRange(const QString &start, const QString &end,
                          std::function<void(TextRange)> finished);
+    // `withContext` also reads the sentence around the range.
     void textRange(const QString &start, const QString &end,
-                   std::function<void(TextRange)> finished);
+                   std::function<void(TextRange)> finished, bool withContext = false);
     void wordAt(QPoint point, std::function<void(WordSelection)> finished);
     void imageAt(QPoint point, std::function<void(QImage)> finished);
     void linkDetails(const QString &source, std::function<void(LinkDetails)> finished);

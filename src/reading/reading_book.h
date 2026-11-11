@@ -40,6 +40,10 @@ public:
 
     const QByteArray &fingerprint() const { return digest; }
 
+    // The host's key for the opened file, such as an Android document URI.
+    // Empty when the identity already names the file.
+    const QString &sourceKey() const { return sourceKey_; }
+
     bool deviceTransition() const;
     bool canWriteNative() const;
 
@@ -205,7 +209,7 @@ private:
     // `background` queues the write instead of waiting for it.
     void saveSpeed(bool force = false, bool background = false);
     std::unique_ptr<ReaderSession> session_;
-    QString statePath, identity_;
+    QString statePath, identity_, sourceKey_;
     storage::Paths paths_;
     QByteArray digest;
     std::unique_ptr<ReadingBridge> bridge;

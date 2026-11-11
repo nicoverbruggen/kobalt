@@ -91,6 +91,8 @@ public:
     void setTitleGap(int pixels);
     void setDetailFont(const QFont &font);
     void setMetadataFont(const QFont &font);
+    // The caption alone, after setMetadataFont; the leading and trailing text keep theirs.
+    void setCaptionFont(const QFont &font);
     QPushButton *addAction(const QString &name, const QString &accessibleName);
     void setActionIcon(ControlIcon icon);
     QSize sizeHint() const override;

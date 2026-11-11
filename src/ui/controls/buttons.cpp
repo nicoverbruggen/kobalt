@@ -696,6 +696,74 @@ void DismissButton::paintEvent(QPaintEvent *)
     controlIcon(ControlIcon::Close, pressed ? paper : ink).paint(&painter, bounds);
 }
 
+CaptionDropdown::CaptionDropdown(QWidget *parent) : Button(parent)
+{
+    setFocusPolicy(Qt::NoFocus);
+    // The strip sets the height; a button's usual minimum would reach under
+    // the rows below it and cover the strip's divider.
+    readerStyle(this, "QPushButton{min-height:0;}");
+    setMinimumHeight(0);
+}
+
+bool CaptionDropdown::fitsBeside(int progress) const
+{
+    const int needed = qMax(interfaceTextWidth(text().toUpper(), captionFont()),
+                            interfaceTextWidth(label.toUpper(), labelFont()));
+    return needed <= width() - 2 * metrics::chrome::inset - progress - px(24);
+}
+
+QFont CaptionDropdown::labelFont()
+{
+    return captionFont(metrics::chrome::captionLabelText);
+}
+
+void CaptionDropdown::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    const auto paper = palette().color(QPalette::Window),
+               ink = palette().color(QPalette::WindowText);
+    painter.fillRect(rect(), isDown() ? palette().color(QPalette::Midlight) : paper);
+    const int inset = metrics::chrome::inset;
+    const int left = busy && progressWidth ? inset + progressWidth + px(24) : inset;
+    const int chevron = px(18), gap = px(20);
+    const bool choices = !busy && !plain;
+    const int available = qMax(1, width() - left - inset - (choices ? chevron + gap : 0));
+    const QFont valueFont = captionFont();
+    painter.setPen(ink);
+    painter.setFont(valueFont);
+    const auto shown = elideInterfaceText(text().toUpper(), valueFont, available);
+    if (!choices) {
+        // Scan progress and plain captions: one line, without label or chevron.
+        drawInterfaceText(painter, QRect(left, 0, available, height()), shown,
+                          Qt::AlignLeft | Qt::AlignVCenter);
+        return;
+    }
+    // Each line is as tall as its capitals, and the lines centre as one group,
+    // as in the bottom tabs. The value has no descenders, so the chevron
+    // centres on the value line.
+    const int valueHeight = interfaceInkBounds(QStringLiteral("H"), valueFont).height();
+    int top = (height() - valueHeight) / 2;
+    if (!label.isEmpty()) {
+        const QFont small = labelFont();
+        const int labelHeight = interfaceInkBounds(QStringLiteral("H"), small).height(),
+                  spacing = px(10);
+        top = (height() - labelHeight - spacing - valueHeight) / 2;
+        painter.setFont(small);
+        drawOpticalText(painter, QRect(left, top, available, labelHeight), label.toUpper());
+        painter.setFont(valueFont);
+        top += labelHeight + spacing;
+    }
+    const QRect valueLine(left, top, available, valueHeight);
+    drawOpticalText(painter, valueLine, shown);
+    const int h = chevron / 2;
+    const QPoint center(left + interfaceTextWidth(shown, valueFont) + gap + h,
+                        valueLine.center().y());
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(ink, qMax(1, px(3)), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPolyline(QPolygon({ center + QPoint(-h, -h / 2), center + QPoint(0, h / 2),
+                                    center + QPoint(h, -h / 2) }));
+}
+
 namespace {
 QStringList cellLabelLines(const QString &text, const QFont &font, int available)
 {

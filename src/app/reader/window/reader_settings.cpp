@@ -350,6 +350,7 @@ void Reader::openSettings()
     settingsTimeRemainingFormat =
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
+    saveWordsOption->setChecked(preferences.value("save_looked_up_words").toBool(true));
     zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
     static_cast<SettingsPanel *>(general)->hideBookOnSleepOption->setChecked(
             book->hideBookOnSleepScreen());
@@ -768,6 +769,7 @@ void Reader::applySettings()
     next["dictionary_font_size"] = settingsDictionaryFontSize;
     next["header_footer_added_weight"] = settingsHeaderFooterWeight;
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
+    next["save_looked_up_words"] = saveWordsOption->isChecked();
     next["zen_mode"] = zenModeOption->isChecked();
     if (wifiPowerSaverOption)
         next[wifiPowerSaverKey] = wifiPowerSaverOption->isChecked();
@@ -853,6 +855,13 @@ void Reader::applySettings()
         kosyncClient->cancel();
         syncCoordinator->resetProgress();
         hideKosyncOpening();
+    }
+    if (!features::enabled(preferences, features::Words)) {
+        ++savedLookupEpoch;
+        lookupSnapshot = {};
+        dictionaryPanel->setSaved(false, false);
+        if (wordNotice)
+            wordNotice->hide();
     }
     if (!features::enabled(preferences, features::Annotations) && annotationMode)
         leaveAnnotations();

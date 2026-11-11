@@ -1207,7 +1207,7 @@ TextRange EngineDocument::annotationRange(const QString &start, const QString &e
     return textRange(first.start, last.end);
 }
 
-TextRange EngineDocument::textRange(const QString &start, const QString &end)
+TextRange EngineDocument::textRange(const QString &start, const QString &end, bool withContext)
 {
     if (!engine_ || start.isEmpty() || end.isEmpty() || start.size() > 4096 || end.size() > 4096) {
         return {};
@@ -1229,7 +1229,27 @@ TextRange EngineDocument::textRange(const QString &start, const QString &end)
     if (text.isEmpty() || text.size() > 256 * 1024) {
         return {};
     }
-    return { qstring(a.toString()), qstring(b.toString()), text };
+    TextRange result{ qstring(a.toString()), qstring(b.toString()), text };
+    if (withContext) {
+        ldomXPointerEx first(a), last(b);
+        first.thisSentenceStart();
+        last.thisSentenceEnd();
+        if (first.compare(a) <= 0 && last.compare(b) >= 0) {
+            auto sentence = qstring(ldomXRange(first, last).getRangeText()).simplified();
+            // A long sentence keeps the part around the range.
+            constexpr int limit = 600;
+            if (sentence.size() > limit) {
+                const int at = qMax(0, int(sentence.indexOf(text)));
+                const int from = qBound(0, at + int(text.size()) / 2 - limit / 2,
+                                        int(sentence.size()) - limit);
+                sentence = QString(from > 0 ? QStringLiteral("…") : QString())
+                        + sentence.mid(from, limit)
+                        + (from + limit < sentence.size() ? QStringLiteral("…") : QString());
+            }
+            result.context = sentence;
+        }
+    }
+    return result;
 }
 
 QVector<int>

@@ -76,6 +76,12 @@ int PagedText::pages() const
     return document.pages();
 }
 
+int PagedText::contentHeight() const
+{
+    ensureLayout();
+    return document.height() + margins.top() + margins.bottom();
+}
+
 void PagedText::setPage(int number)
 {
     // A stale layout clamps the page when it is next laid out.

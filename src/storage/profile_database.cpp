@@ -28,7 +28,7 @@
 namespace kobalt {
 namespace {
 constexpr int applicationId = 1262571057; // KAN1, owned annotation database.
-constexpr int schemaVersion = 3;
+constexpr int schemaVersion = 4;
 constexpr qint64 maxDatabaseBytes = (qint64(1) << 32) - 1;
 
 // SQLite reports a damaged file as CORRUPT or NOTADB. A lock or an I/O error
@@ -83,7 +83,8 @@ QVariant scalar(QSqlDatabase &db, const QString &statement)
     return q.value(0);
 }
 
-void validateSchema(QSqlDatabase &db, bool sessions = false)
+// Version 3 added reading sessions and version 4 added saved words.
+void validateSchema(QSqlDatabase &db, int version)
 {
     // Names alone accept partial tables and CREATE TABLE AS copies whose
     // primary keys are gone. Reject both before changing the journal mode.
@@ -111,12 +112,19 @@ void validateSchema(QSqlDatabase &db, bool sessions = false)
                "key" },
         Table{ "library_folders", "key,label,ordinal", "TEXT,TEXT,INTEGER", "key" }
     };
-    if (sessions)
+    if (version >= 3)
         tables.append(
                 { "reading_sessions",
                   "id,book,identity,fingerprint,source_key,title,author,started,observed,active_ms,start_position,end_position,status",
                   "TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,INTEGER,INTEGER,INTEGER,TEXT,TEXT,TEXT",
                   "id" });
+    if (version >= 4)
+        tables.append(
+                { "saved_words",
+                  "book,word_key,word,identity,fingerprint,source_key,title,author,chapter,context,position,"
+                  "dictionary,definition,created,looked_up,lookups",
+                  "TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,INTEGER,INTEGER,INTEGER",
+                  "book,word_key" });
     for (const auto &table : tables) {
         QSqlQuery query(db);
         const auto name = QString::fromLatin1(table.name);
@@ -155,6 +163,20 @@ void sessionSchema(QSqlDatabase &db)
         "status TEXT NOT NULL CHECK(status IN ('active','completed','interrupted')))");
     run(db, "CREATE INDEX reading_sessions_book ON reading_sessions(book,started)");
     run(db, "CREATE INDEX reading_sessions_started ON reading_sessions(started)");
+}
+
+// One row per word and book. The book columns are a snapshot from the lookup,
+// so a word outlives its book in the Library, like reading sessions.
+void wordSchema(QSqlDatabase &db)
+{
+    run(db,
+        "CREATE TABLE saved_words(book TEXT NOT NULL,word_key TEXT NOT NULL,word TEXT NOT NULL,"
+        "identity TEXT NOT NULL,fingerprint TEXT NOT NULL,source_key TEXT NOT NULL,title TEXT NOT NULL,"
+        "author TEXT NOT NULL,chapter TEXT NOT NULL,context TEXT NOT NULL,position TEXT NOT NULL,"
+        "dictionary TEXT NOT NULL,definition TEXT NOT NULL,created INTEGER NOT NULL CHECK(created>=0),"
+        "looked_up INTEGER NOT NULL CHECK(looked_up>=created),lookups INTEGER NOT NULL CHECK(lookups>0),"
+        "PRIMARY KEY(book,word_key))");
+    run(db, "CREATE INDEX saved_words_looked_up ON saved_words(looked_up)");
 }
 
 void profileSchema(QSqlDatabase &db)
@@ -216,6 +238,7 @@ void createDatabase(const QString &path, const QString &directory)
             run(db, "CREATE INDEX entry_order ON entries(book,kind,ordinal)");
             profileSchema(db);
             sessionSchema(db);
+            wordSchema(db);
             run(db, QString("PRAGMA application_id=%1").arg(applicationId));
             run(db, QString("PRAGMA user_version=%1").arg(schemaVersion));
             check(db.commit(), "database-commit");
@@ -414,7 +437,7 @@ private:
             check(scalar(db, "PRAGMA application_id").toInt() == applicationId,
                   "unsupported-database-format");
             const int version = scalar(db, "PRAGMA user_version").toInt();
-            check(version == 2 || version == schemaVersion, "unsupported-database-version");
+            check(version >= 2 && version <= schemaVersion, "unsupported-database-version");
             check(scalar(db, "PRAGMA encoding").toString() == QStringLiteral("UTF-8"),
                   "unsupported-database-encoding");
             const qint64 pageSize = scalar(db, "PRAGMA page_size").toLongLong();
@@ -432,23 +455,25 @@ private:
                            "name IN ('books','lists','entries','imports','library_books','library_folders','book_state','profile_state')")
                             .toInt();
             check(tables == 8, "invalid-database");
-            validateSchema(db, version == schemaVersion);
-            if (version == 2) {
+            validateSchema(db, version);
+            if (version < schemaVersion) {
                 // Upgrade before changing the journal mode. A rejected or failed
                 // migration leaves the old schema and data intact.
                 run(db, "PRAGMA synchronous=EXTRA");
                 run(db, "PRAGMA fullfsync=ON");
                 run(db, "BEGIN IMMEDIATE");
                 const int lockedVersion = scalar(db, "PRAGMA user_version").toInt();
-                check(lockedVersion == 2 || lockedVersion == schemaVersion,
+                check(lockedVersion >= 2 && lockedVersion <= schemaVersion,
                       "unsupported-database-version");
-                validateSchema(db, lockedVersion == schemaVersion);
-                if (lockedVersion == 2) {
-                    sessionSchema(db);
+                validateSchema(db, lockedVersion);
+                if (lockedVersion < schemaVersion) {
+                    if (lockedVersion < 3)
+                        sessionSchema(db);
+                    wordSchema(db);
                     run(db, QString("PRAGMA user_version=%1").arg(schemaVersion));
                 }
                 check(db.commit(), "database-commit");
-                validateSchema(db, true);
+                validateSchema(db, schemaVersion);
             }
             // Validate and, if needed, migrate before changing journal mode.
             // A rejected file keeps its content; only a log left by a crash

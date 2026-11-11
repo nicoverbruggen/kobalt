@@ -109,6 +109,8 @@ struct SyncedPositionDescription
 {
     PositionComparison comparison;
     QString chapter;
+    // Compared only: the page of the synced position in this layout, or -1.
+    int page = -1;
 };
 
 // GUI-side settings and immutable frame copies. The worker owns engine access.
@@ -172,7 +174,7 @@ public:
     bool goTo(const QString &anchor);
     bool goToNative(const QString &location, std::function<void(QString)> finished);
     bool goToSyncedPosition(const QString &position, std::function<void(QString)> finished);
-    // Resolves chapter and source order without navigating or rendering another page.
+    // Resolves chapter, page and source order without navigating or rendering another page.
     void describeSyncedPosition(const QString &position,
                                 std::function<void(SyncedPositionDescription)> finished);
     void nativePosition(std::function<void(QString, QString)> finished);

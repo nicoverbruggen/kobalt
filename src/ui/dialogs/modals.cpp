@@ -116,10 +116,7 @@ public:
     {
         setObjectName(action.name);
         setFocusPolicy(Qt::StrongFocus);
-        setProperty("reader_primary_action", primary);
-        readerStyle(this,
-                    "QPushButton{border:none;padding:0;min-height:0;"
-                            + styles::font(metrics::chrome::labelText, primary) + "}");
+        setModalActionPrimary(this, primary);
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     }
 
@@ -608,6 +605,14 @@ bool ModalOverlay::focusNextPrevChild(bool next)
         }
     } while (candidate != start);
     return true;
+}
+
+void setModalActionPrimary(QPushButton *button, bool primary)
+{
+    button->setProperty("reader_primary_action", primary);
+    readerStyle(button,
+                "QPushButton{border:none;padding:0;min-height:0;"
+                        + styles::font(metrics::chrome::labelText, primary) + "}");
 }
 
 QPushButton *makeModalButton(QWidget *parent, const ModalAction &action, bool primary)

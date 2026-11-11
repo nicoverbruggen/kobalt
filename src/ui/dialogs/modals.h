@@ -129,6 +129,9 @@ struct ModalAction
 };
 
 QPushButton *makeModalButton(QWidget *parent, const ModalAction &action, bool primary);
+// The primary action has a bold label. A choice can move that weight to the
+// safer action, as the sync choice does when the synced position is behind.
+void setModalActionPrimary(QPushButton *button, bool primary);
 
 class NoticeModal : public ModalOverlay
 {

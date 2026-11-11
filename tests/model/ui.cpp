@@ -5661,9 +5661,9 @@ int main(int argc, char **argv)
         }
         // Async descriptions must resize nested headings after the initial short message.
         choice.descriptionLabel()->setText(
-                kobalt::strings::get("kosync.position_comparison")
-                        .arg("12.3", "Local chapter", "45.6", "Remote chapter", "Test reader",
-                             "Synced: 8 Nov 2026 09:00", "The synced position is ahead."));
+                "On this device · 12.3%\nLocal chapter\n\nSynced position · 45.6%\nRemote "
+                "chapter\nDevice: Test reader\nSynced: 8 Nov 2026 09:00\n\nThe synced position "
+                "is ahead.");
         choice.fitCard();
         app.processEvents();
         auto *body = choice.descriptionLabel();

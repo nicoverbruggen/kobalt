@@ -340,6 +340,22 @@ inline QRect centered(const QSize &size)
 }
 } // namespace notice
 
+namespace syncChoice {
+// The KOSync position choice: a jump graph over From, To, Device and Synced rows.
+// Lines stay at least 4 px on a 300 ppi e-ink screen.
+inline constexpr int pageJump = 12; // Larger jumps leave the page boxes for a track.
+// The graph keeps the width it has on an e-reader card and is centered on wider cards.
+inline constexpr Px graphWidth{ 688 };
+inline constexpr Px graphGap{ 36 }, labelGap{ 14 }, rowGap{ 16 }, captionGap{ 36 }, ruleGap{ 22 },
+        bottomGap{ 40 };
+inline constexpr Px track{ 6 }, arrow{ 10 }, arrowHead{ 28 }, here{ 13 }, hereLine{ 5 };
+inline constexpr Px tick{ 4 }, tickReach{ 14 }, minimumTickGap{ 14 }, dot{ 3 }, dotPitch{ 10 },
+        trackEnd{ 32 };
+inline constexpr Px pageWidth{ 40 }, pageHeight{ 54 }, pageGap{ 12 }, pageLine{ 2 },
+        currentPageLine{ 5 }, jumpLine{ 5 }, jumpHead{ 18 }, jumpLift{ 36 }, startLine{ 3 },
+        startDash{ 6 }, startReach{ 12 };
+} // namespace syncChoice
+
 namespace acknowledgments {
 inline constexpr Px textMargin{ 12 }, captionGap{ 40 };
 inline constexpr TextPx noticeText{ 24 };

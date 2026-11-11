@@ -13,6 +13,7 @@
 #include "app/reader/views/reading_page.h"
 #include "render/page_refresh_regions.h"
 #include "app/reader/views/kosync_notice.h"
+#include "app/reader/views/sync_choice.h"
 #include "platforms/desktop/window.h"
 #include "platforms/desktop/services.h"
 #include "app/reader/views/opening.h"
@@ -10562,9 +10563,121 @@ private slots:
         QVERIFY(capture(fixture, name + "-fonts-kf-default"));
     }
 
+    // Checks the sync choice's scales, jump label, chapter starts and rows with a long nested book.
+    void syncChoiceView()
+    {
+        // War and Peace in miniature: front matter, then Books whose first
+        // chapter starts on the Book's own page, five pages a chapter.
+        QVector<ChapterLink> links{ { "Contents", "front", 0, 0 } };
+        int page = 2;
+        for (int book = 1; book <= 15; ++book) {
+            links.append({ QString("BOOK %1").arg(book), {}, page, 0 });
+            for (int chapter = 1; chapter <= 20; ++chapter, page += 5)
+                links.append({ QString("CHAPTER %1").arg(chapter), {}, page, 1 });
+        }
+        const int pages = page + 3;
+        const auto starts = reader::syncChapterStarts(links);
+        // Each Book heading shares its page with its first chapter.
+        QCOMPARE(starts.size(), 1 + 15 * 20);
+        QCOMPARE(starts[1].title, QString("CHAPTER 1"));
+        QCOMPARE(starts[1].parent, QString("BOOK 1"));
+        QVERIFY(starts[1].top && !starts[2].top);
+        QCOMPARE(reader::syncChapterParent(links, "CHAPTER 8", 2 + 8 * 100 + 7 * 5),
+                 QString("BOOK 9"));
+        QVERIFY(reader::syncChapterParent(links, "Contents", 0).isEmpty());
+
+        reader::SyncJump jump;
+        jump.pages = pages;
+        jump.starts = starts;
+        jump.nested = true;
+        jump.fromChapter = "CHAPTER 8";
+        jump.fromParent = "BOOK 9";
+        jump.toChapter = "CHAPTER 2";
+        jump.toParent = "BOOK 9";
+        jump.fromPercent = 54;
+        jump.toPercent = 54.4;
+        jump.device = "A reader with a deliberately long device name for comparison, and then a "
+                      "little more text after that";
+        jump.time = "Today at 09:00";
+        reader::SyncChoiceView view(nullptr);
+        const auto check = [&](int here, int synced, reader::SyncChoiceView::Scale scale,
+                               const QString &label) {
+            jump.here = here;
+            jump.synced = synced;
+            view.setJump(jump);
+            QCOMPARE(view.scale(), scale);
+            QCOMPARE(view.jumpLabel(), label);
+            const int height = view.heightForWidth(688);
+            QVERIFY(height > 0);
+            view.resize(688, height);
+            // The view draws ink, not only paper.
+            const auto image = view.grab().toImage();
+            QVERIFY(image.width() == 688 && image.height() == height);
+            bool ink = false;
+            for (int y = 0; y < image.height() && !ink; y += 2)
+                for (int x = 0; x < image.width() && !ink; x += 2)
+                    ink = qGray(image.pixel(x, y)) < 64;
+            QVERIFY(ink);
+        };
+        const int chapter = starts[180].page;
+        check(chapter - 1, chapter + 1, reader::SyncChoiceView::Scale::Pages,
+              "2 pages ahead · 1 chapter");
+        check(chapter + 3, chapter + 2, reader::SyncChoiceView::Scale::Pages, "1 page back");
+        // A jump onto the last page, with neighbouring page numbers.
+        check(pages - 2, pages - 1, reader::SyncChoiceView::Scale::Pages, "1 page ahead");
+        check(chapter, chapter + 12, reader::SyncChoiceView::Scale::Pages,
+              "12 pages ahead · 2 chapters");
+        check(chapter, chapter + 13, reader::SyncChoiceView::Scale::Track,
+              "13 pages ahead · 2 chapters");
+        check(chapter, chapter - 200, reader::SyncChoiceView::Scale::Track,
+              "200 pages back · 40 chapters");
+        // From a quarter of the book, the graph shows the whole book.
+        const int quarter = (pages + 3) / 4;
+        const auto crossing = [&](int distance) {
+            return std::count_if(starts.cbegin(), starts.cend(), [&](const auto &start) {
+                return start.page > chapter && start.page <= chapter + distance;
+            });
+        };
+        check(chapter, chapter + quarter - 1, reader::SyncChoiceView::Scale::Track,
+              QString("%1 pages ahead · %2 chapters").arg(quarter - 1).arg(crossing(quarter - 1)));
+        check(chapter, chapter + quarter, reader::SyncChoiceView::Scale::Book,
+              QString("%1 pages ahead · %2 chapters").arg(quarter).arg(crossing(quarter)));
+        // The From row reads "Same chapter" only when the graph shows a jump.
+        jump.toChapter = jump.fromChapter;
+        jump.here = chapter;
+        jump.synced = chapter + 1;
+        QVERIFY(jump.sameChapter() && jump.startsCrossed() == 0);
+        // Different chapters with one title, or a book without contents, are
+        // not one chapter.
+        jump.synced = chapter + 6;
+        QVERIFY(jump.startsCrossed() == 1 && !jump.sameChapter());
+        jump.synced = chapter + 1;
+        jump.fromChapter = jump.toChapter = QString();
+        QVERIFY(!jump.sameChapter());
+        jump.fromChapter = jump.toChapter = "CHAPTER 8";
+        view.setJump(jump);
+        const int withGraph = view.heightForWidth(688);
+        // Without a synced page the view keeps its rows and drops the graph.
+        jump.synced = -1;
+        view.setJump(jump);
+        QVERIFY(!jump.drawable());
+        QVERIFY(view.heightForWidth(688) > 0 && view.heightForWidth(688) < withGraph);
+
+        const QDateTime now(QDate(2026, 11, 8), QTime(18, 0));
+        QCOMPARE(reader::syncTimeText(QDateTime(QDate(2026, 11, 8), QTime(9, 0)), now),
+                 strings::get("kosync.today_at")
+                         .arg(QLocale().toString(QTime(9, 0), QLocale::ShortFormat)));
+        QCOMPARE(reader::syncTimeText(QDateTime(QDate(2026, 11, 7), QTime(21, 14)), now),
+                 strings::get("kosync.yesterday_at")
+                         .arg(QLocale().toString(QTime(21, 14), QLocale::ShortFormat)));
+        const QDateTime older(QDate(2026, 11, 3), QTime(18, 40));
+        QCOMPARE(reader::syncTimeText(older, now), QLocale().toString(older, QLocale::ShortFormat));
+        QCOMPARE(reader::syncTimeText(QDateTime(), now), strings::get("kosync.time_unavailable"));
+    }
+
     void kosyncChoice_data() { screenshotVariants(); }
 
-    // The real async progress choice must show every body line after its loading message.
+    // The real async progress choice shows its jump graph and rows after its loading message.
     void kosyncChoice()
     {
         QFETCH(int, preset);
@@ -10592,42 +10705,86 @@ private slots:
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         openPrologueBody(fixture);
         const auto earlier = fixture.state().value("position").toString();
+        const int earlierPage = fixture.state().value("page").toInt();
         for (int i = 0; i < 5; ++i)
             QVERIFY(fixture.turnPage(1));
         const auto later = fixture.state().value("position").toString();
         QVERIFY(earlier != later);
-        for (const bool backward : { true, false }) {
-            if (!backward)
+        // A jump past the page boxes shows the track.
+        for (int i = 0; i < ui::metrics::syncChoice::pageJump; ++i)
+            QVERIFY(fixture.turnPage(1));
+        const auto farther = fixture.state().value("position").toString();
+        for (int i = 0; i < 5 + ui::metrics::syncChoice::pageJump; ++i)
+            QVERIFY(fixture.turnPage(-1));
+        QCOMPARE(fixture.state().value("page").toInt(), earlierPage);
+
+        struct Case
+        {
+            const char *scene;
+            QString position;
+            int direction;
+            bool pages;
+            QString device;
+        };
+
+        // A typical device name in one scene shows the usual row spacing. The
+        // long name in the others wraps to two lines.
+        const QString longName("A reader with a deliberately long device name for comparison");
+        // Backward starts five pages on, so the earlier position is behind it.
+        for (const auto &jump :
+             { Case{ "-kosync-choice-backward", earlier, -1, true, "Kobo Clara Colour" },
+               Case{ "-kosync-choice-forward", later, 1, true, longName },
+               Case{ "-kosync-choice-far", farther, 1, false, longName } }) {
+            if (jump.direction < 0)
+                for (int i = 0; i < 5; ++i)
+                    QVERIFY(fixture.turnPage(1));
+            else if (fixture.state().value("page").toInt() != earlierPage)
                 for (int i = 0; i < 5; ++i)
                     QVERIFY(fixture.turnPage(-1));
-            *body = QJsonDocument(
-                            QJsonObject{
-                                    { "progress", backward ? earlier : later },
-                                    { "percentage", backward ? 0.1 : 0.5 },
-                                    { "device",
-                                      "A reader with a deliberately long device name for comparison" },
-                                    { "device_id",
-                                      backward ? "remote-backward" : "remote-forward" },
-                                    { "timestamp", 1794124800 } })
+            *body = QJsonDocument(QJsonObject{ { "progress", jump.position },
+                                               { "percentage", jump.direction < 0 ? 0.1 : 0.5 },
+                                               { "device", jump.device },
+                                               { "device_id", QString("remote") + jump.scene },
+                                               { "timestamp", 1794124800 } })
                             .toJson();
             fixture.window.readerWindow()->findChild<QPushButton *>("rrKosyncNow")->click();
             QPointer<ui::ChoiceModal> dialog;
             QTRY_VERIFY((dialog = dynamic_cast<ui::ChoiceModal *>(fixture.widget("rrKosyncChoice")))
                         && dialog->isVisible() && dialog->primaryButton()->isEnabled());
-            const auto direction = strings::get(backward ? "kosync.direction_backward"
-                                                         : "kosync.direction_forward");
-            auto *description = dialog->descriptionLabel();
-            QVERIFY(description->text().contains(direction));
-            QVERIFY(capture(
-                    fixture,
-                    name + (backward ? "-kosync-choice-backward" : "-kosync-choice-forward")));
-            QVERIFY2(description->height() >= description->heightForWidth(description->width()),
-                     qPrintable(QString("body %1, required %2")
-                                        .arg(description->height())
-                                        .arg(description->heightForWidth(description->width()))));
-            QCOMPARE(description->visibleRegion().boundingRect(), description->rect());
-            QVERIFY(dialog->rect().contains(dialog->card()->geometry()));
+            auto *view = dynamic_cast<reader::SyncChoiceView *>(
+                    dialog->findChild<QWidget *>("rrKosyncChoiceView"));
+            QVERIFY(view && view->isVisible());
+            QCOMPARE(view->jump().direction(), jump.direction);
+            QVERIFY(view->jump().drawable());
+            QCOMPARE(view->scale() == reader::SyncChoiceView::Scale::Pages, jump.pages);
+            QCOMPARE(view->jump().device, jump.device);
+            QVERIFY(!view->jump().fromChapter.isEmpty() && !view->jump().toChapter.isEmpty());
             auto *title = dialog->findChild<QLabel *>("rrModalTitle");
+            QCOMPARE(title->text(),
+                     strings::get(jump.direction > 0 ? "kosync.ahead_title"
+                                                     : "kosync.behind_title"));
+            QVERIFY(!dialog->descriptionLabel()->isVisible());
+            // Forward makes the jump the bold action; backward makes staying bold and focused.
+            QCOMPARE(dialog->primaryButton()->text(),
+                     strings::get(jump.direction > 0 ? "kosync.jump_ahead" : "kosync.go_back"));
+            QCOMPARE(dialog->secondaryButton()->text(), strings::get("kosync.stay_here"));
+            QCOMPARE(dialog->primaryButton()->property("reader_primary_action").toBool(),
+                     jump.direction > 0);
+            QCOMPARE(dialog->secondaryButton()->property("reader_primary_action").toBool(),
+                     jump.direction < 0);
+            if (jump.direction < 0)
+                QCOMPARE(dialog->focusWidget(), dialog->secondaryButton());
+            QVERIFY(capture(fixture, name + jump.scene));
+            QVERIFY2(view->height() >= view->heightForWidth(view->width()),
+                     qPrintable(QString("view %1, required %2")
+                                        .arg(view->height())
+                                        .arg(view->heightForWidth(view->width()))));
+            QCOMPARE(view->visibleRegion().boundingRect(), view->rect());
+            QVERIFY(dialog->card()->rect().contains(dialog->secondaryButton()->geometry().united(
+                    dialog->primaryButton()->geometry())));
+            QVERIFY(view->mapTo(dialog->card(), QPoint(0, view->height())).y()
+                    <= dialog->secondaryButton()->mapTo(dialog->card(), QPoint()).y());
+            QVERIFY(dialog->rect().contains(dialog->card()->geometry()));
             QVERIFY(title->height() >= title->heightForWidth(title->width()));
             dialog->secondaryButton()->click();
             QTRY_VERIFY(!dialog);

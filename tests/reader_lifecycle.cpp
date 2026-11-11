@@ -23,6 +23,7 @@
 #include "app/reader/views/appearance_preview.h"
 #include "app/reader/settings/settings_panel.h"
 #include "app/reader/views/kosync_notice.h"
+#include "app/reader/views/sync_choice.h"
 #include "app/reader/views/image_viewer.h"
 #include "app/reader/views/sleep_screen.h"
 #include "platforms/standalone/canvas.h"
@@ -9142,30 +9143,37 @@ private:
                     && widget->isVisible());
         auto *dialog = dynamic_cast<ui::ChoiceModal *>(widget.data());
         QVERIFY(dialog);
-        auto *description = dialog->descriptionLabel();
-        const auto direction = strings::get(invalid           ? "kosync.direction_unknown"
-                                                    : forward ? "kosync.direction_forward"
-                                                              : "kosync.direction_backward");
-        QTRY_VERIFY(description->text().contains(direction));
-        QVERIFY(description->text().contains(localChapter));
-        QVERIFY(description->text().contains(invalid ? strings::get("kosync.chapter_unavailable")
-                                                     : remoteChapter));
-        QVERIFY(description->text().contains("Crosspoint X4"));
-        QVERIFY(description->text().contains("Synced: "));
-        QVERIFY(description->text().contains("On this device · "
-                                             + QLocale().toString(localPercent, 'f', 1) + "%"));
-        QVERIFY(description->text().contains(
-                "Synced position · " + QLocale().toString(remotePercent * 100, 'f', 1) + "%"));
-        QCOMPARE(description->textFormat(), Qt::PlainText);
+        reader::SyncChoiceView *view = nullptr;
+        QTRY_VERIFY((view = dynamic_cast<reader::SyncChoiceView *>(
+                             dialog->findChild<QWidget *>("rrKosyncChoiceView")))
+                    && view->isVisible());
+        const auto &jump = view->jump();
+        // Source order decides the direction, not the contradictory percentage.
+        QCOMPARE(jump.direction(), invalid ? 0 : forward ? 1 : -1);
+        QCOMPARE(jump.drawable(), !invalid);
+        QCOMPARE(jump.fromChapter, localChapter);
+        QCOMPARE(jump.toChapter, invalid ? QString() : remoteChapter);
+        QCOMPARE(jump.here, host.session()->page());
+        QCOMPARE(qRound(jump.fromPercent), qRound(localPercent));
+        if (!invalid)
+            QCOMPARE(qRound(jump.toPercent),
+                     qRound(100.0 * jump.synced / (host.session()->pages() - 1)));
+        QCOMPARE(jump.device, QString("Crosspoint X4"));
+        // The server stamps the sync, so a run across midnight reads Yesterday.
+        QVERIFY(jump.time.startsWith(strings::get("kosync.today_at").arg(QString()))
+                || jump.time.startsWith(strings::get("kosync.yesterday_at").arg(QString())));
+        // A long jump leaves the page boxes for a track.
+        QVERIFY(invalid || view->scale() != reader::SyncChoiceView::Scale::Pages);
         QVERIFY(host.window()->rect().contains(dialog->card()->geometry()));
-        QVERIFY(description->height() >= description->heightForWidth(description->width()));
-        QCOMPARE(description->visibleRegion().boundingRect(), description->rect());
+        QVERIFY(view->height() >= view->heightForWidth(view->width()));
+        QCOMPARE(view->visibleRegion().boundingRect(), view->rect());
         QCOMPARE(host.session()->state().value("position").toString(), localPosition);
-        if (!invalid && !forward) {
-            QCOMPARE(dialog->findChild<QLabel *>("rrModalTitle")->text(),
-                     strings::get("kosync.resume_backward_title"));
+        const auto title = invalid ? "kosync.resume_title"
+                : forward          ? "kosync.ahead_title"
+                                   : "kosync.behind_title";
+        QCOMPARE(dialog->findChild<QLabel *>("rrModalTitle")->text(), strings::get(title));
+        if (!invalid && !forward)
             QCOMPARE(dialog->focusWidget(), dialog->secondaryButton());
-        }
         const auto capture = qEnvironmentVariable("KOBALT_KOSYNC_CHOICE_CAPTURE");
         if (!capture.isEmpty() && (decision == "keep" || forward))
             QVERIFY(host.window()->grab().save(capture

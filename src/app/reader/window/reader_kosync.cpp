@@ -3,6 +3,7 @@
 #include "support/diagnostics.h"
 #include <QTimer>
 #include "app/reader/views/kosync_notice.h"
+#include "app/reader/views/sync_choice.h"
 #include <utility>
 #include <QLocale>
 
@@ -548,7 +549,7 @@ void Reader::showKosyncChoice()
     auto *dialog = new ui::ChoiceModal(
             this,
             { strings::get("kosync.comparing_positions"), strings::get("kosync.resume_title"), {} },
-            { strings::get("kosync.keep_local"), "rrKosyncKeep" },
+            { strings::get("kosync.stay_here"), "rrKosyncKeep" },
             { strings::get("kosync.use_remote"), "rrKosyncResume" });
     kosyncDialog = dialog;
     dialog->setObjectName("rrKosyncChoice");
@@ -610,57 +611,77 @@ void Reader::showKosyncChoice()
     dialog->raise();
     dialog->fitCard();
     const auto epoch = kosyncChoiceEpoch;
-    const auto localChapter = session->chapterTitle();
-    const double localPercentage =
-            session->pages() > 1 ? 100.0 * session->page() / (session->pages() - 1) : 0;
     dialog->primaryButton()->setEnabled(false);
     QPointer<ui::ChoiceModal> guard(dialog);
     session->describeSyncedPosition(
-            remote.position,
-            [this, guard, epoch, remote, localChapter,
-             localPercentage](SyncedPositionDescription info) {
+            remote.position, [this, guard, epoch, remote](SyncedPositionDescription info) {
                 if (!guard || !guard->isVisible() || epoch != kosyncChoiceEpoch)
                     return;
                 const bool compared =
                         info.comparison.status == PositionComparison::Status::Compared;
-                const bool backward = compared && info.comparison.direction < 0;
-                const auto direction = strings::get(!compared          ? "kosync.direction_unknown"
-                                                            : backward ? "kosync.direction_backward"
-                                                            : info.comparison.direction > 0
-                                                            ? "kosync.direction_forward"
-                                                            : "kosync.direction_same");
-                auto *description = guard->descriptionLabel();
-                const int width = guard->card()->width()
-                        - 2 * int(ui::metrics::notice::cardMargins.left()) - 4;
-                const auto chapter = [&](QString value) {
-                    if (value.trimmed().isEmpty())
-                        value = strings::get("kosync.chapter_unavailable");
-                    return ui::elideInterfaceText(value.simplified(), description->font(), width);
+                const int direction = compared ? info.comparison.direction : 0;
+                const auto links = session->chapters();
+                SyncJump jump;
+                jump.pages = session->pages();
+                jump.here = session->page();
+                jump.synced = compared && info.page < jump.pages ? info.page : -1;
+                jump.starts = syncChapterStarts(links);
+                jump.nested = std::any_of(links.cbegin(), links.cend(),
+                                          [](const ChapterLink &link) { return link.depth > 0; });
+                jump.fromChapter = session->chapterTitle();
+                jump.fromParent = syncChapterParent(links, jump.fromChapter, jump.here);
+                if (compared) {
+                    jump.toChapter = info.chapter;
+                    jump.toParent = syncChapterParent(links, info.chapter, jump.synced);
+                }
+                const auto percent = [&jump](int page) {
+                    return jump.pages > 1 ? 100.0 * page / (jump.pages - 1) : 0.0;
                 };
-                const auto device = remote.device.trimmed().isEmpty()
+                jump.fromPercent = percent(jump.here);
+                // The synced page in this layout keeps the graph and the row in
+                // agreement. The reported percentage is the fallback.
+                jump.toPercent = jump.synced >= 0 ? percent(jump.synced) : remote.percentage * 100;
+                jump.device = remote.device.trimmed().isEmpty()
                         ? strings::get("kosync.device_unknown")
                         : remote.device.simplified();
-                const auto timestamp = remote.timestamp > 0
-                        ? QDateTime::fromMSecsSinceEpoch(remote.timestamp * 1000).toLocalTime()
-                        : QDateTime();
-                const auto synced = timestamp.isValid()
-                        ? strings::get("kosync.synced_at")
-                                  .arg(QLocale().toString(timestamp, QLocale::ShortFormat))
-                        : strings::get("kosync.time_unavailable");
-                description->setText(
-                        strings::get("kosync.position_comparison")
-                                .arg(QLocale().toString(localPercentage, 'f', 1),
-                                     chapter(localChapter),
-                                     QLocale().toString(remote.percentage * 100, 'f', 1),
-                                     chapter(info.chapter),
-                                     ui::elideInterfaceText(device, description->font(), width),
-                                     synced, direction));
-                guard->findChild<QLabel *>("rrModalTitle")
-                        ->setText(strings::get(backward ? "kosync.resume_backward_title"
-                                                        : "kosync.resume_title"));
-                guard->primaryButton()->setEnabled(true);
-                if (backward)
-                    guard->secondaryButton()->setFocus(Qt::OtherFocusReason);
+                jump.time = syncTimeText(remote.timestamp > 0 ? QDateTime::fromMSecsSinceEpoch(
+                                                                        remote.timestamp * 1000)
+                                                                        .toLocalTime()
+                                                              : QDateTime(),
+                                         QDateTime::currentDateTime());
+                guard->descriptionLabel()->hide();
+                // The view sits between the heading and the actions, with the
+                // heading's side inset and room above the actions.
+                auto *details = new QWidget(guard->card());
+                details->setObjectName("rrKosyncChoiceDetails");
+                auto *layout = new QVBoxLayout(details);
+                layout->setContentsMargins(ui::metrics::chrome::inset, 0,
+                                           ui::metrics::chrome::inset,
+                                           ui::metrics::syncChoice::bottomGap);
+                auto *view = new SyncChoiceView(details);
+                view->setJump(jump);
+                layout->addWidget(view);
+                auto *rows = guard->card()->rows();
+                rows->insertWidget(rows->count() - 1, details);
+                // A layout shows a widget added to a visible card only on the
+                // next event loop turn. fitCard() must measure it now.
+                details->show();
+                // Forward, the jump is the bold action. Backward, staying is
+                // bold and focused, so the safer choice is the default.
+                const auto title = direction > 0 ? strings::key("kosync.ahead_title")
+                        : direction < 0          ? strings::key("kosync.behind_title")
+                                                 : strings::key("kosync.resume_title");
+                guard->findChild<QLabel *>("rrModalTitle")->setText(strings::get(title));
+                auto *go = guard->primaryButton(), *stay = guard->secondaryButton();
+                go->setText(strings::get(direction > 0 ? strings::key("kosync.jump_ahead")
+                                                 : direction < 0
+                                                 ? strings::key("kosync.go_back")
+                                                 : strings::key("kosync.use_remote")));
+                ui::setModalActionPrimary(go, direction >= 0);
+                ui::setModalActionPrimary(stay, direction < 0);
+                go->setEnabled(true);
+                if (direction < 0)
+                    stay->setFocus(Qt::OtherFocusReason);
                 guard->fitCard();
                 refresh();
             });

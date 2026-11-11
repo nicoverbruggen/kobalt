@@ -159,7 +159,6 @@
 "kosync.resume_title" = "Resume synced reading?";
 /* Arguments: %1 percentage read; %2 device name. */
 "kosync.resume_description" = "Another device saved a position at %1% (%2). Choose which position to keep.";
-"kosync.keep_local" = "Keep this position";
 "kosync.use_remote" = "Use synced position";
 "kosync.kept_local" = "Your position was kept. It will be sent on the next sync.";
 "kosync.resumed" = "Resumed at the synced position.";
@@ -1279,16 +1278,32 @@
 "kosync.filename_unavailable" = "The original filename is unavailable. Reimport this book on Android, or choose Binary matching.";
 
 "kosync.comparing_positions" = "Comparing reading positions…";
-"kosync.position_comparison" = "On this device · %1%\n%2\n\nSynced position · %3%\n%4\nDevice: %5\n%6\n\n%7";
-"kosync.direction_forward" = "Accepting the synced position would move you forward in the book.";
-"kosync.direction_backward" = "This would move you backward in the book. Check both positions before replacing your current position.";
-"kosync.direction_same" = "Both positions are at the same place in the book.";
-"kosync.direction_unknown" = "The synced position could not be compared with your current position.";
-"kosync.resume_backward_title" = "Move backward to synced position?";
 "kosync.chapter_unavailable" = "Chapter unavailable";
 "kosync.device_unknown" = "Unknown device";
 "kosync.time_unavailable" = "Sync time unavailable";
-"kosync.synced_at" = "Synced: %1";
+"kosync.ahead_title" = "You read further on another device";
+"kosync.behind_title" = "The synced position is behind you";
+"kosync.stay_here" = "Stay here";
+"kosync.jump_ahead" = "Jump ahead";
+"kosync.go_back" = "Go back";
+"kosync.pages_ahead" = "%1 pages ahead";
+"kosync.pages_ahead_one" = "1 page ahead";
+"kosync.pages_back" = "%1 pages back";
+"kosync.pages_back_one" = "1 page back";
+"kosync.chapters_crossed" = "%1 chapters";
+"kosync.chapters_crossed_one" = "1 chapter";
+"kosync.jump_label" = "%1 · %2";
+"kosync.page_number" = "p. %1";
+"kosync.here" = "Here";
+"kosync.synced_label" = "Synced";
+"kosync.percent" = "%1%";
+"kosync.from" = "From";
+"kosync.to" = "To";
+"kosync.device" = "Device";
+"kosync.synced" = "Synced";
+"kosync.same_chapter" = "Same chapter";
+"kosync.today_at" = "Today at %1";
+"kosync.yesterday_at" = "Yesterday at %1";
 
 /* widget keyboard */
 "keyboard.shift" = "Shift";

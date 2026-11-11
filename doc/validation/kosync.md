@@ -8,7 +8,8 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | --- | --- |
 | `model.kosync` | The sync client: document identity, accounts, schedule, responses, retries and hostname lookups |
 | `model.sync-coordinator` | Book-scoped attempts, late connection answers, hidden readiness and final-upload handoffs without a reader window |
-| `desktop.kosyncChoice` | The real asynchronous forward and backward choice, text height, visible bounds and card fit across gallery viewports and text scales |
+| `desktop.syncChoiceView` | The choice's scales and their thresholds, the jump label, chapter starts and parents in nested contents, and the sync time text, with a long synthetic book |
+| `desktop.kosyncChoice` | The real asynchronous forward, backward and longer forward choice: titles, actions and focus, the scale, view height, visible bounds and card fit across gallery viewports and text scales |
 | `component.kosync-ui` | The KOSync Settings tab, the Automatic sync sheet, the password editor and the sync notice |
 | `platform.native-sync-network` | The Kobo connection controller, Wi-Fi release, the Kobo side of the Wi-Fi power saver and the hold on Nickel's background connections |
 | `lifecycle.kosyncAccountGating` | No sync work without a usable account, and the toolbar sync button |
@@ -50,7 +51,7 @@ Sources, pinned for this comparison: [reference server](https://github.com/korea
 
 `model.kosync` checks absent-progress responses, first upload, malformed and ambiguous 404 responses, endpoint isolation and transport failures. `lifecycle.kosyncMissingProgress` runs Sync now through the production reader and verifies that absent progress permits an upload while route, authentication and server errors do not. Existing reconciliation checks retain remote conflict protection.
 
-The choice check supplies controlled HTTP replies to the production reader. It checks text height as well as widget visibility: a label can be fully visible while its text is clipped inside it. The gallery uses the same case for `kosync-choice-forward` and `kosync-choice-backward`, including a long device name. Run `KOBALT_GALLERY_CASE=kosyncChoice` with the screenshot preset for these scenes before a full gallery has indexed them.
+The choice check supplies controlled HTTP replies to the production reader. It checks the view's height as well as its visibility: a widget can be fully visible while its content is cut inside it. The view is added to a card that is already shown, so the check also catches a view that the card measured before it was shown. The gallery uses the same case for `kosync-choice-forward` and `kosync-choice-backward`, five pages apart, and `kosync-choice-far`, seventeen pages ahead on the track. The backward scene uses a typical device name; the other two use a long one that wraps. Run `KOBALT_GALLERY_CASE=kosyncChoice` with the screenshot preset for these scenes before a full gallery has indexed them. The Trevelyan fixture is short, so the gallery does not show the whole-book scale; `desktop.syncChoiceView` covers it with a synthetic book of 300 chapters in 15 Books.
 
 ## Captures
 

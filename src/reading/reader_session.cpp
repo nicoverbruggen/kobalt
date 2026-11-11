@@ -1215,6 +1215,7 @@ void ReaderSession::describeSyncedPosition(const QString &position,
                     if (result.comparison.error.isEmpty()) {
                         result.comparison.status = PositionComparison::Status::Compared;
                         result.chapter = engine->chapterTitle(position);
+                        result.page = engine->pagesOf({ position }).value(0, -1);
                     }
                 }
                 kobalt::qt::invoke(

@@ -10666,8 +10666,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             return preview && preview->property("sample_ready").toBool();
         };
         const auto closeStyling = [&fixture] {
-            if (!fixture.press("rrWordSpacingClose")
-                || !QTest::qWaitFor([&] { return !fixture.visible("rrWordSpacingPopup"); })
+            // Wait for retirement before another sheet reuses its control names.
+            const QPointer<QWidget> sheet = fixture.widget("rrWordSpacingPopup");
+            if (!sheet || !fixture.press("rrWordSpacingClose")
+                || !QTest::qWaitFor([&] { return sheet.isNull(); })
                 || !fixture.press("rrSettingsClose"))
                 return false;
             return QTest::qWaitFor([&] {
@@ -10682,14 +10684,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!ready());
         QTRY_VERIFY_WITH_TIMEOUT(ready(), 10000);
         const auto portrait = fixture.widget("rrStylingPreview")->grab().toImage();
-        QVERIFY(closeStyling());
-
-        // Settings forgets its samples when it closes. The reader keeps them.
-        QVERIFY(openStyling());
         {
+            // Hold the engine before closing, so reopening cannot rely on the
+            // gate's wait to process the old sheet's deferred deletion.
             const auto gate = holdEngine();
             const auto unblock = qScopeGuard([gate] { gate->release.release(); });
             QTRY_VERIFY(gate->entered.load());
+            QVERIFY(closeStyling());
+
+            // Settings forgets its samples when it closes. The reader keeps them.
+            QVERIFY(openStyling());
             QVERIFY(fixture.press("rrWordSpacing"));
             QVERIFY(ready());
             QCOMPARE(fixture.widget("rrStylingPreview")->grab().toImage(), portrait);

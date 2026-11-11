@@ -142,5 +142,31 @@ int main()
             "New books did not start with the chosen preset");
     choosing[newBookKey] = "deleted";
     require(newBookChoice(choosing) == "last", "A deleted preset was still used for new books");
+
+    // Restoring the examples brings back deleted ones and undoes changes to
+    // them, first and in their order. The user's own presets follow in theirs.
+    Preset mine = shipped[0];
+    mine.id = "preset-mine";
+    mine.name = "Mine";
+    mine.example = false;
+    Preset changedClassic = shipped[3];
+    changedClassic.name = "Evening";
+    changedClassic.halfPoints = 30;
+    const auto restored = restoreExamples({ mine, changedClassic });
+    require(restored.size() == 5 && restored.mid(0, 4) == shipped && restored[4] == mine,
+            "Restoring did not put the examples back before the user's presets");
+    // The user's presets are never dropped: only the examples that fit return.
+    QVector<Preset> own;
+    for (int index = 0; index < maximumCount - 1; ++index) {
+        auto preset = mine;
+        preset.id = newId(own);
+        preset.name = QString("Mine %1").arg(index);
+        own.append(preset);
+    }
+    const auto full = restoreExamples(own);
+    require(full.size() == maximumCount && full[0] == shipped[0] && full.mid(1) == own,
+            "Restoring dropped a user's preset or went past the limit");
+    own.append(mine);
+    require(restoreExamples(own) == own, "Restoring a full list changed it");
     return 0;
 }

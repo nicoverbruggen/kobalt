@@ -2710,6 +2710,7 @@ void Reader::recordOpening()
         || book->deviceTransition())
         return;
     recordedOpening = true;
+    startTextPresetPrerender();
     if (!kosyncStarted)
         synchronizeKosync();
     // A newer synced position waits for the reader's choice. The first page

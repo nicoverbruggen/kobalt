@@ -28,6 +28,16 @@ struct TextPresetView
     // The preset's thickness steps, and its variable weight when the font
     // has a weight axis, so the card's sample is as heavy as the page text.
     int thickness = 0, axisWeight = 0;
+
+    bool operator==(const TextPresetView &other) const
+    {
+        return id == other.id && name == other.name && detail == other.detail
+                && font.family == other.font.family && font.files == other.font.files
+                && font.identity == other.font.identity && thickness == other.thickness
+                && axisWeight == other.axisWeight;
+    }
+
+    bool operator!=(const TextPresetView &other) const { return !(*this == other); }
 };
 
 // Calls `held` after a long press and suppresses the click that would follow.

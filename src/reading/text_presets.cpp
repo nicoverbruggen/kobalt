@@ -125,6 +125,18 @@ QVector<Preset> examples()
     };
 }
 
+QVector<Preset> restoreExamples(const QVector<Preset> &presets)
+{
+    const auto shipped = examples();
+    QVector<Preset> own;
+    for (const auto &preset : presets)
+        if (!find(shipped, preset.id))
+            own.append(preset);
+    auto restored = shipped.mid(0, qMax(0, maximumCount - int(own.size())));
+    restored += own;
+    return restored;
+}
+
 QVector<Preset> load(const QJsonObject &preferences)
 {
     if (!preferences.contains(listKey))

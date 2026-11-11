@@ -21,6 +21,8 @@ struct Paths
     QString database() const;
     QString layoutCache() const;
     QString sleepScreen() const;
+    // Finished preview tiles, such as the All presets grid's. Disposable.
+    QString previews() const;
     // Parsed books, owned by CREngine. It deletes any other file it finds there.
     QString documentCache() const;
     QString bookState(const QString &identity) const;

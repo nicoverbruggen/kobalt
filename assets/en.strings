@@ -1495,6 +1495,11 @@
 /* Arguments: %1 */
 "text_presets.delete_prompt" = "Delete %1?";
 "text_presets.delete_detail" = "Books keep their text. Only the preset is removed.";
+"text_presets.restore" = "Restore default presets";
+"text_presets.restore_prompt" = "Restore Default Presets?";
+"text_presets.restore_detail" = "The presets that come with Kobalt return as they shipped. Your own presets stay. The presets apply when you close Settings.";
+"text_presets.restore_confirm" = "Restore presets";
+"text_presets.restore_selected" = "Default presets selected";
 "text_presets.gallery_hint" = "Tap to apply · hold for options";
 "text_presets.save_current" = "Save current text";
 "settings.text_for_new_books" = "Text for new books";

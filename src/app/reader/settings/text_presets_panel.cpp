@@ -756,6 +756,10 @@ TextPresetGallery::TextPresetGallery(QWidget *parent) : ui::Panel(parent)
 void TextPresetGallery::setPresets(const QVector<TextPresetView> &views, const QString &current,
                                    bool save, const QString &detail)
 {
+    // The reader syncs the gallery on each refresh. Unchanged presets keep
+    // the page and its previews: on e-ink a repaint is a screen update.
+    if (views == presets && current == selected && save == canSave && detail == currentDetail)
+        return;
     presets = views;
     selected = current;
     canSave = save;
@@ -792,6 +796,8 @@ void TextPresetGallery::setPreviews(const QHash<QString, QImage> &images)
 {
     for (auto it = images.cbegin(); it != images.cend(); ++it)
         previews.insert(it.key(), it.value());
+    // Tests read how many previews the last handover brought.
+    setProperty("previews_shown", int(images.size()));
     grid->update();
 }
 

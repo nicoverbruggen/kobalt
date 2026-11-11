@@ -243,6 +243,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "settings", "Reader settings" },
         { "settings-controls", "Controls settings" },
         { "settings-defaults", "Default settings" },
+        { "settings-restore-presets", "Restore default presets" },
         { "settings-display", "Display settings" },
         { "settings-animations-supported", "Page animations on MTK" },
         { "settings-animations-uncertain", "Page animations with compatibility warning" },

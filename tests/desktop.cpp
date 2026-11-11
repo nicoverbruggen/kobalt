@@ -33,6 +33,7 @@
 #include "reading/reading_density.h"
 #include "reading/appearance_settings.h"
 #include "reading/text_presets.h"
+#include "app/reader/settings/text_presets_panel.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "storage/reading_history.h"
@@ -1512,6 +1513,27 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QVERIFY(revealChapter("rrChapter4"));
 }
 
+// Holds the engine thread until `release`, so only kept samples can appear.
+struct EngineGate
+{
+    QSemaphore release;
+    std::atomic_bool entered{ false };
+};
+
+std::shared_ptr<EngineGate> holdEngine()
+{
+    auto gate = std::make_shared<EngineGate>();
+    qt::invoke(
+            engineWorker(),
+            [gate] {
+                EngineJob activity;
+                gate->entered.store(true);
+                gate->release.acquire();
+            },
+            Qt::QueuedConnection);
+    return gate;
+}
+
 bool revealSettingsOption(Fixture &fixture, const char *name)
 {
     auto *reader = fixture.window.readerWindow();
@@ -2179,6 +2201,12 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(scene("settings-new-book-text"));
         QVERIFY(fixture.press("rrTextPresetGalleryClose"));
         QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
+        QVERIFY(revealSettingsOption(fixture, "rrRestorePresets"));
+        QVERIFY(fixture.press("rrRestorePresets"));
+        QTRY_VERIFY(fixture.visible("rrRestorePresetsConfirmation"));
+        QVERIFY(scene("settings-restore-presets"));
+        QVERIFY(fixture.press("rrKeepPresets"));
+        QTRY_VERIFY(!fixture.visible("rrRestorePresetsConfirmation"));
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
         QVERIFY(fixture.press("rrTimeRemainingFormat"));
@@ -9097,6 +9125,77 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         verticalJustificationTour(fixture, "six-inch-light", false);
     }
 
+    // Checks Settings > Defaults > Restore default presets: Cancel keeps the list, and a
+    // confirmed restore applies when Settings closes. Deleted and changed examples come back
+    // first, the user's own preset stays, and the appearance defaults are left alone.
+    void settingsRestorePresets()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto shipped = textpresets::examples();
+        auto changed = shipped[0];
+        changed.halfPoints = 30;
+        auto mine = shipped[1];
+        mine.id = "preset-mine";
+        mine.name = "Mine";
+        mine.example = false;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        textpresets::store(preferences, { changed, mine });
+        preferences["dictionary_font_size"] = 140;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto saved = [&fixture] {
+            return textpresets::load(storage::readJson(fixture.paths.preferences()));
+        };
+        const auto openDefaults = [&fixture] {
+            return fixture.press("rrPage")
+                    && QTest::qWaitFor([&] { return fixture.visible("rrSettings"); })
+                    && fixture.press("rrSettings") && fixture.press("rrSettingsDefaults")
+                    && revealSettingsOption(fixture, "rrRestorePresets");
+        };
+        const auto closeSettings = [&fixture] {
+            if (!fixture.press("rrSettingsClose")
+                || !QTest::qWaitFor([&] { return !fixture.visible("rrGeneralSettings"); }))
+                return false;
+            // Closing Settings can leave the reading menu open.
+            if (fixture.visible("rrControlsTop"))
+                fixture.press("rrPage");
+            return QTest::qWaitFor([&] {
+                return !fixture.visible("rrControlsTop") && !fixture.state().value("busy").toBool();
+            });
+        };
+
+        QVERIFY(openDefaults());
+        QVERIFY(fixture.press("rrRestorePresets"));
+        QTRY_VERIFY(fixture.visible("rrRestorePresetsConfirmation"));
+        QVERIFY(fixture.press("rrKeepPresets"));
+        QTRY_VERIFY(!fixture.visible("rrRestorePresetsConfirmation"));
+        QVERIFY(fixture.widget("rrRestorePresets")->isEnabled());
+        QVERIFY(closeSettings());
+        QCOMPARE(saved(), (QVector<textpresets::Preset>{ changed, mine }));
+
+        QVERIFY(openDefaults());
+        QVERIFY(fixture.press("rrRestorePresets"));
+        QTRY_VERIFY(fixture.visible("rrRestorePresetsConfirmation"));
+        QVERIFY(fixture.press("rrConfirmPresets"));
+        QTRY_VERIFY(!fixture.visible("rrRestorePresetsConfirmation"));
+        QVERIFY(!fixture.widget("rrRestorePresets")->isEnabled());
+        // Nothing is saved before Settings closes.
+        QCOMPARE(saved(), (QVector<textpresets::Preset>{ changed, mine }));
+        QVERIFY(closeSettings());
+        QTRY_COMPARE(saved(), shipped + QVector<textpresets::Preset>{ mine });
+        QCOMPARE(storage::readJson(fixture.paths.preferences())
+                         .value("dictionary_font_size")
+                         .toInt(),
+                 140);
+        // Settings offers the restore again the next time it opens.
+        QVERIFY(openDefaults());
+        QVERIFY(fixture.widget("rrRestorePresets")->isEnabled());
+    }
+
     // Checks the Styling sheets in Settings: rendered samples, every option, drafts until Settings closes and global persistence.
     // Checks that a Styling sample is rendered once for each orientation: opening it again shows it without the engine.
     void settingsStylingSamples()
@@ -9131,26 +9230,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 return !fixture.visible("rrControlsTop") && !fixture.visible("rrGeneralSettings")
                         && !fixture.state().value("busy").toBool();
             });
-        };
-
-        // Holds the engine thread, so only a kept sample can appear.
-        struct Gate
-        {
-            QSemaphore release;
-            std::atomic_bool entered{ false };
-        };
-
-        const auto holdEngine = [] {
-            auto gate = std::make_shared<Gate>();
-            qt::invoke(
-                    engineWorker(),
-                    [gate] {
-                        EngineJob activity;
-                        gate->entered.store(true);
-                        gate->release.acquire();
-                    },
-                    Qt::QueuedConnection);
-            return gate;
         };
 
         // The first opening lays the sample out on the engine thread.
@@ -9194,6 +9273,87 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(ready());
             QCOMPARE(fixture.widget("rrStylingPreview")->grab().toImage(), portrait);
         }
+    }
+
+    // Checks that the All presets gallery renders each tile of its page once, although showing
+    // it resizes it and refreshes the reader; that opening it again shows the same tiles at once,
+    // without the engine; and that a book opened later prepares them from storage, again without
+    // the engine.
+    void settingsTextPresetGallery()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto gallery = [&fixture] {
+            return dynamic_cast<reader::TextPresetGallery *>(fixture.widget("rrTextPresetGallery"));
+        };
+        const auto openAll = [&fixture] {
+            return fixture.press("rrPage")
+                    && QTest::qWaitFor([&] { return fixture.visible("rrNavText"); })
+                    && fixture.press("rrNavText")
+                    && QTest::qWaitFor([&] { return fixture.visible("rrTextPresetToggle"); })
+                    && (fixture.visible("rrTextPresetAll") || fixture.press("rrTextPresetToggle"))
+                    && QTest::qWaitFor([&] { return fixture.visible("rrTextPresetAll"); })
+                    && fixture.press("rrTextPresetAll")
+                    && QTest::qWaitFor([&] { return fixture.visible("rrTextPresetGallery"); });
+        };
+        const auto closeAll = [&fixture, &gallery] {
+            QPointer<QWidget> open = gallery();
+            return fixture.press("rrTextPresetGalleryClose")
+                    && QTest::qWaitFor([&] { return !open; });
+        };
+
+        // The engine is held before the reader prepares the grid, so the tiles render when
+        // All opens, once each.
+        QImage shown;
+        int wanted = 0;
+        {
+            const auto gate = holdEngine();
+            auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            QTRY_VERIFY(gate->entered.load());
+            QVERIFY(openAll());
+            wanted = gallery()->visibleIds().size();
+            QVERIFY(wanted > 0);
+        }
+        QTRY_COMPARE_WITH_TIMEOUT(gallery()->property("previews_shown").toInt(), wanted, 30000);
+        auto *reader = fixture.window.readerWindow();
+        QCOMPARE(gallery()->property("preview_renders").toInt()
+                         + reader->property("text_preset_prerender_renders").toInt(),
+                 wanted);
+        shown = gallery()->grab().toImage();
+        QVERIFY(closeAll());
+
+        {
+            const auto gate = holdEngine();
+            const auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            QTRY_VERIFY(gate->entered.load());
+            QVERIFY(fixture.press("rrTextPresetAll"));
+            QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+            QCOMPARE(gallery()->property("previews_shown").toInt(), wanted);
+            QCOMPARE(gallery()->property("preview_renders").toInt(), 0);
+            QCOMPARE(gallery()->grab().toImage(), shown);
+        }
+        QVERIFY(closeAll());
+
+        // A new reader has nothing in memory. With the engine held, its tiles can come only
+        // from storage.
+        reader->close();
+        QTRY_VERIFY(fixture.window.idle());
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto gate = holdEngine();
+        const auto unblock = qScopeGuard([gate] { gate->release.release(); });
+        QTRY_VERIFY(gate->entered.load());
+        reader = fixture.window.readerWindow();
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("text_presets_prerendered").toBool(), 10000);
+        QVERIFY(openAll());
+        QCOMPARE(gallery()->property("previews_shown").toInt(), wanted);
+        QCOMPARE(gallery()->property("preview_renders").toInt(), 0);
+        QCOMPARE(gallery()->grab().toImage(), shown);
     }
 
     void advancedText_data()

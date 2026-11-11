@@ -1617,6 +1617,12 @@ void Reader::buildSettings()
         resetDefaults->setEnabled(false);
         settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
     });
+    connect(settings->confirmPresets, &QPushButton::clicked, this, [this, settings] {
+        restoringPresets = true;
+        settings->resetPresets->setText(strings::get("text_presets.restore_selected"));
+        settings->resetPresets->setEnabled(false);
+        settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
+    });
     if (settings->debugProgress)
         connect(settings->debugProgress, &QPushButton::clicked, this,
                 [this] { showProgressDebug(); });

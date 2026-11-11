@@ -70,6 +70,11 @@ QString Paths::sleepScreen() const
     return child(directory, "cache/sleep-screen.png");
 }
 
+QString Paths::previews() const
+{
+    return child(directory, "cache/previews");
+}
+
 QString Paths::documentCache() const
 {
     return child(directory, ".cache");

@@ -332,6 +332,7 @@ void Reader::openSettings()
     acknowledgments->hide();
     appearanceEdit.clearContinuation();
     restoringDefaults = false;
+    restoringPresets = false;
     for (const auto *key : appearance::fallbackFontKeys) {
         const auto family = preferences.value(key).toString();
         settingsFontFaces[key] = session->fontFaces().contains(family) ? family : QString();
@@ -362,6 +363,9 @@ void Reader::openSettings()
     settingsPages->setCurrentIndex(int(SettingsPage::Display));
     resetDefaults->setText(strings::get("reader.restore_appearance_defaults"));
     resetDefaults->setEnabled(true);
+    auto *resetPresets = static_cast<SettingsPanel *>(general)->resetPresets;
+    resetPresets->setText(strings::get("text_presets.restore"));
+    resetPresets->setEnabled(true);
     // Keep the typography draft until Settings is applied.
     menu->hide();
     const bool showingTopControls = !topControls->isVisible();
@@ -801,6 +805,8 @@ void Reader::applySettings()
     next.remove(pageNavigation::barVisibleKey);
     next["minimal_annotation_mode"] = minimalAnnotationOption->isChecked();
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
+    if (restoringPresets)
+        textpresets::store(next, textpresets::restoreExamples(textpresets::load(next)));
     if (restoringDefaults) {
         next[kobalt::headerfooter::presetKey] = kobalt::headerfooter::presetValue(
                 services.phoneLayout ? kobalt::headerfooter::Preset::Phone

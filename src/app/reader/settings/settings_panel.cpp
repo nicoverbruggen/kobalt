@@ -813,6 +813,23 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     readerStyle(resetDefaults, styles::font(metrics::text::secondary));
     resetDefaults->setFixedHeight(metrics::about::actionHeight);
     resetRow->addStretch(1);
+    // Text presets are not appearance defaults: a restore of either leaves
+    // the other alone.
+    auto *presetsRow = kobalt::ui::horizontalRow();
+    defaultsRows->addLayout(presetsRow);
+    presetsRow->addStretch(1);
+    resetPresets =
+            ui::makeCaptionButton(defaultsPage, presetsRow, "rrRestorePresets",
+                                  strings::get("text_presets.restore"), [this] {
+                                      settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
+                                      restorePresetsDialog->fitCard();
+                                      restorePresetsDialog->show();
+                                      restorePresetsDialog->raise();
+                                      restorePresetsDialog->setFocus();
+                                  });
+    readerStyle(resetPresets, styles::font(metrics::text::secondary));
+    resetPresets->setFixedHeight(metrics::about::actionHeight);
+    presetsRow->addStretch(1);
     defaultsRows->addStretch(1);
     auto *stylingPage = new QWidget(settingsPages);
     stylingPage->setObjectName("rrStylingOptions");
@@ -1098,6 +1115,20 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     connect(keepDefaults, &QPushButton::clicked, this, [this] { dismissRestore(); });
     connect(confirmDefaults, &QPushButton::clicked, this, [this] { dismissRestore(); });
     restoreDialog->dismissed = [this] { dismissRestore(); };
+    restorePresetsDialog = new ui::ChoiceModal(
+            parent,
+            { strings::get("text_presets.restore_detail"),
+              strings::get("text_presets.restore_prompt"),
+              {} },
+            { strings::get("common.cancel"), "rrKeepPresets" },
+            { strings::get("text_presets.restore_confirm"), "rrConfirmPresets" });
+    restorePresetsDialog->setObjectName("rrRestorePresetsConfirmation");
+    restorePresetsDialog->setDimmed(true);
+    keepPresets = restorePresetsDialog->secondaryButton();
+    confirmPresets = restorePresetsDialog->primaryButton();
+    connect(keepPresets, &QPushButton::clicked, this, [this] { dismissRestore(); });
+    connect(confirmPresets, &QPushButton::clicked, this, [this] { dismissRestore(); });
+    restorePresetsDialog->dismissed = [this] { dismissRestore(); };
     settingsError = new ui::InterfaceLabel(this);
     settingsError->setWordWrap(true);
     settingsError->hide();
@@ -1134,10 +1165,13 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     }
     generalOptions->setContentsMargins(0, 0, 0, 0);
     defaultsRows->setContentsMargins(0, 0, 0, 0);
-    resetRow->setStretch(0, 0);
-    resetRow->setStretch(1, 1);
-    resetRow->setStretch(2, 0);
+    for (auto *row : { resetRow, presetsRow }) {
+        row->setStretch(0, 0);
+        row->setStretch(1, 1);
+        row->setStretch(2, 0);
+    }
     for (auto *button : { resetDefaults,
+                          resetPresets,
                           refreshButton,
                           columnSpacingButton,
                           sleepScreenButton,
@@ -1175,7 +1209,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           textForNewBooksButton }) {
         styleListAction(button);
         // The refresh row's caption shows its current choice, set when Settings opens.
-        if (button == resetDefaults)
+        if (button == resetDefaults || button == resetPresets)
             button->setCaption(strings::get("settings.asks_first"));
         if (button == beautifierButton || button == wordSpacingButton
             || button == paragraphSpacingButton || button == trackingButton
@@ -1469,6 +1503,7 @@ void SettingsPanel::showOptionsPage(int page)
 SettingsPanel::~SettingsPanel()
 {
     delete restoreDialog;
+    delete restorePresetsDialog;
     delete standbyDialog;
     delete fontDialog;
 }
@@ -2421,10 +2456,14 @@ void SettingsPanel::dismissFontChoices()
 
 void SettingsPanel::dismissRestore()
 {
-    if (!restoreDialog || restoreDialog->isHidden())
-        return;
-    restoreDialog->hide();
-    resetDefaults->setFocus();
+    if (restoreDialog && !restoreDialog->isHidden()) {
+        restoreDialog->hide();
+        resetDefaults->setFocus();
+    }
+    if (restorePresetsDialog && !restorePresetsDialog->isHidden()) {
+        restorePresetsDialog->hide();
+        resetPresets->setFocus();
+    }
 }
 
 void SettingsPanel::dismissAutomaticOpeningConfirmation()

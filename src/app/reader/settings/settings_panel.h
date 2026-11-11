@@ -174,8 +174,9 @@ public:
                       *navigationBarButton = nullptr, *tappableLinksButton = nullptr,
                       *chapterGroupsButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
-    ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr;
+    ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr, *resetPresets = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;
+    QPushButton *keepPresets = nullptr, *confirmPresets = nullptr;
     QPushButton *openAcknowledgments = nullptr, *debugProgress = nullptr;
     DictionariesPage *dictionaries = nullptr;
     KosyncPage *kosync = nullptr;
@@ -224,7 +225,7 @@ private:
     void showOptionsPage(int page);
     void fitRail(int availableHeight = 0);
     AboutPage *aboutPage = nullptr;
-    QPointer<ui::ChoiceModal> restoreDialog;
+    QPointer<ui::ChoiceModal> restoreDialog, restorePresetsDialog;
     static void styleListAction(ui::CaptionButton *button);
     QPointer<ui::ChoiceModal> standbyDialog;
     QPointer<ui::ChoiceModal> automaticOpeningDialog;

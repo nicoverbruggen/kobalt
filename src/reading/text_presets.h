@@ -35,6 +35,10 @@ struct Preset
 
 // The examples that ship with Kobalt. Kobalt matches the book defaults.
 QVector<Preset> examples();
+// The examples as they ship, first and in their order, then the other presets
+// in theirs. Other presets are never dropped: when the list would be longer
+// than maximumCount, only the examples that fit come back.
+QVector<Preset> restoreExamples(const QVector<Preset> &presets);
 // The saved list. A profile that never saved one gets the examples.
 QVector<Preset> load(const QJsonObject &preferences);
 void store(QJsonObject &preferences, const QVector<Preset> &presets);

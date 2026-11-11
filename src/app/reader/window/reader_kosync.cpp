@@ -547,9 +547,9 @@ void Reader::showKosyncChoice()
     if (!features::enabled(preferences, features::Kosync))
         return;
     if (!syncCoordinator->pendingProgress() || kosyncPositionFailed || kosyncPromptDeferred
-        || kosyncDialog || closing || lifecycleHidden || !isVisible() || session->busy()
-        || services.suspended() || book->deviceTransition() || book->pendingProgress() || syncDialog
-        || finishDialog || topControls->isVisible() || general->isVisible() || annotationMode
+        || positionPromptOpen() || closing || lifecycleHidden || !isVisible() || session->busy()
+        || services.suspended() || book->deviceTransition() || book->pendingProgress()
+        || topControls->isVisible() || general->isVisible() || annotationMode
         || searchPanel->isVisible() || dictionaryPanel->isVisible()
         || (imageViewer && imageViewer->isVisible()) || linksActive() || lookupPending
         || appearanceEdit.panelOpen())

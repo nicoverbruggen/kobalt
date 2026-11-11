@@ -599,6 +599,14 @@ private:
     quint64 linkEpoch = 0;
     bool linkPending = false, returningFromLink = false;
     bool linksActive() const;
+    // What covers the page. Each caller adds the terms that only it needs.
+    // A typography panel, Settings or a choice screen.
+    bool sheetOpen() const;
+    // A prompt about the reading position: sync, KOSync or finishing the book.
+    bool positionPromptOpen() const;
+    // A tool over the page: the chapter graph, the light popup, the
+    // dictionary, search, acknowledgments, a link or a pending lookup.
+    bool readingToolOpen() const;
     kobalt::ui::Panel *linkDiscovery = nullptr;
     QLabel *linkDiscoveryIcon = nullptr, *linkDiscoveryHint = nullptr;
     QPushButton *linkDiscoveryToggle = nullptr;

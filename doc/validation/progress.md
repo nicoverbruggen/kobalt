@@ -10,7 +10,7 @@ The progress checks include a changed native position with an unchanged or older
 
 Same-timestamp KEPUB span locations that drop a positive character offset to zero or omit it keep the precise local position and allow the next save without a choice. Model and session checks retain conflicts for other changed positions, timestamps and statuses, and for normalization of an unacknowledged position. A genuine same-timestamp move to the same span start has the same representation and follows this rule.
 
-Lifecycle checks also cover closing after an offset round trip or a conflict choice, saving a kept local position at the next sleep without a page turn, and delaying a progress choice until the image viewer closes.
+Lifecycle checks also cover closing after an offset round trip or a conflict choice, saving a kept local position at the next sleep without a page turn, and delaying a progress choice until Settings, the image viewer, the bookmark list and the menu are closed. The choice also waits while the reader is in annotation mode.
 
 The `component.ui` assertions cover linear chapter lengths above the visible minimum height, one scale across graph pages, chart padding, and chart height at different densities and text sizes. The `chapterGraphLengths` gallery case shows unequal long chapters beside short ones in each supported viewport.
 

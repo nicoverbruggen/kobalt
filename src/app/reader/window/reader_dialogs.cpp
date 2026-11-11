@@ -219,14 +219,14 @@ void Reader::showFormattingWarning()
 
 bool Reader::progressBlocked() const
 {
+    // The sync prompt is the choice itself, so positionPromptOpen() does not
+    // apply here.
     return bool(debugDialog) || bool(finishDialog) || bool(kosyncDialog)
             || bool(annotationErrorDialog) || bool(formattingWarningDialog)
             || bool(settingsWriteErrorDialog) || book->deviceTransition() || services.suspended()
-            || !isVisible() || lightPopup->isVisible() || session->busy()
-            || chapterGraph->isVisible() || dictionaryPanel->isVisible() || searchPanel->isVisible()
-            || linksActive() || lookupPending || appearanceEdit.panelOpen()
-            || appearanceEdit.applying() || general->isVisible() || choices->isVisible()
-            || acknowledgments->isVisible() || imageViewer->isVisible();
+            || !isVisible() || session->busy() || sheetOpen() || readingToolOpen()
+            || appearanceEdit.applying() || imageViewer->isVisible() || annotationMode
+            || bookmarkList->isVisible() || topControls->isVisible();
 }
 
 void Reader::dismissProgressChoice()

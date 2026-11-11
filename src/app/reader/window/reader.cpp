@@ -863,12 +863,9 @@ bool Reader::event(QEvent *event)
                         return widget && widget->isVisible();
                     });
             const bool dismissed = navigation && navigation->isVisible() && topControls->isVisible()
-                    && !appearanceEdit.panelOpen() && !general->isVisible() && !choices->isVisible()
-                    && !chapterGraph->isVisible() && !lightPopup->isVisible()
-                    && !bookmarkList->isVisible() && !seekOpen && !session->busy()
-                    && !dictionaryPanel->isVisible() && !searchPanel->isVisible() && !linksActive()
-                    && !lookupPending && !acknowledgments->isVisible() && !closeSaveError
-                    && !services.suspended() && !overlayVisible;
+                    && !sheetOpen() && !readingToolOpen() && !bookmarkList->isVisible() && !seekOpen
+                    && !session->busy() && !closeSaveError && !services.suspended()
+                    && !overlayVisible;
             setProperty("reader_navigation_dismissal", dismissed);
             setProperty("reader_navigation_dismissal_plain", pageTextOnly(page->image));
         }
@@ -1656,6 +1653,23 @@ bool Reader::linksActive() const
     return linkPending || bool(linkDialog) || (linkPanel && linkPanel->isVisible());
 }
 
+bool Reader::sheetOpen() const
+{
+    return appearanceEdit.panelOpen() || general->isVisible() || choices->isVisible();
+}
+
+bool Reader::positionPromptOpen() const
+{
+    return syncDialog || kosyncDialog || finishDialog;
+}
+
+bool Reader::readingToolOpen() const
+{
+    return chapterGraph->isVisible() || lightPopup->isVisible() || dictionaryPanel->isVisible()
+            || searchPanel->isVisible() || acknowledgments->isVisible() || linksActive()
+            || lookupPending;
+}
+
 void Reader::dismissLinkConfirmation()
 {
     if (linkDialog) {
@@ -2061,11 +2075,8 @@ void Reader::syncLinkDiscovery()
     if (!linkDiscovery)
         return;
     const bool blocked = annotationMode || session->busy() || lifecycleHidden || closing
-            || services.suspended() || appearanceEdit.panelOpen() || general->isVisible()
-            || menu->isVisible() || choices->isVisible() || chapterGraph->isVisible()
-            || lightPopup->isVisible() || bookmarkList->isVisible() || acknowledgments->isVisible()
-            || searchPanel->isVisible() || dictionaryPanel->isVisible() || linksActive()
-            || lookupPending || syncDialog || kosyncDialog || finishDialog;
+            || services.suspended() || sheetOpen() || readingToolOpen() || positionPromptOpen()
+            || menu->isVisible() || bookmarkList->isVisible();
     if (blocked
         || (revealingLinks && revealedPosition != session->state().value("position").toString()))
         hideRevealedLinks();
@@ -2584,11 +2595,8 @@ void Reader::pageButton(int direction, quint32 sourceTime, bool userInput, int p
         pageScrubber->turnPreview(direction);
         return;
     }
-    if (!session->canTurn() || appearanceEdit.panelOpen() || general->isVisible()
-        || choices->isVisible() || chapterGraph->isVisible() || revealingLinks
-        || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive()
-        || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible()
-        || lightPopup->isVisible())
+    if (!session->canTurn() || sheetOpen() || readingToolOpen() || revealingLinks
+        || bookmarkList->isVisible())
         return;
     if (userInput && physicalKey && services.buttonControls) {
         // Without saved actions the native direction already follows rotation.
@@ -2613,9 +2621,9 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
     if (pageScrubber)
         pageScrubber->cancel();
     kobalt::diagnosticInput();
-    if (finishDialog || syncDialog || kosyncDialog || annotationErrorDialog
-        || formattingWarningDialog || settingsWriteErrorDialog || !session->canTurn() || closing
-        || exitPending || lifecycleHidden || services.suspended() || book->deviceTransition()
+    if (positionPromptOpen() || annotationErrorDialog || formattingWarningDialog
+        || settingsWriteErrorDialog || !session->canTurn() || closing || exitPending
+        || lifecycleHidden || services.suspended() || book->deviceTransition()
         || appearanceEdit.panelOpen() || appearanceEdit.applying())
         return;
     if (!pageTurnClock.isValid())

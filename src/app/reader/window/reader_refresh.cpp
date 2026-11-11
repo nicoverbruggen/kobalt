@@ -127,11 +127,15 @@ void Reader::refresh()
     // The panel needs far longer to draw a page than this function needs
     // for the rest of its work. On a plain page turn, paint now and let the
     // controls, the chapter graph and the saved position follow.
-    const bool readingTurn = !resizePending && isVisible() && !appearanceEdit.panelOpen()
-            && !topControls->isVisible() && !general->isVisible() && !choices->isVisible()
-            && !syncDialog && !kosyncDialog && !finishDialog && !services.suspended()
-            && !applyingText && !session->busy() && session->turnDirection() != 0
-            && nextImage.cacheKey() != previousPageImage;
+    // Nothing covers the page and its image changed. Asked again further
+    // down, after the control syncs have run.
+    const auto pageExposed = [&] {
+        return isVisible() && !sheetOpen() && !topControls->isVisible() && !positionPromptOpen()
+                && !services.suspended() && !applyingText
+                && nextImage.cacheKey() != previousPageImage;
+    };
+    const bool readingTurn =
+            !resizePending && pageExposed() && !session->busy() && session->turnDirection() != 0;
     if (readingTurn) {
         paintTurn();
         return;
@@ -155,9 +159,8 @@ void Reader::refresh()
     // the page it returns to. A chapter chosen in the menu is still
     // rendering when the menu closes: flash the new page, not the old one,
     // so the jump is one flash and not a flash and then the page.
-    if ((flashAfterMenu || flashAfterPagePreview) && !session->busy() && isVisible()
-        && !appearanceEdit.panelOpen() && (flashAfterPagePreview || !topControls->isVisible())
-        && !general->isVisible() && !choices->isVisible()
+    if ((flashAfterMenu || flashAfterPagePreview) && !session->busy() && isVisible() && !sheetOpen()
+        && (flashAfterPagePreview || !topControls->isVisible())
         && !(searchPanel && searchPanel->isVisible())) {
         const bool preview = std::exchange(flashAfterPagePreview, false);
         flashAfterMenu = false;
@@ -167,11 +170,7 @@ void Reader::refresh()
     // Panels invalidate their own pixels. Repaint the reading area only
     // when its content changes, including a completed typography preview.
     if (!readingTurn)
-        page->refreshContent(isVisible() && !appearanceEdit.panelOpen() && !topControls->isVisible()
-                             && !general->isVisible() && !choices->isVisible() && !syncDialog
-                             && !kosyncDialog && !finishDialog && !services.suspended()
-                             && !applyingText && (session->turnDirection() != 0 || passageFrame)
-                             && nextImage.cacheKey() != previousPageImage);
+        page->refreshContent(pageExposed() && (session->turnDirection() != 0 || passageFrame));
     if (!recordedOpening && pagePainted)
         recordOpening();
     publishResize();
@@ -596,8 +595,7 @@ void Reader::syncAppearanceControls(bool pickingFont)
 bool Reader::controlsHidden() const
 {
     return !topControls->isVisible() && !bottomControls->isVisible() && !menu->isVisible()
-            && !general->isVisible() && !choices->isVisible() && !chapterGraph->isVisible()
-            && !appearanceEdit.panelOpen();
+            && !sheetOpen() && !chapterGraph->isVisible();
 }
 
 void Reader::syncStaleControls()

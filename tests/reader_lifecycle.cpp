@@ -8710,7 +8710,7 @@ private slots:
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
     }
 
-    // Checks that a newer synced position waits while Settings covers the page, and asks once Settings closes.
+    // Checks that a newer synced position waits while Settings, the menu or the image viewer covers the page.
     void progressChoiceWaitsForSettings_data()
     {
         QTest::addColumn<bool>("image");
@@ -8762,8 +8762,69 @@ private slots:
         host.window()->progressTick();
         QTest::qWait(200);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
-        // Closing Settings asks without another progress check.
         QVERIFY(click(canvas, close));
+        // Settings closes to the menu, which also covers the page.
+        if (!image) {
+            auto *top = host.window()->findChild<QWidget *>("rrControlsTop");
+            auto *page = host.window()->findChild<QWidget *>("rrPage");
+            QTRY_VERIFY(top->isVisible());
+            QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+            QTRY_VERIFY(!top->isVisible());
+        }
+        // The reader asks without another progress check.
+        QWidget *card = nullptr;
+        QTRY_VERIFY_WITH_TIMEOUT((card = host.window()->findChild<QWidget *>("rrSyncedPosition"))
+                                         && card->isVisible(),
+                                 10000);
+        auto *keep = card->findChild<QPushButton *>("rrKeepPosition");
+        QVERIFY(keep);
+        QVERIFY(click(canvas, keep));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+    }
+
+    // Checks that a newer synced position waits while the bookmark list or the menu covers the page.
+    void progressChoiceWaitsForBookmarks()
+    {
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        canvas.setUpdatesEnabled(true);
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        host.window()->progressTick();
+        auto *page = host.window()->findChild<QWidget *>("rrPage");
+        auto *top = host.window()->findChild<QWidget *>("rrControlsTop");
+        auto *list = host.window()->findChild<QWidget *>("rrBookmarkList");
+        QVERIFY(page && top && list);
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(top->isVisible());
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrBookmarks")));
+        QTRY_VERIFY(list->isVisible());
+        // The platform reports a newer position while Bookmarks is open.
+        host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
+        host.window()->progressTick();
+        QTest::qWait(100);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrBookmarkListClose")));
+        QTRY_VERIFY(!list->isVisible());
+        // The menu still covers the page, so the choice keeps waiting.
+        QVERIFY(top->isVisible());
+        host.window()->progressTick();
+        QTest::qWait(100);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(!top->isVisible());
+        // The reader asks without another progress check.
         QWidget *card = nullptr;
         QTRY_VERIFY_WITH_TIMEOUT((card = host.window()->findChild<QWidget *>("rrSyncedPosition"))
                                          && card->isVisible(),

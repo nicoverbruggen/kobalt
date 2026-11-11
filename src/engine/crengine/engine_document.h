@@ -398,6 +398,7 @@ private:
     QMap<std::tuple<quintptr, int, int>, bool> imageInversion_;
     bool hideNonlinearFragments_ = false;
     bool normalizePageMargins_ = true, reduceChapterSpacing_ = true;
+    bool normalizeTextColors_ = false;
     QString verticalSpacing_ = "off", verticalSpacingScope_ = "all";
     int wordSpacing_ = 100;
     int justificationTracking_ = 0;

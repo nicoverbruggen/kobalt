@@ -1413,6 +1413,8 @@
 "settings.normalization_margins_description" = "Use the margins set in Layout.";
 "settings.normalization_chapters" = "Reduce chapter-start spacing";
 "settings.normalization_chapters_description" = "Keep space above chapter-opening illustrations.";
+"settings.normalization_text_colors" = "Normalize text colors";
+"settings.normalization_text_colors_description" = "Use black text, or white in dark mode. Remove publisher background colors.";
 
 "settings.time_remaining_format" = "Time remaining format";
 "settings.time_remaining_format_description" = "Applies to reading-time estimates in the header, footer and sleep screen.";

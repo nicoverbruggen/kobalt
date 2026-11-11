@@ -15,6 +15,7 @@ QJsonObject normalizationSettings(const QJsonObject &settings)
     const bool legacy = settings.value("avoid_wasteful_styling").toBool(true);
     result["normalize_page_margins"] = settings.value("normalize_page_margins").toBool(legacy);
     result["reduce_chapter_spacing"] = settings.value("reduce_chapter_spacing").toBool(legacy);
+    result["normalize_text_colors"] = settings.value("normalize_text_colors").toBool(false);
     return result;
 }
 

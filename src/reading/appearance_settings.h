@@ -72,14 +72,14 @@ inline QJsonObject beautifierSettings(const QJsonObject &settings)
 }
 
 inline constexpr auto normalizationPresetKey = "book_normalization_preset";
-inline constexpr std::array<const char *, 5> normalizationKeys{
-    "normalize_page_margins", "reduce_chapter_spacing", "beautifier_initials", "beautifier_spacing",
-    "beautifier_indent"
+inline constexpr std::array<const char *, 6> normalizationKeys{
+    "normalize_page_margins", "reduce_chapter_spacing", "beautifier_initials",
+    "beautifier_spacing",     "beautifier_indent",      "normalize_text_colors"
 };
 QJsonObject normalizationSettings(const QJsonObject &settings);
 QString normalizationPreset(const QJsonObject &settings);
 QJsonObject normalizationPresetSettings(const QString &preset);
-inline constexpr std::array<const char *, 36> keys{ "line_spacing_version",
+inline constexpr std::array<const char *, 37> keys{ "line_spacing_version",
                                                     "font_pixels",
                                                     "line_spacing",
                                                     "paragraph_spacing",
@@ -102,6 +102,7 @@ inline constexpr std::array<const char *, 36> keys{ "line_spacing_version",
                                                     "beautifier_indent",
                                                     "normalize_page_margins",
                                                     "reduce_chapter_spacing",
+                                                    "normalize_text_colors",
                                                     "serif_font_face",
                                                     "sans_font_face",
                                                     "monospace_font_face",

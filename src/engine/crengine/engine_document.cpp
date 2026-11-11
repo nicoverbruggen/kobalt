@@ -181,15 +181,21 @@ private:
 class PageDrawBuffer : public LVColorDrawBuf
 {
 public:
-    PageDrawBuffer(QImage &image, bool dark, bool smooth,
+    PageDrawBuffer(QImage &image, bool dark, bool smooth, bool normalizeTextColors,
                    QMap<std::tuple<quintptr, int, int>, bool> *inversion = nullptr)
         : LVColorDrawBuf(image.width(), image.height(), image.bits(), 32),
           pageSize(image.size()),
           dark(dark),
+          normalizeTextColors(normalizeTextColors),
           inversion(inversion)
     {
         setInvertColors(dark);
         setSmoothScalingImages(smooth);
+    }
+
+    void SetTextColor(lUInt32 color) override
+    {
+        LVColorDrawBuf::SetTextColor(normalizeTextColors ? 0 : color);
     }
 
     bool hasImages = false, hasText = false;
@@ -215,7 +221,7 @@ public:
         // On preserved colored paper, keep the publisher's original contrast.
         const bool invertInk =
                 dark && (preserveContrast ? neutral : !neutral && !hasVisibleColor(color));
-        const lUInt32 ink = invertInk ? color ^ 0x00ffffffU : color;
+        const lUInt32 ink = normalizeTextColors ? 0 : invertInk ? color ^ 0x00ffffffU : color;
         LVColorDrawBuf::Draw(x, y, bitmap, width, height, &ink);
     }
 
@@ -274,6 +280,7 @@ private:
     QSize pageSize;
     bool imageRegionsFull = false;
     bool dark;
+    bool normalizeTextColors;
     QMap<std::tuple<quintptr, int, int>, bool> *inversion;
 };
 
@@ -543,6 +550,7 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     imageInversion_.clear();
     hideNonlinearFragments_ = saved.value("hide_nonlinear_fragments").toBool(false);
     const auto normalization = appearance::normalizationSettings(saved);
+    normalizeTextColors_ = normalization.value("normalize_text_colors").toBool();
     normalizePageMargins_ = normalization.value("normalize_page_margins").toBool();
     reduceChapterSpacing_ = normalization.value("reduce_chapter_spacing").toBool();
     verticalSpacing_ = appearance::verticalSpacingMode(saved.value("vertical_justification"));
@@ -762,7 +770,7 @@ QImage EngineDocument::coverImage(QSize maximumSize, const QString &preferredPat
             return {};
         }
         image.fill(Qt::white);
-        PageDrawBuffer buffer(image, false, true);
+        PageDrawBuffer buffer(image, false, true, false);
         buffer.Draw(cover, 0, 0, size.width(), size.height(), false);
         // CREngine leaves the high byte unused; Qt RGB32 requires opaque pixels.
         const int width = image.width(), height = image.height();
@@ -913,6 +921,8 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     const bool dark = settings.value("dark_mode").toBool(darkMode_);
     const bool hideNonlinear =
             settings.value("hide_nonlinear_fragments").toBool(hideNonlinearFragments_);
+    const bool normalizeTextColors =
+            settings.value("normalize_text_colors").toBool(normalizeTextColors_);
     const bool normalizePageMargins =
             settings.value("normalize_page_margins").toBool(normalizePageMargins_);
     const bool reduceChapterSpacing =
@@ -955,9 +965,10 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     const bool bionicChanged = bionic != bionic_;
     // Outline thickness changes pixels only. Keep the formatted page and its anchors.
     const bool thicknessChanged = weight != weight_;
-    const bool styled = beautifierInitials != beautifierInitials_
-            || beautifierSpacing != beautifierSpacing_ || beautifierIndent != beautifierIndent_
-            || fallbackFaces != fallbackFaces_ || normalizePageMargins != normalizePageMargins_
+    const bool styled = normalizeTextColors != normalizeTextColors_
+            || beautifierInitials != beautifierInitials_ || beautifierSpacing != beautifierSpacing_
+            || beautifierIndent != beautifierIndent_ || fallbackFaces != fallbackFaces_
+            || normalizePageMargins != normalizePageMargins_
             || reduceChapterSpacing != reduceChapterSpacing_ || wordSpacing != wordSpacing_
             || tracking != justificationTracking_ || hanging != hangingPunctuation_
             || widowsOrphans != widowsOrphans_ || bionicChanged || axisChanged || opticalChanged
@@ -1021,6 +1032,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     darkMode_ = dark;
     activateFontParameters();
     hideNonlinearFragments_ = hideNonlinear;
+    normalizeTextColors_ = normalizeTextColors;
     normalizePageMargins_ = normalizePageMargins;
     reduceChapterSpacing_ = reduceChapterSpacing;
     verticalSpacing_ = verticalSpacing;
@@ -1160,6 +1172,11 @@ void EngineDocument::applyStyleSheet()
     if (normalizePageMargins_) {
         overrides = "html,body,DocFragment { margin:0 !important; padding:0 !important; }\n";
     }
+    // Normalize ink in PageDrawBuffer so SVG currentColor keeps its publisher
+    // value. Clear CSS backgrounds outside SVG so theme ink stays readable.
+    if (normalizeTextColors_)
+        overrides +=
+                "*:not(svg, svg *), *:not(svg, svg *)::before, *:not(svg, svg *)::after, *:not(svg, svg *)::first-letter { background-color:transparent !important; }\n";
     overrides +=
             "svg[data-kobalt-fullpage=\"1\"] { width:100% !important; height:100vh !important; }\n";
     // A one-screen-pixel boundary stops a leading illustration's margin from
@@ -1445,7 +1462,7 @@ QImage EngineDocument::image(int pageNumber)
         result = QImage(size_, QImage::Format_RGB32);
     if (result.isNull())
         return {};
-    PageDrawBuffer buffer(result, darkMode_, true, &imageInversion_);
+    PageDrawBuffer buffer(result, darkMode_, true, normalizeTextColors_, &imageInversion_);
     if (columns_ == 1) {
         engine_->drawColumn(buffer, pageNumber, 0);
     } else {
@@ -1455,7 +1472,7 @@ QImage EngineDocument::image(int pageNumber)
             return {};
         QPainter painter(&result);
         for (int i = 0; i < columns_; ++i) {
-            PageDrawBuffer part(column, darkMode_, true, &imageInversion_);
+            PageDrawBuffer part(column, darkMode_, true, normalizeTextColors_, &imageInversion_);
             engine_->drawColumn(part, pageNumber, i);
             buffer.hasImages |= part.hasImages;
             buffer.hasText |= part.hasText;
@@ -1819,6 +1836,7 @@ QJsonObject EngineDocument::state() const
               { "dark_mode", darkMode_ },
               { "hide_nonlinear_fragments", hideNonlinearFragments_ },
               { "normalize_page_margins", normalizePageMargins_ },
+              { "normalize_text_colors", normalizeTextColors_ },
               { "reduce_chapter_spacing", reduceChapterSpacing_ },
               { "vertical_justification", verticalSpacing_ },
               { "vertical_spacing_scope", verticalSpacingScope_ },

@@ -9799,6 +9799,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.prepared);
         auto globalBeautifier = storage::readJson(fixture.paths.preferences());
         globalBeautifier["beautifier_initials"] = true;
+        globalBeautifier["normalize_text_colors"] = true;
         globalBeautifier["beautifier_spacing"] = false;
         globalBeautifier["beautifier_indent"] = false;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), globalBeautifier));
@@ -9854,6 +9855,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto second = fixture.state();
         QVERIFY(!second.contains("book_beautifier"));
         QVERIFY(second.value("beautifier_initials").toBool());
+        QVERIFY(second.value("normalize_text_colors").toBool());
         QVERIFY(!second.value("beautifier_spacing").toBool());
         QVERIFY(!second.value("beautifier_indent").toBool());
 
@@ -12978,12 +12980,13 @@ private slots:
         QVERIFY(fixture.widget("rrNormalizationRecommended")->property("checked").toBool());
         QVERIFY(fixture.widget("rrNormalizationMargins")->property("checked").toBool());
         QVERIFY(fixture.widget("rrNormalizationChapters")->property("checked").toBool());
+        QVERIFY(!fixture.widget("rrNormalizationTextColors")->property("checked").toBool());
         QVERIFY(capture(fixture, name + "-beautifier-off"));
         QVERIFY(fixture.press("rrNormalizationFull"));
         QVERIFY(capture(fixture, name + "-beautifier-full"));
         for (const auto *rule :
              { "rrNormalizationMargins", "rrNormalizationChapters", "rrBeautifierInitials",
-               "rrBeautifierSpacing", "rrBeautifierIndent" })
+               "rrBeautifierSpacing", "rrBeautifierIndent", "rrNormalizationTextColors" })
             QVERIFY(fixture.widget(rule)->property("checked").toBool());
         QVERIFY(fixture.press("rrNormalizationCustom"));
         QVERIFY(fixture.widget("rrBeautifierIndent")->property("checked").toBool());
@@ -12998,18 +13001,22 @@ private slots:
                               QPoint(initials->width() * 3 / 4, initials->height() * 2 / 3)));
         QTRY_VERIFY(initials->isChecked());
         QVERIFY(fixture.widget("rrNormalizationCustom")->property("checked").toBool());
+        QVERIFY(fixture.press("rrNormalizationTextColors"));
         QVERIFY(capture(fixture, name + "-beautifier-rules"));
         QVERIFY(fixture.press("rrBeautifierCancel"));
         QTRY_VERIFY(!fixture.widget("rrBeautifierPopup"));
         QVERIFY(fixture.press("rrBeautifierSettings"));
         QVERIFY(!fixture.widget("rrBeautifierInitials")->property("checked").toBool());
+        QVERIFY(!fixture.widget("rrNormalizationTextColors")->property("checked").toBool());
         QVERIFY(fixture.press("rrBeautifierInitials"));
+        QVERIFY(fixture.press("rrNormalizationTextColors"));
         QVERIFY(fixture.press("rrBeautifierDone"));
         QTRY_VERIFY(!fixture.widget("rrBeautifierPopup"));
         QVERIFY(capture(fixture, name + "-beautifier-settings"));
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_VERIFY(fixture.state().value("beautifier_initials").toBool());
+        QVERIFY(fixture.state().value("normalize_text_colors").toBool());
         QVERIFY(!fixture.state().value("beautifier_spacing").toBool());
         QVERIFY(fixture.state().value("normalize_page_margins").toBool());
         QVERIFY(fixture.state().value("reduce_chapter_spacing").toBool());
@@ -13018,8 +13025,10 @@ private slots:
         QVERIFY(revealSettingsOption(fixture, "rrBeautifierSettings"));
         QVERIFY(fixture.press("rrBeautifierSettings"));
         QVERIFY(fixture.widget("rrBeautifierInitials")->property("checked").toBool());
+        QVERIFY(fixture.widget("rrNormalizationTextColors")->property("checked").toBool());
         QVERIFY(!fixture.widget("rrBeautifierSpacing")->property("checked").toBool());
         QVERIFY(fixture.press("rrBeautifierInitials"));
+        QVERIFY(fixture.press("rrNormalizationTextColors"));
         QVERIFY(fixture.press("rrBeautifierDone"));
         QTRY_VERIFY(!fixture.widget("rrBeautifierPopup"));
         while (fixture.widget("rrSettingsOptionsPrevious")->isEnabled())

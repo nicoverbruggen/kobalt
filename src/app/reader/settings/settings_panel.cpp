@@ -1781,10 +1781,13 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     rows->addWidget(presetRow);
     QVector<ui::DescribedOption *> options;
     const QStringList names{ "rrNormalizationMargins", "rrNormalizationChapters",
-                             "rrBeautifierInitials", "rrBeautifierSpacing", "rrBeautifierIndent" };
-    const QStringList labels{ "settings.normalization_margins", "settings.normalization_chapters",
-                              "settings.beautifier_initials", "settings.beautifier_spacing",
-                              "settings.beautifier_indent" };
+                             "rrBeautifierInitials",   "rrBeautifierSpacing",
+                             "rrBeautifierIndent",     "rrNormalizationTextColors" };
+    const QStringList labels{
+        "settings.normalization_margins", "settings.normalization_chapters",
+        "settings.beautifier_initials",   "settings.beautifier_spacing",
+        "settings.beautifier_indent",     "settings.normalization_text_colors"
+    };
     for (int i = 0; i < int(appearance::normalizationKeys.size()); ++i) {
         const auto prefix = labels[i];
         auto *option = checklistOption(card, names[i], strings::get(prefix.toUtf8().constData()),

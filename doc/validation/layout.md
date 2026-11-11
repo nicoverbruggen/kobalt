@@ -39,6 +39,8 @@ Set `KOBALT_TEST_CAPTURE_DIR` for app captures of the column checks, or `KOBALT_
 
 `ctest --preset mac -R "engine.beautifier|model.appearance-settings|session.(reading-book|bookmark-session|highlight-session)"` runs the book normalization checks with the saved state, bookmarks and highlights that it affects.
 
+The normalization check compares authored, inline, inherited and pseudo-element text colors with a neutral reference in both themes. It checks publisher background removal, reversible toggles, reflow, cache reopen in both directions and unchanged raster and vector image pixels. Settings checks cover the optional default, global ownership, preset selection and appearance identity.
+
 For an authorized local EPUB, `kobalt-beautifier-tests --compare-layout <epub> <passage> <output-directory>` compares paragraph spacing, indentation and line spacing one at a time, then checks centering and expansion on up to 32 pages from that passage. It saves comparison images and a JSON record in the output directory. Each setting must restore the original page when reset, and the source EPUB must stay unchanged. A zero count for a page-spacing mode can mean that the sampled pages do not meet that mode's suitability rules. It does not show a defect by itself. `kobalt-beautifier-tests --compare <epub> <passage> <output-directory>` renders the same source passage before and after normalization, checks the source text and file hashes, and verifies that turning the mode off restores the original pixels. Keep private books and comparison output under ignored build directories. Do not add them to the public fixtures.
 
 ## Limits

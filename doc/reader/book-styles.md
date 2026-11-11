@@ -11,6 +11,8 @@ Kobo spans and their IDs stay intact, including in kepubify conversions. The ori
 
 Book normalization includes independent Use Kobalt page margins and Reduce chapter-start spacing rules. The first overrides HTML and body margins and padding so the Layout margins apply. The second removes margins at forced page breaks. Space above illustrations at chapter starts is preserved. Both rules are on in Recommended and Full. Turn either off in Custom to keep that publisher styling. The current book reflows without losing its reading position. Text and Layout controls still apply. CSS `@page` rules remain unsupported by the renderer.
 
+Normalize text colors replaces publisher text colors with pure black in light mode and pure white in dark mode. Publisher background colors become transparent so text stays readable on the theme background. Glyph edges keep antialiasing. Images keep their existing rendering and dark-mode behavior. Recommended leaves this rule off; Full enables it. The original book stays unchanged.
+
 ## Custom book styles
 
 `userstyle.css` adds your own CSS to every book. Use it for changes that the Text and Layout panels do not offer, such as paragraph indentation or heading alignment. It changes book content only, not the reader interface.

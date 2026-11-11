@@ -5,6 +5,7 @@
 #include "reader_inputs.h"
 #include "check.h"
 #include <QCryptographicHash>
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
@@ -187,6 +188,126 @@ void compareLayout(const QString &path, const QString &query, const QString &out
 } // namespace
 
 // Checks book normalization: reversible styling, protected paragraphs, text initials, explicit overrides, caches and previews.
+static void checkTextColors()
+{
+    const QByteArray body =
+            "<h2 id='title'>Colored heading</h2>"
+            "<p id='colored' style='color:#12120d !important;background-color:#224466 !important'>"
+            "Inherited ink <span>and nested text</span> "
+            "<span style='color:#cc2200 !important;background-color:#ffff00 !important'>inline ink</span></p>"
+            "<p><a href='#title'>Linked text</a></p>";
+    const QByteArray css =
+            "body {color:#334455;background-color:#ffddaa}"
+            "#title {color:#e8f0f0 !important;background-color:#222 !important}"
+            "a {color:#0000ff !important;text-decoration:underline} p::before {content:'Before ';color:red !important}";
+    QMap<QString, qint64> sizes, referenceSizes;
+    const auto source = fixture(body, sizes, css);
+    // Same markup and geometry, but with explicit theme-neutral author colors.
+    auto referenceBody = body;
+    referenceBody.replace("#12120d", "#000")
+            .replace("#224466", "transparent")
+            .replace("#cc2200", "#000")
+            .replace("#ffff00", "transparent");
+    auto referenceCss = css;
+    referenceCss.replace("#334455", "#000")
+            .replace("#ffddaa", "transparent")
+            .replace("#e8f0f0", "#000")
+            .replace("#222", "transparent")
+            .replace("#0000ff", "#000")
+            .replace("color:red", "color:#000");
+    const auto reference = fixture(referenceBody, referenceSizes, referenceCss);
+    QTemporaryDir cache(QDir::currentPath() + "/text-colors-cache-XXXXXX");
+    require(cache.isValid(), "Cannot create text color cache");
+    QString error;
+    EngineDocument model(test::readerFonts()), expected(test::readerFonts());
+    model.setDocumentCache(cache.path(), QByteArray(64, 'c'), "text-colors", 1024 * 1024);
+    require(model.openResources(source, sizes, { 800, 1000 }, {}, &error), qPrintable(error));
+    require(expected.openResources(reference, referenceSizes, { 800, 1000 }, {}, &error),
+            qPrintable(error));
+    const auto original = model.image(0);
+    const auto anchor = model.position();
+    require(model.saveDocumentCache(), "Cannot save publisher color cache");
+    for (bool dark : { false, true, false }) {
+        model.setDarkMode(dark);
+        expected.setDarkMode(dark);
+        const auto publisher = model.image(0);
+        require(model.applyAppearance(appearance::Patch({ { "normalize_text_colors", true } })),
+                "Cannot enable text color normalization");
+        require(model.image(0) == expected.image(0),
+                "Normalized author, inline, inherited or pseudo-element colors differ from neutral text");
+        require(model.position() == anchor, "Text color normalization moved the anchor");
+        model.resize({ 900, 1000 });
+        expected.resize({ 900, 1000 });
+        require(model.image(0) == expected.image(0), "Reflow lost normalized text colors");
+        model.resize({ 800, 1000 });
+        expected.resize({ 800, 1000 });
+        require(model.applyAppearance(appearance::Patch({ { "normalize_text_colors", false } })),
+                "Cannot disable text color normalization");
+        require(model.image(0) == publisher,
+                "Disabling normalization did not restore publisher colors");
+    }
+    require(model.image(0) == original, "Color toggles changed the original light page");
+    require(model.applyAppearance(appearance::Patch({ { "normalize_text_colors", true } })),
+            "Cannot save normalized appearance");
+    const auto saved = model.state();
+    const auto normalized = model.image(0);
+    require(normalized != original, "Color fixture did not exercise normalization");
+    require(model.openResources(source, sizes, { 800, 1000 }, saved, &error), qPrintable(error));
+    require(model.openedFromCache() && model.image(0) == normalized && model.position() == anchor,
+            "Cached reopen lost normalized text colors or reading anchor");
+    model.setDarkMode(true);
+    expected.setDarkMode(true);
+    require(model.image(0) == expected.image(0), "Dark-mode toggle lost active normalization");
+    model.setDarkMode(false);
+    require(model.image(0) == normalized, "Light-mode toggle lost active normalization");
+    require(model.saveDocumentCache(), "Cannot save normalized color cache");
+    require(model.openResources(source, sizes, { 800, 1000 }, {}, &error), qPrintable(error));
+    require(model.openedFromCache() && model.image(0) == original,
+            "Reopening normalized cache with rule off lost publisher colors");
+
+    QImage raster(60, 90, QImage::Format_RGB32);
+    raster.fill(QColor("#cc2200"));
+    QByteArray png;
+    QBuffer buffer(&png);
+    require(buffer.open(QIODevice::WriteOnly) && raster.save(&buffer, "PNG"),
+            "Cannot encode image fixture");
+    const auto svg = QByteArray("<svg xmlns='http://www.w3.org/2000/svg' width='60' height='90'>"
+                                "<rect width='60' height='90' fill='#224466'/></svg>")
+                             .toBase64();
+    const auto images = fixture(
+            "<p><img src='data:image/png;base64," + png.toBase64()
+                    + "'/><img src='data:image/svg+xml;base64," + svg
+                    + "'/></p><svg xmlns='http://www.w3.org/2000/svg' width='60' height='90' style='color:#cc2200'><rect width='60' height='90' fill='currentColor'/></svg><div style='color:#224466'><svg xmlns='http://www.w3.org/2000/svg' width='60' height='90'><rect width='60' height='90' fill='currentColor'/></svg></div>",
+            sizes);
+    EngineDocument vertical(test::readerFonts()), verticalReference(test::readerFonts());
+    QMap<QString, qint64> verticalSizes, verticalReferenceSizes;
+    const auto verticalSource =
+            fixture(body, verticalSizes, css + "body {writing-mode:vertical-rl}");
+    const auto verticalExpected = fixture(referenceBody, verticalReferenceSizes,
+                                          referenceCss + "body {writing-mode:vertical-rl}");
+    for (bool dark : { false, true }) {
+        require(vertical.openResources(verticalSource, verticalSizes, { 800, 1000 },
+                                       { { "dark_mode", dark }, { "normalize_text_colors", true } },
+                                       &error),
+                qPrintable(error));
+        require(verticalReference.openResources(verticalExpected, verticalReferenceSizes,
+                                                { 800, 1000 }, { { "dark_mode", dark } }, &error),
+                qPrintable(error));
+        require(vertical.image(0) == verticalReference.image(0),
+                "Vertical text or decorations did not use normalized ink");
+    }
+    EngineDocument imageModel(test::readerFonts());
+    for (bool dark : { false, true }) {
+        require(imageModel.openResources(images, sizes, { 800, 1000 }, { { "dark_mode", dark } },
+                                         &error),
+                qPrintable(error));
+        const auto before = imageModel.image(0);
+        require(imageModel.applyAppearance(appearance::Patch({ { "normalize_text_colors", true } }))
+                        && imageModel.image(0) == before,
+                "Text color normalization changed raster or vector image pixels");
+    }
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
@@ -200,6 +321,7 @@ int main(int argc, char **argv)
                       QString::fromLocal8Bit(argv[4]));
         return 0;
     }
+    checkTextColors();
     const QByteArray prose =
             " ordinary words continue through the paragraph, with enough text to distinguish prose from a heading or separator. The words keep their original order and their source anchors.";
     QString error;

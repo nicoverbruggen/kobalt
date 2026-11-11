@@ -247,7 +247,7 @@ int main()
             "Dictionary UI preferences invalidated the book layout");
     // Appearance settings decide the layout. The list must stay complete, because a
     // missing key would let a retained layout survive a changed setting.
-    require(appearance::keys.size() == 36, "The appearance keys changed without this check");
+    require(appearance::keys.size() == 37, "The appearance keys changed without this check");
     require(appearance::bookDefaults({}).value("paragraph_indent").toInt() == -1,
             "Paragraph indentation no longer defaults to Publisher");
     for (int percent : { -1, 0, 100, 300 }) {
@@ -382,6 +382,11 @@ int main()
     require(!invalidBeautifier.value("book_beautifier").toBool()
                     && !invalidBeautifier.value("beautifier_initials").toBool(),
             "Invalid beautifier settings did not use safe defaults");
+    for (const auto &value : { QJsonValue(), QJsonValue("true"), QJsonValue(1), QJsonValue(false) })
+        require(!appearance::normalizationSettings({ { "normalize_text_colors", value } })
+                         .value("normalize_text_colors")
+                         .toBool(),
+                "Missing or invalid color normalization did not default off");
     const auto recommended = appearance::normalizationPresetSettings("recommended");
     const auto full = appearance::normalizationPresetSettings("full");
     require(appearance::normalizationPreset({}) == "recommended"
@@ -390,6 +395,12 @@ int main()
             "Recommended changed the existing defaults");
     for (const auto *key : appearance::normalizationKeys)
         require(full.value(key).toBool(), "Full did not enable every rule");
+    auto oldFull = full;
+    oldFull.remove("normalize_text_colors");
+    const auto preservedFull = appearance::cleanPreferences(oldFull);
+    require(!preservedFull.value("normalize_text_colors").toBool()
+                    && appearance::normalizationPreset(preservedFull) == "custom",
+            "An old Full selection enabled the new opt-in color rule");
     for (bool enabled : { false, true }) {
         const auto migrated = appearance::cleanPreferences({ { "avoid_wasteful_styling", enabled },
                                                              { "beautifier_spacing", true },

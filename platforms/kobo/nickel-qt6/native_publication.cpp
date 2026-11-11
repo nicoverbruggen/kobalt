@@ -1,4 +1,5 @@
 #include "support/strings.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "platforms/kobo/common/native_publication.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/publication_source.h"
@@ -10,12 +11,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 // These native return values use caller-owned storage on ARM. Their native
 // destructors retain responsibility for their reference-counted contents.
 struct Location

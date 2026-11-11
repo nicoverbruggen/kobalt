@@ -11,6 +11,7 @@
 #include "platforms/kobo/common/native_light.h"
 #include "platforms/kobo/common/native_wifi_power.h"
 #include "platforms/kobo/display/page_animation.h"
+#include "platforms/kobo/nickel-qt6/native_types.h"
 #include <NickelHook.h>
 #include <QMetaType>
 #include <dlfcn.h>
@@ -27,9 +28,7 @@ bool (*nativePrerenderAllowed)(const void *);
 // on; a release that changes it leaves Nickel's reader in place.
 bool firmwareSupported()
 {
-    const auto *volume = static_cast<const QtPrivate::QMetaTypeInterface *>(
-            dlsym(RTLD_DEFAULT, "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE"));
-    return volume && QMetaType(volume).sizeOf() == 12;
+    return nativeType(volumeType).sizeOf() == sizeof(Volume);
 }
 } // namespace kobalt::nickel_qt6
 

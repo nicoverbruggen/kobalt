@@ -1,4 +1,5 @@
 #include "platforms/kobo/common/native_publication.h"
+#include "platforms/kobo/nickel-qt6/native_types.h"
 #include <QMetaType>
 #include <QObject>
 #include <cstring>
@@ -6,20 +7,9 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-QMetaType nativeType(const char *name)
-{
-    return QMetaType(symbol<const QtPrivate::QMetaTypeInterface *>(name));
-}
-
 struct OpeningApi
 {
-    QMetaType volume = nativeType("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE");
+    QMetaType volume = nativeType(volumeType);
     QMetaType keys =
             nativeType("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI5QListI10ContentKeyEE8metaTypeE");
     QMetaType bookmark =

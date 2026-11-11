@@ -1,4 +1,5 @@
 #include "book_menu.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "book_protection.h"
 #include "local_book_path.h"
 #include "publication/publication.h"
@@ -24,12 +25,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 QString bookIdentity(const void *volume)
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)

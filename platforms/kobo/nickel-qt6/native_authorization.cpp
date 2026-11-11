@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/nickel-qt6/native_types.h"
 #include "platforms/kobo/common/native_authorization.h"
 #include "support/diagnostics.h"
 #include <QCoreApplication>
@@ -16,20 +17,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[3];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
 // getUserOnDevice returns an eight-byte User value in the supported ABI.
 struct User
 {
@@ -39,7 +26,7 @@ struct User
     ~User() { symbol<void (*)(void *)>("_ZN4UserD1Ev")(this); }
 };
 
-static_assert(sizeof(Volume) == 12 && sizeof(User) == 8);
+static_assert(sizeof(User) == 8);
 
 struct Api
 {
@@ -64,8 +51,7 @@ struct Api
 
     bool ready() const
     {
-        const auto type = QMetaType(symbol<const QtPrivate::QMetaTypeInterface *>(
-                "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE"));
+        const auto type = nativeType(volumeType);
         return type.sizeOf() == sizeof(Volume) && get && id && device && dbName && connection
                 && user && userId && warning && borrowed && openBorrowed && volumes && sync
                 && symbol<void *>("_ZN6VolumeD1Ev") && symbol<void *>("_ZN4UserD1Ev")

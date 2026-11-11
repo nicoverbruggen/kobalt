@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "platforms/kobo/common/native_light.h"
 #include "support/diagnostics.h"
 #include <QApplication>
@@ -31,12 +32,6 @@ static bool observedLightDevice = false;
 static int lightDeviceError = 0;
 #endif
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 struct Api
 {
     const void *(*device)() = symbol<decltype(device)>("_ZN6Device16getCurrentDeviceEv");

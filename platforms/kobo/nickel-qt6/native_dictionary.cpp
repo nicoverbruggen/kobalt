@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/nickel-qt6/native_types.h"
 #include "support/strings.h"
 #include "platforms/kobo/common/native_dictionary.h"
 #include "platforms/kobo/common/dictionary_selection.h"
@@ -40,20 +41,6 @@ extern "C" __attribute__((visibility("default"))) void kobalt_dictionary_web_vie
 }
 #endif
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[3];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
 struct Dictionary
 {
     void *word;
@@ -117,19 +104,16 @@ struct Api
 
     bool ready() const
     {
-        const auto type = [](const char *name) {
-            return QMetaType(symbol<const QtPrivate::QMetaTypeInterface *>(name)).sizeOf();
-        };
+        const auto type = [](const char *name) { return nativeType(name).sizeOf(); };
         return type("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI10DictionaryE8metaTypeE")
                 == sizeof(Dictionary)
                 && type("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI18DictionaryProviderE8metaTypeE")
                 == 28
-                && type("_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE")
-                == sizeof(Volume)
-                && all && suffix && path && custom && select && volume && values && device && dbName
-                && settings && choose && parser && active && initialize && equal && valid
-                && installed && language && name && source && construct && find && definition
-                && symbol<void *>("_ZN6VolumeD1Ev") && symbol<void *>("_ZN10DictionaryD1Ev")
+                && type(volumeType) == sizeof(Volume) && all && suffix && path && custom && select
+                && volume && values && device && dbName && settings && choose && parser && active
+                && initialize && equal && valid && installed && language && name && source
+                && construct && find && definition && symbol<void *>("_ZN6VolumeD1Ev")
+                && symbol<void *>("_ZN10DictionaryD1Ev")
                 && symbol<void *>("_ZN15ContentSettingsD1Ev");
     }
 };

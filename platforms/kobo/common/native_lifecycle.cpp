@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "native_lifecycle.h"
 #include "startup_recovery.h"
 #include "screensaver_compatibility.h"
@@ -33,12 +34,6 @@ namespace kobalt {
 namespace {
 QPointer<NativeLifecycle> active;
 std::atomic_bool sessionStorageAvailable{ true };
-
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
 
 struct PowerApi
 {

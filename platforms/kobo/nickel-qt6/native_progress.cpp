@@ -1,4 +1,5 @@
 #include "support/diagnostics.h"
+#include "platforms/kobo/nickel-qt6/native_types.h"
 #include "support/qt_compat.h"
 #include "reading/reading_bridge.h"
 #include "reading/word_estimates.h"
@@ -25,20 +26,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[3];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
 struct Location
 {
     void *words[2];
@@ -47,7 +34,7 @@ struct Location
     ~Location() { symbol<void (*)(void *)>("_ZN15ContentLocationD1Ev")(this); }
 };
 
-static_assert(sizeof(Volume) == 12 && sizeof(Location) == 8);
+static_assert(sizeof(Location) == 8);
 
 struct Api
 {
@@ -108,8 +95,7 @@ struct Api
 
     bool ready() const
     {
-        auto type = QMetaType(symbol<const QtPrivate::QMetaTypeInterface *>(
-                "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE"));
+        auto type = nativeType(volumeType);
         return type.sizeOf() == sizeof(Volume) && get && values && device && dbName && tolino
                 && connection && location && validLocation && teng && serialized && bookmark
                 && status && firstTime && percent && update && refresh && begin && end && manager

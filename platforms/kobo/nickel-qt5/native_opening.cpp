@@ -1,4 +1,5 @@
 #include "opening_context.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "platforms/kobo/common/native_publication.h"
 #include <QObject>
@@ -6,12 +7,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 struct Api
 {
     void *(*copyVolume)(const void *) = symbol<decltype(copyVolume)>(

@@ -1,4 +1,5 @@
 #include "platforms/kobo/common/native_publication.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "publication/native_resources.h"
@@ -12,12 +13,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 struct Api
 {
     QString (*identity)(const void *) = symbol<decltype(identity)>("_ZNK7Content5getIdEv");

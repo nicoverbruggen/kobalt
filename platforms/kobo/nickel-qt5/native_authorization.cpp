@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/nickel-qt5/native_types.h"
 #include "native_account.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "platforms/kobo/common/native_authorization.h"
@@ -20,22 +21,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[2];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
-static_assert(sizeof(Volume) == 8);
-
 struct Api
 {
     Volume (*get)(const QString &, const QString &) =

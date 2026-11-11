@@ -1,4 +1,5 @@
 #include "native_tile_cover.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include <QApplication>
@@ -19,12 +20,6 @@ bool &enabled()
 {
     static bool value = false;
     return value;
-}
-
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
 
 QString identity(const void *volume)

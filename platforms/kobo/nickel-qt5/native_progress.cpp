@@ -1,4 +1,5 @@
 #include "support/diagnostics.h"
+#include "platforms/kobo/nickel-qt5/native_types.h"
 #include "support/qt_compat.h"
 #include "reading/reading_bridge.h"
 #include "reading/word_estimates.h"
@@ -26,22 +27,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[2];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
-static_assert(sizeof(Volume) == 8);
-
 struct Api
 {
     Volume (*get)(const QString &, const QString &) =

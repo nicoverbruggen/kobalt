@@ -1,4 +1,5 @@
 #include "native_sync_network.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "native_network_state.h"
 #include "native_dialog_overlay.h"
 #include "support/diagnostics.h"
@@ -8,12 +9,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 NativeSyncNetworkBindings nativeBindings()
 {
     const auto instance = symbol<QObject *(*)()>("_ZN23WirelessWorkflowManager14sharedInstanceEv");

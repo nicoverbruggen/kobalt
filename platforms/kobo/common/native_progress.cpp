@@ -1,15 +1,10 @@
 #include "native_progress.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include <dlfcn.h>
 #include <utility>
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 quint64 nextConnectionId = 0;
 } // namespace
 

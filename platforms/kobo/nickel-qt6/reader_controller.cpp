@@ -1,4 +1,5 @@
 #include "../common/diagnostics.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "support/qt_compat.h"
 #include "hooks.h"
 #include "platforms/kobo/common/native_tile_cover.h"
@@ -42,12 +43,6 @@ ReaderEnvironment &environment()
 {
     static ReaderEnvironment value;
     return value;
-}
-
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 }
 
 std::function<bool(const void *, const void *)> beginOpening;
@@ -500,9 +495,9 @@ int initialize()
         kobalt::diagnostic("firmware-rejected", {}, kobalt::DiagnosticSeverity::Warning);
         return 0;
     }
-    prerenderManager =
-            symbol<decltype(prerenderManager)>("_ZN26IPrerenderToPersistManager8instanceEv");
-    stopPrerendering = symbol<decltype(stopPrerendering)>(
+    prerenderManager = kobalt::symbol<decltype(prerenderManager)>(
+            "_ZN26IPrerenderToPersistManager8instanceEv");
+    stopPrerendering = kobalt::symbol<decltype(stopPrerendering)>(
             "_ZThn8_N25PrerenderToPersistManager16stopPrerenderingEv");
     if (!kobalt::NativeOpening::available() || !kobalt::NativePublication::available()
         || !kobalt::NativeProgress::available() || !kobalt::NativeLifecycle::powerAvailable()

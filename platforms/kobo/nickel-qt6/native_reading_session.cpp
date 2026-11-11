@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/nickel-qt6/native_types.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/native_event_save.h"
@@ -28,20 +29,6 @@ namespace {
 #ifndef KOBALT_READER_HARDWARE
 NativeReadingSession *testActive = nullptr;
 #endif
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[3];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
 struct Location
 {
     void *words[2];
@@ -60,7 +47,7 @@ struct SessionPosition
     double percent = 0;
 };
 
-static_assert(sizeof(Volume) == 12 && offsetof(SessionPosition, percent) == 80);
+static_assert(offsetof(SessionPosition, percent) == 80);
 
 struct Api
 {
@@ -115,8 +102,7 @@ struct Api
 
     bool ready() const
     {
-        const auto type = QMetaType(symbol<const QtPrivate::QMetaTypeInterface *>(
-                "_ZN9QtPrivate25QMetaTypeInterfaceWrapperI6VolumeE8metaTypeE"));
+        const auto type = nativeType(volumeType);
         return type.sizeOf() == sizeof(Volume) && get && percent && bookmark && location
                 && validLocation && teng && serialized && values && device && dbName && tolino
                 && connection && engine && start && end && fire && saveEvents && flushEvents && time

@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/nickel-qt5/native_types.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "support/strings.h"
 #include "platforms/kobo/common/native_dictionary.h"
@@ -43,20 +44,6 @@ extern "C" __attribute__((visibility("default"))) void kobalt_dictionary_web_vie
 }
 #endif
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
-struct Volume
-{
-    void *words[2];
-    Volume(const Volume &) = delete;
-
-    ~Volume() { symbol<void (*)(void *)>("_ZN6VolumeD1Ev")(this); }
-};
-
 struct Dictionary
 {
     void *word;

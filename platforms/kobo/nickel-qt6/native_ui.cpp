@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "support/strings.h"
 #include "platforms/kobo/common/native_ui.h"
 #include <QApplication>
@@ -32,12 +33,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 QWidget *nativeWidget(const char *typeSymbol, QWidget *parent)
 {
     const auto *interface = symbol<const QtPrivate::QMetaTypeInterface *>(typeSymbol);

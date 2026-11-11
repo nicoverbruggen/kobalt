@@ -1,4 +1,5 @@
 #include "support/qt_compat.h"
+#include "platforms/kobo/common/native_symbol.h"
 #include "platforms/kobo/common/native_keyboard.h"
 #include "platform/api/kobo_refresh.h"
 #include "support/diagnostics.h"
@@ -15,12 +16,6 @@
 
 namespace kobalt {
 namespace {
-template <class T>
-T symbol(const char *name)
-{
-    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
-}
-
 struct Api
 {
     void (*frame)(void *, QWidget *) = symbol<decltype(frame)>("_ZN13KeyboardFrameC1EP7QWidget");

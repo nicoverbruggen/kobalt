@@ -209,6 +209,8 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
       orientation(orientation)
 {
     Q_ASSERT(services.complete());
+    annotationDraft = std::make_unique<AnnotationDraft>(
+            *session, [this] { return !lifecycleHidden && !services.suspended(); });
     if (services.annotationExporter)
         annotationExporter = services.annotationExporter(this);
     building.start();
@@ -219,9 +221,8 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     setObjectName("rrReader");
     setAttribute(Qt::WA_DeleteOnClose);
     // Member timers belong to the window, so a check of its children finds them.
-    for (auto *timer :
-         { &kosyncDeadline, &kosyncOpeningGrace, &kosyncReaderRetry, &renderNoticeTimer,
-           &resizeTimer, &annotationModeHide, &brightnessHide, &lightFeedback })
+    for (auto *timer : { &kosyncOpeningGrace, &renderNoticeTimer, &resizeTimer, &annotationModeHide,
+                         &brightnessHide, &lightFeedback })
         timer->setParent(this);
     presentation = services.presentation(this);
     Q_ASSERT(presentation);
@@ -1832,7 +1833,7 @@ void Reader::connectPageInput()
     };
     page->tapped = [this](QPoint point) {
         const QPoint bodyPoint = point - QPoint(0, page->topHeight());
-        if (!topControls->isVisible() && !annotationStart.isEmpty()
+        if (!topControls->isVisible() && !annotationDraft->range().start.isEmpty()
             && page->annotationContains(bodyPoint)) {
             annotationTap(bodyPoint);
             return;
@@ -1841,7 +1842,7 @@ void Reader::connectPageInput()
             dismissDictionary();
             return;
         }
-        if (!annotationStart.isEmpty() && !topControls->isVisible())
+        if (!annotationDraft->range().start.isEmpty() && !topControls->isVisible())
             dismissLookup(true);
         const qreal x = qreal(point.x()) / qMax(1, page->width());
         if (searchPanel->isVisible() || linksActive() || lookupPending) {

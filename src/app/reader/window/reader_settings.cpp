@@ -275,9 +275,7 @@ void Reader::openSettings()
     kosyncPage->setLastSync(kosyncClient->lastSync());
     kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
     kosyncPage->setDeviceName(kosyncClient->customDeviceName(), kosyncClient->defaultDeviceName());
-    kosyncPage->setStatus(kosyncMessage,
-                          kosyncClient->busy() || kosyncConnecting || kosyncAuthenticating
-                                  || bool(kosyncReaderReady));
+    kosyncPage->setStatus(kosyncMessage, syncCoordinator->busy());
     session->cancelPendingTurn();
     hideRevealedLinks(false);
     dismissLookup();

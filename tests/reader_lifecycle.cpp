@@ -5758,6 +5758,16 @@ private slots:
         };
         readOn(1);
         QCOMPARE(status->text(), QString("unchanged"));
+        const auto lastClock = clock;
+        clock = -1;
+        readOn(0);
+        QCOMPARE(status->text(), QString("unchanged"));
+        clock = lastClock - 5 * 60000;
+        readOn(0);
+        QCOMPARE(status->text(), QString("unchanged"));
+        clock = lastClock;
+        readOn(0);
+        QCOMPARE(status->text(), QString("unchanged"));
         // Never while reading: no page syncs. Every 15 minutes: the interval
         // counts from the skipped opening sync, and Wait keeps the sync local.
         readOn(15);

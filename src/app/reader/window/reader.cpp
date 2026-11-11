@@ -602,7 +602,7 @@ void Reader::wakeReader()
     cancelKosync();
     kosyncStarted = false;
     kosyncWaking = true;
-    kosyncBackgroundFailures = 0;
+    syncCoordinator->resetBackgroundFailures();
     sleepImage = {};
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
@@ -1700,7 +1700,7 @@ void Reader::dismissDictionary()
 
 void Reader::lookupSelection()
 {
-    if (annotationStart.isEmpty() || annotationEnd.isEmpty())
+    if (annotationDraft->range().start.isEmpty() || annotationDraft->range().end.isEmpty())
         return;
     const auto epoch = ++lookupEpoch;
     lookupPending = true;
@@ -1708,38 +1708,39 @@ void Reader::lookupSelection()
     updateLinkReturn();
     QPointer<Reader> guard(this);
     kobalt::ui::PanelTiming timing("dictionary");
-    session->textRange(
-            annotationStart, annotationEnd, [guard, epoch, timing](TextRange range) mutable {
-                if (!guard || guard->lookupEpoch != epoch || guard->lifecycleHidden
-                    || guard->services.suspended())
-                    return;
-                timing.stage("range");
-                guard->lookupPending = false;
-                const auto query = range.text.simplified();
-                if (query.isEmpty()) {
-                    guard->updateOrientationBlock();
-                    guard->updateLinkReturn();
-                    return;
-                }
-                QRect bounds;
-                for (const auto &rect : guard->draftHighlightRects)
-                    bounds = bounds.united(rect);
-                guard->lookupText = query;
-                guard->lookupBounds = bounds.translated(
-                        guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
-                const auto result = guard->dictionary->lookup(guard->book->identity(), query);
-                if (!guard || guard->lookupEpoch != epoch || guard->lifecycleHidden)
-                    return;
-                timing.stage("lookup");
-                timing.field("chars", result.html.size());
-                guard->dictionaryPanel->setChoices(guard->dictionary->choices());
-                guard->dictionaryPanel->setBookFont(guard->bookFace());
-                guard->dictionaryPanel->open(query, result, guard->lookupBounds);
-                timing.finish(guard->dictionaryPanel);
-                guard->syncAnnotationControls();
-                guard->updateOrientationBlock();
-                guard->updateLinkReturn();
-            });
+    session->textRange(annotationDraft->range().start, annotationDraft->range().end,
+                       [guard, epoch, timing](TextRange range) mutable {
+                           if (!guard || guard->lookupEpoch != epoch || guard->lifecycleHidden
+                               || guard->services.suspended())
+                               return;
+                           timing.stage("range");
+                           guard->lookupPending = false;
+                           const auto query = range.text.simplified();
+                           if (query.isEmpty()) {
+                               guard->updateOrientationBlock();
+                               guard->updateLinkReturn();
+                               return;
+                           }
+                           QRect bounds;
+                           for (const auto &rect : guard->annotationDraft->geometry().rectangles)
+                               bounds = bounds.united(rect);
+                           guard->lookupText = query;
+                           guard->lookupBounds = bounds.translated(
+                                   guard->page->mapTo(guard, QPoint(0, guard->page->topHeight())));
+                           const auto result =
+                                   guard->dictionary->lookup(guard->book->identity(), query);
+                           if (!guard || guard->lookupEpoch != epoch || guard->lifecycleHidden)
+                               return;
+                           timing.stage("lookup");
+                           timing.field("chars", result.html.size());
+                           guard->dictionaryPanel->setChoices(guard->dictionary->choices());
+                           guard->dictionaryPanel->setBookFont(guard->bookFace());
+                           guard->dictionaryPanel->open(query, result, guard->lookupBounds);
+                           timing.finish(guard->dictionaryPanel);
+                           guard->syncAnnotationControls();
+                           guard->updateOrientationBlock();
+                           guard->updateLinkReturn();
+                       });
 }
 
 int Reader::millisecondsOfDay() const
@@ -2421,7 +2422,7 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
     }
     if (session->turn(direction)) {
         if (annotationMode) {
-            ++annotationEpoch;
+            annotationDraft->invalidate();
             annotationPopover->hide();
         }
         ++savedHighlightEpoch;

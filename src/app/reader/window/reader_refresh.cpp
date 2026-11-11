@@ -56,8 +56,8 @@ void Reader::refresh()
     if (lifecycleHidden)
         return;
     // A KOSync result that waited while the reader was hidden continues now.
-    if (kosyncReaderReady && !kosyncReaderRetry.isActive() && isVisible() && !services.suspended())
-        continueKosyncWhenReady(std::move(kosyncReaderReady));
+    if (syncCoordinator && isVisible() && !services.suspended())
+        syncCoordinator->resume();
     const bool darkReady = publishPendingDarkMode();
     if (general->isVisible())
         static_cast<SettingsPanel *>(general)->updateButtonControls(
@@ -207,7 +207,7 @@ void Reader::syncFrameState()
     // A new page or layout invalidates the held text, but not the gesture.
     // A decoded image keeps the text geometry and its pending lookup.
     if (!appearanceEdit.panelOpen()
-        && (session->busy() || annotationViewportFrame != annotationViewportKey()))
+        && (session->busy() || annotationDraft->viewport() != annotationViewportKey()))
         dismissLookup(true);
     if (!session->busy() && !pendingPassage.position.isEmpty()) {
         // Accept the visit only after the engine confirms a different passage.

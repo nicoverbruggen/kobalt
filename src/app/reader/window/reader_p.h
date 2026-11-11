@@ -17,9 +17,11 @@
 #include "reading/page_navigation.h"
 #include "ui/input/tap_filter.h"
 #include "sync/kosync.h"
+#include "sync/sync_coordinator.h"
 #include "app/reader/settings/kosync_page.h"
 #include "reading/bookmark_session.h"
 #include "reading/highlight_session.h"
+#include "reading/annotation_draft.h"
 #include "storage/annotation_export.h"
 #include "app/reader/views/reading_page.h"
 #include "app/reader/views/image_viewer.h"
@@ -95,7 +97,7 @@ public:
 
     bool pendingNetworkSync() const override
     {
-        return kosyncFinishing && kosyncFinishingElapsed.elapsed() < kosyncFinishBudget;
+        return syncCoordinator && syncCoordinator->finalPending();
     }
 
     void prepareWake() override;
@@ -162,8 +164,6 @@ private:
     void moveAnnotationDrag(QPoint point);
     void finishAnnotationDrag(bool cancelled);
     void requestAnnotationDrag();
-    void resolveAnnotationDraft(std::function<void()> after = {},
-                                std::function<void()> reject = {});
     void resolveAnnotationTokens(kobalt::AnnotationToken start, kobalt::AnnotationToken end,
                                  bool startPolicy, bool endPolicy, std::function<void()> after = {},
                                  std::function<void()> reject = {});
@@ -213,18 +213,12 @@ private:
         return preferences.value("minimal_annotation_mode").toBool(false);
     }
 
-    bool annotationMode = false, annotationSaving = false, annotationShowActionsPending = false,
-         annotationAdjusting = false, annotationDirty = false;
-    QString annotationStart, annotationEnd, annotationEditing, annotationFrame,
-            annotationViewportFrame;
-    kobalt::AnnotationToken annotationStartWord, annotationEndWord;
-    bool annotationStartPolicy = false, annotationEndPolicy = false;
-    QString annotationChosenStart, annotationChosenEnd;
+    bool annotationMode = false, annotationSaving = false, annotationShowActionsPending = false;
+    std::unique_ptr<kobalt::AnnotationDraft> annotationDraft;
+    QString annotationFrame;
     QRect annotationActionAnchor;
-    quint64 annotationSaveRevision = 0;
-    quint64 annotationEpoch = 0, savedHighlightEpoch = 0;
-    QVector<QRect> draftHighlightRects, savedHighlightRects;
-    kobalt::AnnotationGeometry draftHighlightGeometry;
+    quint64 savedHighlightEpoch = 0;
+    QVector<QRect> savedHighlightRects;
     bool annotationDragging = false, annotationDragPending = false, annotationDragReleased = false;
     bool annotationHandleDragging = false, annotationDragAwaitingRelease = false,
          annotationDragLoadingEdges = false;
@@ -261,16 +255,12 @@ private:
     void finishKosyncPresentation();
     void prepareAnnotationPresentation(std::function<void(bool)> finished);
     void showKosyncChoice();
-    void startKosyncExchange(bool finishing);
-    void continueKosyncWhenReady(std::function<void()> ready);
-    void prepareKosyncNetwork(bool interactive, std::function<void()> ready);
     void updateKosyncFeatures();
     void syncKosyncWhileReading();
     qint64 kosyncClock() const;
     void flushKosync(std::function<void()> finished, bool enabled = true);
-    void finishKosync(const QString &message);
+    void finishKosync(const QString &message, bool finishing);
     void cancelKosync();
-    void releaseKosyncWifi();
     void restartKosync();
     void showKosyncOpening();
     void hideKosyncOpening();
@@ -278,30 +268,21 @@ private:
     // Declared before the client, which uses it until destroyed.
     std::unique_ptr<QNetworkAccessManager> kosyncHttp;
     std::unique_ptr<kosync::Client> kosyncClient;
-    std::unique_ptr<SyncNetwork> kosyncNetwork;
+    // Destroy the attempt owner before its borrowed client and HTTP transport.
+    std::unique_ptr<kosync::SyncCoordinator> syncCoordinator;
     KosyncPage *kosyncPage = nullptr;
-    static constexpr int kosyncFinishBudget = 2000;
-    QTimer kosyncDeadline, kosyncOpeningGrace, kosyncReaderRetry;
-    QElapsedTimer kosyncFinishingElapsed;
-    std::function<void()> kosyncFinished;
+    QTimer kosyncOpeningGrace;
+    ReadingTimer kosyncIntervalClock;
     std::function<void(bool)> kosyncPresentationReady;
-    std::function<void()> kosyncReaderReady;
-    bool kosyncFinishing = false, kosyncOpening = false, kosyncFlushWaiting = false;
-    bool kosyncConnecting = false, kosyncAuthenticating = false;
-    // The running sync asked for a silent connection. When it ends, the
-    // network controller turns off the Wi-Fi that this request turned on.
-    bool kosyncReleaseWifi = false;
+    bool kosyncOpening = false;
     // The power saver's request at sleep. Wake deletes it, which drops a
     // Bluetooth answer that arrives after wake.
     QPointer<QObject> wifiSleepRequest;
-    // Failed background connections in a row, in memory only.
-    int kosyncBackgroundFailures = 0;
     // The next opening-style sync follows a wake, not a book opening.
     bool kosyncWaking = false;
     QPointer<ui::ModalOverlay> kosyncDialog;
-    kosync::Reconciler kosyncProgress;
     QString kosyncMessage;
-    quint64 kosyncEpoch = 0;
+    quint64 kosyncChoiceEpoch = 0;
     bool kosyncStarted = false;
     // The position the last check saw, and when a sync last started, an
     // opening or wake skipped it or a deferred choice came back, from kosyncClock().

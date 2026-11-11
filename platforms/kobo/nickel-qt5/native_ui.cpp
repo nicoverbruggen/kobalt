@@ -86,6 +86,16 @@ bool nativeReaderReverseLandscapeButtons()
     return device && bw && bw(device);
 }
 
+bool nativePageButtonsRotated()
+{
+    // The buttons sit on one edge of the device. Turned upside down, the lower
+    // button is the physically upper one, so the pair swaps.
+    const auto *screen = QGuiApplication::primaryScreen();
+    return screen
+            && (screen->orientation() == Qt::InvertedPortraitOrientation
+                || screen->orientation() == Qt::InvertedLandscapeOrientation);
+}
+
 int nativePageButtonDirection(QKeyEvent *event)
 {
     // Firmware 4.46 exports no button mapping. In its stock reader the lower
@@ -98,15 +108,8 @@ int nativePageButtonDirection(QKeyEvent *event)
     if (key != Qt::Key_F23 && key != Qt::Key_F24)
         return 0;
     QSettings settings("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf", QSettings::IniFormat);
-    bool inverted = settings.value("Reading/invertPageTurnButtons", false).toBool();
-    // The buttons sit on one edge of the device. Turned upside down, the lower
-    // button is the physically upper one, so the pair swaps.
-    const auto *screen = QGuiApplication::primaryScreen();
-    if (screen
-        && (screen->orientation() == Qt::InvertedPortraitOrientation
-            || screen->orientation() == Qt::InvertedLandscapeOrientation))
-        inverted = !inverted;
-    return (key == Qt::Key_F24) != inverted ? 1 : -1;
+    const bool inverted = settings.value("Reading/invertPageTurnButtons", false).toBool();
+    return (key == Qt::Key_F24) != (inverted != nativePageButtonsRotated()) ? 1 : -1;
 }
 
 bool nativeReaderSleepScreenAvailable()

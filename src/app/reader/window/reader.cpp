@@ -2541,7 +2541,10 @@ void Reader::pageButton(int direction, quint32 sourceTime, bool userInput, int p
         || lightPopup->isVisible())
         return;
     if (userInput && physicalKey && services.buttonControls) {
-        for (const auto &button : services.buttonControls()) {
+        // Without saved actions the native direction already follows rotation.
+        const bool rotated = !preferences.value(pageButtons::preferenceKey).toObject().isEmpty()
+                && services.pageButtonsRotated && services.pageButtonsRotated();
+        for (const auto &button : pageButtons::held(services.buttonControls(), rotated)) {
             if (button.key == physicalKey) {
                 direction = pageButtons::direction(preferences, button.id, direction);
                 break;

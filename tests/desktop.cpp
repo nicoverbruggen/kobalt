@@ -3414,6 +3414,34 @@ private slots:
         QTRY_COMPARE(fixture.state().value("page").toInt(), initial + expectedDirection + 1);
     }
 
+    // Upside down, the physically lower button is on top and takes the upper action.
+    void buttonMappingFollowsRotation()
+    {
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.pageButtons = [] { return true; };
+            services.buttonControls = [] { return pageButtons::paging(); };
+            services.pageButtonsRotated = [] { return true; };
+        });
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[pageButtons::preferenceKey] =
+                QJsonObject{ { "page_upper", "next" }, { "page_lower", "previous" } };
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.turnPage(1));
+        const int initial = fixture.state().value("page").toInt();
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->physicalPageButton(Qt::Key_F24, -1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("page").toInt(), initial + 1);
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->physicalPageButton(Qt::Key_F23, 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("page").toInt(), initial);
+    }
+
     void buttonMappingUnavailable()
     {
         Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {

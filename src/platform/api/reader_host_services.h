@@ -128,6 +128,9 @@ struct ReaderHostServices
     std::function<void(QObject *context, QKeyEvent *event)> remoteKeyActivity;
     // Optional physical controls. Empty means there are no mappable buttons.
     std::function<pageButtons::Buttons()> buttonControls;
+    // Optional. True when the current rotation puts the physically lower
+    // page button on top. Saved button actions follow the held position.
+    std::function<bool()> pageButtonsRotated;
     std::function<bool()> pageButtons, reverseLandscapeButtons;
     std::function<int(QKeyEvent *)> pageButtonDirection;
     std::function<QStringList()> fontFamilies;

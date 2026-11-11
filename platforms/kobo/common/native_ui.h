@@ -47,6 +47,8 @@ void reportNativeBluetoothActivity(QObject *context, QKeyEvent *event);
 bool nativeReaderHasPageButtons();
 bool nativeReaderReverseLandscapeButtons();
 int nativePageButtonDirection(QKeyEvent *event);
+// True when the current rotation puts the physically lower page button on top.
+bool nativePageButtonsRotated();
 void installNativeReaderSetting(QWidget *view, std::function<bool()> enabled,
                                 std::function<bool(bool)> save);
 // GUI thread only. Use the firmware font alias used by native navigation and clock controls.

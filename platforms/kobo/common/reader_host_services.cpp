@@ -271,6 +271,7 @@ ReaderHostServices readerHostServices()
     };
     result.reverseLandscapeButtons = nativeReaderReverseLandscapeButtons;
     result.pageButtonDirection = nativePageButtonDirection;
+    result.pageButtonsRotated = nativePageButtonsRotated;
     result.fontFamilies = nativeReaderFontFamilies;
     result.uiFont = nativeReaderUiFont;
     result.suspended = NativeLifecycle::suspended;

@@ -637,7 +637,10 @@ void Reader::fitAppearance()
 
 pageButtons::Buttons Reader::buttonControls() const
 {
-    auto buttons = services.buttonControls ? services.buttonControls() : pageButtons::Buttons{};
+    auto buttons = services.buttonControls
+            ? pageButtons::held(services.buttonControls(),
+                                services.pageButtonsRotated && services.pageButtonsRotated())
+            : pageButtons::Buttons{};
     for (auto &button : buttons) {
         QKeyEvent event(QEvent::KeyPress, button.key, Qt::NoModifier);
         const int nativeDirection = services.pageButtonDirection(&event);

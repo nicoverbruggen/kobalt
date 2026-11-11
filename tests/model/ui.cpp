@@ -2125,6 +2125,10 @@ int main(int argc, char **argv)
                         "Stats clips a large figure");
                 require(unit->geometry().right() < cell->width() - chrome::inset + 1,
                         "A figure unit runs past its cell");
+                // A single-line label draws a line break as a missing glyph.
+                for (const auto *label : { unit, detail })
+                    require(!label->text().contains('\n') || label->wordWrap(),
+                            "A two-line Stats unit or detail does not break its line");
                 // The same padding sits above the caption and below the last line.
                 require(cell->findChildren<QLabel *>().at(0)->y() == chapterMetrics::cellPadding
                                 && detail->geometry().bottom() + 1 + chapterMetrics::cellPadding

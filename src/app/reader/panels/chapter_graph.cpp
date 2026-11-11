@@ -154,6 +154,10 @@ public:
             label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
         for (auto *label : { unit, detail }) {
             label->setTextFormat(Qt::PlainText);
+            // twoLines() breaks a long unit or detail with '\n'. Only the
+            // wrapped painting turns it into a line; the single-line painting
+            // drew it as a missing glyph.
+            label->setWordWrap(true);
             ui::readerStyle(label,
                             ui::styles::font(chapters::unitText)
                                     + "background:transparent;color:palette(placeholder-text);");

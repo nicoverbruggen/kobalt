@@ -142,6 +142,7 @@ public:
     QWidget *powerSection = nullptr;
     ui::DescribedOption *wifiPowerSaverOption = nullptr;
     ui::DescribedOption *disableStandbyOption = nullptr;
+    ui::DescribedOption *hideBookOnSleepOption = nullptr;
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
     ui::CaptionButton *disabledFeaturesButton = nullptr;

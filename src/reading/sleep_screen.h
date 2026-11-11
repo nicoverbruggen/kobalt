@@ -74,7 +74,28 @@ struct Snapshot
     // Set only when the native full-size cover supplied the decoded image.
     QString coverPath{};
     qint64 coverBytes = 0, coverModified = 0;
+    bool privateBook = false;
 };
+
+// Safe fallback when the book or its chosen design is unavailable.
+inline Snapshot privateSnapshot(QSize size, bool dark = false)
+{
+    if (size.isEmpty() || qint64(size.width()) * size.height() > 4 * 1024 * 1024)
+        size = QSize(800, 1200);
+    Snapshot snapshot;
+    snapshot.image =
+            QImage(QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height())),
+                   QImage::Format_RGB32);
+    snapshot.image.fill(dark ? Qt::black : Qt::white);
+    snapshot.orientation = Qt::PortraitOrientation;
+    snapshot.dark = dark;
+    snapshot.mode = Mode::Plain;
+    snapshot.design = Design::Card;
+    snapshot.tile = Tile::Card;
+    snapshot.dimPage = false;
+    snapshot.privateBook = true;
+    return snapshot;
+}
 
 // Where a cover fits in `size` without cropping, centred.
 inline QRect coverArea(QSize cover, QSize size)
@@ -170,11 +191,11 @@ inline Tile savedTile(const QJsonObject &preferences)
 
 // The gallery's order: Kobo's own screen, the reading page, today's default,
 // then the rest.
-inline constexpr Design designs[] = { Design::Stock,     Design::Page,   Design::Bookmark,
-                                      Design::Card,      Design::Cover,  Design::Seal,
-                                      Design::Medallion, Design::Pill,   Design::Caption,
-                                      Design::Widgets,   Design::Night,  Design::Ring,
-                                      Design::Framed,    Design::Lines,  Design::Letter,
+inline constexpr Design designs[] = { Design::Stock,     Design::Page,  Design::Bookmark,
+                                      Design::Card,      Design::Cover, Design::Seal,
+                                      Design::Medallion, Design::Pill,  Design::Caption,
+                                      Design::Widgets,   Design::Night, Design::Ring,
+                                      Design::Framed,    Design::Lines, Design::Letter,
                                       Design::Overlay };
 inline constexpr auto designKey = "sleep_design";
 // The Night screen's own greeting. Long-pressing Night in the gallery sets it.
@@ -361,4 +382,29 @@ inline Tile tile(const QJsonObject &preferences)
         return Tile::None;
     }
 }
+
+// Keep the design and anonymous reading statistics, discarding all book pixels
+// and identifying metadata. Stock needs a Kobalt fallback to cover Nickel's image.
+inline Snapshot privateSnapshot(QSize size, const QJsonObject &preferences, Snapshot source = {})
+{
+    auto snapshot = privateSnapshot(size, preferences.value("dark_mode").toBool(source.dark));
+    snapshot.design = design(preferences);
+    snapshot.tile = tile(preferences);
+    if (snapshot.design == Design::Stock) {
+        snapshot.design = Design::Card;
+        snapshot.tile = Tile::Card;
+    }
+    if (backdrop(snapshot.design) == Mode::Cover)
+        snapshot.image.fill(Qt::black);
+    snapshot.percent = source.percent;
+    snapshot.progress = source.progress;
+    snapshot.remaining = source.remaining;
+    snapshot.details = source.details;
+    snapshot.details.title.clear();
+    snapshot.details.author.clear();
+    snapshot.details.chapter.clear();
+    snapshot.details.greeting = preferences.value(greetingKey).toString();
+    return snapshot;
+}
+
 } // namespace kobalt::sleep

@@ -96,9 +96,14 @@ bool ReaderController::resetBook(const QString &path)
     if (!idle() || path.isEmpty())
         return false;
     const auto identity = QUrl::fromLocalFile(QFileInfo(path).absoluteFilePath()).toString();
-    // Keep an identity-only checkpoint so the prototype fallback cannot restore
-    // old settings or progress on the next opening.
-    return storage::writeBookState(paths, identity, { { "book", identity } });
+    // Reset progress and reading preferences, retaining this book's privacy choice.
+    const auto saved = storage::readBookState(paths, identity, paths.bookState(identity));
+    if (saved.status != storage::ReadStatus::Ok && saved.status != storage::ReadStatus::Missing)
+        return false;
+    QJsonObject reset{ { "book", identity } };
+    if (saved.object.value("hide_book_on_sleep_screen").toBool(false))
+        reset["hide_book_on_sleep_screen"] = true;
+    return storage::writeBookState(paths, identity, reset);
 }
 
 void ReaderController::open(const QString &path, QSize pixels, QString sourceKey,

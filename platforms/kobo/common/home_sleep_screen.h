@@ -15,6 +15,8 @@ public:
     void forget();
     void prepare(bool enabled, bool powerOff = false);
     void preparePowerOff(sleep::Snapshot);
+    // Rebuild from the last book's durable privacy choice, never a cached image.
+    bool preparePrivateScreen(bool powerOff = false, const QString &identity = {});
     void persistPowerOff(const QString &identity);
     void present();
     void clear();

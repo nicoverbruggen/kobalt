@@ -999,6 +999,7 @@ sleep::Snapshot Reader::sleepPreviewSample()
     sample.tile = sleep::savedTile(preferences);
     if (session && book)
         sample.details = sleepDetails();
+    sample.privateBook = book && book->hideBookOnSleepScreen();
     return sample;
 }
 

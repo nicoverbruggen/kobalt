@@ -86,7 +86,10 @@ bool resetNativeUnread(QJsonObject &checkpoint, const ReadingProgress &current)
             && (saved.book != current.book
                 || (saved.status == 0 && !preferNativeProgress(current, saved)))))
         return false;
+    const bool hideBook = checkpoint.value("hide_book_on_sleep_screen").toBool(false);
     checkpoint = qt::object({ { "book", current.book } });
+    if (hideBook)
+        checkpoint["hide_book_on_sleep_screen"] = true;
     return true;
 }
 } // namespace kobalt

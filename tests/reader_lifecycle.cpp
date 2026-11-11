@@ -4148,6 +4148,174 @@ private slots:
                  "Today dropped the completed session after the sleep timeout");
     }
 
+    void sleepPrivatePreviewsHideBookPixels()
+    {
+        const QSize size(300, 400);
+        QImage cover(size, QImage::Format_RGB32), pageImage(size, QImage::Format_RGB32);
+        cover.fill(Qt::red);
+        pageImage.fill(Qt::green);
+        QImage overlay(20, 20, QImage::Format_ARGB32);
+        overlay.fill(qRgba(0, 0, 255, 80));
+        sleep::Snapshot source;
+        source.privateBook = true;
+        source.percent = 42;
+        source.progress = "42% read";
+        source.details.title = "Private title";
+        source.details.author = "Private author";
+        source.details.chapter = "Private chapter";
+        source.details.greeting = "Sleep well";
+        for (const auto design : sleep::designs) {
+            source.design = design;
+            source.tile = sleep::Tile::Bookmark;
+            QJsonObject preferences;
+            sleep::setDesign(preferences, design);
+            preferences[sleep::greetingKey] = source.details.greeting;
+            auto expected = sleep::privateSnapshot(size, preferences, source);
+            if (design == sleep::Design::Overlay)
+                sleep::drawOverlay(expected.image, overlay);
+            QImage preview(size, QImage::Format_RGB32);
+            preview.fill(Qt::yellow);
+            QPainter painter(&preview);
+            reader::paintSleepPreview(painter, QRectF(QPointF(), QSizeF(size)), size, cover,
+                                      pageImage, overlay, source);
+            painter.end();
+            QCOMPARE(preview,
+                     reader::sleepDesignImage(expected.image, expected, -1,
+                                              reader::SleepStatus::Sleeping));
+        }
+    }
+
+    void sleepPrivateBookCloseSavesAnonymousDesign()
+    {
+        const auto paths = testPaths();
+        QJsonObject preferences;
+        sleep::setDesign(preferences, sleep::Design::Ring);
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(coverBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.book()->setHideBookOnSleepScreen(true);
+        host.window()->close();
+        QTRY_VERIFY(host.idle());
+        QVERIFY(state->saved.privateBook);
+        QCOMPARE(state->saved.design, sleep::Design::Ring);
+        QVERIFY(state->saved.percent >= 0 && !state->saved.progress.isEmpty());
+        QVERIFY(state->saved.details.title.isEmpty() && state->saved.details.author.isEmpty()
+                && state->saved.details.chapter.isEmpty() && state->saved.coverPath.isEmpty());
+        host.open(coverBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        QVERIFY(host.book()->hideBookOnSleepScreen());
+    }
+
+    void sleepPrivateBookRetainsNeutralFrameWhenHandoffFails()
+    {
+        const auto paths = testPaths();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [](ReaderHostServices &services) {
+            services.presentation = [](QWidget *) {
+                return std::make_unique<test::HostPresentation>();
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(coverBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.book()->setHideBookOnSleepScreen(true);
+        const auto privateShot = host.window()->powerScreenSnapshot();
+        host.window()->sleepReader();
+        auto *mask = host.window()->findChild<QLabel *>("rrPrivateSleepFrame");
+        QVERIFY(mask && mask->isVisible());
+        QCOMPARE(mask->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                 reader::sleepDesignImage(privateShot.image, privateShot, -1,
+                                          reader::SleepStatus::Sleeping));
+        host.window()->sleepViewReady();
+        QVERIFY(host.window()->isVisible() && mask->isVisible());
+        host.window()->wakeReader();
+        QVERIFY(!host.window()->findChild<QLabel *>("rrPrivateSleepFrame"));
+        QTRY_VERIFY(host.window()->readyForPresentation());
+    }
+
+    void sleepPrivateBookOverridesEveryDesign_data()
+    {
+        QTest::addColumn<QString>("design");
+        QTest::addColumn<bool>("dark");
+        for (const auto design : sleep::designs)
+            for (bool dark : { false, true })
+                QTest::newRow(qPrintable(sleep::value(design)
+                                         + (dark ? "-dark-coverless" : "-light-cover")))
+                        << sleep::value(design) << dark;
+    }
+
+    void sleepPrivateBookOverridesEveryDesign()
+    {
+        QFETCH(QString, design);
+        QFETCH(bool, dark);
+        const auto paths = testPaths();
+        QJsonObject preferences{ { "dark_mode", dark } };
+        for (const auto choice : sleep::designs)
+            if (sleep::value(choice) == design)
+                sleep::setDesign(preferences, choice);
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(dark ? textBook : coverBook, dark ? nativeSize : nativeSize.transposed());
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.book()->setHideBookOnSleepScreen(true);
+        const auto backdrop = sleep::privateSnapshot(nativeSize, preferences);
+        const auto awake = host.window()->powerScreenSnapshot();
+        QCOMPARE(awake.image, backdrop.image);
+        QCOMPARE(awake.mode, sleep::Mode::Plain);
+        QCOMPARE(awake.design,
+                 sleep::design(preferences) == sleep::Design::Stock ? sleep::Design::Card
+                                                                    : sleep::design(preferences));
+        QVERIFY(awake.privateBook);
+        QCOMPARE(awake.percent,
+                 pageProgressPercent(host.session()->page(), host.session()->pages()));
+        QVERIFY(awake.coverPath.isEmpty() && awake.coverArea.isEmpty());
+        QVERIFY(awake.details.title.isEmpty() && awake.details.author.isEmpty()
+                && awake.details.chapter.isEmpty() && awake.details.greeting.isEmpty());
+        QVERIFY(!awake.progress.isEmpty());
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        const auto expected =
+                reader::sleepDesignImage(awake.image, awake, 67, reader::SleepStatus::Sleeping);
+        QCOMPARE(state->image, expected);
+        const auto sleeping = host.window()->powerScreenSnapshot();
+        QCOMPARE(sleeping.image, awake.image);
+        QCOMPARE(reader::sleepDesignImage(sleeping.image, sleeping, 67,
+                                          reader::SleepStatus::PoweredOff),
+                 reader::sleepDesignImage(awake.image, awake, 67, reader::SleepStatus::PoweredOff));
+        host.window()->wakeReader();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        QVERIFY(state->image.isNull());
+        QCOMPARE(storage::readPreferences(paths.preferences()).object.value(sleep::designKey),
+                 preferences.value(sleep::designKey));
+        QVERIFY(storage::readBookState(paths, host.book()->identity())
+                        .object.value("hide_book_on_sleep_screen")
+                        .toBool());
+    }
+
     void sleepPowerOffWithoutCoverKeepsDesign_data()
     {
         QTest::addColumn<QString>("design");
@@ -4352,17 +4520,22 @@ private slots:
         QTest::addColumn<int>("designIndex");
         QTest::addColumn<bool>("dark");
         QTest::addColumn<bool>("longMetadata");
+        QTest::addColumn<bool>("privateBook");
         for (const auto design : sleep::designs) {
             if (sleep::tiled(design) || design == sleep::Design::Stock)
                 continue;
             QTest::newRow(qPrintable(sleep::value(design) + "-light"))
-                    << int(design) << false << false;
+                    << int(design) << false << false << false;
             QTest::newRow(qPrintable(sleep::value(design) + "-dark"))
-                    << int(design) << true << false;
+                    << int(design) << true << false << false;
             for (bool dark : { false, true })
                 QTest::newRow(
                         qPrintable(sleep::value(design) + (dark ? "-long-dark" : "-long-light")))
-                        << int(design) << dark << true;
+                        << int(design) << dark << true << false;
+            for (bool dark : { false, true })
+                QTest::newRow(qPrintable(sleep::value(design)
+                                         + (dark ? "-private-dark" : "-private-light")))
+                        << int(design) << dark << false << true;
         }
     }
 
@@ -4373,6 +4546,7 @@ private slots:
         QFETCH(int, designIndex);
         QFETCH(bool, dark);
         QFETCH(bool, longMetadata);
+        QFETCH(bool, privateBook);
         const auto design = sleep::Design(designIndex);
         const int previous = ui::density();
         ui::setDensity(300);
@@ -4392,6 +4566,7 @@ private slots:
         for (const QSize size : { QSize(1072, 1448), QSize(1448, 1072) }) {
             sleep::Snapshot shot;
             shot.design = design;
+            shot.privateBook = privateBook;
             shot.mode = sleep::backdrop(design);
             shot.tile = sleep::Tile::None;
             shot.dimPage = false;
@@ -4418,6 +4593,10 @@ private slots:
             } else {
                 backdrop = QImage(size, QImage::Format_RGB32);
                 backdrop.fill(Qt::white);
+            }
+            if (privateBook) {
+                backdrop.fill(shot.mode == sleep::Mode::Cover ? Qt::black : Qt::white);
+                shot.coverArea = {};
             }
             QVector<QImage> underlay;
             const auto paint = [&](reader::SleepStatus status, QVector<QImage> *saved = nullptr) {
@@ -4541,6 +4720,11 @@ private slots:
                 shot.dark = dark;
                 shot.dimPage = false;
                 shot.percent = 42;
+                // Compare two titled layouts. An absent title intentionally
+                // centres Ring's percentage instead of reserving its title area.
+                shot.details.title = "Title";
+                shot.details.chapter = "Chapter";
+                shot.details.author = "Author";
                 shot.details.left = "3 h 37 min";
                 QImage backdrop(size, QImage::Format_RGB32);
                 backdrop.fill(Qt::black);
@@ -5107,9 +5291,17 @@ private slots:
         QVERIFY(!storage::readJson(paths.preferences()).contains(sleep::greetingKey));
     }
 
-    // Checks partial alpha, dimming and the final Bookmark in a real reader sleep transition.
+    void sleepOverlayUsesTheDimmedPage_data()
+    {
+        QTest::addColumn<bool>("privateBook");
+        QTest::newRow("reading-page") << false;
+        QTest::newRow("private-opaque-page") << true;
+    }
+
+    // Checks partial alpha over either the reading page or the private opaque background.
     void sleepOverlayUsesTheDimmedPage()
     {
+        QFETCH(bool, privateBook);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const storage::Paths paths{ directory.path() };
@@ -5140,6 +5332,7 @@ private slots:
         auto *page = host.window()->findChild<QWidget *>("rrPage");
         QVERIFY(page);
         const auto clean = static_cast<ReadingPage *>(page)->snapshot(true);
+        host.book()->setHideBookOnSleepScreen(privateBook);
 
         // The reader's overlay preload is ahead of this barrier on the engine worker.
         bool loaded = false;
@@ -5151,11 +5344,18 @@ private slots:
         QCOMPARE(backdrop.tile, sleep::Tile::Bookmark);
         const QPoint transparent(5, 300);
         const QPoint translucent(5, 50);
-        QVERIFY(qGray(backdrop.image.pixel(transparent)) < qGray(clean.pixel(transparent)));
-        const auto dimmed = reader::sleepScreenImage(
-                clean, {}, {}, false, -1, reader::SleepStatus::Sleeping, true, sleep::Tile::None);
-        const int before = qGray(dimmed.pixel(translucent));
-        QVERIFY(qAbs(qGray(backdrop.image.pixel(translucent)) - (before + 255) / 2) <= 1);
+        if (privateBook) {
+            QCOMPARE(backdrop.image.pixel(transparent), qRgb(255, 255, 255));
+            QCOMPARE(backdrop.image.pixel(translucent), qRgb(255, 255, 255));
+            QVERIFY(backdrop.details.title.isEmpty() && backdrop.details.chapter.isEmpty());
+        } else {
+            QVERIFY(qGray(backdrop.image.pixel(transparent)) < qGray(clean.pixel(transparent)));
+            const auto dimmed = reader::sleepScreenImage(clean, {}, {}, false, -1,
+                                                         reader::SleepStatus::Sleeping, true,
+                                                         sleep::Tile::None);
+            const int before = qGray(dimmed.pixel(translucent));
+            QVERIFY(qAbs(qGray(backdrop.image.pixel(translucent)) - (before + 255) / 2) <= 1);
+        }
         host.window()->sleepReader();
         host.window()->sleepViewReady();
         QCOMPARE(state->presented, 1);

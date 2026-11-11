@@ -351,6 +351,8 @@ void Reader::openSettings()
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
+    static_cast<SettingsPanel *>(general)->hideBookOnSleepOption->setChecked(
+            book->hideBookOnSleepScreen());
     if (wifiPowerSaverOption)
         wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(false));
     if (disableStandbyOption)
@@ -838,6 +840,12 @@ void Reader::applySettings()
     if (zenMode() != next.value("zen_mode").toBool(false))
         flashAfterZenSwitch = true;
     preferences = next;
+    const bool hideBook = static_cast<SettingsPanel *>(general)->hideBookOnSleepOption->isChecked();
+    if (hideBook != book->hideBookOnSleepScreen()) {
+        book->setHideBookOnSleepScreen(hideBook);
+        QJsonObject snapshot;
+        book->checkpoint(&snapshot, true);
+    }
     if (!features::enabled(preferences, features::Kosync)) {
         cancelKosync();
         kosyncClient->cancel();

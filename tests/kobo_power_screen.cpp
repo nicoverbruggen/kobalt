@@ -5,6 +5,7 @@
 #include "ui/style/fonts.h"
 #include "assets/assets.h"
 #include "storage/sleep_snapshot.h"
+#include "support/strings.h"
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QDir>
@@ -14,6 +15,7 @@
 #include <QPointer>
 #include <QPainter>
 #include <QTest>
+#include <QScreen>
 
 // These substitute the native battery service and window types only. The
 // overlay, composition and power-screen owner are the production Kobo code.
@@ -125,6 +127,153 @@ class PowerScreenTests : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void privateLastBookIgnoresCachedImagesAndGlobalDesign_data()
+    {
+        QTest::addColumn<bool>("nativeCover");
+        QTest::newRow("saved-page") << false;
+        QTest::newRow("native-cover-reference") << true;
+    }
+
+    void privateLastBookIgnoresCachedImagesAndGlobalDesign()
+    {
+        QFETCH(bool, nativeCover);
+        using namespace kobalt;
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const storage::Paths paths{ directory.path() };
+        const auto connection = Device::getCurrentDevice()->getDbName();
+        {
+            auto database = QSqlDatabase::addDatabase("QSQLITE", connection);
+            database.setDatabaseName(directory.path() + "/native.sqlite");
+            QVERIFY(database.open());
+            QSqlQuery query(database);
+            QVERIFY(query.exec(
+                    "CREATE TABLE content (ContentID TEXT, ContentType INTEGER, DateLastRead TEXT)"));
+            QVERIFY(query.exec(
+                    "INSERT INTO content VALUES ('private', 6, '2026-10-24T09:00:00Z')"));
+            QVERIFY(storage::writeBookState(
+                    paths, "private",
+                    { { "book", "private" }, { "hide_book_on_sleep_screen", true } }));
+            MainWindowView window;
+            window.resize(QGuiApplication::primaryScreen()->size());
+            AbstractPowerView power(&window);
+            power.setGeometry(window.rect());
+            window.show();
+            power.show();
+            // Even a valid old cover reference or a saved page must be ignored.
+            sleep::Snapshot stale;
+            stale.image = QImage(window.size(), QImage::Format_RGB32);
+            stale.image.fill(Qt::red);
+            stale.mode = sleep::Mode::Page;
+            stale.details.title = "Private title";
+            if (nativeCover) {
+                const auto path = directory.path() + "/native-cover.png";
+                QVERIFY(stale.image.save(path));
+                const QFileInfo file(path);
+                stale.mode = sleep::Mode::Cover;
+                stale.dimPage = false;
+                stale.coverPath = path;
+                stale.coverBytes = file.size();
+                stale.coverModified = file.lastModified().toMSecsSinceEpoch();
+            }
+            nickel::HomeSleepScreen owner(paths, nullptr);
+            owner.remember(stale, "private");
+            owner.finishSave();
+            for (const auto design : sleep::designs) {
+                QJsonObject preferences;
+                sleep::setDesign(preferences, design);
+                QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+                for (bool off : { false, true }) {
+                    owner.prepare(true, off);
+                    owner.present();
+                    auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+                    QVERIFY(frame);
+                    const auto neutral = sleep::privateSnapshot(window.size(), preferences);
+                    const auto expected = reader::sleepDesignImage(
+                            neutral.image, neutral, 67,
+                            off ? reader::SleepStatus::PoweredOff : reader::SleepStatus::Charging);
+                    QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                             expected);
+                    owner.clear();
+                }
+            }
+            // A verified private snapshot retains anonymous statistics after restart.
+            QJsonObject preferences;
+            sleep::setDesign(preferences, sleep::Design::Ring);
+            QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+            sleep::Snapshot progress;
+            progress.percent = 42;
+            progress.progress = "42% read";
+            progress.details.title = "Private title";
+            const auto privateShot = sleep::privateSnapshot(window.size(), preferences, progress);
+            owner.remember(privateShot, "private");
+            owner.finishSave();
+            {
+                nickel::HomeSleepScreen restored(paths, nullptr);
+                QVERIFY(restored.preparePrivateScreen());
+                restored.present();
+                auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+                QVERIFY(frame);
+                QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                         reader::sleepDesignImage(privateShot.image, privateShot, 67,
+                                                  reader::SleepStatus::Charging));
+            }
+            // Finished status is independent of the raw page percentage.
+            QVERIFY(storage::writeBookState(paths, "private",
+                                            { { "book", "private" },
+                                              { "hide_book_on_sleep_screen", true },
+                                              { "percent", 94 },
+                                              { "position", "/body/p[7]" },
+                                              { "finished_position", "/body/p[7]" } }));
+            sleep::setDesign(preferences, sleep::Design::Letter);
+            QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+            progress.percent = 100;
+            progress.progress = strings::get("sleep.percent_read").arg(100);
+            const auto completed = sleep::privateSnapshot(window.size(), preferences, progress);
+            owner.remember(completed, "private");
+            owner.finishSave();
+            for (bool off : { false, true }) {
+                nickel::HomeSleepScreen restored(paths, nullptr);
+                QVERIFY(restored.preparePrivateScreen(off));
+                restored.present();
+                auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+                QVERIFY(frame);
+                QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                         reader::sleepDesignImage(completed.image, completed, 67,
+                                                  off ? reader::SleepStatus::PoweredOff
+                                                      : reader::SleepStatus::Charging));
+            }
+            // A restart needs no retained image, and opening another book does not inherit privacy.
+            owner.forget();
+            nickel::HomeSleepScreen restarted(paths, nullptr);
+            QVERIFY(restarted.preparePrivateScreen());
+            restarted.present();
+            QVERIFY(power.findChild<QWidget *>("rrSleepFrame"));
+            restarted.clear();
+            QVERIFY(query.exec("INSERT INTO content VALUES ('public', 6, '2026-10-24T09:00:01Z')"));
+            QVERIFY(!restarted.preparePrivateScreen());
+            restarted.present();
+            QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            // During opening, Nickel may not have committed this book's last-read stamp yet.
+            QVERIFY(restarted.preparePrivateScreen(false, "private"));
+            restarted.present();
+            QVERIFY(power.findChild<QWidget *>("rrSleepFrame"));
+            restarted.clear();
+            QVERIFY(query.exec(
+                    "UPDATE content SET DateLastRead = '2026-10-24T09:00:02Z' WHERE ContentID = 'private'"));
+            QVERIFY(restarted.preparePrivateScreen(true));
+            restarted.clear();
+            // Tied last-read stamps cannot prove that the visible native book is public.
+            QVERIFY(query.exec("UPDATE content SET DateLastRead = '2026-10-24T09:00:02Z'"));
+            QVERIFY(restarted.preparePrivateScreen());
+            restarted.clear();
+            // An unavailable native database must not restore a cached cover either.
+            database.close();
+            QVERIFY(restarted.preparePrivateScreen(true));
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
 
     void saveReadsCommittedTokenOffTheGuiThread()
     {

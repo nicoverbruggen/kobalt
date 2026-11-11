@@ -426,6 +426,7 @@ private:
     // The design and text of the current sleep screen, without its image, and
     // what lies under its status so a battery change can repaint only that.
     sleep::Snapshot sleepShot;
+    QPointer<QLabel> privateSleepFrame;
     QVector<QImage> sleepUnderlay;
     // Reading finished earlier today, loaded off the GUI thread when the book
     // opens. Sleep uses it only once it is ready.
@@ -682,6 +683,7 @@ private:
     void prepareSleepOverlay();
     void updateSleepOverlayOption();
     sleep::Snapshot captureSleepScreen();
+    sleep::Snapshot privateSleepSnapshot();
     sleep::Details sleepDetails();
     void loadTodayReading();
     void updateSleepBattery();

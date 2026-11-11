@@ -246,6 +246,13 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         homeAfterClose = false;
         authorization->setBlocked(true);
         timer.stop();
+        const bool browser = run.reader && BrowserHandoff::activeFor(run.reader);
+        const bool homeOwnsSleep = busy || !run.reader || browser;
+        // A preparing reader can outlive asynchronous disposal. Prepare its
+        // private backdrop before disposal changes the run or its busy state.
+        // Once closed, identity is only retained for reuse: consult Nickel then.
+        if (bindings_.enabled() && homeOwnsSleep)
+            homeSleep->preparePrivateScreen(false, busy || run.reader ? run.identity : QString());
         if (busy) {
             disposeForTransition([] { });
         } else if (run.reader) {
@@ -260,8 +267,11 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         }
     };
     lifecycle->sleepViewReady = [this] {
-        if (run.reader && !busy)
+        if (run.reader && !busy && !BrowserHandoff::activeFor(run.reader))
             run.reader->sleepViewReady();
+        // Preparation may finish disposing between the sleep and view signals.
+        // Present a prepared Home frame independently of the remaining reader.
+        homeSleep->present();
     };
     lifecycle->beforeWake = [this] {
         homeSleep->clear();
@@ -321,6 +331,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         // owns this book and the clean backdrop needed for power-off.
         if (run.reader && !busy && !BrowserHandoff::activeFor(run.reader))
             homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
+        else if (bindings_.enabled())
+            homeSleep->preparePrivateScreen(true, busy || run.reader ? run.identity : QString());
     };
     lifecycle->prepareShutdown = [this](std::function<void()> ready) {
         homeAfterClose = false;

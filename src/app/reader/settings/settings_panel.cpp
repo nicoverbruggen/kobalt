@@ -944,6 +944,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                   strings::get("settings.time_remaining_format"), [] { });
     systemRows->addWidget(timeRemainingFormatButton);
     section(systemPage, systemRows, "rrSystemSleepSection", strings::get("settings.section_sleep"));
+    hideBookOnSleepOption = check(systemPage, "rrHideBookOnSleepScreen",
+                                  strings::get("settings.hide_book_on_sleep_screen"),
+                                  strings::get("settings.hide_book_on_sleep_screen_description"));
+    hideBookOnSleepOption->setEnabled(inputs.sleepScreenSupported);
+    systemRows->addWidget(hideBookOnSleepOption);
     sleepScreenButton = ui::makeCaptionButton(systemPage, nullptr, "rrSleepScreen",
                                               strings::get("settings.sleep_screen"), [] { });
     sleepScreenButton->setEnabled(inputs.sleepScreenSupported);
@@ -1150,7 +1155,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         landscapeColumnsOption,     animationOption,      edgeLightOption,
         lightGestureFeedbackOption, denseGraphOption,     hideTabLabelsOption,
         wifiPowerSaverOption,       disableStandbyOption, automaticOpeningOption,
-        minimalAnnotationOption
+        minimalAnnotationOption,    hideBookOnSleepOption
     };
     options.append(openingCoverOption);
     options.prepend(zenModeOption);

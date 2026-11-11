@@ -77,6 +77,9 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     this->utc = utc ? std::move(utc)
                     : ReadingHistory::UtcClock([] { return QDateTime::currentMSecsSinceEpoch(); });
     auto saved = storage::readBookState(paths_, identity_, this->statePath).object;
+    // Privacy belongs to the publication, including after Mark as unread.
+    hideBookOnSleepScreen_ = saved.value("book").toString() == identity_
+            && saved.value("hide_book_on_sleep_screen").toBool(false);
     // The native opener resets its snapshot before the database record is
     // replaced. Apply the same reset before retaining fields or preferences.
     if (this->bridge)
@@ -853,6 +856,7 @@ QJsonObject ReadingBook::checkpointState() const
     state["nickel_progress"] = baseline.json();
     state["finished_position"] = acceptedFinishedAnchor;
     state["suppress_finish_prompt"] = finishPromptSuppressed;
+    state["hide_book_on_sleep_screen"] = hideBookOnSleepScreen_;
     if (!imageViews.isEmpty())
         state["image_views"] = imageViews;
     // For the Android and desktop library, which shows progress without

@@ -121,6 +121,11 @@ public:
     // True while the reader stays on the position the user marked as finished.
     bool finishedHere() const;
 
+    bool hideBookOnSleepScreen() const { return hideBookOnSleepScreen_; }
+
+    // Memory only. The caller queues the existing book checkpoint.
+    void setHideBookOnSleepScreen(bool hide) { hideBookOnSleepScreen_ = hide; }
+
     void suppressFinishPrompt() { finishPromptSuppressed = true; }
 
     void pollProgress();
@@ -174,6 +179,7 @@ public:
 private:
     bool canFinish() const;
     bool finishPromptSuppressed = false;
+    bool hideBookOnSleepScreen_ = false;
     struct ActivitySave;
     void writeActivity(std::shared_ptr<ActivitySave>, int attempt);
     void resumeActivityCheckpoints();

@@ -54,6 +54,8 @@ QJsonObject metadataFor(const sleep::Snapshot &snapshot, const QString &token)
                                  { "percent", snapshot.percent } });
     // Optional fields for the newer designs. Older readers ignore them.
     const auto &details = snapshot.details;
+    metadata["private_book"] = snapshot.privateBook;
+    metadata["design"] = sleep::value(snapshot.design);
     metadata["title"] = details.title.left(maxText);
     metadata["author"] = details.author.left(maxText);
     metadata["chapter"] = details.chapter.left(maxText);
@@ -61,9 +63,9 @@ QJsonObject metadataFor(const sleep::Snapshot &snapshot, const QString &token)
     metadata["font"] = details.font.left(maxText);
     metadata["greeting"] = details.greeting.left(maxText);
     if (!snapshot.coverArea.isEmpty())
-        metadata["cover_area"] = qt::array({ snapshot.coverArea.x(), snapshot.coverArea.y(),
-                                             snapshot.coverArea.width(),
-                                             snapshot.coverArea.height() });
+        metadata["cover_area"] =
+                qt::array({ snapshot.coverArea.x(), snapshot.coverArea.y(),
+                            snapshot.coverArea.width(), snapshot.coverArea.height() });
     return metadata;
 }
 
@@ -74,6 +76,10 @@ void readDetails(const QJsonObject &metadata, sleep::Snapshot &snapshot)
         const auto value = metadata.value(key);
         return value.isString() ? value.toString().left(maxText) : QString();
     };
+    snapshot.privateBook = metadata.value("private_book").toBool(false);
+    for (const auto design : sleep::designs)
+        if (metadata.value("design") == sleep::value(design))
+            snapshot.design = design;
     snapshot.details.title = string("title");
     snapshot.details.author = string("author");
     snapshot.details.chapter = string("chapter");

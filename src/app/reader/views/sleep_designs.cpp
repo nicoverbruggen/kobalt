@@ -524,8 +524,13 @@ CaptionLayout captionLayout(const Frame &frame, const sleep::Snapshot &shot)
     const QFont state = mono(2.2 * frame.u, 0.3);
     layout.bottom = frame.bottom(6);
     layout.detailTop = layout.bottom - lineHeight(detail);
-    layout.titleTop = layout.detailTop - 1.6 * frame.v - layout.title->height;
-    layout.top = layout.titleTop - 1 * frame.v - lineHeight(state);
+    if (shot.details.title.isEmpty()) {
+        layout.titleTop = layout.detailTop;
+        layout.top = layout.detailTop - 1.6 * frame.v - lineHeight(state);
+    } else {
+        layout.titleTop = layout.detailTop - 1.6 * frame.v - layout.title->height;
+        layout.top = layout.titleTop - 1 * frame.v - lineHeight(state);
+    }
     return layout;
 }
 
@@ -552,7 +557,8 @@ void paintCaption(QPainter &painter, const Frame &frame, const Content &content)
             : content.word();
     text(painter, state, white, QRectF(frame.x(8), layout.top, 84 * frame.u, lineHeight(state)),
          heading.toUpper());
-    drawBlock(painter, *layout.title, QPointF(frame.x(8), layout.titleTop), white);
+    if (!content.shot.details.title.isEmpty())
+        drawBlock(painter, *layout.title, QPointF(frame.x(8), layout.titleTop), white);
     const QFont detail = sans(3 * frame.u);
     QString line = content.shot.progress;
     if (!content.shot.remaining.isEmpty())
@@ -607,7 +613,11 @@ WidgetsLayout widgetsLayout(const Frame &frame, const sleep::Snapshot &shot)
     const qreal half = (width - gap) / 2;
     const qreal smallHeight = lineHeight(label) + lineHeight(figure) + 1 * frame.v
             + qMax<qreal>(0.9 * frame.v, lineHeight(small));
-    const qreal top = layout.book.bottom() + gap;
+    if (shot.privateBook) {
+        layout.book = {};
+        layout.cover = {};
+    }
+    const qreal top = shot.privateBook ? frame.y(24) : layout.book.bottom() + gap;
     layout.read = QRectF(left, top, half, smallHeight + 2 * pad);
     layout.second = QRectF(left + half + gap, top, half, smallHeight + 2 * pad);
     const QFont remaining = serif(8 * u);
@@ -644,32 +654,35 @@ void paintWidgets(QPainter &painter, const Frame &frame, const Content &content,
     painter.setPen(QPen(colors.gray, qMax<qreal>(1, 0.2 * u)));
     painter.setBrush(colors.paper);
     for (const auto &tile : { layout.book, layout.read, layout.second, layout.left })
-        painter.drawRoundedRect(tile, 4 * u, 4 * u);
+        if (!tile.isEmpty())
+            painter.drawRoundedRect(tile, 4 * u, 4 * u);
     painter.restore();
-    if (!cover.isNull()) {
-        QPainterPath clip;
-        clip.addRoundedRect(layout.cover, 1 * u, 1 * u);
-        painter.save();
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.setClipPath(clip, Qt::IntersectClip);
-        painter.drawImage(layout.cover, cover);
-        painter.restore();
-    } else {
-        painter.fillRect(layout.cover, colors.soft);
-    }
     const QFont label = mono(1.9 * u, 0.2);
-    const qreal textLeft = layout.cover.right() + 4 * u;
-    const qreal textWidth = layout.book.right() - pad - textLeft;
-    text(painter, label, colors.ink,
-         QRectF(textLeft, layout.labelTop, textWidth, lineHeight(label)),
-         strings::get("sleep.now_reading").toUpper());
-    drawBlock(painter, *layout.title, QPointF(textLeft, layout.titleTop), colors.ink);
-    if (!content.shot.details.author.isEmpty()) {
-        const QFont author = sans(2.6 * u);
-        text(painter, author, colors.ink,
-             QRectF(textLeft, layout.authorTop, textWidth, lineHeight(author)),
-             ui::elideInterfaceText(metadata(content.shot.details.author), author,
-                                    qRound(textWidth)));
+    if (!content.shot.privateBook) {
+        if (!cover.isNull()) {
+            QPainterPath clip;
+            clip.addRoundedRect(layout.cover, 1 * u, 1 * u);
+            painter.save();
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            painter.setClipPath(clip, Qt::IntersectClip);
+            painter.drawImage(layout.cover, cover);
+            painter.restore();
+        } else {
+            painter.fillRect(layout.cover, colors.soft);
+        }
+        const qreal textLeft = layout.cover.right() + 4 * u;
+        const qreal textWidth = layout.book.right() - pad - textLeft;
+        text(painter, label, colors.ink,
+             QRectF(textLeft, layout.labelTop, textWidth, lineHeight(label)),
+             strings::get("sleep.now_reading").toUpper());
+        drawBlock(painter, *layout.title, QPointF(textLeft, layout.titleTop), colors.ink);
+        if (!content.shot.details.author.isEmpty()) {
+            const QFont author = sans(2.6 * u);
+            text(painter, author, colors.ink,
+                 QRectF(textLeft, layout.authorTop, textWidth, lineHeight(author)),
+                 ui::elideInterfaceText(metadata(content.shot.details.author), author,
+                                        qRound(textWidth)));
+        }
     }
     const QFont figure = serif(13 * u), small = sans(2.4 * u);
     const auto tileText = [&](const QRectF &tile, const QString &caption, const QString &value) {
@@ -827,9 +840,10 @@ void paintNight(QPainter &painter, const Frame &frame, const Content &content, Q
     text(painter, word, colors.ink,
          QRectF(frame.x(9), layout.wordTop, 82 * frame.u, lineHeight(word)), heading,
          Qt::AlignLeft | Qt::AlignTop);
-    QString line = strings::get("sleep.percent_through")
-                           .arg(qBound(0, content.shot.percent, 100))
-                           .arg(content.shot.details.title);
+    QString line = content.shot.privateBook ? content.shot.progress
+                                            : strings::get("sleep.percent_through")
+                                                      .arg(qBound(0, content.shot.percent, 100))
+                                                      .arg(content.shot.details.title);
     if (!content.shot.remaining.isEmpty())
         line += QStringLiteral(" · ") + content.shot.remaining;
     text(painter, detail, colors.ink,
@@ -885,8 +899,15 @@ void paintRing(QPainter &painter, const Frame &frame, const Content &content, QS
     const auto number = QString::number(percent);
     const int numberWidth = ui::interfaceTextWidth(number, figure);
     const int signWidth = ui::interfaceTextWidth(QStringLiteral("%"), sign);
-    const qreal start = centre.x() - (numberWidth + signWidth) / 2.0;
-    const qreal percentBaseline = box.top() + 54 * s;
+    qreal start = centre.x() - (numberWidth + signWidth) / 2.0;
+    qreal percentBaseline = box.top() + 54 * s;
+    if (content.shot.details.title.isEmpty()) {
+        const auto ink = ui::interfaceInkBounds(number, figure)
+                                 .united(ui::interfaceInkBounds(QStringLiteral("%"), sign)
+                                                 .translated(numberWidth, 0));
+        start = centre.x() - ink.center().x();
+        percentBaseline = centre.y() - ink.center().y();
+    }
     baselineText(painter, figure, colors.ink, QPointF(start, percentBaseline), number,
                  Qt::AlignLeft);
     baselineText(painter, sign, colors.ink, QPointF(start + numberWidth, percentBaseline),
@@ -951,16 +972,17 @@ void paintFramed(QPainter &painter, const Frame &frame, const Content &content, 
     const QSizeF fitted = shape.scaled(layout.room.size(), Qt::KeepAspectRatio);
     const QRectF art(layout.room.center() - QPointF(fitted.width() / 2, fitted.height() / 2),
                      fitted);
-    if (cover.isNull())
+    if (cover.isNull() && !content.shot.privateBook)
         painter.fillRect(art, colors.soft);
-    else
+    else if (!cover.isNull())
         painter.drawImage(art, cover);
     // A hairline keeps a white cover's edge visible on the paper.
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(QPen(colors.gray, qMax<qreal>(1, 0.2 * frame.u)));
     painter.setBrush(Qt::NoBrush);
-    painter.drawRect(art);
+    if (!content.shot.privateBook)
+        painter.drawRect(art);
     painter.restore();
     text(painter, serif(7 * frame.u), colors.ink, layout.word, content.word(),
          Qt::AlignHCenter | Qt::AlignVCenter);
@@ -982,10 +1004,11 @@ void paintFramed(QPainter &painter, const Frame &frame, const Content &content, 
 QVector<QRect> framedAreas(const Frame &frame, QSize size)
 {
     const auto layout = framedLayout(frame);
-    return { QRectF(0, layout.word.top() - 2, size.width(), layout.word.height() + 4)
-                     .toAlignedRect(),
-             QRectF(0, layout.battery.top() - 2, size.width(), layout.battery.height() + 4)
-                     .toAlignedRect() };
+    return {
+        QRectF(0, layout.word.top() - 2, size.width(), layout.word.height() + 4).toAlignedRect(),
+        QRectF(0, layout.battery.top() - 2, size.width(), layout.battery.height() + 4)
+                .toAlignedRect()
+    };
 }
 
 // ---------------------------------------------------------------- C14
@@ -1116,7 +1139,9 @@ QStringList letterParagraphs(const Content &content, const Palette &colors)
 {
     const auto &details = content.shot.details;
     const bool off = content.status == SleepStatus::PoweredOff;
-    const auto title = QStringLiteral("<i>%1</i>").arg(escaped(details.title));
+    const auto title = content.shot.privateBook
+            ? escaped(strings::get("sleep.private_book"))
+            : QStringLiteral("<i>%1</i>").arg(escaped(details.title));
     // Substitute only placeholders from the template, never from book metadata.
     const auto fill = [](const QString &text, const QStringList &values) {
         QString result;
@@ -1290,6 +1315,13 @@ void paintDesign(QPainter &painter, QSize size, const sleep::Snapshot &shot, con
 
 sleep::Snapshot displaySnapshot(sleep::Snapshot shot)
 {
+    if (shot.privateBook) {
+        shot.details.title.clear();
+        shot.details.author.clear();
+        shot.details.chapter.clear();
+        shot.coverArea = {};
+        shot.coverPath.clear();
+    }
     shot.details.title = metadata(shot.details.title);
     shot.details.author = metadata(shot.details.author);
     shot.details.chapter = metadata(shot.details.chapter);
@@ -1309,6 +1341,15 @@ QImage sleepDesignImage(QImage backdrop, const sleep::Snapshot &source, int batt
     const auto snapshot = displaySnapshot(source);
     if (underlay)
         underlay->clear();
+    if (snapshot.privateBook && snapshot.design == Design::Cover && !backdrop.isNull()) {
+        QPainter painter(&backdrop);
+        const QFont font = serif(backdrop.width() * 0.26);
+        const auto mark = strings::get("sleep.missing_cover");
+        const auto ink = ui::interfaceInkBounds(mark, font);
+        baselineText(painter, font, Qt::white,
+                     QPointF(backdrop.width() / 2.0, backdrop.height() / 2.0 - ink.center().y()),
+                     mark);
+    }
     if (sleep::tiled(snapshot.design) || backdrop.isNull())
         return sleepScreenImage(std::move(backdrop), snapshot.progress, snapshot.remaining,
                                 snapshot.dark, batteryPercent, status, snapshot.dimPage,
@@ -1430,6 +1471,18 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
                        const QImage &page, const QImage &overlay, const sleep::Snapshot &source)
 {
     const auto snapshot = displaySnapshot(source);
+    if (snapshot.privateBook) {
+        QJsonObject preferences;
+        sleep::setDesign(preferences, snapshot.design);
+        preferences[sleep::greetingKey] = snapshot.details.greeting;
+        if (snapshot.design == Design::Page || snapshot.design == Design::Overlay)
+            preferences[sleep::tileKey] = sleep::value(snapshot.tile);
+        auto shot = sleep::privateSnapshot(size, preferences, snapshot);
+        if (snapshot.design == Design::Overlay && !overlay.isNull())
+            sleep::drawOverlay(shot.image, overlay);
+        painter.drawImage(target, sleepDesignImage(shot.image, shot, -1, SleepStatus::Sleeping));
+        return;
+    }
     if (size.isEmpty() || target.isEmpty())
         return;
     painter.save();

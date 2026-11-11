@@ -91,6 +91,7 @@
 #include <QFontInfo>
 #include <QGraphicsView>
 #include <QLabel>
+#include "app/reader/views/sleep_screen.h"
 #include <QLineEdit>
 #include <QImage>
 #include <QJsonArray>
@@ -8012,6 +8013,72 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_face"), originalFace);
     }
 
+    void settingsSleepPrivacy()
+    {
+        const auto state = std::make_shared<test::SleepPresentationState>();
+        Fixture fixture(false, false, false, true, false, false,
+                        [state](ReaderHostServices &services) {
+                            services.presentation = [state](QWidget *) {
+                                return std::make_unique<test::HostPresentation>(state);
+                            };
+                        });
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, 1);
+        const QString otherBook = fixture.paths.directory + "/other.epub";
+        QVERIFY(QFile::copy(book, otherBook));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        const auto open = [&](const QString &path) {
+            const int before = opened.count();
+            fixture.window.openBook(path);
+            return QTest::qWaitFor(
+                    [&] {
+                        return opened.count() > before && !fixture.state().value("busy").toBool();
+                    },
+                    10000);
+        };
+        const auto show = [&] {
+            return fixture.press("rrPage") && fixture.press("rrSettings")
+                    && fixture.press("rrSettingsSystem")
+                    && revealSettingsOption(fixture, "rrHideBookOnSleepScreen");
+        };
+        const auto checked = [&] {
+            return qobject_cast<QCheckBox *>(fixture.widget("rrHideBookOnSleepScreen"))
+                    ->isChecked();
+        };
+        QVERIFY(open(book));
+        QVERIFY(show());
+        QVERIFY(!checked());
+        QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(!storage::readPreferences(fixture.paths.preferences())
+                         .object.contains("hide_book_on_sleep_screen"));
+        QVERIFY(open(otherBook));
+        QVERIFY(show());
+        QVERIFY(!checked());
+        QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(open(book));
+        QVERIFY(show());
+        QVERIFY(checked());
+        QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(open(otherBook));
+        QVERIFY(show());
+        QVERIFY(checked());
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(open(book));
+        QVERIFY(show());
+        QVERIFY(!checked());
+    }
+
     void settingsStandby_data()
     {
         QTest::addColumn<bool>("dark");
@@ -13863,6 +13930,11 @@ private slots:
         QVERIFY(revealSettingsOption(fixture, "rrSleepScreen"));
         const auto name = screenshotVariant(preset, dark);
         QVERIFY(capture(fixture, name + "-sleep-settings"));
+        QVERIFY(revealSettingsOption(fixture, "rrHideBookOnSleepScreen"));
+        QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
+        QVERIFY(capture(fixture, name + "-settings-book-privacy"));
+        QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
+        QVERIFY(revealSettingsOption(fixture, "rrSleepScreen"));
         QVERIFY(fixture.press("rrSleepScreen"));
         QTRY_VERIFY(fixture.visible("rrSleepGallery"));
         capturePages(fixture, name + "-sleep-gallery", "rrSleepGallery");
@@ -13880,6 +13952,40 @@ private slots:
 
         QVERIFY(capture(fixture, name + "-sleep-greeting"));
         QVERIFY(fixture.press("rrSleepGreetingCancel"));
+        QVERIFY(fixture.press("rrSleepGalleryClose"));
+        QVERIFY(revealSettingsOption(fixture, "rrHideBookOnSleepScreen"));
+        QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto shot = fixture.window.readerWindow()->powerScreenSnapshot();
+        QCOMPARE(shot.mode, sleep::Mode::Plain);
+        // A native power view fills the screen, including a phone's safe area.
+        const auto screen = screenshotSize(preset);
+        shot.image = shot.image.scaled(QSize(qMin(screen.width(), screen.height()),
+                                             qMax(screen.width(), screen.height())));
+        QLabel preview;
+        preview.resize(shot.image.size());
+        preview.show();
+        preview.setPixmap(QPixmap::fromImage(
+                reader::sleepDesignImage(shot.image, shot, 67, reader::SleepStatus::Sleeping)));
+        QVERIFY(capture(fixture, name + "-sleep-private", &preview));
+        preview.setPixmap(QPixmap::fromImage(
+                reader::sleepDesignImage(shot.image, shot, 67, reader::SleepStatus::PoweredOff)));
+        QVERIFY(capture(fixture, name + "-power-off-private", &preview));
+        // Each private design retains its own anonymous layout and progress.
+        for (const auto design : sleep::designs) {
+            QJsonObject preferences;
+            sleep::setDesign(preferences, design);
+            auto privateShot = sleep::privateSnapshot(shot.image.size(), preferences, shot);
+            preview.setPixmap(QPixmap::fromImage(reader::sleepDesignImage(
+                    privateShot.image, privateShot, 67, reader::SleepStatus::Sleeping)));
+            QVERIFY(capture(fixture, name + "-sleep-private-" + sleep::value(design), &preview));
+            preview.setPixmap(QPixmap::fromImage(reader::sleepDesignImage(
+                    privateShot.image, privateShot, 67, reader::SleepStatus::PoweredOff)));
+            QVERIFY(capture(fixture, name + "-power-off-private-" + sleep::value(design),
+                            &preview));
+        }
     }
 
     void screens_data() { screenshotVariants(); }

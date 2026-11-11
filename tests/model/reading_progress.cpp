@@ -165,6 +165,10 @@ int main(int argc, char **argv)
                     && reset == QJsonObject({ { "book", first.book } }),
             "An unread book without a Kobalt checkpoint reused Nickel's old location");
     reset = checkpoint;
+    reset["hide_book_on_sleep_screen"] = true;
+    require(resetNativeUnread(reset, unread) && reset.value("hide_book_on_sleep_screen").toBool(),
+            "Mark as unread lost the book's privacy choice");
+    reset = checkpoint;
     require(!resetNativeUnread(reset, {}) && reset == checkpoint,
             "Failed native read reset the local checkpoint");
     require(!resetNativeUnread(reset, second) && reset == checkpoint,

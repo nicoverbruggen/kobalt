@@ -186,7 +186,8 @@ private:
         painter.setPen(colors.ink);
         painter.setFont(name);
         ui::drawSegmentPrivateText(painter, QRect(x, top, nameWidth + 2, lineHeight),
-                                  ui::elideInterfaceText(label, name, nameWidth + 2), Qt::AlignLeft);
+                                   ui::elideInterfaceText(label, name, nameWidth + 2),
+                                   Qt::AlignLeft);
         painter.setOpacity(1);
     }
 
@@ -322,7 +323,7 @@ QImage SleepGallery::preview(const Entry &entry, QSize size)
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    if (entry.design == sleep::Design::Stock) {
+    if (entry.design == sleep::Design::Stock && !sample_.privateBook) {
         // Kobo owns the real screen; these proportions represent its current cover options.
         painter.fillRect(image.rect(), Qt::white);
         painter.setPen(Qt::black);

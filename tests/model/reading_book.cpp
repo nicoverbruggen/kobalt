@@ -380,6 +380,7 @@ int main(int argc, char **argv)
                                   { "book", identity },
                                   { "extra", QJsonObject{ { "keep", "value" } } },
                                   { "suppress_finish_prompt", flag },
+                                  { "hide_book_on_sleep_screen", flag },
                                   { "dictionary_id", "dictionary" } };
             if (flag.isNull())
                 original.remove("suppress_finish_prompt");
@@ -394,6 +395,9 @@ int main(int argc, char **argv)
             const auto hash = session->sourceHash();
             ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths,
                              identity, hash, nullptr, {}, {});
+            require(book.hideBookOnSleepScreen() == flag.toBool(false),
+                    "Missing or invalid sleep privacy changed the default");
+            book.setHideBookOnSleepScreen(true);
             require(book.offerFinish() == !flag.toBool(false),
                     "Missing or invalid finish flag changed default");
             const auto position = book.checkpointState().value("position");
@@ -422,7 +426,8 @@ int main(int argc, char **argv)
             const auto stored =
                     storage::readBookState(finishPaths, identity, finishPaths.bookState(identity))
                             .object;
-            require(stored.value("suppress_finish_prompt").toBool()
+            require(stored.value("hide_book_on_sleep_screen").toBool()
+                            && stored.value("suppress_finish_prompt").toBool()
                             && stored.value("extra") == original.value("extra")
                             && stored.value("dictionary_id") == original.value("dictionary_id")
                             && stored.value("position") == position

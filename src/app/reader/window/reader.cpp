@@ -377,6 +377,8 @@ void Reader::prepareSleepOverlay()
 
 sleep::Snapshot Reader::powerScreenSnapshot()
 {
+    if (book->hideBookOnSleepScreen())
+        return privateSleepSnapshot();
     if (exportRunning)
         return exitSleepSnapshot;
     if (lifecycleHidden && !sleepImage.isNull()) {
@@ -444,8 +446,20 @@ void Reader::loadTodayReading()
     });
 }
 
+sleep::Snapshot Reader::privateSleepSnapshot()
+{
+    auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample());
+    // Transparent artwork keeps its style, but never reveals the reading page.
+    if (sleep::design(preferences) == sleep::Design::Overlay && !sleepOverlay.isNull())
+        sleep::drawOverlay(snapshot.image, sleepOverlay);
+    return snapshot;
+}
+
 sleep::Snapshot Reader::captureSleepScreen()
 {
+    // Privacy must also cover Stock, previews, modal dialogs and unavailable pages.
+    if (book->hideBookOnSleepScreen())
+        return privateSleepSnapshot();
     // RGB32 needs four bytes per pixel. Bound the optional capture to 16 MiB;
     // oversized viewports keep Nickel's power screen instead.
     const qint64 pixels = qint64(page->width()) * page->height();
@@ -542,6 +556,18 @@ void Reader::sleepReader()
     sleepShot.image = {};
     sleepImage = sleepDesignImage(std::move(snapshot.image), sleepShot, sleepBattery.percent,
                                   status, &sleepUnderlay);
+    if (book->hideBookOnSleepScreen()) {
+        // Cover the reader before any save pumps events. If the native handoff
+        // fails, this opaque frame remains instead of exposing the reading page.
+        privateSleepFrame = new QLabel(this);
+        privateSleepFrame->setObjectName("rrPrivateSleepFrame");
+        privateSleepFrame->setAttribute(Qt::WA_OpaquePaintEvent);
+        privateSleepFrame->setGeometry(rect());
+        privateSleepFrame->setScaledContents(true);
+        privateSleepFrame->setPixmap(QPixmap::fromImage(sleepImage));
+        privateSleepFrame->show();
+        privateSleepFrame->raise();
+    }
     services.cancelAnimation();
     page->animationDirection = 0;
     setProperty("reader_animation_direction", 0);
@@ -651,6 +677,8 @@ void Reader::updateSleepBattery()
             repaintSleepStatus(sleepImage, sleepUnderlay, sleepShot, battery.percent, status);
     if (area.isEmpty())
         return;
+    if (privateSleepFrame)
+        privateSleepFrame->setPixmap(QPixmap::fromImage(sleepImage));
     if (!isVisible())
         presentation->updateSleepScreen(sleepImage, area);
 }
@@ -666,7 +694,9 @@ void Reader::sleepViewReady()
     if (!lifecycleHidden || !isVisible())
         return;
     if (!sleepImage.isNull()) {
-        presentation->presentSleepScreen(sleepImage, sleepOrientation);
+        const bool presented = presentation->presentSleepScreen(sleepImage, sleepOrientation);
+        if (!presented && book->hideBookOnSleepScreen())
+            return;
     }
     // Hiding a top-level window immediately submits the backing store
     // underneath it. Paint Nickel's sleep view first, or that store still
@@ -684,6 +714,7 @@ void Reader::sleepViewReady()
 
 void Reader::wakeReader()
 {
+    delete privateSleepFrame.data();
     cancelWifiPowerAtSleep();
     cancelKosync();
     kosyncStarted = false;
@@ -1478,8 +1509,15 @@ void Reader::closeEvent(QCloseEvent *event)
         finishExit();
         return;
     }
+    if (!closeWithoutSaving && book->hideBookOnSleepScreen()) {
+        // The accepted close no longer takes input. Drain any earlier backdrop
+        // write before handing the anonymous snapshot to the host.
+        mainthread::AllowBlocking allow("closing reader");
+        presentation->saveSleepScreen(exitSleepSnapshot);
+    }
 #ifdef KOBALT_SCENARIO_PLAYER
-    if (!closeWithoutSaving && scenario::sleepPersistenceOptions().mode >= 0) {
+    if (!closeWithoutSaving && !book->hideBookOnSleepScreen()
+        && scenario::sleepPersistenceOptions().mode >= 0) {
         QElapsedTimer sleepDispatch;
         sleepDispatch.start();
         presentation->saveSleepScreen(exitSleepSnapshot);
@@ -2753,6 +2791,8 @@ void Reader::finishExit()
     if (!closingTimes.started.isValid())
         closingTimes.started.start();
     diagnostic("exit-save-ready", { { "elapsed_ms", double(closingTimes.started.elapsed()) } });
+    if (book->hideBookOnSleepScreen())
+        exitSleepSnapshot = privateSleepSnapshot();
     exportRunning = true;
     dismissProgressChoice();
 #ifdef KOBALT_SCENARIO_PLAYER

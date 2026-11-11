@@ -758,6 +758,8 @@
 "settings.automatic_book_opening_off_title" = "Have Kobo open books by default?";
 "settings.automatic_book_opening_off_description" = "Books from your library will open in Kobo's built-in reader. To open a book in Kobalt, long-press it and choose Read with Kobalt.";
 "settings.automatic_book_opening_off" = "Use built-in reader";
+"settings.hide_book_on_sleep_screen" = "Hide this book while asleep";
+"settings.hide_book_on_sleep_screen_description" = "Keep the style and progress, but hide the cover and identifying text on sleep and power-off screens. Saved for this book only.";
 "settings.sleep_screen" = "Sleep and power-off screen";
 "settings.session_timeout" = "New session after sleep";
 "settings.session_timeout_description" = "Waking your device after this amount of time starts a new reading session. You do not need to close and reopen your book, this is automatic.";
@@ -863,6 +865,8 @@
 "sleep.greeting_title" = "Night greeting";
 "sleep.greeting_hint" = "Shown on the Night sleep screen instead of Goodnight. Leave it empty to use Goodnight.";
 /* Arguments: %1 percentage, %2 book title */
+"sleep.missing_cover" = "?";
+"sleep.private_book" = "your book";
 "sleep.percent_through" = "%1% through %2";
 "sleep.now_reading" = "Now reading";
 "sleep.read_label" = "Read";

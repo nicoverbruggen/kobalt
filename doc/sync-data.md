@@ -77,7 +77,7 @@ On Qt 5, step 5 also writes the current chapter's own row for a KEPUB book, as N
 `NativeReadingSession` (`native_reading_session.cpp`, both packages) reports sessions through Nickel's event engine, as Nickel's own reader does:
 
 - Start: `EventEngine::startReadingSession(volume, state, {ViewType: ReadingView})` with the current percentage, then the event `readerShown`.
-- Page turn: the event `pageTurned` with `wordsRead`, the estimated words on the page just left.
+- Page turn: the event `pageTurned` with `wordsRead`, the estimated words on the page just left. The volume comes from one `VolumeManager::getById` for each reading interval, repeated after Nickel's sync, account or USB signals.
 - End: the event `readerHidden` and `EventEngine::endReadingSession` with the current percentage and position. The order differs: Qt 6 sends `readerHidden` before ending the session, Qt 5 after, matching each firmware's reader.
 
 Nickel turns the start and end into the analytics events `OpenContent` and `LeaveContent`. `LeaveContent` carries the progress at the end of the session, `SecondsRead`, `PagesTurned` and `IdleTime`. Nickel adds title, author, content type and format, `Origin`, `Monetization` and `ViewType`.

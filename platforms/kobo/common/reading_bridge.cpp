@@ -63,6 +63,7 @@ public:
 
     void observeReading(const ReadingActivity &activity) override
     {
+        useRecord();
         reading_.start(activity);
         reading_.page(activity);
     }
@@ -76,6 +77,7 @@ public:
 
     void stopReading(const ReadingActivity &activity) override
     {
+        useRecord();
         if (!activity.position.isEmpty() && activity.pages > 0 && activity.page >= 0)
             reading_.page(activity);
         reading_.stop();
@@ -95,6 +97,11 @@ public:
     void retryFailedReadingSave() override { reading_.retryFailedSave(); }
 
 private:
+    // Page events keep one lookup of Nickel's record until Nickel signals a
+    // sync, an account update or the end of a USB session. Without those
+    // signals every page event looks the record up.
+    void useRecord() { reading_.useRecord(progress_->signalsChanges(), progress_->changes()); }
+
     std::unique_ptr<NativeProgress> progress_;
     const bool allowUnmapped_;
     const NativeSyncPolicy syncPolicy_;

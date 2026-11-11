@@ -35,12 +35,31 @@ public:
 
     // The reader's minute tick refreshes Nickel's reading pace.
     void minuteTick() { pace_.tick(); }
+
+    // Page events use one lookup of the book's Nickel record for as long as
+    // `generation` stays the same. The owner passes a new generation when
+    // Nickel reports a sync, an account update or the end of a USB session.
+    // With `cache` false every page event looks the record up again: the
+    // owner cannot tell when Nickel changes it.
+    void useRecord(bool cache, quint64 generation)
+    {
+        if (!cache || generation != recordGeneration)
+            forgetRecord();
+        cacheRecord = cache;
+        recordGeneration = generation;
+    }
 #ifndef KOBALT_READER_HARDWARE
     static void testCommand();
 #endif
 private:
     // Fires the page event for the words on the page just left.
     void report(int words);
+    void forgetRecord();
+    // Nickel's record of the book, defined with each firmware's Volume.
+    struct Record;
+    std::unique_ptr<Record> record_;
+    bool cacheRecord = false;
+    quint64 recordGeneration = 0;
     QString book;
     double percent = 0;
     bool running = false, ending = false;

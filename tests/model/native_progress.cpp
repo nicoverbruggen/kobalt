@@ -107,9 +107,13 @@ int main(int argc, char **argv)
         require(progress.takeChange(), "a notification exposes the pending progress change");
         ++notifications;
     };
+    const auto changes = progress.changes();
     emit N3SyncManager::sharedInstance() -> finished();
     emit N3SyncManager::sharedInstance() -> userProfileUpdated();
     require(notifications == 2, "sync and account signals notify the reader without polling");
+    // The reading session keeps Nickel's book record until this count moves.
+    require(progress.changes() == changes + 2,
+            "sync and account signals did not count as changes of Nickel's data");
     progress.changeAvailable = [&] {
         require(!progress.deviceTransition(),
                 "USB notifications wait for the transition to finish");
@@ -145,6 +149,8 @@ int main(int argc, char **argv)
     require(!progress.deviceTransition(), "processing completion releases progress");
     require(notifications == 7 && progress.takeChange(),
             "processing completion notifies with a pending change");
+    require(progress.changes() == changes + 7,
+            "each notification counts as one change, also after takeChange()");
 }
 
 #include "native_progress.moc"

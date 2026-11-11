@@ -67,6 +67,7 @@ The reader once checked Nickel's state every 250 ms. That poll is gone; the minu
 A page turn paints the new page and then lets the rest follow from the event loop. That second pass leaves out work whose result nothing shows:
 
 - The text of the page is not read for the rotation placeholder. A rotation reads it.
+- On Kobo, the page event reuses Nickel's record of the book; see [Progress and statistics](reader/progress.md).
 
 ## Wi-Fi
 

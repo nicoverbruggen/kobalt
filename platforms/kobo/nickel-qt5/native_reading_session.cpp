@@ -340,6 +340,13 @@ void writeLater(const std::weak_ptr<NativeReadingSession *> &guard, const QStrin
 }
 } // namespace
 
+struct NativeReadingSession::Record
+{
+    explicit Record(const QString &book) : volume(api().get(book, api().dbName(api().device()))) { }
+
+    Volume volume;
+};
+
 NativeReadingSession::NativeReadingSession(QString identity) : book(std::move(identity))
 {
     pace_.changed = [this] {
@@ -375,6 +382,8 @@ void NativeReadingSession::start(const ReadingActivity &activity)
         return;
     percent = qBound(0.0, activity.percent, 100.0);
     activity_.start(activity);
+    // The first page event of this session looks the record up again.
+    forgetRecord();
     prepareVolume(volume, activity);
     SessionPosition state;
     state.percent = percent;
@@ -420,14 +429,28 @@ void NativeReadingSession::page(const ReadingActivity &activity)
     report(words);
 }
 
+void NativeReadingSession::forgetRecord()
+{
+    record_.reset();
+}
+
 void NativeReadingSession::report(int words)
 {
-    auto volume = api().get(book, api().dbName(api().device()));
-    if (api().values(&volume).value("ContentID").toString() != book)
-        return;
+    // Nickel's own reader keeps its Volume for the whole session. Look the
+    // record up for the first page event and keep it until useRecord() or a
+    // new session drops it, so a page turn does not read Nickel's cache and
+    // copy the row.
+    if (!record_) {
+        std::unique_ptr<Record> found(new Record(book));
+        if (api().values(&found->volume).value("ContentID").toString() != book)
+            return;
+        record_ = std::move(found);
+    }
     // Nickel handles page activity and subscription accounting. Its event
     // engine intentionally ignores page events in sideload mode.
-    api().fire(api().engine(), "pageTurned", volume, { { "wordsRead", words } });
+    api().fire(api().engine(), "pageTurned", record_->volume, { { "wordsRead", words } });
+    if (!cacheRecord)
+        record_.reset();
 }
 
 bool NativeReadingSession::estimates(const ReadingActivity &activity, ReadingEstimates *result)
@@ -442,6 +465,8 @@ bool NativeReadingSession::estimates(const ReadingActivity &activity, ReadingEst
 void NativeReadingSession::stop()
 {
     pace_.stop();
+    // Hold no Nickel record while the reader is hidden, asleep or closing.
+    forgetRecord();
 #ifndef KOBALT_READER_HARDWARE
     if (testActive == this)
         testActive = nullptr;

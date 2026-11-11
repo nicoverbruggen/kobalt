@@ -41,6 +41,10 @@ public:
         return value;
     }
 
+    // Counts the changes that takeChange() reports. A caller that keeps
+    // Nickel data of its own compares it to know when to read that data again.
+    quint64 changes() const { return changeCount; }
+
     // Called on the GUI thread, inside Nickel's sync or USB signal, once
     // takeChange() has a change to report.
     std::function<void()> changeAvailable;
@@ -72,6 +76,7 @@ private:
     void noteChange()
     {
         changed = true;
+        ++changeCount;
         if (changeAvailable)
             changeAvailable();
     }
@@ -82,6 +87,7 @@ private:
 #endif
     QString book;
     quint64 connectionId;
+    quint64 changeCount = 0;
     bool transitioning = false, processing = false, changed = true, signalled = false;
     QVariantMap persisted(QString *error) const;
 };

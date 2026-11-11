@@ -509,6 +509,7 @@ if(BUILD_TESTING)
             pageTurnFrames
             listPressFeedback
             optionAndSwatchPressFeedback
+            annotationSwatchLabelsFit
             marksSortingAndAnnotationRows
             annotationDetailsOnlyLoadVisiblePage
             hidingSelectionMenuKeepsDamageCompact

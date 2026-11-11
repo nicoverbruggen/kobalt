@@ -66,8 +66,13 @@ protected:
         }
         p.setPen(ink);
         p.setFont(labelFont);
-        const int labelTop = chip.y() + diameter + ringExtent + gap;
-        drawInterfaceText(p, QRect(0, labelTop, width(), labelLine.height()), text(),
+        // The layout above reserves the ink of "Ag" below the chip. The text is
+        // drawn from its line box, which starts above the ink, so raise the
+        // box by that distance. Otherwise the descenders of "Yellow" and
+        // "Gray" fall below the swatch and are cut off.
+        const int inkTop = chip.y() + diameter + ringExtent + gap;
+        const int lineTop = inkTop - (interfaceLineAscent(labelFont) + labelLine.top());
+        drawInterfaceText(p, QRect(0, lineTop, width(), interfaceLineHeight(labelFont)), text(),
                           Qt::AlignHCenter | Qt::AlignTop);
     }
 

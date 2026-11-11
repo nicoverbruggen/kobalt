@@ -3049,6 +3049,39 @@ private slots:
         }
     }
 
+    // Checks that the colour swatch labels keep their descenders inside the swatch.
+    void annotationSwatchLabelsFit_data() { variants(); }
+
+    void annotationSwatchLabelsFit()
+    {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        QWidget host;
+        host.setProperty("reader_dark", dark);
+        host.setPalette(ui::readerPalette(host.palette(), dark));
+        // The phone's narrow swatches and the wider e-reader swatches.
+        for (int width : { ui::px(110), ui::px(160) }) {
+            ui::HighlightSwatch swatch("gray", "Gray", &host);
+            swatch.resize(width, swatch.height());
+            const auto image = swatch.grab().toImage();
+            const auto paper = image.pixelColor(ui::px(4), ui::px(4));
+            const auto inked = [&](int y) {
+                for (int x = 0; x < image.width(); ++x)
+                    if (qAbs(qGray(image.pixel(x, y)) - paper.lightness()) > 100)
+                        return true;
+                return false;
+            };
+            // The label sits in the lower third, below the colour chip. A label
+            // cut off by the swatch's edge leaves ink on its last row.
+            bool label = false;
+            for (int y = image.height() * 2 / 3; y < image.height() - 1; ++y)
+                label = label || inked(y);
+            QVERIFY2(label, "The swatch label is missing");
+            QVERIFY2(!inked(image.height() - 1), "The swatch cuts off its label");
+        }
+    }
+
     void marksSortingAndAnnotationRows_data() { variants(); }
 
     void marksSortingAndAnnotationRows()

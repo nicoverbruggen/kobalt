@@ -705,6 +705,7 @@ bool Reader::writePreferences(const QJsonObject &next)
     // loses the other's change.
     if (!preferencesWriter)
         preferencesWriter = std::make_unique<storage::RecordWriter>();
+    ++preferencesWrites;
     if (!preferencesWriter->writeNow([path = book->paths().preferences(), global] {
             return kobalt::storage::writePreferences(path, global);
         })) {
@@ -885,6 +886,7 @@ void Reader::toggleZenStats()
     logSettingChanges(qt::object({ { "zen_stats", !shown } }),
                       qt::object({ { "zen_stats", shown } }));
     preferences["zen_stats"] = shown;
+    const auto write = ++preferencesWrites;
     auto next = appearance::globalPreferences(preferences);
     appearance::rememberTextLayout(next, session->state());
     appearance::rememberPageMargins(next, session->state());
@@ -893,15 +895,16 @@ void Reader::toggleZenStats()
     QPointer<Reader> guard(this);
     preferencesWriter->post([path = book->paths().preferences(),
                              next] { return kobalt::storage::writePreferences(path, next); },
-                            [guard, shown](bool saved) {
+                            [guard, shown, write](bool saved) {
                                 if (saved)
                                     return;
-                                // A failed save undoes the toggle, as the other settings do.
                                 qt::invoke(
                                         QCoreApplication::instance(),
-                                        [guard, shown] {
-                                            if (!guard)
+                                        [guard, shown, write] {
+                                            if (!guard || guard->preferencesWrites != write)
                                                 return;
+                                            // A failed save undoes the toggle, as the
+                                            // other settings do.
                                             guard->preferences["zen_stats"] = !shown;
                                             guard->showSettingsWriteError();
                                             guard->syncNavigation();

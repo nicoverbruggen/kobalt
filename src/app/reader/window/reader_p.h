@@ -636,6 +636,11 @@ private:
     pageButtons::Buttons buttonControls() const;
     void saveButtonControls(const QJsonObject &actions);
     bool savingButtonControls = false;
+    // Counts preferences writes. An asynchronous save that fails undoes its
+    // change only when no later write started: a later write already carries
+    // the change, and its own result decides.
+    quint64 preferencesWrites = 0;
+
     void showSettingsWriteError();
     void selectPanel(int index);
     void openPanel(int index);

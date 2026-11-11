@@ -2932,8 +2932,10 @@ private slots:
             for (int x = iconArea.left(); x <= iconArea.right(); ++x)
                 iconPixels += sortImage.pixelColor(x, y) == ink;
         QVERIFY(iconPixels > 10);
-        QVERIFY(list.findChild<QPushButton *>("rrMarksSort")->x()
-                >= list.findChild<QPushButton *>("rrBookmarksTab")->geometry().right());
+        // Sort sits at the left edge, before the tabs.
+        QCOMPARE(list.findChild<QPushButton *>("rrMarksSort")->x(), 0);
+        QVERIFY(list.findChild<QPushButton *>("rrBookmarksTab")->x()
+                >= list.findChild<QPushButton *>("rrMarksSort")->geometry().right());
         QVector<QImage> appearances;
         for (const auto *style : { "shaded", "underline", "dotted" }) {
             auto item = a;

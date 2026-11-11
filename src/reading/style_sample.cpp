@@ -277,11 +277,13 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
     result.cropRatio = request.cropRatio;
     if (request.values.isEmpty() || request.page.isEmpty())
         return result;
-    const auto document =
+    auto document =
             sampleDocument(request.key == "word_spacing" || request.key == "justification_tracking",
                            request.key == "hanging_punctuation");
     if (document.blocks.isEmpty())
         return result;
+    if (request.boldHeading)
+        document.prefix.replace("</head>", "<style>h2{font-weight:bold}</style></head>");
     QStringList paragraphTexts;
     for (const auto &block : document.blocks)
         if (block.paragraph && paragraphTexts.size() < paragraphSampleCount)

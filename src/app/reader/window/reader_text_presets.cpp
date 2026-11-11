@@ -48,12 +48,15 @@ TextPresetView Reader::textPresetView(const Preset &preset)
     view.id = preset.id;
     view.name = preset.name;
     view.detail = presetDetail(preset);
-    view.example = preset.example;
     const auto face =
             preset.fontFace.isEmpty() ? QString::fromLatin1(defaultFontFace) : preset.fontFace;
     for (const auto &font : textPresetSettings()->fontCatalog())
         if (font.family.compare(face, Qt::CaseInsensitive) == 0) {
             view.font = ui::fontPreviewSource(font.family, font.files);
+            view.thickness = qBound(0, preset.weightSteps, 12);
+            if (font.weightAxis.available())
+                view.axisWeight =
+                        qBound(font.weightAxis.minimum, preset.fontWeight, font.weightAxis.maximum);
             break;
         }
     return view;
@@ -74,7 +77,6 @@ void Reader::buildTextPresets()
     };
     textPresetSection->chosen = [this](const QString &id) { applyTextPreset(id); };
     textPresetSection->held = [this](const QString &id) { showTextPresetActions(id); };
-    textPresetSection->saveRequested = [this] { saveNewTextPreset(); };
     textPresetSection->saveAsRequested = [this] { saveNewTextPreset(); };
     textPresetSection->updateRequested = [this] { updateTextPreset(book->textPreset()); };
     textPresetSection->allRequested = [this] { openTextPresetGallery(); };
@@ -105,11 +107,11 @@ void Reader::syncTextPresets()
     for (int index = 0; index < presets.size(); ++index) {
         if (presets[index].id == selected)
             selectedIndex = index;
-        if (index < 3)
+        if (index < TextPresetSection::cardCount)
             cards.append(textPresetView(presets[index]));
     }
     // The cards keep their order. A preset further down takes the last card.
-    if (selectedIndex >= 3 && !cards.isEmpty())
+    if (selectedIndex >= TextPresetSection::cardCount && !cards.isEmpty())
         cards.last() = textPresetView(presets[selectedIndex]);
     const auto *chosen = textpresets::find(presets, selected);
     textPresetSection->setState(cards, selected, chosen ? chosen->name : QString(), modified,
@@ -380,6 +382,7 @@ void Reader::renderTextPresetPreview(const Preset &preset, QSize size, QObject *
     request.page = page;
     request.thumbnail = QSize(1, 1);
     request.cropOrigin = { 0, 0 };
+    request.boldHeading = true;
     request.crop = QSize(page.width(), qRound(size.height() / scale));
     registerPickerFonts(preset.fontFace);
     const bool dark = darkTheme;

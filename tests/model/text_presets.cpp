@@ -11,21 +11,29 @@ using namespace kobalt::textpresets;
 // Checks text presets: examples, cleanup of damaged lists, matching, density, names and the new-book choice.
 int main()
 {
-    // A profile without a list starts with the three examples; Comfort is the book default.
+    // A profile without a list starts with the four examples; Kobalt is the book default.
     const auto shipped = load({});
-    require(shipped.size() == 3 && shipped[0].id == "comfort" && shipped[1].id == "compact"
-                    && shipped[2].id == "large" && shipped[0].example,
+    require(shipped.size() == 4 && shipped[0].id == "kobalt" && shipped[1].id == "bookish"
+                    && shipped[2].id == "modern" && shipped[3].id == "classic",
             "A new profile did not get the example presets");
+    for (const auto &preset : shipped)
+        require(preset.example, "A shipped preset is not marked as an example");
+    require(shipped[0].name == "Kobalt" && shipped[1].name == "Bookish"
+                    && shipped[2].name == "Modern" && shipped[3].name == "Classic"
+                    && shipped[1].fontFace == "NV Ancizar Serif" && shipped[1].lineSpacing == 140
+                    && shipped[2].fontFace == "NV Jost" && shipped[3].fontFace == "NV Garamond"
+                    && shipped[3].halfPoints == 24,
+            "The example presets changed their names or fonts");
     require(shipped[0].fontFace == defaultFontFace && shipped[0].halfPoints == 22
                     && shipped[0].lineSpacing == defaultLineSpacing,
-            "Comfort no longer matches the book defaults");
+            "Kobalt no longer matches the book defaults");
     // An empty saved list stays empty: deleting every preset is respected.
     QJsonObject empty;
     store(empty, {});
     require(load(empty).isEmpty(), "Deleting every preset brought the examples back");
 
     // Values round-trip; invalid entries, duplicates and extras are dropped.
-    auto preset = shipped[1];
+    auto preset = shipped[2];
     preset.id = "mine";
     preset.name = "Evening";
     preset.weightSteps = 2;
@@ -67,15 +75,18 @@ int main()
 
     // A state matches a preset when every value agrees, in any density.
     const auto previousPpi = readingPpi.load();
+    auto large = shipped[2];
+    large.id = "large";
+    large.halfPoints = 30;
     for (const int ppi : { 300, 212, 450 }) {
         readingPpi = ppi;
-        auto state = values(shipped[2]);
+        auto state = values(large);
         state["margin_pixels"] = 99;
-        require(matches(shipped[2], state) && !matches(shipped[1], state),
+        require(matches(large, state) && !matches(shipped[2], state),
                 "A preset did not match its own values");
         require(capture(state).halfPoints == 30, "The size changed with screen density");
         state["line_spacing"] = 141;
-        require(!matches(shipped[2], state), "A changed line spacing still matched");
+        require(!matches(large, state), "A changed line spacing still matched");
     }
     readingPpi = previousPpi;
 
@@ -95,9 +106,8 @@ int main()
     named[0].name = "Libron 11";
     require(suggestedName(named, shipped[0]) == "Libron 11 (2)",
             "A suggested name repeated an existing one");
-    require(suggestedName(shipped, shipped[1]) == "Literata 10",
-            "A suggested name kept the NV prefix");
-    require(nameTaken(shipped, "  comfort ") && !nameTaken(shipped, "Comfort", "comfort"),
+    require(suggestedName(shipped, shipped[2]) == "Jost 11", "A suggested name kept the NV prefix");
+    require(nameTaken(shipped, "  kobalt ") && !nameTaken(shipped, "Kobalt", "kobalt"),
             "Names were not compared without case and spaces");
 
     // Publisher Fonts is an empty face. It saves, loads and gets a name.
@@ -123,12 +133,12 @@ int main()
     require(newBookChoice({}) == "last", "New books no longer follow the last book by default");
     require(newBookChoice(qt::object({ { appearance::inheritTextLayoutKey, false } })) == "book",
             "The old inheritance setting was not honoured");
-    auto choosing = qt::object({ { newBookKey, "large" } });
-    require(newBookChoice(choosing) == "large", "A preset was not kept for new books");
+    auto choosing = qt::object({ { newBookKey, "modern" } });
+    require(newBookChoice(choosing) == "modern", "A preset was not kept for new books");
     const auto defaults = appearance::bookDefaults(choosing);
-    require(defaults.value("font_face").toString() == "NV Charis"
-                    && defaults.value("font_pixels").toInt() == halfPointPixels(30)
-                    && defaults.value("line_spacing").toInt() == 140,
+    require(defaults.value("font_face").toString() == "NV Jost"
+                    && defaults.value("font_pixels").toInt() == halfPointPixels(22)
+                    && defaults.value("line_spacing").toInt() == defaultLineSpacing,
             "New books did not start with the chosen preset");
     choosing[newBookKey] = "deleted";
     require(newBookChoice(choosing) == "last", "A deleted preset was still used for new books");

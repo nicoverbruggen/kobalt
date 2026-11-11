@@ -81,7 +81,7 @@ bool fromJson(const QJsonValue &value, Preset &preset)
 }
 
 Preset example(const char *id, const char *label, const char *face, int halfPoints, int lineSpacing,
-               const char *alignment, const char *hyphenation)
+               const char *alignment, const char *hyphenation, int weightSteps = 0)
 {
     Preset preset;
     preset.id = QString::fromLatin1(id);
@@ -92,6 +92,7 @@ Preset example(const char *id, const char *label, const char *face, int halfPoin
     preset.alignment = QString::fromLatin1(alignment);
     preset.hyphenation = QString::fromLatin1(hyphenation);
     preset.fontWeight = defaultVariableFontWeight;
+    preset.weightSteps = weightSteps;
     preset.example = true;
     return preset;
 }
@@ -109,10 +110,18 @@ bool Preset::operator==(const Preset &other) const
 QVector<Preset> examples()
 {
     return {
-        example("comfort", "text_presets.example_comfort", defaultFontFace, 22, defaultLineSpacing,
+        // Kobalt is the book defaults, and Modern the same text in the bundled
+        // sans. Ancizar Serif reads well with tighter lines. Garamond has
+        // small lowercase letters, so Classic is one point larger.
+        example("kobalt", "text_presets.example_kobalt", defaultFontFace, 22, defaultLineSpacing,
                 "left", "off"),
-        example("compact", "text_presets.example_compact", "NV Literata", 20, 130, "justify", "on"),
-        example("large", "text_presets.example_large", "NV Charis", 30, 140, "left", "off"),
+        example("bookish", "text_presets.example_bookish", "NV Ancizar Serif", 22, 140, "left",
+                "off"),
+        example("modern", "text_presets.example_modern", "NV Jost", 22, defaultLineSpacing, "left",
+                "off"),
+        example("classic", "text_presets.example_classic", "NV Garamond", 24, 145, "left", "off",
+                // Garamond's thin strokes read better two steps heavier.
+                2),
     };
 }
 

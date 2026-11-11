@@ -37,7 +37,7 @@ FontPreviewSource fontPreviewSource(const QString &family, const QStringList &fi
 
 bool drawFontPreview(QPainter &painter, QRect area, const QString &text,
                      const FontPreviewSource &source, int inkHeight, int weight, bool boldReading,
-                     bool centered, bool wrap)
+                     bool centered, bool wrap, int axisWeight)
 {
     // The same size limits as the interface sample font.
     const FontPreviewScale scale{ inkHeight, metrics::choices::sampleBase,
@@ -53,7 +53,7 @@ bool drawFontPreview(QPainter &painter, QRect area, const QString &text,
             + QString::number(scale.minimum) + ':' + QString::number(scale.maximum) + ':'
             + QString::number(scale.lineGap) + ':' + QString::number(weight) + ':'
             + QString::number(boldReading) + ':' + QString::number(centered) + ':'
-            + QString::number(wrap);
+            + QString::number(wrap) + ':' + QString::number(axisWeight);
     const auto key = QString::fromLatin1(
             QCryptographicHash::hash(keyData.toUtf8(), QCryptographicHash::Sha256).toHex());
     const QImage *bitmap = cache().object(key);
@@ -67,7 +67,7 @@ bool drawFontPreview(QPainter &painter, QRect area, const QString &text,
             if (identity(source.files) == source.identity)
                 image = renderFontPreviewBitmap(source.files, source.family, text, area.size(),
                                                 scale, weight, boldReading, centered, wrap,
-                                                privateInterfaceFontFiles());
+                                                privateInterfaceFontFiles(), axisWeight);
         } catch (const std::bad_alloc &) {
             image = {};
         }

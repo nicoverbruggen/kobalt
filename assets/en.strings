@@ -1468,12 +1468,11 @@
 "features.kosync_description" = "Stops KOSync and hides its controls. Your saved account is kept. Kobo’s own sync is unaffected.";
 "text_presets.title" = "Text presets";
 "text_presets.gallery_title" = "Text Presets";
-"text_presets.example_comfort" = "Comfort";
-"text_presets.example_compact" = "Compact";
-"text_presets.example_large" = "Large";
-"text_presets.example" = "Built-in";
+"text_presets.example_kobalt" = "Kobalt";
+"text_presets.example_bookish" = "Bookish";
+"text_presets.example_modern" = "Modern";
+"text_presets.example_classic" = "Classic";
 "text_presets.none" = "None";
-"text_presets.save" = "Save";
 "text_presets.all" = "All";
 "text_presets.show" = "Show text presets";
 "text_presets.hide" = "Hide text presets";
@@ -1481,8 +1480,7 @@
 "text_presets.modified" = "%1*";
 /* Arguments: %1 */
 "text_presets.modified_name" = "%1, changed";
-/* Arguments: %1 */
-"text_presets.update" = "Update %1";
+"text_presets.update" = "Update selected preset";
 "text_presets.save_as_new" = "Save as new…";
 "text_presets.save_title" = "Save Text Preset";
 "text_presets.rename_title" = "Rename Text Preset";

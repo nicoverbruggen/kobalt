@@ -33,6 +33,9 @@ struct StyleSampleRequest
     QSize crop;
     QPoint cropOrigin;
     bool marginGuides = false;
+    // Draws the sample's chapter heading in bold, as books do by default.
+    // Styling previews keep it regular so the heading does not distract.
+    bool boldHeading = false;
     // Image pixels per interface pixel in the crops. Book samples render at the
     // size of the reading page, whose pixels are interface pixels.
     qreal cropRatio = 1;

@@ -425,6 +425,10 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         path.cubicTo(21, 13, 22, 15, 21, 18);
         path.lineTo(20, 21);
         path.closeSubpath();
+    } else if (icon == ControlIcon::Grid) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("squares-four"), path);
     } else if (icon >= ControlIcon::Rows && icon <= ControlIcon::Check) {
         // Kobalt's own drawings, on Phosphor's 24-unit grid with its stroke.
         result.canvas = 24;
@@ -436,11 +440,6 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
             line(10, 8.5, 17, 8.5);
             line(10, 15.5, 21, 15.5);
             line(10, 18.5, 17, 18.5);
-        } else if (icon == ControlIcon::Grid) {
-            path.addRect(QRectF(4, 3, 6.5, 8));
-            path.addRect(QRectF(13.5, 3, 6.5, 8));
-            path.addRect(QRectF(4, 13, 6.5, 8));
-            path.addRect(QRectF(13.5, 13, 6.5, 8));
         } else if (icon == ControlIcon::Home) {
             path.moveTo(3, 11);
             path.lineTo(12, 3.5);

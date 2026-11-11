@@ -307,6 +307,10 @@
       "sha256": "a9791208ad848f553cc7eb38a6adaf3dedcbb5922841dd05c683d123fd6272f6"
     },
     {
+      "file": "squares-four.svg",
+      "sha256": "f70d6b20e08e028ab5b1714077681910a2431092cf7a23b82366ddaec554ab87"
+    },
+    {
       "file": "sun.svg",
       "sha256": "8df1c7b747774f8b2c1fe353b1b785c74aac35bfa50f2ed7d8d9a85a4191b2ac"
     },

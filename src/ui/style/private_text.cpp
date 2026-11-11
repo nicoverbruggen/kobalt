@@ -29,6 +29,7 @@
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
 #include FT_FONT_FORMATS_H
+#include FT_MULTIPLE_MASTERS_H
 #include FT_TRUETYPE_TABLES_H
 #include <fribidi.h>
 #include <hb-ft.h>
@@ -1156,10 +1157,31 @@ QMap<QString, QString> privateInterfaceFontFiles()
     return result;
 }
 
+// Sets the weight axis of a variable font and leaves its other axes at their defaults.
+static void setWeightAxis(FT_Library library, FT_Face face, int weight)
+{
+    FT_MM_Var *variations = nullptr;
+    if (FT_Get_MM_Var(face, &variations) || !variations)
+        return;
+    QVector<FT_Fixed> coordinates(int(variations->num_axis));
+    bool found = false;
+    for (FT_UInt i = 0; i < variations->num_axis; ++i) {
+        const auto &axis = variations->axis[i];
+        coordinates[int(i)] = axis.def;
+        if (axis.tag == FT_MAKE_TAG('w', 'g', 'h', 't')) {
+            coordinates[int(i)] = qBound(axis.minimum, FT_Fixed(weight) * 65536, axis.maximum);
+            found = true;
+        }
+    }
+    if (found)
+        FT_Set_Var_Design_Coordinates(face, variations->num_axis, coordinates.data());
+    FT_Done_MM_Var(library, variations);
+}
+
 QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
                                QSize size, const FontPreviewScale &scale, int weight,
                                bool boldReading, bool centered, bool wrap,
-                               const QMap<QString, QString> &fallbacks)
+                               const QMap<QString, QString> &fallbacks, int axisWeight)
 {
     if (text.isEmpty() || text.size() > 256 || files.size() > 64 || size.width() <= 0
         || size.height() <= 0 || size.width() > 2048 || size.height() > 512
@@ -1209,6 +1231,9 @@ QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, 
     if (FT_New_Face(isolated.library, QFile::encodeName(chosen).constData(), chosenIndex,
                     &face->handle))
         return {};
+    // Before the first glyph and the shaper, which both follow the face's variation.
+    if (axisWeight > 0)
+        setWeightAxis(isolated.library, face->handle, axisWeight);
     isolated.faces.insert("preview", face);
     isolated.owners.insert(face->handle, face.get());
 

@@ -1,6 +1,7 @@
 #include "text_presets_panel.h"
 #include "settings_panel.h"
 
+#include "reading/reading_density.h"
 #include "support/strings.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/paging.h"
@@ -25,7 +26,7 @@ namespace chrome = metrics::chrome;
 
 namespace {
 constexpr int holdMilliseconds = 600;
-constexpr int galleryColumns = 2, galleryRows = 3;
+constexpr int galleryRows = 3;
 
 int cardHeight()
 {
@@ -77,6 +78,15 @@ public:
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     }
 
+    static int iconGap() { return ui::px(16); }
+
+    // The width of the icon and the whole label, with the usual side insets.
+    static int fullWidth(const QString &label)
+    {
+        return 2 * chrome::inset + metrics::control::iconSize + iconGap()
+                + ui::interfaceTextWidth(label, ui::interfaceFont(metrics::text::secondary));
+    }
+
 protected:
     void paintEvent(QPaintEvent *) override
     {
@@ -88,8 +98,9 @@ protected:
         const QFont font = ui::interfaceFont(metrics::text::secondary);
         painter.setFont(font);
         painter.setPen(color);
-        const int icon = metrics::control::iconSize, gap = ui::px(16);
-        const int room = qMax(0, width() - 2 * chrome::inset - icon - gap);
+        const int icon = metrics::control::iconSize, gap = iconGap();
+        // A narrow bar, as on a phone, gives the side insets to the label first.
+        const int room = qMax(0, width() - 2 * ui::px(8) - icon - gap);
         const auto label = ui::elideInterfaceText(text(), font, room);
         const int labelWidth = ui::interfaceTextWidth(label, font);
         const int left = (width() - icon - gap - labelWidth) / 2;
@@ -236,13 +247,15 @@ void TextPresetCard::setPreset(const TextPresetView &view, bool isSelected, bool
     // card must not repaint: on e-ink each repaint is a screen update.
     if (!action && id == view.id && name == view.name && font.family == view.font.family
         && font.files == view.font.files && font.identity == view.font.identity
-        && selected == isSelected && modified == isModified
-        && accessibleDescription() == view.detail)
+        && thickness == view.thickness && axisWeight == view.axisWeight && selected == isSelected
+        && modified == isModified && accessibleDescription() == view.detail)
         return;
     action = false;
     id = view.id;
     name = view.name;
     font = view.font;
+    thickness = view.thickness;
+    axisWeight = view.axisWeight;
     selected = isSelected;
     modified = isModified;
     setObjectName("rrTextPreset_" + view.id);
@@ -304,15 +317,16 @@ void TextPresetCard::paintEvent(QPaintEvent *)
     const int top = (height() - sample - gap - nameHeight) / 2;
     const QRect sampleArea(0, top, width(), sample);
     if (action) {
-        const int iconSize = ui::px(52);
+        // The size of the panel tab icons, so the strokes are equally thick.
+        const int iconSize = metrics::control::iconSize;
         ui::controlIcon(icon, colors.ink)
                 .paint(&painter,
                        QRect((width() - iconSize) / 2, sampleArea.center().y() - iconSize / 2,
                              iconSize, iconSize));
     } else {
         painter.setPen(colors.ink);
-        if (!ui::drawFontPreview(painter, sampleArea, QStringLiteral("Aa"), font, ui::px(44), 0,
-                                 false, true)) {
+        if (!ui::drawFontPreview(painter, sampleArea, QStringLiteral("Aa"), font, ui::px(44),
+                                 thickness, false, true, false, axisWeight)) {
             painter.setFont(ui::interfaceFont(sample * 3 / 4));
             ui::drawInterfaceText(painter, sampleArea, QStringLiteral("Aa"), Qt::AlignCenter);
         }
@@ -340,9 +354,9 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
     auto *cardsLayout = new QHBoxLayout(row);
     cardsLayout->setContentsMargins(0, 0, 0, 0);
     cardsLayout->setSpacing(0);
-    for (int index = 0; index < 3; ++index) {
+    for (int index = 0; index < cardCount; ++index) {
         auto *card = new TextPresetCard(row);
-        cardsLayout->addWidget(card, 4);
+        cardsLayout->addWidget(card, 1);
         cards.append(card);
         new HoldTimer(card, [this, card] {
             if (held && !card->presetId().isEmpty())
@@ -353,27 +367,26 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
                 chosen(card->presetId());
         });
     }
-    saveCard = new TextPresetCard(row);
-    saveCard->setObjectName("rrTextPresetSave");
-    saveCard->setAction(ui::ControlIcon::Plus, strings::get("text_presets.save"));
-    cardsLayout->addWidget(saveCard, 3);
-    connect(saveCard, &QPushButton::clicked, this, [this] {
-        if (saveRequested)
-            saveRequested();
-    });
     allCard = new TextPresetCard(row);
     allCard->setObjectName("rrTextPresetAll");
     allCard->setAction(ui::ControlIcon::Grid, strings::get("text_presets.all"));
     allCard->setDivider(false);
-    cardsLayout->addWidget(allCard, 3);
+    // A narrow cell, as wide as a toolbar cell, so four presets fit beside it.
+    // The cards ignore their width hint; a fixed cell must not, or the layout
+    // gives the whole row to the cards.
+    allCard->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    allCard->setFixedWidth(chrome::cellWidth);
+    cardsLayout->addWidget(allCard);
     connect(allCard, &QPushButton::clicked, this, [this] {
         if (allRequested)
             allRequested();
     });
-    actions = new ui::Panel(this, Qt::TopEdge);
+    // The section draws the divider above the bar, as it does under the
+    // cards. A panel edge here would add a second, heavy rule.
+    actions = new ui::Panel(this);
     actions->setObjectName("rrTextPresetChangeBar");
     auto *actionsLayout = new QHBoxLayout(actions);
-    actionsLayout->setContentsMargins(0, metrics::control::border, 0, 0);
+    actionsLayout->setContentsMargins(0, 0, 0, 0);
     actionsLayout->setSpacing(0);
     const auto actionButton = [this](const char *name, ui::ControlIcon icon) {
         auto *button = new ChangeButton(icon, actions);
@@ -384,10 +397,12 @@ TextPresetSection::TextPresetSection(QWidget *parent) : QWidget(parent)
     saveAsButton = actionButton("rrTextPresetSaveAs", ui::ControlIcon::Plus);
     actionsLayout->addWidget(updateButton, 1);
     auto *divider = new ui::Panel(actions);
+    divider->setObjectName("rrTextPresetChangeDivider");
     divider->setFixedWidth(metrics::control::border);
     divider->setDividers(Qt::LeftEdge);
     actionsLayout->addWidget(divider);
     actionsLayout->addWidget(saveAsButton, 1);
+    updateButton->setText(strings::get("text_presets.update"));
     saveAsButton->setText(strings::get("text_presets.save_as_new"));
     connect(updateButton, &QPushButton::clicked, this, [this] {
         if (updateRequested)
@@ -417,8 +432,13 @@ void TextPresetSection::setState(const QVector<TextPresetView> &views, const QSt
             card->setPreset(views[index], views[index].id == selected,
                             views[index].id == selected && modified);
     }
-    updateButton->setText(strings::get("text_presets.update").arg(selectedName));
-    const bool showActions = open && modified && !selectedName.isEmpty();
+    // Saving goes through this bar: Update and Save as new for a changed
+    // preset, and Save as new alone when the text matches no preset.
+    const bool none = selectedName.isEmpty();
+    updateButton->setVisible(!none);
+    if (auto *divider = actions->findChild<QWidget *>("rrTextPresetChangeDivider"))
+        divider->setVisible(!none);
+    const bool showActions = open && (modified || none);
     const bool rearranged = resized || row->isHidden() == open || actions->isHidden() == showActions
             || toggle->width() != qMin(toggle->sizeHint().width(), width() / 2);
     row->setVisible(open);
@@ -475,11 +495,20 @@ void TextPresetSection::arrange()
         // The cards end with a divider, as a list row does.
         y += metrics::control::border;
     }
-    if (!actions->isHidden())
-        actions->setGeometry(0, y, width(), actionsHeight());
+    if (actions->isHidden())
+        return;
+    // Update and Save as new share the bar equally when both labels fit their
+    // half. On a narrow screen each takes room in proportion to its label.
+    auto *buttons = static_cast<QHBoxLayout *>(actions->layout());
+    const int update = ChangeButton::fullWidth(updateButton->text()),
+              saveAs = ChangeButton::fullWidth(saveAsButton->text());
+    const bool equal = updateButton->isHidden() || qMax(update, saveAs) <= width() / 2;
+    buttons->setStretchFactor(updateButton, equal ? 1 : update);
+    buttons->setStretchFactor(saveAsButton, equal ? 1 : saveAs);
+    actions->setGeometry(0, y, width(), actionsHeight());
 }
 
-// Six tiles per page, painted as one surface so a page turn redraws once.
+// A page of tiles, painted as one surface so a page turn redraws once.
 class TextPresetGrid final : public QWidget
 {
 public:
@@ -500,9 +529,9 @@ public:
 
     QRect cell(int slot) const
     {
-        const int column = slot % galleryColumns, row = slot / galleryColumns;
-        const int left = width() * column / galleryColumns,
-                  right = width() * (column + 1) / galleryColumns;
+        const int columns = gallery->columns();
+        const int column = slot % columns, row = slot / columns;
+        const int left = width() * column / columns, right = width() * (column + 1) / columns;
         const int top = height() * row / galleryRows, bottom = height() * (row + 1) / galleryRows;
         return { left, top, right - left, bottom - top };
     }
@@ -522,9 +551,9 @@ public:
     // The slot's index in the gallery's tiles, or -1.
     int tileAt(QPoint point) const
     {
-        for (int slot = 0; slot < galleryColumns * galleryRows; ++slot)
+        for (int slot = 0; slot < gallery->perPage(); ++slot)
             if (cell(slot).contains(point)) {
-                const int index = gallery->page * galleryColumns * galleryRows + slot;
+                const int index = gallery->page * gallery->perPage() + slot;
                 return index < gallery->tileCount() ? index : -1;
             }
         return -1;
@@ -541,7 +570,7 @@ protected:
         QPainter painter(this);
         const auto colors = ui::themeColors(this);
         painter.fillRect(rect(), colors.paper);
-        const int perPage = galleryColumns * galleryRows;
+        const int perPage = gallery->perPage();
         for (int slot = 0; slot < perPage; ++slot) {
             const int index = gallery->page * perPage + slot;
             if (index >= gallery->tileCount())
@@ -636,21 +665,17 @@ private:
                            colors.ink, ui::px(6));
         const auto ink = marked ? colors.paper : colors.ink;
         painter.setPen(ink);
-        // The name always shows. On a narrow tile the Example tag goes first,
-        // then the size and spacing.
+        // The name always shows. On a narrow tile the size and spacing give
+        // way to it.
         const auto detail = view.detail.toUpper();
         const int detailWidth = ui::interfaceTextWidth(detail, detailFont);
-        const auto tag = strings::get("text_presets.example").toUpper();
-        const int tagWidth = ui::interfaceTextWidth(tag, detailFont) + ui::px(12);
         const int nameFull = ui::interfaceTextWidth(view.name, nameFont);
-        const auto room = [&](bool withTag, bool withDetail) {
-            return caption.width() - 2 * inset - (withDetail ? detailWidth + inset : 0)
-                    - (withTag ? tagWidth + ui::px(12) : 0);
+        const auto room = [&](bool withDetail) {
+            return caption.width() - 2 * inset - (withDetail ? detailWidth + inset : 0);
         };
-        const bool showTag = view.example && nameFull <= room(true, true);
-        const bool showDetail = nameFull <= room(showTag, true);
-        // The name, size and Example tag share one baseline, so text in
-        // different fonts sits on the same line.
+        const bool showDetail = nameFull <= room(true);
+        // The name and size share one baseline, so text in different fonts
+        // sits on the same line.
         const int nameHeight = ui::interfaceLineHeight(nameFont);
         // Centre the capitals, not the line box, as optical labels do.
         const int capitals = ui::interfaceInkBounds(QStringLiteral("H"), nameFont).height();
@@ -668,23 +693,12 @@ private:
                                   detail, Qt::AlignLeft | Qt::AlignTop);
         }
         painter.setFont(nameFont);
-        const auto name =
-                ui::elideInterfaceText(view.name, nameFont, qMax(0, room(showTag, showDetail)));
+        const auto name = ui::elideInterfaceText(view.name, nameFont, qMax(0, room(showDetail)));
         const int nameWidth = ui::interfaceTextWidth(name, nameFont);
         ui::drawInterfaceText(painter,
                               onBaseline(caption.left() + inset, nameWidth + 2,
                                          ui::interfaceLineAscent(nameFont), nameHeight),
                               name, Qt::AlignLeft | Qt::AlignTop);
-        if (showTag) {
-            painter.setFont(detailFont);
-            const auto text = onBaseline(caption.left() + inset + nameWidth + ui::px(18),
-                                         tagWidth - ui::px(12), captionAscent, captionHeight);
-            const QRect box = text.adjusted(-ui::px(6), -ui::px(2), ui::px(6), ui::px(2));
-            painter.setPen(QPen(ink, rule));
-            painter.setBrush(Qt::NoBrush);
-            painter.drawRect(box.adjusted(rule / 2, rule / 2, -rule / 2 - 1, -rule / 2 - 1));
-            ui::drawInterfaceText(painter, text, tag, Qt::AlignHCenter | Qt::AlignTop);
-        }
     }
 
     TextPresetGallery *gallery;
@@ -746,11 +760,26 @@ void TextPresetGallery::setPresets(const QVector<TextPresetView> &views, const Q
     selected = current;
     canSave = save;
     currentDetail = detail;
-    int start = page;
+    showPage(selectedPage());
+}
+
+int TextPresetGallery::columns() const
+{
+    // A phone in portrait is too narrow for two samples side by side.
+    return isNarrowWidth(width(), ui::density()) ? 1 : 2;
+}
+
+int TextPresetGallery::perPage() const
+{
+    return columns() * galleryRows;
+}
+
+int TextPresetGallery::selectedPage() const
+{
     for (int index = 0; index < presets.size(); ++index)
         if (presets[index].id == selected)
-            start = index / (galleryColumns * galleryRows);
-    showPage(start);
+            return index / perPage();
+    return page;
 }
 
 void TextPresetGallery::setHeading(const QString &text, const QString &instructions)
@@ -780,9 +809,8 @@ QSize TextPresetGallery::previewSize() const
 QStringList TextPresetGallery::visibleIds() const
 {
     QStringList ids;
-    const int perPage = galleryColumns * galleryRows;
-    for (int index = page * perPage; index < qMin(int(presets.size()), (page + 1) * perPage);
-         ++index)
+    const int count = perPage();
+    for (int index = page * count; index < qMin(int(presets.size()), (page + 1) * count); ++index)
         ids.append(presets[index].id);
     return ids;
 }
@@ -794,8 +822,7 @@ int TextPresetGallery::tileCount() const
 
 int TextPresetGallery::pageCount() const
 {
-    const int perPage = galleryColumns * galleryRows;
-    return qMax(1, (tileCount() + perPage - 1) / perPage);
+    return qMax(1, (tileCount() + perPage() - 1) / perPage());
 }
 
 void TextPresetGallery::showPage(int target)
@@ -810,6 +837,14 @@ void TextPresetGallery::showPage(int target)
 void TextPresetGallery::resizeEvent(QResizeEvent *event)
 {
     ui::Panel::resizeEvent(event);
+    // The width decides the columns. When they change, the pages do too:
+    // show the one with the preset in force again.
+    if (perPage() != arrangedPerPage) {
+        arrangedPerPage = perPage();
+        page = qBound(0, selectedPage(), pageCount() - 1);
+        pager->setPage(page, pageCount());
+        grid->update();
+    }
     // Showing the grid can resize it more than once. Render again only when
     // the previews would change size; each round repaints the whole grid.
     const auto size = previewSize();

@@ -33,7 +33,7 @@ struct Preset
     bool operator!=(const Preset &other) const { return !(*this == other); }
 };
 
-// The examples that ship with Kobalt. Comfort matches the book defaults.
+// The examples that ship with Kobalt. Kobalt matches the book defaults.
 QVector<Preset> examples();
 // The saved list. A profile that never saved one gets the examples.
 QVector<Preset> load(const QJsonObject &preferences);

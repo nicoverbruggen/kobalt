@@ -52,10 +52,11 @@ struct FontPreviewScale
 
 // Uses isolated file-backed faces and retains no font bytes. Returns an 8-bit coverage bitmap.
 // Characters the font lacks use the bundled `fallbacks` from privateInterfaceFontFiles().
+// `axisWeight` selects a variable font's weight; 0 keeps the font's default.
 QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, const QString &text,
                                QSize size, const FontPreviewScale &scale, int weight,
                                bool boldReading, bool centered, bool wrap,
-                               const QMap<QString, QString> &fallbacks = {});
+                               const QMap<QString, QString> &fallbacks = {}, int axisWeight = 0);
 
 struct PrivateText
 {

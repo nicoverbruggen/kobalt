@@ -3864,5 +3864,15 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path.closeSubpath();
         return true;
     }
+    if (name == QStringLiteral("squares-four")) {
+        // Four rounded squares, each with a square hole.
+        path.setFillRule(Qt::OddEvenFill);
+        for (const qreal x : { 40.0, 136.0 })
+            for (const qreal y : { 40.0, 136.0 }) {
+                path.addRoundedRect(QRectF(x, y, 80, 80), 16, 16);
+                path.addRect(QRectF(x + 16, y + 16, 48, 48));
+            }
+        return true;
+    }
     return false;
 }

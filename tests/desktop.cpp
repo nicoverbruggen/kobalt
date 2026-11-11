@@ -1863,12 +1863,12 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         return;
     }
     QVERIFY(fixture.visible("rrTextPresetToggle"));
-    QVERIFY(!fixture.visible("rrTextPreset_comfort"));
+    QVERIFY(!fixture.visible("rrTextPreset_kobalt"));
     QVERIFY(fixture.press("rrTextPresetToggle"));
-    QTRY_VERIFY(fixture.visible("rrTextPreset_comfort"));
+    QTRY_VERIFY(fixture.visible("rrTextPreset_kobalt"));
     QVERIFY(fixture.visible("rrTextPresetAll") && !fixture.visible("rrTextPresetUpdate"));
-    // The book starts at the defaults, which Comfort matches.
-    QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Comfort"));
+    // The book starts at the defaults, which Kobalt matches.
+    QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Kobalt"));
     QVERIFY(scene("text-presets"));
     if (!screenshots) {
         // A preset applies to the preview; closing the panel keeps it.
@@ -1885,20 +1885,22 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
             QVERIFY(fixture.press("rrNavText"));
             QTRY_VERIFY(fixture.visible("rrFont"));
             // The row stays open.
-            QTRY_VERIFY(fixture.visible("rrTextPreset_comfort"));
+            QTRY_VERIFY(fixture.visible("rrTextPreset_kobalt"));
             QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), label);
         };
-        applied("rrTextPreset_large", "NV Charis", "Large");
+        applied("rrTextPreset_modern", "NV Jost", "Modern");
         if (QTest::currentTestFailed())
             return;
-        applied("rrTextPreset_comfort", "Libron", "Comfort");
+        applied("rrTextPreset_kobalt", "Libron", "Kobalt");
         if (QTest::currentTestFailed())
             return;
     }
     // A change after a preset marks it and offers to update it or save a new one.
     QVERIFY(fixture.press("rrLarger"));
     QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrTextPresetUpdate") && settled(), 30000);
-    QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Comfort*"));
+    QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Kobalt*"));
+    QCOMPARE(fixture.window.readerWindow()->findChild<QPushButton *>("rrTextPresetUpdate")->text(),
+             QString("Update selected preset"));
     QVERIFY(scene("text-presets-changed"));
     QVERIFY(fixture.press("rrTextPresetSaveAs"));
     QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
@@ -1911,7 +1913,7 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
     } else {
         // A taken name keeps the dialog open; a new one saves and selects the preset.
-        input->setText("comfort");
+        input->setText("kobalt");
         QVERIFY(fixture.press("rrTextPresetNameSave"));
         QTRY_VERIFY(fixture.visible("rrTextPresetNameNote"));
         QVERIFY(fixture.visible("rrTextPresetName"));
@@ -1922,7 +1924,7 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
                      QString("Evening"));
         QVERIFY(!fixture.visible("rrTextPresetUpdate"));
         const auto saved = textpresets::load(storage::readJson(fixture.paths.preferences()));
-        QCOMPARE(saved.size(), 4);
+        QCOMPARE(saved.size(), 5);
         QCOMPARE(saved.last().name, QString("Evening"));
         QCOMPARE(saved.last().halfPoints, 23);
     }
@@ -1938,7 +1940,11 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
     // A long press on a tile opens its actions instead of applying it.
     auto *grid = fixture.widget("rrTextPresetGrid");
     QVERIFY(grid);
-    const QPoint second(grid->width() * 3 / 4, grid->height() / 6);
+    // A phone in portrait shows one tile per row, so the second tile is
+    // below the first, not beside it.
+    const bool singleColumn = isNarrowWidth(grid->width(), ui::density());
+    const QPoint second = singleColumn ? QPoint(grid->width() / 2, grid->height() / 2)
+                                       : QPoint(grid->width() * 3 / 4, grid->height() / 6);
     QTest::mousePress(grid, Qt::LeftButton, {}, second);
     QTRY_VERIFY(fixture.visible("rrTextPresetActions"));
     QTest::mouseRelease(grid, Qt::LeftButton, {}, second);
@@ -1955,7 +1961,9 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         QCOMPARE(fixture.window.readerWindow()
                          ->findChild<QLineEdit *>("rrTextPresetNameInput")
                          ->text(),
-                 QString("Compact"));
+                 // The grid opens on the page of the preset in force. With one
+                 // column that is the second page, where Evening is second.
+                 singleColumn ? QString("Evening") : QString("Bookish"));
         QVERIFY(fixture.press("rrTextPresetNameCancel"));
         QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
     }
@@ -1963,13 +1971,13 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
     QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
     // Leave the text and the closed cards as they were.
     if (screenshots) {
-        // Comfort is the text the book started with. The size buttons can be
+        // Kobalt is the text the book started with. The size buttons can be
         // on the panel's second page on short screens.
-        QVERIFY(fixture.press("rrTextPreset_comfort"));
+        QVERIFY(fixture.press("rrTextPreset_kobalt"));
         QTRY_VERIFY_WITH_TIMEOUT(settled() && !fixture.visible("rrTextPresetUpdate"), 30000);
     }
     QVERIFY(fixture.press("rrTextPresetToggle"));
-    QTRY_VERIFY(!fixture.visible("rrTextPreset_comfort"));
+    QTRY_VERIFY(!fixture.visible("rrTextPreset_kobalt"));
     if (screenshots)
         QCOMPARE(fixture.state().value("font_pixels"), original.value("font_pixels"));
 }

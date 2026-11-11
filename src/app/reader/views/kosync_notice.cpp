@@ -16,8 +16,7 @@ KosyncNotice::KosyncNotice(QWidget *parent)
               { strings::get("kosync.opening_description"), strings::get("kosync.opening"), {} },
               { strings::get("kosync.cancel_sync"), "rrKosyncCancel" })
 {
-    auto *content = card();
-    heading = content->findChild<QLabel *>("rrModalTitle");
+    heading = titleLabel();
     auto *header = heading->parentWidget();
     auto *headerRows = static_cast<QVBoxLayout *>(header->layout());
     const int index = headerRows->indexOf(heading);

@@ -21,6 +21,7 @@
 #include "ui/controls/text.h"
 #include "ui/controls/paging.h"
 #include "ui/dialogs/modals.h"
+#include "ui/dialogs/choice_sheet.h"
 #include "ui/dialogs/action_menu.h"
 #include "ui/style/fonts.h"
 #include "ui/style/metrics.h"
@@ -2585,6 +2586,76 @@ private slots:
                     directory
                     + QString("/library-scan-%1-%2.png").arg(dark ? "dark" : "light").arg(ppi)));
         }
+    }
+
+    // Checks that only a backdrop tap closes a pop-up, not a tap on its card's title, padding or border.
+    void modalClosesOnBackdropOnly()
+    {
+        ui::setDensity(300);
+        QWidget host;
+        ui::readerStyle(&host, ui::styles::reader());
+        host.resize(ui::px(1072), ui::px(1448));
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        const auto sheet = ui::makeChoiceSheet(&host, "rrProbe", "Probe title", "Probe hint",
+                                               "rrProbeTitle", "rrProbeHint");
+        sheet.list->add("rrProbeOne", "One");
+        sheet.list->add("rrProbeTwo", "Two");
+        int dismissed = 0, chosen = -1;
+        sheet.overlay->dismissed = [&] { ++dismissed; };
+        sheet.list->chosen = [&](int index) { chosen = index; };
+        ui::presentChoiceSheet(sheet.overlay, sheet.list);
+        QCoreApplication::processEvents();
+        QCOMPARE(sheet.overlay->objectName(), QString("rrProbePopup"));
+        QCOMPARE(sheet.list->objectName(), QString("rrProbeChoices"));
+        auto *card = sheet.overlay->card();
+        auto *title = card->findChild<QLabel *>("rrProbeTitle");
+        QVERIFY(title && title->isVisible() && card->findChild<QLabel *>("rrProbeHint"));
+        QTest::mouseClick(title, Qt::LeftButton);
+        QCOMPARE(dismissed, 0);
+        // The heading's padding beside the title, then the card's border.
+        QTest::mouseClick(title->parentWidget(), Qt::LeftButton, Qt::NoModifier, QPoint(2, 2));
+        QCOMPARE(dismissed, 0);
+        QTest::mouseClick(card, Qt::LeftButton, Qt::NoModifier, QPoint(0, card->height() / 2));
+        QCOMPARE(dismissed, 0);
+        // A row still answers, and does not close the sheet by itself.
+        QTest::mouseClick(sheet.list->options().at(1), Qt::LeftButton);
+        QCOMPARE(chosen, 1);
+        QCOMPARE(dismissed, 0);
+        QVERIFY(!card->geometry().contains(QPoint(4, 4)));
+        QTest::mouseClick(sheet.overlay, Qt::LeftButton, Qt::NoModifier, QPoint(4, 4));
+        QCOMPARE(dismissed, 1);
+    }
+
+    void choiceSheetListFillsCard_data()
+    {
+        QTest::addColumn<int>("ppi");
+        QTest::newRow("212") << 212;
+        QTest::newRow("300") << 300;
+    }
+
+    // Checks that a choice sheet's list fills the card inside its unscaled border, also at 212 ppi.
+    void choiceSheetListFillsCard()
+    {
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        const auto restore = qScopeGuard([] { ui::setDensity(300); });
+        QWidget host;
+        ui::readerStyle(&host, ui::styles::reader());
+        host.resize(ui::px(1072), ui::px(1448));
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        const auto sheet = ui::makeChoiceSheet(&host, "rrProbe", "Probe title");
+        sheet.list->add("rrProbeOne", "One",
+                        "A description that is long enough to wrap onto a second line at the "
+                        "width of the card, so that the row height depends on the width.");
+        sheet.list->add("rrProbeTwo", "Two", "Short.");
+        ui::presentChoiceSheet(sheet.overlay, sheet.list);
+        QCoreApplication::processEvents();
+        auto *card = sheet.overlay->card();
+        QCOMPARE(sheet.list->x(), int(ui::metrics::notice::cardBorder));
+        QCOMPARE(sheet.list->width(), card->width() - 2 * int(ui::metrics::notice::cardBorder));
+        QCOMPARE(sheet.list->height(), sheet.list->heightForWidth(sheet.list->width()));
     }
 
     void connectedModalFooter_data() { variants(); }

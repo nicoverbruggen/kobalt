@@ -59,6 +59,16 @@ PopupCard::Heading PopupCard::heading(const QString &text, const QString &descri
     return result;
 }
 
+void PopupCard::mousePressEvent(QMouseEvent *event)
+{
+    event->accept();
+}
+
+void PopupCard::mouseReleaseEvent(QMouseEvent *event)
+{
+    event->accept();
+}
+
 QLabel *PopupCard::message(const QString &text, const QString &name)
 {
     auto *label = new ui::InterfaceLabel(text, this);
@@ -151,13 +161,15 @@ protected:
     }
 };
 
-QLabel *modalContent(PopupCard *card, const ModalContent &content)
+PopupCard::Heading modalContent(PopupCard *card, const ModalContent &content)
 {
     Q_ASSERT(!content.title.trimmed().isEmpty());
     if (!content.image.isNull())
         card->image(content.image);
-    return card->heading(content.title, content.description, "rrModalTitle", "rrModalDescription")
-            .description;
+    return card->heading(content.title, content.description,
+                         content.titleName.isEmpty() ? QStringLiteral("rrModalTitle")
+                                                     : content.titleName,
+                         "rrModalDescription");
 }
 } // namespace
 
@@ -583,6 +595,7 @@ void ModalOverlay::mousePressEvent(QMouseEvent *event)
     event->accept();
 }
 
+// The card accepts its own taps, so only a tap on the backdrop arrives here.
 void ModalOverlay::mouseReleaseEvent(QMouseEvent *event)
 {
     if (dismissed)
@@ -624,7 +637,9 @@ NoticeModal::NoticeModal(QWidget *parent, const ModalContent &content, const Mod
     : ModalOverlay(parent)
 {
     setDimmed(true);
-    description = modalContent(card(), content);
+    const auto heading = modalContent(card(), content);
+    title = heading.title;
+    description = heading.description;
     primary = makeModalButton(card(), action, true);
     card()->adaptiveActions({ primary });
     setProperty("reader_standard_modal", true);
@@ -636,7 +651,9 @@ ChoiceModal::ChoiceModal(QWidget *parent, const ModalContent &content,
     : ModalOverlay(parent)
 {
     setDimmed(true);
-    description = modalContent(card(), content);
+    const auto heading = modalContent(card(), content);
+    title = heading.title;
+    description = heading.description;
     secondary = makeModalButton(card(), secondaryAction, false);
     primary = makeModalButton(card(), primaryAction, true);
     card()->adaptiveActions({ secondary, primary });

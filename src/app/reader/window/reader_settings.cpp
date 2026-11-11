@@ -1516,12 +1516,5 @@ void Reader::openSettingsFont(const QString &key)
                 showSettingsFonts();
                 refresh();
             });
-    settingsFontPopup = panel->fontDialog;
-    if (!settingsFontPopup)
-        return;
-    settingsFontPopup->installEventFilter(this);
-    for (auto *widget : settingsFontPopup->findChildren<QWidget *>())
-        textRefresh(widget);
-    textRefresh(settingsFontPopup);
 }
 } // namespace kobalt::reader

@@ -76,7 +76,12 @@ public:
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                          const QString &current, const QString &emptyLabel,
                          std::function<void(const QString &)> chosen);
-    void dismissFontChoices();
+    void dismissSheet();
+    // Shows, raises and focuses the open sheet, then reports it through
+    // sheetShown().
+    void presentSheet();
+    ui::RadioList *openChoiceSheet(const QString &name, const QString &title,
+                                   const QString &hint = {}, const QString &titleName = {});
     void showHeaderFooterWeights(int current, const QFont &sampleFont,
                                  std::function<void(int)> chosen);
     void showDictionaryFontSizes(int current, const QString &family, bool customFont,
@@ -122,7 +127,10 @@ public:
     QSize stylingEdgeSize(QSize readingPage) const;
     QSize stylingCropSize(QSize readingPage, int horizontalMargin) const;
     QSize stylingTextPageSize(QSize readingPage, int horizontalMargin) const;
-    QPointer<ui::ModalOverlay> fontDialog;
+    QPointer<ui::ModalOverlay> sheet;
+    // Called each time a sheet appears, so the reader can set its e-ink
+    // refresh and keep it above other pop-ups.
+    std::function<void(ui::ModalOverlay *)> sheetShown;
     ui::CellButton *closeButton = nullptr;
     // Asks the reader to fit the panel again, for changes that do not switch
     // the page, such as returning to the section list.

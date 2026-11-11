@@ -450,6 +450,18 @@ private:
     kobalt::ui::Panel *pinnedBookmarks = nullptr;
     QVector<kobalt::ui::CellButton *> pinnedButtons;
     kobalt::ToolbarComposition toolbarComposition;
+
+    // Toolbar buttons whose state follows the reader. buildToolbar() makes
+    // them once; a recomposition moves and hides them and never rebuilds them.
+    struct ToolbarButtons
+    {
+        QPushButton *light = nullptr, *typography = nullptr, *layout = nullptr, *settings = nullptr,
+                    *graph = nullptr;
+    };
+
+    ToolbarButtons toolbarButtons;
+    // The weight sliders with their minus and plus buttons.
+    QVector<QWidget *> weightControls;
     std::unique_ptr<kobalt::reader::Navigation> navigation;
     QVector<QWidget *> topActions;
     kobalt::ui::Panel *general = nullptr;
@@ -570,7 +582,7 @@ private:
     void openSearch(const QString &query = {});
     kobalt::LinkPanel *linkPanel = nullptr;
     QPointer<kobalt::ui::ModalOverlay> linkDialog;
-    QPointer<kobalt::ui::ModalOverlay> fontDefaultDialog, settingsFontPopup;
+    QPointer<kobalt::ui::ModalOverlay> fontDefaultDialog, settingsSheet;
     QJsonObject settingsFontFaces;
     QString settingsDefaultFontFace;
     QString settingsUiFontFace, settingsUiMonoFontFace, settingsHeaderFooterFontFace;
@@ -751,24 +763,33 @@ private:
                          std::function<void(int)> chosen, const QString &description = {});
     bool saveSleepPreferences(const QJsonObject &next);
     void closeSleepScreen();
+
+    // One row of a choice pop-up.
+    struct ChoiceOption
+    {
+        QString name, label, description;
+        bool enabled = true;
+    };
+
+    // The setting choices of Settings share one pop-up; see reader_dialogs.cpp.
+    void openChoicePopup(QPointer<kobalt::ui::ModalOverlay> &slot, const QString &name,
+                         const QString &title, const QString &hint,
+                         const QVector<ChoiceOption> &options, int current,
+                         std::function<void(int)> chosen, bool focus = true);
+    void closePopup(QPointer<kobalt::ui::ModalOverlay> &slot);
+    bool savePreferences(const QJsonObject &next);
     void showTapZones();
     void openTapZones();
-    void closeTapZones();
     void showPageNavigation();
     void openPageNavigation();
-    void closePageNavigation();
     void showTappableLinks();
     void openTappableLinks();
-    void closeTappableLinks();
     void showMenuView();
     void openMenuView();
-    void closeMenuView();
     void showChapterGroups();
     void openChapterGroups();
-    void closeChapterGroups();
     void showNavigationBarButtons();
     void openNavigationBarButtons();
-    void closeNavigationBarButtons();
     void applyAutomaticOpening(bool enabled);
     void applySettings();
     bool writePreferences(const QJsonObject &next);
@@ -868,7 +889,6 @@ private:
     static QString refreshExplanation(kobalt::ScreenRefresh mode);
     static QString refreshLabel(kobalt::ScreenRefresh mode);
     void showScreenRefresh();
-    void closeScreenRefresh();
     void openScreenRefresh();
     // Declared after book, so it is destroyed before the session it borrows.
     std::unique_ptr<kobalt::BookmarkSession> bookmarks;

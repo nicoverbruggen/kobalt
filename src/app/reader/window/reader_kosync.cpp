@@ -680,7 +680,7 @@ void Reader::showKosyncChoice()
                 const auto title = direction > 0 ? strings::key("kosync.ahead_title")
                         : direction < 0          ? strings::key("kosync.behind_title")
                                                  : strings::key("kosync.resume_title");
-                guard->findChild<QLabel *>("rrModalTitle")->setText(strings::get(title));
+                guard->titleLabel()->setText(strings::get(title));
                 auto *go = guard->primaryButton(), *stay = guard->secondaryButton();
                 go->setText(strings::get(direction > 0 ? strings::key("kosync.jump_ahead")
                                                  : direction < 0

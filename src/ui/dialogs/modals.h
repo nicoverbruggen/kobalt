@@ -38,6 +38,12 @@ public:
     // fitToWidth(); a card that fits shows every row again.
     void fitToHeight(int height);
 
+protected:
+    // A tap on the card's own padding, title or text stays on the card. It
+    // does not reach the backdrop, which would close the pop-up.
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+
 private:
     QVBoxLayout *contentRows;
     PagerBar *rowPager = nullptr;
@@ -120,6 +126,8 @@ struct ModalContent
     QString description;
     QString title;
     QImage image;
+    // The object name of the title label. Empty means "rrModalTitle".
+    QString titleName = {};
 };
 
 struct ModalAction
@@ -138,11 +146,14 @@ class NoticeModal : public ModalOverlay
 public:
     NoticeModal(QWidget *parent, const ModalContent &content, const ModalAction &action);
 
+    QLabel *titleLabel() const { return title; }
+
     QLabel *descriptionLabel() const { return description; }
 
     QPushButton *primaryButton() const { return primary; }
 
 private:
+    QLabel *title;
     QLabel *description;
     QPushButton *primary;
 };
@@ -153,6 +164,8 @@ public:
     ChoiceModal(QWidget *parent, const ModalContent &content, const ModalAction &secondary,
                 const ModalAction &primary);
 
+    QLabel *titleLabel() const { return title; }
+
     QLabel *descriptionLabel() const { return description; }
 
     QPushButton *primaryButton() const { return primary; }
@@ -160,6 +173,7 @@ public:
     QPushButton *secondaryButton() const { return secondary; }
 
 private:
+    QLabel *title;
     QLabel *description;
     QPushButton *primary;
     QPushButton *secondary;

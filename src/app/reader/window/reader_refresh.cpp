@@ -507,9 +507,9 @@ void Reader::syncAppearanceControls(bool pickingFont)
     if (!sizeSlider->interacting()) {
         const int halfPoints = kobalt::pixelHalfPoints(settings->fontSize());
         sizeSlider->setValue(halfPoints);
-        findChild<QLabel *>("rrTextSizeValue")
-                ->setText(strings::get("reader.text_size_value")
-                                  .arg(QString::number(halfPoints / 2.0, 'f', halfPoints % 2)));
+        sizeSlider->valueLabel()->setText(
+                strings::get("reader.text_size_value")
+                        .arg(QString::number(halfPoints / 2.0, 'f', halfPoints % 2)));
     }
     const auto optical = settings->opticalSizeAxis();
     ui::controlRowOf(opticalSizeSlider)->setVisible(optical.available());
@@ -526,7 +526,7 @@ void Reader::syncAppearanceControls(bool pickingFont)
         opticalSizeSlider->setValue(qRound(settings->opticalSize()));
         const auto caption = strings::get("reader.text_size_value")
                                      .arg(QString::number(opticalSizeSlider->value()));
-        findChild<QLabel *>("rrOpticalSizeValue")->setText(caption);
+        opticalSizeSlider->valueLabel()->setText(caption);
     }
     const auto bionic = settings->state().value("bold_reading").toString("off");
     const bool normalWeight = bionic == "off";
@@ -538,10 +538,8 @@ void Reader::syncAppearanceControls(bool pickingFont)
     };
     choices->setFontAppearance(sampleAppearance);
     fontButton->setAppearance(sampleAppearance);
-    for (const auto *name : { "rrFontWeight", "rrLighter", "rrHeavier", "rrVariableFontWeight",
-                              "rrVariableLighter", "rrVariableHeavier" })
-        if (auto *widget = findChild<QWidget *>(name))
-            widget->setEnabled(normalWeight);
+    for (auto *control : weightControls)
+        control->setEnabled(normalWeight);
     ui::controlRowOf(variableWeightSlider)->setVisible(weightAxis.available());
     syncTextPresets();
     // Navigation places this panel above the bottom bar. Moving it below
@@ -549,10 +547,9 @@ void Reader::syncAppearanceControls(bool pickingFont)
     fitAppearance();
     if (!weightSlider->interacting()) {
         weightSlider->setValue(normalWeight ? settings->thickness() : 0);
-        findChild<QLabel *>("rrFontWeightValue")
-                ->setText(normalWeight
-                                  ? strings::get("reader.weight_value").arg(settings->thickness())
-                                  : strings::get("reader.bionic_weight_locked"));
+        weightSlider->valueLabel()->setText(
+                normalWeight ? strings::get("reader.weight_value").arg(settings->thickness())
+                             : strings::get("reader.bionic_weight_locked"));
     }
     if (weightAxis.available() && !variableWeightSlider->interacting()) {
         variableWeightSlider->setRange(weightAxis.minimum, weightAxis.maximum);
@@ -566,24 +563,24 @@ void Reader::syncAppearanceControls(bool pickingFont)
         variableWeightSlider->setMarkers(stops, ui::SettingSlider::MarkerMode::Stops);
         variableWeightSlider->setPageStep(50);
         variableWeightSlider->setValue(normalWeight ? settings->weight() : weightAxis.defaultValue);
-        findChild<QLabel *>("rrVariableFontWeightValue")
-                ->setText(normalWeight ? QString::number(settings->weight())
-                                       : strings::get("reader.bionic_weight_locked"));
+        variableWeightSlider->valueLabel()->setText(
+                normalWeight ? QString::number(settings->weight())
+                             : strings::get("reader.bionic_weight_locked"));
     }
     if (!spacingSlider->interacting()) {
         spacingSlider->setValue(settings->spacing());
-        findChild<QLabel *>("rrLineSpacingValue")
-                ->setText(strings::get("common.percent").arg(settings->spacing()));
+        spacingSlider->valueLabel()->setText(
+                strings::get("common.percent").arg(settings->spacing()));
     }
     if (!marginSlider->interacting()) {
         marginSlider->setValue(kobalt::marginDesign(settings->margin()));
-        findChild<QLabel *>("rrMarginsValue")
-                ->setText(QString("%1").arg(kobalt::marginDesign(settings->margin())));
+        marginSlider->valueLabel()->setText(
+                QString("%1").arg(kobalt::marginDesign(settings->margin())));
     }
     if (!verticalMarginSlider->interacting()) {
         verticalMarginSlider->setValue(kobalt::marginDesign(settings->topMargin()));
-        findChild<QLabel *>("rrVerticalMarginsValue")
-                ->setText(QString::number(kobalt::marginDesign(settings->topMargin())));
+        verticalMarginSlider->valueLabel()->setText(
+                QString::number(kobalt::marginDesign(settings->topMargin())));
     }
     fontButton->setFace(settings->fontFace());
     for (auto *button : hyphenButtons)
@@ -637,25 +634,22 @@ void Reader::syncReadingControls()
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
-    findChild<QPushButton *>("rrLight")->setEnabled(services.lightAvailable() && !session->busy()
-                                                    && !appearanceEdit.applying());
-    findChild<QPushButton *>("rrLight")->setChecked(lightPopup->isVisible()
-                                                    || appearanceEdit.destination()
-                                                            == AppearanceDestination::Light);
-    findChild<QPushButton *>("rrTypography")->setEnabled(!session->busy());
-    findChild<QPushButton *>("rrLayout")->setEnabled(!session->busy());
+    toolbarButtons.light->setEnabled(services.lightAvailable() && !session->busy()
+                                     && !appearanceEdit.applying());
+    toolbarButtons.light->setChecked(lightPopup->isVisible()
+                                     || appearanceEdit.destination()
+                                             == AppearanceDestination::Light);
+    toolbarButtons.typography->setEnabled(!session->busy());
+    toolbarButtons.layout->setEnabled(!session->busy());
     // Settings applies the newest draft, or waits for the preview to open.
     // Its click handler ignores taps while a panel's changes apply.
-    findChild<QPushButton *>("rrSettings")
-            ->setEnabled(!session->busy() || appearanceEdit.applying());
-    findChild<QPushButton *>("rrTypography")
-            ->setChecked(!general->isVisible() && appearanceEdit.panelOpen()
-                         && panels->currentIndex() == 0);
-    findChild<QPushButton *>("rrLayout")
-            ->setChecked(!general->isVisible() && appearanceEdit.panelOpen()
-                         && panels->currentIndex()
-                                 != int(kobalt::reader::AppearancePage::Typography));
-    findChild<QPushButton *>("rrSettings")->setChecked(general->isVisible());
+    toolbarButtons.settings->setEnabled(!session->busy() || appearanceEdit.applying());
+    toolbarButtons.typography->setChecked(!general->isVisible() && appearanceEdit.panelOpen()
+                                          && panels->currentIndex() == 0);
+    toolbarButtons.layout->setChecked(!general->isVisible() && appearanceEdit.panelOpen()
+                                      && panels->currentIndex()
+                                              != int(kobalt::reader::AppearancePage::Typography));
+    toolbarButtons.settings->setChecked(general->isVisible());
     const bool settingsOpen = general->isVisible();
     // Zen mode moves Search, Annotate and Bookmarks to the bottom tabs.
     const bool zen = zenMode();
@@ -687,10 +681,10 @@ void Reader::syncReadingControls()
                 || features::enabled(preferences, features::Annotations)));
     toolbarComposition.formattingWarning->setVisible(!settingsOpen && !zen
                                                      && session->formattingWarning());
-    findChild<QPushButton *>("rrGraph")->setEnabled(!session->busy() && !appearanceEdit.applying());
-    findChild<QPushButton *>("rrGraph")->setChecked(chapterGraph->isVisible()
-                                                    || appearanceEdit.destination()
-                                                            == AppearanceDestination::Stats);
+    toolbarButtons.graph->setEnabled(!session->busy() && !appearanceEdit.applying());
+    toolbarButtons.graph->setChecked(chapterGraph->isVisible()
+                                     || appearanceEdit.destination()
+                                             == AppearanceDestination::Stats);
     if (chapterGraph->isVisible())
         updateGraph();
     updateOrientationBlock();

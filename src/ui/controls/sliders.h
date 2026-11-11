@@ -5,6 +5,8 @@
 #include <QStringList>
 #include <functional>
 
+class QLabel;
+
 namespace kobalt::ui {
 class SettingSlider : public QSlider
 {
@@ -16,6 +18,19 @@ public:
 
     bool interacting() const { return tracking; }
     enum class MarkerMode { Positions, Stops, Checkpoints };
+
+    // The parts of the row that sliderRow() builds around this slider: the
+    // label that shows the value, and the minus and plus buttons. They are
+    // null and empty for a slider without such a row.
+    QLabel *valueLabel() const { return rowValue; }
+
+    const QVector<QWidget *> &stepButtons() const { return rowSteps; }
+
+    void setRowParts(QLabel *value, QWidget *less, QWidget *more)
+    {
+        rowValue = value;
+        rowSteps = { less, more };
+    }
 
     void setDotMarkers(bool enabled)
     {
@@ -44,6 +59,8 @@ protected:
 private:
     bool tracking = false;
     bool dotMarkers = false;
+    QLabel *rowValue = nullptr;
+    QVector<QWidget *> rowSteps;
     int original = 0;
     QVector<int> markers;
     QVector<int> additionalStops;

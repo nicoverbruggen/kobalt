@@ -571,6 +571,7 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name,
     QObject::connect(less, &QPushButton::clicked, slider, [slider] { slider->nudge(-1); });
     QObject::connect(more, &QPushButton::clicked, slider, [slider] { slider->nudge(1); });
     slider->committed = std::move(apply);
+    slider->setRowParts(value, less, more);
     return slider;
 }
 } // namespace kobalt::ui

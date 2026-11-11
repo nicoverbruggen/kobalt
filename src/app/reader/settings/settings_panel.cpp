@@ -9,6 +9,7 @@
 #include "ui/style/theme.h"
 #include "ui/panel_timing.h"
 #include "settings_panel.h"
+#include "ui/dialogs/choice_sheet.h"
 #include "support/qt_compat.h"
 #include "reading/text_presets.h"
 #include "reading/features.h"
@@ -217,8 +218,6 @@ ui::DescribedOption *checklistOption(QWidget *parent, const QString &name, const
 QPushButton *segmentButton(QWidget *parent, QHBoxLayout *layout, QButtonGroup *group,
                            const QString &name, const QString &text);
 
-// Keep section titles on the Settings baseline. The private text bitmap
-// includes each word's descenders, so centering that bitmap moves the baseline.
 // The chevron of a section row in the narrow Settings list, as other rows
 // that open a page show it. It follows its row's size and pressed state.
 class SectionChevron final : public QWidget
@@ -1103,12 +1102,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             { strings::get(
                       "reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c"),
               strings::get("reader.restore_appearance_defaults_prompt"),
-              {} },
+              {},
+              "rrRestoreTitle" },
             { strings::get("common.cancel"), "rrKeepDefaults" },
             { strings::get("reader.restore_defaults"), "rrConfirmDefaults" });
     restoreDialog->setObjectName("rrRestoreConfirmation");
     restoreDialog->setDimmed(true);
-    restoreDialog->card()->findChild<QLabel *>("rrModalTitle")->setObjectName("rrRestoreTitle");
     restoreDialog->descriptionLabel()->setObjectName("rrRestoreDescription");
     keepDefaults = restoreDialog->secondaryButton();
     confirmDefaults = restoreDialog->primaryButton();
@@ -1505,21 +1504,21 @@ SettingsPanel::~SettingsPanel()
     delete restoreDialog;
     delete restorePresetsDialog;
     delete standbyDialog;
-    delete fontDialog;
+    delete sheet;
 }
 
 void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                                     const QString &current, const QString &emptyLabel,
                                     std::function<void(const QString &)> chosen)
 {
-    if (fontDialog || fonts.isEmpty())
+    if (sheet || fonts.isEmpty())
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrSettingsFontPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
+    sheet = new ui::ModalOverlay(parentWidget());
+    sheet->setObjectName("rrSettingsFontPopup");
+    sheet->setDimmed(true);
+    sheet->setGeometry(parentWidget()->rect());
+    sheet->dismissed = [this] { dismissSheet(); };
+    auto *card = sheet->card();
     auto *rows = card->rows();
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
@@ -1597,15 +1596,15 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         choices->setFixedHeight(range.second * rowHeight);
         pager->setPage(page, pages.size());
         card->fitToWidth(cardWidth);
-        fontDialog->centerCard();
+        sheet->centerCard();
     };
-    connect(pager->previous, &QPushButton::clicked, fontDialog,
+    connect(pager->previous, &QPushButton::clicked, sheet,
             [pager, showPage] { showPage(pager->turnTarget(-1)); });
-    connect(pager->next, &QPushButton::clicked, fontDialog,
+    connect(pager->next, &QPushButton::clicked, sheet,
             [pager, showPage] { showPage(pager->turnTarget(1)); });
     choices->chosen = [this, fonts, chosen](int index) {
         const auto family = fonts[index].family;
-        dismissFontChoices();
+        dismissSheet();
         chosen(family);
     };
     int initialPage = 0;
@@ -1613,9 +1612,7 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         if (selected >= pages[page].first && selected < pages[page].first + pages[page].second)
             initialPage = page;
     showPage(initialPage);
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    presentSheet();
 }
 
 QString SettingsPanel::dictionaryFontSizeLabel(int percent, bool compact)
@@ -1636,25 +1633,26 @@ QString SettingsPanel::dictionaryFontSizeLabel(int percent, bool compact)
     }
 }
 
+// Opens a sheet with a title and one pick-one list, as `sheet`. The caller
+// adds the options, fits it with ui::fitChoiceSheet() and shows it with
+// presentSheet().
+ui::RadioList *SettingsPanel::openChoiceSheet(const QString &name, const QString &title,
+                                              const QString &hint, const QString &titleName)
+{
+    const auto made = ui::makeChoiceSheet(parentWidget(), name, title, hint, titleName);
+    sheet = made.overlay;
+    sheet->dismissed = [this] { dismissSheet(); };
+    return made.list;
+}
+
 void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, bool customFont,
                                             std::function<void(int)> chosen)
 {
-    if (fontDialog)
+    if (sheet)
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrDictionaryFontSizePopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
-    auto *rows = card->rows();
-    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
-                             metrics::control::border, metrics::control::border);
-    rows->setSpacing(0);
-    card->heading(strings::get("settings.dictionary_font_size"));
-    auto *choices = new ui::RadioList(card);
+    auto *choices =
+            openChoiceSheet("rrDictionaryFontSize", strings::get("settings.dictionary_font_size"));
     choices->setMinimumRowHeight(metrics::list::oneLine);
-    choices->setTopDivider(true);
     const bool compact = isPhoneScreen(parentWidget()->size(), ui::density());
     for (int percent : appearance::dictionaryFontSizes) {
         auto *option = choices->add(
@@ -1694,40 +1692,24 @@ void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, 
             choices->setCurrent(choices->options().size() - 1);
     }
     choices->chosen = [this, chosen](int index) {
-        dismissFontChoices();
+        dismissSheet();
         chosen(appearance::dictionaryFontSizes[index]);
     };
-    rows->addWidget(choices);
-    const int cardWidth = qMin<int>(metrics::notice::cardWidth,
-                                    parentWidget()->width() - 2 * metrics::notice::sideClearance);
-    choices->setFixedHeight(choices->heightForWidth(cardWidth - 2 * metrics::control::border));
-    card->fitToWidth(cardWidth);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    ui::fitChoiceSheet(sheet, choices);
+    presentSheet();
 }
 
 void SettingsPanel::showHeaderFooterWeights(int current, const QFont &sampleFont,
                                             std::function<void(int)> chosen)
 {
-    if (fontDialog)
+    if (sheet)
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrHeaderFooterWeightPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
-    auto *rows = card->rows();
-    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
-                             metrics::control::border, metrics::control::border);
-    rows->setSpacing(0);
-    card->heading(strings::get("settings.header_footer_weight"), {}, "rrHeaderFooterWeightTitle");
-    auto *choices = new ui::RadioList(card);
+    auto *choices =
+            openChoiceSheet("rrHeaderFooterWeight", strings::get("settings.header_footer_weight"),
+                            {}, "rrHeaderFooterWeightTitle");
     choices->setMinimumRowHeight(metrics::list::oneLine);
-    choices->setTopDivider(true);
-    for (int steps : { 0, 2, 4, 6, 8 }) {
+    const QVector<int> weights{ 0, 2, 4, 6, 8 };
+    for (int steps : weights) {
         auto *option = choices->add(
                 QString("rrHeaderFooterWeight%1").arg(steps),
                 steps ? strings::get("settings.header_footer_weight_heavier").arg(steps)
@@ -1739,19 +1721,12 @@ void SettingsPanel::showHeaderFooterWeights(int current, const QFont &sampleFont
         if (steps == current)
             choices->setCurrent(choices->options().size() - 1);
     }
-    choices->chosen = [this, chosen](int index) {
-        dismissFontChoices();
-        chosen(index * 2);
+    choices->chosen = [this, chosen, weights](int index) {
+        dismissSheet();
+        chosen(weights[index]);
     };
-    rows->addWidget(choices);
-    const int cardWidth = qMin<int>(metrics::notice::cardWidth,
-                                    parentWidget()->width() - 2 * metrics::notice::sideClearance);
-    choices->setFixedHeight(choices->heightForWidth(cardWidth - 2 * metrics::control::border));
-    card->fitToWidth(cardWidth);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    ui::fitChoiceSheet(sheet, choices);
+    presentSheet();
 }
 
 QString SettingsPanel::columnSpacingLabel(int percent)
@@ -1770,14 +1745,14 @@ QString SettingsPanel::paragraphSpacingLabel(int percent)
 void SettingsPanel::showBeautifier(const QJsonObject &current,
                                    std::function<void(QJsonObject)> chosen)
 {
-    if (fontDialog)
+    if (sheet)
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrBeautifierPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
+    sheet = new ui::ModalOverlay(parentWidget());
+    sheet->setObjectName("rrBeautifierPopup");
+    sheet->setDimmed(true);
+    sheet->setGeometry(parentWidget()->rect());
+    sheet->dismissed = [this] { dismissSheet(); };
+    auto *card = sheet->card();
     auto *rows = card->rows();
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
@@ -1839,10 +1814,10 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     auto *done =
             ui::makeModalButton(card, { strings::get("common.done"), "rrBeautifierDone" }, true);
     card->adaptiveActions({ cancel, done });
-    connect(cancel, &QPushButton::clicked, this, [this] { dismissFontChoices(); });
+    connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, draft, chosen] {
         const auto value = *draft;
-        dismissFontChoices();
+        dismissSheet();
         chosen(value);
     });
     const int width =
@@ -1850,10 +1825,8 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
     for (auto *option : options)
         option->setFixedHeight(option->heightForWidth(width - 2 * metrics::control::border));
     card->fitToWidth(width);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    sheet->centerCard();
+    presentSheet();
 }
 
 QString SettingsPanel::timeRemainingFormatLabel(const QString &format)
@@ -1865,24 +1838,13 @@ QString SettingsPanel::timeRemainingFormatLabel(const QString &format)
 void SettingsPanel::showTimeRemainingFormats(const QString &current,
                                              std::function<void(const QString &)> chosen)
 {
-    if (fontDialog)
+    if (sheet)
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrTimeRemainingFormatPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
-    auto *rows = card->rows();
-    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
-                             metrics::control::border, metrics::control::border);
-    rows->setSpacing(0);
-    card->heading(strings::get("settings.time_remaining_format"),
-                  strings::get("settings.time_remaining_format_description"), {}, {});
-    auto *choices = new ui::RadioList(card);
-    choices->setMinimumRowHeight(chrome::listActionHeight);
-    choices->setTopDivider(true);
-    for (const auto *format : { "detailed", "approximate" }) {
+    auto *choices =
+            openChoiceSheet("rrTimeRemainingFormat", strings::get("settings.time_remaining_format"),
+                            strings::get("settings.time_remaining_format_description"));
+    const QStringList formats{ "detailed", "approximate" };
+    for (const auto &format : formats) {
         choices->add(QString("rrTimeRemainingFormat_%1").arg(format),
                      timeRemainingFormatLabel(format),
                      strings::get(QString("settings.time_remaining_%1_description")
@@ -1892,58 +1854,32 @@ void SettingsPanel::showTimeRemainingFormats(const QString &current,
         if (format == current)
             choices->setCurrent(choices->options().size() - 1);
     }
-    choices->chosen = [this, chosen](int index) {
-        dismissFontChoices();
-        chosen(index == 1 ? QStringLiteral("approximate") : QStringLiteral("detailed"));
+    choices->chosen = [this, chosen, formats](int index) {
+        dismissSheet();
+        chosen(formats[index]);
     };
-    rows->addWidget(choices);
-    const int cardWidth = qMin<int>(metrics::notice::cardWidth,
-                                    parentWidget()->width() - 2 * metrics::notice::sideClearance);
-    choices->setFixedHeight(choices->heightForWidth(cardWidth - 2 * metrics::control::border));
-    card->fitToWidth(cardWidth);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    ui::fitChoiceSheet(sheet, choices);
+    presentSheet();
 }
 
 void SettingsPanel::showColumnSpacingChoices(int current, std::function<void(int)> chosen)
 {
-    if (fontDialog)
+    if (sheet)
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrColumnSpacingPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
-    auto *rows = card->rows();
-    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
-                             metrics::control::border, metrics::control::border);
-    rows->setSpacing(0);
-    card->heading(strings::get("reader.column_spacing"),
-                  strings::get("settings.column_spacing_description"), {}, {});
-    auto *choices = new ui::RadioList(card);
-    choices->setMinimumRowHeight(chrome::listActionHeight);
-    choices->setTopDivider(true);
-    for (int percent : { 100, 150, 200, 250, 300 }) {
+    auto *choices = openChoiceSheet("rrColumnSpacing", strings::get("reader.column_spacing"),
+                                    strings::get("settings.column_spacing_description"));
+    const QVector<int> spacings{ 100, 150, 200, 250, 300 };
+    for (int percent : spacings) {
         choices->add(QString("rrColumnSpacing%1").arg(percent), columnSpacingLabel(percent));
         if (percent == current)
             choices->setCurrent(choices->options().size() - 1);
     }
-    choices->chosen = [this, chosen](int index) {
-        dismissFontChoices();
-        chosen(100 + index * 50);
+    choices->chosen = [this, chosen, spacings](int index) {
+        dismissSheet();
+        chosen(spacings[index]);
     };
-    rows->addWidget(choices);
-    const int cardWidth = qMin<int>(metrics::notice::cardWidth,
-                                    parentWidget()->width() - 2 * metrics::notice::sideClearance);
-    choices->setFixedHeight(choices->heightForWidth(cardWidth - 2 * metrics::control::border));
-    card->fitToWidth(cardWidth);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    ui::fitChoiceSheet(sheet, choices);
+    presentSheet();
 }
 
 namespace {
@@ -2056,11 +1992,11 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                                        std::function<void(int)> chosen, const QString &alignment,
                                        int secondary, std::function<void(int, int)> pairChosen)
 {
-    if (fontDialog)
+    if (sheet)
         return;
     ui::PanelTiming timing("styling");
     timing.field("feature", int(feature));
-    fontDialog = new ui::ModalOverlay(parentWidget());
+    sheet = new ui::ModalOverlay(parentWidget());
     const bool tracking = feature == AdvancedText::Tracking;
     const bool paragraph = feature == AdvancedText::ParagraphSpacing;
     const bool spacing = feature == AdvancedText::WordSpacing || tracking
@@ -2103,11 +2039,11 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     const auto text = [key](const QString &suffix) {
         return strings::get((key + suffix).toUtf8().constData());
     };
-    fontDialog->setObjectName(prefix + "Popup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
+    sheet->setObjectName(prefix + "Popup");
+    sheet->setDimmed(true);
+    sheet->setGeometry(parentWidget()->rect());
+    sheet->dismissed = [this] { dismissSheet(); };
+    auto *card = sheet->card();
     auto *rows = card->rows();
     rows->setContentsMargins(metrics::control::border, metrics::control::border,
                              metrics::control::border, metrics::control::border);
@@ -2131,7 +2067,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     close->setRule(Qt::LeftEdge);
     close->setFixedWidth(chrome::cellWidth);
     headerRow->addWidget(close);
-    connect(close, &QPushButton::clicked, this, [this] { dismissFontChoices(); });
+    connect(close, &QPushButton::clicked, this, [this] { dismissSheet(); });
     rows->addWidget(header);
 
     auto *preview = new StylingPreview(card);
@@ -2357,9 +2293,7 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
     }
     card->fitToWidth(cardWidth);
     fitStylingCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    presentSheet();
     showStylingPreview();
     if (!stylingSamples.value(int(feature)).valid() && stylingRequested)
         stylingRequested(feature);
@@ -2367,9 +2301,9 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
 
 void SettingsPanel::fitStylingCard()
 {
-    if (!fontDialog || !stylingPreview)
+    if (!sheet || !stylingPreview)
         return;
-    auto *card = fontDialog->card();
+    auto *card = sheet->card();
     auto *preview = stylingPreview.data();
     preview->setFixedHeight(preview->property("preferred_height").toInt());
     card->fitToWidth(card->width());
@@ -2381,7 +2315,7 @@ void SettingsPanel::fitStylingCard()
                 qMax(ui::px(120), preview->height() - (card->height() - available)));
         card->fitToWidth(card->width());
     }
-    fontDialog->centerCard();
+    sheet->centerCard();
 }
 
 void SettingsPanel::showStylingPreview()
@@ -2397,7 +2331,7 @@ void SettingsPanel::showStylingPreview()
         stylingSampleReady = {};
         ready();
     }
-    if (auto *same = fontDialog ? fontDialog->findChild<QWidget *>("rrStylingSameNote") : nullptr) {
+    if (auto *same = sheet ? sheet->findChild<QWidget *>("rrStylingSameNote") : nullptr) {
         const bool shown = sample.valid() && !sample.differs;
         if (same->isVisible() != shown) {
             same->setVisible(shown);
@@ -2439,9 +2373,9 @@ void SettingsPanel::invalidateStylingSamples(int unchanged)
     }
 }
 
-void SettingsPanel::dismissFontChoices()
+void SettingsPanel::dismissSheet()
 {
-    if (!fontDialog)
+    if (!sheet)
         return;
     // The closed sheet is deleted later. Until then, only the next sheet's
     // preview may answer to the shared name.
@@ -2449,9 +2383,18 @@ void SettingsPanel::dismissFontChoices()
         stylingPreview->setObjectName({});
     stylingPreview.clear();
     stylingSampleReady = {};
-    fontDialog->hide();
-    fontDialog->deleteLater();
-    fontDialog.clear();
+    sheet->hide();
+    sheet->deleteLater();
+    sheet.clear();
+}
+
+void SettingsPanel::presentSheet()
+{
+    sheet->show();
+    sheet->raise();
+    sheet->setFocus();
+    if (sheetShown)
+        sheetShown(sheet);
 }
 
 void SettingsPanel::dismissRestore()
@@ -2489,7 +2432,7 @@ void SettingsPanel::hideEvent(QHideEvent *event)
     dismissRestore();
     dismissStandbyConfirmation();
     dismissAutomaticOpeningConfirmation();
-    dismissFontChoices();
+    dismissSheet();
     if (stylingHidden)
         stylingHidden();
     stylingSamples.clear();
@@ -2499,7 +2442,7 @@ void SettingsPanel::hideEvent(QHideEvent *event)
 void SettingsPanel::resizeEvent(QResizeEvent *event)
 {
     // A rotation can leave too few rows for the current font page. Reopen at the new size.
-    dismissFontChoices();
+    dismissSheet();
     ui::Panel::resizeEvent(event);
 }
 
@@ -2536,14 +2479,14 @@ void SettingsPanel::updateFeatureOptions()
 
 void SettingsPanel::showDisabledFeatures()
 {
-    if (fontDialog)
+    if (sheet)
         return;
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrDisabledFeaturesPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
+    sheet = new ui::ModalOverlay(parentWidget());
+    sheet->setObjectName("rrDisabledFeaturesPopup");
+    sheet->setDimmed(true);
+    sheet->setGeometry(parentWidget()->rect());
+    sheet->dismissed = [this] { dismissSheet(); };
+    auto *card = sheet->card();
     auto *rows = card->rows();
     rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
                              metrics::control::border, metrics::control::border);
@@ -2571,10 +2514,10 @@ void SettingsPanel::showDisabledFeatures()
     auto *done = ui::makeModalButton(
             card, { strings::get("common.done"), "rrDisabledFeaturesDone" }, true);
     card->adaptiveActions({ cancel, done });
-    connect(cancel, &QPushButton::clicked, this, [this] { dismissFontChoices(); });
+    connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, draft] {
         featurePreferences = *draft;
-        dismissFontChoices();
+        dismissSheet();
         updateFeatureOptions();
         if (refitRequested)
             refitRequested();
@@ -2584,10 +2527,8 @@ void SettingsPanel::showDisabledFeatures()
     for (auto *option : options)
         option->setFixedHeight(option->heightForWidth(width - 2 * metrics::control::border));
     card->fitToWidth(width);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    sheet->centerCard();
+    presentSheet();
 }
 
 void SettingsPanel::showPowerManagement(bool visible)

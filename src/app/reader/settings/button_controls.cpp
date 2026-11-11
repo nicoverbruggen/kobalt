@@ -109,17 +109,17 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
                                        const QJsonObject &current,
                                        std::function<void(QJsonObject)> chosen)
 {
-    if (fontDialog || buttons.isEmpty())
+    if (sheet || buttons.isEmpty())
         return;
     const bool volume = buttons.first().id.startsWith("volume_");
     const int cardWidth = qMin<int>(
             ui::px(1064), parentWidget()->width() - 2 * ui::metrics::notice::sideClearance);
-    fontDialog = new ui::ModalOverlay(parentWidget());
-    fontDialog->setObjectName("rrButtonControlsPopup");
-    fontDialog->setDimmed(true);
-    fontDialog->setGeometry(parentWidget()->rect());
-    fontDialog->dismissed = [this] { dismissFontChoices(); };
-    auto *card = fontDialog->card();
+    sheet = new ui::ModalOverlay(parentWidget());
+    sheet->setObjectName("rrButtonControlsPopup");
+    sheet->setDimmed(true);
+    sheet->setGeometry(parentWidget()->rect());
+    sheet->dismissed = [this] { dismissSheet(); };
+    auto *card = sheet->card();
     auto *rows = card->rows();
     rows->setContentsMargins(ui::metrics::control::border, ui::metrics::notice::cardMargins.top(),
                              ui::metrics::control::border, ui::metrics::control::border);
@@ -215,15 +215,15 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         const int pickerWidth =
                 qMin<int>(ui::metrics::notice::cardWidth,
                           parentWidget()->width() - 2 * ui::metrics::notice::sideClearance);
-        auto *overlay = new ui::ModalOverlay(fontDialog);
+        auto *overlay = new ui::ModalOverlay(sheet);
         overlay->setObjectName("rrButtonActionPopup");
         overlay->setDimmed(true);
-        overlay->setGeometry(fontDialog->rect());
+        overlay->setGeometry(sheet->rect());
         overlay->dismissed = [this, overlay] {
             overlay->hide();
             overlay->deleteLater();
-            if (fontDialog)
-                fontDialog->card()->show();
+            if (sheet)
+                sheet->card()->show();
         };
         auto *picker = overlay->card();
         picker->rows()->setContentsMargins(
@@ -261,10 +261,14 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         picker->fitToWidth(pickerWidth);
         overlay->centerCard();
         // The chooser owns paging while open, including when it has no pager.
-        fontDialog->card()->hide();
+        sheet->card()->hide();
         overlay->show();
         overlay->raise();
         overlay->setFocus();
+        // The chooser is a child of the sheet; report the sheet again so the
+        // chooser gets the same refresh.
+        if (sheetShown)
+            sheetShown(sheet);
     };
     for (int i = 0; i < controls.size(); ++i)
         connect(controls[i], &QPushButton::clicked, card, [choose, i] { choose(i); });
@@ -288,16 +292,14 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
     auto *done = ui::makeModalButton(card, { strings::get("common.done"), "rrButtonControlsDone" },
                                      true);
     card->adaptiveActions({ cancel, done });
-    connect(cancel, &QPushButton::clicked, this, [this] { dismissFontChoices(); });
+    connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
     connect(done, &QPushButton::clicked, this, [this, draft, chosen] {
         const auto value = *draft;
-        dismissFontChoices();
+        dismissSheet();
         chosen(value);
     });
     card->fitToWidth(cardWidth);
-    fontDialog->centerCard();
-    fontDialog->show();
-    fontDialog->raise();
-    fontDialog->setFocus();
+    sheet->centerCard();
+    presentSheet();
 }
 } // namespace kobalt::reader

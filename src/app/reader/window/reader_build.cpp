@@ -722,6 +722,7 @@ void Reader::buildToolbar()
                        ControlIcon::Light, [this] { toggleLight(); });
     lightButton->setCheckable(true);
     lightButton->setEnabled(services.lightAvailable());
+    toolbarButtons.light = lightButton;
     light = services.light(lightButton);
     Q_ASSERT(light);
     warmthSupported = services.lightAvailable() && light->initialize() && light->hasWarmth();
@@ -748,12 +749,15 @@ void Reader::buildToolbar()
     typeButton->setToolTip(strings::get("reader.typography"));
     readerStyle(typeButton, styles::font(metrics::text::typography));
     typeButton->setCheckable(true);
-    iconButton(topControls, top, "rrLayout", strings::get("reader.page_layout"),
-               ControlIcon::Layout, [this] { selectPanel(1); })
-            ->setCheckable(true);
-    iconButton(topControls, top, "rrGraph", strings::get("reader.chapter_lengths"),
-               ControlIcon::Graph, [this] { toggleGraph(); })
-            ->setCheckable(true);
+    toolbarButtons.typography = typeButton;
+    toolbarButtons.layout =
+            iconButton(topControls, top, "rrLayout", strings::get("reader.page_layout"),
+                       ControlIcon::Layout, [this] { selectPanel(1); });
+    toolbarButtons.layout->setCheckable(true);
+    toolbarButtons.graph =
+            iconButton(topControls, top, "rrGraph", strings::get("reader.chapter_lengths"),
+                       ControlIcon::Graph, [this] { toggleGraph(); });
+    toolbarButtons.graph->setCheckable(true);
     toolbarComposition.search =
             iconButton(topControls, top, "rrSearchOpen", strings::get("reader.search_book"),
                        ControlIcon::Search,
@@ -799,6 +803,7 @@ void Reader::buildToolbar()
                                openSettings();
                        });
     toolbarComposition.settings->setCheckable(true);
+    toolbarButtons.settings = toolbarComposition.settings;
     toolbarComposition.clock = menuClock;
     toolbarComposition.session = menuSession;
     toolbarComposition.battery = menuBattery;
@@ -1053,6 +1058,11 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
     opticalSizeSlider = appearance.opticalSizeSlider;
     weightSlider = appearance.weightSlider;
     variableWeightSlider = appearance.variableWeightSlider;
+    // Bionic reading sets its own weight and disables these.
+    for (auto *slider : { weightSlider, variableWeightSlider }) {
+        weightControls.append(slider);
+        weightControls += slider->stepButtons();
+    }
     spacingSlider = appearance.spacingSlider;
     marginSlider = appearance.marginSlider;
     verticalMarginSlider = appearance.verticalMarginSlider;
@@ -1090,9 +1100,9 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                     [pixels](ReaderSession &preview) { preview.style(pixels, preview.spacing()); });
     };
     connect(sizeSlider, &QSlider::valueChanged, this, [this](int value) {
-        findChild<QLabel *>("rrTextSizeValue")
-                ->setText(strings::get("reader.text_size_value")
-                                  .arg(QString::number(value / 2.0, 'f', value % 2)));
+        sizeSlider->valueLabel()->setText(
+                strings::get("reader.text_size_value")
+                        .arg(QString::number(value / 2.0, 'f', value % 2)));
     });
     opticalSizeSlider->committed = [this](int value) {
         const auto *settings = appearanceEdit.edited() && appearanceEdit.ready()
@@ -1102,8 +1112,8 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
             mutateAppearance([value](ReaderSession &preview) { preview.setOpticalSize(value); });
     };
     connect(opticalSizeSlider, &QSlider::valueChanged, this, [this](int value) {
-        findChild<QLabel *>("rrOpticalSizeValue")
-                ->setText(strings::get("reader.text_size_value").arg(QString::number(value)));
+        opticalSizeSlider->valueLabel()->setText(
+                strings::get("reader.text_size_value").arg(QString::number(value)));
     });
     weightSlider->committed = [this](int value) {
         const auto *settings = appearanceEdit.edited() && appearanceEdit.ready()
@@ -1120,7 +1130,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
             mutateAppearance([value](ReaderSession &preview) { preview.setWeight(value); });
     };
     connect(variableWeightSlider, &QSlider::valueChanged, this, [this](int value) {
-        findChild<QLabel *>("rrVariableFontWeightValue")->setText(QString::number(value));
+        variableWeightSlider->valueLabel()->setText(QString::number(value));
     });
     spacingSlider->committed = [this](int value) {
         const auto *settings = appearanceEdit.edited() && appearanceEdit.ready()
@@ -1506,9 +1516,6 @@ void Reader::buildSettings()
                                               settingsDictionaryFontSize = percent;
                                               showSettingsFonts();
                                           });
-        settingsFontPopup = settings->fontDialog;
-        if (settingsFontPopup)
-            settingsFontPopup->installEventFilter(this);
     });
     connect(settings->uiMonoFontButton, &QPushButton::clicked, this,
             [this] { openSettingsFont("ui_mono_font_face"); });
@@ -1565,14 +1572,16 @@ void Reader::buildSettings()
         settings->showButtonControls(buttons, preferences, [this](const QJsonObject &actions) {
             saveButtonControls(actions);
         });
-        settingsFontPopup = settings->fontDialog;
-        if (settingsFontPopup) {
-            settingsFontPopup->installEventFilter(this);
-            for (auto *widget : settingsFontPopup->findChildren<QWidget *>())
-                textRefresh(widget);
-            textRefresh(settingsFontPopup);
-        }
     });
+    // Every Settings sheet gets the reader's text refresh and stays above
+    // the panels; see popups(). The application event filter already sees
+    // its input.
+    settings->sheetShown = [this](ui::ModalOverlay *sheet) {
+        settingsSheet = sheet;
+        for (auto *widget : sheet->findChildren<QWidget *>())
+            textRefresh(widget);
+        textRefresh(sheet);
+    };
     settings->automaticOpeningChosen = [this](bool enabled) { applyAutomaticOpening(enabled); };
     // Zen mode's settings page opens the Light panel as the Light tab would.
     settings->zenLightRequested = [this] { toggleLight(); };
@@ -1683,10 +1692,9 @@ void Reader::connectLightGestures()
     lightFeedback.setInterval(metrics::lightSwipe::feedbackMilliseconds);
     connect(&lightFeedback, &QTimer::timeout, this, [this] {
         if (lightFeedbackLevel < 0 || !takesInput() || book->deviceTransition() || annotationMode
-            || session->busy() || general->isVisible() || topControls->isVisible()
-            || appearanceEdit.panelOpen() || choices->isVisible() || dictionaryPanel->isVisible()
-            || searchPanel->isVisible() || linksActive() || lookupPending || syncDialog
-            || kosyncDialog || finishDialog || lightPopup->isVisible())
+            || session->busy() || sheetOpen() || topControls->isVisible()
+            || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive()
+            || lookupPending || positionPromptOpen() || lightPopup->isVisible())
             return;
         brightnessNotice->setLevel(gestureWarmth, lightFeedbackLevel);
         brightnessNotice->show();

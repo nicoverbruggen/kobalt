@@ -3870,7 +3870,7 @@ int main(int argc, char **argv)
         settings.show();
         app.processEvents();
         const auto sampleHeight = [&settings](const char *name) {
-            auto *option = settings.fontDialog->findChild<QWidget *>(name);
+            auto *option = settings.sheet->findChild<QWidget *>(name);
             require(option && option->isVisible(), "Dictionary size preview is missing");
             const auto image = option->grab().toImage().convertToFormat(QImage::Format_RGB32);
             int first = image.height(), last = -1;
@@ -3889,12 +3889,12 @@ int main(int argc, char **argv)
             const int small = sampleHeight("rrDictionaryFontSize80");
             require(small > 0 && sampleHeight("rrDictionaryFontSize140") > small,
                     "Dictionary size previews do not draw the selected text sizes");
-            auto *option = settings.fontDialog->findChild<QWidget *>("rrDictionaryFontSize140");
+            auto *option = settings.sheet->findChild<QWidget *>("rrDictionaryFontSize140");
             auto *preview = option->findChild<QWidget *>("rrDictionaryFontPreview140");
             require(preview && option->rect().contains(preview->geometry()),
                     "Extra large dictionary preview escapes its row");
             for (int percent : { 80, 100, 120, 140 }) {
-                auto *choice = settings.fontDialog->findChild<QAbstractButton *>(
+                auto *choice = settings.sheet->findChild<QAbstractButton *>(
                         QString("rrDictionaryFontSize%1").arg(percent));
                 require(choice
                                 && choice->text()
@@ -3904,7 +3904,7 @@ int main(int argc, char **argv)
                 require(choice->accessibleName()
                                 == kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(percent),
                         "Dictionary size choice lost its accessible name");
-                auto *sample = settings.fontDialog->findChild<QWidget *>(
+                auto *sample = settings.sheet->findChild<QWidget *>(
                         QString("rrDictionaryFontPreview%1").arg(percent));
                 auto *label = sample->findChild<QLabel *>();
                 require(label, "Dictionary preview has no sample label");
@@ -3929,7 +3929,7 @@ int main(int argc, char **argv)
                                 && pixels.height() - ink.bottom() - 1 >= kobalt::ui::px(8),
                         "Dictionary preview ink has insufficient padding");
             }
-            settings.dismissFontChoices();
+            settings.dismissSheet();
         }
         const auto savedScale = kobalt::ui::textScale();
         const auto savedSize = reader.size();
@@ -3943,7 +3943,7 @@ int main(int argc, char **argv)
                 const QStringList shortNames{ "S", "M", "L", "XL" };
                 int index = 0;
                 for (int percent : { 80, 100, 120, 140 }) {
-                    auto *choice = settings.fontDialog->findChild<QAbstractButton *>(
+                    auto *choice = settings.sheet->findChild<QAbstractButton *>(
                             QString("rrDictionaryFontSize%1").arg(percent));
                     const auto name =
                             kobalt::reader::SettingsPanel::dictionaryFontSizeLabel(percent);
@@ -3954,7 +3954,7 @@ int main(int argc, char **argv)
                             "Dictionary size choice lost its full accessible name");
                     ++index;
                 }
-                settings.dismissFontChoices();
+                settings.dismissSheet();
             }
         }
         reader.resize(savedSize);
@@ -3967,9 +3967,9 @@ int main(int argc, char **argv)
         });
         app.processEvents();
         auto *indent = static_cast<kobalt::ui::SettingSlider *>(
-                settings.fontDialog->findChild<QSlider *>("rrParagraphIndentSlider"));
+                settings.sheet->findChild<QSlider *>("rrParagraphIndentSlider"));
         auto *gap = static_cast<kobalt::ui::SettingSlider *>(
-                settings.fontDialog->findChild<QSlider *>("rrParagraphSpacingSlider"));
+                settings.sheet->findChild<QSlider *>("rrParagraphSpacingSlider"));
         require(indent && gap, "Paragraph adjustment sliders are missing");
         const int inset = kobalt::ui::metrics::control::sliderInset;
         const auto xAt = [inset](kobalt::ui::SettingSlider *control, double position) {
@@ -4079,14 +4079,14 @@ int main(int argc, char **argv)
         require(indent->value() == 60 && paragraphCommits == beforeTouchCancel,
                 "Multi-touch indent drag lost its fine value or committed");
         indent->setValue(60);
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentMore")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphIndentMore")->click();
         require(chosenIndent == 61, "Indent plus did not keep one-percent adjustment");
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentLess")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphIndentLess")->click();
         require(chosenIndent == 60, "Indent minus snapped instead of adjusting one percent");
         indent->setValue(0);
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentLess")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphIndentLess")->click();
         require(chosenIndent == -1, "Indent minus did not reach Publisher");
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphIndentMore")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphIndentMore")->click();
         require(chosenIndent == 0, "Indent plus did not leave Publisher at zero");
         const QVector<int> gapStops{ -1, 0, 25, 50, 75, 100, 125, 150, 175, 200 };
         const QVector<double> gapPositions{ 0, .2, .3, .4, .5, .6, .7, .8, .9, 1 };
@@ -4136,14 +4136,14 @@ int main(int argc, char **argv)
         touch(gap, QEvent::TouchEnd, gapQuarter);
         require(gap->value() == 60 && paragraphCommits == beforeGapCancel,
                 "Cancelled paragraph gap drag lost its fine value or committed");
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
         require(chosenGap == 61, "Paragraph gap plus did not keep one-percent adjustment");
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
         require(chosenGap == 60, "Paragraph gap minus snapped instead of adjusting one percent");
         gap->setValue(0);
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingLess")->click();
         require(chosenGap == -1, "Paragraph gap minus did not reach Publisher");
-        settings.fontDialog->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
+        settings.sheet->findChild<QPushButton *>("rrParagraphSpacingMore")->click();
         require(chosenGap == 0, "Paragraph gap plus did not leave Publisher at zero");
         // Compare complete rail and label pixels with the original visible stops.
         for (auto *control : { indent, gap }) {
@@ -4195,7 +4195,7 @@ int main(int argc, char **argv)
                             "Hidden paragraph stop drew a visible tick");
             }
         }
-        settings.dismissFontChoices();
+        settings.dismissSheet();
     }
     {
         kobalt::ui::PagedText text(&reader);

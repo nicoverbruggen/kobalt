@@ -3554,6 +3554,42 @@ private slots:
         QTRY_VERIFY(fixture.visible("rrChapter9999"));
     }
 
+    // Checks that a Settings choice pop-up closes on a backdrop tap and stays open on a tap on its title or padding.
+    void settingsChoicePopupDismissal()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        for (const auto *row : { "rrScreenRefresh", "rrChapterGroups" }) {
+            const auto popup = QByteArray(row) + "Popup", title = QByteArray(row) + "Title";
+            QVERIFY(fixture.press(qstrcmp(row, "rrScreenRefresh") ? "rrSettingsControls"
+                                                                  : "rrSettingsDisplay"));
+            QVERIFY(fixture.press(row));
+            QTRY_VERIFY(fixture.visible(popup.constData()));
+            auto *overlay = static_cast<ui::ModalOverlay *>(fixture.widget(popup.constData()));
+            auto *card = overlay->card();
+            QVERIFY(fixture.press(title.constData()));
+            QVERIFY(fixture.click(card, QPoint(card->width() / 2, 1)));
+            QCoreApplication::processEvents();
+            QVERIFY(fixture.visible(popup.constData()));
+            const QPoint backdrop(card->x() / 2, card->y() / 2);
+            QVERIFY(!card->geometry().contains(backdrop));
+            QVERIFY(fixture.click(overlay, backdrop));
+            QTRY_VERIFY(!fixture.widget(popup.constData()));
+            // The row still opens the pop-up after a dismissal.
+            QVERIFY(fixture.press(row));
+            QTRY_VERIFY(fixture.visible(popup.constData()));
+            QVERIFY(fixture.click(
+                    static_cast<ui::ModalOverlay *>(fixture.widget(popup.constData())), backdrop));
+            QTRY_VERIFY(!fixture.widget(popup.constData()));
+        }
+    }
+
     void chapterGroups_data() { variants(); }
 
     void chapterGroups()

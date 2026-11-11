@@ -778,7 +778,7 @@ QVector<QWidget *> Reader::popups() const
              brightnessNotice,
              annotationModeNotice,
              fontDefaultDialog.data(),
-             settingsFontPopup.data(),
+             settingsSheet.data(),
              kosyncPage ? kosyncPage->editorDialog.data() : nullptr,
              bookmarkList ? bookmarkList->pinDialog() : nullptr,
              kosyncDialog.data(),
@@ -1066,40 +1066,6 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
             syncStatusBoundary();
         });
     }
-    // The overlay itself only receives taps outside the refresh card.
-    if (refreshPopup && watched == refreshPopup && type == QEvent::MouseButtonRelease) {
-        closeScreenRefresh();
-        return true;
-    }
-    if (sleepPopup && watched == sleepPopup && type == QEvent::MouseButtonRelease) {
-        closeSleepScreen();
-        return true;
-    }
-    if (tapZonesPopup && watched == tapZonesPopup && type == QEvent::MouseButtonRelease) {
-        closeTapZones();
-        return true;
-    }
-    if (navigationBarPopup && watched == navigationBarPopup && type == QEvent::MouseButtonRelease) {
-        closeNavigationBarButtons();
-        return true;
-    }
-    if (chapterGroupsPopup && watched == chapterGroupsPopup && type == QEvent::MouseButtonRelease) {
-        closeChapterGroups();
-        return true;
-    }
-    if (tappableLinksPopup && watched == tappableLinksPopup && type == QEvent::MouseButtonRelease) {
-        closeTappableLinks();
-        return true;
-    }
-    if (menuViewPopup && watched == menuViewPopup && type == QEvent::MouseButtonRelease) {
-        closeMenuView();
-        return true;
-    }
-    if (pageNavigationPopup && watched == pageNavigationPopup
-        && type == QEvent::MouseButtonRelease) {
-        closePageNavigation();
-        return true;
-    }
     // Panels are raised as they open, and a panel created later starts
     // above older widgets. Either can cover a centred pop-up, so put the
     // visible pop-ups back on top whenever another child moves up.
@@ -1140,13 +1106,12 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
             QPointF point;
             if (!pressPoint(point))
                 return QWidget::eventFilter(watched, event);
-            const auto openingMenu = [&](const char *name) {
-                const auto *button = findChild<QPushButton *>(name);
+            const auto openingMenu = [&](const QPushButton *button) {
                 return button->isVisible() && button->isEnabled()
                         && QRect(button->mapToGlobal(QPoint()), button->size())
                                    .contains(point.toPoint());
             };
-            if (!openingMenu("rrLight") && !openingMenu("rrSettings")
+            if (!openingMenu(toolbarButtons.light) && !openingMenu(toolbarButtons.settings)
                 && !QRect(choices->mapToGlobal(QPoint()), choices->size())
                             .contains(point.toPoint())) {
                 dismissing = true;
@@ -3181,8 +3146,7 @@ void Reader::save(bool snapshot, bool background, bool persist)
     state["menu_clock_font"] = QFontInfo(menuClock->font()).family();
     state["menu_battery_font"] = QFontInfo(menuBattery->font()).family();
     state["ui_icon_set"] = QStringLiteral("Lucide");
-    state["typography_button_font"] =
-            QFontInfo(findChild<QPushButton *>("rrTypography")->font()).family();
+    state["typography_button_font"] = QFontInfo(toolbarButtons.typography->font()).family();
     state["benchmark_typography"] = session->temporaryTypography();
     state["display_settings"] = preferences;
     state["header_text_pixels"] = page->headerTextPixels();

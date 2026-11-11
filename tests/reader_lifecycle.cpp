@@ -4931,6 +4931,24 @@ private slots:
         QVERIFY(text.contains(".adds/screensaver"));
         if (!capture.isEmpty())
             QVERIFY(host.window()->grab().save(capture + "/sleep-overlay-help.png"));
+        // The card has no other action, so its button closes it. A tap on the
+        // card's text keeps it open.
+        auto *title = help->findChild<QWidget *>("rrSleepOverlayHelpTitle");
+        QVERIFY(title);
+        QVERIFY(clickAt(canvas, title->mapTo(canvas.surface(), title->rect().center())));
+        QVERIFY(help->isVisible());
+        auto *close = help->findChild<QPushButton *>("rrSleepOverlayHelpClose");
+        QVERIFY(close && close->isVisible());
+        QVERIFY(click(canvas, close));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepOverlayHelpPopup"));
+        QVERIFY(gallery->isVisible());
+        // A tap on the backdrop also closes only the help, not the gallery.
+        QVERIFY(clickAt(canvas, grid->mapTo(canvas.surface(), cell)));
+        QTRY_VERIFY((help = host.window()->findChild<QWidget *>("rrSleepOverlayHelpPopup"))
+                    && help->isVisible());
+        QVERIFY(clickAt(canvas, help->mapTo(canvas.surface(), QPoint(help->width() / 2, 4))));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepOverlayHelpPopup"));
+        QVERIFY(gallery->isVisible());
     }
 
     void sleepGreetingEditor()

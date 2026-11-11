@@ -355,7 +355,10 @@ void KosyncPage::edit(int field)
         editor->setEchoMode(QLineEdit::Password);
     ui::readerStyle(
             editor,
-            "QLineEdit{border:none;border-radius:0;padding:0;background:palette(window);color:palette(window-text);"
+            QString("QLineEdit{border:%1;border-radius:0;padding:0;background:palette(window);color:palette(window-text);")
+                            .arg(field == 2 ? QString("%1px solid palette(mid)")
+                                                      .arg(int(metrics::control::border))
+                                            : QStringLiteral("none"))
                     + ui::styles::font(metrics::chrome::labelText) + "}");
     editor->setTextMargins(metrics::notice::cardMargins.left(), 0,
                            metrics::notice::cardMargins.right(), 0);
@@ -365,8 +368,10 @@ void KosyncPage::edit(int field)
     if (field == 2) {
         auto *row = new QWidget(card);
         auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(0, 0, metrics::notice::cardMargins.right(), 0);
-        layout->setSpacing(0);
+        layout->setContentsMargins(metrics::notice::cardMargins.left(),
+                                   metrics::notice::cardMargins.top(),
+                                   metrics::notice::cardMargins.right(), metrics::notice::cardGap);
+        layout->setSpacing(metrics::notice::cardGap);
         layout->addWidget(editor, 1);
         auto *reveal = ui::makeButton(row, layout, "rrKosyncPasswordReveal",
                                       strings::get("kosync.show_password"), [] { });
@@ -547,6 +552,14 @@ void KosyncPage::placeEditor()
     int bottom = editorDialog->height() / 2;
     if (!bounds.isEmpty())
         bottom = editorDialog->mapFrom(overlayParent_->window(), bounds.topLeft()).y();
+    auto *card = editorDialog->card();
+    if (card->height() > bottom && editorDialog->width() > editorDialog->height()) {
+        if (auto *reveal = editorDialog->findChild<QPushButton *>("rrKosyncPasswordReveal"))
+            reveal->parentWidget()->layout()->setContentsMargins(
+                    metrics::notice::cardMargins.left(), 0, metrics::notice::cardMargins.right(),
+                    0);
+        card->fitToWidth(editorDialog->width() - 2 * int(metrics::notice::sideClearance));
+    }
     editorDialog->setCardArea(QRect(0, 0, editorDialog->width(), qMax(1, bottom)));
 }
 

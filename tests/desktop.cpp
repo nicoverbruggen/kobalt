@@ -579,10 +579,21 @@ struct Fixture
 
     QJsonObject state()
     {
-        if (auto *reader = window.readerWindow()) {
-            reader->checkpoint();
+        auto *reader = window.readerWindow();
+        if (!reader)
+            return storage::readJson(paths.stateReport);
+        reader->checkpoint();
+        // The writer thread renames each new report over the last one. In a
+        // folder that a container shares from the host, a read during that
+        // rename can find no file, so read again until the report is there.
+        QElapsedTimer waited;
+        waited.start();
+        auto report = storage::readJson(paths.stateReport);
+        while (report.isEmpty() && waited.elapsed() < 1000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+            report = storage::readJson(paths.stateReport);
         }
-        return storage::readJson(paths.stateReport);
+        return report;
     }
 
     bool turnPage(int direction)
@@ -9112,8 +9123,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        // A new screen size repaginates the book, which takes longer under load.
         fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(2);
-        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 10000);
         if (!fixture.visible("rrNavLayout"))
             QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrNavLayout"));

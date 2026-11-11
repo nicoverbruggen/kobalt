@@ -1,5 +1,7 @@
 # Diagnostics checks
 
+Hosts install diagnostic providers before logging starts. Providers supply process measurements, descriptor summaries, boot time and startup metadata. Shared diagnostics retain app counters, batching and pressure reporting. An absent measurement stays absent. The model checks cover supplied and unavailable measurements, worker-thread sampling and boot-clock fields. Kobo owns firmware parsing and descriptor naming for its folders.
+
 Label `diagnostics`. Build `mac-tests`, then run `ctest --preset mac -L diagnostics` from `platforms/desktop/`. `ctest --preset mac -N -L diagnostics` lists its tests.
 
 These checks cover the diagnostic log, its batches and limits, descriptor-exhaustion reports, crash reports, the storage diagnostics in the desktop app and the Kobo standby input guard and diagnostics. `platform.standby-input` and `platform.standby-diagnostics` run the Kobo standby code with injected reads, writes and hooks, in processes with and without verbose diagnostics. [Page-turn diagnostics](#page-turn-diagnostics) describes the events that these checks protect.

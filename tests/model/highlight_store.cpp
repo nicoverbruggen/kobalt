@@ -1,3 +1,4 @@
+#include "platform/qt/export_file.h"
 #include "storage/highlight_store.h"
 #include "storage/bookmark_store.h"
 #include "storage/annotation_export.h"
@@ -47,6 +48,20 @@ void replace(const QString &path, const QByteArray &data)
 } // namespace
 
 // Checks the highlight store and ZIP export: Markdown and HTML entries, notes, the embedded font and destinations.
+static QString exportAnnotations(const QString &directory, const QString &identity,
+                                 const QString &title, const QString &author,
+                                 const QVector<Highlight> &rows, AnnotationExportFormat format,
+                                 const QByteArray &font = {})
+{
+    const auto name = annotationExportFileName(identity, title, format);
+    const auto archive = annotationExportArchive(title, author, rows, format,
+                                                 QDateTime::currentDateTimeUtc(), font);
+    if (directory.isEmpty() || name.isEmpty() || archive.isEmpty() || !QDir().mkpath(directory))
+        return {};
+    const auto path = QDir(directory).filePath(name);
+    return platform::writeLocalExport(QUrl::fromLocalFile(path), archive) ? path : QString();
+}
+
 int main()
 {
     // These cases obstruct legacy JSON files; SQLite behavior has its own database regressions.
@@ -98,14 +113,14 @@ int main()
     require(html.contains("id=\"show-markup\" checked") && html.contains("Show annotation styling"),
             "HTML has no checked styling toggle");
     const auto chosenPath = root.path() + "/chosen name.zip";
-    require(writeAnnotationExport(QUrl::fromLocalFile(chosenPath), archive)
+    require(platform::writeLocalExport(QUrl::fromLocalFile(chosenPath), archive)
                     && bytes(chosenPath) == archive,
             "Export to a chosen location changed the ZIP");
-    require(!writeAnnotationExport(QUrl::fromLocalFile(chosenPath), {})
+    require(!platform::writeLocalExport(QUrl::fromLocalFile(chosenPath), {})
                     && bytes(chosenPath) == archive,
             "An empty export replaced the chosen file");
-    require(!writeAnnotationExport(QUrl("https://example.com/export.zip"), archive)
-                    && !writeAnnotationExport(
+    require(!platform::writeLocalExport(QUrl("https://example.com/export.zip"), archive)
+                    && !platform::writeLocalExport(
                             QUrl::fromLocalFile(root.path() + "/missing/fail.zip"), archive),
             "Unsupported or unavailable export destination succeeded");
     require(markdown.contains("&lt;script&gt;") && !markdown.contains("<script>")

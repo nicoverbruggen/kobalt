@@ -1,3 +1,4 @@
+#include "../common/diagnostics.h"
 #include "platforms/kobo/common/standby_diagnostics.h"
 #include "support/qt_compat.h"
 #include "hooks.h"
@@ -421,6 +422,7 @@ int initialize()
     kobalt::installCrashReports(QString::fromLatin1(configDir) + "/crash-reporting",
                                 QStringLiteral("/mnt/onboard"));
 #endif
+    kobalt::setDiagnosticSystem(kobalt::nickel::diagnosticSystem());
     kobalt::initializeDiagnostics(QString::fromLatin1(configDir) + "/diagnostics",
                                   kobalt::diagnosticsRequested(QString::fromLatin1(configDir)));
     kobalt::initializeStandbyDiagnostics();

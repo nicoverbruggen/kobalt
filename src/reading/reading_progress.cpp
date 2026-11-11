@@ -1,26 +1,7 @@
 #include "support/qt_compat.h"
 #include "reading_progress.h"
-#include <QRegularExpression>
 
 namespace kobalt {
-namespace {
-bool droppedKepubOffset(const ReadingProgress &saved, const ReadingProgress &incoming)
-{
-    if (!saved.valid || !incoming.valid || saved.book != incoming.book
-        || saved.status != incoming.status || saved.modified != incoming.modified)
-        return false;
-    static const QRegularExpression position(
-            QStringLiteral("\\A([^#]+#kobo\\.[0-9]+\\.[0-9]+):([0-9]+)\\z"));
-    const auto match = position.match(saved.location);
-    bool validOffset = false;
-    const int offset = match.captured(2).toInt(&validOffset);
-    if (!match.hasMatch() || !validOffset || offset <= 0)
-        return false;
-    const auto span = match.captured(1);
-    return incoming.location == span || incoming.location == span + QLatin1String(":0");
-}
-} // namespace
-
 // Nickel's reader counts the page on screen as read and rounds down: page 1
 // of 83 is 1%, page 82 is 98% and the last page is 100%. Kobalt uses the same
 // count, so Kobo's library shows the number that Kobalt shows.
@@ -71,11 +52,10 @@ void ProgressReconciler::observe(const ReadingProgress &incoming)
     // An older timestamp still needs a choice when its position has changed.
     if (!incoming.valid || incoming.book != latest.book || incoming == latest)
         return;
-    // Nickel can drop a KEPUB character offset without advancing its timestamp.
-    // Accept that native baseline without moving the precise local position.
-    // Other changed positions still need a choice, including nonzero offsets.
-    const bool duplicate =
-            incoming.samePosition(acknowledged) || droppedKepubOffset(acknowledged, incoming);
+    // A host may recognize a normalized observation of the acknowledged
+    // position. This does not weaken exact comparisons before a write.
+    const bool duplicate = incoming.samePosition(acknowledged)
+            || (normalization && normalization(acknowledged, incoming));
     latest = incoming;
     if (duplicate)
         acknowledged = incoming;

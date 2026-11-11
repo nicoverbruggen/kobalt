@@ -1,6 +1,7 @@
 #include "build_info.h"
 #include "qt_compat.h"
 #include "diagnostics.h"
+#include "platform/api/diagnostic_system.h"
 #include "crash_context.h"
 #include "main_thread.h"
 #include "strings.h"
@@ -8,7 +9,6 @@
 #include <QCoreApplication>
 #include <QThread>
 #include <QDir>
-#include <QHash>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -17,13 +17,11 @@
 #include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QRegularExpression>
 #include <QVector>
 #include <QWaitCondition>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
-#include <dirent.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -32,15 +30,8 @@
 #include <deque>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/resource.h>
-#include <dirent.h>
 #include <thread>
-#include <time.h>
 #include <unistd.h>
-#ifdef __APPLE__
-#  include <mach/mach.h>
-#  include <sys/resource.h>
-#endif
 
 namespace kobalt {
 namespace {
@@ -50,6 +41,14 @@ QString logPath;
 bool paused = false, detailed = true;
 bool syncing = true;
 std::function<void(const QJsonObject &)> observer;
+DiagnosticSystem diagnosticSystem;
+
+DiagnosticSystem systemProvider()
+{
+    QMutexLocker lock(&mutex);
+    return diagnosticSystem;
+}
+
 constexpr qint64 normalLimit = 128 * 1024;
 constexpr qint64 verboseLimit = 16 * 1024 * 1024;
 constexpr int verboseHistory = 5;
@@ -375,88 +374,16 @@ std::atomic<qint64> memoryBase{ -1 };
 // part above the base once it is known.
 void addMemory(QJsonObject &fields)
 {
-#ifdef __APPLE__
-    mach_task_basic_info_data_t info{};
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info),
-                  &count)
-        == KERN_SUCCESS)
-        fields["rss_kib"] = double(info.resident_size / 1024);
-    rusage usage{};
-    // The Mac reports the peak in bytes, Linux in KiB.
-    if (getrusage(RUSAGE_SELF, &usage) == 0)
-        fields["peak_rss_kib"] = double(usage.ru_maxrss / 1024);
-#else
-    // These are worker-time samples, not readings taken at the input event.
-    fields["sample_monotonic_ms"] = double(monotonicMilliseconds());
-    QFile frequency("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
-    if (frequency.open(QIODevice::ReadOnly)) {
-        bool ok = false;
-        const auto khz = frequency.read(64).trimmed().toLongLong(&ok);
-        if (ok && khz > 0)
-            fields["cpu_khz"] = double(khz);
+    const auto system = systemProvider();
+    if (system.sample) {
+        const auto sample = system.sample(monotonicMilliseconds());
+        for (auto it = sample.begin(); it != sample.end(); ++it)
+            fields[it.key()] = it.value();
     }
-    QFile memory("/proc/self/status");
-    if (memory.open(QIODevice::ReadOnly)) {
-        for (const auto &line : memory.readAll().split('\n')) {
-            if (line.startsWith("VmSize:") || line.startsWith("VmData:")
-                || line.startsWith("Threads:")) {
-                const auto parts = line.simplified().split(' ');
-                if (parts.size() >= 2)
-                    fields[line.startsWith("VmSize:")           ? "virtual_kib"
-                                   : line.startsWith("VmData:") ? "data_kib"
-                                                                : "threads"] = parts[1].toDouble();
-            }
-            if (line.startsWith("VmRSS:") || line.startsWith("VmHWM:")) {
-                const auto parts = line.simplified().split(' ');
-                if (parts.size() >= 2)
-                    fields[line.startsWith("VmRSS:") ? "rss_kib" : "peak_rss_kib"] =
-                            parts[1].toDouble();
-            }
-        }
-    }
-#endif
     fields["private_font_bytes"] = retainedFontBytes.load();
     fields["native_fallback_font_bytes"] = nativeFontBytes.load();
     fields["font_preview_bitmap_bytes"] = previewBytes.load();
     fields["resource_sample_monotonic_ms"] = double(monotonicMilliseconds());
-#ifdef __linux__
-    QFile systemMemory("/proc/meminfo");
-    if (systemMemory.open(QIODevice::ReadOnly)) {
-        for (const auto &line : systemMemory.readAll().split('\n')) {
-            const auto parts = line.simplified().split(' ');
-            if (parts.size() < 2)
-                continue;
-            if (parts[0] == "MemAvailable:")
-                fields["available_kib"] = parts[1].toDouble();
-            if (parts[0] == "MemFree:")
-                fields["free_kib"] = parts[1].toDouble();
-        }
-    }
-    // Do not count the sampler's own proc/sysfs handles as application usage.
-    systemMemory.close();
-    memory.close();
-    frequency.close();
-    if (auto *directory = opendir("/proc/self/fd")) {
-        int count = 0, highest = -1;
-        while (const auto *entry = readdir(directory)) {
-            char *end = nullptr;
-            const long fd = std::strtol(entry->d_name, &end, 10);
-            if (!entry->d_name[0] || *end || fd < 0 || fd == dirfd(directory))
-                continue;
-            ++count;
-            highest = qMax(highest, int(fd));
-        }
-        closedir(directory);
-        fields["fd_count"] = count;
-        fields["fd_highest"] = highest;
-    }
-#endif
-    rlimit limit{};
-    if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
-        fields["fd_soft_limit"] = limit.rlim_cur == RLIM_INFINITY ? -1.0 : double(limit.rlim_cur);
-        fields["fd_hard_limit"] = limit.rlim_max == RLIM_INFINITY ? -1.0 : double(limit.rlim_max);
-    }
     // Keep pressure evidence even in release logs. The available value is not
     // interchangeable with MemFree; old kernels may provide only the latter.
     const bool low = fields.contains("available_kib")
@@ -490,6 +417,12 @@ void addMemory(QJsonObject &fields)
 }
 } // namespace
 
+void setDiagnosticSystem(DiagnosticSystem system)
+{
+    QMutexLocker lock(&mutex);
+    diagnosticSystem = std::move(system);
+}
+
 void setDiagnosticFontBytes(qint64 bytes)
 {
     retainedFontBytes.store(int(bytes));
@@ -515,28 +448,6 @@ void setDiagnosticObserver(std::function<void(const QJsonObject &)> value)
 {
     QMutexLocker lock(&mutex);
     observer = std::move(value);
-}
-
-QJsonObject diagnosticDeviceFields(const QByteArray &version)
-{
-    const auto fields = version.trimmed().split(',');
-    if (fields.size() != 6) {
-        return {};
-    }
-    QJsonObject result;
-    const auto firmware = QString::fromLatin1(fields[2].trimmed());
-    const auto hardware = QString::fromLatin1(fields[5].trimmed());
-    // Persist only model and firmware fields. The first field is the serial.
-    static const QRegularExpression firmwarePattern(QStringLiteral("^[0-9]+(?:\\.[0-9]+){2,}$"));
-    static const QRegularExpression hardwarePattern(
-            QStringLiteral("^00000000-0000-0000-0000-[0-9]{12}$"));
-    if (firmwarePattern.match(firmware).hasMatch()) {
-        result["firmware"] = firmware;
-    }
-    if (hardwarePattern.match(hardware).hasMatch()) {
-        result["hardware_uuid"] = hardware;
-    }
-    return result;
 }
 
 QString diagnosticErrorCode(const QString &reason)
@@ -597,15 +508,12 @@ void initializeDiagnostics(const QString &directory, bool verbose)
 #ifdef KOBALT_VERSION
     fields["version"] = QString::fromLatin1(KOBALT_VERSION);
 #endif
-#ifdef KOBALT_READER_HARDWARE
-    QFile version("/mnt/onboard/.kobo/version");
-    if (version.open(QIODevice::ReadOnly)) {
-        const auto device = diagnosticDeviceFields(version.read(512));
-        for (auto it = device.begin(); it != device.end(); ++it) {
+    const auto system = systemProvider();
+    if (system.startup) {
+        const auto device = system.startup();
+        for (auto it = device.begin(); it != device.end(); ++it)
             fields[it.key()] = it.value();
-        }
     }
-#endif
     fields["source_commit"] = QString::fromLatin1(kobaltCommit);
     fields["source_modified"] = bool(KOBALT_COMMIT_MODIFIED);
     fields["verbose"] = verbose;
@@ -714,17 +622,15 @@ void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severi
     }
     Entry entry{ {},       QByteArray(event),       std::move(fields),
                  severity, monotonicMilliseconds(), QDateTime::currentMSecsSinceEpoch() };
-#ifdef __linux__
-    timespec boot{};
-    if (clock_gettime(CLOCK_BOOTTIME, &boot) == 0)
-        entry.boot = qint64(boot.tv_sec) * 1000 + boot.tv_nsec / 1000000;
-#endif
+
     entry.thread = reinterpret_cast<quintptr>(QThread::currentThreadId());
     entry.mainThread = QCoreApplication::instance()
             && QThread::currentThread() == QCoreApplication::instance()->thread();
     std::function<void(const QJsonObject &)> notify;
     {
         QMutexLocker lock(&mutex);
+        if (diagnosticSystem.bootMilliseconds)
+            entry.boot = diagnosticSystem.bootMilliseconds();
         if (!paused && !logPath.isEmpty()) {
             entry.path = logPath;
             entry.fileLimit = detailed ? verboseLimit : normalLimit;
@@ -772,30 +678,6 @@ bool flushDiagnostics(int milliseconds)
     return drain(milliseconds);
 }
 
-namespace {
-// Event logs never carry book paths. System files, Kobalt's and other mods'
-// folders and the files directly in Nickel's .kobo folder keep their path. Its
-// subfolders name store books by their IDs, and other platforms keep imported
-// books beside the profile, so those and any other file are named only by
-// their extension.
-QString descriptorTarget(const QString &path)
-{
-    static const char *const kept[] = { "/dev/", "/proc/", "/sys/", "/usr/",
-                                        "/lib/", "/etc/",  "/bin/", "/mnt/onboard/.adds/" };
-    for (const auto *prefix : kept)
-        if (path.startsWith(QLatin1String(prefix)))
-            return path;
-    static const QLatin1String nickel("/mnt/onboard/.kobo/");
-    if (path.startsWith(nickel) && !path.mid(nickel.size()).contains('/'))
-        return path;
-    const auto name = path.section('/', -1);
-    const auto suffix = name.contains('.') ? name.section('.', -1) : QString();
-    static const QRegularExpression plain("^[A-Za-z0-9]{1,8}$");
-    return plain.match(suffix).hasMatch() ? QStringLiteral("other file .") + suffix.toLower()
-                                          : QStringLiteral("other file");
-}
-} // namespace
-
 void reportDescriptorExhaustion(const char *context, int error)
 {
     if (error != EMFILE && error != ENFILE)
@@ -808,72 +690,13 @@ void reportDescriptorExhaustion(const char *context, int error)
         errno = savedError;
         return;
     }
+    const auto system = systemProvider();
     releaseDescriptorReserve();
-    int total = 0, files = 0, sockets = 0, pipes = 0, inotify = 0, other = 0;
-    bool listed = false;
-    QHash<QString, int> targets;
-#ifdef Q_OS_MACOS
-    // macOS lists descriptors without link targets, so it reports only the total.
-    const char *directoryPath = "/dev/fd";
-#else
-    const char *directoryPath = "/proc/self/fd";
-#endif
-    if (DIR *directory = ::opendir(directoryPath)) {
-        listed = true;
-        const int own = ::dirfd(directory);
-        while (const auto *entry = ::readdir(directory)) {
-            if (entry->d_name[0] == '.' || std::atoi(entry->d_name) == own)
-                continue;
-            ++total;
-            char target[512];
-            const auto link = QByteArray(directoryPath) + '/' + entry->d_name;
-            const auto length = ::readlink(link.constData(), target, sizeof(target) - 1);
-            if (length <= 0) {
-                ++other;
-                continue;
-            }
-            target[length] = 0;
-            if (std::strncmp(target, "socket:", 7) == 0)
-                ++sockets;
-            else if (std::strncmp(target, "pipe:", 5) == 0)
-                ++pipes;
-            else if (std::strcmp(target, "anon_inode:inotify") == 0)
-                ++inotify;
-            else if (target[0] == '/') {
-                ++files;
-                ++targets[QString::fromLocal8Bit(target)];
-            } else
-                ++other;
-        }
-        ::closedir(directory);
-    }
-    // Take the slot back at once, before whatever leaks takes it.
+    auto fields = system.descriptors ? system.descriptors() : qt::object({ { "listed", false } });
     takeDescriptorReserve();
-    QHash<QString, int> named;
-    for (auto it = targets.cbegin(); it != targets.cend(); ++it)
-        named[descriptorTarget(it.key())] += it.value();
-    QVector<QPair<int, QString>> ranked;
-    for (auto it = named.cbegin(); it != named.cend(); ++it)
-        ranked.append({ it.value(), it.key() });
-    std::sort(ranked.begin(), ranked.end(),
-              [](const QPair<int, QString> &a, const QPair<int, QString> &b) {
-                  return a.first != b.first ? a.first > b.first : a.second < b.second;
-              });
-    QJsonArray top;
-    for (int i = 0; i < ranked.size() && i < 5; ++i)
-        top.append(qt::object({ { "path", ranked[i].second }, { "count", ranked[i].first } }));
-    diagnostic("descriptor-exhaustion",
-               qt::object({ { "context", QString::fromLatin1(context) },
-                            { "errno", error },
-                            { "listed", listed },
-                            { "open", total },
-                            { "files", files },
-                            { "sockets", sockets },
-                            { "pipes", pipes },
-                            { "inotify", inotify },
-                            { "other", other },
-                            { "most_opened", top } }),
-               DiagnosticSeverity::Error);
+    fields["context"] = QString::fromLatin1(context);
+    fields["errno"] = error;
+    diagnostic("descriptor-exhaustion", fields, DiagnosticSeverity::Error);
     errno = savedError;
 }
 } // namespace kobalt

@@ -8,7 +8,6 @@
 #include <functional>
 
 namespace kobalt {
-QJsonObject diagnosticDeviceFields(const QByteArray &version);
 QString diagnosticErrorCode(const QString &reason);
 // Owners publish counters; the worker samples them without touching GUI caches.
 void setDiagnosticFontBytes(qint64 bytes);

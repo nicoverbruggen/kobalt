@@ -59,17 +59,18 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
                          storage::Paths paths, QString identity, QByteArray digest,
                          std::unique_ptr<ReadingBridge> bridge, ReadingProgress baseline,
                          ReadingProgress diskBaseline, QString sourceKey,
-                         ReadingHistory::UtcClock utc, bool koboCloud)
+                         ReadingHistory::UtcClock utc, ReadingTimer::Clock readingClock)
     : session_(std::move(session)),
       statePath(std::move(statePath)),
       identity_(std::move(identity)),
       paths_(std::move(paths)),
       digest(std::move(digest)),
       bridge(std::move(bridge)),
-      nativeCloudSync(this->bridge && (koboCloud || !identity_.startsWith("file:///"))),
-      koboCloudBook(this->bridge && koboCloud),
+      nativeSync(this->bridge ? this->bridge->nativeSyncPolicy() : NativeSyncPolicy{}),
       baseline(std::move(baseline)),
-      reconciliation(std::move(diskBaseline))
+      reconciliation(std::move(diskBaseline),
+                     this->bridge ? this->bridge->positionNormalization() : nullptr),
+      activeReading(std::move(readingClock))
 {
     this->utc = utc ? std::move(utc)
                     : ReadingHistory::UtcClock([] { return QDateTime::currentMSecsSinceEpoch(); });
@@ -161,20 +162,20 @@ void ReadingBook::releaseNative(bool save)
     // Destroying a native session cancels its callbacks. Release callers that
     // were waiting so their local disposal barrier can retry without it.
     for (const auto &callback : callbacks)
-        callback(false);
+        callback(NativeActivityResult::Abandoned);
 }
 
-void ReadingBook::finishReading(std::function<void(bool)> done)
+void ReadingBook::finishReading(std::function<void(NativeActivityResult)> done)
 {
     sleepingReading = false;
     stopReading(true);
     drainReadingSave(std::move(done));
 }
 
-void ReadingBook::drainReadingSave(std::function<void(bool)> done)
+void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> done)
 {
     if (!bridge) {
-        done(true);
+        done(NativeActivityResult::NotRequired);
         return;
     }
     nativeFinishCallbacks.append(std::move(done));
@@ -182,19 +183,19 @@ void ReadingBook::drainReadingSave(std::function<void(bool)> done)
         return;
     const auto generation = ++nativeFinishGeneration;
     const std::weak_ptr<ReadingBook *> guard = alive;
-    bridge->finishReading([guard, generation](bool saved) {
+    bridge->finishReading([guard, generation](NativeActivityResult result) {
         if (const auto book = guard.lock())
-            (*book)->finishNativeReading(generation, saved);
+            (*book)->finishNativeReading(generation, result);
     });
 }
 
-void ReadingBook::finishNativeReading(quint64 generation, bool saved)
+void ReadingBook::finishNativeReading(quint64 generation, NativeActivityResult result)
 {
     if (generation != nativeFinishGeneration)
         return;
     const auto callbacks = std::exchange(nativeFinishCallbacks, {});
     for (const auto &callback : callbacks)
-        callback(saved);
+        callback(result);
 }
 
 bool ReadingBook::readingSavePending() const
@@ -700,79 +701,79 @@ void ReadingBook::markNativeReading()
     if (!bridge || !canWriteNative() || reconciliation.pending())
         return;
     mainthread::AllowBlocking allow("opening status before reader input");
-    if (!bridge->markReading()) {
+    const auto result = bridge->markReading();
+    if (!activityCompleted(result)) {
         diagnostic("native-opening-status-failed", {}, DiagnosticSeverity::Warning);
         return;
     }
+    if (result == NativeActivityResult::NotRequired)
+        return;
     baseline.status = 1;
     auto acknowledged = reconciliation.baseline();
     acknowledged.status = 1;
-    reconciliation = ProgressReconciler(acknowledged);
+    reconciliation.reset(acknowledged);
 }
 
-bool ReadingBook::writeNative(const QString &location, const QString &mappingError)
+NativeSaveResult ReadingBook::writeNative(const QString &location, const QString &mappingError)
 {
     if (!bridge) {
-        nativeWriteback = "local-only";
-        nativeWritebackError.clear();
-        return true;
+        nativeWriteback = NativeSaveResult::localOnly();
+        return nativeSaveResult();
     }
-    // Some plain EPUB files have positions Nickel cannot store. Record the
-    // time, status and percentage; Nickel keeps its own position. Kobo's cloud
-    // does not sync sideloaded EPUB files, so no other device sees the old
-    // position with a new time. Other books save only locally when their
-    // position cannot be mapped.
+    // The host decides whether this publication supports an activity-only
+    // update when its exact position cannot be mapped.
     const bool timeOnly = !mappingError.isEmpty();
-    QString error = timeOnly && !plainEpub() ? mappingError : QString();
+    QString error = timeOnly && !bridge->allowsUnmappedPosition() ? mappingError : QString();
     // Unsupported mappings intentionally stay local. Storage failures do not.
-    nativeWriteback = error.isEmpty() ? "failed" : "local-only";
+    nativeWriteback =
+            error.isEmpty() ? NativeSaveResult::rejected() : NativeSaveResult::localOnly(error);
     if (error.isEmpty() && canWriteNative()) {
         const auto current = bridge->read(&error);
         reconciliation.observe(current);
         if (reconciliation.pending())
-            return false;
+            return nativeSaveResult();
         if (reconciliation.mayWrite(current)) {
-            ReadingProgress verified;
             // The same whole percentage as Kobalt's own views. The firmware 4
             // bridge keeps an unfinished book below 100, as Nickel's reader does.
             const double percent = pageProgressPercent(session_->page(), session_->pages());
             const bool preserveFinished = finishedHere();
             diagnostic("native-save-start");
-            if (bridge->write(current, timeOnly ? QString() : location, percent, preserveFinished,
-                              readingActivity(), &verified, &error)) {
-                baseline = verified;
-                reconciliation = ProgressReconciler(verified);
-                nativeWriteback = timeOnly ? "time-only" : "verified";
+            nativeWriteback = bridge->write(current, timeOnly ? QString() : location, percent,
+                                            preserveFinished, readingActivity());
+            error = nativeWriteback.message();
+            if (nativeWriteback.saved()) {
+                baseline = nativeWriteback.baseline();
+                reconciliation.reset(baseline);
             } else {
                 // A commit can lose a race after the earlier read. Ask about
                 // that update before letting the window finish its exit.
                 observeProgress();
                 if (reconciliation.pending() && canWriteNative())
-                    return false;
+                    return nativeSaveResult();
             }
-        } else if (error.isEmpty())
-            error = strings::get("error.nickel_progress_changed_before_exit");
-    } else if (error.isEmpty())
+        } else {
+            if (error.isEmpty())
+                error = strings::get("error.nickel_progress_changed_before_exit");
+            nativeWriteback = NativeSaveResult::progressChanged(error);
+        }
+    } else if (error.isEmpty()) {
         error = strings::get(
                 "error.nickel_save_deferred_while_progress_or_device_state_is_unresolved");
-    nativeWritebackError = error;
+        nativeWriteback = NativeSaveResult::deferred(error);
+    }
     diagnostic("native-save",
-               { { "result", nativeWriteback },
+               { { "result", nativeWriteback.diagnosticName() },
                  { "mapping_failed", timeOnly },
                  { "failed", !error.isEmpty() } },
                error.isEmpty() ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
-    return true;
+    return nativeSaveResult();
 }
 
-ReadingBook::NativeSave ReadingBook::nativeSaveResult() const
+NativeSaveResult ReadingBook::nativeSaveResult() const
 {
     if (reconciliation.pending())
-        return NativeSave::Conflict;
-    if (nativeWriteback == "verified" || nativeWriteback == "time-only")
-        return NativeSave::Saved;
-    if (nativeWriteback == "local-only")
-        return NativeSave::LocalOnly;
-    return NativeSave::Failed;
+        return NativeSaveResult::conflict();
+    return nativeWriteback;
 }
 
 bool ReadingBook::saveDictionaryChoice(const QString &id)
@@ -847,9 +848,9 @@ QJsonObject ReadingBook::checkpointState() const
     // opening the book.
     if (session_->pages() > 0)
         state["percent"] = pageProgressPercent(session_->page(), session_->pages());
-    state["native_writeback"] = nativeWriteback;
+    state["native_writeback"] = QString::fromLatin1(nativeWriteback.diagnosticName());
     state["sync_pending"] = reconciliation.pending();
-    state["native_writeback_error"] = nativeWritebackError;
+    state["native_writeback_error"] = nativeWriteback.message();
     return state;
 }
 

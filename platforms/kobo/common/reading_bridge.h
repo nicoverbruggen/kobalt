@@ -8,6 +8,7 @@ class NativeProgress;
 namespace nickel {
 // Construct on the GUI thread after the firmware and native APIs are ready.
 std::unique_ptr<ReadingBridge> makeReadingBridge(QString identity,
-                                                 std::unique_ptr<NativeProgress> progress);
+                                                 std::unique_ptr<NativeProgress> progress,
+                                                 bool koboCloud = false);
 } // namespace nickel
 } // namespace kobalt

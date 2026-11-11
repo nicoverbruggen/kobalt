@@ -346,9 +346,10 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
     syncDialog->setFocus();
 }
 
-#ifndef KOBALT_READER_HARDWARE
 void Reader::showProgressDebug()
 {
+    if (!services.development.simulateProgress)
+        return;
     if (debugDialog) {
         debugDialog->show();
         debugDialog->raise();
@@ -359,42 +360,23 @@ void Reader::showProgressDebug()
     auto *card = dialog->card();
     card->setObjectName("rrProgressDebug");
     auto *rows = card->rows();
-    auto *message = card->message(strings::get(
-            "reader.simulate_nickel_progress_these_controls_change_only_the_synthetic"));
+    auto *message = card->message(services.development.progressDescription);
     auto dismiss = [this, dialog] {
         dialog->hide();
         dialog->deleteLater();
         debugDialog.clear();
     };
-    const bool fixture = book->identity() == "file:///mnt/onboard/progress-integration.kepub.epub";
-    auto action = [this, dialog, card, rows, message, fixture,
-                   dismiss](const char *name, const QString &label, const QString &kind) {
+    const bool available = services.development.progressAvailable
+            && services.development.progressAvailable(book->identity());
+    auto action = [this, dialog, card, rows, message, available,
+                   dismiss](const char *name, const QString &label, ProgressSimulation kind) {
         auto *button = new kobalt::ui::Button(label, card);
         button->setObjectName(name);
-        button->setEnabled(fixture && bool(services.debugProgressAction));
+        button->setEnabled(available);
         rows->addWidget(button);
         connect(button, &QPushButton::clicked, dialog, [this, message, kind, dismiss] {
             const auto current = book->readProgress();
-            QJsonObject command =
-                    kobalt::qt::object({ { "book", book->identity() }, { "action", kind } });
-            if (kind != "fail-next-save") {
-                const bool duplicate = kind == "duplicate", stale = kind == "stale";
-                const QString next = current.location.startsWith("OEBPS/c2.xhtml")
-                        ? "OEBPS/c3.xhtml#kobo.9.1:9"
-                        : "OEBPS/c2.xhtml#kobo.8.1:7";
-                const qint64 stamp = duplicate ? current.modified
-                        : stale
-                        ? current.modified - 1000
-                        : qMax(current.modified, QDateTime::currentMSecsSinceEpoch() / 1000 * 1000)
-                                + 1000;
-                command["action"] = QStringLiteral("persist");
-                command["location"] = duplicate ? current.location : next;
-                command["modified"] = QString::number(stamp);
-                command["status"] = kind == "finished" ? 2 : duplicate ? current.status : 1;
-            }
-            const auto result = services.debugProgressAction ? services.debugProgressAction(command)
-                                                             : QJsonObject();
-            if (!result.value("ok").toBool()) {
+            if (!services.development.simulateProgress(kind, current)) {
                 message->setText(strings::get(
                         "reader.the_simulation_failed_no_successful_update_was_reported"));
                 if (debugDialog) {
@@ -408,11 +390,16 @@ void Reader::showProgressDebug()
             book->invalidateProgress();
         });
     };
-    action("rrDebugNewPosition", strings::get("reader.new_synced_position"), "new");
-    action("rrDebugDuplicate", strings::get("reader.duplicate_current_update"), "duplicate");
-    action("rrDebugStale", strings::get("reader.older_synced_position"), "stale");
-    action("rrDebugFinished", strings::get("reader.book_marked_finished"), "finished");
-    action("rrDebugSaveFailure", strings::get("reader.fail_next_native_save"), "fail-next-save");
+    action("rrDebugNewPosition", strings::get("reader.new_synced_position"),
+           ProgressSimulation::NewPosition);
+    action("rrDebugDuplicate", strings::get("reader.duplicate_current_update"),
+           ProgressSimulation::Duplicate);
+    action("rrDebugStale", strings::get("reader.older_synced_position"),
+           ProgressSimulation::OlderPosition);
+    action("rrDebugFinished", strings::get("reader.book_marked_finished"),
+           ProgressSimulation::Finished);
+    action("rrDebugSaveFailure", strings::get("reader.fail_next_native_save"),
+           ProgressSimulation::SaveFailure);
     auto *done = new kobalt::ui::Button(strings::get("common.back"), card);
     done->setObjectName("rrDebugBack");
     rows->addWidget(done);
@@ -427,7 +414,6 @@ void Reader::showProgressDebug()
     dialog->raise();
     dialog->setFocus();
 }
-#endif
 
 void Reader::showFinishChoice()
 {

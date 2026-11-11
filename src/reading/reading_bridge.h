@@ -1,5 +1,7 @@
 #pragma once
-#include "reading_progress.h"
+#include "native_save_result.h"
+#include "native_activity_result.h"
+#include "native_sync_policy.h"
 #include "chapter.h"
 #include <functional>
 
@@ -33,6 +35,16 @@ public:
     virtual ~ReadingBridge() = default;
     virtual bool deviceTransition() const = 0;
     virtual bool writable() const = 0;
+
+    // Pure normalization of an observed native position. The function owns no
+    // host handles and remains valid for the lifetime of the book's reconciler.
+    virtual ProgressReconciler::Normalization positionNormalization() const { return nullptr; }
+
+    // Whether this publication permits activity updates without a mapped position.
+    virtual bool allowsUnmappedPosition() const { return false; }
+
+    virtual NativeSyncPolicy nativeSyncPolicy() const { return {}; }
+
     virtual ReadingProgress read(QString *error = nullptr) const = 0;
     virtual bool takeChange() = 0;
 
@@ -41,12 +53,12 @@ public:
     // minute.
     virtual bool signalsChanges() const { return false; }
 
-    virtual bool write(const ReadingProgress &expected, const QString &location, double percent,
-                       bool finished, const ReadingActivity &activity, ReadingProgress *verified,
-                       QString *error) = 0;
+    virtual NativeSaveResult write(const ReadingProgress &expected, const QString &location,
+                                   double percent, bool finished,
+                                   const ReadingActivity &activity) = 0;
 
     // Called once under the loading view, without position or estimate writes.
-    virtual bool markReading() { return true; }
+    virtual NativeActivityResult markReading() = 0;
 
     virtual void observeReading(const ReadingActivity &activity) = 0;
 
@@ -67,11 +79,7 @@ public:
     virtual void stopReading(const ReadingActivity &) { stopReading(); }
 
     // Keep the bridge alive until completion before returning native storage.
-    virtual void finishReading(std::function<void(bool)> done)
-    {
-        stopReading();
-        done(true);
-    }
+    virtual void finishReading(std::function<void(NativeActivityResult)> done) = 0;
 
     virtual bool readingSavePending() const { return false; }
 

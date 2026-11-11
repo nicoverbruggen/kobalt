@@ -1,3 +1,4 @@
+#include "platform/posix/diagnostics.h"
 #include "window.h"
 #include "assets/assets.h"
 #include "assets/bundled_fonts.h"
@@ -63,6 +64,7 @@ int main(int argc, char **argv)
     ui::setDensity(300);
     app.setFont(ui::interfaceFont());
     const auto root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    setDiagnosticSystem(platform::processDiagnosticSystem());
     initializeDiagnostics(root + "/diagnostics");
     desktop::Window window(storage::Paths{ root + "/config" },
                            engineFontInputs(assets, {}, root + "/fonts"),

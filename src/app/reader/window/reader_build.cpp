@@ -209,6 +209,8 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
       orientation(orientation)
 {
     Q_ASSERT(services.complete());
+    if (services.annotationExporter)
+        annotationExporter = services.annotationExporter(this);
     building.start();
     // Qt 5.2 leaves default-constructed timers looking valid.
     openingStarted.invalidate();
@@ -442,6 +444,7 @@ void Reader::buildReadingPage()
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     page = new kobalt::ReadingPage(this, services.cancelAnimation);
+    page->rightClickAnnotations = services.rightClickAnnotations;
     layout->addWidget(page, 1);
     page->setFont(kobalt::ui::headerFooterFont());
     readerStyle(page, "font-family:@header-footer-font@;");
@@ -1321,9 +1324,7 @@ void Reader::buildSettings()
             services.automaticBookOpening && services.setAutomaticBookOpening;
     settingsInputs.wifiPowerSaverSupported = bool(services.turnOffWifi);
     settingsInputs.readerStandbySupported = services.readerStandbySupported;
-#ifndef KOBALT_READER_HARDWARE
-    settingsInputs.debugProgressAvailable = true;
-#endif
+    settingsInputs.debugProgressAvailable = bool(services.development.simulateProgress);
     auto *settings = new kobalt::reader::SettingsPanel(this, settingsInputs);
     general = settings;
     kosyncPage = settings->kosync;
@@ -1603,9 +1604,9 @@ void Reader::buildSettings()
         resetDefaults->setEnabled(false);
         settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
     });
-#ifndef KOBALT_READER_HARDWARE
-    connect(settings->debugProgress, &QPushButton::clicked, this, [this] { showProgressDebug(); });
-#endif
+    if (settings->debugProgress)
+        connect(settings->debugProgress, &QPushButton::clicked, this,
+                [this] { showProgressDebug(); });
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int) {
         fitSettings();
         refresh();

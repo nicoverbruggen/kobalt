@@ -1,3 +1,5 @@
+#include "annotation_export.h"
+#include "platform/qt/annotation_export.h"
 #include "services.h"
 #include "runtime.h"
 #include "light.h"
@@ -72,6 +74,9 @@ public:
 ReaderHostServices readerHostServices()
 {
     ReaderHostServices result;
+    result.annotationExporter = [](QWidget *reader) {
+        return platform::pickerAnnotationExporter(reader, reader, writeAnnotationExport);
+    };
     const auto model =
             QJniObject::getStaticObjectField("android/os/Build", "MODEL", "Ljava/lang/String;")
                     .toString()

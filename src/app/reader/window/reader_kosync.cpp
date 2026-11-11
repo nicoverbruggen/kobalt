@@ -50,7 +50,7 @@ void Reader::buildKosync()
     kosyncClient->setDefaultDeviceName(services.deviceName.isEmpty()
                                                ? QStringLiteral("Kobalt")
                                                : services.deviceName + QStringLiteral(" (Kobalt)"));
-    kosyncPage->setNativeCloudSync(book->usesNativeCloudSync(), book->isKoboCloudBook());
+    kosyncPage->setNativeCloudSync(book->nativeSyncPolicy());
     const auto account = [this] {
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
         kosyncPage->setDeviceName(kosyncClient->customDeviceName(),

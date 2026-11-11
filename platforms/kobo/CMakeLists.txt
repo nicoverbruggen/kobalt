@@ -92,8 +92,6 @@ file(GLOB adapters CONFIGURE_DEPENDS "common/*.cpp" "common/*.h" "nickel-qt${KOB
 # in the mod library only.
 add_library(kobalt-code OBJECT ${shared} ${adapters} common/install.c common/startup_recovery.c)
 add_library(kobalt MODULE "${hooks}/nh.c" "${hooks}/resources.c" "${CMAKE_CURRENT_BINARY_DIR}/nhplugin.h")
-set_source_files_properties("${source}/reading/reading_timer.cpp" PROPERTIES
-    COMPILE_DEFINITIONS KOBALT_READING_CLOCK_BOOTTIME=1)
 option(KOBALT_SQLITE_ANNOTATIONS_DEFAULT "Use SQLite annotation storage by default" ON)
 if(KOBALT_SQLITE_ANNOTATIONS_DEFAULT)
     set_source_files_properties("${source}/storage/annotation_database.cpp" PROPERTIES

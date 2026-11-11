@@ -1,3 +1,4 @@
+#include "platforms/kobo/common/progress_policy.h"
 #include "reader_inputs.h"
 #include "check.h"
 #include "reading/reading_book.h"
@@ -72,11 +73,14 @@ struct Calls
     int reads = 0, writes = 0, observed = 0, stopped = 0, destroyed = 0;
     bool writable = true, transition = false, changed = true, failWrite = false, signalled = false;
     bool finished = false;
+    NativeSaveResult failure = NativeSaveResult::unverified("synthetic write failure");
     QString location;
     ReadingProgress current{ "store-id", "chapter.xhtml#one", 1, 1, true };
     ReadingEstimates estimate;
     ReadingActivity writtenActivity, observedActivity, stoppedActivity;
     bool providesEstimates = false;
+    std::function<NativeSyncPolicy()> syncPolicy;
+    NativeActivityResult openingResult = NativeActivityResult::NotRequired;
 };
 
 class Bridge final : public ReadingBridge
@@ -90,6 +94,21 @@ public:
 
     bool writable() const override { return calls.writable && !calls.transition; }
 
+    ProgressReconciler::Normalization positionNormalization() const override
+    {
+        return nickel::acceptsPositionNormalization;
+    }
+
+    bool allowsUnmappedPosition() const override
+    {
+        return nickel::allowsUnmappedPosition(calls.current.book);
+    }
+
+    NativeSyncPolicy nativeSyncPolicy() const override
+    {
+        return calls.syncPolicy ? calls.syncPolicy() : nickel::nativeSyncPolicy(calls.current.book);
+    }
+
     ReadingProgress read(QString *) const override
     {
         ++calls.reads;
@@ -100,8 +119,8 @@ public:
 
     bool signalsChanges() const override { return calls.signalled; }
 
-    bool write(const ReadingProgress &expected, const QString &location, double, bool finished,
-               const ReadingActivity &activity, ReadingProgress *verified, QString *error) override
+    NativeSaveResult write(const ReadingProgress &expected, const QString &location, double,
+                           bool finished, const ReadingActivity &activity) override
     {
         ++calls.writes;
         calls.writtenActivity = activity;
@@ -109,14 +128,20 @@ public:
         calls.location = location;
         require(expected == calls.current, "Bridge received a stale expected baseline");
         if (calls.failWrite) {
-            *error = "synthetic write failure";
-            return false;
+            return calls.failure;
         }
         calls.current.location = location;
         ++calls.current.modified;
         calls.current.status = finished ? 2 : 1;
-        *verified = calls.current;
-        return true;
+        return NativeSaveResult::verified(calls.current, location.isEmpty());
+    }
+
+    NativeActivityResult markReading() override { return calls.openingResult; }
+
+    void finishReading(std::function<void(NativeActivityResult)> done) override
+    {
+        stopReading();
+        done(NativeActivityResult::NotRequired);
     }
 
     void observeReading(const ReadingActivity &activity) override
@@ -156,7 +181,7 @@ int main(int argc, char **argv)
         require(!timer.isValid() && timer.elapsed() == 0, "Reading timer started before reading");
         timer.start();
         boot = 352003;
-        require(timer.includesStandby() && timer.elapsed() == 307342,
+        require(timer.usesHostClock() && timer.elapsed() == 307342,
                 "Reading timer lost standby time from the Clara BW report");
         const auto first = timer.elapsed();
         timer.invalidate();
@@ -177,10 +202,10 @@ int main(int argc, char **argv)
         require(timer.elapsed() == 1000, "A new segment retained the previous duration");
         boot = -1;
         timer.start();
-        require(!timer.includesStandby() && timer.elapsed() >= 0,
+        require(!timer.usesHostClock() && timer.elapsed() >= 0,
                 "An unavailable boot clock did not select the segment fallback");
         boot = 1000000000;
-        require(!timer.includesStandby() && timer.elapsed() < 60000,
+        require(!timer.usesHostClock() && timer.elapsed() < 60000,
                 "A recovering clock changed origins halfway through a fallback segment");
     }
     require(argc == 2, "Expected a synthetic EPUB");
@@ -468,12 +493,66 @@ int main(int argc, char **argv)
     for (const auto &identity : { QStringLiteral("file:///mnt/onboard/book.epub"),
                                   QStringLiteral("file:///mnt/onboard/book.kepub.epub") }) {
         Calls calls;
+        calls.current.book = identity;
         auto session = open();
         const auto hash = session->sourceHash();
         ReadingBook sideload(std::move(session), paths.bookState(identity), paths, identity, hash,
                              std::make_unique<Bridge>(calls), {}, {});
         require(!sideload.usesNativeCloudSync() && sideload.canWriteNative(),
                 "Sideloaded EPUB and KEPUB keep native local progress without excluding KOsync");
+    }
+    {
+        qint64 clock = 4000;
+        auto session = open();
+        const auto hash = session->sourceHash();
+        ReadingBook book(std::move(session), {}, paths, "host-clock", hash, nullptr, {}, {}, {}, {},
+                         [&] { return clock; });
+        book.observeReading();
+        clock += 307342;
+        require(book.readingMilliseconds() == 307342,
+                "ReadingBook did not use its host's reading clock");
+        book.stopReading();
+        clock += 600000;
+        require(book.readingMilliseconds() == 307342, "Stopped book counted deliberate sleep");
+        book.observeReading();
+        clock += 1000;
+        require(book.readingMilliseconds() == 308342, "Resumed book changed clock domains");
+        book.stopReading();
+    }
+    // The host's policy is authoritative even when an identity looks like a local file.
+    for (const bool enabled : { false, true }) {
+        const QString identity = enabled ? "file:///host-managed.epub" : "host-private-id";
+        Calls calls;
+        calls.current.book = identity;
+        calls.syncPolicy = [enabled] {
+            return NativeSyncPolicy{ enabled, "host.sync.description" };
+        };
+        auto session = open();
+        const auto hash = session->sourceHash();
+        ReadingBook book(std::move(session), paths.bookState(identity), paths, identity, hash,
+                         std::make_unique<Bridge>(calls), calls.current, calls.current);
+        require(book.usesNativeCloudSync() == enabled
+                        && book.nativeSyncPolicy().descriptionKey == "host.sync.description",
+                "Shared book replaced the host's sync policy with an identity guess");
+        book.releaseNative(false);
+        require(book.usesNativeCloudSync() == enabled
+                        && book.nativeSyncPolicy().descriptionKey == "host.sync.description",
+                "Native revocation lost the publication's sync policy");
+    }
+    for (const auto result : { NativeActivityResult::NotRequired, NativeActivityResult::Completed,
+                               NativeActivityResult::Failed }) {
+        Calls calls;
+        calls.current.status = 2;
+        calls.openingResult = result;
+        auto session = open();
+        const auto hash = session->sourceHash();
+        ReadingBook book(std::move(session), {}, paths, "store-id", hash,
+                         std::make_unique<Bridge>(calls), calls.current, calls.current);
+        book.markNativeReading();
+        const auto saved = book.checkpointState().value("nickel_progress").toObject();
+        require(saved.value("status").toInt()
+                        == (result == NativeActivityResult::Completed ? 1 : 2),
+                "Opening status advanced without a completed native operation");
     }
     for (const auto &original : { qt::object({ { "line_spacing", 122 } }), QJsonObject(),
                                   qt::object({ { "font_pixels", 31 },
@@ -491,7 +570,7 @@ int main(int argc, char **argv)
             identity, path, QSize(758, 900), original,
             {},       {},   lease,           nativeResourceFactory(path, server.port(), lease)
         };
-        request.temporaryAppearance = appearance::benchmarkTypography(identity);
+        request.temporaryAppearance = appearance::benchmarkTypography();
         request.originalAppearance = original;
         session->open(std::move(request), [&](const OpeningResult &result) {
             require(result.ready(), qPrintable(openingMessage(result)));
@@ -843,7 +922,8 @@ int main(int argc, char **argv)
         require(local.offerFinish(), "Local book cannot be marked finished without a bridge");
         local.markFinished();
         require(!local.offerFinish(), "Local book repeatedly offered the same finish position");
-        require(local.writeNative({}, "no native mapping"),
+        require(local.writeNative({}, "no native mapping").status()
+                        == NativeSaveResult::Status::LocalOnly,
                 "Local-only save required a platform position");
         QJsonObject snapshot;
         require(local.checkpoint(&snapshot), "Local checkpoint failed");
@@ -947,8 +1027,8 @@ int main(int argc, char **argv)
         const QJsonObject preferences{ { sessionTimeout::preferenceKey, minutes } };
         book.sleepReading(preferences);
         bool drained = false;
-        book.drainReadingSave([&](bool saved) {
-            require(saved, "Sleep native drain");
+        book.drainReadingSave([&](NativeActivityResult result) {
+            require(result == NativeActivityResult::NotRequired, "Sleep native drain");
             drained = true;
         });
         waitUntil([&] { return drained; });
@@ -969,8 +1049,8 @@ int main(int argc, char **argv)
         require(count() == 1, "Short sleep or Never split session history");
         book.sleepReading(preferences);
         drained = false;
-        book.drainReadingSave([&](bool saved) {
-            require(saved, "Expired sleep native drain");
+        book.drainReadingSave([&](NativeActivityResult result) {
+            require(result == NativeActivityResult::NotRequired, "Expired sleep native drain");
             drained = true;
         });
         waitUntil([&] { return drained; });
@@ -1457,9 +1537,9 @@ int main(int argc, char **argv)
         require(book.deviceTransition() && !book.canWriteNative() && calls.observed == 1
                         && calls.stopped == 1,
                 "Device transition did not stop platform activity");
-        require(book.writeNative("position", {}),
+        require(book.writeNative("position", {}).status() == NativeSaveResult::Status::Deferred,
                 "Deferred platform write blocked local checkpoint");
-        require(book.nativeSaveResult() == ReadingBook::NativeSave::Failed,
+        require(book.nativeSaveResult().failed(),
                 "Unavailable native storage was reported as intentional local-only progress");
         require(calls.writes == 0, "Platform write ran during transition");
         calls.transition = false;
@@ -1467,14 +1547,15 @@ int main(int argc, char **argv)
         calls.current.location = "chapter.xhtml#remote";
         book.pollProgress();
         require(book.pendingProgress(), "External progress change did not create a conflict");
-        require(!book.writeNative("position", {}) && calls.writes == 0,
+        require(book.writeNative("position", {}).status() == NativeSaveResult::Status::Conflict
+                        && calls.writes == 0,
                 "Conflict was overwritten without a choice");
-        require(book.nativeSaveResult() == ReadingBook::NativeSave::Conflict,
+        require(book.nativeSaveResult().status() == NativeSaveResult::Status::Conflict,
                 "Native conflict lost its result");
         book.acknowledge(book.candidate(), false);
         require(book.session()->turn(1), "Cannot turn before saving native progress");
         waitUntil([&] { return !book.session()->busy(); });
-        require(book.writeNative("position", {}) && calls.writes == 1
+        require(book.writeNative("position", {}).saved() && calls.writes == 1
                         && calls.location == "position",
                 "Acknowledged progress was not written");
         require(calls.observed == 1 && calls.writtenActivity.page == book.session()->page()
@@ -1488,13 +1569,13 @@ int main(int argc, char **argv)
                 "Verified native baseline changed");
         calls.current.location = "chapter.xhtml#remote:0";
         const int beforeEqualTimeSave = calls.writes;
-        require(!book.writeNative("position", {})
-                        && book.nativeSaveResult() == ReadingBook::NativeSave::Conflict
+        require(book.writeNative("position", {}).status() == NativeSaveResult::Status::Conflict
+                        && book.nativeSaveResult().status() == NativeSaveResult::Status::Conflict
                         && calls.writes == beforeEqualTimeSave,
                 "Equal-time native change became an unrecoverable save failure");
         book.acknowledge(book.candidate(), false);
-        require(book.writeNative("position", {})
-                        && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+        require(book.writeNative("position", {}).saved()
+                        && book.nativeSaveResult().status() == NativeSaveResult::Status::Saved
                         && calls.writes == beforeEqualTimeSave + 1,
                 "Keeping the local position did not recover equal-time writeback");
         require(book.checkpoint(&snapshot)
@@ -1503,26 +1584,28 @@ int main(int argc, char **argv)
         calls.current.location = "chapter.xhtml#older:4";
         --calls.current.modified;
         const int beforeOlderSave = calls.writes;
-        require(calls.current.modified > 0 && !book.writeNative("position", {})
-                        && book.nativeSaveResult() == ReadingBook::NativeSave::Conflict
+        require(calls.current.modified > 0
+                        && book.writeNative("position", {}).status()
+                                == NativeSaveResult::Status::Conflict
+                        && book.nativeSaveResult().status() == NativeSaveResult::Status::Conflict
                         && calls.writes == beforeOlderSave,
                 "Older authoritative native position became an unrecoverable save failure");
         book.acknowledge(book.candidate(), false);
-        require(book.writeNative("position", {})
-                        && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+        require(book.writeNative("position", {}).saved()
+                        && book.nativeSaveResult().status() == NativeSaveResult::Status::Saved
                         && calls.writes == beforeOlderSave + 1,
                 "Keeping local progress did not recover an older authoritative position");
         calls.current.location.clear();
         calls.current.status = 0;
         calls.current.modified = 0;
         const int beforeUnreadSave = calls.writes;
-        require(!book.writeNative("position", {})
-                        && book.nativeSaveResult() == ReadingBook::NativeSave::Conflict
+        require(book.writeNative("position", {}).status() == NativeSaveResult::Status::Conflict
+                        && book.nativeSaveResult().status() == NativeSaveResult::Status::Conflict
                         && calls.writes == beforeUnreadSave,
                 "Unread native reset became an unrecoverable save failure");
         book.acknowledge(book.candidate(), false);
-        require(book.writeNative("position", {})
-                        && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+        require(book.writeNative("position", {}).saved()
+                        && book.nativeSaveResult().status() == NativeSaveResult::Status::Saved
                         && calls.writes == beforeUnreadSave + 1,
                 "Keeping local progress did not recover an unread reset");
         // A same-time KEPUB offset round trip must preserve the exact local
@@ -1531,7 +1614,8 @@ int main(int argc, char **argv)
         const QString precise = "chapter.xhtml#kobo.50.2:105";
         for (const auto &normalized : { QStringLiteral("chapter.xhtml#kobo.50.2:0"),
                                         QStringLiteral("chapter.xhtml#kobo.50.2") }) {
-            require(book.writeNative(precise, {}), "Cannot establish a precise native baseline");
+            require(book.writeNative(precise, {}).saved(),
+                    "Cannot establish a precise native baseline");
             calls.current.location = normalized;
             book.observeProgress();
             require(!book.pendingProgress()
@@ -1539,8 +1623,8 @@ int main(int argc, char **argv)
                                     == localPosition,
                     "Dropped native offset moved local progress or opened a choice");
             const int beforeRoundTripSave = calls.writes;
-            require(book.writeNative(precise, {})
-                            && book.nativeSaveResult() == ReadingBook::NativeSave::Saved
+            require(book.writeNative(precise, {}).saved()
+                            && book.nativeSaveResult().status() == NativeSaveResult::Status::Saved
                             && calls.writes == beforeRoundTripSave + 1 && calls.location == precise
                             && book.session()->state().value("position").toString()
                                     == localPosition,
@@ -1548,7 +1632,8 @@ int main(int argc, char **argv)
         }
         const auto committed = calls.current;
         calls.failWrite = true;
-        require(book.writeNative("position-two", {}),
+        require(book.writeNative("position-two", {}).status()
+                        == NativeSaveResult::Status::Unverified,
                 "Ordinary platform failure blocked local persistence");
         require(book.checkpoint(&snapshot), "Failed-write local checkpoint failed");
         require(snapshot.value("nickel_progress").toObject() == committed.json(),
@@ -1558,12 +1643,27 @@ int main(int argc, char **argv)
         require(snapshot.value("native_writeback_error")
                         == QStringLiteral("synthetic write failure"),
                 "Failed native write lost its error");
-        require(book.nativeSaveResult() == ReadingBook::NativeSave::Failed,
-                "Failed native save allowed clean close");
+        require(book.nativeSaveResult().failed(), "Failed native save allowed clean close");
+        for (const auto &failure : { NativeSaveResult::busyBeforeWrite("arbitrary busy wording"),
+                                     NativeSaveResult::unavailable("unsupported firmware"),
+                                     NativeSaveResult::deferred("host transition"),
+                                     NativeSaveResult::rejected("invalid mapping"),
+                                     NativeSaveResult::unverified("unconfirmed persistence") }) {
+            calls.failure = failure;
+            const auto result = book.writeNative("position-two", {});
+            require(result.status() == failure.status() && result.message() == failure.message()
+                            && result.failed() && !result.baseline().valid,
+                    "ReadingBook lost the native failure outcome");
+            require(book.checkpointState().value("nickel_progress").toObject() == committed.json(),
+                    "An unverified write replaced the acknowledged native baseline");
+        }
+        calls.failure = NativeSaveResult::unverified("synthetic write failure");
         const int writes = calls.writes;
-        require(book.writeNative({}, "unmappable store position") && calls.writes == writes,
+        require(book.writeNative({}, "unmappable store position").status()
+                                == NativeSaveResult::Status::LocalOnly
+                        && calls.writes == writes,
                 "Store book accepted a time-only write");
-        require(book.nativeSaveResult() == ReadingBook::NativeSave::LocalOnly,
+        require(book.nativeSaveResult().status() == NativeSaveResult::Status::LocalOnly,
                 "Unsupported store position was reported as a storage failure");
         const auto changeSql = [&](const QString &sql) {
             return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
@@ -1616,13 +1716,14 @@ int main(int argc, char **argv)
                     "Unchanged close record did not sync earlier routine writes");
             routineRecord(2);
             calls.failWrite = false;
-            require(book.writeNative("position-after-routine", {}), "Cannot update close baseline");
+            require(book.writeNative("position-after-routine", {}).saved(),
+                    "Cannot update close baseline");
             require(closeCheckpoint() && checkpoints == 1 && !storage::profileHasUnsyncedWrites(),
                     "Synced close record redundantly checkpointed earlier routine writes");
             const auto finalState = storage::readBookState(paths, "store-id").object;
             require(finalState.value("nickel_progress").toObject() == calls.current.json(),
                     "Close checkpoint lost the verified native baseline");
-            require(book.writeNative("position-before-failed-close", {}),
+            require(book.writeNative("position-before-failed-close", {}).saved(),
                     "Cannot update failed close baseline");
             require(changeSql(
                             "CREATE TRIGGER fail_close_checkpoint BEFORE UPDATE ON book_state BEGIN SELECT RAISE(ABORT,'test'); END"),

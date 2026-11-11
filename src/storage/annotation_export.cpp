@@ -1,14 +1,11 @@
 #include "annotation_export.h"
-#include "support/main_thread.h"
 #include <annotation_export_html.h>
 #include "render/highlight_paint.h"
 #include <QCryptographicHash>
 #include <QDataStream>
-#include <QDir>
-#include <QFile>
+#include <QIODevice>
 #include <QLocale>
 #include <QRegularExpression>
-#include <QSaveFile>
 #include <QSet>
 #include <array>
 #include <limits>
@@ -329,38 +326,4 @@ QByteArray annotationExportArchive(const QString &title, const QString &author,
                            format);
 }
 
-bool writeAnnotationExport(const QUrl &destination, const QByteArray &archive)
-{
-    if (archive.isEmpty() || !destination.isValid())
-        return false;
-    // Known exception: the user waits for the exported file.
-    mainthread::AllowBlocking allow("annotation export");
-    mainthread::BlockingOperation blockingOperation("annotation-export-write");
-    if (destination.isLocalFile()) {
-        QSaveFile file(destination.toLocalFile());
-        return file.open(QIODevice::WriteOnly) && file.write(archive) == archive.size()
-                && file.commit();
-    }
-    if (destination.scheme() != "content")
-        return false;
-    QFile file(destination.toString(QUrl::FullyEncoded));
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return false;
-    const bool written = file.write(archive) == archive.size() && file.flush();
-    file.close();
-    return written && file.error() == QFileDevice::NoError;
-}
-
-QString exportAnnotations(const QString &directory, const QString &identity, const QString &title,
-                          const QString &author, const QVector<Highlight> &rows,
-                          AnnotationExportFormat format, const QByteArray &font)
-{
-    const auto name = annotationExportFileName(identity, title, format);
-    const auto bytes = annotationExportArchive(title, author, rows, format,
-                                               QDateTime::currentDateTimeUtc(), font);
-    if (directory.isEmpty() || name.isEmpty() || bytes.isEmpty() || !QDir().mkpath(directory))
-        return {};
-    const auto path = QDir(directory).filePath(name);
-    return writeAnnotationExport(QUrl::fromLocalFile(path), bytes) ? path : QString();
-}
 } // namespace kobalt

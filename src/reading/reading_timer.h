@@ -3,24 +3,22 @@
 #include <functional>
 
 namespace kobalt {
-// Kobo can suspend the kernel while leaving the reading page visible. Count
-// that time, but let the reader's explicit sleep/hide boundaries pause it.
+// Elapsed time in one clock domain. The owner supplies a source with the
+// required suspend behavior and controls the start and pause boundaries.
+// A missing or initially failed source selects QElapsedTimer for that segment.
 class ReadingTimer
 {
 public:
     // A negative result means the clock could not be read. The optional source
     // also lets regression checks replay standby without suspending the host.
     using Clock = std::function<qint64()>;
-    // The suspend-inclusive clock on Kobo, or none elsewhere. KOSync's
-    // intervals use it too.
-    static Clock platformClock();
-    explicit ReadingTimer(Clock clock = platformClock());
+    explicit ReadingTimer(Clock clock = {});
     void start();
     void invalidate();
 
     bool isValid() const { return fallback.isValid(); }
 
-    bool includesStandby() const { return baseline >= 0; }
+    bool usesHostClock() const { return baseline >= 0; }
 
     qint64 elapsed() const;
 

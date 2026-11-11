@@ -1,3 +1,4 @@
+#include "platforms/kobo/common/diagnostics.h"
 #include "support/qt_compat.h"
 #include "support/diagnostics.h"
 #include "support/crash_context.h"
@@ -43,15 +44,17 @@ static QByteArray read(const QString &path)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const auto device = kobalt::diagnosticDeviceFields(
+    kobalt::setDiagnosticSystem(kobalt::platform::processDiagnosticSystem());
+    const auto device = kobalt::nickel::diagnosticDeviceFields(
             "PRIVATE-SERIAL,4.9.77,4.45.23646,4.9.77,4.9.77,00000000-0000-0000-0000-000000000390\n");
     if (device.value("hardware_uuid").toString() != "00000000-0000-0000-0000-000000000390"
         || device.value("firmware").toString() != "4.45.23646" || device.size() != 2
         || QJsonDocument(device).toJson().contains("PRIVATE-SERIAL")) {
         qFatal("Device diagnostics lost model or disclosed serial");
     }
-    if (!kobalt::diagnosticDeviceFields("PRIVATE-SERIAL,broken").isEmpty()
-        || !kobalt::diagnosticDeviceFields("PRIVATE-SERIAL,x,private firmware,x,x,PRIVATE-SERIAL")
+    if (!kobalt::nickel::diagnosticDeviceFields("PRIVATE-SERIAL,broken").isEmpty()
+        || !kobalt::nickel::diagnosticDeviceFields(
+                    "PRIVATE-SERIAL,x,private firmware,x,x,PRIVATE-SERIAL")
                     .isEmpty()) {
         qFatal("Malformed device fields disclosed arbitrary data");
     }
@@ -208,6 +211,40 @@ int main(int argc, char **argv)
         || sampledMemory.value("fd_highest").toInt() < 0)
         qFatal("Resource sample lost descriptor usage");
 #endif
+    // An absent provider keeps unavailable measurements absent while the app
+    // still publishes its own counters. A supplied provider runs on the worker.
+    for (const bool supplied : { false, true }) {
+        kobalt::DiagnosticSystem system;
+        if (supplied) {
+            system.sample = [&](qint64 monotonic) {
+                if (QThread::currentThread() == app.thread() || monotonic < 0)
+                    qFatal("Host sampling ran on the caller or lost its timestamp");
+                return kobalt::qt::object({ { "rss_kib", 123 }, { "peak_rss_kib", 456 } });
+            };
+            system.bootMilliseconds = [] { return qint64(987654); };
+        }
+        kobalt::setDiagnosticSystem(std::move(system));
+        sampled.store(false);
+        kobalt::sampleDiagnosticMemory([&](QJsonObject fields) {
+            sampledMemory = std::move(fields);
+            sampled.store(true);
+        });
+        sampleWait.restart();
+        while (!sampled.load() && sampleWait.elapsed() < 3000)
+            QThread::msleep(10);
+        if (!sampled.load() || sampledMemory.value("private_font_bytes").toInt() != 123456
+            || sampledMemory.contains("fd_count") || sampledMemory.contains("memory_pressure"))
+            qFatal("Portable counters or unavailable host fields changed");
+        if (supplied ? sampledMemory.value("rss_kib").toInt() != 123
+                     : sampledMemory.contains("rss_kib"))
+            qFatal("Diagnostics replaced the supplied or unavailable memory measurement");
+        kobalt::setDiagnosticObserver([&](const QJsonObject &entry) { observed = entry; });
+        kobalt::diagnostic("provider-clock");
+        if (supplied ? observed.value("boot_ms").toInt() != 987654 : observed.contains("boot_ms"))
+            qFatal("Host boot clock or its unavailable state was lost");
+        kobalt::setDiagnosticObserver({});
+    }
+    kobalt::setDiagnosticSystem(kobalt::platform::processDiagnosticSystem());
     kobalt::setDiagnosticFontBytes(0);
     kobalt::setDiagnosticNativeFontBytes(0);
     if (syncCalls.load() != beforeNormal)

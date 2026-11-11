@@ -111,6 +111,7 @@ public:
     // the right edge changes warmth, when each edge is enabled. `lightStarted`
     // receives true for warmth and may refuse the drag.
     bool brightnessEdge = true, warmthEdge = false;
+    bool rightClickAnnotations = false;
     std::function<bool(bool)> lightStarted;
     std::function<void(double)> lightChanged;
     std::function<void(bool)> lightFinished;

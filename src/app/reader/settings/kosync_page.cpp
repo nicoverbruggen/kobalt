@@ -140,12 +140,14 @@ KosyncPage::~KosyncPage()
     dismissEditor();
 }
 
-void KosyncPage::setNativeCloudSync(bool enabled, bool koboCloud)
+void KosyncPage::setNativeCloudSync(const NativeSyncPolicy &policy)
 {
     dismissEditor();
-    nativeCloudSync_ = enabled;
-    const auto description = koboCloud ? "kosync.kobo_cloud" : "kosync.native_sync";
-    description_->setText(strings::get(enabled ? description : "kosync.description"));
+    nativeCloudSync_ = policy.enabled;
+    const auto description = policy.descriptionKey.isEmpty() ? QStringLiteral("kosync.native_sync")
+                                                             : policy.descriptionKey;
+    description_->setText(
+            strings::get(policy.enabled ? description.toUtf8().constData() : "kosync.description"));
     setStatus({}, false);
 }
 

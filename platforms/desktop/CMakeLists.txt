@@ -76,7 +76,9 @@ file(GLOB_RECURSE shared CONFIGURE_DEPENDS
     "${source}/dictionaries/*.cpp" "${source}/engine/*.cpp"
     "${source}/library/*.cpp" "${source}/render/*.cpp"
     "${source}/reading/*.cpp" "${source}/storage/*.cpp" "${source}/sync/*.cpp")
-add_library(kobalt-core OBJECT ${shared} display.cpp
+add_library(kobalt-core OBJECT ${shared} display.cpp ../standalone/native_image.cpp
+    "${source}/platform/qt/export_file.cpp"
+    "${source}/platform/posix/diagnostics.cpp"
     "${source}/assets/assets.cpp" "${source}/assets/bundled_fonts.cpp" "${source}/assets/font_catalog.cpp"
     "${source}/assets/system_fonts.cpp"
     "${source}/support/diagnostics.cpp" "${source}/support/main_thread.cpp"
@@ -127,12 +129,11 @@ else()
 endif()
 file(GLOB_RECURSE app_sources CONFIGURE_DEPENDS "${source}/app/*.cpp" "${source}/ui/*.cpp")
 add_library(kobalt-desktop OBJECT ${app_sources}
+    "${source}/platform/qt/annotation_export.cpp"
     window.cpp services.cpp
     ../standalone/reader.cpp ../standalone/start_screen.cpp
     "${source}/platform/api/reader_orientation.cpp")
 target_link_libraries(kobalt-desktop PUBLIC kobalt-core)
-set_source_files_properties("${source}/app/reader/views/reading_page.cpp" PROPERTIES
-    COMPILE_DEFINITIONS KOBALT_DESKTOP_POINTER)
 target_compile_options(kobalt-desktop PRIVATE -Wall -Wextra)
 # A build from a linked Git worktree is a variant named after the worktree's
 # folder. A variant has its own name, bundle identifier and profile, so it can
@@ -388,7 +389,7 @@ if(BUILD_TESTING)
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
             sleepScreenDefaultsMigrateOnce sleepPngOverlaysUseEitherFolder sleepSettingsShowWhereToAddPngs sleepOverlayUsesTheDimmedPage sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus readingTimeStatus remoteKeyActivityRequiresActiveReading
-            finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock idleTimers readerStandbySetting wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncFailure kosyncMissingProgress kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave
+            finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock idleTimers readerStandbySetting wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncFailure kosyncMissingProgress kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave developmentOptions developmentStateReports annotationExportHandoff annotationExportOwnerDestruction
             progressChoiceKeepAndGo progressChoiceWaitsForSettings finishedSyncWithoutPositionKeepsLocalReading
             progressChoiceForOlderAlert progressChoiceUnavailablePosition
             appearanceOpeningDoesNotRepaintToolbar annotationFramesKeepFirstPaintComplete annotationListResolvesPagesOnDemand)
@@ -718,10 +719,10 @@ if(BUILD_TESTING)
         "links:^(desktop\\.(links|footnote.*|revealedLinkPress|tappableLinks|bookmarkCornerLinks)|engine\\.(links|search|word-selection)|lifecycle\\.(staleSearchReplyIgnored|searchSurvivesReflow|searchHighlightClearsOnReflow))$"
         "annotations:^(desktop\\.(annotation.*|bookmark.*|pinnedBookmarks|coordinateProbeSerialization|selectionCrossPageDrag)|ui\\.(annotation.*|marksSortingAndAnnotationRows)|lifecycle\\.(annotation.*|closeWithPendingBookmark)|model\\.(bookmark-store|highlight-store|annotation-database)|session\\.(bookmark|highlight)-session|engine\\.source-index)$"
         "fonts:^(desktop\\.(publisherFontDefault|fontPagingClearsCaptions|kfFontVariants|opticalSize)|ui\\.fontSelectionDoesNotToggle|model\\.font-axes|platform\\.(font-sources|system-fonts)|resource\\.resource-provider)$"
-        "progress:^(lifecycle\\.(progress.*|finish.*|nativeProgressWaitsForSleep)|model\\.(reading-pace|reading-speed|reading-progress|chapter-progress|logical-word-counter)|engine\\.document-word-count|platform\\.(native-progress|nickel-reading-pace-cache))$"
+        "progress:^(lifecycle\\.(progress.*|finish.*|developmentOptions|nativeProgressWaitsForSleep)|model\\.(reading-pace|reading-speed|reading-progress|chapter-progress|logical-word-counter)|engine\\.document-word-count|platform\\.(native-progress|nickel-reading-pace-cache))$"
         "storage:^(model\\.(storage-assets|android-assets|profile-storage|record-writer|main-thread|reading-history)|session\\.reading-book|lifecycle\\.(closeWaitsFor.*|closeRetriesRequiredNativeSaves|closeWithUnusableSettings|sleepWaitsForNativeTimeBeforePosition|background.*|standaloneReadingHistory|revokedNativeDrainRetainsLocalSave|quitAfterFailedLocalSaveRetry|appearanceRetryCooldown|recoveryNoticeAfterFirstPage|activityBatchesAndLowBattery)|desktop\\.(sameProcessReadersDoNotRecoverEachOther|standaloneHistorySourceKeys)|platform\\.nickel-(event|reading)-save)$"
         "sleep:^(lifecycle\\.(sleep.*|readerStandbySetting|readerUsesSelectedSleepScreen|closedReaderDoesNotSaveSleepScreen|usb.*|persistedSleepScreen.*|homeSleepScreen.*|pageTurnsResumeWhenReaderIsShownAfterSleep|shutdownFinalSaveTimesOut|teardownRemovesApplicationFilter)|platform\\.(shutdown|sleep-persistence|kobo-power-screen|usb-removal|native-lifecycle)|desktop\\.deviceEmulation|model\\.engine-activity)$"
-        "diagnostics:^(model\\.(diagnostics|crash-reports)|desktop\\.(diagnostics|storageDiagnostics)|platform\\.standby-(input|diagnostics))$"
+        "diagnostics:^(model\\.(diagnostics|crash-reports)|desktop\\.(diagnostics|storageDiagnostics)|lifecycle\\.developmentStateReports|platform\\.standby-(input|diagnostics))$"
         "kobo:^(platform\\.(startup-recovery|native-startup-wait|screensaver-loader|native-dialog-overlay|nickel-.*)|lifecycle\\.nativeOpeningStatus|model\\.qt-compat)$"
         "settings:^(desktop\\.(settings.*|lightDarkModeShortcut)|lifecycle\\.(appearance.*|uneditedPanelTransitions|overflowClosesCurrentPanel)|model\\.appearance-settings|component\\.(ui|acknowledgments)|ui\\.(regularIconWeight|connectedModalFooter))$"
         "layout:^(engine\\..*|corpus\\..*|desktop\\.(columns|globalLayout|advancedText|verticalJustification|stylesheet)|model\\.layout-(cache|compatibility))$"

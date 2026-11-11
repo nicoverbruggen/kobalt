@@ -9,14 +9,9 @@
 #include "platform/api/loopback.h"
 #include "resource_cache.h"
 #include <cerrno>
-#include <QBuffer>
 #include <QElapsedTimer>
 #include <QFile>
-#include <QImageReader>
 #include <QNetworkReply>
-#ifndef KOBALT_READER_HARDWARE
-#  include <QSaveFile>
-#endif
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
@@ -70,14 +65,15 @@ class Transfer : public QObject
 public:
     Transfer(QTcpSocket *socket, ResourceArchive &archive, const QString &route,
              const QString &path, const QMap<QString, qint64> &sizes, ZipResourceIndex &index,
-             QObject *parent)
+             NativeImageFactory nativeImage, QObject *parent)
         : QObject(parent),
           socket_(socket),
           archive_(archive),
           route_(route),
           path_(path),
           sizes_(sizes),
-          index_(index)
+          index_(index),
+          nativeImage_(std::move(nativeImage))
     {
         elapsed_.start();
         socket_->setParent(this);
@@ -116,6 +112,7 @@ private:
     bool requested_ = false, failed_ = false, scheduled_ = false, sending_ = false;
     bool dimensionsOnly_ = false;
     std::unique_ptr<ZipResource> zip_;
+    NativeImageFactory nativeImage_;
     qint64 maxBlock_ = 0;
     qint64 sent_ = 0, length_ = 0;
 
@@ -289,14 +286,11 @@ private:
             reject("native-length");
             return;
         }
-        // kimg contains a native image reference, not portable image bytes.
-        // Nickel's image plugin must consume it while its owners remain alive.
-        if (reply_->header(QNetworkRequest::ContentTypeHeader).toByteArray() == "image/x-kobo") {
-            // For an SVG file Nickel sends a reference to its own raster, which
-            // loses the vector source and is empty in the simulator. A plain
-            // book still holds the source. Serve it only if the entry is
-            // unencrypted, passes its CRC and is SVG text; a protected book's
-            // entries are encrypted and keep the native raster below.
+        const auto type = reply_->header(QNetworkRequest::ContentTypeHeader).toByteArray();
+        auto image = nativeImage_ ? nativeImage_(type, body_) : nullptr;
+        if (image) {
+            // Prefer a validated vector source when the archive contains one.
+            // Protected entries cannot pass plaintext ZIP validation.
             if (name_.endsWith(".svg", Qt::CaseInsensitive)) {
                 const auto source = plainEntry(path_, name_, index_);
                 if (svgSource(source)) {
@@ -304,11 +298,8 @@ private:
                     return;
                 }
             }
-            QBuffer source(&body_);
-            source.open(QIODevice::ReadOnly);
-            QImageReader image(&source);
-            const auto size = image.size();
-            // Nickel has accepted the image reference. Layout needs its size,
+            const auto size = image->size();
+            // The host has accepted the image reference. Layout needs its size,
             // so defer the native pixel decode and PNG conversion to the full request.
             if (dimensionsOnly_) {
                 sendDimensions(size);
@@ -319,15 +310,13 @@ private:
                 send(imagePlaceholder(size));
                 return;
             }
-            // Only use plaintext which matches Nickel's accepted image. A
-            // native filter keeps its native decode path, including for ZIPs.
-            const bool filtered = body_.size() == 20 && body_.startsWith(QByteArray("GT\0", 3))
-                    && body_.at(11) != 0;
-            if (!filtered && startZip(size))
+            // Preserve native effects. Plaintext may replace the decode only
+            // when the host allows it and the image dimensions match.
+            if (image->canUsePlainRaster() && startZip(size))
                 return;
             QElapsedTimer conversion;
             conversion.start();
-            const auto pixels = image.read();
+            const auto pixels = image->read();
             const auto decodeMs = conversion.elapsed();
             if (pixels.isNull()) {
                 reject("image-decode");
@@ -466,7 +455,10 @@ struct ResourceServer::Data
     QString route, path;
 };
 
-ResourceServer::ResourceServer(QObject *parent) : QObject(parent) { }
+ResourceServer::ResourceServer(QObject *parent, NativeImageFactory nativeImage)
+    : QObject(parent), nativeImage_(std::move(nativeImage))
+{
+}
 
 ResourceServer::~ResourceServer()
 {
@@ -545,7 +537,7 @@ bool ResourceServer::open(const QString &path, const OpenArchive &openArchive)
                 continue;
             }
             new Transfer(socket, *data_->archive, data_->route, data_->path, data_->sizes,
-                         data_->index, this);
+                         data_->index, nativeImage_, this);
         }
     });
     return true;

@@ -273,44 +273,45 @@ void NativeProgress::markRecent()
                    DiagnosticSeverity::Warning);
 }
 
-bool NativeProgress::write(const ReadingProgress &expected, const QString &position, double percent,
-                           bool finished, ReadingProgress *verified, QString *error,
-                           const ReadingEstimates *estimates, const ReadingActivity *activity)
+NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QString &position,
+                                       double percent, bool finished,
+                                       const ReadingEstimates *estimates,
+                                       const ReadingActivity *activity)
 {
     // Nickel's Volume API runs on the GUI thread at lifecycle boundaries.
     kobalt::mainthread::BlockingOperation blockingOperation("nickel-progress-write");
-    const auto fail = [error](const QString &message) {
-        if (error)
-            *error = message;
-        return false;
-    };
     if (!NativeLifecycle::nativeProgressSaveAllowed() || deviceTransition())
-        return fail(strings::get(
+        return NativeSaveResult::deferred(strings::get(
                 "error.nickel_save_deferred_while_progress_or_device_state_is_unresolved"));
     const auto &native = api();
     if (!available())
-        return fail(strings::get("error.native_progress_api_is_unavailable"));
+        return NativeSaveResult::unavailable(
+                strings::get("error.native_progress_api_is_unavailable"));
     const bool tolino = native.tolino(native.device());
     if (tolino
         && (!native.setPages || !activity || activity->pages <= 0 || activity->page < 0
             || activity->page >= activity->pages))
-        return fail(strings::get("error.nickel_rejected_the_exact_reading_position"));
+        return NativeSaveResult::rejected(
+                strings::get("error.nickel_rejected_the_exact_reading_position"));
     // Without a position Nickel can store, as for some plain EPUB files, record only
     // the time, the reading status and the percentage. Nickel keeps its own
     // position, and the book still becomes the most recently read one.
     const bool timeOnly = position.isEmpty();
     const auto location = native.location(position, QString());
     if (!timeOnly && (!native.validLocation(&location) || native.teng(&location) != position))
-        return fail(strings::get("error.nickel_rejected_the_exact_reading_position"));
+        return NativeSaveResult::rejected(
+                strings::get("error.nickel_rejected_the_exact_reading_position"));
     const auto db = native.dbName(native.device());
     NativeDatabaseWait wait(native.connection(db, true), true);
     if (!wait.ready()) {
-        return fail(strings::get("error.nickel_database_is_busy_local_position_was_retained"));
+        return NativeSaveResult::busyBeforeWrite(
+                strings::get("error.nickel_database_is_busy_local_position_was_retained"));
     }
     // Nickel starts BEGIN IMMEDIATE and refuses a nested transaction. Never
     // commit someone else's pending work. The lock covers comparison and save.
     if (!native.begin(db))
-        return fail(strings::get("error.nickel_database_is_busy_local_position_was_retained"));
+        return NativeSaveResult::busyBeforeWrite(
+                strings::get("error.nickel_database_is_busy_local_position_was_retained"));
 
     struct Transaction
     {
@@ -332,9 +333,10 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         }
     } transaction{ db };
 
-    const auto before = persisted(error);
+    const auto before = persisted(nullptr);
     if (!expected.valid || !(snapshot(before) == expected))
-        return fail(strings::get("error.nickel_progress_changed_before_saving"));
+        return NativeSaveResult::progressChanged(
+                strings::get("error.nickel_progress_changed_before_saving"));
     // A round trip can leave Nickel's cache behind its committed row. Only
     // refresh after releasing our own transaction, then check the row again.
     const auto cacheMatches = [&](const QVariantMap &values) {
@@ -348,14 +350,17 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     }
     if (!currentCache) {
         if (!native.end(db, false))
-            return fail(strings::get("error.nickel_s_cached_progress_is_not_current"));
+            return NativeSaveResult::unverified(
+                    strings::get("error.nickel_s_cached_progress_is_not_current"));
         transaction.owned = false;
         native.refresh(db);
         if (!native.begin(db))
-            return fail(strings::get("error.nickel_database_is_busy_local_position_was_retained"));
+            return NativeSaveResult::busyBeforeWrite(
+                    strings::get("error.nickel_database_is_busy_local_position_was_retained"));
         transaction.owned = true;
-        if (!(snapshot(persisted(error)) == expected))
-            return fail(strings::get("error.nickel_progress_changed_before_saving"));
+        if (!(snapshot(persisted(nullptr)) == expected))
+            return NativeSaveResult::progressChanged(
+                    strings::get("error.nickel_progress_changed_before_saving"));
     }
     // Detach a fresh native value and let Nickel create its bookmark fields.
     // Persist only those changed fields, never an opening-time Volume snapshot.
@@ -364,7 +369,8 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
     // getDbValues formats DateLastRead to whole seconds, even when SQLite
     // retains milliseconds. The committed-row comparison above stays exact.
     if (!cacheMatches(original))
-        return fail(strings::get("error.nickel_s_cached_progress_is_not_current"));
+        return NativeSaveResult::unverified(
+                strings::get("error.nickel_s_cached_progress_is_not_current"));
     auto stamp = QDateTime::fromMSecsSinceEpoch(
             qMax(QDateTime::currentMSecsSinceEpoch(), expected.modified + 1000), Qt::UTC);
     if (tolino) {
@@ -435,10 +441,10 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
             transaction.owned = false;
         }
         native.refresh(db);
-        return fail(
+        return NativeSaveResult::unverified(
                 strings::get("error.nickel_could_not_commit_progress_local_position_was_retained"));
     }
-    const auto stored = persisted(error);
+    const auto stored = persisted(nullptr);
     const auto actual = snapshot(stored);
     const auto wanted = snapshot(after);
     const auto bookmark = stored.value("tolino_bookmark").toMap();
@@ -463,10 +469,9 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         // A native notification is not proof of persistence. Discard its cache
         // if the independently committed row does not match.
         native.refresh(db);
-        return fail(strings::get(
+        return NativeSaveResult::unverified(strings::get(
                 "error.nickel_persistence_could_not_be_verified_local_position_was_retain"));
     }
-    *verified = actual;
     // Keep Nickel's eligibility, network and power policy. Its worker owns the
     // request after this object closes. This is not proof of server delivery.
     if (!tolino && !timeOnly) {
@@ -474,7 +479,7 @@ bool NativeProgress::write(const ReadingProgress &expected, const QString &posit
         if (native.syncEligible(sync, &volume))
             native.sendBookmark(sync, &volume);
     }
-    return true;
+    return NativeSaveResult::verified(actual, timeOnly);
 }
 
 #ifndef KOBALT_READER_HARDWARE

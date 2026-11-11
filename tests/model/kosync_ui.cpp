@@ -76,7 +76,7 @@ void checkKeyboardInputStaysInEditor()
             QApplication::processEvents();
             for (const char *name :
                  { "rrKosyncLogin", "rrKosyncNow", "rrKosyncLogout", "rrKosyncLearnMore" }) {
-                page.setNativeCloudSync(QString(name) == "rrKosyncLearnMore");
+                page.setNativeCloudSync({ QString(name) == "rrKosyncLearnMore", {} });
                 page.setAccount("https://sync.example", "reader", QString(name) != "rrKosyncLogin",
                                 true);
                 auto *action = page.findChild<QPushButton *>(name);
@@ -98,7 +98,7 @@ void checkKeyboardInputStaysInEditor()
                 require(action->grab().toImage() == normal,
                         "Cancelled Sync action restores its appearance");
             }
-            page.setNativeCloudSync(false);
+            page.setNativeCloudSync({});
             page.setAccount({}, {}, false, true);
             for (const auto *field : { "rrKosyncServer", "rrKosyncUsername", "rrKosyncPassword" }) {
                 page.findChild<QPushButton *>(field)->click();
@@ -720,7 +720,7 @@ int main(int argc, char **argv)
     if (argc > 1)
         require(window.grab().save(QString::fromLocal8Bit(argv[1])),
                 "save account settings capture");
-    page->setNativeCloudSync(true);
+    page->setNativeCloudSync({ true, {} });
     page->setAccount("https://sync.example/prefix", "reader", true, true);
     page->setStatus("Reading progress is up to date.", false);
     panel.fitContent(window.size());
@@ -770,7 +770,7 @@ int main(int argc, char **argv)
     panel.settingsPages->setCurrentIndex(int(reader::SettingsPage::Display));
     require(!reopenedHelp || !reopenedHelp->isVisible(), "leaving Sync dismisses its explanation");
     tab->click();
-    page->setNativeCloudSync(true, true);
+    page->setNativeCloudSync({ true, QStringLiteral("kosync.kobo_cloud") });
     panel.fitContent(window.size());
     QApplication::processEvents();
     require(disclaimer->isVisible() && disclaimer->text().contains("Kobo Cloud")
@@ -779,7 +779,7 @@ int main(int argc, char **argv)
             "Kobo Cloud books explain why KOSync is unavailable");
     require(disclaimer->visibleRegion().boundingRect() == disclaimer->rect(),
             "Kobo Cloud explanation fits on one page");
-    page->setNativeCloudSync(false);
+    page->setNativeCloudSync({});
     page->setAccount("https://sync.example/prefix", "reader", true, true);
     require(server->isVisible() && sync->isVisible() && automatic->isVisible(),
             "sideloaded books retain normal KOsync controls");
@@ -916,10 +916,10 @@ int main(int argc, char **argv)
     page->setAccount("https://sync.example/prefix", "reader", true, false);
     page->setStatus({}, true);
     require(!automatic->isEnabled() && !sync->isEnabled(), "busy sync blocks manual controls");
-    page->setNativeCloudSync(true);
+    page->setNativeCloudSync({ true, {} });
     require(!automatic->isVisible() && !sync->isVisible(),
             "Kobo-managed books hide manual sync controls");
-    page->setNativeCloudSync(false);
+    page->setNativeCloudSync({});
     page->setAccount({}, {}, false, false);
     panel.fitContent(window.size());
     QApplication::processEvents();

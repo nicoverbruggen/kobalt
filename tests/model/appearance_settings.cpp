@@ -736,8 +736,7 @@ int main()
     require(appearance::typographyDefaults().value("font_pixels").toInt() == defaultFontPixels(),
             "Default text size did not follow the screen density");
     readingPpi.store(300);
-    const auto benchmark =
-            appearance::benchmarkTypography("file:///mnt/onboard/kobalt-benchmark.kepub.epub");
+    const auto benchmark = appearance::benchmarkTypography();
     require(benchmark.size() == 15 && benchmark.value("font_face").toString().isEmpty()
                     && benchmark.value("font_pixels").toInt() == defaultFontPixels()
                     && benchmark.value("margin_pixels").toInt() == 60
@@ -746,16 +745,8 @@ int main()
                     && !benchmark.value("dark_mode").toBool()
                     && benchmark.value("hyphenation").toString() == "off",
             "Benchmark typography changed");
-    require(appearance::benchmarkTypography("file:///mnt/onboard/other.epub").isEmpty()
-                    && appearance::benchmarkTypography(
-                               "file:///mnt/onboard/KOBALT-benchmark.kepub.epub")
-                               .isEmpty(),
-            "Benchmark profile matched another book");
     readingPpi.store(212);
-    require(appearance::benchmarkTypography("file:///mnt/onboard/kobalt-benchmark.kepub.epub")
-                            .value("font_pixels")
-                            .toInt()
-                    == defaultFontPixels(),
+    require(appearance::benchmarkTypography().value("font_pixels").toInt() == defaultFontPixels(),
             "Benchmark profile did not follow screen density");
     std::puts("PASS: appearance keys, copy, comparison and typography defaults");
     return 0;

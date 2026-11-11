@@ -1,23 +1,8 @@
 #include "reading_timer.h"
 #include "support/diagnostics.h"
-#include <time.h>
 #include <utility>
 
 namespace kobalt {
-ReadingTimer::Clock ReadingTimer::platformClock()
-{
-#if defined(KOBALT_READING_CLOCK_BOOTTIME) && defined(CLOCK_BOOTTIME)
-    return [] {
-        struct timespec now{};
-        return clock_gettime(CLOCK_BOOTTIME, &now) == 0
-                ? qint64(now.tv_sec) * 1000 + now.tv_nsec / 1000000
-                : qint64(-1);
-    };
-#else
-    return {};
-#endif
-}
-
 ReadingTimer::ReadingTimer(Clock source) : clock(std::move(source))
 {
     // A default QElapsedTimer is not initialized on Kobo's Qt 5.2.

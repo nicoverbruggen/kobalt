@@ -26,7 +26,7 @@ public:
     ReadingBook(std::unique_ptr<ReaderSession> session, QString statePath, storage::Paths paths,
                 QString identity, QByteArray digest, std::unique_ptr<ReadingBridge> bridge,
                 ReadingProgress baseline, ReadingProgress diskBaseline, QString sourceKey = {},
-                ReadingHistory::UtcClock utc = {}, bool koboCloud = false);
+                ReadingHistory::UtcClock utc = {}, ReadingTimer::Clock readingClock = {});
     ~ReadingBook();
 
     void discardPendingSaves() { discardSaves = true; }
@@ -44,18 +44,9 @@ public:
 
     bool hasNativeProgress() const { return bool(bridge); }
 
-    // Downloaded native-library titles use that platform's cloud sync.
-    // Sideloaded file identities keep native local progress and use KOSync.
-    bool usesNativeCloudSync() const { return nativeCloudSync; }
+    bool usesNativeCloudSync() const { return nativeSync.enabled; }
 
-    bool isKoboCloudBook() const { return koboCloudBook; }
-
-    // A sideloaded EPUB file that is not a kepub.
-    bool plainEpub() const
-    {
-        return identity_.startsWith("file://") && identity_.endsWith(".epub", Qt::CaseInsensitive)
-                && !identity_.endsWith(".kepub.epub", Qt::CaseInsensitive);
-    }
+    const NativeSyncPolicy &nativeSyncPolicy() const { return nativeSync; }
 
     // Revocation abandons native work but keeps local data available to save.
     void releaseNative(bool save = true);
@@ -77,9 +68,9 @@ public:
 
     void stopReading(bool background = false, bool nativeAllowed = true);
     void sleepReading(const QJsonObject &preferences);
-    void finishReading(std::function<void(bool)> done);
+    void finishReading(std::function<void(NativeActivityResult)> done);
     // Drain native writes without completing the local session retained by sleep.
-    void drainReadingSave(std::function<void(bool)> done);
+    void drainReadingSave(std::function<void(NativeActivityResult)> done);
     bool readingSavePending() const;
     void retryFailedReadingSave();
     bool checkpointReadingHistory(bool background = false);
@@ -141,12 +132,8 @@ public:
 
     void acknowledge(const ReadingProgress &shown, bool moved);
     void markNativeReading();
-    // False leaves a sync conflict pending for the window to resolve.
-    bool writeNative(const QString &location, const QString &mappingError);
-    enum class NativeSave { Saved, LocalOnly, Conflict, Failed };
-    NativeSave nativeSaveResult() const;
-
-    const QString &nativeSaveError() const { return nativeWritebackError; }
+    NativeSaveResult writeNative(const QString &location, const QString &mappingError);
+    NativeSaveResult nativeSaveResult() const;
 
     // A background checkpoint is queued on the book's writer thread and
     // returns at once; a failure is reported through onCheckpointFailed. A
@@ -189,9 +176,9 @@ private:
     quint64 appearanceGeneration = 0;
     void writeAppearance(int attempt);
     void appearanceCheckpointSaved(const QJsonObject &state);
-    void finishNativeReading(quint64 generation, bool saved);
+    void finishNativeReading(quint64 generation, NativeActivityResult result);
     quint64 nativeFinishGeneration = 0;
-    QVector<std::function<void(bool)>> nativeFinishCallbacks;
+    QVector<std::function<void(NativeActivityResult)>> nativeFinishCallbacks;
     QJsonObject persistedCheckpoint(const QJsonObject &state) const;
     void finishCloseCheckpoint(const QJsonObject &checkpoint, bool saved,
                                std::function<void(bool)> done);
@@ -204,7 +191,7 @@ private:
     storage::Paths paths_;
     QByteArray digest;
     std::unique_ptr<ReadingBridge> bridge;
-    const bool nativeCloudSync, koboCloudBook;
+    const NativeSyncPolicy nativeSync;
     bool released = false, openingStatusAttempted = false, discardSaves = false;
     ReadingProgress baseline;
     ProgressReconciler reconciliation;
@@ -220,7 +207,8 @@ private:
     std::unique_ptr<ReadingSpeed> speed;
     std::unique_ptr<ReadingHistory> history;
     QElapsedTimer speedSaved;
-    QString nativeWriteback = "not-attempted", nativeWritebackError, acceptedFinishedAnchor;
+    NativeSaveResult nativeWriteback;
+    QString acceptedFinishedAnchor;
     // The last checkpoint that reached storage. An identical one is not written again.
     QJsonObject savedCheckpoint, layoutPreferences_;
     // Keep extra fields from the supported record loaded at opening. Reader

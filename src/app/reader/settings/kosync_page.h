@@ -4,6 +4,7 @@
 #include "ui/dialogs/modals.h"
 #include "platform/api/keyboard_controller.h"
 #include "sync/kosync_schedule.h"
+#include "reading/native_sync_policy.h"
 #include <QPointer>
 #include <QDateTime>
 
@@ -19,7 +20,7 @@ public:
     void setSchedule(const kosync::Schedule &schedule);
     // Which platform moments the Automatic sync sheet offers.
     void setScheduleFeatures(bool sleepWake, bool wifi);
-    void setNativeCloudSync(bool enabled, bool koboCloud = false);
+    void setNativeCloudSync(const NativeSyncPolicy &policy);
     void setLastSync(const QDateTime &time);
     void setDeviceName(const QString &name, const QString &defaultName);
     void setFilenameMatching(bool enabled);

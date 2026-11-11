@@ -1,3 +1,4 @@
+#include "platform/qt/annotation_export.h"
 #include "window.h"
 #include "app/library/library_view.h"
 #include "services.h"
@@ -276,7 +277,9 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
               paths, std::move(fonts), std::move(placeholder),
               [this, configureServices = std::move(configureServices)] {
                   auto services = readerHostServices();
-                  services.nativeDialogParent = [this] { return this; };
+                  services.annotationExporter = [this](QWidget *reader) {
+                      return platform::pickerAnnotationExporter(reader, this);
+                  };
                   services.devicePreview = [this] { return screenPreset != 0; };
                   services.readerStandbySupported = screenPreset != 0;
                   // An emulated sleep or power-off suspends the reader as on Kobo.

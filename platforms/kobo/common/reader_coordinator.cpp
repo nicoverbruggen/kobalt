@@ -1,3 +1,5 @@
+#include "diagnostics.h"
+#include "clocks.h"
 #include "native_tile_cover.h"
 #include "reading/appearance_settings.h"
 #include "reader_coordinator.h"
@@ -10,7 +12,6 @@
 #include "browser_handoff.h"
 #include "app/reader_window.h"
 #include "reading/reading_book.h"
-#include "reading/reading_timer.h"
 #include "storage/profile_database.h"
 #include "storage/annotation_database.h"
 #include "storage/reader_storage.h"
@@ -83,6 +84,11 @@ QPointer<ReaderCoordinator> activeCoordinator;
 #ifdef KOBALT_SCENARIO_PLAYER
 bool benchmarkTypographyEnabled = false;
 
+bool benchmarkPublication(const QString &identity)
+{
+    return identity == QStringLiteral("file:///mnt/onboard/kobalt-benchmark.kepub.epub");
+}
+
 // Nickel's own store sync, for the evaluation player. On firmware 4.46.23836
 // and 6.0.279225 the status-bar sync button calls N3SyncManager::sync(). The
 // call returns once the sync has started, and Nickel's workers do the rest.
@@ -119,8 +125,7 @@ extern "C" __attribute__((visibility("default"))) int
 kobalt_benchmark_typography_v1(const char *contentId, int enable)
 {
     if (!qApp || QThread::currentThread() != qApp->thread() || !contentId
-        || (enable != 0 && enable != 1)
-        || kobalt::appearance::benchmarkTypography(QString::fromUtf8(contentId)).isEmpty()
+        || (enable != 0 && enable != 1) || !benchmarkPublication(QString::fromUtf8(contentId))
         || !activeCoordinator || (enable && !activeCoordinator->idleForBenchmark()))
         return 0;
     benchmarkTypographyEnabled = enable != 0;
@@ -925,8 +930,8 @@ void ReaderCoordinator::load()
     const auto originalAppearance = saved;
     QJsonObject temporaryAppearance;
 #ifdef KOBALT_SCENARIO_PLAYER
-    if (benchmarkTypographyEnabled)
-        temporaryAppearance = kobalt::appearance::benchmarkTypography(run.identity);
+    if (benchmarkTypographyEnabled && benchmarkPublication(run.identity))
+        temporaryAppearance = kobalt::appearance::benchmarkTypography();
 #endif
     const auto preferences = kobalt::appearance::readerPreferences(
             kobalt::storage::readPreferences(environment_.paths.preferences()).object, saved);
@@ -999,9 +1004,10 @@ void ReaderCoordinator::showReader()
     auto book = std::make_unique<kobalt::ReadingBook>(
             std::move(run.session), run.statePath, environment_.paths, run.identity,
             run.expectedHash,
-            kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress)),
+            kobalt::nickel::makeReadingBridge(run.identity, std::move(run.nativeProgress),
+                                              koboCloud),
             run.baseline, run.diskBaseline, QString(), kobalt::ReadingHistory::UtcClock(),
-            koboCloud);
+            nickel::bootTimeClock());
     auto services = readerHostServices();
     const auto identity = run.identity;
     services.presentation = [this, identity](QWidget *reader) {
@@ -1243,7 +1249,7 @@ void ReaderCoordinator::runScenarios(const QString &path)
         auto *manager = radio.manager();
         return manager && radio.up(manager);
     };
-    host.realMilliseconds = ReadingTimer::platformClock();
+    host.realMilliseconds = nickel::bootTimeClock();
     // Nickel asks canSuspend before each standby, so a refusal keeps the
     // device awake. A kernel wake lock does not work here: Nickel reads
     // wakeup_count on the GUI thread before it suspends, and that read waits
@@ -1323,7 +1329,7 @@ void ReaderCoordinator::runScenarios(const QString &path)
                                        { "qt", QString::fromLatin1(qVersion()) } });
     QFile version("/mnt/onboard/.kobo/version");
     if (version.open(QIODevice::ReadOnly)) {
-        const auto device = kobalt::diagnosticDeviceFields(version.read(512));
+        const auto device = kobalt::nickel::diagnosticDeviceFields(version.read(512));
         for (auto it = device.begin(); it != device.end(); ++it)
             header[it.key()] = it.value();
     }

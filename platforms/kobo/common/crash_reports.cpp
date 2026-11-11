@@ -1,3 +1,4 @@
+#include "diagnostics.h"
 #include "crash_reports.h"
 #include "build_info.h"
 #include "support/diagnostics.h"
@@ -639,7 +640,7 @@ void installCrashReports(const QString &path, const QString &mount)
 #ifdef KOBALT_READER_HARDWARE
     QFile version("/mnt/onboard/.kobo/version");
     if (version.open(QIODevice::ReadOnly)) {
-        const auto device = diagnosticDeviceFields(version.read(512));
+        const auto device = nickel::diagnosticDeviceFields(version.read(512));
         for (auto it = device.begin(); it != device.end(); ++it)
             addHeader(it.key().toLatin1().constData(), it.value().toString().toLatin1());
     }

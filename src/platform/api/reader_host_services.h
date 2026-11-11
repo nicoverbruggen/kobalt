@@ -1,5 +1,7 @@
 #pragma once
 #include "page_animation_support.h"
+#include "annotation_export.h"
+#include "reading/reading_progress.h"
 #include "page_buttons.h"
 #include "dictionary_service.h"
 #include "keyboard_controller.h"
@@ -39,8 +41,8 @@ struct WifiStatus
 // Constructed by the host and moved into one reader window. Queries stay live
 // across sleep and capability changes. Factories return independently owned
 // non-null controllers; they never return a borrowed native handle. Every
-// callback except automaticBookOpening, setAutomaticBookOpening,
-// debugProgressAction, observeBattery, observeBluetooth, observeWifi, remoteKeyActivity and syncNetwork is required,
+// callback except annotationExporter, automaticBookOpening, setAutomaticBookOpening,
+// observeBattery, observeBluetooth, observeWifi, remoteKeyActivity and syncNetwork is required,
 // including unsupported hosts.
 // A notice in the reader's usual notice card. `name` is the card's object
 // name; its message and button add `Message` and `Confirm`.
@@ -49,8 +51,21 @@ struct ReaderNotice
     QString title, message, name;
 };
 
+enum class ProgressSimulation { NewPosition, Duplicate, OlderPosition, Finished, SaveFailure };
+
+// Optional host development facilities. Omitted callbacks leave progress
+// simulation disabled; report flags do not affect lifecycle checkpoints.
+struct ReaderDevelopment
+{
+    bool continuousStateReports = false, detailedStateReports = false;
+    QString progressDescription;
+    std::function<bool(const QString &identity)> progressAvailable;
+    std::function<bool(ProgressSimulation, const ReadingProgress &)> simulateProgress;
+};
+
 struct ReaderHostServices
 {
+    ReaderDevelopment development;
     // Human-readable model used for the default sync device name.
     QString deviceName;
     // Standalone hosts return to their Library; Kobo uses the default exit label.
@@ -59,13 +74,13 @@ struct ReaderHostServices
     bool desktopUi = false;
     // Narrow phone form factor, resolved from native bounds and reader density.
     bool phoneLayout = false;
+    // A secondary pointer click can open annotation mode on desktop hosts.
+    bool rightClickAnnotations = false;
     // Optional: the cutout, system-bar and corner bands of a reader of this
     // size. The reader asks again on resize or refreshHostPresentation().
     std::function<SafeArea(QSize)> safeArea;
-    // Kobo supplies its default export folder. Other hosts open a save-location picker.
-    std::function<QString()> annotationExportDirectory;
-    // Optional native dialog parent for hosts that embed the reader in a canvas.
-    std::function<QWidget *()> nativeDialogParent;
+    // Empty means export is unsupported. The host owns destination policy and IO.
+    AnnotationExporterFactory annotationExporter;
     // Missing capability means monochrome; independent of theme and animation preferences.
     std::function<bool()> colorDisplay;
     // Optional desktop query. Device previews retain simulated status chrome.
@@ -152,9 +167,6 @@ struct ReaderHostServices
     // the hold.
     std::function<void(QObject *owner, std::function<bool()> holding)> holdWifiOff;
     PresentationFactory presentation;
-    // Empty in hardware builds. Keep the value layout independent of the
-    // diagnostic macro used by the constructing and consuming targets.
-    std::function<QJsonObject(const QJsonObject &)> debugProgressAction;
     std::function<bool()> browserAvailable;
     std::function<bool(const QUrl &, QWidget *)> openBrowser;
     // Optional notice the reader shows once its first page has painted, for

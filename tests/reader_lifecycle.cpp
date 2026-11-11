@@ -1,3 +1,4 @@
+#include "platform/qt/annotation_export.h"
 #include <QVariant>
 #include <QSqlQuery>
 #include "storage/annotation_database.h"
@@ -668,6 +669,156 @@ private slots:
     {
         engineActivity().pause(false);
         directory.reset();
+    }
+
+    void developmentOptions_data()
+    {
+        QTest::addColumn<int>("action");
+        QTest::addColumn<bool>("available");
+        QTest::addColumn<bool>("succeeds");
+        QTest::newRow("unsupported") << -1 << false << false;
+        QTest::newRow("unavailable-book") << 0 << false << false;
+        QTest::newRow("failed") << 0 << true << false;
+        QTest::newRow("new-position") << 0 << true << true;
+        QTest::newRow("duplicate") << 1 << true << true;
+        QTest::newRow("older-position") << 2 << true << true;
+        QTest::newRow("finished") << 3 << true << true;
+        QTest::newRow("save-failure") << 4 << true << true;
+    }
+
+    // Checks host-controlled availability, typed simulation actions and failed results.
+    void developmentOptions()
+    {
+        QFETCH(int, action);
+        QFETCH(bool, available);
+        QFETCH(bool, succeeds);
+        QString queriedIdentity;
+        ReadingProgress received;
+        int calls = 0;
+        auto selected = ProgressSimulation::NewPosition;
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [&](ReaderHostServices &services) {
+            if (action < 0)
+                return;
+            services.development.progressDescription = "Host progress simulation";
+            services.development.progressAvailable = [&](const QString &identity) {
+                queriedIdentity = identity;
+                return available;
+            };
+            services.development.simulateProgress = [&](ProgressSimulation kind,
+                                                        const ReadingProgress &progress) {
+                ++calls;
+                selected = kind;
+                received = progress;
+                return succeeds;
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        auto *entry = host.window()->findChild<QPushButton *>("rrDebugProgress");
+        if (action < 0) {
+            QVERIFY(!entry);
+            return;
+        }
+        QVERIFY(entry);
+        entry->click();
+        auto *card = host.window()->findChild<QWidget *>("rrProgressDebug");
+        QVERIFY(card);
+        QCOMPARE(queriedIdentity, host.book()->identity());
+        auto hasMessage = [&](const QString &message) {
+            for (auto *label : card->findChildren<QLabel *>())
+                if (label->text() == message)
+                    return true;
+            return false;
+        };
+        QVERIFY(hasMessage("Host progress simulation"));
+        const char *names[] = { "rrDebugNewPosition", "rrDebugDuplicate", "rrDebugStale",
+                                "rrDebugFinished", "rrDebugSaveFailure" };
+        const ProgressSimulation kinds[] = { ProgressSimulation::NewPosition,
+                                             ProgressSimulation::Duplicate,
+                                             ProgressSimulation::OlderPosition,
+                                             ProgressSimulation::Finished,
+                                             ProgressSimulation::SaveFailure };
+        for (const auto *name : names) {
+            auto *button = card->findChild<QPushButton *>(name);
+            QVERIFY(button);
+            QCOMPARE(button->isEnabled(), available);
+        }
+        const auto expected = host.book()->readProgress();
+        card->findChild<QPushButton *>(names[action])->click();
+        QCOMPARE(calls, available ? 1 : 0);
+        if (!available)
+            return;
+        QCOMPARE(selected, kinds[action]);
+        QCOMPARE(received.book, expected.book);
+        QCOMPARE(received.location, expected.location);
+        QCOMPARE(received.modified, expected.modified);
+        QCOMPARE(received.status, expected.status);
+        if (succeeds) {
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrProgressDebug"));
+        } else {
+            QVERIFY(hasMessage(strings::get(
+                    "reader.the_simulation_failed_no_successful_update_was_reported")));
+        }
+    }
+
+    void developmentStateReports_data()
+    {
+        QTest::addColumn<bool>("details");
+        QTest::addColumn<bool>("continuous");
+        QTest::newRow("ordinary") << false << false;
+        QTest::newRow("detailed") << true << false;
+        QTest::newRow("continuous") << false << true;
+        QTest::newRow("continuous-detailed") << true << true;
+    }
+
+    // Checks opt-in routine and detailed reports without disabling lifecycle snapshots.
+    void developmentStateReports()
+    {
+        QFETCH(bool, details);
+        QFETCH(bool, continuous);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.development.detailedStateReports = details;
+            services.development.continuousStateReports = continuous;
+        };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        QTRY_VERIFY(!host.session()->busy());
+        // Opening always takes a snapshot. Drain it before checking whether
+        // the later progress choice produces an opt-in routine report.
+        QTRY_VERIFY(QFile::exists(testPaths().stateReport));
+        QTRY_VERIFY(!host.window()->pendingStorageSave());
+        QVERIFY(QFile::remove(testPaths().stateReport));
+        host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
+        host.window()->progressTick();
+        QPushButton *keep = nullptr;
+        QTRY_VERIFY((keep = host.window()->findChild<QPushButton *>("rrKeepPosition"))
+                    && keep->isVisible());
+        QVERIFY(click(canvas, keep));
+        QTRY_VERIFY(!host.window()->pendingStorageSave());
+        QCOMPARE(QFile::exists(testPaths().stateReport), continuous);
+        host.window()->checkpoint();
+        QTRY_VERIFY(!host.window()->pendingStorageSave());
+        const auto report = storage::readJson(testPaths().stateReport);
+        QVERIFY(report.contains("page"));
+        QCOMPARE(report.contains("links"), details);
+        QCOMPARE(report.contains("word_counts"), details);
+        QCOMPARE(report.contains("reading_estimates"), details);
     }
 
     // Checks that an event delivered during reader destruction no longer reaches the reader's application filter.
@@ -6491,9 +6642,10 @@ private slots:
         host.progress->holdFinish = true;
         int nativeReplies = 0;
         bool nativeSaved = true;
-        host.book()->finishReading([&](bool saved) {
+        host.book()->finishReading([&](NativeActivityResult result) {
             ++nativeReplies;
-            nativeSaved = saved;
+            nativeSaved = activityCompleted(result);
+            QCOMPARE(result, NativeActivityResult::Abandoned);
         });
         QVERIFY(host.progress->finishDone);
         const auto lateNativeReply = host.progress->finishDone;
@@ -6793,8 +6945,8 @@ private slots:
         host.progress->rejectWriteWhileFinishing = true;
         if (contention) {
             host.progress->failWrite = true;
-            host.progress->writeError =
-                    strings::get("error.nickel_database_is_busy_local_position_was_retained");
+            host.progress->busyBeforeWrite = true;
+            host.progress->writeError = "A different message for a typed busy result.";
             QTimer::singleShot(contention, host.window(),
                                [progress = host.progress] { progress->failWrite = false; });
         }
@@ -6935,9 +7087,14 @@ private slots:
             host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         }
         host.progress->failWrite = outcome == "failed";
+        // The old busy wording must not turn an unverified write into a retry.
+        host.progress->writeError =
+                strings::get("error.nickel_database_is_busy_local_position_was_retained");
         const auto before = host.progress->current;
         host.window()->sleepReader();
         QCOMPARE(host.progress->writes, writes + (outcome == "saved" ? 1 : 0));
+        if (outcome == "failed")
+            QCOMPARE(host.progress->writeAttempts, 1);
         if (outcome == "saved") {
             QCOMPARE(host.progress->current.location, expected);
             QCOMPARE(host.progress->percent, percent);
@@ -7297,6 +7454,180 @@ private slots:
         turn();
         QTRY_VERIFY(host.window()->flushBeforeStandby());
         QCOMPARE(stored(), saved);
+    }
+
+    void annotationExportOwnerDestruction_data()
+    {
+        QTest::addColumn<bool>("destroyObserver");
+        QTest::newRow("observer") << true;
+        QTest::newRow("operation") << false;
+    }
+
+    void annotationExportOwnerDestruction()
+    {
+        QFETCH(bool, destroyObserver);
+
+        struct Gate
+        {
+            std::atomic_bool entered{ false }, released{ false };
+        };
+
+        const auto gate = std::make_shared<Gate>();
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        auto reader = std::make_unique<QWidget>();
+        reader->resize(600, 900);
+        auto exporter = platform::directoryAnnotationExporter(
+                reader.get(), directory.path(), [gate](const QUrl &url, const QByteArray &bytes) {
+                    gate->entered = true;
+                    while (!gate->released)
+                        QThread::msleep(1);
+                    return platform::writeLocalExport(url, bytes);
+                });
+
+        struct Release
+        {
+            std::shared_ptr<Gate> gate;
+
+            ~Release() { gate->released = true; }
+        } release{ gate };
+
+        int replies = 0;
+        exporter->start({ "book.zip", "Book", "HTML", [] { return QByteArray("archive"); },
+                          [] { return true; }, [] { return true; } },
+                        [&](AnnotationExportResult) { ++replies; });
+        auto *confirm = reader->findChild<QPushButton *>("rrAnnotationExportConfirm");
+        QVERIFY(confirm);
+        confirm->click();
+        QTRY_VERIFY(gate->entered.load());
+        if (destroyObserver) {
+            reader.reset();
+            QVERIFY(exporter->writing());
+            QCOMPARE(replies, 0);
+            gate->released = true;
+            QTRY_VERIFY(!exporter->writing());
+        } else {
+            gate->released = true;
+            mainthread::AllowBlocking allow("destroying the export operation after closing input");
+            exporter.reset();
+        }
+        QCoreApplication::processEvents();
+        QCOMPARE(replies, 0);
+        QFile file(directory.filePath("book.zip"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArray("archive"));
+    }
+
+    void annotationExportHandoff_data()
+    {
+        QTest::addColumn<QString>("boundary");
+        for (const auto *boundary : { "usb", "shutdown", "close", "revoke", "cancel", "failure" })
+            QTest::newRow(boundary) << QString::fromLatin1(boundary);
+    }
+
+    void annotationExportHandoff()
+    {
+        QFETCH(QString, boundary);
+
+        struct Gate
+        {
+            std::atomic_bool entered{ false }, released{ false };
+        };
+
+        const auto gate = std::make_shared<Gate>();
+        auto paths = testPaths();
+        const auto directory = paths.directory + "/exports";
+        AnnotationExporter *exporter = nullptr;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.annotationExporter = [&](QWidget *reader) {
+                auto operation = platform::directoryAnnotationExporter(
+                        reader, directory,
+                        [gate, fail = boundary == "failure"](const QUrl &url,
+                                                             const QByteArray &bytes) {
+                            gate->entered = true;
+                            while (!gate->released)
+                                QThread::msleep(1);
+                            return !fail && platform::writeLocalExport(url, bytes);
+                        });
+                exporter = operation.get();
+                return operation;
+            };
+        };
+        CloseHost cleanup{ host };
+
+        // Release the worker before any failed assertion closes the reader.
+        struct Release
+        {
+            std::shared_ptr<Gate> gate;
+
+            ~Release() { gate->released = true; }
+        } release{ gate };
+
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(exporter);
+        int replies = 0;
+        AnnotationExportStatus outcome = AnnotationExportStatus::Unsupported;
+        exporter->start({ "book.zip", "Book", "HTML", [] { return QByteArray("archive"); },
+                          [] { return true; }, [] { return true; } },
+                        [&](AnnotationExportResult result) {
+                            ++replies;
+                            outcome = result.status;
+                        });
+        auto *confirm = host.window()->findChild<QPushButton *>("rrAnnotationExportConfirm");
+        QVERIFY(confirm);
+        confirm->click();
+        QTRY_VERIFY(gate->entered.load());
+        QVERIFY(exporter->writing());
+        QVERIFY(host.window()->pendingStorageSave());
+        QVERIFY(!host.window()->flushBeforeStandby());
+        const int page = host.session()->page();
+        QVERIFY(host.session()->turn(1));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->page() != page);
+        QCOMPARE(replies, 0);
+        int handoffs = 0;
+        if (boundary == "usb")
+            host.window()->prepareUsb([&] { ++handoffs; });
+        else if (boundary == "shutdown")
+            host.window()->prepareShutdown([&] { ++handoffs; });
+        else if (boundary == "close")
+            host.window()->close();
+        else if (boundary == "revoke") {
+            host.window()->revokeNativeReading();
+            host.window()->finishStorageSave([&](bool) { ++handoffs; }, false);
+        } else if (boundary == "cancel")
+            exporter->cancel();
+        QCoreApplication::processEvents();
+        QCOMPARE(handoffs, 0);
+        QCOMPARE(closed.count(), 0);
+        gate->released = true;
+        if (boundary == "close")
+            QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+        else {
+            QTRY_VERIFY(!exporter->writing());
+            if (boundary == "usb" || boundary == "shutdown" || boundary == "revoke")
+                QTRY_COMPARE(handoffs, 1);
+        }
+        QCOMPARE(replies, boundary == "cancel" ? 0 : 1);
+        if (boundary != "cancel")
+            QCOMPARE(outcome,
+                     boundary == "failure" ? AnnotationExportStatus::Failed
+                                           : AnnotationExportStatus::Saved);
+        QFile file(directory + "/book.zip");
+        if (boundary == "failure")
+            QVERIFY(!file.exists());
+        else {
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QCOMPARE(file.readAll(), QByteArray("archive"));
+        }
     }
 
     void usbFinalSave_data()

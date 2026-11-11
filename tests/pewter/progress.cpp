@@ -16,6 +16,7 @@
 // contract.
 namespace {
 using kobalt::NativeProgress;
+using kobalt::NativeSaveResult;
 using kobalt::ReadingActivity;
 using kobalt::ReadingEstimates;
 using kobalt::ReadingProgress;
@@ -76,16 +77,21 @@ ReadingProgress current(const NativeProgress &progress)
 }
 
 bool write(NativeProgress &progress, const QString &location, double percent, bool finished,
-           QString *error, ReadingProgress *verified = nullptr)
+           QString *error, ReadingProgress *verified = nullptr, NativeSaveResult *outcome = nullptr)
 {
     // The reader writes at a lifecycle boundary, where no input can arrive.
     kobalt::mainthread::AllowBlocking allow("pewter: a lifecycle boundary");
     const auto expected = current(progress);
     pewter::clearCalls();
-    ReadingProgress result;
     const auto shown = activity();
-    return progress.write(expected, location, percent, finished, verified ? verified : &result,
-                          error, &estimates, &shown);
+    const auto result = progress.write(expected, location, percent, finished, &estimates, &shown);
+    if (outcome)
+        *outcome = result;
+    if (error)
+        *error = result.message();
+    if (verified && result.saved())
+        *verified = result.baseline();
+    return result.saved();
 }
 
 int indexOf(const QByteArray &name)
@@ -280,8 +286,13 @@ void refuseFailures(NativeProgress &progress)
     QString error;
     auto before = pewter::row(book);
 
+    NativeSaveResult outcome;
     pewter::options().beginFails = true;
-    require(!write(progress, position, 30, false, &error), "a busy database refuses the save");
+    require(!write(progress, position, 30, false, &error, nullptr, &outcome),
+            "a busy database refuses the save");
+    require(outcome.status() == NativeSaveResult::Status::BusyBeforeWrite,
+            "transaction-entry failure retains its typed busy result");
+    require(!outcome.baseline().valid, "a refused write has no verified baseline");
     require(!error.isEmpty(), "a refused save reports why");
     require(!pewter::find("VolumeManager::updateFields"), "a busy database gets no update");
     requireRefusedWrite(before, "a busy database leaves the row as it was");
@@ -302,10 +313,27 @@ void refuseFailures(NativeProgress &progress)
 
     error.clear();
     pewter::options().commitFails = true;
-    require(!write(progress, position, 30, false, &error), "a failed commit fails the save");
+    require(!write(progress, position, 30, false, &error, nullptr, &outcome),
+            "a failed commit fails the save");
+    require(outcome.status() == NativeSaveResult::Status::Unverified,
+            "commit failure must not become a retryable transaction-entry failure");
     require(pewter::find("Repository::refreshCache"), "a failed commit discards Nickel's cache");
     requireRefusedWrite(before, "a failed commit leaves the row as it was");
     pewter::options().commitFails = false;
+
+    // A successful commit is insufficient when the persisted fields differ.
+    QSqlQuery alter(pewter::database());
+    require(alter.exec("CREATE TRIGGER change_saved_percent AFTER UPDATE OF ___PercentRead "
+                       "ON content BEGIN UPDATE content SET ___PercentRead = 7 "
+                       "WHERE ContentID = NEW.ContentID; END"),
+            "create the persisted-value mismatch fixture");
+    require(!write(progress, position, 30, false, &error, nullptr, &outcome),
+            "a committed but mismatched row is not a verified save");
+    require(outcome.status() == NativeSaveResult::Status::Unverified && !outcome.baseline().valid,
+            "readback failure must not publish a verified baseline");
+    requireSame(pewter::row(book).value("___PercentRead").toInt(), 7,
+                "the mismatch fixture actually changed persisted data");
+    require(alter.exec("DROP TRIGGER change_saved_percent"), "remove the mismatch fixture");
 
     error.clear();
     {
@@ -320,10 +348,9 @@ void refuseFailures(NativeProgress &progress)
                 "the test moves the stored position");
         before = pewter::row(book);
         pewter::clearCalls();
-        ReadingProgress verified;
         const auto shown = activity();
-        require(!progress.write(expected, position, 30, false, &verified, &error, &estimates,
-                                &shown),
+        const auto result = progress.write(expected, position, 30, false, &estimates, &shown);
+        require(result.status() == NativeSaveResult::Status::ProgressChanged,
                 "a position changed by another writer refuses the save");
     }
     require(!pewter::find("VolumeManager::updateFields"), "a changed position gets no update");

@@ -21,13 +21,19 @@ struct ReadingProgress
 };
 
 // One reconciler belongs to one book opening. A different position needs a choice,
-// except when Nickel drops an acknowledged KEPUB span's offset at the same time.
+// unless the host recognizes a normalization of the acknowledged position.
 // A choice about an older alert cannot accept a later one.
 class ProgressReconciler
 {
 public:
-    explicit ProgressReconciler(ReadingProgress initial)
-        : latest(initial), acknowledged(initial) { }
+    using Normalization = bool (*)(const ReadingProgress &, const ReadingProgress &);
+
+    explicit ProgressReconciler(ReadingProgress initial, Normalization normalize = nullptr)
+        : latest(initial), acknowledged(initial), normalization(normalize)
+    {
+    }
+
+    void reset(const ReadingProgress &verified) { latest = acknowledged = verified; }
 
     void observe(const ReadingProgress &incoming);
     void acknowledge(const ReadingProgress &shown);
@@ -45,6 +51,7 @@ public:
 
 private:
     ReadingProgress latest, acknowledged;
+    Normalization normalization;
 };
 
 // A local checkpoint is authoritative until Nickel has a different, newer

@@ -1,4 +1,5 @@
 #include "reading_bridge.h"
+#include "progress_policy.h"
 #include "native_progress.h"
 #include "native_reading_session.h"
 #include "native_lifecycle.h"
@@ -8,8 +9,11 @@ namespace {
 class Bridge final : public ReadingBridge
 {
 public:
-    Bridge(QString identity, std::unique_ptr<NativeProgress> progress)
-        : progress_(std::move(progress)), reading_(std::move(identity))
+    Bridge(QString identity, std::unique_ptr<NativeProgress> progress, bool koboCloud)
+        : progress_(std::move(progress)),
+          allowUnmapped_(nickel::allowsUnmappedPosition(identity)),
+          syncPolicy_(nickel::nativeSyncPolicy(identity, koboCloud)),
+          reading_(std::move(identity))
     {
         reading_.estimatesChanged = [this] {
             if (estimatesChanged) {
@@ -25,23 +29,35 @@ public:
         return NativeLifecycle::nativeProgressSaveAllowed() && !progress_->deviceTransition();
     }
 
+    ProgressReconciler::Normalization positionNormalization() const override
+    {
+        return acceptsPositionNormalization;
+    }
+
+    bool allowsUnmappedPosition() const override { return allowUnmapped_; }
+
+    NativeSyncPolicy nativeSyncPolicy() const override { return syncPolicy_; }
+
     ReadingProgress read(QString *error) const override { return progress_->read(error); }
 
     bool takeChange() override { return progress_->takeChange(); }
 
     bool signalsChanges() const override { return progress_->signalsChanges(); }
 
-    bool write(const ReadingProgress &expected, const QString &location, double percent,
-               bool finished, const ReadingActivity &activity, ReadingProgress *verified,
-               QString *error) override
+    NativeSaveResult write(const ReadingProgress &expected, const QString &location, double percent,
+                           bool finished, const ReadingActivity &activity) override
     {
         ReadingEstimates estimates;
         const bool available = reading_.estimates(activity, &estimates);
-        return progress_->write(expected, location, percent, finished, verified, error,
+        return progress_->write(expected, location, percent, finished,
                                 available ? &estimates : nullptr, &activity);
     }
 
-    bool markReading() override { return progress_->markReading(); }
+    NativeActivityResult markReading() override
+    {
+        return progress_->markReading() ? NativeActivityResult::Completed
+                                        : NativeActivityResult::Failed;
+    }
 
     void markRecent() override { progress_->markRecent(); }
 
@@ -67,9 +83,11 @@ public:
 
     void stopReading() override { reading_.stop(); }
 
-    void finishReading(std::function<void(bool)> done) override
+    void finishReading(std::function<void(NativeActivityResult)> done) override
     {
-        reading_.finish(std::move(done));
+        reading_.finish([done = std::move(done)](bool saved) {
+            done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);
+        });
     }
 
     bool readingSavePending() const override { return reading_.savePending(); }
@@ -78,15 +96,17 @@ public:
 
 private:
     std::unique_ptr<NativeProgress> progress_;
+    const bool allowUnmapped_;
+    const NativeSyncPolicy syncPolicy_;
     NativeReadingSession reading_;
 };
 } // namespace
 
-std::unique_ptr<ReadingBridge> makeReadingBridge(QString identity,
-                                                 std::unique_ptr<NativeProgress> progress)
+std::unique_ptr<ReadingBridge>
+makeReadingBridge(QString identity, std::unique_ptr<NativeProgress> progress, bool koboCloud)
 {
     if (!progress)
         return {};
-    return std::make_unique<Bridge>(std::move(identity), std::move(progress));
+    return std::make_unique<Bridge>(std::move(identity), std::move(progress), koboCloud);
 }
 } // namespace kobalt::nickel

@@ -1266,8 +1266,7 @@ void ReadingPage::beginPointer(QPointF point, const QInputEvent *event)
 
 void ReadingPage::mousePressEvent(QMouseEvent *event)
 {
-#if defined(Q_OS_MAC) || defined(KOBALT_DESKTOP_POINTER)
-    if (ui::isPointerMouse(event) && event->button() == Qt::RightButton) {
+    if (rightClickAnnotations && ui::isPointerMouse(event) && event->button() == Qt::RightButton) {
         cancelHold();
         origin = ui::mousePosition(event);
         rightPressed = event->buttons() == Qt::RightButton;
@@ -1275,7 +1274,6 @@ void ReadingPage::mousePressEvent(QMouseEvent *event)
         event->accept();
         return;
     }
-#endif
     rightPressed = false;
     if (!kobalt::ui::isPointerMouse(event) || event->button() != Qt::LeftButton)
         return;
@@ -1284,15 +1282,13 @@ void ReadingPage::mousePressEvent(QMouseEvent *event)
 
 void ReadingPage::mouseMoveEvent(QMouseEvent *event)
 {
-#if defined(Q_OS_MAC) || defined(KOBALT_DESKTOP_POINTER)
-    if (rightPressed && ui::isPointerMouse(event)) {
+    if (rightClickAnnotations && rightPressed && ui::isPointerMouse(event)) {
         rightMoved |= event->buttons() != Qt::RightButton
                 || (ui::mousePosition(event) - origin).manhattanLength()
                         > metrics::lookup::moveTolerance;
         event->accept();
         return;
     }
-#endif
     if (!tracking || !kobalt::ui::isPointerMouse(event))
         return;
     latest = kobalt::ui::mousePosition(event);
@@ -1301,8 +1297,7 @@ void ReadingPage::mouseMoveEvent(QMouseEvent *event)
 
 void ReadingPage::mouseReleaseEvent(QMouseEvent *event)
 {
-#if defined(Q_OS_MAC) || defined(KOBALT_DESKTOP_POINTER)
-    if (ui::isPointerMouse(event) && event->button() == Qt::RightButton) {
+    if (rightClickAnnotations && ui::isPointerMouse(event) && event->button() == Qt::RightButton) {
         const bool request = rightPressed && !rightMoved && event->buttons() == Qt::NoButton
                 && (ui::mousePosition(event) - origin).manhattanLength()
                         <= metrics::lookup::moveTolerance;
@@ -1313,7 +1308,6 @@ void ReadingPage::mouseReleaseEvent(QMouseEvent *event)
         event->accept();
         return;
     }
-#endif
     rightPressed = false;
     if (!kobalt::ui::isPointerMouse(event) || event->button() != Qt::LeftButton)
         return;

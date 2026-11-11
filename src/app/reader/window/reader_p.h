@@ -357,9 +357,7 @@ private:
     QTimer *clockTimer = nullptr;
     // The minute of the day the clock timer was last armed in.
     int clockMinute = -1;
-#ifdef KOBALT_READER_HARDWARE
     const bool liveState = QFile::exists(book->paths().directory + "/live-state");
-#endif
     QLabel *menuClock, *menuSession;
     kobalt::ui::BatteryIndicator *menuBattery;
     kobalt::ui::BluetoothIndicator *menuBluetooth;
@@ -619,9 +617,7 @@ private:
     void showChapters();
     void toggleGraph();
     void openGraph();
-#ifndef KOBALT_READER_HARDWARE
     void showProgressDebug();
-#endif
     bool progressBlocked() const;
     void dismissProgressChoice();
     void showProgressChoice();
@@ -699,12 +695,8 @@ private:
     void closeMarksActions();
     void askExportMarks(AnnotationExportFormat format);
     QByteArray marksExportArchive(AnnotationExportFormat format);
-    void confirmMarksExport(AnnotationExportFormat format, bool replace, const QString &path,
-                            std::function<void()> accepted);
-    void saveMarksExport(AnnotationExportFormat format, const QString &path, bool replaceApproved);
-    void chooseMarksExport(AnnotationExportFormat format);
     void finishMarksExport(AnnotationExportFormat format, bool saved, const QString &location = {});
-    QPointer<QDialog> annotationExportPicker;
+    std::unique_ptr<AnnotationExporter> annotationExporter;
     QPointer<kobalt::ui::ModalOverlay> customReplaceDialog;
     QPointer<kobalt::ui::ModalOverlay> annotationErrorDialog, settingsWriteErrorDialog;
     QPointer<kobalt::ui::ModalOverlay> formattingWarningDialog;

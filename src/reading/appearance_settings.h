@@ -242,8 +242,8 @@ inline void migrateLineSpacing(QJsonObject &saved)
 bool same(const QJsonObject &a, const QJsonObject &b);
 // The typography that Restore appearance defaults selects.
 QJsonObject typographyDefaults();
-// Empty for every identity except the benchmark-owned EPUB.
-QJsonObject benchmarkTypography(const QString &identity);
+// Reproducible typography for host-selected evaluation publications.
+QJsonObject benchmarkTypography();
 // A global default selects the override for new books, not Publisher Fonts.
 // Existing saved book selections stay unchanged.
 void applyFontDefault(QJsonObject &saved, const QJsonObject &preferences);

@@ -405,7 +405,6 @@ foreach(lane qt5 qt6 qt5-eval qt6-eval)
 endforeach()
 
 # Per-source definitions of platforms/kobo/CMakeLists.txt with its defaults.
-set(defines_reading_timer.cpp -DKOBALT_READING_CLOCK_BOOTTIME=1)
 set(defines_annotation_database.cpp -DKOBALT_SQLITE_ANNOTATIONS_DEFAULT=1)
 set(defines_diagnostics.cpp -DKOBALT_VERBOSE_DIAGNOSTICS=1)
 # The pewter tests use the device build's view of the adapter headers.

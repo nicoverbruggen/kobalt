@@ -1,5 +1,5 @@
 #pragma once
-#include "reading/reading_progress.h"
+#include "reading/native_save_result.h"
 #include <QObject>
 #include <QPointer>
 #include <QVariantMap>
@@ -17,10 +17,9 @@ public:
     ~NativeProgress() override;
     static bool available();
     ReadingProgress read(QString *error = nullptr) const;
-    bool write(const ReadingProgress &expected, const QString &location, double percent,
-               bool finished, ReadingProgress *verified, QString *error,
-               const ReadingEstimates *estimates = nullptr,
-               const ReadingActivity *activity = nullptr);
+    NativeSaveResult write(const ReadingProgress &expected, const QString &location, double percent,
+                           bool finished, const ReadingEstimates *estimates = nullptr,
+                           const ReadingActivity *activity = nullptr);
     bool markReading();
     // Records the book as recently read for Nickel's Home screen, as Nickel's
     // reader does when a book closes. Best effort; a busy database skips it.

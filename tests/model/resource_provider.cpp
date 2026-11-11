@@ -99,6 +99,46 @@ struct Counters
     int opened = 0, requested = 0, aborted = 0, replies = 0, destroyed = 0;
 };
 
+struct ImageState
+{
+    QSize size{ 3, 2 };
+    QImage pixels{ 3, 2, QImage::Format_ARGB32 };
+    bool plain = true;
+    int sizes = 0, reads = 0, destroyed = 0;
+};
+
+class TestNativeImage final : public NativeImage
+{
+public:
+    TestNativeImage(ImageState &state, QNetworkReply *reply) : state(state), reply(reply) { }
+
+    ~TestNativeImage() override
+    {
+        require(bool(reply), "The native reply must outlive its image decoder");
+        ++state.destroyed;
+    }
+
+    QSize size() override
+    {
+        require(bool(reply), "Native dimensions require a live reply");
+        ++state.sizes;
+        return state.size;
+    }
+
+    QImage read() override
+    {
+        require(bool(reply), "Native pixel conversion requires a live reply");
+        ++state.reads;
+        return state.pixels;
+    }
+
+    bool canUsePlainRaster() const override { return state.plain; }
+
+private:
+    ImageState &state;
+    QPointer<QNetworkReply> reply;
+};
+
 class PendingReply final : public QNetworkReply
 {
 public:
@@ -617,7 +657,18 @@ int main(int argc, char **argv)
 
     Counters protocolCounts;
     ProtocolArchive *provider = nullptr;
-    native::ResourceServer protocol;
+    ImageState nativeImage;
+    nativeImage.pixels.fill(Qt::red);
+    native::ResourceServer protocol(
+            nullptr,
+            [&](const QByteArray &type,
+                const QByteArray &reference) -> std::unique_ptr<NativeImage> {
+                if (type != "image/x-test-native")
+                    return {};
+                require(reference == "native-image-reference",
+                        "Pass the complete native reference to the host");
+                return std::make_unique<TestNativeImage>(nativeImage, provider->latest);
+            });
     require(protocol.open(path,
                           [&] {
                               auto archive = std::make_unique<ProtocolArchive>(protocolCounts);
@@ -726,9 +777,50 @@ int main(int argc, char **argv)
         connectRequest(client, protocol, firstLine + "filename: image.svg\r\n" + auth + "\r\n");
         waitFor([&] { return bool(provider->latest); }, "SVG request reaches provider");
         provider->latest->append("native-image-reference");
-        provider->latest->complete(22, QNetworkReply::NoError, "image/x-kobo");
+        provider->latest->complete(22, QNetworkReply::NoError, "image/x-test-native");
         require(body(response(client)) == svg,
                 "native SVG reference uses validated plaintext vector source");
+    }
+    require(nativeImage.sizes == 0 && nativeImage.reads == 0 && nativeImage.destroyed == 1,
+            "A validated vector source needs no native raster conversion");
+    for (int mode = 0; mode < 5; ++mode) {
+        nativeImage.plain = mode != 1;
+        nativeImage.size = mode == 2 ? QSize(4, 2) : QSize(3, 2);
+        const bool dimensions = mode == 3;
+        if (mode == 4)
+            nativeImage.pixels = {};
+        const int reads = nativeImage.reads;
+        const int destroyed = nativeImage.destroyed;
+        QTcpSocket client;
+        connectRequest(client, protocol,
+                       firstLine + "filename: image.png\r\n" + auth
+                               + (dimensions ? "X-Kobalt-Image-Dimensions: 1\r\n" : "") + "\r\n");
+        waitFor([&] { return bool(provider->latest); }, "native image request reaches provider");
+        provider->latest->append("native-image-reference");
+        // A failed decoder must be used rather than bypassed by plaintext.
+        if (mode == 4)
+            nativeImage.plain = false;
+        provider->latest->complete(22, QNetworkReply::NoError, "image/x-test-native");
+        const auto reply = response(client);
+        if (dimensions) {
+            require(reply.startsWith("HTTP/1.1 206 ")
+                            && reply.contains("X-Kobalt-Image-Dimensions: 1 3 2\r\n")
+                            && body(reply).isEmpty() && nativeImage.reads == reads,
+                    "Native dimension probes must not decode or transfer pixels");
+        } else if (mode == 0) {
+            require(body(reply) == largePng && nativeImage.reads == reads,
+                    "Matching plaintext can bypass native decoding when the host allows it");
+        } else if (mode == 4) {
+            require(reply.startsWith("HTTP/1.1 404 ") && body(reply).isEmpty(),
+                    "A failed native decode must not expose reference bytes");
+        } else {
+            const auto decoded = QImage::fromData(body(reply));
+            require(!decoded.isNull() && decoded.pixel(0, 0) == qRgb(255, 0, 0)
+                            && nativeImage.reads == reads + 1,
+                    "Native effects or mismatched dimensions must keep the host decode path");
+        }
+        require(nativeImage.destroyed == destroyed + 1,
+                "Each native decoder is released before its reply");
     }
     {
         const int aborted = protocolCounts.aborted;

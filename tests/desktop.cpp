@@ -1,3 +1,5 @@
+#include "platform/posix/diagnostics.h"
+#include "platform/qt/annotation_export.h"
 #include "storage/record_writer.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/controls/options.h"
@@ -409,8 +411,9 @@ struct Fixture
                   [this, annotationExports, standaloneSettings,
                    configure](ReaderHostServices &services) {
                       if (annotationExports)
-                          services.annotationExportDirectory = [this] {
-                              return paths.directory + "/exports/annotations";
+                          services.annotationExporter = [this](QWidget *reader) {
+                              return platform::directoryAnnotationExporter(
+                                      reader, paths.directory + "/exports/annotations");
                           };
                       // Dictionary management belongs to standalone hosts. Its
                       // gallery rows use the same reader sizes without Kobo chrome.
@@ -6528,13 +6531,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             filename->setText(exportedPath);
             QTRY_COMPARE(picker->selectedFiles().value(0), exportedPath);
             QVERIFY(QMetaObject::invokeMethod(picker, "accept", Qt::QueuedConnection));
-        } else {
+        }
+        QTRY_VERIFY(fixture.visible("rrAnnotationExportDone"));
+        if (!pickerExport) {
             const QDir exportFolder(fixture.paths.directory + "/exports/annotations");
             const auto exportedFiles = exportFolder.entryList({ "*.zip" }, QDir::Files);
             QCOMPARE(exportedFiles.size(), 1);
             exportedPath = exportFolder.filePath(exportedFiles.first());
         }
-        QTRY_VERIFY(fixture.visible("rrAnnotationExportDone"));
         QTRY_VERIFY(!fixture.widget("rrAnnotationExportDialog"));
         QTRY_VERIFY(exportPicker.isNull());
         QFile exportedFile(exportedPath);
@@ -6811,6 +6815,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     {
         QFETCH(bool, dark);
         ReadingPage page(nullptr, [] { });
+        page.rightClickAnnotations = true;
         page.resize(500, 600);
         page.setPalette(ui::readerPalette(page.palette(), dark));
         page.setProperty("reader_dark", dark);
@@ -9914,6 +9919,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     void annotationRightClickRejectsChords()
     {
         ReadingPage page(nullptr, [] { });
+        page.rightClickAnnotations = true;
         page.resize(600, 900);
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
@@ -9931,6 +9937,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::mouseRelease(&page, Qt::LeftButton, Qt::NoModifier, point);
         QTest::mouseRelease(&page, Qt::RightButton, Qt::NoModifier, point);
         QCOMPARE(requests, 0);
+        QTest::mouseClick(&page, Qt::RightButton, Qt::NoModifier, point);
+        QCOMPARE(requests, 1);
+        page.rightClickAnnotations = false;
         QTest::mouseClick(&page, Qt::RightButton, Qt::NoModifier, point);
         QCOMPARE(requests, 1);
     }
@@ -11995,6 +12004,7 @@ int main(int argc, char **argv)
     FontCopies fontCopies;
     copies = &fontCopies;
     GuardedApplication app(argc, argv);
+    setDiagnosticSystem(platform::processDiagnosticSystem());
     if (QGuiApplication::platformName() != "minimal" && !watching) {
         qCritical() << "This executable only runs headlessly.";
         return 2;

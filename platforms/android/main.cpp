@@ -1,3 +1,6 @@
+#include "platform/posix/diagnostics.h"
+#include "annotation_export.h"
+#include "platform/qt/annotation_export.h"
 #include "platforms/standalone/reader.h"
 #include "platforms/standalone/start_screen.h"
 #include "services.h"
@@ -47,7 +50,10 @@ public:
                   std::move(fonts), std::move(placeholder),
                   [this] {
                       auto services = android::readerHostServices();
-                      services.nativeDialogParent = [this] { return this; };
+                      services.annotationExporter = [this](QWidget *reader) {
+                          return platform::pickerAnnotationExporter(reader, this,
+                                                                    android::writeAnnotationExport);
+                      };
                       // The cutout and system-bar bands above and below the
                       // reader, while it shows. The sides stay window margins.
                       services.safeArea = [this](QSize) {
@@ -565,6 +571,7 @@ int main(int argc, char **argv)
     readingPpi.store(physicalPpi);
     ui::setDensity(physicalPpi);
     QApplication::setFont(ui::interfaceFont());
+    setDiagnosticSystem(platform::processDiagnosticSystem());
     initializeDiagnostics(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                           + "/diagnostics");
     Window window(engineFontInputs(*assets, "/system/fonts", {}),

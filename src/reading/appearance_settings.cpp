@@ -369,10 +369,8 @@ void applyFontDefault(QJsonObject &saved, const QJsonObject &preferences)
         saved["font_face"] = face;
 }
 
-QJsonObject benchmarkTypography(const QString &identity)
+QJsonObject benchmarkTypography()
 {
-    if (identity != QStringLiteral("file:///mnt/onboard/kobalt-benchmark.kepub.epub"))
-        return {};
     return qt::object({ { "font_face", QString() },
                         { "default_font_face", QStringLiteral("Libron") },
                         { "font_pixels", defaultFontPixels() },

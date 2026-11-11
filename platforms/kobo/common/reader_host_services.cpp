@@ -1,4 +1,4 @@
-#include "platform/qt/annotation_export.h"
+#include "app/reader/views/annotation_exporter.h"
 #include "clocks.h"
 #include <QKeyEvent>
 #include "reader_host_services.h"
@@ -237,7 +237,7 @@ ReaderHostServices readerHostServices()
     ReaderHostServices result;
     result.readerStandbySupported = true;
     result.annotationExporter = [](QWidget *reader) {
-        return platform::directoryAnnotationExporter(
+        return reader::directoryAnnotationExporter(
                 reader, QStringLiteral("/mnt/onboard/Kobalt/Annotations"));
     };
 

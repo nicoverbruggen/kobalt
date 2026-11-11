@@ -1,4 +1,4 @@
-#include "platform/qt/annotation_export.h"
+#include "app/reader/views/annotation_exporter.h"
 #include "window.h"
 #include "app/library/library_view.h"
 #include "services.h"
@@ -278,7 +278,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
               [this, configureServices = std::move(configureServices)] {
                   auto services = readerHostServices();
                   services.annotationExporter = [this](QWidget *reader) {
-                      return platform::pickerAnnotationExporter(reader, this);
+                      return reader::pickerAnnotationExporter(reader, this);
                   };
                   services.devicePreview = [this] { return screenPreset != 0; };
                   services.readerStandbySupported = screenPreset != 0;

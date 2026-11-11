@@ -1,4 +1,4 @@
-#include "platform/qt/annotation_export.h"
+#include "app/reader/views/annotation_exporter.h"
 #include <QVariant>
 #include <QSqlQuery>
 #include "storage/annotation_database.h"
@@ -8321,7 +8321,7 @@ private slots:
         QVERIFY(directory.isValid());
         auto reader = std::make_unique<QWidget>();
         reader->resize(600, 900);
-        auto exporter = platform::directoryAnnotationExporter(
+        auto exporter = reader::directoryAnnotationExporter(
                 reader.get(), directory.path(), [gate](const QUrl &url, const QByteArray &bytes) {
                     gate->entered = true;
                     while (!gate->released)
@@ -8385,7 +8385,7 @@ private slots:
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&](ReaderHostServices &services) {
             services.annotationExporter = [&](QWidget *reader) {
-                auto operation = platform::directoryAnnotationExporter(
+                auto operation = reader::directoryAnnotationExporter(
                         reader, directory,
                         [gate, fail = boundary == "failure"](const QUrl &url,
                                                              const QByteArray &bytes) {

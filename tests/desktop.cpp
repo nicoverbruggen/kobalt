@@ -1,6 +1,6 @@
 #include "support/host_presentation.h"
 #include "platform/posix/diagnostics.h"
-#include "platform/qt/annotation_export.h"
+#include "app/reader/views/annotation_exporter.h"
 #include "storage/record_writer.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/controls/options.h"
@@ -436,7 +436,7 @@ struct Fixture
                    configure](ReaderHostServices &services) {
                       if (annotationExports)
                           services.annotationExporter = [this](QWidget *reader) {
-                              return platform::directoryAnnotationExporter(
+                              return reader::directoryAnnotationExporter(
                                       reader, paths.directory + "/exports/annotations");
                           };
                       // Dictionary management belongs to standalone hosts. Its

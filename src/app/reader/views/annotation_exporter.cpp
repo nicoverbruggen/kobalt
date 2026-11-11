@@ -1,4 +1,4 @@
-#include "annotation_export.h"
+#include "annotation_exporter.h"
 #include "support/save_wait.h"
 #include "storage/record_writer.h"
 #include "support/main_thread.h"
@@ -15,7 +15,7 @@
 #include <QPushButton>
 #include <utility>
 
-namespace kobalt::platform {
+namespace kobalt::reader {
 namespace {
 class QtAnnotationExporter final : public QObject, public AnnotationExporter
 {
@@ -254,4 +254,4 @@ std::unique_ptr<AnnotationExporter> pickerAnnotationExporter(QWidget *reader, QW
     return std::make_unique<QtAnnotationExporter>(reader, nativeParent, QString(), true,
                                                   std::move(write));
 }
-} // namespace kobalt::platform
+} // namespace kobalt::reader

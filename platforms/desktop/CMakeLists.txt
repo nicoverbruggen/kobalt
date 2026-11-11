@@ -114,7 +114,6 @@ else()
 endif()
 file(GLOB_RECURSE app_sources CONFIGURE_DEPENDS "${source}/app/*.cpp" "${source}/ui/*.cpp")
 add_library(kobalt-desktop OBJECT ${app_sources}
-    "${source}/platform/qt/annotation_export.cpp"
     window.cpp services.cpp
     ../standalone/reader.cpp ../standalone/start_screen.cpp
     "${source}/platform/api/reader_orientation.cpp")

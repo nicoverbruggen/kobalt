@@ -1,6 +1,6 @@
 #include "platform/posix/diagnostics.h"
 #include "annotation_export.h"
-#include "platform/qt/annotation_export.h"
+#include "app/reader/views/annotation_exporter.h"
 #include "platforms/standalone/reader.h"
 #include "platforms/standalone/start_screen.h"
 #include "services.h"
@@ -51,8 +51,8 @@ public:
                   [this] {
                       auto services = android::readerHostServices();
                       services.annotationExporter = [this](QWidget *reader) {
-                          return platform::pickerAnnotationExporter(reader, this,
-                                                                    android::writeAnnotationExport);
+                          return reader::pickerAnnotationExporter(reader, this,
+                                                                  android::writeAnnotationExport);
                       };
                       // The cutout and system-bar bands above and below the
                       // reader, while it shows. The sides stay window margins.

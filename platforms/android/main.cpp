@@ -122,6 +122,7 @@ public:
                     store.removeBook(key);
                 });
         start->setSingleBooksAreCopies(true);
+        start->setResourceFolders(android::resourceFolderLabels, android::chooseResourceFolder);
         applyLibraryTheme();
         layout->addWidget(start);
         canvas = new standalone::WidgetCanvas(this);
@@ -581,7 +582,9 @@ int main(int argc, char **argv)
     setDiagnosticSystem(platform::processDiagnosticSystem());
     initializeDiagnostics(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                           + "/diagnostics");
-    Window window(engineFontInputs(*assets, "/system/fonts", {}),
+    Window window(engineFontInputs(*assets, "/system/fonts",
+                                   QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                                           + "/user-folders/fonts"),
                   placeholderFontFamily(*assets, copies));
     // Keep edge-to-edge geometry while the activity controls bar visibility.
     window.show();

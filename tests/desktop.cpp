@@ -2872,6 +2872,98 @@ void checkStatsPins(Fixture &fixture, int pins)
     }
 }
 
+void checkResourceFolders(int preset, bool dark)
+{
+    Fixture fixture(dark);
+    QVERIFY(fixture.prepared);
+    selectPreview(fixture, preset);
+    auto *start = fixture.window.findChild<standalone::StartScreen *>();
+    QVERIFY(start);
+    QStringList labels{ {}, {}, {} };
+    int requested = -1, cleared = -1;
+    start->setResourceFolders([&labels] { return labels; },
+                              [&](int kind, bool clear) {
+                                  if (clear) {
+                                      cleared = kind;
+                                      labels[kind].clear();
+                                  } else {
+                                      requested = kind;
+                                  }
+                              });
+    start->showLibrary();
+    auto *view = start->library();
+    QTRY_COMPARE(view->size(), librarySize(preset));
+    const auto name = screenshotVariant(preset, dark);
+    const auto visible = [view](const QString &name) -> QWidget * {
+        for (auto *widget : view->findChildren<QWidget *>(name))
+            if (widget->isVisible())
+                return widget;
+        return nullptr;
+    };
+    const auto close = [&] {
+        auto *button = visible("libraryResourceFoldersClose");
+        QVERIFY(button);
+        static_cast<QPushButton *>(button)->click();
+    };
+    const auto captures = [&](const QString &scene) {
+        for (int page = 1; page < 10; ++page) {
+            QCoreApplication::processEvents();
+            QVERIFY(capture(fixture,
+                            name + '-' + scene
+                                    + (page == 1 ? QString() : '-' + QString::number(page))));
+            auto *next = visible("libraryResourceFoldersNext");
+            if (!next || !next->isEnabled())
+                return;
+            static_cast<QPushButton *>(next)->click();
+        }
+        QFAIL("Resource folder modal did not finish paging");
+    };
+    const auto openFolders = [&] {
+        view->findChild<QPushButton *>("libraryMore")->click();
+        view->findChild<QPushButton *>("libraryMoreResourceFolders")->click();
+    };
+    const auto reveal = [&](const QString &objectName) {
+        for (int i = 0; i < 4; ++i) {
+            auto *widget = visible(objectName);
+            if (widget && widget->isVisible())
+                return widget;
+            auto *next = static_cast<QPushButton *>(visible("libraryResourceFoldersNext"));
+            if (!next || !next->isVisible() || !next->isEnabled())
+                break;
+            next->click();
+        }
+        return static_cast<QWidget *>(nullptr);
+    };
+    view->findChild<QPushButton *>("libraryMore")->click();
+    QVERIFY(view->findChild<QPushButton *>("libraryMoreResourceFolders"));
+    QVERIFY(capture(fixture, name + "-library-resource-options"));
+    view->findChild<QPushButton *>("libraryMoreResourceFolders")->click();
+    captures("library-resource-folders");
+    close();
+    for (int kind = 0; kind < 3; ++kind) {
+        openFolders();
+        auto *row = reveal(QString("libraryResourceFolder%1").arg(kind));
+        QVERIFY(row);
+        static_cast<QPushButton *>(row)->click();
+        QCOMPARE(requested, kind);
+        labels[kind] = QStringList{ "Dictionaries on SD card", "Reading fonts",
+                                    "My bookmark icons" }[kind];
+        QVERIFY(!fixture.window.readerWindow());
+    }
+    openFolders();
+    captures("library-resource-folders-selected");
+    close();
+    for (int kind = 0; kind < 3; ++kind) {
+        openFolders();
+        auto *clear = reveal(QString("libraryResourceFolderClear%1").arg(kind));
+        QVERIFY(clear);
+        static_cast<QPushButton *>(clear)->click();
+        QCOMPARE(cleared, kind);
+        QVERIFY(labels[kind].isEmpty());
+        close();
+    }
+}
+
 void checkCustomPinnedBookmarks(int preset, bool dark)
 {
     Fixture fixture(dark);
@@ -5412,6 +5504,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks custom icons first, built-in choices, theme changes and removed-icon placeholders.
+    void resourceFolders_data() { screenshotVariants(); }
+
+    void resourceFolders()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkResourceFolders(preset, dark);
+    }
+
     void customPinnedBookmarks_data() { screenshotVariants(); }
 
     void customPinnedBookmarks()
@@ -12606,6 +12707,15 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void resourceFolders_data() { screenshotVariants(); }
+
+    void resourceFolders()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkResourceFolders(preset, dark);
+    }
 
     void customPinnedBookmarks_data() { screenshotVariants(); }
 

@@ -1604,3 +1604,12 @@
 "features.words_description" = "Hides the Words tab, the dictionary's save button and My Words in the Library. Lookups are no longer saved; saved words are kept.";
 "words.no_entry" = "No dictionary entry · Added by you";
 "words.no_entry_detail" = "The dictionary had no entry for this word. You added it to My Words yourself.";
+
+/* Android resource folders */
+"library.resource_folders" = "Resource folders";
+"library.resource_folders_description" = "Choose folders for dictionaries, fonts and custom icons. Changes load when you next open a book.";
+"library.dictionary_folder" = "Dictionaries";
+"library.font_folder" = "Fonts";
+"library.icon_folder" = "Custom icons";
+"library.folder_not_selected" = "Choose a folder";
+"library.clear_folder" = "Clear folder choice";

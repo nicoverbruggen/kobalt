@@ -1505,6 +1505,12 @@ void LibraryView::showMoreSheet()
         items.append(ui::actionItem(
                 strings::get("library.about"), "libraryMoreAbout", ui::ControlIcon::About,
                 [this] { showAbout(); }, true));
+        if (chooseResourceFolder)
+            items.insert(items.size() - 1,
+                         ui::actionItem(
+                                 strings::get("library.resource_folders"),
+                                 "libraryMoreResourceFolders", ui::ControlIcon::Folders,
+                                 [this] { showResourceFolders(); }, true));
         moreSheet = new ui::ActionMenu(this, {}, items);
         moreSheet->setObjectName("libraryMoreSheet");
         moreSheet->dismissed = [this] { closeOverlay(); };
@@ -1516,6 +1522,53 @@ void LibraryView::showMoreSheet()
     moreSheet->show();
     moreSheet->raise();
     moreSheet->setFocus();
+}
+
+void LibraryView::showResourceFolders()
+{
+    closeOverlay();
+    auto *modal = new ui::NoticeModal(this,
+                                      { strings::get("library.resource_folders_description"),
+                                        strings::get("library.resource_folders"),
+                                        {} },
+                                      { strings::get("common.ok"), "libraryResourceFoldersClose" });
+    modal->setObjectName("libraryResourceFolders");
+    overlay = modal;
+    const auto labels = resourceFolderLabels ? resourceFolderLabels() : QStringList();
+    const char *keys[] = { "library.dictionary_folder", "library.font_folder",
+                           "library.icon_folder" };
+    for (int kind = 0; kind < 3; ++kind) {
+        auto *row = new ui::ListRow(modal->card());
+        row->setObjectName(QString("libraryResourceFolder%1").arg(kind));
+        row->setTitle(strings::get(keys[kind]));
+        const auto label = labels.value(kind);
+        row->setDetail(label.isEmpty() ? strings::get("library.folder_not_selected") : label);
+        row->setFixedHeight(row->sizeHint().height());
+        row->setAccessory(ui::ListRow::Chevron{});
+        if (!label.isEmpty()) {
+            auto *clear = row->addAction(QString("libraryResourceFolderClear%1").arg(kind),
+                                         strings::get("library.clear_folder"));
+            connect(clear, &QPushButton::clicked, this, [this, kind] {
+                if (chooseResourceFolder)
+                    chooseResourceFolder(kind, true);
+                showResourceFolders();
+            });
+        }
+        connect(row, &QPushButton::clicked, this, [this, kind] {
+            closeOverlay();
+            if (chooseResourceFolder)
+                chooseResourceFolder(kind, false);
+        });
+        modal->card()->rows()->insertWidget(modal->card()->rows()->count() - 1, row);
+    }
+    connect(modal->primaryButton(), &QPushButton::clicked, this, [this] { closeOverlay(); });
+    modal->dismissed = [this] { closeOverlay(); };
+    setDark(dark);
+    modal->setGeometry(rect());
+    modal->fitCard();
+    modal->show();
+    modal->raise();
+    modal->setFocus();
 }
 
 void LibraryView::showAbout()

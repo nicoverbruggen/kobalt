@@ -41,6 +41,7 @@ fi
     --workdir /work/platforms/android "$image" bash -euc '
         exec 9>"/work/build/android-$KOBALT_ANDROID_HOST_ARCH/build.lock"
         flock -n 9 || { echo "Android output is in use by another build" >&2; exit 1; }
+        cmake -DOUTPUT="/work/build/android-$KOBALT_ANDROID_HOST_ARCH/user-folders-tests" -P /work/platforms/android/check-user-folders.cmake
         started=$SECONDS
         options=(-DKOBALT_ANDROID_RELEASE=OFF)
         if [[ $KOBALT_ANDROID_RELEASE == 1 ]]; then options=(-DKOBALT_ANDROID_RELEASE=ON -DCMAKE_BUILD_TYPE=Release); fi

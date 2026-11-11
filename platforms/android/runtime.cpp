@@ -1,4 +1,5 @@
 #include "runtime.h"
+#include "dictionaries/stardict.h"
 #include <QGuiApplication>
 #include <QInputMethod>
 #include <QJniObject>
@@ -35,6 +36,31 @@ void releaseFolder(const QString &uri)
 {
     QNativeInterface::QAndroidApplication::context().callMethod<void>(
             "releaseFolder", QJniObject::fromString(uri).object<jstring>());
+}
+
+QStringList resourceFolderLabels()
+{
+    QStringList labels;
+    const QJniObject context = QNativeInterface::QAndroidApplication::context();
+    for (int i = 0; i < 3; ++i)
+        labels.append(
+                context.callObjectMethod("resourceFolderLabel", "(I)Ljava/lang/String;", jint(i))
+                        .toString());
+    return labels;
+}
+
+void chooseResourceFolder(int kind, bool clear)
+{
+    // Clearing updates SharedPreferences in memory and queues its disk write.
+    if (clear) {
+        QNativeInterface::QAndroidApplication::context().callMethod<void>(
+                "chooseResourceFolder", jint(kind), jboolean(true));
+        return;
+    }
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread([kind, clear] {
+        QNativeInterface::QAndroidApplication::context().callMethod<void>(
+                "chooseResourceFolder", jint(kind), jboolean(clear));
+    });
 }
 
 void openLibraryBook(const QString &uri, const QString &destination, qint64 size, qint64 modified)
@@ -215,4 +241,11 @@ extern "C" JNIEXPORT void JNICALL Java_org_kobalt_android_KobaltActivity_folderC
         if (owner && chosenFolder)
             chosenFolder(key, name);
     });
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_kobalt_android_KobaltActivity_prepareDictionaries(JNIEnv *, jobject, jstring directory)
+{
+    // Called on the reader opening worker while refreshing selected folders.
+    kobalt::FolderDictionaries::prepare(QJniObject(directory).toString());
 }

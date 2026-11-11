@@ -163,7 +163,7 @@ Run `bash platforms/kobo/build.sh qt5-diagnostic` for firmware 4, or `qt6-diagno
 
 ## Android
 
-The Android project builds a signed debug APK through Qt's standard CMake `apk` target. It uses the prepared multi-architecture kobuild image; Docker selects its native host variant. Both variants target Android `arm64-v8a`.
+The Android project builds a signed debug APK through Qt's standard CMake `apk` target. Its build first runs the plain Java selected-folder checks with the SDK JDK. See [Android resource folders](reader/android.md#resource-folders) for choosing font, dictionary and custom-icon folders. It uses the prepared multi-architecture kobuild image; Docker selects its native host variant. Both variants target Android `arm64-v8a`.
 
 ```sh
 docker pull ghcr.io/nicoverbruggen/kobuild:android-v0.5.3

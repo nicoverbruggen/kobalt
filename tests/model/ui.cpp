@@ -3309,6 +3309,46 @@ int main(int argc, char **argv)
     }
     {
         using namespace kobalt::ui;
+        // A selected folder can replace a same-path face between book openings.
+        for (bool loaded : { false, true }) {
+            QTemporaryDir folder;
+            require(folder.isValid(), "Cannot create font refresh fixture");
+            const auto path = folder.path() + "/Reading.ttf";
+            const auto regular =
+                    kobalt::test::readerAssets().fontData("ebook-core/NV_Bitter-Regular.ttf");
+            const auto bold =
+                    kobalt::test::readerAssets().fontData("ebook-core/NV_Bitter-Bold.ttf");
+            require(!regular.isEmpty() && !bold.isEmpty() && regular != bold,
+                    "Missing replacement font fixtures");
+            const auto replace = [&path](const QByteArray &bytes) {
+                QFile file(path);
+                require(file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                                && file.write(bytes) == bytes.size(),
+                        "Cannot replace font fixture");
+            };
+            replace(regular);
+            const auto family = QString("Folder font refresh %1").arg(loaded);
+            QFont changed(family);
+            changed.setPixelSize(36);
+            require(registerPrivateInterfaceFont(path, family), "Cannot register refresh fixture");
+            QImage previous;
+            if (loaded) {
+                require(nativeEditorFontData(changed) == regular,
+                        "Cannot load original font bytes");
+                previous = renderPrivateText("iiiiWWWW", changed).image;
+            }
+            replace(bold);
+            forgetPrivateInterfaceFonts(folder.path());
+            require(nativeEditorFontData(changed).isEmpty(),
+                    "Removed font registration survived refresh");
+            require(registerPrivateInterfaceFont(path, family)
+                            && nativeEditorFontData(changed) == bold,
+                    "Reopening retained stale font bytes or a stale lazy reader");
+            if (loaded)
+                require(renderPrivateText("iiiiWWWW", changed).image != previous,
+                        "Font refresh retained cached glyphs or shaped text");
+            forgetPrivateInterfaceFonts(folder.path());
+        }
         const auto alias = QStringLiteral("Dictionary private-only canary");
         require(registerPrivateInterfaceFont(
                         kobalt::test::readerAssets().file("fonts/NotoSansMath-Regular.ttf"), alias),

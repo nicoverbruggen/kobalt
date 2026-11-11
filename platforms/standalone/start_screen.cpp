@@ -73,6 +73,8 @@ void StartScreen::buildLibrary()
         view->refresh();
     };
     view->singleBooksAreCopies = singleBooksAreCopies;
+    view->resourceFolderLabels = resourceFolderLabels;
+    view->chooseResourceFolder = chooseResourceFolder;
     view->setKeyboardFactory(keyboard);
     view->setDark(dark);
     view->show();
@@ -100,6 +102,17 @@ void StartScreen::applyTextSize()
     }
     view = nullptr;
     buildLibrary();
+}
+
+void StartScreen::setResourceFolders(std::function<QStringList()> labels,
+                                     std::function<void(int, bool)> choose)
+{
+    resourceFolderLabels = std::move(labels);
+    chooseResourceFolder = std::move(choose);
+    if (view) {
+        view->resourceFolderLabels = resourceFolderLabels;
+        view->chooseResourceFolder = chooseResourceFolder;
+    }
 }
 
 void StartScreen::setKeyboardFactory(KeyboardFactory factory)

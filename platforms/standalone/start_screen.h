@@ -57,6 +57,8 @@ public:
     // On Android a book opened from the library on its own is Kobalt's copy,
     // which removal deletes. The confirmation says so.
     void setSingleBooksAreCopies(bool value);
+    void setResourceFolders(std::function<QStringList()> labels,
+                            std::function<void(int, bool)> choose);
 signals:
     void exitRequested();
     // From the library: open one of its books, add a folder, or open and add
@@ -82,6 +84,8 @@ private:
     library::LibraryView *view = nullptr;
     std::function<qreal()> textScale;
     KeyboardFactory keyboard;
+    std::function<QStringList()> resourceFolderLabels;
+    std::function<void(int, bool)> chooseResourceFolder;
     // The text scale the library was built with.
     qreal builtTextScale = 1;
     bool libraryRepairPending = false;

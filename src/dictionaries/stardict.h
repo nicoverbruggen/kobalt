@@ -2,6 +2,7 @@
 #include "platform/api/dictionary_service.h"
 #include <memory>
 #include <functional>
+#include <QHash>
 
 namespace kobalt {
 // File-backed indexes and dictzip chunks keep large dictionaries off the heap.
@@ -18,5 +19,25 @@ public:
 private:
     struct Data;
     std::unique_ptr<Data> data;
+};
+
+// User-supplied StarDict files, separate from downloaded dictionaries.
+// Preparation writes only the host's private working copy, on a worker.
+class FolderDictionaries final : public DictionaryService
+{
+public:
+    static void prepare(const QString &directory);
+    explicit FolderDictionaries(QString directory);
+
+    QVector<DictionaryChoice> choices() const override { return entries; }
+
+    bool select(const QString &book, const QString &id, QString *error) override;
+    DictionaryResult lookup(const QString &book, const QString &word) override;
+
+private:
+    QString directory, activeId;
+    QVector<DictionaryChoice> entries;
+    QHash<QString, QString> selected;
+    std::unique_ptr<StarDict> active;
 };
 } // namespace kobalt

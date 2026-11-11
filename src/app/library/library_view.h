@@ -65,6 +65,9 @@ public:
     // On Android a book opened on its own is Kobalt's copy, which removal
     // deletes. The confirmation says so.
     bool singleBooksAreCopies = false;
+    // Optional host folder pickers: dictionaries, fonts, custom pins, in that order.
+    std::function<QStringList()> resourceFolderLabels;
+    std::function<void(int kind, bool clear)> chooseResourceFolder;
 
 protected:
     void resizeEvent(QResizeEvent *) override;
@@ -106,6 +109,7 @@ private:
     void showMenu(ui::ActionMenu *menu, const char *name);
     void confirmRemove(const QString &key);
     void showFolders();
+    void showResourceFolders();
     void showAbout();
     void closeOverlay();
     QWidget *buildEmpty();

@@ -514,6 +514,24 @@ int main(int argc, char **argv)
                 "Dictionary lookup did not resolve a complete phrase entry");
         require(dictionary.lookup("ice").html.isEmpty(),
                 "Phrase lookup silently used only its first word");
+        FolderDictionaries::prepare(folder);
+        FolderDictionaries sideloaded(folder);
+        require(sideloaded.choices().size() == 1
+                        && sideloaded.choices().first().id == "folder:phrase",
+                "Selected folder dictionary not discovered");
+        require(sideloaded.select("book", "folder:phrase", &error), qPrintable(error));
+        require(sideloaded.lookup("book", "ice cream").html.toUtf8() == definition
+                        && sideloaded.lookup("book", "ice cream").dictionaryId == "folder:phrase",
+                "Selected folder dictionary lookup failed");
+        require(!sideloaded.select("book", "folder:../phrase", &error),
+                "Arbitrary dictionary path accepted");
+        DictionaryManager combined(temp.path() + "/folder-downloads",
+                                   std::make_unique<FolderDictionaries>(folder));
+        require(combined.lookup("another-book", "ice cream").dictionaryId == "folder:phrase",
+                "Folder dictionary not available beside downloads");
+        require(QFile::remove(folder + "/phrase.ifo"), "Remove selected dictionary fixture");
+        FolderDictionaries removed(folder);
+        require(removed.choices().isEmpty(), "Removed dictionary remained selectable");
     }
     QByteArray idx("CAT\0", 4);
     be32(idx, first.size());

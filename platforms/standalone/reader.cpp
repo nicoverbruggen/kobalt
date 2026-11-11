@@ -2,6 +2,7 @@
 #include "reading/reading_density.h"
 #include "support/strings.h"
 #include "support/main_thread.h"
+#include "ui/style/private_text.h"
 #include "support/diagnostics.h"
 #include "reader.h"
 #include "app/reader_interface.h"
@@ -21,6 +22,7 @@
 #include <utility>
 #ifdef Q_OS_ANDROID
 #  include <QCoreApplication>
+#  include <QStandardPaths>
 #  include <QJniObject>
 #  include <QtCore/qnativeinterface.h>
 #endif
@@ -206,6 +208,26 @@ void ReaderController::begin(const QString &path, QSize pixels)
         identity, path, viewport, saved, {}, paths.layoutCache(), lease, source->resources(lease)
     };
 #ifdef Q_OS_ANDROID
+    // Materialize the selected document trees before the engine discovers
+    // fonts. This factory runs on the opening worker, after the old reader drains.
+    const auto resources = request.resources;
+    request.resources = [resources](const QMap<QString, qint64> &sizes, const QString &font,
+                                    std::shared_ptr<std::atomic_bool> rejected) {
+        mainthread::BlockingOperation operation("android-resource-folder-refresh");
+        if (QNativeInterface::QAndroidApplication::context().callMethod<jboolean>(
+                    "refreshUserFolders")) {
+            // Posted before this worker's opening completion constructs the next reader.
+            QMetaObject::invokeMethod(
+                    qApp,
+                    [] {
+                        ui::forgetPrivateInterfaceFonts(
+                                QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                                + "/user-folders/fonts");
+                    },
+                    Qt::QueuedConnection);
+        }
+        return resources(sizes, font, std::move(rejected));
+    };
     const QJniObject context = QNativeInterface::QAndroidApplication::context();
     request.syncFilename =
             context.callObjectMethod("syncFilename", "(Ljava/lang/String;)Ljava/lang/String;",
@@ -217,7 +239,12 @@ void ReaderController::begin(const QString &path, QSize pixels)
 #endif
     request.restartAtStart = restartAtStart;
     request.userStyleSheetPath = paths.directory + "/userstyle.css";
+#ifdef Q_OS_ANDROID
+    request.customPinsPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+            + "/user-folders/custom-pins";
+#else
     request.customPinsPath = paths.customPins();
+#endif
     request.appearanceDefaults = appearance::bookDefaults(settings);
     opening->open(
             std::move(request),

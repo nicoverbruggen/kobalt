@@ -1,6 +1,8 @@
 #include "annotation_export.h"
 #include "app/reader/views/annotation_exporter.h"
 #include "services.h"
+#include "dictionaries/stardict.h"
+#include <QStandardPaths>
 #include "runtime.h"
 #include "light.h"
 #include "ui/style/fonts.h"
@@ -15,27 +17,6 @@
 
 namespace kobalt::android {
 namespace {
-class Dictionary final : public DictionaryService
-{
-public:
-    QVector<DictionaryChoice> choices() const override { return {}; }
-
-    bool select(const QString &, const QString &, QString *error) override
-    {
-        if (error)
-            *error = QStringLiteral("No dictionary installed.");
-        return false;
-    }
-
-    DictionaryResult lookup(const QString &, const QString &word) override
-    {
-        DictionaryResult result;
-        result.word = word;
-        result.error = QStringLiteral("No dictionary installed.");
-        return result;
-    }
-};
-
 class Keyboard final : public KeyboardController
 {
 public:
@@ -145,7 +126,11 @@ ReaderHostServices readerHostServices()
     };
     result.cancelAnimation = [] { };
     result.light = [](QWidget *) { return std::make_unique<Light>(lightValue); };
-    result.dictionary = [] { return std::make_unique<Dictionary>(); };
+    result.dictionary = [] {
+        return std::make_unique<FolderDictionaries>(
+                QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+                + "/user-folders/dictionaries");
+    };
     result.keyboard = [](QWidget *, QLineEdit *editor) {
         return std::make_unique<Keyboard>(editor);
     };

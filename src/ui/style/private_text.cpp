@@ -12,6 +12,7 @@
 #include <QFontMetrics>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QSet>
 #include <QHash>
 #include <QMap>
@@ -698,6 +699,46 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
     state.clearLayouts();
     state.registrations.insert(registrationKey);
     return true;
+}
+
+void forgetPrivateInterfaceFonts(const QString &directory)
+{
+    auto &state = fonts();
+    const auto prefix = QDir(directory).absolutePath() + '/';
+    const auto sourcePrefix = "reading:" + prefix;
+    QSet<QString> removed;
+    for (auto it = state.pending.cbegin(); it != state.pending.cend(); ++it)
+        if (it.key().startsWith(sourcePrefix))
+            removed.insert(it.key());
+    if (removed.isEmpty())
+        return;
+    // Faces and shaped text contain pointers into the registrations and source bytes.
+    state.clearFaces();
+    for (auto it = state.registered.begin(); it != state.registered.end();) {
+        auto &entries = it.value();
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                     [&removed](const RegisteredFace &face) {
+                                         return removed.contains(face.file);
+                                     }),
+                      entries.end());
+        if (entries.isEmpty())
+            it = state.registered.erase(it);
+        else
+            ++it;
+    }
+    for (auto it = state.registrations.begin(); it != state.registrations.end();)
+        if (it->startsWith(prefix))
+            it = state.registrations.erase(it);
+        else
+            ++it;
+    for (const auto &key : removed) {
+        state.pending.remove(key);
+        state.sources.remove(key);
+        state.sizes.remove(key);
+        state.recent.removeAll(key);
+        state.pinned.remove(key);
+    }
+    setDiagnosticFontBytes(state.bytes());
 }
 
 bool privateFontFixedPitch(const QFont &font)

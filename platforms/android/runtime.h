@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QRegion>
 #include <QSize>
 #include <QMargins>
@@ -35,6 +36,8 @@ Battery battery();
 void showKeyboard();
 // Library folders are granted document trees, read through the activity.
 void releaseFolder(const QString &uri);
+QStringList resourceFolderLabels();
+void chooseResourceFolder(int kind, bool clear);
 void openLibraryBook(const QString &uri, const QString &destination, qint64 size, qint64 modified);
 void hideKeyboard();
 } // namespace kobalt::android

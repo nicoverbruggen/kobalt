@@ -2,12 +2,14 @@
 #include "support/main_thread.h"
 #include <QFile>
 #include <QDir>
+#include <QDirIterator>
 #include <QtEndian>
 #include <QMap>
 #include <QStringList>
 #include <QSaveFile>
 #include <zlib.h>
 #include <cstring>
+#include <algorithm>
 
 namespace kobalt {
 namespace {
@@ -415,4 +417,97 @@ DictionaryResult StarDict::lookup(const QString &word)
         result.html = QString::fromUtf8(html);
     return result;
 }
+
+void FolderDictionaries::prepare(const QString &directory)
+{
+    mainthread::BlockingOperation operation("dictionary-index-write");
+    QDirIterator files(directory, { "*.ifo" }, QDir::Files | QDir::NoSymLinks,
+                       QDirIterator::Subdirectories);
+    int checked = 0;
+    while (files.hasNext() && checked++ < 2048) {
+        const auto file = files.next();
+        const auto marker = file + ".kobalt-ready";
+        if (QFile::exists(marker))
+            continue;
+        const QFileInfo info(file);
+        QString error;
+        if (!StarDict::prepare(info.path(), info.completeBaseName(), &error))
+            continue;
+        QSaveFile ready(marker);
+        if (ready.open(QIODevice::WriteOnly)) {
+            ready.write("ready");
+            ready.commit();
+        }
+    }
+}
+
+FolderDictionaries::FolderDictionaries(QString directory) : directory(std::move(directory))
+{
+    QDirIterator files(this->directory, { "*.ifo.kobalt-ready" }, QDir::Files | QDir::NoSymLinks,
+                       QDirIterator::Subdirectories);
+    while (files.hasNext() && entries.size() < 2048) {
+        auto path = files.next();
+        path.chop(int(QStringLiteral(".kobalt-ready").size()));
+        QFile metadata(path);
+        if (!metadata.open(QIODevice::ReadOnly) || metadata.size() > 65536)
+            continue;
+        QString name, language;
+        for (const auto &line : QString::fromUtf8(metadata.readAll()).split('\n')) {
+            if (line.startsWith("bookname="))
+                name = line.mid(9).trimmed();
+            if (line.startsWith("lang="))
+                language = line.mid(5).trimmed();
+        }
+        const auto relative = QDir(this->directory).relativeFilePath(path.left(path.size() - 4));
+        entries.append({ "folder:" + relative,
+                         name.isEmpty() ? QFileInfo(path).completeBaseName() : name, language,
+                         false });
+    }
+    std::sort(entries.begin(), entries.end(),
+              [](const DictionaryChoice &a, const DictionaryChoice &b) {
+                  const int order = QString::compare(a.name, b.name, Qt::CaseInsensitive);
+                  return order ? order < 0 : a.id < b.id;
+              });
+}
+
+bool FolderDictionaries::select(const QString &book, const QString &id, QString *error)
+{
+    for (const auto &entry : entries) {
+        if (entry.id != id)
+            continue;
+        if (activeId != id) {
+            const QFileInfo file(QDir(directory).filePath(id.mid(7)));
+            auto dictionary = std::make_unique<StarDict>();
+            if (!dictionary->open(file.path(), file.fileName(), error))
+                return false;
+            active = std::move(dictionary);
+            activeId = id;
+        }
+        selected.insert(book, id);
+        return true;
+    }
+    return fail(error, "This dictionary is not available.");
+}
+
+DictionaryResult FolderDictionaries::lookup(const QString &book, const QString &word)
+{
+    DictionaryResult result;
+    result.word = word;
+    QString error;
+    const auto id = selected.value(book, entries.isEmpty() ? QString() : entries.first().id);
+    if (!select(book, id, &error)) {
+        result.error = error;
+        return result;
+    }
+    result = active->lookup(word);
+    result.dictionaryId = id;
+    for (const auto &entry : entries)
+        if (entry.id == id) {
+            result.dictionary = entry.name;
+            result.language = entry.language;
+            break;
+        }
+    return result;
+}
+
 } // namespace kobalt

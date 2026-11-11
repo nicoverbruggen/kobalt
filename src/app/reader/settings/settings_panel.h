@@ -184,6 +184,7 @@ public:
 protected:
     void hideEvent(QHideEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void showStylingChoices(AdvancedText feature, int current, std::function<void(int)> chosen,
@@ -213,6 +214,12 @@ private:
     QWidget *optionsViewport = nullptr, *optionsClip = nullptr;
     ui::PagerBar *optionsPager = nullptr;
     QVector<QPair<int, int>> optionPages;
+    // The row positions the pages were cut from. A row that changes its
+    // height afterwards, for example when its description wraps anew, moves
+    // the rows below it, so the pages are cut again.
+    QVector<QRect> pagedRows;
+    QVector<QRect> pageRows() const;
+    bool repaginateQueued = false;
     int optionPage = 0, pageHeight = 0;
     void showOptionsPage(int page);
     void fitRail(int availableHeight = 0);

@@ -9,6 +9,7 @@
 #include "ui/style/theme.h"
 #include "ui/panel_timing.h"
 #include "settings_panel.h"
+#include "support/qt_compat.h"
 #include "reading/text_presets.h"
 #include "reading/features.h"
 #include "app/about/about_page.h"
@@ -1190,6 +1191,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         }
     }
     settingsTabs->setAlignment(Qt::AlignTop);
+    for (int index = 0; index < settingsPages->count(); ++index)
+        settingsPages->widget(index)->installEventFilter(this);
     styleTabs(false);
     fitRail();
     hide();
@@ -1375,8 +1378,38 @@ int SettingsPanel::fitContent(QSize availableSize)
         if (split > 0 && split <= pageHeight && contentHeight - split <= pageHeight)
             optionPages = { { 0, split }, { split, contentHeight } };
     }
+    pagedRows = pageRows();
     showOptionsPage(optionPage);
     return panelHeight + headingHeight + leaveHeight;
+}
+
+QVector<QRect> SettingsPanel::pageRows() const
+{
+    QVector<QRect> result;
+    auto *rows =
+            settingsPages->currentWidget() ? settingsPages->currentWidget()->layout() : nullptr;
+    if (!rows)
+        return result;
+    for (int index = 0; index < rows->count(); ++index)
+        if (!rows->itemAt(index)->isEmpty())
+            result.append(rows->itemAt(index)->geometry());
+    return result;
+}
+
+bool SettingsPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    // The page's layout handles the request after this filter. Compare the
+    // rows once it has, and refit only when one moved or changed height.
+    if (event->type() == QEvent::LayoutRequest && watched == settingsPages->currentWidget()
+        && isVisible() && optionPages.size() > 1 && !repaginateQueued && refitRequested) {
+        repaginateQueued = true;
+        qt::later(0, this, [this] {
+            repaginateQueued = false;
+            if (isVisible() && pageRows() != pagedRows && refitRequested)
+                refitRequested();
+        });
+    }
+    return ui::Panel::eventFilter(watched, event);
 }
 
 void SettingsPanel::setZenLayout(bool value)

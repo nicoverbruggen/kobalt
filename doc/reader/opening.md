@@ -10,6 +10,8 @@ Loading a local book does not require Wi-Fi or an internet connection. Kobo, And
 
 Resource reads reuse one archive directory index per publication instead of scanning the ZIP directory for each chapter or image. The index retains at most 4 MiB of directory bytes and 4,096 entry offsets. It holds no resource bytes or open files. Changed file metadata invalidates it. Each resource still checks its local header and CRC.
 
+The source cache loads resources in 64 KiB blocks. After a successful load, it compacts the last partial block to the size of its content when the temporary copy fits within the existing 32 MiB budget. Compaction does not evict other resources. This reduces unused space for small chapters and stylesheets without reducing the cache budget or changing resource contents. Saved reading data and disk cache formats stay unchanged.
+
 Kobalt removes the recognized original `kobostylehacks` CSS block from chapter input before rendering. This restores publisher heading and paragraph spacing, relative font sizes and link colours. The book file stays unchanged. The wrapper-only rule used by kepubify and blocks with unknown or custom additions remain intact.
 
 Nickel stays responsible for authorization. Kobalt receives an opening only after Nickel accepts it, then reads the EPUB's ZIP entries directly. It checks the publication structure and lets CREngine load its reading sections before displaying the book. Protected content, source access failures and books the engine cannot load still offer fallback to Nickel. A store purchase keeps its existing book identity and uses the same progress, completion and sync integration as before. Direct loading does not turn it into a sideloaded book.

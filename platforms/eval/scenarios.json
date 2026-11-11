@@ -446,6 +446,26 @@
       "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}
     },
     {
+      "id": "memory.large.reading",
+      "kind": "memory",
+      "unit": "KiB",
+      "paths": ["src/", "dependencies/"],
+      "book": "war-and-peace",
+      "repeat": 1,
+      "steps": [{"settle": true}],
+      "sample": {"memory": "rss_kib"}
+    },
+    {
+      "id": "memory.large.kobalt",
+      "kind": "memory",
+      "unit": "KiB",
+      "paths": ["src/", "dependencies/"],
+      "book": "war-and-peace",
+      "repeat": 1,
+      "steps": [{"settle": true}],
+      "sample": {"memory": "kobalt_rss_kib"}
+    },
+    {
       "id": "memory.peak",
       "kind": "memory",
       "unit": "KiB",

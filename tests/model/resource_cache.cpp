@@ -3,6 +3,7 @@
 #include "publication/resource_cache.h"
 #include "publication/source_lease.h"
 #include <QCoreApplication>
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include "check.h"
@@ -12,6 +13,107 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     auto cancelled = std::make_shared<std::atomic_bool>(false);
+    {
+        const int block = int(ResourceCache::blockBytes);
+        for (const int size : { 0, 1, block - 1, block, block + 1, 2 * block + 17 }) {
+            QByteArray payload(size, Qt::Uninitialized);
+            for (int at = 0; at < size; ++at)
+                payload[at] = char(at % 251);
+            for (const int chunk : { 1, 8191, block, 3 * block }) {
+                ResourceCache compact(
+                        { "text" },
+                        [&](const QString &, const ResourceCache::Sink &sink, QString *) {
+                            for (int at = 0; at < size; at += chunk)
+                                if (!sink(payload.constData() + at, qMin(chunk, size - at)))
+                                    return false;
+                            return sink(nullptr, 0);
+                        },
+                        cancelled);
+                require(compact.readBounded("text", size) == payload,
+                        "Compacted resource changed streamed bytes");
+                require(compact.statistics()["allocated_bytes"].toDouble() == size,
+                        "Completed resource retained unused block space");
+                char end[4]{};
+                if (size > block)
+                    require(compact.read("text", block - 2, end, 4) == qMin(4, size - block + 2)
+                                    && QByteArray(end, qMin(4, size - block + 2))
+                                            == payload.mid(block - 2, 4),
+                            "Read across a compacted block boundary changed bytes");
+            }
+        }
+    }
+    {
+        QStringList names;
+        for (int i = 0; i < 400; ++i)
+            names.append(QString::number(i));
+        const QByteArray chapter(13 * 1024, 'x');
+        ResourceCache chapters(
+                names,
+                [&](const QString &, const ResourceCache::Sink &sink, QString *) {
+                    return sink(chapter.constData(), chapter.size());
+                },
+                cancelled);
+        for (const auto &name : names)
+            require(chapters.size(name) == chapter.size(), "Small chapter failed to load");
+        require(chapters.statistics()["allocated_bytes"].toDouble()
+                                == qint64(names.size()) * chapter.size()
+                        && chapters.statistics()["evictions"].toInt() == 0,
+                "Small chapters retained full blocks or evicted reusable bytes");
+        for (const auto &name : names)
+            require(chapters.readBounded(name, chapter.size()) == chapter,
+                    "Cached chapter bytes changed");
+        require(chapters.statistics()["loads"].toInt() == names.size(),
+                "Compacted chapters needed extra transfers");
+        chapters.releaseBytes();
+        require(chapters.statistics()["allocated_bytes"].toInt() == 0,
+                "Released compacted chapters retained bytes");
+    }
+    {
+        ResourceCache full(
+                { "small", "large" },
+                [](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                    if (name == "small")
+                        return sink("abc", 3);
+                    std::array<char, ResourceCache::blockBytes> block{};
+                    for (qint64 left = ResourceCache::budgetBytes - 1; left > 0;) {
+                        const auto count = qMin(left, ResourceCache::blockBytes);
+                        if (!sink(block.data(), count))
+                            return false;
+                        left -= count;
+                    }
+                    return true;
+                },
+                cancelled);
+        require(full.size("small") == 3 && full.size("large") == ResourceCache::budgetBytes - 1
+                        && full.statistics()["allocated_bytes"].toDouble()
+                                == ResourceCache::budgetBytes
+                        && full.statistics()["peak_bytes"].toDouble() == ResourceCache::budgetBytes
+                        && full.statistics()["evictions"].toInt() == 1,
+                "Near-budget tail compaction exceeded the budget or lost eviction accounting");
+        char end[4];
+        require(full.read("large", ResourceCache::budgetBytes - 3, end, 4) == 2 && end[0] == 0
+                        && end[1] == 0,
+                "Uncompacted tail exposed bytes past the resource end");
+        require(full.readBounded("small", 3) == "abc"
+                        && full.statistics()["allocated_bytes"].toInt() == 3
+                        && full.statistics()["evictions"].toInt() == 2,
+                "Eviction mixed full and compacted block sizes");
+    }
+    {
+        ResourceCache failed(
+                { "resident", "failed" },
+                [](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                    if (name == "resident")
+                        return sink("kept", 4);
+                    const QByteArray partial(ResourceCache::blockBytes + 17, 'x');
+                    sink(partial.constData(), partial.size());
+                    return false;
+                },
+                cancelled);
+        require(failed.size("resident") == 4 && failed.size("failed") == -1
+                        && failed.statistics()["allocated_bytes"].toInt() == 4,
+                "Failed transfer corrupted compacted-entry accounting");
+    }
     {
         ResourceCache bounded(
                 { "text" },

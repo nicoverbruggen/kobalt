@@ -113,7 +113,7 @@ void ResourceCache::evict()
     const auto name = recent_.back();
     recent_.pop_back();
     auto entry = entries_.find(name);
-    allocated_ -= qint64(entry->second.blocks.size()) * blockBytes;
+    allocated_ -= entry->second.capacity;
     entries_.erase(entry);
     ++evictions_;
 }
@@ -183,12 +183,14 @@ ResourceCache::Entry *ResourceCache::ensure(const QString &name, qint64 limit)
                     if (!offset) {
                         while (allocated_ + blockBytes > budgetBytes && !recent_.empty())
                             evict();
-                        pending.blocks.push_back(std::make_unique<Block>());
+                        // Reads stop at size; unused bytes need no initialization.
+                        pending.blocks.emplace_back(new char[size_t(blockBytes)]);
+                        pending.capacity += blockBytes;
                         allocated_ += blockBytes;
                         peak_ = qMax(peak_, allocated_);
                     }
                     const auto length = qMin(count, blockBytes - offset);
-                    std::memcpy(pending.blocks.back()->data() + offset, data, size_t(length));
+                    std::memcpy(pending.blocks.back().get() + offset, data, size_t(length));
                     data += length;
                     count -= length;
                     pending.size += length;
@@ -196,7 +198,6 @@ ResourceCache::Entry *ResourceCache::ensure(const QString &name, qint64 limit)
                 return true;
             },
             &error_);
-    loadNs_ += transfer.nsecsElapsed();
     if (cancelled_ && cancelled_()) {
         failure = strings::get("error.reading_session_closed");
         cause = Failure::Cancelled;
@@ -209,7 +210,8 @@ ResourceCache::Entry *ResourceCache::ensure(const QString &name, qint64 limit)
         cause = Failure::Changed;
     }
     if (!loaded || !failure.isEmpty() || !error_.isEmpty()) {
-        allocated_ -= qint64(pending.blocks.size()) * blockBytes;
+        loadNs_ += transfer.nsecsElapsed();
+        allocated_ -= pending.capacity;
         if (!failure.isEmpty())
             error_ = failure;
         if (error_.isEmpty())
@@ -217,6 +219,18 @@ ResourceCache::Entry *ResourceCache::ensure(const QString &name, qint64 limit)
         failure_ = cause == Failure::None ? Failure::Transfer : cause;
         return nullptr;
     }
+    const auto tail = pending.size % blockBytes;
+    // Small chapters and stylesheets should not retain a whole block. Keep the
+    // temporary copy within the budget without evicting another resource for it.
+    if (tail && allocated_ + tail <= budgetBytes) {
+        std::unique_ptr<char[]> compact(new char[size_t(tail)]);
+        std::memcpy(compact.get(), pending.blocks.back().get(), size_t(tail));
+        peak_ = qMax(peak_, allocated_ + tail);
+        pending.blocks.back() = std::move(compact);
+        pending.capacity -= blockBytes - tail;
+        allocated_ -= blockBytes - tail;
+    }
+    loadNs_ += transfer.nsecsElapsed();
     fingerprints_[name] = digest;
     recent_.push_front(name);
     return &entries_.emplace(name, std::move(pending)).first->second;
@@ -253,8 +267,8 @@ qint64 ResourceCache::read(const QString &name, qint64 offset, void *buffer, qin
             return -1;
         const auto at = offset + copied;
         const auto take = qMin(length - copied, blockBytes - at % blockBytes);
-        std::memcpy(output + copied,
-                    entry->blocks[size_t(at / blockBytes)]->data() + at % blockBytes, size_t(take));
+        std::memcpy(output + copied, entry->blocks[size_t(at / blockBytes)].get() + at % blockBytes,
+                    size_t(take));
         copied += take;
     }
     return cancelled_ && cancelled_() ? -1 : length;

@@ -65,11 +65,7 @@ public:
             timer.start(interval > 0 ? interval : 500);
             update();
         });
-        connect(this, &QPushButton::released, this, [this] {
-            timer.stop();
-            setStep(0);
-            update();
-        });
+        connect(this, &QPushButton::released, this, [this] { cancel(); });
     }
 
     static constexpr int steps = 3;
@@ -142,7 +138,31 @@ protected:
         }
     }
 
+    // A press that ends without a release, because Settings was hidden or
+    // the button moved between the heading and the bar, must not leave Zen
+    // mode later.
+    void hideEvent(QHideEvent *event) override
+    {
+        cancel();
+        QPushButton::hideEvent(event);
+    }
+
+    bool event(QEvent *event) override
+    {
+        if (event->type() == QEvent::ParentChange)
+            cancel();
+        return QPushButton::event(event);
+    }
+
 private:
+    void cancel()
+    {
+        timer.stop();
+        setDown(false);
+        setStep(0);
+        update();
+    }
+
     void setStep(int next)
     {
         if (step == next)

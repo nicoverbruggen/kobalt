@@ -7752,6 +7752,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(leave->property("reader_hold_step").toInt(), 0);
         QVERIFY(fixture.visible("rrZenSettings"));
         QVERIFY(qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
+        // A press that ends because Settings is hidden, without a release,
+        // keeps Zen mode too: the steps would have finished within the wait.
+        leave->setProperty("reader_hold_step_ms", 20);
+        QTest::mousePress(leave, Qt::LeftButton);
+        auto *holder = leave->parentWidget();
+        holder->hide();
+        QTest::qWait(100);
+        holder->show();
+        QCOMPARE(leave->property("reader_hold_step").toInt(), 0);
+        QVERIFY(!leave->isDown());
+        QVERIFY(qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
+        QVERIFY(fixture.visible("rrZenSettings"));
         // Held through all three steps, Zen mode turns off in the draft and
         // all settings return, starting on Display.
         leave->setProperty("reader_hold_step_ms", 10);

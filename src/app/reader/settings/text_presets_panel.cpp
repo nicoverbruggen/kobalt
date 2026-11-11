@@ -44,7 +44,9 @@ void drawPill(QPainter &painter, const QWidget *widget, const QRect &bounds, con
                paper = widget->palette().color(QPalette::Window);
     const QFont font = ui::interfaceFont(metrics::text::secondary);
     painter.setFont(font);
-    const int padding = ui::px(14);
+    // A narrow card, as on a phone, gives the padding to the name first.
+    const int padding = qBound<int>(
+            ui::px(4), (bounds.width() - ui::interfaceTextWidth(text, font)) / 2, ui::px(14));
     const int room = qMax(0, bounds.width() - 2 * padding);
     const auto shown = ui::elideInterfaceText(text, font, room);
     const int width = ui::interfaceTextWidth(shown, font) + 2 * padding;

@@ -245,7 +245,9 @@ void Reader::editTextPresetName(const QString &id)
     editor->setInputMethodHints(Qt::ImhNoPredictiveText);
     ui::readerStyle(
             editor,
-            QString("QLineEdit{border:%1px solid palette(mid);border-radius:0;padding:0;background:palette(window);color:palette(window-text);")
+            // The suggested name starts selected; show the selection in ink,
+            // not the system's accent colour.
+            QString("QLineEdit{border:%1px solid palette(mid);border-radius:0;padding:0;background:palette(window);color:palette(window-text);selection-background-color:palette(window-text);selection-color:palette(window);")
                             .arg(int(metrics::control::border))
                     + ui::styles::font(metrics::chrome::labelText) + "}");
     editor->setTextMargins(metrics::notice::cardMargins.left(), 0,

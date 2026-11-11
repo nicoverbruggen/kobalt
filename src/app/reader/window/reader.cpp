@@ -2835,8 +2835,8 @@ void Reader::saveExit(quint64 request)
         return;
     // Writer completion and GUI acknowledgement are different barriers. Wait
     // for both before allowing destruction or reporting a failed annotation.
-    if (annotationSaving || bookmarks->saving() || highlights->saving() || book->savesPending()
-        || (annotationExporter && annotationExporter->writing())) {
+    if (savingDenseGraph || annotationSaving || bookmarks->saving() || highlights->saving()
+        || book->savesPending() || (annotationExporter && annotationExporter->writing())) {
         saveWait.after([this, request] { saveExit(request); });
         return;
     }
@@ -3031,8 +3031,9 @@ void Reader::cancelExit()
 bool Reader::pendingStorageSave() const
 {
     return (annotationExporter && annotationExporter->writing()) || savingButtonControls
-            || book->savesPending() || book->readingSavePending() || bookmarks->saving()
-            || highlights->saving() || annotationSaving || (reportWriter && !reportWriter->idle());
+            || savingDenseGraph || book->savesPending() || book->readingSavePending()
+            || bookmarks->saving() || highlights->saving() || annotationSaving
+            || (reportWriter && !reportWriter->idle());
 }
 
 void Reader::finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed)

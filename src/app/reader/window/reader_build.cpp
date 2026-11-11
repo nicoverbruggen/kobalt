@@ -62,6 +62,11 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
+        if (testAttribute(Qt::WA_OpaquePaintEvent)) {
+            painter.fillRect(rect(), ui::themeColors(this).paper);
+            ui::paintEdges(painter, rect(), ui::Edges(Qt::LeftEdge),
+                           palette().color(QPalette::WindowText), metrics::control::border);
+        }
         painter.setRenderHint(QPainter::Antialiasing);
         const int padding = ui::px(12);
         QMap<int, QVector<QRect>> columns;
@@ -958,6 +963,7 @@ void Reader::buildOverlays()
     linkDiscovery->hide();
     chapterGraph = new kobalt::ChapterGraph(this);
     chapterGraph->changed = [this] { saveSoon(); };
+    chapterGraph->denseChanged = [this](bool dense) { setDenseGraph(dense); };
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
     choices = new ChoiceScreen(this);
     choices->hide();

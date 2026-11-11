@@ -2838,6 +2838,16 @@ void checkStatsPins(Fixture &fixture, int pins)
     QVERIFY(bar->y() >= top && bar->geometry().bottom() < bottom);
     QVERIFY(!bar->geometry().intersects(stats->geometry()));
     QVERIFY(stats->y() >= top && stats->geometry().bottom() < bottom);
+    if (bar->x() == stats->geometry().right() + 1) {
+        QCOMPARE(bar->y(), top);
+        QCOMPARE(bar->geometry().bottom() + 1, fixture.widget("rrBottomNavigation")->y());
+        QCOMPARE(bar->geometry().right() + 1, reader->width());
+        const auto image = bar->grab().toImage();
+        QCOMPARE(image.pixelColor(0, image.height() / 2),
+                 bar->palette().color(QPalette::WindowText));
+        QCOMPARE(image.pixelColor(image.width() - 1, image.height() / 2),
+                 ui::themeColors(bar).paper);
+    }
     int visible = 0;
     bool hidden = false;
     for (int i = 0; i < BookmarkStore::maxPins; ++i) {
@@ -3057,6 +3067,20 @@ void checkPinnedBookmarks(int preset, bool dark)
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
             checkStatsPins(fixture, i + 1);
+            if (captureDirectory.isEmpty()) {
+                auto *mode = qobject_cast<QPushButton *>(fixture.widget("rrGraphMode"));
+                QVERIFY(mode);
+                const bool compact =
+                        (mode->accessibleName() == strings::get("chapter_graph.show_wider_bars"));
+                for (int toggle = 0; toggle < 2; ++toggle) {
+                    QVERIFY(fixture.press("rrGraphMode"));
+                    QTRY_VERIFY(mode->isEnabled());
+                    QCOMPARE((mode->accessibleName()
+                              == strings::get("chapter_graph.show_wider_bars")),
+                             toggle == 0 ? !compact : compact);
+                    checkStatsPins(fixture, i + 1);
+                }
+            }
             QVERIFY(capture(fixture,
                             name
                                     + (i == 0 ? "-pinned-bookmark-stats-single"
@@ -9250,6 +9274,139 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrBrightnessNotice"));
     }
 
+    void graphMode_data() { screenshotVariants(); }
+
+    // Graph toggles share Settings, survive reopening and never wait for storage.
+    void graphMode()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        for (int count : { 3, 43 }) {
+            Fixture fixture(dark);
+            QVERIFY(fixture.prepared);
+            selectPreview(fixture, preset);
+            auto files = test::songbook(count);
+            if (count == 3)
+                files["songs.xhtml"].replace(
+                        "</p>",
+                        QByteArray("<br/>The morning brings us home again.").repeated(40) + "</p>");
+            QVERIFY(writeBook(fixture.directory.path(), "graph.epub", files));
+            const auto path = fixture.directory.path() + "/graph.epub";
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(path);
+            QTRY_COMPARE(opened.count(), 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.turnPage(1));
+            QVERIFY(fixture.turnPage(-1));
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavStats"));
+            auto *graph = dynamic_cast<ChapterGraph *>(fixture.widget("rrChapterGraph"));
+            auto *mode = qobject_cast<QPushButton *>(fixture.widget("rrGraphMode"));
+            QVERIFY(graph && mode && mode->isVisible());
+            QVERIFY(!mode->isCheckable() && !mode->isChecked());
+            QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrGraphSessionDetail"))->text(),
+                     strings::get("stats.page_turns").arg(2));
+            QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            QCOMPARE(graph->graphPages(), (count + 19) / 20);
+            const auto position = fixture.state().value("position");
+            if (count > 20) {
+                QVERIFY(fixture.press("rrGraphNext"));
+                QCOMPARE(graph->graphPage(), 1);
+            }
+
+            struct Gate
+            {
+                QSemaphore release;
+                std::atomic_bool entered{ false };
+            };
+
+            auto gate = std::make_shared<Gate>();
+            storage::RecordWriter blocker;
+            auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            blocker.post(
+                    [gate] {
+                        gate->entered.store(true);
+                        return gate->release.tryAcquire(1, 3000);
+                    },
+                    {});
+            QTRY_VERIFY(gate->entered.load());
+            QElapsedTimer elapsed;
+            elapsed.start();
+            auto *reader = fixture.window.readerWindow();
+            const auto point = mode->mapTo(reader, mode->rect().center());
+            QCOMPARE(reader->childAt(point), mode);
+            QVERIFY(fixture.press("rrGraphMode"));
+            QVERIFY2(elapsed.elapsed() < 1000, "Graph mode blocked input on a preference write");
+            QVERIFY((mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            QVERIFY(!mode->isEnabled());
+            QCOMPARE(graph->graphPage(), 0);
+            QCOMPARE(graph->graphPages(), 1);
+            bool delivered = false;
+            QTimer::singleShot(0, [&] { delivered = true; });
+            QTRY_VERIFY(delivered);
+            gate->release.release();
+            QTRY_VERIFY(mode->isEnabled());
+            QTRY_VERIFY(storage::readJson(fixture.paths.preferences())
+                                .value("dense_stats_chart")
+                                .toBool());
+            QCOMPARE(fixture.state().value("position"), position);
+            QVERIFY(!mode->isChecked());
+            QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrGraphSessionDetail"))->text(),
+                     strings::get("stats.page_turns").arg(2));
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsDisplay"));
+            QVERIFY(revealSettingsOption(fixture, "rrDenseGraph"));
+            auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrDenseGraph"));
+            QVERIFY(option && option->isChecked());
+            QVERIFY(fixture.press("rrDenseGraph"));
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavStats"));
+            QTRY_VERIFY(mode->isVisible());
+            QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            QCOMPARE(graph->graphPages(), (count + 19) / 20);
+            {
+                BlockedFile blocked(fixture.paths.preferences());
+                QVERIFY(blocked.active());
+                QVERIFY(fixture.press("rrGraphMode"));
+                QTRY_VERIFY(fixture.visible("rrSettingsWriteError"));
+                QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+                QVERIFY(mode->isEnabled());
+                QVERIFY(blocked.restore());
+            }
+            QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
+            QVERIFY(fixture.press("rrGraphMode"));
+            QTRY_VERIFY(mode->isEnabled());
+            QVERIFY((mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(!fixture.window.readerWindow());
+            fixture.window.openBook(path);
+            QTRY_COMPARE(opened.count(), 2);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavStats"));
+            mode = qobject_cast<QPushButton *>(fixture.widget("rrGraphMode"));
+            QVERIFY(mode
+                    && (mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            QVERIFY(!mode->isChecked());
+            QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrGraphSessionDetail"))->text(),
+                     strings::get("stats.page_turns").arg(0));
+            QCOMPARE(fixture.state().value("position"), position);
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(!fixture.window.readerWindow());
+            fixture.window.openBook(book);
+            QTRY_COMPARE(opened.count(), 3);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavStats"));
+            mode = qobject_cast<QPushButton *>(fixture.widget("rrGraphMode"));
+            QVERIFY(mode && !mode->isChecked());
+            QCOMPARE(mode->accessibleName(), strings::get("chapter_graph.show_wider_bars"));
+        }
+    }
+
     // Checks feature visibility, dependent defaults, persistence and re-enabling through System.
     void settingsFeatures()
     {
@@ -14326,6 +14483,17 @@ private slots:
         graph->setReading(55, 100000, 64 * 60000, 170 * 60000);
         const auto *bars = graph->findChild<QWidget *>("rrChapterBars");
         QVERIFY(bars);
+        const auto *mode = graph->findChild<QPushButton *>("rrGraphMode");
+        const auto *position = graph->findChild<QLabel *>("rrGraphChapterPosition");
+        QVERIFY(mode && position);
+        QVERIFY(qAbs(mode->geometry().center().y() - position->geometry().center().y()) <= 1);
+        QVERIFY(!position->geometry().intersects(mode->geometry()));
+        const auto *caption = graph->findChild<QLabel *>("rrGraphChapterNumber");
+        const auto *title = graph->findChild<QLabel *>("rrGraphChapterTitle");
+        QVERIFY(caption && title);
+        const auto heading = caption->geometry().united(title->geometry());
+        QVERIFY(qAbs(heading.center().y() - mode->geometry().center().y()) <= 1);
+        QVERIFY(caption->geometry().bottom() < title->y());
         QVERIFY(!graph->findChild<QLabel *>("rrGraphLengthCaption"));
         QVERIFY(bars->y()
                 >= int(ui::metrics::chapters::rowHeight) + int(ui::metrics::chapters::barsTop));
@@ -14340,6 +14508,95 @@ private slots:
         QVERIFY(rule);
         rule->move(0, graph->y());
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-stats-lengths"));
+    }
+
+    void chapterGraphBook_data() { screenshotVariants(); }
+
+    // Exercises both graph modes with the pinned, unmodified War and Peace EPUB.
+    void chapterGraphBook()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        QFile references(QStringLiteral(KOBALT_SCREENSHOT_REFERENCES));
+        QVERIFY(references.open(QIODevice::ReadOnly));
+        captureBook =
+                QJsonDocument::fromJson(references.readAll()).object()["war-and-peace"].toObject();
+        const auto resetBook = qScopeGuard([] { captureBook = {}; });
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        const auto path =
+                QStringLiteral(KOBALT_SCREENSHOT_BOOKS) + '/' + captureBook["filename"].toString();
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromLatin1(
+                         QCryptographicHash::hash(input.readAll(), QCryptographicHash::Sha256)
+                                 .toHex()),
+                 captureBook["sha256"].toString());
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSearchOpen"));
+        auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+        QVERIFY(query);
+        query->setText("Well, Prince, so Genoa and Lucca");
+        QVERIFY(fixture.press("rrSearchSubmit"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
+        QVERIFY(fixture.press("rrSearchResult0"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        // Clear the search highlight, leaving the actual opening chapter visible.
+        QVERIFY(fixture.turnPage(1));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.turnPage(-1));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto position = fixture.state().value("position");
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+        QTRY_COMPARE(fixture.state().value("bookmark_count").toInt(), 1);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+        QTRY_VERIFY(fixture.visible("rrPinName"));
+        qobject_cast<QLineEdit *>(fixture.widget("rrPinName"))->setText("Book One");
+        QVERIFY(fixture.press("rrPinIcon_map"));
+        QVERIFY(fixture.press("rrPinSave"));
+        QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+        QVERIFY(fixture.press("rrBookmarkListClose"));
+        QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+        QVERIFY(fixture.press("rrNavStats"));
+        auto *graph = dynamic_cast<ChapterGraph *>(fixture.widget("rrChapterGraph"));
+        auto *mode = qobject_cast<QPushButton *>(fixture.widget("rrGraphMode"));
+        QVERIFY(graph && mode
+                && !(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+        const auto *caption = graph->findChild<QLabel *>("rrGraphChapterNumber");
+        const auto *title = graph->findChild<QLabel *>("rrGraphChapterTitle");
+        QVERIFY(caption && title);
+        const auto heading = caption->geometry().united(title->geometry());
+        QVERIFY(qAbs(heading.center().y() - mode->geometry().center().y()) <= 1);
+        QVERIFY(caption->geometry().bottom() < title->y());
+        QVERIFY(graph->graphPages() > 2);
+        checkStatsPins(fixture, 1);
+        const auto name = screenshotVariant(preset, dark);
+        QVERIFY(capture(fixture, name + "-stats-book-paged-first"));
+        QVERIFY(fixture.press("rrGraphNext"));
+        QVERIFY(capture(fixture, name + "-stats-book-paged-next"));
+        while (fixture.widget("rrGraphNext")->isEnabled())
+            QVERIFY(fixture.press("rrGraphNext"));
+        QVERIFY(capture(fixture, name + "-stats-book-paged-last"));
+        QVERIFY(fixture.press("rrGraphMode"));
+        QTRY_VERIFY(mode->isEnabled());
+        QVERIFY((mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+        QCOMPARE(fixture.state().value("position"), position);
+        checkStatsPins(fixture, 1);
+        capturePages(fixture, name + "-stats-book-compact", "rrGraph");
+        QVERIFY(fixture.press("rrGraphMode"));
+        QTRY_VERIFY(mode->isEnabled());
+        QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+        QCOMPARE(fixture.state().value("position"), position);
+        QVERIFY(graph->graphPage() < graph->graphPages() - 1);
     }
 
     void publications()

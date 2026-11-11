@@ -1922,7 +1922,7 @@ int main(int argc, char **argv)
         graph.findChild<QPushButton *>("rrGraphNext")->click();
         QApplication::processEvents();
         const auto secondPage = bars->grab().toImage();
-        require(barHeight(secondPage, (secondPage.width() - barWidth) / 2) == chartHeight,
+        require(barHeight(secondPage, sparseLeft) == chartHeight,
                 "The longest chapter lost its height on the final graph page");
         graph.setDense(true);
         even.last().words = 10000000;
@@ -1974,7 +1974,87 @@ int main(int argc, char **argv)
         for (int x = 0; x < lastPage.width(); ++x)
             if (qGray(lastPage.pixel(x, chartHeight - 2)) < 255)
                 ++filled;
-        require(filled == barWidth, "A single final chapter expanded beyond the bar width cap");
+        require(filled == sparseWidth, "A single final chapter changed its page's bar width");
+        // Inspect actual ink spans, including the dense chart's fallback pages.
+        // Every last-page column must start at the same x as on a full page.
+        auto spans = [&](const QImage &image) {
+            QVector<QPair<int, int>> result;
+            int start = -1;
+            for (int x = 0; x <= image.width(); ++x) {
+                const bool ink = x < image.width()
+                        && image.pixelColor(x, chartHeight - 1) == QColor(Qt::black);
+                if (ink && start < 0)
+                    start = x;
+                if (!ink && start >= 0) {
+                    result.append(qMakePair(start, x - start));
+                    start = -1;
+                }
+            }
+            return result;
+        };
+        for (int width : { 720, 1072, 1264, 1448 }) {
+            graph.resize(width, graph.height());
+            for (bool dense : { false, true }) {
+                QVector<kobalt::ChapterLink> many;
+                for (int i = 0; i < (dense ? 180 : 43); ++i)
+                    many.append({ QString::number(i), QString::number(i), i, 0, 1000 });
+                graph.setDense(dense);
+                graph.setData(many, {}, true, {});
+                graph.open();
+                QApplication::processEvents();
+                const auto full = spans(bars->grab().toImage());
+                require(!full.isEmpty(), "The full graph page has no bars");
+                while (next->isEnabled())
+                    next->click();
+                QApplication::processEvents();
+                const auto last = spans(bars->grab().toImage());
+                require(!last.isEmpty() && last.size() <= full.size(),
+                        "The final graph page lost its bars");
+                for (int i = 0; i < last.size(); ++i)
+                    require(last[i] == full[i],
+                            "Graph pages changed their column widths, gaps or left alignment");
+                if (dense)
+                    require(full.first().second >= int(chapterMetrics::minimumBarWidth),
+                            "Dense graph paging lost its minimum column width");
+            }
+        }
+        // Replay the sidebar allocation around a normal reader refresh.
+        // The current chapter must survive the temporary full-width layout.
+        {
+            kobalt::ChapterGraph pinned(&host);
+            QVector<kobalt::ChapterLink> many;
+            for (int i = 0; i < 385; ++i)
+                many.append({ QString::number(i), QString::number(i), i, 0, 1000 });
+            pinned.resize(1328, chapterMetrics::graphHeight);
+            pinned.setDense(false);
+            pinned.setData(many, { 150, 151, 1, 10 }, true, {});
+            pinned.open();
+            pinned.setDense(true);
+            const int currentPage = pinned.graphPage();
+            require(currentPage > 0, "Pinned graph fixture did not reach a later compact page");
+            pinned.resize(1480, pinned.height());
+            pinned.resize(1328, pinned.height());
+            require(pinned.graphPage() == currentPage,
+                    "A sidebar resize hid the current chapter after a graph mode change");
+        }
+        graph.resize(1072, graph.height());
+        graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
+        graph.setDense(false);
+        graph.open();
+        graph.findChild<QPushButton *>("rrGraphPrevious")->click();
+        int toggles = 0;
+        graph.denseChanged = [&](bool) { ++toggles; };
+        auto *mode = graph.findChild<QPushButton *>("rrGraphMode");
+        require(mode && !mode->isCheckable() && !mode->isChecked()
+                        && mode->accessibleName() == get("chapter_graph.show_more_chapters"),
+                "The graph mode control has the wrong state or action name");
+        mode->click();
+        require(!mode->isChecked() && graph.graphPages() == 1
+                        && mode->accessibleName() == get("chapter_graph.show_wider_bars"),
+                "The graph mode control did not show more chapters");
+        mode->click();
+        require(!mode->isChecked() && graph.graphPage() == 1 && toggles == 2,
+                "Toggling did not return to the current reading chapter");
         graph.setDense(true);
         require(graph.graphPages() == 1, "The dense chart kept the sparse pages");
         const QString longTitle =
@@ -2017,7 +2097,15 @@ int main(int argc, char **argv)
                 "Book progress disagrees with the current page");
         require(text("rrGraphBookFigure") == "75", "Book pages remaining omit the displayed page");
         graph.setChapterNumber(13, 24);
+        graph.setReading(23, 35706, -1, -1, 17);
+        require(text("rrGraphSessionDetail") == get("stats.page_turns").arg(17),
+                "Session page turns are missing");
+        graph.setReading(23, 35706, -1, -1, 1);
+        require(text("rrGraphSessionDetail") == get("stats.page_turn").arg(1),
+                "A changed turn count did not update without a minute change");
         graph.setReading(23, 35706);
+        require(text("rrGraphSessionDetail") == get("stats.page_turns").arg(0),
+                "A new session did not clear its displayed page turns");
         require(text("rrGraphChapterNumber") == get("stats.contents_position").arg(13).arg(24)
                         && text("rrGraphSessionFigure") == "23"
                         && text("rrGraphBookDetail") == get("stats.words").arg("35,706"),
@@ -2538,7 +2626,14 @@ int main(int argc, char **argv)
             app.processEvents();
             graphTitle->setGeometry(0, 0, 1, 1);
             graph.setProgress("A chapter with a title that needs layout", 4, 10, 12, 25, 100);
-            require(graphTitle->width() == graph.width() - 2 * int(metrics::chrome::inset),
+            const auto *position = graph.findChild<QLabel *>("rrGraphChapterPosition");
+            const auto *mode = graph.findChild<QPushButton *>("rrGraphMode");
+            require(graphTitle->width() > 1
+                            && !graphTitle->geometry().intersects(position->geometry())
+                            && !graphTitle->geometry().intersects(mode->geometry())
+                            && kobalt::ui::interfaceTextWidth(graphTitle->text(),
+                                                              graphTitle->font())
+                                    <= graphTitle->width(),
                     "Heavier interface text did not lay out unchanged Stats progress");
             require(interfaceWeight() == heavierTextSteps
                             && QFontInfo(interfaceFont()).family() == nativeFamily
@@ -2578,7 +2673,12 @@ int main(int argc, char **argv)
             app.processEvents();
             graphTitle->setGeometry(0, 0, 1, 1);
             graph.setProgress("A chapter with a title that needs layout", 4, 10, 12, 25, 100);
-            require(graphTitle->width() == graph.width() - 2 * int(metrics::chrome::inset),
+            require(graphTitle->width() > 1
+                            && !graphTitle->geometry().intersects(position->geometry())
+                            && !graphTitle->geometry().intersects(mode->geometry())
+                            && kobalt::ui::interfaceTextWidth(graphTitle->text(),
+                                                              graphTitle->font())
+                                    <= graphTitle->width(),
                     "Regular interface text did not lay out unchanged Stats progress");
             require(plain->grab().toImage() == regularPixels && measure() == regular,
                     "Regular text did not return to its pixels");

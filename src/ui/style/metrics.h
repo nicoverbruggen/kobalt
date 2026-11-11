@@ -229,7 +229,7 @@ inline constexpr TextPx zenStatsHeight{ 150 }, zenStatText{ 46 }, zenStatUnit{ 2
 
 namespace chapters {
 // Stats: the chapter row, the chart of every chapter and three figure cells.
-inline constexpr Px rowHeight{ 120 }, captionTop{ 20 }, titleTop{ 60 }, chartHeight{ 248 };
+inline constexpr Px rowHeight{ 120 }, headingGap{ 4 }, chartHeight{ 248 };
 inline constexpr Px growthShortEdge{ 1072 }, maximumGrowth{ 150 }, exposedPaper{ 180 };
 inline constexpr Px barsTop{ 30 }, barsHeight{ 150 }, tickGap{ 4 }, tickHeight{ 8 }, tickWidth{ 2 },
         numberTop{ 14 };

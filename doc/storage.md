@@ -8,6 +8,8 @@ Kobalt separates saved reading data from disposable rendering caches. Storage fo
 
 ## Saved reading data
 
+The graph button and Settings share the existing global `dense_stats_chart` Boolean. The graph button writes it through the profile writer and restores the saved mode if the write fails. No saved-data or cache format changes.
+
 `show_opening_cover` is an optional global Boolean. Missing or invalid values use true. False keeps the Kobalt logo while opening or reopening a book, including native-reader handoff. Loading progress and status messages remain visible. The setting does not change sleep screens, book state or rendering caches. Settings schema 1 stays unchanged.
 
 `inpage_footnotes` is an optional global Boolean. Missing or invalid values use false. True enables CREngine's page notes for explicit EPUB note markup. It participates in appearance identity, reflow and preview snapshots, and replaces stale book snapshots without entering text presets. The optional field keeps settings schema 1, book-record format 1 and parsed-book cache format unchanged. The stylesheet and engine render context invalidate pagination when the choice changes; parsed text remains reusable. Labeled Gutenberg note paragraphs receive optional cached layout markers. Older parsed caches add these markers on opening without changing source text, IDs or saved positions.

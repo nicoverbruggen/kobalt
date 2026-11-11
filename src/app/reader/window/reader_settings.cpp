@@ -684,7 +684,7 @@ pageButtons::Buttons Reader::buttonControls() const
 
 void Reader::saveButtonControls(const QJsonObject &actions)
 {
-    if (savingButtonControls || savingDarkMode >= 0)
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
         return;
     auto next = appearance::globalPreferences(preferences);
     appearance::rememberTextLayout(next, session->state());
@@ -722,7 +722,7 @@ void Reader::saveButtonControls(const QJsonObject &actions)
 bool Reader::writePreferences(const QJsonObject &next)
 {
     // Do not replace a pending asynchronous dark-mode save.
-    if (savingButtonControls || savingDarkMode >= 0)
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
         return false;
     // Known exception: a settings change waits for its write, so each caller
     // can undo the change when the write fails.
@@ -747,7 +747,8 @@ bool Reader::writePreferences(const QJsonObject &next)
 
 void Reader::applySettings()
 {
-    if (savingButtonControls || savingDarkMode >= 0 || session->temporaryTypography())
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
+        || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
@@ -921,11 +922,57 @@ void Reader::applySettings()
     refresh();
 }
 
+void Reader::setDenseGraph(bool dense)
+{
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+        chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
+        refresh();
+        return;
+    }
+    auto next = appearance::globalPreferences(preferences);
+    appearance::rememberTextLayout(next, session->state());
+    appearance::rememberPageMargins(next, session->state());
+    next["dense_stats_chart"] = dense;
+    logSettingChanges(qt::object({ { "dense_stats_chart",
+                                     preferences.value("dense_stats_chart").toBool(false) } }),
+                      qt::object({ { "dense_stats_chart", dense } }));
+    savingDenseGraph = true;
+    if (!preferencesWriter)
+        preferencesWriter = std::make_unique<storage::RecordWriter>();
+    QPointer<Reader> guard(this);
+    preferencesWriter->post(
+            [path = book->paths().preferences(), next] {
+                return storage::writePreferences(path, next);
+            },
+            [guard, dense](bool saved) {
+                qt::invoke(
+                        QCoreApplication::instance(),
+                        [guard, dense, saved] {
+                            if (!guard)
+                                return;
+                            guard->savingDenseGraph = false;
+                            saves::settled();
+                            if (saved) {
+                                guard->preferences["dense_stats_chart"] = dense;
+                                guard->denseGraphOption->setChecked(dense);
+                            } else {
+                                guard->chapterGraph->setDense(
+                                        guard->preferences.value("dense_stats_chart")
+                                                .toBool(false));
+                                guard->showSettingsWriteError();
+                            }
+                            guard->refresh();
+                        },
+                        Qt::QueuedConnection);
+            });
+    refresh();
+}
+
 void Reader::toggleZenStats()
 {
     // Do not overtake a pending dark mode or button save, as writePreferences
     // does. The button already toggled itself, so put it back.
-    if (savingButtonControls || savingDarkMode >= 0) {
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         syncNavigation();
         return;
     }
@@ -965,8 +1012,8 @@ void Reader::toggleZenStats()
 
 void Reader::applyDarkMode(bool enabled)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || pendingDarkMode >= 0 || session->busy()
-        || session->temporaryTypography()) {
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph || pendingDarkMode >= 0
+        || session->busy() || session->temporaryTypography()) {
         refresh();
         return;
     }

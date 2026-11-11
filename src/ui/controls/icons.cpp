@@ -122,6 +122,16 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(QStringLiteral("door-open"), path);
+    } else if (icon == ControlIcon::ZoomIn || icon == ControlIcon::ZoomOut) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("magnifying-glass"), path);
+        QPainterPath sign;
+        sign.setFillRule(Qt::WindingFill);
+        sign.addRect(80, 104, 64, 16);
+        if (icon == ControlIcon::ZoomIn)
+            sign.addRect(104, 80, 16, 64);
+        path = path.united(sign);
     } else if (icon == ControlIcon::Bold) {
         // Bold reading: a bold B beside a regular o, as the feature sets the
         // start of a word in bold. The outlines come from IBM Plex Sans, on
@@ -753,7 +763,8 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::Sync && icon != ControlIcon::Sort
             && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
-            && icon != ControlIcon::WordsSaved
+            && icon != ControlIcon::WordsSaved && icon != ControlIcon::ZoomIn
+            && icon != ControlIcon::ZoomOut
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)

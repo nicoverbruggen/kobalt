@@ -792,6 +792,7 @@ void Reader::syncPinnedBookmarks()
     // Prefer the exposed paper above Stats, keeping its text at full width.
     // Short landscape screens instead leave room beside it for one column.
     const bool besideStats = stats && chapterGraph->y() - top < cell + 2 * padding;
+    pinnedBookmarks->setAttribute(Qt::WA_OpaquePaintEvent, besideStats);
     if (stats && !besideStats)
         bottom = chapterGraph->y();
     const int room = qMax(1, bottom - top);
@@ -813,8 +814,14 @@ void Reader::syncPinnedBookmarks()
         chapterGraph->setGeometry(0, bottom - chapterGraph->height(), panelWidth,
                                   chapterGraph->height());
     }
-    pinnedBookmarks->setGeometry(width() - trayWidth - edgeGap, top + (room - trayHeight) / 2,
-                                 trayWidth, trayHeight);
+    if (besideStats)
+        pinnedBookmarks->setGeometry(chapterGraph->geometry().right() + 1, top,
+                                     width() - chapterGraph->width(), room);
+    else
+        pinnedBookmarks->setGeometry(width() - trayWidth - edgeGap, top + (room - trayHeight) / 2,
+                                     trayWidth, trayHeight);
+    const int trayLeft = besideStats ? edgeGap : 0;
+    const int trayTop = (pinnedBookmarks->height() - trayHeight) / 2;
     for (int i = 0; i < pinnedButtons.size(); ++i) {
         auto *button = pinnedButtons[i];
         button->setVisible(i < count);
@@ -824,9 +831,10 @@ void Reader::syncPinnedBookmarks()
         const int column = i / columnRows;
         const int rows = qMin(columnRows, count - column * columnRows);
         const int columnTop = (trayHeight - (cell * rows + 2 * padding)) / 2;
-        button->setGeometry(padding + column * (cell + gap),
-                            columnTop + padding + i % columnRows * cell + (cell - side) / 2, side,
-                            side);
+        button->setGeometry(trayLeft + padding + column * (cell + gap),
+                            trayTop + columnTop + padding + i % columnRows * cell
+                                    + (cell - side) / 2,
+                            side, side);
         button->setGlyph(ui::bookmarkIcon(pin.icon));
         const auto name = pin.name.isEmpty() ? pin.chapter : pin.name;
         button->setAccessibleName(name);

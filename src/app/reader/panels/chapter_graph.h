@@ -24,9 +24,12 @@ public:
     // The times are the rest of
     // the chapter and of the book at the session's pace, or -1 without a pace.
     void setReading(int minutes, qint64 words, qint64 chapterMilliseconds = -1,
-                    qint64 bookMilliseconds = -1);
+                    qint64 bookMilliseconds = -1, int pageTurns = 0);
     // Dense charts show every chapter on one row; sparse charts page 20 at a time.
     void setDense(bool value);
+
+    void setModeEnabled(bool enabled) { mode->setEnabled(enabled); }
+
     void open();
 
     void setTopPadding(int padding)
@@ -46,6 +49,7 @@ public:
     int graphPage() const;
     int graphPages() const;
     std::function<void()> changed;
+    std::function<void(bool)> denseChanged;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -54,13 +58,16 @@ protected:
 private:
     QVector<ChapterLink> chapters;
     ChapterSelection selection;
-    int first = 0;
+    // Retain a chapter through capacity changes, rather than a rounded page start.
+    int anchor = 0;
     int topPadding = 0, availableHeight = 0;
     // The chart can grow on larger screens and shrink on short ones.
     int chartHeight() const;
+    bool inlinePager() const;
+    int pagerHeight() const;
     bool ready = false, dense = true;
     qint64 words = -1, chapterTime = -1, bookTime = -1;
-    int minutes = 0;
+    int minutes = 0, pageTurns = 0;
 
     struct Progress
     {
@@ -72,6 +79,7 @@ private:
     QString title;
     int progressWeight = -1;
     ui::PagerBar *pager;
+    ui::CellButton *mode;
     ChapterBars *bars;
     StatsCell *chapterCell, *bookCell, *sessionCell;
     int capacity() const;

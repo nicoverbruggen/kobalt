@@ -61,7 +61,8 @@ void Reader::refresh()
     const bool darkReady = publishPendingDarkMode();
     if (general->isVisible())
         static_cast<SettingsPanel *>(general)->updateButtonControls(
-                buttonControls(), preferences, savingButtonControls || savingDarkMode >= 0);
+                buttonControls(), preferences,
+                savingButtonControls || savingDarkMode >= 0 || savingDenseGraph);
     const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode)
             : pendingDarkMode >= 0        ? bool(pendingDarkMode)
                                           : session->state().value("dark_mode").toBool(false);
@@ -686,6 +687,7 @@ void Reader::syncReadingControls()
     toolbarButtons.graph->setChecked(chapterGraph->isVisible()
                                      || appearanceEdit.destination()
                                              == AppearanceDestination::Stats);
+    chapterGraph->setModeEnabled(!savingButtonControls && savingDarkMode < 0 && !savingDenseGraph);
     if (chapterGraph->isVisible())
         updateGraph();
     updateOrientationBlock();
@@ -813,7 +815,8 @@ void Reader::updateReadingStats()
     const auto reading = book->sessionReadingMilliseconds();
     const auto estimates = book->estimates();
     chapterGraph->setReading(int(reading / 60000), session->totalWords(),
-                             estimates.chapterMilliseconds, estimates.bookMilliseconds);
+                             estimates.chapterMilliseconds, estimates.bookMilliseconds,
+                             book->sessionPageTurns());
 }
 
 } // namespace kobalt::reader

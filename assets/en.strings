@@ -265,6 +265,8 @@
 /* Arguments: %1, %2 */
 "chapter_graph.next_chapter" = "Next chapter: %1 %2";
 "chapter_graph.no_chapter_lengths_available" = "No chapter lengths available";
+"chapter_graph.show_more_chapters" = "Show more chapters";
+"chapter_graph.show_wider_bars" = "Show wider chapter bars";
 
 /* common */
 "common.auto" = "Auto";
@@ -1028,7 +1030,9 @@
 "stats.pages_left" = "pages left";
 "stats.page_left" = "page left";
 "stats.minutes" = "min";
-"stats.since_opening" = "Since opening";
+/* %1: Page turns in the current reading session. */
+"stats.page_turn" = "%1 page turn";
+"stats.page_turns" = "%1 page turns";
 /* Arguments: %1 */
 "stats.words" = "%1 words";
 "stats.last_chapter" = "Last chapter";

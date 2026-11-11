@@ -492,6 +492,7 @@ private:
 
     // Shows or hides Zen mode's reading stats and remembers the choice.
     void toggleZenStats();
+    void setDenseGraph(bool dense);
 
     QJsonObject preferences;
     QLabel *settingsError;
@@ -834,7 +835,7 @@ private:
     bool writePreferences(const QJsonObject &next);
     pageButtons::Buttons buttonControls() const;
     void saveButtonControls(const QJsonObject &actions);
-    bool savingButtonControls = false;
+    bool savingButtonControls = false, savingDenseGraph = false;
     // Counts preferences writes. An asynchronous save that fails undoes its
     // change only when no later write started: a later write already carries
     // the change, and its own result decides.

@@ -7986,8 +7986,16 @@ private slots:
     }
 
     // Checks that activity saves wait for a batch without timers, save at once on low battery until charging, and cool down after a failure.
+    void activityBatchesAndLowBattery_data()
+    {
+        QTest::addColumn<bool>("completeFailureFirst");
+        QTest::newRow("immediate-standby") << false;
+        QTest::newRow("completed-failure") << true;
+    }
+
     void activityBatchesAndLowBattery()
     {
+        QFETCH(bool, completeFailureFirst);
         QTemporaryDir root;
         auto paths = testPaths();
         paths.directory = root.path();
@@ -8062,7 +8070,17 @@ private slots:
         storage::closeProfile();
         QVERIFY(QFile::setPermissions(paths.database(), QFileDevice::ReadOwner));
         turn();
-        QVERIFY(!host.window()->flushBeforeStandby());
+        if (completeFailureFirst) {
+            host.window()->flushBeforeStandby();
+            QTRY_COMPARE(failures, 1);
+        }
+        // The failed batch can finish before Nickel asks about standby.
+        // Cooldown permits standby once no write remains pending.
+        if (host.window()->flushBeforeStandby()) {
+            QCOMPARE(failures, 1);
+            QVERIFY(!host.book()->savesPending());
+            QVERIFY(host.book()->activitySaveCoolingDown());
+        }
         QTRY_COMPARE(failures, 1);
         QVERIFY(host.book()->activitySaveCoolingDown());
         QTRY_VERIFY(host.window()->flushBeforeStandby());

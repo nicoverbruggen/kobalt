@@ -15,6 +15,8 @@ These checks cover the profile database, record writers, saves at close and slee
 | `lifecycle.closeWaitsFor*`, `lifecycle.closeRetriesRequiredNativeSaves`, `lifecycle.sleepWaitsForNativeTimeBeforePosition` | Saves and their order at close and sleep |
 | `lifecycle.background*`, `lifecycle.standaloneReadingHistory`, `lifecycle.activityBatchesAndLowBattery` | Reading history and activity saves through background, resume and low battery |
 
+`lifecycle.activityBatchesAndLowBattery` checks standby both before and after a failed background save completes. Standby may resume during retry cooldown only after pending writes end. The check retains the unsaved position until an explicit successful checkpoint.
+
 `lifecycle.nativeOpeningStatus`, in [Kobo adapters](kobo.md), checks the native status update at opening.
 
 ## Notes

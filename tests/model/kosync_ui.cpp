@@ -519,8 +519,16 @@ int main(int argc, char **argv)
                     && save->geometry().right() == reference.primaryButton()->geometry().right()
                     && cancel->geometry().bottom() == card->height() - 3,
             "Cancel and OK dividers meet the alert frame without outer padding");
-    require(editor->x() == cancel->x() && editor->width() == cancel->width() + save->width(),
-            "input occupies the alert content band without an inset box");
+    // Every field uses the bordered, inset input of the password field.
+    auto *inputRow = card->findChild<QWidget *>("rrKosyncInputRow");
+    require(inputRow && editor->parentWidget() == inputRow
+                    && inputRow->x() == cancel->x()
+                    && inputRow->width() == cancel->width() + save->width()
+                    && editor->x() == ui::metrics::notice::cardMargins.left()
+                    && editor->geometry().right()
+                            == inputRow->width() - 1 - ui::metrics::notice::cardMargins.right()
+                    && editor->styleSheet().contains("solid"),
+            "input sits in a bordered box inset within the alert content band");
     if (argc > 1) {
         reference.show();
         reference.raise();

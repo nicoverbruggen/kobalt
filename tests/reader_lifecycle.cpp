@@ -9521,12 +9521,20 @@ private:
                 username->click();
                 auto *input = host.window()->findChild<QLineEdit *>("rrKosyncInput");
                 QVERIFY(input);
+                const auto usernameStyle = input->styleSheet();
+                QVERIFY(usernameStyle.contains("solid"));
+                QTRY_VERIFY(input->isVisible());
+                const int usernameLeft = input->mapTo(host.window(), QPoint()).x();
                 input->setText("another-reader");
                 host.window()->findChild<QPushButton *>("rrKosyncEditSave")->click();
                 QTRY_VERIFY(!host.window()->findChild<QLineEdit *>("rrKosyncInput"));
                 host.window()->findChild<QPushButton *>("rrKosyncPassword")->click();
                 input = host.window()->findChild<QLineEdit *>("rrKosyncInput");
                 QVERIFY(input);
+                // Both credentials use the same bordered input at the same inset.
+                QCOMPARE(input->styleSheet(), usernameStyle);
+                QTRY_VERIFY(input->isVisible());
+                QCOMPARE(input->mapTo(host.window(), QPoint()).x(), usernameLeft);
                 input->setText("fixture-password");
                 host.window()->findChild<QPushButton *>("rrKosyncEditSave")->click();
                 QTRY_VERIFY(!host.window()->findChild<QLineEdit *>("rrKosyncInput"));

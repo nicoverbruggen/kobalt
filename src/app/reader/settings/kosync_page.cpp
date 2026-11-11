@@ -355,24 +355,25 @@ void KosyncPage::edit(int field)
         editor->setEchoMode(QLineEdit::Password);
     ui::readerStyle(
             editor,
-            QString("QLineEdit{border:%1;border-radius:0;padding:0;background:palette(window);color:palette(window-text);")
-                            .arg(field == 2 ? QString("%1px solid palette(mid)")
-                                                      .arg(int(metrics::control::border))
-                                            : QStringLiteral("none"))
+            QString("QLineEdit{border:%1px solid palette(mid);border-radius:0;padding:0;background:palette(window);color:palette(window-text);")
+                            .arg(int(metrics::control::border))
                     + ui::styles::font(metrics::chrome::labelText) + "}");
     editor->setTextMargins(metrics::notice::cardMargins.left(), 0,
                            metrics::notice::cardMargins.right(), 0);
     if (field == 3)
         editor->setPlaceholderText(defaultDeviceName_);
     editor->setMinimumHeight(metrics::chrome::actionHeight);
+    // Every field uses the same bordered input in the same inset row. Only the
+    // password row adds its reveal button.
+    auto *row = new QWidget(card);
+    row->setObjectName("rrKosyncInputRow");
+    auto *layout = new QHBoxLayout(row);
+    layout->setContentsMargins(metrics::notice::cardMargins.left(),
+                               metrics::notice::cardMargins.top(),
+                               metrics::notice::cardMargins.right(), metrics::notice::cardGap);
+    layout->setSpacing(metrics::notice::cardGap);
+    layout->addWidget(editor, 1);
     if (field == 2) {
-        auto *row = new QWidget(card);
-        auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(metrics::notice::cardMargins.left(),
-                                   metrics::notice::cardMargins.top(),
-                                   metrics::notice::cardMargins.right(), metrics::notice::cardGap);
-        layout->setSpacing(metrics::notice::cardGap);
-        layout->addWidget(editor, 1);
         auto *reveal = ui::makeButton(row, layout, "rrKosyncPasswordReveal",
                                       strings::get("kosync.show_password"), [] { });
         reveal->setCheckable(true);
@@ -394,10 +395,8 @@ void KosyncPage::edit(int field)
             reveal->setAccessibleName(strings::get(visible ? "kosync.hide_password_accessible"
                                                            : "kosync.show_password_accessible"));
         });
-        card->rows()->insertWidget(1, row);
-    } else {
-        card->rows()->insertWidget(1, editor);
     }
+    card->rows()->insertWidget(1, row);
     auto *cancel = dialog->secondaryButton();
     auto *save = dialog->primaryButton();
     const auto submit = [this, field, editor] {
@@ -554,10 +553,9 @@ void KosyncPage::placeEditor()
         bottom = editorDialog->mapFrom(overlayParent_->window(), bounds.topLeft()).y();
     auto *card = editorDialog->card();
     if (card->height() > bottom && editorDialog->width() > editorDialog->height()) {
-        if (auto *reveal = editorDialog->findChild<QPushButton *>("rrKosyncPasswordReveal"))
-            reveal->parentWidget()->layout()->setContentsMargins(
-                    metrics::notice::cardMargins.left(), 0, metrics::notice::cardMargins.right(),
-                    0);
+        if (auto *row = editorDialog->findChild<QWidget *>("rrKosyncInputRow"))
+            row->layout()->setContentsMargins(metrics::notice::cardMargins.left(), 0,
+                                              metrics::notice::cardMargins.right(), 0);
         card->fitToWidth(editorDialog->width() - 2 * int(metrics::notice::sideClearance));
     }
     editorDialog->setCardArea(QRect(0, 0, editorDialog->width(), qMax(1, bottom)));

@@ -2,6 +2,7 @@
 #include "reading/reading_density.h"
 #include <QJsonObject>
 #include <array>
+#include <utility>
 
 namespace kobalt {
 inline constexpr auto defaultFontFace = "Libron";
@@ -166,6 +167,62 @@ inline bool validWidowsOrphans(const QString &mode)
 // Copies every appearance key from `from` into `to`. A key that `from` does
 // not have is removed from `to`, so the engine uses its own default for it.
 void copy(QJsonObject &to, const QJsonObject &from);
+
+// A partial edit. Missing keys leave the current requested values unchanged.
+// Values are validated by the engine; unrelated book and navigation keys are ignored.
+class Patch
+{
+public:
+    Patch() = default;
+    explicit Patch(const QJsonObject &fields);
+
+    const QJsonObject &fields() const { return fields_; }
+
+private:
+    QJsonObject fields_;
+};
+
+// A complete appearance snapshot from an opened session or completed frame.
+// Editing it retains every field not named by the patch. It carries no position.
+class Requested
+{
+public:
+    static Requested fromResolvedState(const QJsonObject &state);
+    Requested edited(const Patch &patch) const;
+
+    const QJsonObject &fields() const { return fields_; }
+
+    void replaceIn(QJsonObject &state) const;
+
+    bool operator==(const Requested &other) const { return fields_ == other.fields_; }
+
+    bool operator!=(const Requested &other) const { return !(*this == other); }
+
+private:
+    explicit Requested(QJsonObject fields) : fields_(std::move(fields)) { }
+
+    QJsonObject fields_;
+};
+
+// Stored input may omit fields or retain explicit null values. Do not fill them
+// from a temporary appearance when making a checkpoint.
+class SavedInput
+{
+public:
+    SavedInput() = default;
+    explicit SavedInput(const QJsonObject &record);
+    void restoreIn(QJsonObject &record) const;
+
+private:
+    QJsonObject fields_;
+};
+
+// Captured with the pixels, never taken from an unfinished appearance request.
+struct Displayed
+{
+    Requested settings;
+    quint64 renderId;
+};
 
 // Converts the old double-scaled spacing once, preserving its approximate height.
 inline void migrateLineSpacing(QJsonObject &saved)

@@ -186,7 +186,7 @@ int main(int argc, char **argv)
             if (appearanceFailure) {
                 auto invalid = model.state();
                 invalid["font_pixels"] = -1;
-                model.apply(invalid);
+                model.editAppearance(kobalt::appearance::Patch(invalid));
             } else {
                 require(model.goTo("/body[999999]/text().0"), "Cannot queue missing passage jump");
             }

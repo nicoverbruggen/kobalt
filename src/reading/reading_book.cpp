@@ -863,7 +863,7 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
     if (imageViews.isEmpty())
         checkpoint.remove("image_views");
     if (session_->temporaryTypography())
-        appearance::copy(checkpoint, session_->persistentState());
+        session_->persistentAppearance().restoreIn(checkpoint);
     // These describe the displayed frame, not a saved reading position. Drop
     // them from imported records too, before comparing checkpoints or applying
     // the record's byte limit. Diagnostic snapshots above keep the full frame.

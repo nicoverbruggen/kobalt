@@ -135,7 +135,8 @@ int main(int argc, char **argv)
         require(!lead.isEmpty() && model.goTo(lead.first().start)
                         && model.textFontFace() == "Libron",
                 "The default book override changed Publisher Fonts");
-        require(model.applyAppearance(kobalt::qt::object({ { "default_font_face", "Libron" } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "default_font_face", "Libron" } }))),
                 "Cannot change default book override");
         require(model.state()["font_face"].toString().isEmpty(),
                 "Default change replaced Publisher Fonts selection");
@@ -176,8 +177,8 @@ int main(int argc, char **argv)
                           : QString("IBM Plex Sans"));
         checkFace("Monomarker", "IBM Plex Mono");
         checkFace("Namedmarker", "IBM Plex Sans");
-        require(model.applyAppearance(kobalt::qt::object(
-                        { { "default_font_face", kobalt::test::alternateReadingFace() } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                        { { "default_font_face", kobalt::test::alternateReadingFace() } }))),
                 "Cannot change the default book override");
         checkFace("Serifmarker", "Libron");
         checkFace("Sansmarker",
@@ -193,8 +194,8 @@ int main(int argc, char **argv)
                   model.fontFaces().contains(kobalt::publisherSansFontFace)
                           ? QString(kobalt::publisherSansFontFace)
                           : QString("IBM Plex Sans"));
-        require(model.applyAppearance(kobalt::qt::object(
-                        { { "font_face", kobalt::test::alternateReadingFace() } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                        { { "font_face", kobalt::test::alternateReadingFace() } }))),
                 "Cannot select an explicit reading font");
         QVector<QImage> explicitPages;
         for (int page = 0; page < model.pages(); ++page) {
@@ -203,7 +204,8 @@ int main(int argc, char **argv)
         checkFace("Serifmarker", kobalt::test::alternateReadingFace());
         checkFace("Sansmarker", kobalt::test::alternateReadingFace());
         checkFace("Namedmarker", kobalt::test::alternateReadingFace());
-        require(model.applyAppearance(kobalt::qt::object({ { "default_font_face", "Libron" } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "default_font_face", "Libron" } }))),
                 "Cannot change the default alongside an explicit reading font");
         require(model.pages() == explicitPages.size(),
                 "Default changes repaginated an explicit override");
@@ -231,8 +233,8 @@ int main(int argc, char **argv)
         for (int page = 0; page < model.pages(); ++page) {
             originalPages.append(model.image(page));
         }
-        require(model.applyAppearance(kobalt::qt::object(
-                        { { "default_font_face", kobalt::test::alternateReadingFace() } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                        { { "default_font_face", kobalt::test::alternateReadingFace() } }))),
                 "Cannot save defaults while publisher fonts are present");
         require(model.pages() == originalPages.size(),
                 "Defaults repaginated a book with embedded fonts");
@@ -275,11 +277,12 @@ int main(int argc, char **argv)
                     checkFace("Embeddedmarker", "Embedded");
             };
             checkFamilies();
-            require(model.applyAppearance(kobalt::qt::object({ { "serif_font_face", "" },
-                                                               { "sans_font_face", "" },
-                                                               { "monospace_font_face", "" } })),
+            require(model.applyAppearance(kobalt::appearance::Patch(
+                            kobalt::qt::object({ { "serif_font_face", "" },
+                                                 { "sans_font_face", "" },
+                                                 { "monospace_font_face", "" } }))),
                     "Cannot restore automatic fallbacks");
-            require(model.applyAppearance(fallbacks),
+            require(model.applyAppearance(kobalt::appearance::Patch(fallbacks)),
                     "Cannot change generic fallback fonts on an open book");
             checkFamilies();
             kobalt::EngineDocument preview(kobalt::test::readerFonts());
@@ -293,19 +296,21 @@ int main(int argc, char **argv)
             require(model.open(bytes, size, saved, &error), qPrintable(error));
             checkFamilies();
             const auto before = model.state();
-            require(!model.applyAppearance(
-                            kobalt::qt::object({ { "serif_font_face", "Missing font" } })),
+            require(!model.applyAppearance(kobalt::appearance::Patch(
+                            kobalt::qt::object({ { "serif_font_face", "Missing font" } }))),
                     "Missing fallback was accepted");
             require(model.state() == before, "Rejected fallback changed the model");
-            require(model.applyAppearance(kobalt::qt::object({ { "font_face", "Libron" } })),
+            require(model.applyAppearance(kobalt::appearance::Patch(
+                            kobalt::qt::object({ { "font_face", "Libron" } }))),
                     "Explicit override failed");
             checkFace("Serifmarker", "Libron");
             checkFace("Sansmarker", "Libron");
             checkFace("Namedmarker", "Libron");
-            require(model.applyAppearance(kobalt::qt::object({ { "font_face", "" },
-                                                               { "serif_font_face", "" },
-                                                               { "sans_font_face", "" },
-                                                               { "monospace_font_face", "" } })),
+            require(model.applyAppearance(kobalt::appearance::Patch(
+                            kobalt::qt::object({ { "font_face", "" },
+                                                 { "serif_font_face", "" },
+                                                 { "sans_font_face", "" },
+                                                 { "monospace_font_face", "" } }))),
                     "Cannot reset fallback choices");
             checkFace("Monomarker", "IBM Plex Mono");
         }
@@ -343,7 +348,8 @@ int main(int argc, char **argv)
                 if (QColor::fromRgba(image.pixel(x, y)) == QColor(0, 204, 102))
                     accent |= QRect(x, y, 1, 1);
         require(!accent.isEmpty(), "Equation colour marker is missing");
-        require(model.applyAppearance(kobalt::qt::object({ { "dark_mode", true } })),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch(kobalt::qt::object({ { "dark_mode", true } }))),
                 "Cannot enable equation dark mode");
         const auto dark = model.image(0);
         const QPoint marker = accent.center();
@@ -359,7 +365,8 @@ int main(int argc, char **argv)
         require(QColor::fromRgba(dark.pixel(ink.center()))
                         == QColor::fromRgba(image.pixel(ink.center())),
                 "Ordinary artwork changed colour");
-        require(model.applyAppearance(kobalt::qt::object({ { "dark_mode", false } })),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch(kobalt::qt::object({ { "dark_mode", false } }))),
                 "Cannot restore equation light mode");
         require(model.image(0) == image, "Equation night rendering changed its source pixels");
     }
@@ -428,7 +435,8 @@ int main(int argc, char **argv)
             require(model.turnTarget(page, -1) == qMax(page - 1, 0),
                     "Default backward paging skipped a physical page");
         }
-        require(model.applyAppearance(kobalt::qt::object({ { "hide_nonlinear_fragments", true } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "hide_nonlinear_fragments", true } }))),
                 "Cannot enable hiding non-linear fragments");
         require(model.state().value("hide_nonlinear_fragments").toBool(),
                 "Hiding setting was not retained");
@@ -473,8 +481,8 @@ int main(int argc, char **argv)
                 "The footnote aside cannot be opened directly");
         require(model.turnTarget(model.page(), 1) != model.page(),
                 "A turn inside a non-linear section is stuck");
-        require(model.applyAppearance(
-                        kobalt::qt::object({ { "hide_nonlinear_fragments", false } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "hide_nonlinear_fragments", false } }))),
                 "Cannot disable hiding non-linear fragments");
         require(model.turnTarget(1, -1) == 0, "Cannot turn back to the first physical page");
         require(model.state().value("dom_version").toInt() > 20260000,
@@ -504,7 +512,8 @@ int main(int argc, char **argv)
         require(text(TextLangMan::getTextLangCfg()->getHyphMethod()->getId()) == "German.pattern",
                 "German does not use its dictionary");
         // Long compounds must break inside words at a narrow width.
-        require(model.applyAppearance(kobalt::qt::object({ { "text_alignment", "justify" } }),
+        require(model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                                              { { "text_alignment", "justify" } })),
                                       QSize(480, 1448)),
                 "Cannot narrow the page");
         const auto hyphenated = model.image(model.page());

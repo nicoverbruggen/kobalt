@@ -1513,15 +1513,17 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
             const bool fills =
                     fixture.coordinateQuery(book, false, [](EngineDocument &coordinates) {
                         const int page = coordinates.page();
-                        if (!coordinates.applyAppearance({ { "vertical_justification", "off" },
-                                                           { "vertical_spacing_scope", "all" } }))
+                        if (!coordinates.applyAppearance(kobalt::appearance::Patch(
+                                    { { "vertical_justification", "off" },
+                                      { "vertical_spacing_scope", "all" } })))
                             return false;
                         const auto before = coordinates.image(page);
-                        if (!coordinates.applyAppearance({ { "vertical_justification", "expand" } })
+                        if (!coordinates.applyAppearance(kobalt::appearance::Patch(
+                                    { { "vertical_justification", "expand" } }))
                             || coordinates.image(page) == before)
                             return false;
-                        return coordinates.applyAppearance(
-                                       { { "vertical_justification", "center" } })
+                        return coordinates.applyAppearance(kobalt::appearance::Patch(
+                                       { { "vertical_justification", "center" } }))
                                 && coordinates.image(page) != before;
                     });
             if (fills)

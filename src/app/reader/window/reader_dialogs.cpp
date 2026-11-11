@@ -156,10 +156,10 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions)
                 preferences = next;
                 dismiss();
                 mutateAppearance([face](ReaderSession &preview) {
-                    auto settings = preview.state();
-                    settings["default_font_face"] =
-                            face.isEmpty() ? QString(defaultFontFace) : face;
-                    preview.apply(settings);
+                    const auto patch = appearance::Patch(
+                            qt::object({ { "default_font_face",
+                                           face.isEmpty() ? QString(defaultFontFace) : face } }));
+                    preview.requestAppearance(preview.displayedAppearance().settings.edited(patch));
                 });
                 showFontPicker();
                 diagnostic("font-default-applied", {}, false);

@@ -206,8 +206,9 @@ void decorativePages()
                         captionRects.append(model.rangeRects(hit.start, hit.end));
                     require(!hits.isEmpty(), "Graphic page contains no prose to adjust");
                     for (const auto *mode : { "expand", "center" }) {
-                        require(model.applyAppearance({ { "vertical_justification", mode },
-                                                        { "vertical_spacing_scope", "all" } }),
+                        require(model.applyAppearance(kobalt::appearance::Patch(
+                                        { { "vertical_justification", mode },
+                                          { "vertical_spacing_scope", "all" } })),
                                 "Cannot adjust decorative page");
                         const auto after = model.image(page);
                         if (kind == "top" && columns == 1 && page == 0)
@@ -320,19 +321,21 @@ void decorativePages()
                             require(reopened.rangeRects(hit.start, hit.end)
                                             == model.rangeRects(hit.start, hit.end),
                                     "Cached decorative hit geometry differs");
-                        require(model.applyAppearance({ { "vertical_justification", "off" } })
+                        require(model.applyAppearance(kobalt::appearance::Patch(
+                                        { { "vertical_justification", "off" } }))
                                         && model.image(page) == before,
                                 "Normal did not restore decorative pixels");
                     }
                     const auto original = model.image(page);
                     int formats = 0;
-                    require(model.applyAppearance({}, QSize(viewport.height(), viewport.width()))
-                                    && model.applyAppearance({}, viewport,
-                                                             [&](OpeningStage stage, int percent) {
-                                                                 if (stage == OpeningStage::Pages
-                                                                     && percent == 0)
-                                                                     ++formats;
-                                                             })
+                    require(model.applyAppearance(kobalt::appearance::Patch(QJsonObject{}),
+                                                  QSize(viewport.height(), viewport.width()))
+                                    && model.applyAppearance(
+                                            kobalt::appearance::Patch(QJsonObject{}), viewport,
+                                            [&](OpeningStage stage, int percent) {
+                                                if (stage == OpeningStage::Pages && percent == 0)
+                                                    ++formats;
+                                            })
                                     && formats == 0 && model.image(page) == original,
                             "Retained rotation changed decorative layout");
                 }
@@ -342,13 +345,15 @@ void decorativePages()
                     require(expanded, qPrintable("Expand excluded decorative fixture: " + kind));
                     require(centered, qPrintable("Center excluded decorative fixture: " + kind));
                 }
-                require(model.applyAppearance({ { "widows_orphans", "allow" },
-                                                { "vertical_justification", "off" } }),
+                require(model.applyAppearance(
+                                kobalt::appearance::Patch({ { "widows_orphans", "allow" },
+                                                            { "vertical_justification", "off" } })),
                         "Cannot disable paragraph protection");
                 const auto before = model.image(0);
                 for (const auto *mode : { "expand", "center" })
-                    require(model.applyAppearance({ { "vertical_justification", mode },
-                                                    { "vertical_spacing_scope", "protection" } })
+                    require(model.applyAppearance(kobalt::appearance::Patch(
+                                    { { "vertical_justification", mode },
+                                      { "vertical_spacing_scope", "protection" } }))
                                     && model.image(0) == before,
                             "Protection-only adjusted an unprotected decorative page");
             }
@@ -408,7 +413,8 @@ int main(int argc, char **argv)
         const auto position = model.position();
         const int pages = model.pages();
         require(!first.isEmpty() && !last.isEmpty(), "Missing baseline selection geometry");
-        require(model.applyAppearance({ { "vertical_justification", "center" } }),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", "center" } })),
                 "Enable centering");
         const auto after = model.image(0);
         const auto centeredFirst = model.rangeRects(edges.first.start, edges.first.end);
@@ -427,7 +433,8 @@ int main(int argc, char **argv)
         require(model.annotationGeometry(edges.last.start, edges.last.end).rectangles
                         == centeredLast,
                 "Centered annotation geometry did not follow the text");
-        require(model.applyAppearance({ { "vertical_justification", "off" } })
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", "off" } }))
                         && model.image(0) == before,
                 "Off did not restore the original page");
     }
@@ -449,7 +456,8 @@ int main(int argc, char **argv)
                 qPrintable(error));
         const auto before = model.image(0);
         for (const auto *mode : { "expand", "center" }) {
-            require(model.applyAppearance({ { "vertical_justification", mode } })
+            require(model.applyAppearance(
+                            kobalt::appearance::Patch({ { "vertical_justification", mode } }))
                             && model.image(0) == before,
                     "Page spacing changed prose inside a visible border");
         }
@@ -469,18 +477,23 @@ int main(int argc, char **argv)
         for (int attempt = 0; attempt < (cached ? 1 : 6); ++attempt) {
             if (attempt) {
                 height += 7;
-                require(model.applyAppearance({}, QSize(800, height)), "Resize protection fixture");
+                require(model.applyAppearance(kobalt::appearance::Patch(QJsonObject{}),
+                                              QSize(800, height)),
+                        "Resize protection fixture");
             }
             for (int page = 0; page < qMin(12, model.pages()); ++page) {
                 require(model.go(page), "Open protection fixture page");
-                require(model.applyAppearance({ { "vertical_justification", "off" } }),
+                require(model.applyAppearance(
+                                kobalt::appearance::Patch({ { "vertical_justification", "off" } })),
                         "Disable page adjustment");
                 const auto before = model.image(page);
-                require(model.applyAppearance({ { "vertical_justification", "expand" },
-                                                { "vertical_spacing_scope", "protection" } }),
+                require(model.applyAppearance(kobalt::appearance::Patch(
+                                { { "vertical_justification", "expand" },
+                                  { "vertical_spacing_scope", "protection" } })),
                         "Enable protection-only expansion");
                 const auto protectedImage = model.image(page);
-                require(model.applyAppearance({ { "vertical_spacing_scope", "all" } }),
+                require(model.applyAppearance(
+                                kobalt::appearance::Patch({ { "vertical_spacing_scope", "all" } })),
                         "Enable general expansion");
                 const auto generalImage = model.image(page);
                 protectedPage |= protectedImage != before;
@@ -491,24 +504,26 @@ int main(int argc, char **argv)
         }
         require(protectedPage, "No gap caused by widow/orphan protection was adjusted");
         require(ordinaryPage, "Protection-only expansion also changed ordinary page gaps");
-        require(model.applyAppearance(
-                        { { "widows_orphans", "allow" }, { "vertical_justification", "off" } }),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        { { "widows_orphans", "allow" }, { "vertical_justification", "off" } })),
                 "Disable paragraph protection");
         for (int page = 0; page < qMin(8, model.pages()); ++page) {
             require(model.go(page), "Open unprotected page");
-            require(model.applyAppearance({ { "vertical_justification", "off" } }),
+            require(model.applyAppearance(
+                            kobalt::appearance::Patch({ { "vertical_justification", "off" } })),
                     "Disable unprotected adjustment");
             const auto before = model.image(page);
             for (const auto &mode : { QString("expand"), QString("center") }) {
-                require(model.applyAppearance({ { "vertical_justification", mode },
-                                                { "vertical_spacing_scope", "protection" } }),
+                require(model.applyAppearance(kobalt::appearance::Patch(
+                                { { "vertical_justification", mode },
+                                  { "vertical_spacing_scope", "protection" } })),
                         "Select protection-only mode");
                 require(model.image(page) == before,
                         "Protection-only mode changed a page with protection disabled");
             }
         }
-        require(model.applyAppearance(
-                        { { "widows_orphans", "avoid" }, { "vertical_justification", "off" } }),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        { { "widows_orphans", "avoid" }, { "vertical_justification", "off" } })),
                 "Restore protected layout for cache");
         require(model.saveDocumentCache(), "Save protection metadata");
     }

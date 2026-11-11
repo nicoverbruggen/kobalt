@@ -397,6 +397,43 @@ int run(int argc, char **argv)
             opened.exec();
         }
         {
+            const auto displayed = session->displayedAppearance();
+            for (const auto *key : appearance::keys)
+                require(displayed.settings.fields().contains(key),
+                        "An opened frame must expose a complete appearance snapshot");
+            const auto imageKey = session->image().cacheKey();
+            const int pixels = displayed.settings.fields().value("font_pixels").toInt() + 1;
+            const int spacing = displayed.settings.fields().value("line_spacing").toInt() + 10;
+            session->updated = [&] {
+                if (!session->busy())
+                    opened.quit();
+            };
+            session->editAppearance(appearance::Patch(qt::object({ { "font_pixels", pixels } })));
+            session->editAppearance(appearance::Patch(qt::object({ { "line_spacing", spacing } })));
+            require(session->requestedAppearance().fields().value("font_pixels").toInt() == pixels
+                            && session->requestedAppearance().fields().value("line_spacing").toInt()
+                                    == spacing,
+                    "A queued partial edit lost an earlier pending request");
+            QJsonObject persisted;
+            session->persistentAppearance().restoreIn(persisted);
+            require(session->displayedAppearance().renderId == displayed.renderId
+                            && session->displayedAppearance().settings == displayed.settings
+                            && session->image().cacheKey() == imageKey
+                            && appearance::same(persisted, displayed.settings.fields()),
+                    "An unfinished request changed displayed or checkpoint appearance");
+            opened.exec();
+            require(session->displayedAppearance().renderId != displayed.renderId
+                            && session->displayedAppearance().settings
+                                    == session->requestedAppearance()
+                            && session->fontSize() == pixels && session->spacing() == spacing,
+                    "A completed frame did not publish its requested appearance");
+            session->requestAppearance(displayed.settings);
+            opened.exec();
+            require(session->displayedAppearance().settings == displayed.settings,
+                    "Replacing the complete appearance did not restore the captured snapshot");
+            session->updated = {};
+        }
+        {
             const auto rawImage = session->image();
             const auto emptyGeneration = session->markupGeneration();
             require(session->setMarkup({}) == emptyGeneration,
@@ -503,13 +540,13 @@ int run(int argc, char **argv)
             session->setMarkup(request);
             auto changed = appearance;
             changed["font_pixels"] = appearance.value("font_pixels").toInt() + 4;
-            session->apply(changed);
+            session->editAppearance(kobalt::appearance::Patch(changed));
             opened.exec();
             require(session->markup().request == request
                             && session->markup().imageKey == session->image().cacheKey(),
                     "Reflow published geometry from an earlier image");
             session->setMarkup({});
-            session->apply(appearance);
+            session->editAppearance(kobalt::appearance::Patch(appearance));
             opened.exec();
             require(session->markup().resolvedRanges == 0,
                     "Cleared markup queued visible geometry after reflow");
@@ -665,7 +702,7 @@ int run(int argc, char **argv)
         auto bionicSettings = session->state();
         const auto applyBionic = [&](const QString &mode) {
             bionicSettings["bold_reading"] = mode;
-            session->apply(bionicSettings);
+            session->editAppearance(kobalt::appearance::Patch(bionicSettings));
         };
         applyBionic("bold");
         require(session->renderProgress().reason == RenderReason::EnableBionic,
@@ -725,7 +762,8 @@ int run(int argc, char **argv)
                             == (size.width() < size.height() ? portraitImage : landscapeImage),
                     "A cached session rotation changed page pixels");
         }
-        session->apply(kobalt::qt::object({ { "font_face", "missing-performance-test-font" } }));
+        session->editAppearance(kobalt::appearance::Patch(
+                kobalt::qt::object({ { "font_face", "missing-performance-test-font" } })));
         rendered.exec();
         require(!session->error().isEmpty() && !session->renderProgress().active,
                 "Rejected appearance bypassed validation or kept its progress active");
@@ -1224,7 +1262,8 @@ int run(int argc, char **argv)
             require(absolute->turn(1), "Cannot turn into the non-linear section");
             opened.exec();
             require(absolute->page() == nonLinearPage, "Default turn skipped a non-linear section");
-            absolute->apply(kobalt::qt::object({ { "hide_nonlinear_fragments", true } }));
+            absolute->editAppearance(kobalt::appearance::Patch(
+                    kobalt::qt::object({ { "hide_nonlinear_fragments", true } })));
             opened.exec();
             require(absolute->go(0), "Cannot go to the first physical page");
             opened.exec();

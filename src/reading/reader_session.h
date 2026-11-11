@@ -146,7 +146,8 @@ public:
 
     void openPreview(const ReaderSession &source, QSize size,
                      std::function<void(QString)> finished);
-    void apply(const QJsonObject &settings, QSize size = {});
+    void requestAppearance(const appearance::Requested &settings, QSize size = {});
+    void editAppearance(const appearance::Patch &patch, QSize size = {});
     std::function<void()> updated;
     RenderProgress renderProgress() const;
     // Appearance and viewport work reports progress separately from frames.
@@ -271,11 +272,19 @@ public:
     QJsonObject state() const { return frame.state; }
 
     // The newest requested settings, including any whose frame is still rendering.
-    QJsonObject requestedState() const { return desired; }
+    appearance::Requested requestedAppearance() const
+    {
+        return appearance::Requested::fromResolvedState(desired);
+    }
+
+    appearance::Displayed displayedAppearance() const
+    {
+        return { appearance::Requested::fromResolvedState(frame.state), frame.renderId };
+    }
 
     bool temporaryTypography() const { return !temporaryAppearance.isEmpty(); }
 
-    QJsonObject persistentState() const;
+    appearance::SavedInput persistentAppearance() const;
 
     // Captured with the displayed frame, so sleep never waits for the engine worker.
     QString savedNativePosition(QString *error) const
@@ -407,7 +416,8 @@ private:
     QString identity_;
     PositionCodec positions_;
     QJsonObject desired;
-    QJsonObject temporaryAppearance, originalAppearance;
+    QJsonObject temporaryAppearance;
+    appearance::SavedInput originalAppearance;
     QSize desiredSize;
     QString destination;
     int pageDelta = 0;

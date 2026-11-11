@@ -70,22 +70,24 @@ int main(int argc, char **argv)
             model.setDocumentCache(cache.path(), QByteArray(64, 'a'), "paragraph-gap", 1024 * 1024);
             require(model.openResources(source, sizes, size, settings, &error), qPrintable(error));
             const auto publisher = model.image(0);
-            require(model.applyAppearance({ { "line_spacing", 200 } })
+            require(model.applyAppearance(kobalt::appearance::Patch({ { "line_spacing", 200 } }))
                             && model.image(0) != publisher,
                     "Line spacing did not change prose inside a zero-width frame");
-            require(model.applyAppearance({ { "line_spacing", 150 } })
+            require(model.applyAppearance(kobalt::appearance::Patch({ { "line_spacing", 150 } }))
                             && model.image(0) == publisher,
                     "Restoring line spacing changed the original frame");
             require(model.state().value("paragraph_spacing").toInt() == -1,
                     "Older book did not use Publisher spacing");
             const auto anchor = model.position();
-            require(model.applyAppearance({ { "paragraph_spacing", 0 } }),
+            require(model.applyAppearance(
+                            kobalt::appearance::Patch({ { "paragraph_spacing", 0 } })),
                     "Cannot remove paragraph gaps");
             const auto compact = model.image(0);
             const auto first = word(model, "Firstmarker"), second = word(model, "Secondmarker");
             require(compact != publisher, "Removing publisher gaps did not change layout");
             for (int percent : { 25, 50, 100, 200 }) {
-                require(model.applyAppearance({ { "paragraph_spacing", percent } }),
+                require(model.applyAppearance(
+                                kobalt::appearance::Patch({ { "paragraph_spacing", percent } })),
                         "Cannot set a custom paragraph gap");
                 require(word(model, "Secondmarker").top() - word(model, "Firstmarker").top()
                                 == second.top() - first.top() + 40 * percent / 100,
@@ -106,22 +108,26 @@ int main(int argc, char **argv)
                     qPrintable(error));
             require(restored.openedFromCache() && restored.image(0) == model.image(0),
                     "Cached paragraph layout changed");
-            require(restored.applyAppearance({ { "paragraph_spacing", 0 } })
+            require(restored.applyAppearance(
+                            kobalt::appearance::Patch({ { "paragraph_spacing", 0 } }))
                             && restored.image(0) == compact,
                     "Cached book lost its paragraph markers");
-            require(model.applyAppearance({ { "paragraph_spacing", -1 } })
+            require(model.applyAppearance(
+                            kobalt::appearance::Patch({ { "paragraph_spacing", -1 } }))
                             && model.image(0) == publisher,
                     "Publisher did not restore authored spacing");
             for (const auto &invalid : { QJsonValue(-2), QJsonValue(201), QJsonValue(true),
                                          QJsonValue("50"), QJsonValue(1.5) })
-                require(!model.applyAppearance({ { "paragraph_spacing", invalid } })
+                require(!model.applyAppearance(
+                                kobalt::appearance::Patch({ { "paragraph_spacing", invalid } }))
                                 && model.image(0) == publisher,
                         "Invalid paragraph spacing changed the book");
-            require(model.applyAppearance({ { "paragraph_indent", 0 } }),
+            require(model.applyAppearance(kobalt::appearance::Patch({ { "paragraph_indent", 0 } })),
                     "Cannot remove paragraph indentation");
             const int unindented = word(model, "Firstmarker").left();
             for (int percent : { 50, 100, 200, 300 }) {
-                require(model.applyAppearance({ { "paragraph_indent", percent } }),
+                require(model.applyAppearance(
+                                kobalt::appearance::Patch({ { "paragraph_indent", percent } })),
                         "Cannot set paragraph indentation");
                 require(word(model, "Firstmarker").left() - unindented == 40 * percent / 100,
                         "Paragraph indentation does not follow text size");
@@ -141,12 +147,13 @@ int main(int argc, char **argv)
                     qPrintable(error));
             require(indented.openedFromCache() && indented.image(0) == model.image(0),
                     "Cached reopening lost paragraph indentation");
-            require(model.applyAppearance({ { "paragraph_indent", -1 } })
+            require(model.applyAppearance(kobalt::appearance::Patch({ { "paragraph_indent", -1 } }))
                             && model.image(0) == publisher,
                     "Publisher did not restore original indentation");
             for (const auto &invalid : { QJsonValue(-2), QJsonValue(301), QJsonValue(true),
                                          QJsonValue("100"), QJsonValue(1.5) })
-                require(!model.applyAppearance({ { "paragraph_indent", invalid } })
+                require(!model.applyAppearance(
+                                kobalt::appearance::Patch({ { "paragraph_indent", invalid } }))
                                 && model.image(0) == publisher,
                         "Invalid indentation changed the book");
 
@@ -167,8 +174,8 @@ int main(int argc, char **argv)
                 require(protectedBook.openResources(special, sizes, size, settings, &error),
                         qPrintable(error));
                 const auto before = protectedBook.image(0);
-                require(protectedBook.applyAppearance(
-                                { { "paragraph_spacing", 0 }, { "paragraph_indent", 200 } })
+                require(protectedBook.applyAppearance(kobalt::appearance::Patch(
+                                { { "paragraph_spacing", 0 }, { "paragraph_indent", 200 } }))
                                 && protectedBook.image(0) == before,
                         "Paragraph adjustments changed a heading or special block");
             }
@@ -181,8 +188,8 @@ int main(int argc, char **argv)
                 require(framed.openResources(special, sizes, size, settings, &error),
                         qPrintable(error));
                 const auto before = framed.image(0);
-                require(framed.applyAppearance(
-                                { { "paragraph_spacing", 0 }, { "paragraph_indent", 200 } })
+                require(framed.applyAppearance(kobalt::appearance::Patch(
+                                { { "paragraph_spacing", 0 }, { "paragraph_indent", 200 } }))
                                 && framed.image(0) == before,
                         "Paragraph adjustments changed text inside a visible border");
             }

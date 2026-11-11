@@ -508,7 +508,7 @@ int main(int argc, char **argv)
                         && !session->setHyphenation("on") && !session->setVerticalMargins(0),
                 "Temporary appearance accepted a typography edit");
         session->setDarkMode(true);
-        session->apply(original);
+        session->editAppearance(kobalt::appearance::Patch(original));
         waitUntil([&] { return !session->busy(); });
         const auto hash = session->sourceHash();
         const auto statePath = paths.bookState(identity);

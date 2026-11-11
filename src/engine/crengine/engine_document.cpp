@@ -849,16 +849,18 @@ bool EngineDocument::style(int pixels, int spacing, const QString &face, int mar
 bool EngineDocument::style(int pixels, int spacing, const QString &face, int margin,
                            const QString &alignment)
 {
-    return applyAppearance(kobalt::qt::object({ { "font_pixels", pixels },
-                                                { "line_spacing", spacing },
-                                                { "font_face", face },
-                                                { "margin_pixels", margin },
-                                                { "text_alignment", alignment } }));
+    return applyAppearance(
+            kobalt::appearance::Patch(kobalt::qt::object({ { "font_pixels", pixels },
+                                                           { "line_spacing", spacing },
+                                                           { "font_face", face },
+                                                           { "margin_pixels", margin },
+                                                           { "text_alignment", alignment } })));
 }
 
-bool EngineDocument::applyAppearance(const QJsonObject &settings, QSize size,
+bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
                                      OpeningProgress progress)
 {
+    const auto &settings = patch.fields();
     const int pixels = settings.value("font_pixels").toInt(pixels_);
     const int spacing = settings.value("line_spacing").toInt(spacing_);
     const int paragraphSpacing = settings.contains("paragraph_spacing")
@@ -1097,7 +1099,8 @@ bool EngineDocument::setThickness(int steps)
 {
     if (steps < 0 || steps > 12)
         return false;
-    return applyAppearance(kobalt::qt::object({ { "weight_steps", steps } }));
+    return applyAppearance(
+            kobalt::appearance::Patch(kobalt::qt::object({ { "weight_steps", steps } })));
 }
 
 bool EngineDocument::setWeight(int steps)
@@ -1105,8 +1108,8 @@ bool EngineDocument::setWeight(int steps)
     const auto axis = weightAxis();
     if (axis.available() && (steps < axis.minimum || steps > axis.maximum))
         return false;
-    return applyAppearance(
-            kobalt::qt::object({ { axis.available() ? "font_weight" : "weight_steps", steps } }));
+    return applyAppearance(kobalt::appearance::Patch(
+            kobalt::qt::object({ { axis.available() ? "font_weight" : "weight_steps", steps } })));
 }
 
 bool EngineDocument::setOpticalSize(double points)
@@ -1115,12 +1118,14 @@ bool EngineDocument::setOpticalSize(double points)
     if (!axis.available() || !std::isfinite(points)
         || (points < axis.minimum || points > axis.maximum) || points != std::floor(points))
         return false;
-    return applyAppearance(kobalt::qt::object({ { "font_optical_size", points } }));
+    return applyAppearance(
+            kobalt::appearance::Patch(kobalt::qt::object({ { "font_optical_size", points } })));
 }
 
 bool EngineDocument::setHyphenation(const QString &mode)
 {
-    return applyAppearance(kobalt::qt::object({ { "hyphenation", mode } }));
+    return applyAppearance(
+            kobalt::appearance::Patch(kobalt::qt::object({ { "hyphenation", mode } })));
 }
 
 void EngineDocument::applyPublisherFontFallbacks()
@@ -1223,7 +1228,7 @@ void EngineDocument::applyStyleSheet()
 
 void EngineDocument::resize(QSize size)
 {
-    applyAppearance({}, size);
+    applyAppearance(kobalt::appearance::Patch(QJsonObject{}), size);
 }
 
 void EngineDocument::prepareDamage(int fromPage, int toPage)
@@ -1304,7 +1309,7 @@ void EngineDocument::trim()
 
 void EngineDocument::setDarkMode(bool enabled)
 {
-    applyAppearance(kobalt::qt::object({ { "dark_mode", enabled } }));
+    applyAppearance(kobalt::appearance::Patch(kobalt::qt::object({ { "dark_mode", enabled } })));
 }
 
 bool EngineDocument::loadNextImage()

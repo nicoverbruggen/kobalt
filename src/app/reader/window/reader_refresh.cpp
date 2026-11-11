@@ -386,7 +386,8 @@ void Reader::showPageImage(const QImage &nextImage)
         const auto *preview = appearanceEdit.preview();
         // Opening a panel keeps the current book frame. Use the isolated
         // preview only after appearance or viewport dimensions change.
-        if (session->busy() || !appearance::same(preview->state(), session->state())
+        if (session->busy()
+            || preview->displayedAppearance().settings != session->displayedAppearance().settings
             || preview->image().size() != nextImage.size()) {
             displayedImage = preview->image();
             displayedSource = appearanceEdit.preview();

@@ -900,7 +900,8 @@ static void checkVerticalJustification()
         const auto headingRects = model.rangeRects(headings.first().start, headings.first().end);
         require(!headingRects.isEmpty(), "missing chapter heading geometry");
         const auto opening = model.image(0);
-        require(model.applyAppearance({ { "vertical_justification", true } }),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", true } })),
                 "enable vertical fill");
         const auto expandedOpening = model.image(0);
         require(model.rangeRects(headings.first().start, headings.first().end) == headingRects,
@@ -910,7 +911,8 @@ static void checkVerticalJustification()
                     "vertical fill changed chapter heading pixels");
         // Headings keep their spacing while the prose below them can expand.
         require(expandedOpening != opening, "chapter heading disabled prose expansion");
-        require(model.applyAppearance({ { "vertical_justification", false } }),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", false } })),
                 "disable vertical fill");
         require(model.go(1), "open prose page");
         const auto before = model.image(1);
@@ -922,7 +924,9 @@ static void checkVerticalJustification()
         const auto links = model.pageLinks();
         require(!beforeFirst.isEmpty() && !beforeLast.isEmpty() && !links.isEmpty(),
                 "missing prose geometry");
-        require(model.applyAppearance({ { "vertical_justification", true } }), "enable prose fill");
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", true } })),
+                "enable prose fill");
         const auto after = model.image(1);
         require(after != before, "vertical justification did not change prose pixels");
         require(model.pages() == pages && model.position() == position,
@@ -968,11 +972,14 @@ static void checkVerticalJustification()
             expected = imageHash(after);
         require(model.go(pages - 1), "open ending page");
         const auto ending = model.image(pages - 1);
-        require(model.applyAppearance({ { "vertical_justification", false } }),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", false } })),
                 "disable ending fill");
         require(model.image(pages - 1) == ending, "short ending page was stretched");
-        require(model.applyAppearance({ { "vertical_justification", true }, { "columns", 2 } },
-                                      QSize(1280, 783)),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch(
+                                { { "vertical_justification", true }, { "columns", 2 } }),
+                        QSize(1280, 783)),
                 "enable two-column fill");
         require(model.go(1), "open two-column prose");
         const auto columnEdges = model.annotationPageEdges();
@@ -980,7 +987,8 @@ static void checkVerticalJustification()
         require(!lastRects.isEmpty()
                         && model.wordAt(lastRects.last().center()).start == columnEdges.last.start,
                 "second-column inverse mapping missed the word");
-        require(model.applyAppearance({ { "columns", 1 } }, QSize(800, 973)),
+        require(model.applyAppearance(kobalt::appearance::Patch({ { "columns", 1 } }),
+                                      QSize(800, 973)),
                 "restore single-column viewport");
         require(model.saveDocumentCache(), "save vertical justification line metadata");
     }
@@ -997,7 +1005,8 @@ static void checkVerticalJustification()
         require(excluded.open(publication(body), QSize(800, 973), {}, &error), qPrintable(error));
         require(excluded.pages() > 2, "exclusion fixture did not fill a page");
         const auto before = excluded.image(0);
-        require(excluded.applyAppearance({ { "vertical_justification", true } }),
+        require(excluded.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", true } })),
                 "enable excluded layout fill");
         require(excluded.image(0) == before,
                 "vertical fill changed an authored or decorated layout");
@@ -1539,7 +1548,8 @@ int main(int argc, char **argv)
         const auto position = scaled.position();
         const auto pages = scaled.pages();
         const auto cached = scaled.cachedPages();
-        require(scaled.applyAppearance(kobalt::qt::object({ { "smooth_images", false } }))
+        require(scaled.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "smooth_images", false } })))
                         && scaled.cachedPages() == cached && hash(scaled.image(0)) == hash(smooth),
                 "Retired smoothing option changed output or discarded cached pages");
         auto grayPixels = [](const QImage &image) {
@@ -1563,7 +1573,8 @@ int main(int argc, char **argv)
                                        kobalt::qt::object({ { "smooth_images", false } }), &error)
                         && hash(reopened.image(0)) == hash(smooth),
                 "An old saved false value disabled image smoothing");
-        require(scaled.applyAppearance(kobalt::qt::object({ { "smooth_images", true } }))
+        require(scaled.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "smooth_images", true } })))
                         && hash(scaled.image(0)) == hash(smooth),
                 "Retired smoothing value changed its output");
     }
@@ -1612,7 +1623,7 @@ int main(int argc, char **argv)
         separate.resize(QSize(800, 1000));
         const auto separateMs = timer.elapsed();
         timer.restart();
-        require(combined.applyAppearance(appearance, QSize(800, 1000)),
+        require(combined.applyAppearance(kobalt::appearance::Patch(appearance), QSize(800, 1000)),
                 "Cannot apply combined appearance changes");
         const auto combinedMs = timer.elapsed();
         require(separate.state() == combined.state() && combined.position() == anchor
@@ -1627,11 +1638,11 @@ int main(int argc, char **argv)
         auto invalid = appearance;
         invalid["hyphenation"] = QStringLiteral("invalid");
         invalid["font_pixels"] = 48;
-        require(!combined.applyAppearance(invalid, QSize(900, 1100)) && combined.state() == saved
-                        && combined.cachedPages() == cached,
+        require(!combined.applyAppearance(kobalt::appearance::Patch(invalid), QSize(900, 1100))
+                        && combined.state() == saved && combined.cachedPages() == cached,
                 "Invalid appearance partially changed the book");
-        require(combined.applyAppearance(appearance, QSize(800, 1000)) && combined.state() == saved
-                        && combined.cachedPages() == cached,
+        require(combined.applyAppearance(kobalt::appearance::Patch(appearance), QSize(800, 1000))
+                        && combined.state() == saved && combined.cachedPages() == cached,
                 "Unchanged appearance invalidated the page cache");
         std::printf("Appearance comparison: separate=%lld ms, combined=%lld ms\n",
                     static_cast<long long>(separateMs), static_cast<long long>(combinedMs));
@@ -2827,13 +2838,14 @@ int main(int argc, char **argv)
     const auto regularWidth = regular->getTextWidth(U"Regular words", 13);
     const auto boldWidth = bold->getTextWidth(U"Bold words", 10);
     int thicknessLayoutCallbacks = 0;
-    require(css.applyAppearance(kobalt::qt::object({ { "weight_steps", 3 } }), {},
-                                [&](kobalt::OpeningStage stage, int) {
-                                    if (stage == kobalt::OpeningStage::Styles
-                                        || stage == kobalt::OpeningStage::Pages) {
-                                        ++thicknessLayoutCallbacks;
-                                    }
-                                }),
+    require(css.applyAppearance(
+                    kobalt::appearance::Patch(kobalt::qt::object({ { "weight_steps", 3 } })), {},
+                    [&](kobalt::OpeningStage stage, int) {
+                        if (stage == kobalt::OpeningStage::Styles
+                            || stage == kobalt::OpeningStage::Pages) {
+                            ++thicknessLayoutCallbacks;
+                        }
+                    }),
             "Weight adjustment failed");
     require(thicknessLayoutCallbacks == 0, "Outline thickness recalculated styles or pagination");
     const auto weightedPage = hash(css.image(0));
@@ -2910,7 +2922,8 @@ int main(int argc, char **argv)
     require(css.setWeight(4), "Cannot prepare saved thickness for Bionic reading");
     const auto priorWeightPage = hash(css.image(0));
     for (const auto *mode : { "bold" }) {
-        require(css.applyAppearance(kobalt::qt::object({ { "bold_reading", mode } })),
+        require(css.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "bold_reading", mode } }))),
                 "Cannot enable Bionic reading");
         const auto emphasized = hash(css.image(0));
         kobalt::EngineDocument freshlyEmphasized(css.fontInputs());
@@ -2938,13 +2951,16 @@ int main(int argc, char **argv)
         css.releaseImages();
         require(hash(reopened.image(0)) == weightedPage && hash(css.image(0)) == emphasized,
                 "Alternating models contaminated font glyph caches");
-        require(css.applyAppearance(kobalt::qt::object({ { "bold_reading", "off" } }))
+        require(css.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "bold_reading", "off" } })))
                         && hash(css.image(0)) == priorWeightPage,
                 "Disabling Bionic reading did not restore thickness");
     }
-    require(!css.applyAppearance(kobalt::qt::object({ { "bold_reading", "invalid" } })),
+    require(!css.applyAppearance(kobalt::appearance::Patch(
+                    kobalt::qt::object({ { "bold_reading", "invalid" } }))),
             "Invalid Bionic mode was accepted");
-    require(!css.applyAppearance(kobalt::qt::object({ { "bold_reading", "synthetic" } })),
+    require(!css.applyAppearance(kobalt::appearance::Patch(
+                    kobalt::qt::object({ { "bold_reading", "synthetic" } }))),
             "Retired Bionic mode was accepted");
     auto legacyBionic = css.state();
     legacyBionic["bold_reading"] = QStringLiteral("synthetic");
@@ -2978,7 +2994,8 @@ int main(int argc, char **argv)
             qPrintable(error));
     const auto codeImage = hash(codeModel.image(0));
     for (const auto *mode : { "bold" })
-        require(codeModel.applyAppearance(kobalt::qt::object({ { "bold_reading", mode } }))
+        require(codeModel.applyAppearance(
+                        kobalt::appearance::Patch(kobalt::qt::object({ { "bold_reading", mode } })))
                         && hash(codeModel.image(0)) == codeImage,
                 "Bionic reading altered proportional code");
     kobalt::Publication nowrapBook;
@@ -3012,7 +3029,8 @@ int main(int argc, char **argv)
     for (const auto *mode : { "bold", "off", "bold", "off" }) {
         int formattingStarts = 0;
         require(nowrapModel.applyAppearance(
-                        kobalt::qt::object({ { "bold_reading", mode } }), {},
+                        kobalt::appearance::Patch(kobalt::qt::object({ { "bold_reading", mode } })),
+                        {},
                         [&](kobalt::OpeningStage stage, int percent) {
                             require(stage != kobalt::OpeningStage::Text && percent >= 0
                                             && percent <= 100,
@@ -3056,12 +3074,13 @@ int main(int argc, char **argv)
     require(inlineHeading.open(inlineBook.finish(&error), QSize(1072, 1328), {}, &error),
             qPrintable(error));
     for (const auto &face : { QStringLiteral("Libron"), kobalt::test::headingReadingFace() }) {
-        require(inlineHeading.applyAppearance(
-                        kobalt::qt::object({ { "font_face", face }, { "bold_reading", "off" } })),
+        require(inlineHeading.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "font_face", face }, { "bold_reading", "off" } }))),
                 "Cannot select the inline-heading regression font");
         int normalHeight = 0;
         for (const auto *mode : { "off", "bold" }) {
-            require(inlineHeading.applyAppearance(kobalt::qt::object({ { "bold_reading", mode } })),
+            require(inlineHeading.applyAppearance(kobalt::appearance::Patch(
+                            kobalt::qt::object({ { "bold_reading", mode } }))),
                     "Cannot test emphasized inline heading");
             const auto headings = inlineHeading.searchPage("One", 0).hits;
             require(!headings.isEmpty(), "Cannot find inline chapter number");

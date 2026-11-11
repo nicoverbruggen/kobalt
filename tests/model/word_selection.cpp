@@ -452,10 +452,11 @@ int main(int argc, char **argv)
     require(!middleGeometry.vertical && !middleGeometry.rectangles.isEmpty()
                     && !middleGeometry.start.visible && !middleGeometry.end.visible,
             "Continuation page fabricated source endpoints from its visible fragment");
-    require(model.applyAppearance(kobalt::qt::object({ { "font_pixels", 64 },
-                                                       { "margin_pixels", 24 },
-                                                       { "hyphenation", "on" } }),
-                                  QSize(360, 700)),
+    require(model.applyAppearance(
+                    kobalt::appearance::Patch(kobalt::qt::object({ { "font_pixels", 64 },
+                                                                   { "margin_pixels", 24 },
+                                                                   { "hyphenation", "on" } })),
+                    QSize(360, 700)),
             "Cannot reflow selection fixture");
     require(model.textRange(cross.start, cross.end).text == cross.text,
             "Reflow changed source passage");

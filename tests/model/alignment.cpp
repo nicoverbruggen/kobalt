@@ -72,7 +72,8 @@ int main(int argc, char **argv)
             "Alignment fixture is missing artwork or text");
     const auto anchor = model.position();
     for (const auto *mode : { "left", "right", "justify" }) {
-        require(model.applyAppearance(kobalt::qt::object({ { "text_alignment", mode } })),
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        kobalt::qt::object({ { "text_alignment", mode } }))),
                 "Cannot apply alignment");
         const auto aligned = model.image(0);
         std::printf("%s: image x=%d, prose x=%d, heading x=%d\n", mode, bounds(aligned, 0).x(),
@@ -102,7 +103,8 @@ int main(int argc, char **argv)
         std::fflush(stdout);
         require(previewImage == aligned, "Alignment differs in the section preview");
     }
-    require(model.applyAppearance(kobalt::qt::object({ { "text_alignment", "publisher" } }))
+    require(model.applyAppearance(kobalt::appearance::Patch(
+                    kobalt::qt::object({ { "text_alignment", "publisher" } })))
                     && model.image(0) == original,
             "Publisher alignment did not restore the original layout");
     auto marginImage = [&](const QByteArray &body, int margin, int ppi = 300,
@@ -179,17 +181,18 @@ int main(int argc, char **argv)
     const auto inset = marginImage(picture, 48);
     require(bounds(inset, 0).x() == 48 && bounds(inset, 0).y() == bounds(edge, 0).y() + 24,
             "Publisher spacing did not add to the app's page inset");
-    require(model.applyAppearance(kobalt::qt::object(
-                    { { "top_margin_pixels", 96 }, { "bottom_margin_pixels", 60 } })),
+    require(model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                    { { "top_margin_pixels", 96 }, { "bottom_margin_pixels", 60 } }))),
             "Cannot set independent vertical margins");
     require(model.state().value("top_margin_pixels").toInt() == 96
                     && model.state().value("bottom_margin_pixels").toInt() == 60,
             "Vertical margins were not retained");
     require(bounds(model.image(0), 2).top() >= 96, "Top margin did not inset the text");
-    require(!model.applyAppearance(kobalt::qt::object({ { "top_margin_pixels", -1 } })),
+    require(!model.applyAppearance(
+                    kobalt::appearance::Patch(kobalt::qt::object({ { "top_margin_pixels", -1 } }))),
             "Accepted a negative top margin");
-    require(!model.applyAppearance(kobalt::qt::object(
-                    { { "bottom_margin_pixels", kobalt::maximumMarginPixels() + 1 } })),
+    require(!model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                    { { "bottom_margin_pixels", kobalt::maximumMarginPixels() + 1 } }))),
             "Accepted an excessive bottom margin");
     require(model.style(model.fontSize(), model.spacing(), model.fontFace(), 12),
             "Cannot change side margins");

@@ -81,18 +81,18 @@ void compare(const QString &path, const QString &query, const QString &output)
     const auto before = model.image(model.page());
     require(QDir().mkpath(output) && before.save(output + "/before.png"),
             "Cannot save before render");
-    require(model.applyAppearance({ { "beautifier_initials", true },
-                                    { "beautifier_spacing", true },
-                                    { "beautifier_indent", true } }),
+    require(model.applyAppearance(kobalt::appearance::Patch({ { "beautifier_initials", true },
+                                                              { "beautifier_spacing", true },
+                                                              { "beautifier_indent", true } })),
             "Cannot enable beautifier");
     require(model.goTo(hit.start), "Beautifier lost comparison anchor");
     const auto after = model.image(model.page());
     require(after.save(output + "/after.png"), "Cannot save after render");
     require(model.textRange(hit.start, hit.end).text == query, "Beautifier changed source text");
     const int afterPages = model.pages();
-    require(model.applyAppearance({ { "beautifier_initials", false },
-                                    { "beautifier_spacing", false },
-                                    { "beautifier_indent", false } })
+    require(model.applyAppearance(kobalt::appearance::Patch({ { "beautifier_initials", false },
+                                                              { "beautifier_spacing", false },
+                                                              { "beautifier_indent", false } }))
                     && model.goTo(hit.start) && model.image(model.page()) == before,
             "Turning beautifier off did not restore the original pixels");
     require(QCryptographicHash::hash(read(path), QCryptographicHash::Sha256).toHex() == hash,
@@ -128,11 +128,13 @@ void compareLayout(const QString &path, const QString &query, const QString &out
     const auto original = model.image(model.page());
     QJsonObject result;
     for (const auto *key : { "paragraph_spacing", "paragraph_indent", "line_spacing" }) {
-        require(model.applyAppearance({ { key, key == QString("line_spacing") ? 100 : 0 } })
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        { { key, key == QString("line_spacing") ? 100 : 0 } }))
                         && model.goTo(hit.start),
                 "Cannot set first layout comparison value");
         const auto before = model.image(model.page());
-        require(model.applyAppearance({ { key, key == QString("paragraph_spacing") ? 100 : 200 } })
+        require(model.applyAppearance(kobalt::appearance::Patch(
+                        { { key, key == QString("paragraph_spacing") ? 100 : 200 } }))
                         && model.goTo(hit.start),
                 "Cannot set second layout comparison value");
         const auto after = model.image(model.page());
@@ -140,7 +142,7 @@ void compareLayout(const QString &path, const QString &query, const QString &out
         require(before.save(output + "/" + key + "-before.png")
                         && after.save(output + "/" + key + "-after.png"),
                 "Cannot save layout comparison images");
-        require(model.applyAppearance(settings) && model.goTo(hit.start)
+        require(model.applyAppearance(kobalt::appearance::Patch(settings)) && model.goTo(hit.start)
                         && model.image(model.page()) == original,
                 "Layout comparison did not restore the original page");
     }
@@ -151,8 +153,9 @@ void compareLayout(const QString &path, const QString &query, const QString &out
     for (int page = firstPage; page < endPage; ++page)
         pages.append(model.image(page));
     for (const auto *mode : { "expand", "center" }) {
-        require(model.applyAppearance({ { "vertical_justification", mode },
-                                        { "vertical_spacing_scope", "all" } }),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "vertical_justification", mode },
+                                                    { "vertical_spacing_scope", "all" } })),
                 "Cannot select comparison page spacing");
         require(model.pages() == pageCount, "Page spacing changed pagination");
         int changed = 0;
@@ -168,7 +171,7 @@ void compareLayout(const QString &path, const QString &query, const QString &out
             ++changed;
         }
         result[QString(mode) + "_changed_pages"] = changed;
-        require(model.applyAppearance(settings) && model.goTo(hit.start)
+        require(model.applyAppearance(kobalt::appearance::Patch(settings)) && model.goTo(hit.start)
                         && model.image(model.page()) == original,
                 "Page spacing comparison did not restore the original page");
     }
@@ -226,9 +229,10 @@ int main(int argc, char **argv)
             const auto target = model.linkDetails(links.first().source, false).target;
             require(!target.isEmpty(), "Fixture link target did not resolve");
             require(!model.state()["beautifier_initials"].toBool(), "Beautifier is not opt-in");
-            require(model.applyAppearance({ { "beautifier_initials", true },
-                                            { "beautifier_spacing", true },
-                                            { "beautifier_indent", true } }),
+            require(model.applyAppearance(
+                            kobalt::appearance::Patch({ { "beautifier_initials", true },
+                                                        { "beautifier_spacing", true },
+                                                        { "beautifier_indent", true } })),
                     "Cannot enable beautifier");
             require(model.image(0) != before, "Beautifier did not change prose or initial");
             EngineDocument normalInitial(test::readerFonts());
@@ -252,14 +256,16 @@ int main(int argc, char **argv)
                             sizes, { 1072, 1448 }, { { "dark_mode", dark } }, &error),
                     qPrintable(error));
             const auto unnamedBefore = unnamedInitial.image(0);
-            require(unnamedInitial.applyAppearance({ { "beautifier_initials", true },
-                                                     { "beautifier_spacing", true },
-                                                     { "beautifier_indent", true } })
+            require(unnamedInitial.applyAppearance(
+                            kobalt::appearance::Patch({ { "beautifier_initials", true },
+                                                        { "beautifier_spacing", true },
+                                                        { "beautifier_indent", true } }))
                             && unnamedInitial.image(0) == normalInitial.image(0),
                     "Generic floated initial was not normalized");
-            require(unnamedInitial.applyAppearance({ { "beautifier_initials", false },
-                                                     { "beautifier_spacing", false },
-                                                     { "beautifier_indent", false } })
+            require(unnamedInitial.applyAppearance(
+                            kobalt::appearance::Patch({ { "beautifier_initials", false },
+                                                        { "beautifier_spacing", false },
+                                                        { "beautifier_indent", false } }))
                             && unnamedInitial.image(0) == unnamedBefore,
                     "Generic initial did not restore its original styling");
             require(model.textRange(hit.start, hit.end).text == "Betamarker",
@@ -280,12 +286,14 @@ int main(int argc, char **argv)
             require(preview.openPreview(model, { 1072, 1448 }, &error)
                             && preview.image(0) == model.image(0),
                     "Preview differs");
-            require(restored.applyAppearance({ { "beautifier_initials", false },
-                                               { "beautifier_spacing", false },
-                                               { "beautifier_indent", false } })
+            require(restored.applyAppearance(
+                            kobalt::appearance::Patch({ { "beautifier_initials", false },
+                                                        { "beautifier_spacing", false },
+                                                        { "beautifier_indent", false } }))
                             && restored.image(0) == before,
                     "Off did not restore pixels");
-            require(!restored.applyAppearance({ { "beautifier_initials", "on" } }),
+            require(!restored.applyAppearance(
+                            kobalt::appearance::Patch({ { "beautifier_initials", "on" } })),
                     "Invalid setting accepted");
             for (const auto &special :
                  { QByteArray("<p class='quote'>"), QByteArray("<p class='letter'>"),
@@ -298,9 +306,10 @@ int main(int argc, char **argv)
                                 { 1072, 1448 }, { { "dark_mode", dark } }, &error),
                         qPrintable(error));
                 const auto original = protectedBook.image(0);
-                require(protectedBook.applyAppearance({ { "beautifier_initials", true },
-                                                        { "beautifier_spacing", true },
-                                                        { "beautifier_indent", true } })
+                require(protectedBook.applyAppearance(
+                                kobalt::appearance::Patch({ { "beautifier_initials", true },
+                                                            { "beautifier_spacing", true },
+                                                            { "beautifier_indent", true } }))
                                 && protectedBook.image(0) == original,
                         "Beautifier changed a protected passage");
             }
@@ -324,10 +333,12 @@ int main(int argc, char **argv)
         require(reference.openResources(fixture(body, sizes), sizes, { 1072, 1448 }, {}, &error),
                 qPrintable(error));
         require(before != reference.image(0), "Initial fixture has no visible decoration");
-        require(decorated.applyAppearance({ { "beautifier_initials", true } })
+        require(decorated.applyAppearance(
+                        kobalt::appearance::Patch({ { "beautifier_initials", true } }))
                         && decorated.image(0) == reference.image(0),
                 "Initial normalization depends on paragraph position or classification");
-        require(decorated.applyAppearance({ { "beautifier_initials", false } })
+        require(decorated.applyAppearance(
+                        kobalt::appearance::Patch({ { "beautifier_initials", false } }))
                         && decorated.image(0) == before,
                 "Initial normalization did not restore publisher styling");
     }
@@ -341,9 +352,10 @@ int main(int argc, char **argv)
                     { { "paragraph_indent", 200 }, { "paragraph_spacing", 50 } }, &error),
             qPrintable(error));
     const auto explicitImage = explicitLayout.image(0);
-    require(explicitLayout.applyAppearance({ { "beautifier_initials", true },
-                                             { "beautifier_spacing", true },
-                                             { "beautifier_indent", true } })
+    require(explicitLayout.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", true },
+                                                { "beautifier_spacing", true },
+                                                { "beautifier_indent", true } }))
                     && explicitLayout.image(0) == explicitImage,
             "Beautifier overrode explicit paragraph controls");
 
@@ -352,20 +364,23 @@ int main(int argc, char **argv)
     require(independent.openResources(ordinary, sizes, { 1072, 1448 }, {}, &error),
             qPrintable(error));
     const auto unchanged = independent.image(0);
-    require(independent.applyAppearance({ { "beautifier_initials", false },
-                                          { "beautifier_spacing", false },
-                                          { "beautifier_indent", false } })
+    require(independent.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", false },
+                                                { "beautifier_spacing", false },
+                                                { "beautifier_indent", false } }))
                     && independent.image(0) == unchanged,
             "Disabled rules still changed the book");
-    require(independent.applyAppearance({ { "beautifier_initials", true } })
+    require(independent.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", true } }))
                     && independent.image(0) == unchanged,
             "Initial-only normalization changed ordinary prose");
-    require(independent.applyAppearance({ { "beautifier_spacing", true } })
+    require(independent.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_spacing", true } }))
                     && independent.image(0) != unchanged,
             "Paragraph spacing rule did not apply independently");
     const auto spacingOnly = independent.image(0);
-    require(independent.applyAppearance(
-                    { { "beautifier_spacing", false }, { "beautifier_indent", true } })
+    require(independent.applyAppearance(kobalt::appearance::Patch(
+                    { { "beautifier_spacing", false }, { "beautifier_indent", true } }))
                     && independent.image(0) != unchanged && independent.image(0) != spacingOnly,
             "Indentation rule did not apply independently");
 
@@ -383,9 +398,10 @@ int main(int argc, char **argv)
                                          { "beautifier_indent", true } },
                                        &error),
             qPrintable(error));
-    require(largeLetter.applyAppearance({ { "beautifier_initials", true },
-                                          { "beautifier_spacing", true },
-                                          { "beautifier_indent", true } })
+    require(largeLetter.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", true },
+                                                { "beautifier_spacing", true },
+                                                { "beautifier_indent", true } }))
                     && largeLetter.image(0) != largeImage
                     && largeLetter.image(0) == normalLetter.image(0),
             "CSS first letter was not normalized");
@@ -406,7 +422,8 @@ int main(int argc, char **argv)
             qPrintable(error));
     const auto spacedBefore = spacedLetter.image(0);
     require(spacedBefore != plainLetter.image(0), "CSS initial fixture has no visible decoration");
-    require(spacedLetter.applyAppearance({ { "beautifier_initials", true } })
+    require(spacedLetter.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", true } }))
                     && spacedLetter.image(0) == plainLetter.image(0),
             "CSS initial normalization depends on paragraph classification or class name");
     require(spacedLetter.saveDocumentCache(), "Cannot save initial cache");
@@ -419,7 +436,8 @@ int main(int argc, char **argv)
             qPrintable(error));
     require(cachedLetter.openedFromCache() && cachedLetter.image(0) == spacedLetter.image(0),
             "Warm cache lost independent CSS initial normalization");
-    require(spacedLetter.applyAppearance({ { "beautifier_initials", false } })
+    require(spacedLetter.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", false } }))
                     && spacedLetter.image(0) == spacedBefore,
             "CSS initial normalization did not restore publisher styling");
     const auto image =
@@ -434,7 +452,8 @@ int main(int argc, char **argv)
                     sizes, { 1072, 1448 }, {}, &error),
             qPrintable(error));
     const auto imageBefore = imageInitial.image(0);
-    require(imageInitial.applyAppearance({ { "beautifier_initials", true } })
+    require(imageInitial.applyAppearance(
+                    kobalt::appearance::Patch({ { "beautifier_initials", true } }))
                     && imageInitial.image(0) == imageBefore,
             "Text-initial normalization changed an image initial");
     QJsonObject prefs;

@@ -1,4 +1,5 @@
 #pragma once
+#include "reading/appearance_settings.h"
 #include "publication/opening_result.h"
 #include "reading/chapter.h"
 #include "assets/font_catalog.h"
@@ -232,7 +233,7 @@ public:
     // Bounded saved-range geometry for a preview. Keeps the exact reading bookmark.
     QVector<QVector<QRect>> pageRangeRects(int page,
                                            const QVector<QPair<QString, QString>> &ranges);
-    bool applyAppearance(const QJsonObject &settings, QSize size = {},
+    bool applyAppearance(const appearance::Patch &patch, QSize size = {},
                          OpeningProgress progress = {});
     bool style(int pixels, int spacing);
     bool style(int pixels, int spacing, const QString &face, int margin);

@@ -170,21 +170,26 @@ int main(int argc, char **argv)
     changed[0].second = marks[4].second;
     compare(model, changed);
     const auto settings = model.state();
-    require(model.applyAppearance({ { "font_pixels", model.fontSize() + 8 } }),
+    require(model.applyAppearance(
+                    kobalt::appearance::Patch({ { "font_pixels", model.fontSize() + 8 } })),
             "Cannot reflow font size");
     compare(model, marks);
-    require(model.applyAppearance({ { "font_face", test::alternateReadingFace() } }),
+    require(model.applyAppearance(
+                    kobalt::appearance::Patch({ { "font_face", test::alternateReadingFace() } })),
             "Cannot reflow reading font");
     compare(model, marks);
-    require(model.applyAppearance({ { "columns", 2 } }, { 900, 600 }),
+    require(model.applyAppearance(kobalt::appearance::Patch({ { "columns", 2 } }), { 900, 600 }),
             "Cannot rotate into two columns");
     compare(model, marks, true);
     // A -> B -> A without any intervening index access must discard old DOM paths.
-    require(model.applyAppearance(settings, { 600, 800 }), "Cannot restore layout A");
+    require(model.applyAppearance(kobalt::appearance::Patch(settings), { 600, 800 }),
+            "Cannot restore layout A");
     model.visibleRanges(marks);
-    require(model.applyAppearance({ { "font_pixels", model.fontSize() + 5 } }),
+    require(model.applyAppearance(
+                    kobalt::appearance::Patch({ { "font_pixels", model.fontSize() + 5 } })),
             "Cannot set intermediate layout B");
-    require(model.applyAppearance(settings, { 600, 800 }), "Cannot restore layout A again");
+    require(model.applyAppearance(kobalt::appearance::Patch(settings), { 600, 800 }),
+            "Cannot restore layout A again");
     require(!Probe::cached(model), "A-B-A reflow retained compiled source pointers");
     compare(model, marks);
     int checks = 0;

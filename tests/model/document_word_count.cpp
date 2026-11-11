@@ -53,9 +53,9 @@ int main(int argc, char **argv)
     check(model.wordCounts());
     require(model.wordCounts().cached && model.position() == anchor,
             "Cached count scanned or moved the reader");
-    require(model.applyAppearance(
-                    kobalt::qt::object({ { "font_pixels", 60 }, { "hyphenation", "on" } }),
-                    QSize(600, 800)),
+    require(model.applyAppearance(kobalt::appearance::Patch(kobalt::qt::object(
+                                          { { "font_pixels", 60 }, { "hyphenation", "on" } })),
+                                  QSize(600, 800)),
             "Cannot reflow the fixture");
     check(model.wordCounts());
     require(model.wordCounts().cached, "Reflow discarded logical counts");

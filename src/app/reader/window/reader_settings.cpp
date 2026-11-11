@@ -747,8 +747,9 @@ void Reader::applySettings()
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
     if (!writePreferences(next)) {
-        bionicOption->setChecked(session->requestedState().value("bold_reading").toString("off")
-                                 == "bold");
+        bionicOption->setChecked(
+                session->requestedAppearance().fields().value("bold_reading").toString("off")
+                == "bold");
         minimalAnnotationOption->setChecked(minimalAnnotationMode());
         settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
         settingsError->show();
@@ -767,9 +768,10 @@ void Reader::applySettings()
     syncChromeControls();
     applyEdgeLight();
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
-    auto settings = appearanceEdit.edited() && appearanceEdit.ready()
-            ? appearanceEdit.preview()->requestedState()
-            : session->state();
+    const auto requested = appearanceEdit.edited() && appearanceEdit.ready()
+            ? appearanceEdit.preview()->requestedAppearance()
+            : session->displayedAppearance().settings;
+    QJsonObject settings;
     settings["default_font_face"] =
             settingsDefaultFontFace.isEmpty() ? QString(defaultFontFace) : settingsDefaultFontFace;
     for (const auto *key : appearance::fallbackFontKeys)
@@ -796,7 +798,7 @@ void Reader::applySettings()
         for (auto it = defaults.begin(); it != defaults.end(); ++it)
             settings[it.key()] = it.value();
     }
-    session->apply(settings, bodySize());
+    session->requestAppearance(requested.edited(appearance::Patch(settings)), bodySize());
     applyingText = session->busy();
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);
@@ -861,23 +863,20 @@ void Reader::applyBoldReading(bool enabled)
     auto next = preferences;
     next["bold_reading"] = mode;
     if (!writePreferences(next)) {
-        bionicOption->setChecked(session->requestedState().value("bold_reading").toString("off")
-                                 == "bold");
+        bionicOption->setChecked(
+                session->requestedAppearance().fields().value("bold_reading").toString("off")
+                == "bold");
         return;
     }
     preferences = next;
     settingsError->clear();
     settingsError->hide();
-    auto settings = session->requestedState();
-    settings["bold_reading"] = mode;
-    session->apply(settings);
+    session->editAppearance(appearance::Patch(qt::object({ { "bold_reading", mode } })));
     // Keep a pending typography draft in the same mode, including a preview
     // that has not finished opening yet.
     if (appearanceEdit.preview()) {
         mutateAppearance([mode](ReaderSession &preview) {
-            auto settings = preview.requestedState();
-            settings["bold_reading"] = mode;
-            preview.apply(settings);
+            preview.editAppearance(appearance::Patch(qt::object({ { "bold_reading", mode } })));
         });
     }
     refresh();
@@ -972,13 +971,13 @@ void Reader::registerPickerFonts(const QString &family)
         if (!family.isEmpty() && font.family != family)
             continue;
         if (family.isEmpty() && font.origin == FontOrigin::Interface) {
-            const auto state = appearanceEdit.edited() && appearanceEdit.ready()
-                    ? appearanceEdit.preview()->requestedState()
-                    : session->state();
-            if (font.family != supplementalFontFamily(state.value("language").toString())
+            const auto requested = appearanceEdit.edited() && appearanceEdit.ready()
+                    ? appearanceEdit.preview()->requestedAppearance()
+                    : session->displayedAppearance().settings;
+            if (font.family != supplementalFontFamily(session->state().value("language").toString())
                 && font.family
                         != preferences.value("default_font_face").toString(kobalt::defaultFontFace)
-                && font.family != state.value("font_face").toString())
+                && font.family != requested.fields().value("font_face").toString())
                 continue;
         }
         for (const auto &file : font.files)
@@ -1192,9 +1191,9 @@ void Reader::finishPreview()
     appearanceEdit.clearError();
     const QSize viewport = bodySize();
     if (appearanceEdit.ready())
-        session->apply(appearanceEdit.preview()->requestedState(), viewport);
+        session->requestAppearance(appearanceEdit.preview()->requestedAppearance(), viewport);
     else if (session->image().size() != viewport)
-        session->apply(session->state(), viewport);
+        session->requestAppearance(session->displayedAppearance().settings, viewport);
     header->setGeometry(0, 0, width(), page->topHeight());
     header->setVisible(page->topHeight() > 0);
     if (appearanceEdit.destination() == AppearanceDestination::None)

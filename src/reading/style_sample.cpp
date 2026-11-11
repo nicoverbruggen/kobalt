@@ -124,7 +124,7 @@ bool apply(EngineDocument &engine, const StyleSampleRequest &request, const QJso
     // Qt 5.2 has no initializer-list constructor for JSON objects.
     QJsonObject settings;
     settings.insert(request.key, value);
-    return engine.applyAppearance(settings);
+    return engine.applyAppearance(kobalt::appearance::Patch(settings));
 }
 
 QStringList pageStarts(EngineDocument &engine)

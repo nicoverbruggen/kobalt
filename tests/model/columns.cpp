@@ -130,12 +130,15 @@ void chapterProgress()
             if (firstColumns == 3) {
                 // Keep the engine's text width unchanged while changing the screen
                 // grouping, so cached chapter pages must include the column count.
-                require(model.applyAppearance({ { "columns", 1 } }, { 490, 800 }) && model.go(0),
+                require(model.applyAppearance(kobalt::appearance::Patch({ { "columns", 1 } }),
+                                              { 490, 800 })
+                                && model.go(0),
                         "Cannot reflow to one column");
                 require(model.chapters()[1].page == 3 && model.chapterProgress().pages == 3,
                         "Chapter pages stayed grouped after switching to one column");
-                require(model.applyAppearance({ { "columns", 2 } }, { 1000, 800 }) && model.go(0)
-                                && model.chapterProgress().pages == 2,
+                require(model.applyAppearance(kobalt::appearance::Patch({ { "columns", 2 } }),
+                                              { 1000, 800 })
+                                && model.go(0) && model.chapterProgress().pages == 2,
                         "Chapter total lost its shared screen after reflow");
             }
         }
@@ -318,10 +321,12 @@ int main(int argc, char **argv)
                 require(model.go(model.pages() - 1), "Cannot open last column screen");
                 require(!model.image(model.page()).isNull(),
                         "Last partial screen failed to render");
-                require(!model.applyAppearance({ { "columns", 0 } })
-                                && !model.applyAppearance({ { "columns", 3 } }),
+                require(!model.applyAppearance(kobalt::appearance::Patch({ { "columns", 0 } }))
+                                && !model.applyAppearance(
+                                        kobalt::appearance::Patch({ { "columns", 3 } })),
                         "Invalid column count was accepted");
-                require(model.applyAppearance({ { "columns", count == 2 ? 1 : 2 } }),
+                require(model.applyAppearance(
+                                kobalt::appearance::Patch({ { "columns", count == 2 ? 1 : 2 } })),
                         "Cannot change column count");
                 require(model.viewport() == QSize(1000, 800), "Column change lost screen size");
             }
@@ -342,7 +347,8 @@ int main(int argc, char **argv)
                            { "dark_mode", dark } },
                          { 1000, 800 }, rtl);
                     for (int gap : { 0, 20, 90 }) {
-                        require(model.applyAppearance({ { "column_spacing", gap } }),
+                        require(model.applyAppearance(
+                                        kobalt::appearance::Patch({ { "column_spacing", gap } })),
                                 "Cannot change column spacing");
                         require(model.state().value("column_spacing").toInt() == gap,
                                 "Column spacing was not retained");
@@ -390,9 +396,10 @@ int main(int argc, char **argv)
                     require(model.state().value("columns").toInt() == 2
                                     && model.state().value("column_spacing").toInt() == 90,
                             "Landscape rotation changed the column choice or spacing");
-                    require(model.applyAppearance({ { "margin_pixels", 60 } }),
+                    require(model.applyAppearance(
+                                    kobalt::appearance::Patch({ { "margin_pixels", 60 } })),
                             "Cannot change outer margins");
-                    require(model.applyAppearance({ { "columns", 1 } }),
+                    require(model.applyAppearance(kobalt::appearance::Patch({ { "columns", 1 } })),
                             "Cannot restore one column with outer margins");
                     kobalt::EngineDocument single(kobalt::test::readerFonts());
                     open(single, paragraph, {},
@@ -404,10 +411,11 @@ int main(int argc, char **argv)
                          { 1000, 800 }, rtl);
                     require(model.image(0) == single.image(0),
                             "Column settings changed single-column margins");
-                    require(!model.applyAppearance({ { "column_spacing", -1 } })
-                                    && !model.applyAppearance(
+                    require(!model.applyAppearance(
+                                    kobalt::appearance::Patch({ { "column_spacing", -1 } }))
+                                    && !model.applyAppearance(kobalt::appearance::Patch(
                                             { { "column_spacing",
-                                                kobalt::maximumMarginPixels() + 1 } }),
+                                                kobalt::maximumMarginPixels() + 1 } })),
                             "Invalid column spacing was accepted");
                 }
     kobalt::EngineDocument cramped(kobalt::test::readerFonts());
@@ -451,7 +459,7 @@ int main(int argc, char **argv)
                                                  + QString("/page-margin-%1.png").arg(margin)),
                     "Cannot save margin-relative sample");
         }
-        require(relative.applyAppearance({ { "font_pixels", 60 } })
+        require(relative.applyAppearance(kobalt::appearance::Patch({ { "font_pixels", 60 } }))
                         && relative.state().value("column_spacing").toInt() == 90,
                 "Changing text size did not update the column separator");
         const auto position = relative.position();
@@ -464,11 +472,14 @@ int main(int argc, char **argv)
                         && relative.state().value("column_spacing").toInt() == 90,
                 "Landscape did not restore two columns and the font-relative gap");
         require(relative.goTo(position), "Rotation lost the saved passage");
-        require(relative.applyAppearance({ { "two_columns_landscape", false } })
+        require(relative.applyAppearance(
+                        kobalt::appearance::Patch({ { "two_columns_landscape", false } }))
                         && relative.state().value("columns").toInt() == 1,
                 "Disabling landscape columns retained the current two-column rendering");
-        require(!relative.applyAppearance({ { "column_spacing_percent", 99 } })
-                        && !relative.applyAppearance({ { "column_spacing_percent", 301 } }),
+        require(!relative.applyAppearance(
+                        kobalt::appearance::Patch({ { "column_spacing_percent", 99 } }))
+                        && !relative.applyAppearance(
+                                kobalt::appearance::Patch({ { "column_spacing_percent", 301 } })),
                 "Invalid relative column spacing was accepted");
     }
     std::puts(

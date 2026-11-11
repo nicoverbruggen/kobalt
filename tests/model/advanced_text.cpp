@@ -77,7 +77,8 @@ int main(int argc, char **argv)
                     && model.state().value("widows_orphans").toString() == "publisher",
             "Advanced text defaults changed");
     for (int percent : { 5, 15 }) {
-        require(model.applyAppearance({ { "justification_tracking", percent } }),
+        require(model.applyAppearance(
+                        kobalt::appearance::Patch({ { "justification_tracking", percent } })),
                 "Cannot apply tracking");
         require(model.image(0) != original, "Tracking did not change loose justified lines");
         require(model.pages() == pages && model.position() == anchor,
@@ -92,18 +93,21 @@ int main(int argc, char **argv)
         open(reopened, prose, {}, model.state());
         require(reopened.image(0) == model.image(0), "Reopening lost tracking");
     }
-    require(model.applyAppearance({ { "justification_tracking", 0 } })
+    require(model.applyAppearance(kobalt::appearance::Patch({ { "justification_tracking", 0 } }))
                     && model.image(0) == original,
             "Turning tracking off did not restore pixels");
-    require(!model.applyAppearance({ { "justification_tracking", -1 } })
-                    && !model.applyAppearance({ { "justification_tracking", 21 } })
-                    && !model.applyAppearance({ { "widows_orphans", "invalid" } }),
+    require(!model.applyAppearance(kobalt::appearance::Patch({ { "justification_tracking", -1 } }))
+                    && !model.applyAppearance(
+                            kobalt::appearance::Patch({ { "justification_tracking", 21 } }))
+                    && !model.applyAppearance(
+                            kobalt::appearance::Patch({ { "widows_orphans", "invalid" } })),
             "Invalid advanced text was accepted");
     for (const auto *alignment : { "left", "right", "center" }) {
         EngineDocument aligned(kobalt::test::readerFonts());
         open(aligned, prose, {}, { { "text_alignment", alignment } });
         const auto before = aligned.image(0);
-        require(aligned.applyAppearance({ { "justification_tracking", 15 } })
+        require(aligned.applyAppearance(
+                        kobalt::appearance::Patch({ { "justification_tracking", 15 } }))
                         && aligned.image(0) == before,
                 "Tracking changed non-justified text");
     }
@@ -112,7 +116,8 @@ int main(int argc, char **argv)
         EngineDocument shaped(kobalt::test::readerFonts());
         open(shaped, "<p>" + text.repeated(15) + "</p>", {}, { { "text_alignment", "justify" } });
         const auto before = shaped.image(0);
-        require(shaped.applyAppearance({ { "justification_tracking", 15 } })
+        require(shaped.applyAppearance(
+                        kobalt::appearance::Patch({ { "justification_tracking", 15 } }))
                         && shaped.image(0) == before,
                 "Tracking changed CJK glyphs or cursive joining");
     }
@@ -127,7 +132,7 @@ int main(int argc, char **argv)
     require(spaced.state().value("word_spacing").toInt() == 100, "Word spacing default changed");
     QStringList narrowStarts;
     for (int percent : { 80, 120 }) {
-        require(spaced.applyAppearance({ { "word_spacing", percent } }),
+        require(spaced.applyAppearance(kobalt::appearance::Patch({ { "word_spacing", percent } })),
                 "Cannot apply word spacing");
         require(spaced.image(0) != normalSpaces, "Word spacing did not change rendered text");
         QStringList starts;
@@ -147,10 +152,12 @@ int main(int argc, char **argv)
         open(reopened, spacingProse, {}, spaced.state(), { 530, 320 });
         require(reopened.image(0) == spaced.image(0), "Reopening lost word spacing");
     }
-    require(spaced.applyAppearance({ { "word_spacing", 100 } }) && spaced.image(0) == normalSpaces,
+    require(spaced.applyAppearance(kobalt::appearance::Patch({ { "word_spacing", 100 } }))
+                    && spaced.image(0) == normalSpaces,
             "Normal word spacing did not restore pixels");
-    require(!spaced.applyAppearance({ { "word_spacing", 0 } })
-                    && !spaced.applyAppearance({ { "word_spacing", 101 } }),
+    require(!spaced.applyAppearance(kobalt::appearance::Patch({ { "word_spacing", 0 } }))
+                    && !spaced.applyAppearance(
+                            kobalt::appearance::Patch({ { "word_spacing", 101 } })),
             "Invalid word spacing was accepted");
     EngineDocument invalidSpacing(kobalt::test::readerFonts());
     open(invalidSpacing, spacingProse, {},
@@ -174,7 +181,8 @@ int main(int argc, char **argv)
             continue;
         orphan |= hasOrphan;
         widow |= hasWidow;
-        require(pagination.applyAppearance({ { "widows_orphans", "avoid" } }),
+        require(pagination.applyAppearance(
+                        kobalt::appearance::Patch({ { "widows_orphans", "avoid" } })),
                 "Cannot avoid widows and orphans");
         const auto avoided = paragraphPages(pagination);
         require(avoided[0] == avoided[1] && avoided[2] == avoided[3],
@@ -186,7 +194,8 @@ int main(int argc, char **argv)
         EngineDocument reopened(kobalt::test::readerFonts());
         open(reopened, body, {}, pagination.state(), { 1072, 320 });
         require(paragraphPages(reopened) == avoided, "Reopening lost widow and orphan avoidance");
-        require(pagination.applyAppearance({ { "widows_orphans", "publisher" } })
+        require(pagination.applyAppearance(
+                        kobalt::appearance::Patch({ { "widows_orphans", "publisher" } }))
                         && paragraphPages(pagination) == allowed,
                 "Publisher did not restore authored pagination");
         EngineDocument publisher(kobalt::test::readerFonts());
@@ -195,7 +204,8 @@ int main(int argc, char **argv)
                               "orphans:2!important;widows:2!important");
         open(publisher, protectedBody, {}, {}, { 1072, 320 });
         require(paragraphPages(publisher) == avoided, "Publisher mode ignored authored avoidance");
-        require(publisher.applyAppearance({ { "widows_orphans", "allow" } })
+        require(publisher.applyAppearance(
+                        kobalt::appearance::Patch({ { "widows_orphans", "allow" } }))
                         && paragraphPages(publisher) == allowed,
                 "Allow both failed to override publisher avoidance");
         EngineDocument inherited(kobalt::test::readerFonts());
@@ -234,7 +244,8 @@ int main(int argc, char **argv)
                 };
                 require(!hanging.state().value("hanging_punctuation").toBool(),
                         "Hanging punctuation default changed");
-                require(hanging.applyAppearance({ { "hanging_punctuation", true } }),
+                require(hanging.applyAppearance(
+                                kobalt::appearance::Patch({ { "hanging_punctuation", true } })),
                         "Cannot enable hanging punctuation");
                 const auto enabled = hanging.image(0);
                 if (QString(alignment) == "justify" || QString(alignment) == "right") {
@@ -258,7 +269,8 @@ int main(int argc, char **argv)
                 EngineDocument reopened(kobalt::test::readerFonts());
                 open(reopened, body, {}, hanging.state(), { 800, 600 });
                 require(reopened.image(0) == enabled, "Reopening lost hanging punctuation");
-                require(hanging.applyAppearance({ { "hanging_punctuation", false } })
+                require(hanging.applyAppearance(
+                                kobalt::appearance::Patch({ { "hanging_punctuation", false } }))
                                 && hanging.image(0) == before && hanging.position() == anchor,
                         "Disabling hanging punctuation did not restore pixels and position");
                 if (QString(alignment) == "justify") {

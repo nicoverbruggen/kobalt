@@ -140,7 +140,8 @@ int main(int argc, char **argv)
                             }
                             const int otherPixels = pixels == 52 ? 54 : 52;
                             require(inherited.applyAppearance(
-                                            kobalt::qt::object({ { "font_pixels", otherPixels } })),
+                                            kobalt::appearance::Patch(kobalt::qt::object(
+                                                    { { "font_pixels", otherPixels } }))),
                                     "Cannot reflow the indentation fixture");
                             require(offset(inherited)
                                             == otherPixels * 3 / 2 * (negative == hanging ? 1 : -1),

@@ -352,8 +352,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     const bool restartAtStart = request.restartAtStart;
     auto saved = std::move(request.saved);
     temporaryAppearance = request.temporaryAppearance;
-    originalAppearance = request.originalAppearance;
-    appearance::migrateLineSpacing(originalAppearance);
+    auto original = request.originalAppearance;
+    appearance::migrateLineSpacing(original);
+    originalAppearance = appearance::SavedInput(original);
     const auto pinnedAppearance = temporaryAppearance;
     const auto appearanceDefaults = std::move(request.appearanceDefaults);
     const auto nativeLocation = std::move(request.platformLocation),
@@ -598,7 +599,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                     if (retainedHit && outcome.ready()) {
                         publishCover();
                         const auto modelStart = timer.elapsed();
-                        if (!engine->applyAppearance(saved, size))
+                        if (!engine->applyAppearance(kobalt::appearance::Patch(saved), size))
                             outcome = OpeningResult::failed(
                                     OpeningFailureKind::InvalidContent,
                                     strings::key("error.cannot_restore_the_retained_appearance"));
@@ -913,18 +914,23 @@ bool ReaderSession::setVerticalMargins(int margin)
     return true;
 }
 
-QJsonObject ReaderSession::persistentState() const
+appearance::SavedInput ReaderSession::persistentAppearance() const
 {
-    auto saved = frame.state;
-    if (temporaryTypography())
-        appearance::copy(saved, originalAppearance);
-    return saved;
+    return temporaryTypography() ? originalAppearance : appearance::SavedInput(frame.state);
 }
 
-void ReaderSession::apply(const QJsonObject &settings, QSize size)
+void ReaderSession::editAppearance(const appearance::Patch &patch, QSize size)
+{
+    requestAppearance(requestedAppearance().edited(patch), size);
+}
+
+void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size)
 {
     auto next = desired;
-    appearance::copy(next, temporaryTypography() ? temporaryAppearance : settings);
+    if (temporaryTypography())
+        appearance::copy(next, temporaryAppearance);
+    else
+        settings.replaceIn(next);
     const bool resized = size.isValid() && size != desiredSize;
     if (resized)
         desiredSize = size;
@@ -2430,7 +2436,9 @@ void ReaderSession::dispatch(bool pageTurn)
                 // change needs validation and application; rotation can change the latter
                 // without opening the menu.
                 const bool unchanged = appearance::same(before, requested) && oldSize == size;
-                if (!unchanged && !engine->applyAppearance(requested, size, progress))
+                if (!unchanged
+                    && !engine->applyAppearance(kobalt::appearance::Patch(requested), size,
+                                                progress))
                     result.error = strings::get("error.could_not_update_text");
                 else {
                     appearanceChanged = !unchanged

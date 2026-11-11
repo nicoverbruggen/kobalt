@@ -136,10 +136,11 @@ void checkMathFonts(const QString &captureDirectory)
                 }
                 require(model.image(0) == expected,
                         "MathML symbols did not use the bundled math font independently of the reading font");
-                require(model.applyAppearance(kobalt::qt::object({ { "font_face", "NV Bitter" } }))
+                require(model.applyAppearance(kobalt::appearance::Patch(
+                                kobalt::qt::object({ { "font_face", "NV Bitter" } })))
                                 && model.image(0) == expected
-                                && model.applyAppearance(
-                                        kobalt::qt::object({ { "font_face", "" } }))
+                                && model.applyAppearance(kobalt::appearance::Patch(
+                                        kobalt::qt::object({ { "font_face", "" } })))
                                 && model.image(0) == expected,
                         "Changing the reading font lost MathML font selection");
                 kobalt::EngineDocument preview(model.fontInputs());

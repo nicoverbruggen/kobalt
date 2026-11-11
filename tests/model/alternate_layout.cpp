@@ -44,7 +44,7 @@ void open(EngineDocument &model, const kobalt::test::BookFiles &files, QJsonObje
 int reflow(EngineDocument &model, QSize size, QJsonObject settings = {})
 {
     int formats = 0;
-    require(model.applyAppearance(settings, size,
+    require(model.applyAppearance(kobalt::appearance::Patch(settings), size,
                                   [&](kobalt::OpeningStage stage, int percent) {
                                       if (stage == kobalt::OpeningStage::Pages && percent == 0)
                                           ++formats;

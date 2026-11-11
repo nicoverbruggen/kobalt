@@ -78,7 +78,8 @@ int main(int argc, char **argv)
         const auto trimmed = ink(original);
         require(heading.state().value("reduce_chapter_spacing").toBool(),
                 "Space saving is not on by default");
-        require(heading.applyAppearance({ { "reduce_chapter_spacing", false } }),
+        require(heading.applyAppearance(
+                        kobalt::appearance::Patch({ { "reduce_chapter_spacing", false } })),
                 "Cannot preserve publisher spacing");
         require(heading.state().value("normalize_page_margins").toBool(),
                 "Chapter spacing changed the margin rule");
@@ -92,7 +93,8 @@ int main(int argc, char **argv)
         require(preview.openPreview(heading, QSize(800, 1000), &error), qPrintable(error));
         require(!preview.state().value("reduce_chapter_spacing").toBool(),
                 "Preview lost publisher spacing preference");
-        require(heading.applyAppearance({ { "reduce_chapter_spacing", true } }),
+        require(heading.applyAppearance(
+                        kobalt::appearance::Patch({ { "reduce_chapter_spacing", true } })),
                 "Cannot restore space saving");
         require(heading.image(1) == original, "Spacing toggle did not restore original layout");
 
@@ -119,7 +121,8 @@ int main(int argc, char **argv)
         kobalt::EngineDocument margins(kobalt::test::readerFonts());
         open(margins, "<p>Body margins</p>", "body{margin:20px;padding:10px}");
         const auto zero = ink(margins.image(0));
-        require(margins.applyAppearance({ { "normalize_page_margins", false } }),
+        require(margins.applyAppearance(
+                        kobalt::appearance::Patch({ { "normalize_page_margins", false } })),
                 "Cannot restore body margins");
         require(margins.state().value("reduce_chapter_spacing").toBool(),
                 "Margin rule changed chapter spacing");

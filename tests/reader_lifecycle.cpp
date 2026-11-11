@@ -2123,7 +2123,7 @@ private slots:
                 rejectUpdate = false;
                 auto invalid = host.session()->state();
                 invalid["font_pixels"] = 0;
-                host.session()->apply(invalid);
+                host.session()->editAppearance(kobalt::appearance::Patch(invalid));
             } else if (productionUpdated)
                 productionUpdated();
         };
@@ -2598,7 +2598,7 @@ private slots:
         if (reflow) {
             auto appearance = host.session()->state();
             appearance["font_pixels"] = appearance.value("font_pixels").toInt() + 4;
-            host.session()->apply(appearance);
+            host.session()->editAppearance(kobalt::appearance::Patch(appearance));
         } else {
             QVERIFY(host.session()->go(samePosition ? (backward ? 1 : 2) : 3));
         }
@@ -7921,7 +7921,7 @@ private slots:
                 QVERIFY(!list->isVisible());
                 auto appearance = host.session()->state();
                 appearance["font_pixels"] = appearance.value("font_pixels").toInt() + 4;
-                host.session()->apply(appearance);
+                host.session()->editAppearance(kobalt::appearance::Patch(appearance));
                 QTRY_VERIFY(!host.session()->busy());
             }
         }
@@ -8260,7 +8260,7 @@ private slots:
             paints.elapsed.start();
             auto appearance = host.session()->state();
             appearance["font_pixels"] = appearance.value("font_pixels").toInt() + 4;
-            host.session()->apply(appearance);
+            host.session()->editAppearance(kobalt::appearance::Patch(appearance));
             QTRY_VERIFY(!host.session()->busy());
             QVERIFY(barrier());
             QTRY_VERIFY(!paints.images.isEmpty());

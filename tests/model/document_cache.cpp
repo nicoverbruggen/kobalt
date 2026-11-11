@@ -208,7 +208,8 @@ int main(int argc, char **argv)
         opened(emphasizedAgain, fingerprint, policy, prefixSettings);
         require(emphasizedAgain.openedFromCache() && hash(emphasizedAgain.image(0)) == prefixImage,
                 "Cached Bionic reading changed its rendering");
-        require(emphasizedAgain.applyAppearance(settings) && emphasizedAgain.saveDocumentCache(),
+        require(emphasizedAgain.applyAppearance(kobalt::appearance::Patch(settings))
+                        && emphasizedAgain.saveDocumentCache(),
                 "Cannot cache a book after disabling Bionic reading");
         opened(plainAgain, fingerprint, policy, settings);
         require(plainAgain.openedFromCache(),

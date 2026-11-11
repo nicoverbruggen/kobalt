@@ -407,3 +407,40 @@ QJsonObject typographyDefaults()
               { "hyphenation", QStringLiteral("off") } });
 }
 } // namespace kobalt::appearance
+
+namespace kobalt::appearance {
+Patch::Patch(const QJsonObject &fields)
+{
+    copy(fields_, fields);
+}
+
+Requested Requested::fromResolvedState(const QJsonObject &state)
+{
+    QJsonObject fields;
+    copy(fields, state);
+    return Requested(std::move(fields));
+}
+
+Requested Requested::edited(const Patch &patch) const
+{
+    auto fields = fields_;
+    for (auto it = patch.fields().begin(); it != patch.fields().end(); ++it)
+        fields[it.key()] = it.value();
+    return Requested(std::move(fields));
+}
+
+void Requested::replaceIn(QJsonObject &state) const
+{
+    copy(state, fields_);
+}
+
+SavedInput::SavedInput(const QJsonObject &record)
+{
+    copy(fields_, record);
+}
+
+void SavedInput::restoreIn(QJsonObject &record) const
+{
+    copy(record, fields_);
+}
+} // namespace kobalt::appearance

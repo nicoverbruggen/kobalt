@@ -12,6 +12,32 @@ using namespace kobalt;
 // Checks appearance settings: defaults, invalid values, migrations, global and book precedence, new-book inheritance and which changes need a new layout.
 int main()
 {
+    {
+        const auto original = qt::object({ { "font_pixels", 40 },
+                                           { "line_spacing", 150 },
+                                           { "position", "chapter-one" },
+                                           { "unknown", 7 } });
+        const auto request = appearance::Requested::fromResolvedState(original);
+        const auto changed = request.edited(appearance::Patch(qt::object(
+                { { "font_pixels", 45 }, { "position", "chapter-two" }, { "unknown", 9 } })));
+        require(changed.fields().value("font_pixels").toInt() == 45
+                        && changed.fields().value("line_spacing").toInt() == 150
+                        && request.fields().value("font_pixels").toInt() == 40,
+                "A partial appearance edit lost another requested field or changed its source");
+        auto checkpoint = original;
+        changed.replaceIn(checkpoint);
+        require(checkpoint.value("position").toString() == "chapter-one"
+                        && checkpoint.value("unknown").toInt() == 7,
+                "Appearance edits must not carry positions or unrelated record fields");
+        const appearance::SavedInput saved(qt::object(
+                { { "font_pixels", QJsonValue(QJsonValue::Null) }, { "position", "stored" } }));
+        saved.restoreIn(checkpoint);
+        require(checkpoint.contains("font_pixels") && checkpoint.value("font_pixels").isNull()
+                        && !checkpoint.contains("line_spacing")
+                        && checkpoint.value("position").toString() == "chapter-one"
+                        && checkpoint.value("unknown").toInt() == 7,
+                "Persisted appearance must preserve null and absent keys without moving the book");
+    }
     for (const auto *mode : { "current", "all", "off" }) {
         const auto cleaned = appearance::cleanPreferences(
                 { { "chapter_groups", mode }, { "future_option", 42 } });

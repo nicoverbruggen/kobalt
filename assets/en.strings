@@ -1119,8 +1119,6 @@
 
 "reader.hide_nonlinear_fragments" = "Hide non-linear fragments";
 "settings.hide_nonlinear_fragments_description" = "Skip non-linear sections when turning pages. Links, Chapters and page numbers can still open them.";
-"settings.inherit_text_layout" = "Inherit text style from the last book";
-"settings.inherit_text_layout_description" = "New books start with the last book's text style. Layout settings apply to all books.";
 "settings.inherit_header_footer" = "Inherit header and footer from the last book";
 "settings.inherit_header_footer_description" = "New books start with the last book's header and footer. Books with saved settings keep them.";
 
@@ -1468,3 +1466,42 @@
 "features.bookmarks_description" = "Hides bookmark controls, ribbons and pinned shortcuts. Saved bookmarks are kept.";
 "features.kosync" = "KOSync";
 "features.kosync_description" = "Stops KOSync and hides its controls. Your saved account is kept. Kobo’s own sync is unaffected.";
+"text_presets.title" = "Text presets";
+"text_presets.gallery_title" = "Text Presets";
+"text_presets.example_comfort" = "Comfort";
+"text_presets.example_compact" = "Compact";
+"text_presets.example_large" = "Large";
+"text_presets.example" = "Built-in";
+"text_presets.none" = "None";
+"text_presets.save" = "Save";
+"text_presets.all" = "All";
+"text_presets.show" = "Show text presets";
+"text_presets.hide" = "Hide text presets";
+/* Arguments: %1 */
+"text_presets.modified" = "%1*";
+/* Arguments: %1 */
+"text_presets.modified_name" = "%1, changed";
+/* Arguments: %1 */
+"text_presets.update" = "Update %1";
+"text_presets.save_as_new" = "Save as new…";
+"text_presets.save_title" = "Save Text Preset";
+"text_presets.rename_title" = "Rename Text Preset";
+"text_presets.name" = "Preset name";
+"text_presets.name_taken" = "Another preset already has this name.";
+/* Arguments: %1 */
+"text_presets.limit" = "Kobalt keeps up to %1 presets. Delete one in Settings to save another.";
+"text_presets.could_not_save" = "Could not save the text presets.";
+"text_presets.rename" = "Rename";
+"text_presets.update_from_current" = "Update from current text";
+"text_presets.delete" = "Delete preset";
+/* Arguments: %1 */
+"text_presets.delete_prompt" = "Delete %1?";
+"text_presets.delete_detail" = "Books keep their text. Only the preset is removed.";
+"text_presets.gallery_hint" = "Tap to apply · hold for options";
+"text_presets.save_current" = "Save current text";
+"settings.text_for_new_books" = "Text for new books";
+"settings.text_for_new_books_title" = "Text for New Books";
+"settings.new_book_text_heading" = "A new book starts with";
+"settings.new_book_book_default" = "Book default";
+"settings.new_book_last_used" = "Last used";
+"text_presets.used_for_new_books" = "Used for new books";

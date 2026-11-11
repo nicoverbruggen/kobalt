@@ -1055,6 +1055,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
     spacingSlider = appearance.spacingSlider;
     marginSlider = appearance.marginSlider;
     verticalMarginSlider = appearance.verticalMarginSlider;
+    buildTextPresets();
     appearancePreview = new kobalt::reader::AppearancePreview(this);
     appearancePreview->followPanel(menu, [this] { syncAppearancePreview(); });
     connect(panels, &QStackedWidget::currentChanged, this, [this] { syncAppearancePreview(); });
@@ -1394,7 +1395,8 @@ void Reader::buildSettings()
     }
     settingsPages = settings->settingsPages;
     darkOption = settings->darkOption;
-    inheritTextLayoutOption = settings->inheritTextLayoutOption;
+    connect(settings->textForNewBooksButton, &QPushButton::clicked, this,
+            [this] { openNewBookText(); });
     animationOption = settings->animationOption;
     edgeLightOption = settings->edgeLightOption;
     lightGestureFeedbackOption = settings->lightGestureFeedbackOption;

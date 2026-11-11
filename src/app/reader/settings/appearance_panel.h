@@ -35,12 +35,16 @@ class AppearanceSheet final : public ui::Panel
 public:
     explicit AppearanceSheet(QWidget *parent);
     AppearanceLayout controls() const;
+    // A full-width section above the Typography rows, under the sheet's top
+    // rule: the Text presets bar. It stays in place when the rows page.
+    void setTopSection(QWidget *section);
     int fitHeight(int width, int availableHeight);
     QStackedWidget *pages;
     QLabel *message;
 
 private:
     QWidget *clip;
+    QWidget *topSection = nullptr;
     ui::PagerBar *pager;
     // The top and bottom of each page of rows, in the selected page's coordinates.
     QVector<QPair<int, int>> rowPages;

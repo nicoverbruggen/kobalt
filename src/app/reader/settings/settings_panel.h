@@ -5,6 +5,7 @@
 #include "ui/controls/options.h"
 #include "ui/controls/panels.h"
 #include "ui/controls/paging.h"
+#include "ui/controls/rows.h"
 #include "ui/controls/text.h"
 #include "ui/dialogs/modals.h"
 #include "dictionaries_page.h"
@@ -139,8 +140,9 @@ public:
     QJsonObject featurePreferences;
     void showDisabledFeatures();
     void updateFeatureOptions();
-    ui::DescribedOption *darkOption = nullptr, *inheritTextLayoutOption = nullptr,
-                        *animationOption = nullptr;
+    ui::DescribedOption *darkOption = nullptr, *animationOption = nullptr;
+    // Defaults: what new books start with. The reader opens the preset grid.
+    ui::CaptionButton *textForNewBooksButton = nullptr;
     ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,
                         *denseGraphOption = nullptr;
     ui::DescribedOption *hideNonlinearOption = nullptr;
@@ -216,6 +218,7 @@ private:
     void fitRail(int availableHeight = 0);
     AboutPage *aboutPage = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog;
+    static void styleListAction(ui::CaptionButton *button);
     QPointer<ui::ChoiceModal> standbyDialog;
     QPointer<ui::ChoiceModal> automaticOpeningDialog;
     QHash<int, StyleSample> stylingSamples;

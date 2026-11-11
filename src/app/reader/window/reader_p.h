@@ -38,6 +38,8 @@
 #include "app/reader/panels/link_panel.h"
 #include "app/reader/panels/search_panel.h"
 #include "app/reader/settings/appearance_panel.h"
+#include "app/reader/settings/text_presets_panel.h"
+#include "reading/text_presets.h"
 #include "appearance_edit_session.h"
 #include "app/reader/views/navigation.h"
 #include "platform/api/reader_host_services.h"
@@ -369,8 +371,8 @@ private:
     kobalt::ui::Panel *general = nullptr;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption,
-            *lightGestureFeedbackOption, *denseGraphOption;
+    QCheckBox *darkOption, *animationOption, *edgeLightOption, *lightGestureFeedbackOption,
+            *denseGraphOption;
     QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
               *hideTabLabelsOption = nullptr, *zenModeOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
@@ -575,6 +577,26 @@ private:
     void loadGalleryCover();
     void showSleepOverlayHelp();
     void editSleepGreeting();
+    // Text presets: the bar and cards of the Text panel, All presets, the
+    // save and rename dialog, and their part of Settings > Defaults.
+    void buildTextPresets();
+    void syncTextPresets();
+    ReaderSession *textPresetSettings();
+    kobalt::reader::TextPresetView textPresetView(const kobalt::textpresets::Preset &preset);
+    void applyTextPreset(const QString &id);
+    bool saveTextPresets(QJsonObject next, const QVector<kobalt::textpresets::Preset> &presets);
+    void updateTextPreset(const QString &id);
+    void saveNewTextPreset();
+    void editTextPresetName(const QString &id);
+    void renderTextPresetPreview(const kobalt::textpresets::Preset &preset, QSize size,
+                                 QObject *context, std::function<void(const QImage &)> finished);
+    void showTextPresetActions(const QString &id);
+    void confirmDeleteTextPreset(const QString &id);
+    void openTextPresetGallery();
+    void renderTextPresetGallery();
+    void closeTextPresetGallery();
+    void showTextPresetSettings();
+    void openNewBookText();
     sleep::Snapshot sleepPreviewSample();
     void openSessionTimeout();
 
@@ -661,6 +683,15 @@ private:
     QPointer<kobalt::reader::SleepGallery> sleepGallery;
     QPointer<kobalt::ui::ChoiceModal> greetingEditor;
     std::unique_ptr<kobalt::KeyboardController> greetingKeyboard;
+    kobalt::reader::TextPresetSection *textPresetSection = nullptr;
+    QPointer<kobalt::reader::TextPresetGallery> textPresetGallery;
+    QPointer<kobalt::ui::ChoiceModal> textPresetEditor;
+    QPointer<kobalt::ui::ModalOverlay> textPresetActions;
+    std::unique_ptr<kobalt::KeyboardController> textPresetKeyboard;
+    // The presets the All grid shows: the saved ones, or for Text for new
+    // books also the book defaults and the last book's text.
+    QVector<kobalt::textpresets::Preset> textPresetGalleryEntries;
+    bool textPresetChoosingNewBook = false;
     kobalt::ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                               *navigationBarButton = nullptr, *chapterGroupsButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup, navigationBarPopup,

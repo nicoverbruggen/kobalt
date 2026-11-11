@@ -32,6 +32,7 @@
 #include "library/book_metadata.h"
 #include "reading/reading_density.h"
 #include "reading/appearance_settings.h"
+#include "reading/text_presets.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "storage/reading_history.h"
@@ -1846,6 +1847,111 @@ void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString 
     fixture.widget("rrHeaderFooter")->removeEventFilter(&panelPaints);
 }
 
+// Text presets in the Text panel: the bar opens the cards, a card applies its
+// text, a change marks the preset and offers Update and Save as new, and All
+// shows large previews with each preset's actions. The tour leaves the cards
+// closed and the book's text as it found it.
+template <typename Scene>
+void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
+{
+    const auto settled = [&fixture] { return !fixture.state().value("busy").toBool(); };
+    const auto original = fixture.state();
+    QVERIFY(fixture.visible("rrTextPresetToggle"));
+    QVERIFY(!fixture.visible("rrTextPreset_comfort"));
+    QVERIFY(fixture.press("rrTextPresetToggle"));
+    QTRY_VERIFY(fixture.visible("rrTextPreset_comfort"));
+    QVERIFY(fixture.visible("rrTextPresetAll") && !fixture.visible("rrTextPresetUpdate"));
+    // The book starts at the defaults, which Comfort matches.
+    QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Comfort"));
+    QVERIFY(scene("text-presets"));
+    if (!screenshots) {
+        QVERIFY(fixture.press("rrTextPreset_large"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+                fixture.state().value("font_face").toString() == "NV Charis" && settled(), 30000);
+        QTRY_COMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(),
+                     QString("Large"));
+        QVERIFY(fixture.press("rrTextPreset_comfort"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+                fixture.state().value("font_face").toString() == "Libron" && settled(), 30000);
+    }
+    // A change after a preset marks it and offers to update it or save a new one.
+    QVERIFY(fixture.press("rrLarger"));
+    QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrTextPresetUpdate") && settled(), 30000);
+    QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Comfort*"));
+    QVERIFY(scene("text-presets-changed"));
+    QVERIFY(fixture.press("rrTextPresetSaveAs"));
+    QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+    auto *input = fixture.window.readerWindow()->findChild<QLineEdit *>("rrTextPresetNameInput");
+    QVERIFY(input);
+    QCOMPARE(input->text(), QString("Libron 11.5"));
+    QVERIFY(scene("text-presets-save"));
+    if (screenshots) {
+        QVERIFY(fixture.press("rrTextPresetNameCancel"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
+    } else {
+        // A taken name keeps the dialog open; a new one saves and selects the preset.
+        input->setText("comfort");
+        QVERIFY(fixture.press("rrTextPresetNameSave"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetName"));
+        input->setText("Evening");
+        QVERIFY(fixture.press("rrTextPresetNameSave"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
+        QTRY_COMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(),
+                     QString("Evening"));
+        QVERIFY(!fixture.visible("rrTextPresetUpdate"));
+        const auto saved = textpresets::load(storage::readJson(fixture.paths.preferences()));
+        QCOMPARE(saved.size(), 4);
+        QCOMPARE(saved.last().name, QString("Evening"));
+        QCOMPARE(saved.last().halfPoints, 23);
+    }
+    QVERIFY(fixture.press("rrTextPresetAll"));
+    QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+    QTRY_VERIFY_WITH_TIMEOUT(settled(), 30000);
+    if (screenshots) {
+        // Previews render on the engine worker; give each one its paint.
+        QTest::qWait(100);
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 30000);
+        QVERIFY(scene("text-presets-all"));
+    }
+    // A long press on a tile opens its actions instead of applying it.
+    auto *grid = fixture.widget("rrTextPresetGrid");
+    QVERIFY(grid);
+    const QPoint second(grid->width() * 3 / 4, grid->height() / 6);
+    QTest::mousePress(grid, Qt::LeftButton, {}, second);
+    QTRY_VERIFY(fixture.visible("rrTextPresetActions"));
+    QTest::mouseRelease(grid, Qt::LeftButton, {}, second);
+    QVERIFY(fixture.visible("rrTextPresetGallery"));
+    QVERIFY(scene("text-presets-actions"));
+    if (screenshots) {
+        QTest::keyClick(fixture.widget("rrTextPresetActions"), Qt::Key_Escape);
+        QTRY_VERIFY(!fixture.visible("rrTextPresetActions"));
+    } else {
+        // Rename is the header's edit cell; it opens the name dialog on the preset's name.
+        QVERIFY(fixture.press("rrTextPresetRename"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetActions"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+        QCOMPARE(fixture.window.readerWindow()
+                         ->findChild<QLineEdit *>("rrTextPresetNameInput")
+                         ->text(),
+                 QString("Compact"));
+        QVERIFY(fixture.press("rrTextPresetNameCancel"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
+    }
+    QVERIFY(fixture.press("rrTextPresetGalleryClose"));
+    QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
+    // Leave the text and the closed cards as they were.
+    if (screenshots) {
+        // Comfort is the text the book started with. The size buttons can be
+        // on the panel's second page on short screens.
+        QVERIFY(fixture.press("rrTextPreset_comfort"));
+        QTRY_VERIFY_WITH_TIMEOUT(settled() && !fixture.visible("rrTextPresetUpdate"), 30000);
+    }
+    QVERIFY(fixture.press("rrTextPresetToggle"));
+    QTRY_VERIFY(!fixture.visible("rrTextPreset_comfort"));
+    if (screenshots)
+        QCOMPARE(fixture.state().value("font_pixels"), original.value("font_pixels"));
+}
+
 // The same real-widget tour supplies integration checks and screenshot scenes.
 void tour(Fixture &fixture, const QString &name, bool screenshots)
 {
@@ -1878,6 +1984,9 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QVERIFY(fixture.press("rrNavText"));
     QTRY_VERIFY(fixture.visible("rrFont"));
     QVERIFY(scene("text"));
+    textPresetsTour(fixture, scene, screenshots);
+    if (QTest::currentTestFailed())
+        return;
     QVERIFY(fixture.press("rrFont"));
     QTRY_VERIFY(fixture.visible("rrFontChoice0"));
     if (screenshots)
@@ -2030,6 +2139,16 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
             capturePages(fixture, name + "-settings-" + QString(tab).toLower(),
                          "rrSettingsOptions");
         }
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QVERIFY(revealSettingsOption(fixture, "rrTextForNewBooks"));
+        QVERIFY(fixture.press("rrTextForNewBooks"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+        // Previews render on the engine worker; give each one its paint.
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QTest::qWait(100);
+        QVERIFY(scene("settings-new-book-text"));
+        QVERIFY(fixture.press("rrTextPresetGalleryClose"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
         QVERIFY(fixture.press("rrTimeRemainingFormat"));
@@ -8806,16 +8925,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                  strings::get("settings.time_remaining_approximate").toUpper());
         QVERIFY(!storage::readJson(fixture.paths.preferences()).contains("time_remaining_format"));
 
+        // Text for new books saves at once, like the other popup choices,
+        // and keeps the old inheritance switch for older builds.
         QVERIFY(fixture.press("rrSettingsDefaults"));
-        QTRY_VERIFY(fixture.visible("rrInheritTextLayout"));
-        auto *inherit =
-                fixture.window.readerWindow()->findChild<QCheckBox *>("rrInheritTextLayout");
-        QVERIFY(inherit);
-        const bool inherited = inherit->isChecked();
-        QVERIFY(fixture.press("rrInheritTextLayout"));
-        QTRY_COMPARE(inherit->isChecked(), !inherited);
+        QVERIFY(revealSettingsOption(fixture, "rrTextForNewBooks"));
+        QVERIFY(fixture.press("rrTextForNewBooks"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+        // The first tile is Book default.
+        auto *choices = fixture.widget("rrTextPresetGrid");
+        QVERIFY(fixture.click(choices, QPoint(choices->width() / 4, choices->height() / 6)));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("new_book_text"),
+                     QJsonValue("book"));
+        QCOMPARE(dynamic_cast<ui::CaptionButton *>(fixture.widget("rrTextForNewBooks"))->caption(),
+                 strings::get("settings.new_book_book_default"));
         const QJsonObject expected{ { "time_remaining_format", "approximate" },
-                                    { "inherit_text_layout", !inherited } };
+                                    { "inherit_text_layout", false } };
         // Settings are a draft until the panel closes.
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
@@ -8836,14 +8961,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrKeepDefaults"));
         QTRY_VERIFY(!fixture.visible("rrRestoreConfirmation"));
         QCOMPARE(storage::readJson(fixture.paths.preferences()), saved);
-        QVERIFY(fixture.press("rrSettingsDefaults"));
-        QTRY_VERIFY(fixture.visible("rrInheritTextLayout"));
-        const bool previous = inherit->isChecked();
+        QVERIFY(fixture.press("rrSettingsStyling"));
+        QVERIFY(revealSettingsOption(fixture, "rrHideNonlinearFragments"));
+        auto *nonlinear =
+                fixture.window.readerWindow()->findChild<QCheckBox *>("rrHideNonlinearFragments");
+        QVERIFY(nonlinear);
+        const bool previous = nonlinear->isChecked();
         {
             BlockedFile blocked(fixture.paths.preferences());
             QVERIFY(blocked.active());
-            QVERIFY(fixture.press("rrInheritTextLayout"));
-            QCOMPARE(inherit->isChecked(), !previous);
+            QVERIFY(fixture.press("rrHideNonlinearFragments"));
+            QCOMPARE(nonlinear->isChecked(), !previous);
             QVERIFY(fixture.press("rrSettingsClose"));
             QTRY_VERIFY(fixture.visible("rrSettingsWriteError"));
             QVERIFY(blocked.restore());
@@ -8855,7 +8983,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
-                             .value("inherit_text_layout")
+                             .value("hide_nonlinear_fragments")
                              .toBool(),
                      !previous);
     }

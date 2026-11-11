@@ -9,6 +9,7 @@
 #include "ui/style/theme.h"
 #include "ui/panel_timing.h"
 #include "settings_panel.h"
+#include "reading/text_presets.h"
 #include "reading/features.h"
 #include "app/about/about_page.h"
 #include "reading/reading_density.h"
@@ -755,11 +756,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     defaultsRows->setSpacing(0);
     section(defaultsPage, defaultsRows, "rrDefaultsNewBooksSection",
             strings::get("settings.section_new_books"));
-    inheritTextLayoutOption =
-            check(defaultsPage, "rrInheritTextLayout", strings::get("settings.inherit_text_layout"),
-                  strings::get("settings.inherit_text_layout_description"));
-    defaultsRows->addWidget(inheritTextLayoutOption);
-    inheritTextLayoutOption->setChecked(true);
+    textForNewBooksButton =
+            ui::makeCaptionButton(defaultsPage, defaultsRows, "rrTextForNewBooks",
+                                  strings::get("settings.text_for_new_books"), [] { });
     section(defaultsPage, defaultsRows, "rrDefaultsGlobalFontSection",
             strings::get("settings.section_default_global_font"));
     defaultFontButton = ui::makeCaptionButton(defaultsPage, nullptr, "rrDefaultFont",
@@ -1089,13 +1088,13 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         optionPage = 0;
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = { hideNonlinearOption,    darkOption,
-                                               bionicOption,           landscapeColumnsOption,
-                                               animationOption,        inheritTextLayoutOption,
-                                               edgeLightOption,        lightGestureFeedbackOption,
-                                               denseGraphOption,       hideTabLabelsOption,
-                                               wifiPowerSaverOption,   disableStandbyOption,
-                                               automaticOpeningOption, minimalAnnotationOption };
+    QVector<ui::DescribedOption *> options = {
+        hideNonlinearOption,        darkOption,           bionicOption,
+        landscapeColumnsOption,     animationOption,      edgeLightOption,
+        lightGestureFeedbackOption, denseGraphOption,     hideTabLabelsOption,
+        wifiPowerSaverOption,       disableStandbyOption, automaticOpeningOption,
+        minimalAnnotationOption
+    };
     options.prepend(zenModeOption);
     options.append(zenDarkOption);
     for (auto *option : options) {
@@ -1151,17 +1150,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           zenLightButton,
                           zenSyncButton,
                           zenAutomaticButton,
-                          zenAboutButton }) {
-        button->setRule(Qt::BottomEdge);
+                          zenAboutButton,
+                          textForNewBooksButton }) {
+        styleListAction(button);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults)
             button->setCaption(strings::get("settings.asks_first"));
-        ui::readerStyle(
-                button,
-                QString("QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;border:0;border-radius:0;text-align:left;padding:0 %3px;background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}")
-                        .arg(int(chrome::labelText))
-                        .arg(int(chrome::listActionHeight))
-                        .arg(int(chrome::inset)));
         if (button == beautifierButton || button == wordSpacingButton
             || button == paragraphSpacingButton || button == trackingButton
             || button == hangingPunctuationButton || button == widowsOrphansButton
@@ -1173,8 +1167,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                     QString("QPushButton{font-size:%1px;border:0;border-radius:0;text-align:left;padding:0;background:palette(window);color:palette(window-text);}")
                             .arg(int(chrome::labelText)));
             button->setMinimumHeight(chrome::listActionHeight);
-        } else {
-            button->setFixedHeight(chrome::listActionHeight);
         }
     }
     settingsTabs->setAlignment(Qt::AlignTop);
@@ -2323,6 +2315,19 @@ void SettingsPanel::showStylingPreview()
             fitStylingCard();
         }
     }
+}
+
+// A Settings list row: a bottom rule, the label size and one fixed row height.
+void SettingsPanel::styleListAction(ui::CaptionButton *button)
+{
+    button->setRule(Qt::BottomEdge);
+    ui::readerStyle(
+            button,
+            QString("QPushButton{font-size:%1px;min-height:%2px;max-height:%2px;border:0;border-radius:0;text-align:left;padding:0 %3px;background:palette(window);color:palette(window-text);} QPushButton:pressed{background:palette(midlight);}")
+                    .arg(int(chrome::labelText))
+                    .arg(int(chrome::listActionHeight))
+                    .arg(int(chrome::inset)));
+    button->setFixedHeight(chrome::listActionHeight);
 }
 
 void SettingsPanel::setStylingSample(AdvancedText feature, const StyleSample &sample)

@@ -60,7 +60,7 @@ Support files are in `.adds/kobalt/`. Annotation exports are in `Kobalt/Annotati
 |---|---|
 | `assets/` | Bundled fonts, hyphenation dictionaries and `manifest.json` |
 | `config.json` | `enabled`, the Open books in Kobalt choice |
-| `reader-settings.json` | Settings that apply to every book: display options, Bold Reading, default reading font, interface preferences, new-book inheritance options and the last text/layout and header/footer settings |
+| `reader-settings.json` | Settings that apply to every book: display options, Bold Reading, default reading font, interface preferences, new-book text choice, text presets and the last text/layout and header/footer settings |
 | `userstyle.css` | Optional user CSS for every book; create and edit this file yourself |
 | `<hash>.json` | One file per book: saved position, typography, header and footer preset, orientation, dictionary choice and the Nickel progress baseline |
 | `annotations/<key>/` | One folder per book with `bookmarks.json`, `highlights.json` and `book.json`, see Bookmarks and annotations |

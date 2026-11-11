@@ -533,6 +533,7 @@ void Reader::syncAppearanceControls(bool pickingFont)
         if (auto *widget = findChild<QWidget *>(name))
             widget->setEnabled(normalWeight);
     ui::controlRowOf(variableWeightSlider)->setVisible(weightAxis.available());
+    syncTextPresets();
     // Navigation places this panel above the bottom bar. Moving it below
     // the toolbar here would invalidate it before navigation moves it back.
     fitAppearance();

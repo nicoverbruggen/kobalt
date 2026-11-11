@@ -36,8 +36,10 @@ inline ActionMenuItem actionItem(const QString &text, const QString &name, Contr
 class ActionMenu final : public ModalOverlay
 {
 public:
+    // `headerAction`, when it has an action, is an icon cell at the header's
+    // right, such as Rename. Choosing it dismisses the menu first, as a row does.
     ActionMenu(QWidget *parent, const ActionMenuHeader &header,
-               const QVector<ActionMenuItem> &items);
+               const QVector<ActionMenuItem> &items, const ActionMenuItem &headerAction = {});
     QPushButton *action(const QString &name) const;
 
     const QVector<QPushButton *> &actions() const { return rows; }

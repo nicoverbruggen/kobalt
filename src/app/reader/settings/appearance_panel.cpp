@@ -214,9 +214,24 @@ AppearanceLayout AppearanceSheet::controls() const
              nullptr };
 }
 
+void AppearanceSheet::setTopSection(QWidget *section)
+{
+    topSection = section;
+}
+
 int AppearanceSheet::fitHeight(int width, int availableHeight)
 {
     ensurePolished();
+    int sectionHeight = 0;
+    if (topSection) {
+        const bool shown = pages->currentIndex() == int(AppearancePage::Typography);
+        topSection->setVisible(shown);
+        if (shown)
+            sectionHeight = topSection->sizeHint().height();
+        QMargins margins = metrics::panel::margins;
+        margins.setTop(margins.top() + sectionHeight);
+        layout()->setContentsMargins(margins);
+    }
     const auto margins = layout()->contentsMargins();
     const int innerWidth = qMax(1, width - margins.left() - margins.right());
     auto *rows = pages->currentWidget()->layout();
@@ -279,6 +294,10 @@ int AppearanceSheet::fitHeight(int width, int availableHeight)
     }
     const int height = overflow ? qMax(1, availableHeight) : contentHeight + extra;
     resize(width, height);
+    if (topSection && sectionHeight) {
+        topSection->setGeometry(0, metrics::chrome::heavyRule, width, sectionHeight);
+        topSection->raise();
+    }
     layout()->activate();
     if (overflow)
         showRows(rowPage);
@@ -306,6 +325,8 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
     auto *typeRows = layout.typeRows, *pageRows = layout.pageRows;
     fontButton = new FontButton(typography);
     fontButton->setObjectName("rrFont");
+    // The font picker is a screen of its own, like Header and footer.
+    fontButton->setForward(true);
     readerStyle(fontButton,
                 QString("min-height:%1px;max-height:%1px;")
                         .arg(metrics::choices::fontButtonHeight - 2 * metrics::control::padding));

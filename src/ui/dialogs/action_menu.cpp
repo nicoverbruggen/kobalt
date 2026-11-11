@@ -194,7 +194,7 @@ private:
 } // namespace
 
 ActionMenu::ActionMenu(QWidget *parent, const ActionMenuHeader &header,
-                       const QVector<ActionMenuItem> &items)
+                       const QVector<ActionMenuItem> &items, const ActionMenuItem &headerAction)
     : ModalOverlay(parent)
 {
     setProperty("reader_standard_modal", true);
@@ -204,8 +204,29 @@ ActionMenu::ActionMenu(QWidget *parent, const ActionMenuHeader &header,
     rowsLayout->setSpacing(0);
     const bool hasHeader = !header.image.isNull() || !header.title.isEmpty()
             || !header.detail.isEmpty() || !header.caption.isEmpty();
-    if (hasHeader)
+    if (hasHeader && headerAction.triggered) {
+        auto *top = new QWidget(card());
+        auto *topLayout = new QHBoxLayout(top);
+        topLayout->setContentsMargins(0, 0, 0, 0);
+        topLayout->setSpacing(0);
+        topLayout->addWidget(new MenuHeader(header, top), 1);
+        auto *cell = new CellButton(headerAction.icon, top);
+        cell->setObjectName(headerAction.name);
+        cell->setAccessibleName(headerAction.text);
+        cell->setRule(Qt::LeftEdge);
+        cell->setFixedWidth(metrics::chrome::cellWidth);
+        cell->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+        topLayout->addWidget(cell);
+        const auto action = headerAction.triggered;
+        connect(cell, &QPushButton::clicked, this, [this, action] {
+            if (dismissed)
+                dismissed();
+            action();
+        });
+        rowsLayout->addWidget(top);
+    } else if (hasHeader) {
         rowsLayout->addWidget(new MenuHeader(header, card()));
+    }
     for (const auto &item : items) {
         // Without a header, the first row's divider would double the card's border.
         auto *row = new ActionRow(item, hasHeader || !rows.isEmpty(), card());

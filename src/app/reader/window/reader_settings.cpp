@@ -364,8 +364,7 @@ void Reader::openSettings()
     darkOption->setChecked(session->state().value("dark_mode").toBool(false));
     static_cast<SettingsPanel *>(general)->featurePreferences = preferences;
     static_cast<SettingsPanel *>(general)->updateFeatureOptions();
-    inheritTextLayoutOption->setChecked(
-            preferences.value(appearance::inheritTextLayoutKey).toBool(true));
+    showTextPresetSettings();
     hideNonlinearOption->setChecked(
             session->state().value("hide_nonlinear_fragments").toBool(false));
     auto *displaySettings = static_cast<SettingsPanel *>(general);
@@ -747,7 +746,6 @@ void Reader::applySettings()
     for (const auto *key : features::keys)
         next[key] =
                 static_cast<SettingsPanel *>(general)->featurePreferences.value(key).toBool(false);
-    next[appearance::inheritTextLayoutKey] = inheritTextLayoutOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     next["vertical_justification"] = settingsVerticalSpacing;
     next["vertical_spacing_scope"] = settingsVerticalSpacingScope;

@@ -1,5 +1,6 @@
 #include "support/strings.h"
 #include "reading_book.h"
+#include "text_presets.h"
 #include "appearance_settings.h"
 #include "session_timeout.h"
 #include "reader_session.h"
@@ -96,6 +97,8 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
             layoutPreferences_[key] = preferences.value(key);
     if (saved.value("book").toString() == identity_)
         dictionaryChoice_ = saved.value("dictionary_id").toString();
+    if (saved.value("book").toString() == identity_)
+        textPreset_ = saved.value(textpresets::bookKey).toString().left(64);
     // Qt 5.2 leaves a default-constructed QElapsedTimer uninitialized, so
     // isValid() is not reliable until the timer is invalidated or started.
     progressPoll.invalidate();
@@ -839,6 +842,8 @@ QJsonObject ReadingBook::checkpointState() const
         state[it.key()] = it.value();
     if (!dictionaryChoice_.isEmpty())
         state["dictionary_id"] = dictionaryChoice_;
+    if (!textPreset_.isEmpty())
+        state[textpresets::bookKey] = textPreset_;
     state["schema"] = 1;
     state["nickel_progress"] = baseline.json();
     state["finished_position"] = acceptedFinishedAnchor;
@@ -862,6 +867,8 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
         checkpoint[it.key()] = it.value();
     if (dictionaryChoice_.isEmpty())
         checkpoint.remove("dictionary_id");
+    if (textPreset_.isEmpty())
+        checkpoint.remove(textpresets::bookKey);
     if (imageViews.isEmpty())
         checkpoint.remove("image_views");
     if (session_->temporaryTypography())

@@ -904,8 +904,13 @@ void Client::push(const QByteArray &document, const Progress &progress, const Me
         QJsonObject fields;
         if (!metadata.filename.isEmpty())
             fields["filename"] = metadata.filename;
-        if (!metadata.title.isEmpty())
-            fields["title"] = metadata.title;
+        // KOReader sends its display title: the book's title, or the file
+        // name without its extension when the book has none.
+        const auto title = metadata.title.isEmpty() && !metadata.filename.isEmpty()
+                ? QFileInfo(metadata.filename).completeBaseName()
+                : metadata.title;
+        if (!title.isEmpty())
+            fields["title"] = title;
         if (!metadata.authors.isEmpty())
             fields["authors"] = metadata.authors;
         if (!fields.isEmpty())

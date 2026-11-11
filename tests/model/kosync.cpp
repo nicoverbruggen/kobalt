@@ -946,6 +946,15 @@ int main(int argc, char **argv)
                         && sent.value("title").toString() == metadata.title
                         && !sent.contains("authors") && sent.size() == 2,
                 "opted-in uploads carry KOReader's metadata object without empty fields");
+        // Without a title, the file name without its extension is the title,
+        // as KOReader's display title is.
+        client.push(digest, received, { "Untitled.Draft.epub", {}, {} }, done);
+        wait(client);
+        const auto untitled =
+                QJsonDocument::fromJson(network.payload).object().value("metadata").toObject();
+        require(error.isEmpty() && untitled.value("filename").toString() == "Untitled.Draft.epub"
+                        && untitled.value("title").toString() == "Untitled.Draft",
+                "a book without a title sends its file name as the title");
         client.push(digest, received, {}, done);
         wait(client);
         require(error.isEmpty()

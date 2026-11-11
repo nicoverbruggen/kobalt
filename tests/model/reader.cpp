@@ -2640,7 +2640,12 @@ int main(int argc, char **argv)
                     "<p><span id=\"native\">A&#x1f600;<em>BC</em>D</span></p>"
                     "<p id=\"normalized\">A   B\n C</p>"
                     "<p id=\"point-nodes\">A<!--comment--><?instruction test?>B<![CDATA[C]]>D</p>"
-                    "<p class=\"hidden\">Hidden text<span id=\"duplicate\"><span id=\"duplicate\">X</span></span></p></body></html>";
+                    "<p class=\"hidden\">Hidden text<span id=\"duplicate\"><span id=\"duplicate\">X</span></span>"
+                    "<span id=\"duplicate\">A&#x1f600;BC</span>"
+                    "<span id=\"kobo.1.1\">First</span><span id=\"kobo.1.1\">Second</span>"
+                    "<span id=\"dup%2Danchor\">First</span><span id=\"dup%2Danchor\">Second</span>"
+                    "<span id=\"dup-anchor\">Wrong passage</span>"
+                    "<span id=\"split\">First<br/>Second</span><span id=\"split\">Other</span></p></body></html>";
         require(styled.append(name, content, &error), qPrintable(error));
     }
     kobalt::EngineDocument css(kobalt::test::readerFonts());
@@ -2709,12 +2714,84 @@ int main(int argc, char **argv)
     require(css.platformPosition(positions, &error) == chapter2 && error.isEmpty()
                     && css.position() == normalizedAnchor,
             "Normalized whitespace prevented chapter-only progress or changed the local position");
-    require(css.goTo("/body/DocFragment[2]/body/p[6]/span[1]/span[1]/text().0"),
+    require(css.goTo("/body[1]/DocFragment[2]/body[1]/p[6]/span[1]/span[1]/text()[1].0"),
             "Cannot select the duplicate-ID fixture");
     const auto ambiguousAnchor = css.position();
-    require(css.platformPosition(positions, &error).isEmpty() && !error.isEmpty()
+    const auto nestedPoint = chapter2 + "#point(/1/2/6/2/1/1:0)";
+    require(css.platformPosition(positions, &error) == nestedPoint && error.isEmpty()
                     && css.position() == ambiguousAnchor,
-            "Ambiguous source IDs were saved as a native position");
+            "Duplicated nested IDs prevented a structural position or changed the local position");
+    require(css.goToPlatform(positions, nestedPoint, &error) && css.position() == ambiguousAnchor
+                    && error.isEmpty(),
+            "A structural position resolved through an ambiguous ID instead of its own path");
+    require(css.goTo("/body[1]/DocFragment[2]/body[1]/p[6]/span[2]/text()[1].2"),
+            "Cannot select the duplicate sibling ID fixture");
+    const auto siblingAnchor = css.position();
+    const auto siblingPoint = chapter2 + "#point(/1/2/6/3/1:5)";
+    require(css.platformPosition(positions, &error) == siblingPoint && error.isEmpty()
+                    && css.position() == siblingAnchor,
+            "Duplicated sibling IDs lost the structural position or its UTF-8 offset");
+    require(css.goToPlatform(positions, nestedPoint, &error)
+                    && css.goToPlatform(positions, siblingPoint, &error)
+                    && css.position() == siblingAnchor && error.isEmpty(),
+            "A duplicate sibling ID changed the structural position on import");
+    require(!css.goToPlatform(positions, chapter2 + "#duplicate:0", &error)
+                    && css.position() == siblingAnchor,
+            "An ambiguous ID-only location was accepted after structural import");
+    require(css.goTo("/body/DocFragment[2]/body/p[6]/span[4]/text().2"),
+            "Cannot select the duplicate KEPUB span fixture");
+    const auto kepubAnchor = css.position();
+    require(css.platformPosition(positions, &error) == chapter2 && error.isEmpty()
+                    && css.position() == kepubAnchor,
+            "Duplicated KEPUB spans prevented chapter progress or changed the local position");
+    require(!css.goToPlatform(positions, chapter2 + "#kobo.1.1:0", &error)
+                    && css.position() == kepubAnchor,
+            "An ambiguous KEPUB span was accepted on import");
+    require(css.goTo("/body[1]/DocFragment[2]/body[1]/p[6]/span[6]/text()[1].2"),
+            "Cannot select the duplicate literal-percent ID fixture");
+    const auto percentAnchor = css.position();
+    const auto percentPoint = chapter2 + "#point(/1/2/6/7/1:2)";
+    require(css.platformPosition(positions, &error) == percentPoint && error.isEmpty(),
+            "Duplicated literal-percent IDs prevented a structural position");
+    require(css.goToPlatform(positions, percentPoint, &error) && css.position() == percentAnchor
+                    && error.isEmpty(),
+            "Structural import URL-decoded a literal source ID and opened another passage");
+    require(!css.goToPlatform(positions, chapter2 + "#dup%252Danchor:2", &error)
+                    && css.position() == percentAnchor,
+            "URL-encoded ambiguous ID-only location was accepted");
+    for (const bool atEnd : { false, true }) {
+        const auto splitAnchor = QStringLiteral("/body[1]/DocFragment[2]/body[1]/p[6]/span[8]/")
+                + (atEnd ? "text()[1].5" : "text()[2].0");
+        require(css.goTo(splitAnchor), "Cannot select either side of the line break");
+        const auto splitPoint =
+                chapter2 + (atEnd ? "#point(/1/2/6/9/1:5)" : "#point(/1/2/6/9/3:0)");
+        require(css.platformPosition(positions, &error) == splitPoint && error.isEmpty(),
+                "Duplicate ID lost its text-node boundary on export");
+        require(css.goToPlatform(positions, splitPoint, &error) && error.isEmpty()
+                        && css.position() == splitAnchor,
+                "Structural import crossed the line break at a shared text offset");
+    }
+    {
+        const auto repeated = storedEpub(
+                { { "mimetype", "application/epub+zip" },
+                  { "META-INF/container.xml",
+                    "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
+                  { "book.opf",
+                    "<package xmlns='http://www.idpf.org/2007/opf' version='2.0'><metadata/><manifest><item id='c' href='c.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/><itemref idref='c'/></spine></package>" },
+                  { "c.xhtml",
+                    "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Repeated</title></head><body><p id='dup'>First</p><p id='dup'>Second</p></body></html>" } });
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
+        require(model.open(repeated, QSize(1072, 1328), {}, &error), qPrintable(error));
+        require(model.goTo("/body[1]/DocFragment[2]/body[1]/p[2]/text()[1].1"),
+                "Cannot select the repeated source chapter");
+        const auto anchor = model.position();
+        require(model.platformPosition(positions, &error).isEmpty() && !error.isEmpty()
+                        && model.position() == anchor,
+                "Duplicate-ID fallback exported an ambiguous chapter path");
+        require(!model.goToPlatform(positions, "c.xhtml#point(/1/2/2/1:1)", &error)
+                        && model.position() == anchor,
+                "Structural import accepted an ambiguous chapter path");
+    }
     const auto styledPage = css.image(0);
     int firstInk = styledPage.width();
     for (int y = 0; y < styledPage.height(); ++y)

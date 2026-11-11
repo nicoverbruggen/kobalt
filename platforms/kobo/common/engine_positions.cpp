@@ -243,7 +243,8 @@ bool sourceElementPath(const Source &source, int element, ElementPath &path)
 // A native point() resolves to an element with an ID and an offset in it, or,
 // in a chapter without IDs, to an element path and an offset in that element.
 // The path, text and offset of the containing element are also kept when an
-// ancestor has an ID, so the decoder can use them if that ID's text changed.
+// ancestor has an ID, so the decoder can use them if that ID is duplicated
+// or its text changed.
 struct NativePoint
 {
     QString id;
@@ -252,6 +253,7 @@ struct NativePoint
     QString text;
     int elementOffset = 0;
     bool located = false;
+    bool textStart = false;
 };
 
 // Nickel point() locations count DOM children from the document element and
@@ -287,6 +289,7 @@ bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, N
     const auto prefix = QString::fromUtf8(utf8.constData(), bytes);
     if (prefix.toUtf8() != utf8.left(bytes))
         return false;
+    result.textStart = nodes[target].text && bytes == 0;
     const int position = nodes[target].begin + prefix.size();
     const int element = nodes[target].element ? target : nodes[target].parent;
     result.located = element > 0 && sourceElementPath(source, element, result.path);
@@ -328,7 +331,7 @@ bool nativePoint(ldomDocument *doc, const QString &path, const QString &point, N
 // The point() Nickel stores for `units` UTF-16 units into `element`, or an
 // empty string when the source does not have the same element and text.
 QString sourcePoint(ldomDocument *doc, const QString &path, ldomNode *fragment, ldomNode *element,
-                    int units)
+                    int units, bool textEnd)
 {
     ElementPath elementPath;
     Source source;
@@ -339,8 +342,9 @@ QString sourcePoint(ldomDocument *doc, const QString &path, ldomNode *fragment, 
         return {};
     const auto &nodes = source.nodes;
     const int position = nodes[match].begin + units;
-    // Nickel's own points end in a text node. Prefer the text node that starts
-    // at the position; at the element's end, use the last one.
+    // Nickel's own points end in a text node. Preserve an explicit text-node
+    // end; otherwise prefer the node that starts here, or the last node at
+    // the element's end.
     int target = match;
     for (int node = match + 1; node < nodes.size() && nodes[node].begin <= nodes[match].end;
          ++node) {
@@ -351,7 +355,7 @@ QString sourcePoint(ldomDocument *doc, const QString &path, ldomNode *fragment, 
             || nodes[node].end < position)
             continue;
         target = node;
-        if (position < nodes[node].end)
+        if (position < nodes[node].end || textEnd)
             break;
     }
     const int bytes =
@@ -404,10 +408,10 @@ bool unitsBefore(ldomNode *element, ldomNode *target, int offset, int &units, QS
 }
 
 bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomNode *element,
-                QString &sourceText, QString *error, bool *textChanged = nullptr)
+                QString &sourceText, QString *error, bool *unusableAnchor = nullptr)
 {
-    if (textChanged) {
-        *textChanged = false;
+    if (unusableAnchor) {
+        *unusableAnchor = false;
     }
     auto fail = [error](const QString &message) {
         if (error)
@@ -439,13 +443,15 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
             --depth;
         }
     }
+    if (!parser.hasError() && matches > 1 && unusableAnchor)
+        *unusableAnchor = true;
     if (parser.hasError() || matches != 1) {
         return fail(strings::get(
                 "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     }
     if (sourceText != qstring(element->getText())) {
-        if (textChanged) {
-            *textChanged = true;
+        if (unusableAnchor) {
+            *unusableAnchor = true;
         }
         return fail(strings::get(
                 "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
@@ -493,7 +499,9 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
             return fail(strings::get("error.unsupported_native_text_offset"));
         id.truncate(colon);
     }
-    id = QUrl::fromPercentEncoding(id.toUtf8());
+    // A structural point already supplied the literal ID from the chapter XML.
+    if (!structural)
+        id = QUrl::fromPercentEncoding(id.toUtf8());
     auto *doc = engine.engine_->getDocument();
     auto *body = doc->nodeFromXPath(U"/body");
     if (!body)
@@ -538,12 +546,13 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
         // TENG offsets count UTF-16 units in the source DOM. CREngine uses
         // UTF-32 and can normalize whitespace. Reject a changed text stream
         // rather than turning the same number into a position in different text.
-        bool textChanged = false;
-        if (!nativeText(doc, path, id, element, sourceText, error, &textChanged)) {
+        bool unusableAnchor = false;
+        if (!nativeText(doc, path, id, element, sourceText, error, &unusableAnchor)) {
             // CREngine drops the whitespace between block children, so an ID
             // on a section around paragraphs without IDs fails this check. A
-            // native point still names its own element, which can match.
-            if (!structural || !textChanged || !point.located || !byPath())
+            // native point still names its own element, which can match even
+            // when the ancestor ID is duplicated.
+            if (!structural || !unusableAnchor || !point.located || !byPath())
                 return {};
             if (error)
                 error->clear();
@@ -559,7 +568,9 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
             const auto text = node->getText();
             int units = 0;
             for (int i = 0; i <= text.length(); ++i) {
-                if (units == remaining) {
+                // A point at the start of a text node belongs after intervening
+                // markup (for example <br/>), not at the previous node's end.
+                if (units == remaining && !(point.textStart && i == text.length())) {
                     return qstring(ldomXPointer(node, i).toString());
                 }
                 if (i < text.length())
@@ -628,13 +639,18 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
     const auto prefix = qstring(fragment->getAttributeValue("id")) + "_ ";
     // Without an ID, store Nickel's own DOM point for the nearest element.
     const auto structuralPoint = [&]() -> QString {
+        const auto chapter = chapterFallback();
+        if (chapter.isEmpty())
+            return {};
         auto *nearest = target->isText() ? target->getParentNode() : target;
         int units = 0;
         if (!nearest || nearest == fragment
             || !unitsBefore(nearest, target, pointer.getOffset(), units, nullptr))
-            return chapterFallback();
-        const auto point = sourcePoint(doc, path, fragment, nearest, units);
-        return point.isEmpty() ? chapterFallback() : encodedPath + '#' + point;
+            return chapter;
+        const bool textEnd = target->isText() && pointer.getOffset() > 0
+                && pointer.getOffset() == target->getText().length();
+        const auto point = sourcePoint(doc, path, fragment, nearest, units, textEnd);
+        return point.isEmpty() ? chapter : chapter + '#' + point;
     };
     auto *element = target->isText() ? target->getParentNode() : target;
     while (element && element != fragment && element->getAttributeValue("id").empty())
@@ -648,9 +664,9 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
     }
     const auto id = internalId.mid(prefix.size());
     QString sourceText;
-    bool textChanged = false;
-    if (!nativeText(doc, path, id, element, sourceText, error, &textChanged)) {
-        if (!textChanged)
+    bool unusableAnchor = false;
+    if (!nativeText(doc, path, id, element, sourceText, error, &unusableAnchor)) {
+        if (!unusableAnchor)
             return {};
         if (error)
             error->clear();
@@ -659,8 +675,7 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
         // so it keeps the chapter start there, as before.
         if (id.startsWith("kobo.") || id == "book-inner" || id == "book-columns")
             return chapterFallback();
-        // CREngine drops the whitespace between block children, so an ID on
-        // a section around paragraphs without IDs fails this check. Nickel's
+        // A duplicated ID or changed text cannot identify this position. Nickel's
         // DOM point for the nearest element can still match; otherwise this
         // falls back to the chapter.
         return structuralPoint();

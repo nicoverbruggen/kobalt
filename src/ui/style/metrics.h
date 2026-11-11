@@ -255,9 +255,9 @@ inline constexpr Px leadingWidth{ 72 }, lineInset{ 18 };
 namespace contents {
 inline constexpr Px stripHeight{ list::headerHeight };
 inline constexpr Px pageGap{ 24 }, indent{ 40 };
-// Exit Kobalt ignores taps this soon after the list closes from the same spot.
+// The Settings button ignores taps this soon after a panel closes from the same spot.
 // A first guess at a double tap on e-ink; not yet measured on a device.
-inline constexpr int exitGuardMilliseconds = 400;
+inline constexpr int closeGuardMilliseconds = 400;
 } // namespace contents
 
 namespace reading {

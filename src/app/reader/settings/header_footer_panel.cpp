@@ -453,17 +453,14 @@ void PresetCard::paintEvent(QPaintEvent *)
 
 namespace {
 // The bar that takes the place of the header's action row, as in Chapters:
-// a cell on the left, a serif title and an optional count on the right.
-void arrangeBar(QWidget *owner, QWidget *cell, QLabel *title, QLabel *count)
+// a serif title and the close cell on the right.
+void arrangeBar(QWidget *owner, QWidget *cell, QLabel *title)
 {
     const int barHeight = metrics::chrome::actionHeight - metrics::chrome::heavyRule;
-    const int titleLeft = metrics::chrome::cellWidth + metrics::chrome::inset;
-    cell->setGeometry(0, 0, metrics::chrome::cellWidth, barHeight);
-    const int titleRight = count ? owner->width() / 2 : owner->width() - metrics::chrome::inset;
-    title->setGeometry(titleLeft, 0, qMax(1, titleRight - titleLeft), barHeight);
-    if (count)
-        count->setGeometry(owner->width() / 2, 0,
-                           qMax(1, owner->width() / 2 - metrics::chrome::inset), barHeight);
+    const int cellLeft = owner->width() - metrics::chrome::cellWidth;
+    cell->setGeometry(cellLeft, 0, metrics::chrome::cellWidth, barHeight);
+    title->setGeometry(metrics::chrome::inset, 0,
+                       qMax(1, cellLeft - 2 * int(metrics::chrome::inset)), barHeight);
 }
 
 QLabel *barTitle(QWidget *parent, const char *name)
@@ -599,7 +596,7 @@ FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent)
     setObjectName("rrHeaderFooterChooser");
     // The same close cell as Chapters: it leaves without a new choice.
     auto *close = new ui::CellButton(ui::ControlIcon::Close, this);
-    close->setRule(Qt::RightEdge);
+    close->setRule(Qt::LeftEdge);
     close->setObjectName("rrHeaderFooterFieldsClose");
     close->setAccessibleName(strings::get("header_footer.close_fields"));
     finish = close;
@@ -774,9 +771,9 @@ void FieldChooser::resizeEvent(QResizeEvent *)
             + metrics::settings::toggleGap + metrics::chrome::checkSize
             + 2 * metrics::chrome::inset;
     const bool stacked = this->barHeight() > metrics::chrome::actionHeight;
-    uppercase->setGeometry(width() - boxWidth, stacked ? int(metrics::chrome::actionHeight) : 0,
-                           boxWidth, barHeight);
-    arrangeBar(this, finish, title, nullptr);
+    uppercase->setGeometry(width() - (stacked ? 0 : int(metrics::chrome::cellWidth)) - boxWidth,
+                           stacked ? int(metrics::chrome::actionHeight) : 0, boxWidth, barHeight);
+    arrangeBar(this, finish, title);
     if (!stacked)
         title->setGeometry(title->x(), 0, qMax(1, uppercase->x() - title->x()), barHeight);
     heading->setGeometry(0, this->barHeight(), width(), metrics::list::headerHeight);

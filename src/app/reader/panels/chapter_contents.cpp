@@ -50,7 +50,7 @@ ChapterContents::ChapterContents(QWidget *parent) : Panel(parent)
     setObjectName("rrContents");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
     close->setObjectName("rrContentsClose");
-    close->setRule(Qt::RightEdge);
+    close->setRule(Qt::LeftEdge);
     close->setAccessibleName(strings::get("chapter_contents.close"));
     connect(close, &QPushButton::clicked, this, [this] {
         if (back)
@@ -197,12 +197,14 @@ void ChapterContents::arrange(int anchor)
     if (first >= 0)
         page = first / rows;
     page = qBound(0, page, pageCount() - 1);
-    // The Chapters bar takes the place of the header's action row.
+    // The Chapters bar takes the place of the header's action row. The close
+    // cell sits on the right, as in Text Presets.
     const int barHeight = chrome::actionHeight - chrome::heavyRule,
-              titleLeft = chrome::cellWidth + chrome::inset;
-    close->setGeometry(0, 0, chrome::cellWidth, barHeight);
-    title->setGeometry(titleLeft, 0, qMax(1, width() / 2 - titleLeft), barHeight);
-    position->setGeometry(width() / 2, 0, qMax(1, width() / 2 - chrome::inset), barHeight);
+              closeLeft = width() - chrome::cellWidth;
+    close->setGeometry(closeLeft, 0, chrome::cellWidth, barHeight);
+    title->setGeometry(chrome::inset, 0, qMax(1, width() / 2 - chrome::inset), barHeight);
+    position->setGeometry(width() / 2, 0, qMax(1, closeLeft - chrome::inset - width() / 2),
+                          barHeight);
     listHeader->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
     pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     empty->setGeometry(chrome::inset, top, qMax(1, width() - 2 * chrome::inset),

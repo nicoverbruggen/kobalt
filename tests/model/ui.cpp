@@ -1658,9 +1658,9 @@ int main(int argc, char **argv)
         auto *close = choices.findChild<QPushButton *>("rrContentsClose");
         close->click();
         require(closed, "Contents close did not return to the reader");
-        require(close->geometry().topLeft() == QPoint()
+        require(close->y() == 0 && close->geometry().right() == close->parentWidget()->width() - 1
                         && close->width() == kobalt::ui::metrics::chrome::cellWidth,
-                "The Chapters bar lost its close cell");
+                "The Chapters bar lost its close cell on the right");
         auto *next = choices.findChild<QPushButton *>("rrContentsNext");
         previous->click();
         require(choices.currentPage() == 2, "Previous did not wrap to the final contents page");

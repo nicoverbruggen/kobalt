@@ -477,28 +477,28 @@ void Reader::showFinishChoice()
     updateOrientationBlock();
 }
 
-void Reader::guardExit()
+void Reader::guardCloseTap()
 {
-    exitGuarded = true;
-    exitGuardPressTime = lastPressTime;
-    const int generation = ++exitGuardGeneration;
+    closeGuarded = true;
+    closeGuardPressTime = lastPressTime;
+    const int generation = ++closeGuardGeneration;
     kobalt::qt::later(0, this, [this, generation] {
-        kobalt::qt::later(metrics::contents::exitGuardMilliseconds, this, [this, generation] {
-            if (generation == exitGuardGeneration)
-                exitGuarded = false;
+        kobalt::qt::later(metrics::contents::closeGuardMilliseconds, this, [this, generation] {
+            if (generation == closeGuardGeneration)
+                closeGuarded = false;
         });
     });
 }
 
-bool Reader::exitGuardElapsed() const
+bool Reader::closeGuardElapsed() const
 {
     // The timer above starts once the reader has handled the close. Source
     // timestamps tell a tap pressed later apart from one that only waited.
     // Without them, the timer alone decides. Subtraction permits clock wrap.
-    if (!exitGuardPressTime || !lastPressTime)
+    if (!closeGuardPressTime || !lastPressTime)
         return false;
-    const quint32 elapsed = lastPressTime - exitGuardPressTime;
-    return elapsed < 0x80000000u && elapsed >= quint32(metrics::contents::exitGuardMilliseconds);
+    const quint32 elapsed = lastPressTime - closeGuardPressTime;
+    return elapsed < 0x80000000u && elapsed >= quint32(metrics::contents::closeGuardMilliseconds);
 }
 
 void Reader::askRemoveBookmark(const QString &position)

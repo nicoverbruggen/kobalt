@@ -279,8 +279,17 @@ void checkPhoneSettings()
                 row->click();
                 panel.fitContent(host.size());
                 QApplication::processEvents();
-                require(title->mapTo(&panel, title->contentsRect().topLeft()) == position,
-                        "Settings submenu titles keep the same text origin");
+                // The close cell sits on the right; an open section puts its
+                // back cell on the left, and the title follows it at the same
+                // distance as it keeps from the edge in the list.
+                auto *back = panel.findChild<QPushButton *>("rrSettingsBack");
+                require(back && back->isVisible(), "Settings submenus show a back cell");
+                const auto origin = title->mapTo(&panel, title->contentsRect().topLeft());
+                require(origin.y() == position.y()
+                                && origin.x()
+                                        == back->mapTo(&panel, QPoint(back->width(), 0)).x()
+                                                + position.x(),
+                        "Settings submenu titles follow the back cell at the list's inset");
                 require(baseline() == reference,
                         "Settings submenu titles keep the Settings baseline");
                 if (!out.isEmpty())
@@ -522,8 +531,7 @@ int main(int argc, char **argv)
             "Cancel and OK dividers meet the alert frame without outer padding");
     // Every field uses the bordered, inset input of the password field.
     auto *inputRow = card->findChild<QWidget *>("rrKosyncInputRow");
-    require(inputRow && editor->parentWidget() == inputRow
-                    && inputRow->x() == cancel->x()
+    require(inputRow && editor->parentWidget() == inputRow && inputRow->x() == cancel->x()
                     && inputRow->width() == cancel->width() + save->width()
                     && editor->x() == ui::metrics::notice::cardMargins.left()
                     && editor->geometry().right()

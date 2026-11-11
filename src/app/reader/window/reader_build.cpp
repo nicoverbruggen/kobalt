@@ -712,13 +712,7 @@ void Reader::buildToolbar()
     const auto repaintTitle = [returnTitle] { returnTitle->update(); };
     connect(back, &QPushButton::pressed, returnTitle, repaintTitle);
     connect(back, &QPushButton::released, returnTitle, repaintTitle);
-    connect(back, &QPushButton::clicked, this, [this] {
-        // The chapter list's close cell sits where Exit Kobalt is. A second
-        // tap that lands after the list closed must not leave the reader.
-        if (exitGuarded && !exitGuardElapsed())
-            return;
-        close();
-    });
+    connect(back, &QPushButton::clicked, this, [this] { close(); });
     back->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     top->addStretch(1);
     auto *lightButton =
@@ -788,6 +782,11 @@ void Reader::buildToolbar()
     toolbarComposition.settings =
             iconButton(topControls, top, "rrSettings", strings::get("reader.reader_settings"),
                        ControlIcon::Settings, [this] {
+                           // A panel's close cell sits where this button is. A
+                           // second tap that lands after the panel closed must
+                           // not open Settings.
+                           if (closeGuarded && !closeGuardElapsed())
+                               return;
                            // The button stays enabled while a panel's changes apply, so the
                            // visible top bar does not repaint twice. Ignore taps then.
                            if (appearanceEdit.applying())
@@ -1005,7 +1004,7 @@ void Reader::buildOverlays()
     bookmarkList->back = [this] {
         annotationPopover->hide();
         bookmarkList->hide();
-        guardExit();
+        guardCloseTap();
         showControls();
         refresh();
     };
@@ -1030,7 +1029,7 @@ void Reader::buildOverlays()
             else
                 menu->raise();
         } else {
-            guardExit();
+            guardCloseTap();
             showControls();
         }
         refresh();
@@ -1345,7 +1344,7 @@ void Reader::buildSettings()
     connect(settings->closeButton, &QPushButton::clicked, this, [this] {
         if (appearanceEdit.applying())
             return;
-        guardExit();
+        guardCloseTap();
         applySettings();
     });
     settings->showDictionaries(services.downloadableDictionaries

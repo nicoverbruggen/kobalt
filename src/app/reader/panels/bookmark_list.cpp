@@ -37,7 +37,7 @@ BookmarkList::BookmarkList(QWidget *parent, KeyboardFactory factory)
     setObjectName("rrBookmarkList");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
     close->setObjectName("rrBookmarkListClose");
-    close->setRule(Qt::RightEdge);
+    close->setRule(Qt::LeftEdge);
     close->setAccessibleName(strings::get("bookmarks.close"));
     connect(close, &QPushButton::clicked, this, [this] {
         if (back)
@@ -654,13 +654,15 @@ void BookmarkList::arrange()
     const int reserved = 3 * chrome::cellWidth;
     const bool both = !bookmarksTab->isHidden() && !annotationsTab->isHidden();
     const int tabWidth = qMax(1, (width() - reserved) / (both ? 2 : 1));
-    close->setGeometry(0, 0, chrome::cellWidth, barHeight);
-    annotationsTab->setGeometry(chrome::cellWidth, 0, tabWidth, barHeight);
-    bookmarksTab->setGeometry(chrome::cellWidth + (both ? tabWidth : 0), 0,
+    // The tabs start at the left edge. Sort, more and close follow on the
+    // right, with close last, as in Text Presets.
+    annotationsTab->setGeometry(0, 0, tabWidth, barHeight);
+    bookmarksTab->setGeometry(both ? tabWidth : 0, 0,
                               qMax(1, width() - reserved - (both ? tabWidth : 0)), barHeight);
-    moreButton->setGeometry(width() - chrome::cellWidth, 0, chrome::cellWidth, barHeight);
+    sortButton->setGeometry(width() - 3 * chrome::cellWidth, 0, chrome::cellWidth, barHeight);
+    moreButton->setGeometry(width() - 2 * chrome::cellWidth, 0, chrome::cellWidth, barHeight);
+    close->setGeometry(width() - chrome::cellWidth, 0, chrome::cellWidth, barHeight);
     listHeader->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
-    sortButton->setGeometry(width() - 2 * chrome::cellWidth, 0, chrome::cellWidth, barHeight);
     if (sortPopup) {
         sortPopup->setGeometry(rect());
         sortPopup->centerCard();

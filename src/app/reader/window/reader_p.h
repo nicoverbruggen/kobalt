@@ -665,18 +665,18 @@ private:
     bool pageList(int direction);
     // Runs from a tap or swipe until its page is painted; invalid otherwise.
     QElapsedTimer turnStarted;
-    // Exit Kobalt ignores the second tap of a double tap on a panel's close
-    // control, which sits where Exit Kobalt is. A tap that waited in the queue
-    // while the screen repainted still counts as part of the double tap, but
-    // only if it was pressed within the guard time of the first. Closing
-    // Settings can hold the GUI longer than that on a device.
-    bool exitGuarded = false;
-    int exitGuardGeneration = 0;
+    // The Settings button ignores the second tap of a double tap on a panel's
+    // close cell, which sits where the Settings button is. A tap that waited
+    // in the queue while the screen repainted still counts as part of the
+    // double tap, but only if it was pressed within the guard time of the
+    // first. Closing Settings can hold the GUI longer than that on a device.
+    bool closeGuarded = false;
+    int closeGuardGeneration = 0;
     // Source timestamps of the newest press and of the press that armed the
-    // exit guard. Zero when the platform gives no timestamp.
-    quint32 lastPressTime = 0, exitGuardPressTime = 0;
-    void guardExit();
-    bool exitGuardElapsed() const;
+    // close guard. Zero when the platform gives no timestamp.
+    quint32 lastPressTime = 0, closeGuardPressTime = 0;
+    void guardCloseTap();
+    bool closeGuardElapsed() const;
     // Full flashes clear the ghosting that partial page turns leave behind.
     // Turns since the last flash, for the Refresh the screen setting.
     int pagesSinceFlash = 0;

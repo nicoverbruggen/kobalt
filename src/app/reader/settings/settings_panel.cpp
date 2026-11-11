@@ -470,12 +470,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     headingLayout = headingRows;
     headingRows->setContentsMargins(0, 0, 0, chrome::heavyRule);
     headingRows->setSpacing(0);
-    closeButton = new ui::CellButton(ui::ControlIcon::Close, heading);
-    closeButton->setObjectName("rrSettingsClose");
-    closeButton->setAccessibleName(strings::get("settings.close"));
-    closeButton->setRule(Qt::RightEdge);
-    closeButton->setFixedWidth(chrome::cellWidth);
-    headingRows->addWidget(closeButton);
     backButton = new ui::CellButton(ui::ControlIcon::Back, heading);
     backButton->setObjectName("rrSettingsBack");
     backButton->setAccessibleName(strings::get("common.back"));
@@ -515,6 +509,14 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     zenMarkRows->addWidget(zenMark, 0, Qt::AlignVCenter);
     zenMarkBox->hide();
     headingRows->addWidget(zenMarkBox);
+    // The close cell sits on the right, as in Text Presets. An open section
+    // replaces it with the back cell on the left.
+    closeButton = new ui::CellButton(ui::ControlIcon::Close, heading);
+    closeButton->setObjectName("rrSettingsClose");
+    closeButton->setAccessibleName(strings::get("settings.close"));
+    closeButton->setRule(Qt::LeftEdge);
+    closeButton->setFixedWidth(chrome::cellWidth);
+    headingRows->addWidget(closeButton);
     generalRows->addWidget(heading);
     auto *sections = new QWidget(this);
     generalRows->addWidget(sections, 1);
@@ -1302,7 +1304,8 @@ int SettingsPanel::fitContent(QSize availableSize)
     auto *leave = static_cast<HoldButton *>(zenLeave);
     if (leaveInHeading != (leave->parentWidget() != zenLeaveBar)) {
         if (leaveInHeading) {
-            headingLayout->addWidget(leave);
+            // The hold cell goes before the close cell.
+            headingLayout->insertWidget(headingLayout->indexOf(closeButton), leave);
             leave->setFixedSize(leave->cellWidth(), chrome::actionHeight - chrome::heavyRule);
         } else {
             leaveLayout->insertWidget(0, leave);

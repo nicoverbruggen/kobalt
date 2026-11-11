@@ -7,6 +7,7 @@
 #include "reading_bridge.h"
 #include "reading_timer.h"
 #include "storage/reading_history.h"
+#include "support/save_wait.h"
 #include <QElapsedTimer>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -236,6 +237,8 @@ private:
     // after their last writes have finished.
     std::unique_ptr<storage::RecordWriter> writer, speedWriter;
     std::shared_ptr<ReadingBook *> alive = std::make_shared<ReadingBook *>(this);
+    // Waits for the reading history's write when a close checkpoint ends.
+    SaveWait saveWait;
     QString dictionaryChoice_;
     QString textPreset_;
 };

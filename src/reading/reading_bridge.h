@@ -81,6 +81,8 @@ public:
     // Keep the bridge alive until completion before returning native storage.
     virtual void finishReading(std::function<void(NativeActivityResult)> done) = 0;
 
+    // A bridge whose pending save ends outside finishReading's completion
+    // reports it with saves::settled(), so a waiting close continues at once.
     virtual bool readingSavePending() const { return false; }
 
     virtual void retryFailedReadingSave() { }

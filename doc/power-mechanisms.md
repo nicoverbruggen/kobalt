@@ -62,6 +62,8 @@ The diagnostic log and the profile writer each use their own thread. They wait w
 
 The reader once checked Nickel's state every 250 ms. That poll is gone; the minute tick above is what remains.
 
+Closing, sleep, USB and shutdown wait for pending saves without a poll. Each save reports its end with `saves::settled()` (`src/support/save_wait.h`): the profile writer thread after each write, the bookmark and annotation saves, the book's activity and appearance saves, the annotation export and, on Kobo, the reading-time save on Nickel's event thread. The waiting step then checks its own condition again, from the event loop. A `SaveWait` also has one fallback timer of one second (`rrSaveWaitFallback`). It runs the same check, so a save that does not report delays the step but cannot stall it. The opening view's cover read reports its end in the same way. No timer runs while nothing waits.
+
 ## What a page turn does not do
 
 A page turn paints the new page and then lets the rest follow from the event loop. That second pass leaves out work whose result nothing shows:

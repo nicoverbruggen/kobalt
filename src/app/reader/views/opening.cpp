@@ -28,13 +28,15 @@
 #include <QRunnable>
 #include <QThreadPool>
 #include <atomic>
+#include <functional>
 #include "reading/reading_density.h"
 
 namespace kobalt {
 namespace {
 struct CoverRead
 {
-    std::atomic_bool cancelled{ false }, finished{ false };
+    std::atomic_bool cancelled{ false };
+    // Written by the job, then read on the GUI thread in `finished`.
     QImage image;
 };
 
@@ -43,6 +45,8 @@ class CoverJob final : public QRunnable
 public:
     QString path;
     std::shared_ptr<CoverRead> result;
+    // Runs on the GUI thread after the read, unless it was cancelled first.
+    std::function<void()> finished;
 
     void run() override
     {
@@ -59,7 +63,7 @@ public:
                     result->image = reader.read();
             }
         }
-        result->finished.store(true, std::memory_order_release);
+        kobalt::qt::invoke(QCoreApplication::instance(), finished, Qt::QueuedConnection);
     }
 };
 
@@ -169,15 +173,6 @@ public:
         brand = new ui::InterfaceLabel(strings::get("app.wordmark"), this);
         brand->setObjectName("rrOpeningBrand");
         brand->setAlignment(Qt::AlignCenter);
-        coverPoll.setInterval(10);
-        connect(&coverPoll, &QTimer::timeout, this, [this] {
-            if (!coverRead || !coverRead->finished.load(std::memory_order_acquire))
-                return;
-            coverPoll.stop();
-            auto image = std::move(coverRead->image);
-            coverRead.reset();
-            setCover(std::move(image));
-        });
         label = new ui::InterfaceLabel(strings::get("opening.loading"), this);
         label->setObjectName("rrOpeningLabel");
         label->setAlignment(Qt::AlignCenter);
@@ -260,8 +255,17 @@ public:
         auto *job = new CoverJob;
         job->path = path;
         job->result = coverRead;
+        // The job reports its end; nothing polls for it. A newer read or a
+        // closed dialog drops the report.
+        const QPointer<OpeningDialog> guard(this);
+        job->finished = [guard, read = coverRead] {
+            if (!guard || guard->coverRead != read)
+                return;
+            auto image = std::move(read->image);
+            guard->coverRead.reset();
+            guard->setCover(std::move(image));
+        };
         QThreadPool::globalInstance()->start(job);
-        coverPoll.start();
     }
 
     void setProgress(int percent)
@@ -565,7 +569,6 @@ private:
     qreal lift = 0;
     bool delayed = false;
     std::shared_ptr<CoverRead> coverRead;
-    QTimer coverPoll;
     QProgressBar *progress;
     QLabel *brand, *label, *hint;
     OpeningRedirect *redirect;

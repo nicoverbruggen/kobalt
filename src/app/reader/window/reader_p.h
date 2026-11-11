@@ -40,6 +40,7 @@
 #include "app/reader/settings/appearance_panel.h"
 #include "app/reader/settings/text_presets_panel.h"
 #include "reading/text_presets.h"
+#include "support/save_wait.h"
 #include "appearance_edit_session.h"
 #include "app/reader/views/navigation.h"
 #include "platform/api/reader_host_services.h"
@@ -94,6 +95,8 @@ public:
     void checkpoint() override;
     bool flushBeforeStandby() override;
     bool pendingStorageSave() const override;
+    // Runs the close and transition steps again when a save reports its end.
+    kobalt::SaveWait saveWait{ this };
     void revokeNativeReading() override;
     void finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed = true) override;
     void prepareUsb(std::function<void()> finished) override;

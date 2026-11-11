@@ -1,6 +1,7 @@
 #pragma once
 
 #include "support/qt_compat.h"
+#include "support/save_wait.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -120,6 +121,7 @@ private:
         failed_ = true;
         failedSince.start();
         timer.stop();
+        saves::settled();
         const auto ready = std::exchange(completions, {});
         // Keep the interval and its commit phase for the next attempt.
         const QPointer<NativeReadingSave> guard(this);
@@ -181,6 +183,7 @@ private:
         }
         const auto ready = std::exchange(completions, {});
         elapsed.invalidate();
+        saves::settled();
         // A completion can destroy this queue. Do not access members afterward.
         const QPointer<NativeReadingSave> guard(this);
         for (const auto &done : ready) {

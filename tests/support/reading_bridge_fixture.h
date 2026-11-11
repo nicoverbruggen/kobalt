@@ -1,6 +1,7 @@
 #pragma once
 #include "platforms/kobo/common/progress_policy.h"
 #include "reading/reading_bridge.h"
+#include "support/save_wait.h"
 #include <memory>
 #include <utility>
 
@@ -26,6 +27,7 @@ struct HostProgress
     void completeFinish(bool saved)
     {
         finishPending = false;
+        saves::settled();
         auto done = std::move(finishDone);
         finishDone = {};
         if (done)

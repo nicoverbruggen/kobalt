@@ -1,4 +1,5 @@
 #include "annotation_export.h"
+#include "support/save_wait.h"
 #include "storage/record_writer.h"
 #include "support/main_thread.h"
 #include "support/qt_compat.h"
@@ -209,11 +210,12 @@ private:
         // The callback can reach the GUI before RecordWriter clears running.
         // Never destroy the writer or release storage until that barrier passes.
         if (!writer.idle()) {
-            qt::later(1, this,
-                      [this, saved, needsConsent, path] { written(saved, needsConsent, path); });
+            saveWait.after(
+                    [this, saved, needsConsent, path] { written(saved, needsConsent, path); });
             return;
         }
         writePending = false;
+        saves::settled();
         if (cancelled)
             return;
         if (needsConsent) {
@@ -229,6 +231,8 @@ private:
     QPointer<QWidget> reader, nativeParent, currentDialog;
     QString directory;
     bool usePicker, cancelled = false, writePending = false;
+    // The writer thread reports when its write no longer runs.
+    SaveWait saveWait{ this };
     ExportWriter write;
     AnnotationExportRequest request;
     Done done;

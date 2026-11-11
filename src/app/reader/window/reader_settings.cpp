@@ -679,6 +679,7 @@ void Reader::saveButtonControls(const QJsonObject &actions)
                                             if (!guard)
                                                 return;
                                             guard->savingButtonControls = false;
+                                            saves::settled();
                                             if (saved)
                                                 guard->preferences[pageButtons::preferenceKey] =
                                                         actions;

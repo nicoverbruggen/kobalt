@@ -6,6 +6,7 @@
 #include "platforms/kobo/common/native_session_volume.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
+#include "support/save_wait.h"
 #include <QElapsedTimer>
 #include <QDateTime>
 #include <QMetaType>
@@ -418,6 +419,7 @@ void NativeReadingSession::start(const ReadingActivity &activity)
     flushStart([started] {
         if (const auto self = started.lock())
             --(*self)->startFlushes;
+        saves::settled();
     });
     if (api().pace) {
         const auto identity = book;

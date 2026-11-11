@@ -1,4 +1,5 @@
 #include "highlight_session.h"
+#include "support/save_wait.h"
 #include "reader_session.h"
 #include "support/diagnostics.h"
 #include "storage/profile_database.h"
@@ -276,6 +277,7 @@ void HighlightSession::finishSave(quint64 id, bool ok, const QString &error, qui
                                   const QVector<Highlight> &highlights)
 {
     reported_ = qMax(reported_, id);
+    saves::settled();
     if (ok)
         saved_ = highlights;
     else

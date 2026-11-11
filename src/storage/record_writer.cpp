@@ -1,5 +1,6 @@
 #include "record_writer.h"
 #include "support/main_thread.h"
+#include "support/save_wait.h"
 #include <algorithm>
 #include <cerrno>
 #include <cassert>
@@ -243,6 +244,8 @@ private:
             lock.lock();
             writer->running = busy = false;
             finished.notifyAll();
+            // `done` has queued its GUI-thread work. This report follows it.
+            saves::settled();
         }
     }
 

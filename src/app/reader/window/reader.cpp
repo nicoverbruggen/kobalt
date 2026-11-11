@@ -159,9 +159,10 @@ void Reader::prepareShutdown(std::function<void()> finished, bool allowFailedSav
         // Hosts also call this while retiring an accepted reader close. The
         // explicit quit waives failed saves, but already queued work must drain.
         // Defer completion so the host cannot delete us inside closeEvent().
-        qt::later(10, this, [this, finished] {
+        qt::later(0, this, [this, finished] {
             if (pendingStorageSave())
-                prepareShutdown(finished, allowFailedTransition);
+                saveWait.after(
+                        [this, finished] { prepareShutdown(finished, allowFailedTransition); });
             else
                 finished();
         });
@@ -248,9 +249,11 @@ void Reader::saveTransition(quint64 request, bool usb, const QString &location,
                     saveTransition(request, usb, location, error, mapped, finished, failures);
                 });
     };
-    // Polling an active operation does not spend or renew its retry budget.
+    // Waiting for an active operation does not spend or renew its retry budget.
     if (pendingStorageSave()) {
-        again(failures);
+        saveWait.after([this, request, usb, location, error, mapped, finished, failures] {
+            saveTransition(request, usb, location, error, mapped, finished, failures);
+        });
         return;
     }
     if (failures >= 3) {
@@ -2719,7 +2722,7 @@ void Reader::saveExit(quint64 request)
     // for both before allowing destruction or reporting a failed annotation.
     if (annotationSaving || bookmarks->saving() || highlights->saving() || book->savesPending()
         || (annotationExporter && annotationExporter->writing())) {
-        kobalt::qt::later(10, this, [this, request] { saveExit(request); });
+        saveWait.after([this, request] { saveExit(request); });
         return;
     }
     if (bookmarks->hasFailedSave() || highlights->hasFailedSave()) {
@@ -2802,7 +2805,7 @@ void Reader::finishExitSaved(quint64 request)
     if (request != closeRequest || !exportRunning || lifecycleHidden)
         return;
     if (pendingStorageSave()) {
-        kobalt::qt::later(10, this, [this, request] { finishExitSaved(request); });
+        saveWait.after([this, request] { finishExitSaved(request); });
         return;
     }
     closing = true;
@@ -2946,7 +2949,7 @@ void Reader::revokeNativeReading()
 void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures)
 {
     if (pendingStorageSave()) {
-        kobalt::qt::later(10, this, [this, finished, nativeAllowed, failures] {
+        saveWait.after([this, finished, nativeAllowed, failures] {
             finishStorageData(finished, nativeAllowed, failures);
         });
         return;

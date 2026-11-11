@@ -8,6 +8,7 @@ These checks cover the profile database, record writers, saves at close and slee
 | --- | --- |
 | `model.profile-storage` | The SQLite profile: import, schema checks, single ownership, recovery, backups and synced commits |
 | `model.record-writer` | Queue order, cancellation and limits of the record writers |
+| `model.save-wait` | Save waits: a report runs the waiting check from the event loop, also from a worker thread; the writer thread reports each write; the fallback timer covers a save that does not report |
 | `model.reading-history` | Reading history, its migration and its recovery |
 | `session.reading-book` | Saved book state, background saves and retries, reading time and history in the session |
 | `platform.nickel-event-save` | Nickel's event flush against a competing database writer |

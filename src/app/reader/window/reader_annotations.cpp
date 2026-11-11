@@ -759,6 +759,7 @@ void Reader::prepareAnnotation(bool leave, std::function<void()> after)
         if (!guard)
             return;
         guard->annotationSaving = false;
+        saves::settled();
         if (!guard->annotationMode || result == AnnotationDraft::Prepared::Stale)
             return;
         if (result == AnnotationDraft::Prepared::Rejected) {
@@ -864,6 +865,7 @@ void Reader::saveAnnotation(bool leave, std::function<void()> after)
                     return;
                 }
                 guard->annotationSaving = false;
+                saves::settled();
                 if (!guard->annotationMode
                     || !guard->annotationDraft->finishSave(transaction, saved)) {
                     guard->annotationShowActionsPending = false;

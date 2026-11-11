@@ -1,4 +1,5 @@
 #include "bookmark_session.h"
+#include "support/save_wait.h"
 #include "reader_session.h"
 #include "appearance_settings.h"
 #include "support/diagnostics.h"
@@ -277,6 +278,7 @@ void BookmarkSession::finishSave(quint64 id, bool ok, const QString &error, quin
                                  const QVector<Bookmark> &bookmarks, const char *reason)
 {
     reported = qMax(reported, id);
+    saves::settled();
     diagnostic("bookmarks-saved",
                { { "reason", reason },
                  { "count", int(bookmarks.size()) },

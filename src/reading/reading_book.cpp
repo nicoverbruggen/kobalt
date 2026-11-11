@@ -1,4 +1,5 @@
 #include "support/strings.h"
+#include "support/save_wait.h"
 #include "reading_book.h"
 #include "text_presets.h"
 #include "appearance_settings.h"
@@ -187,6 +188,8 @@ void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> don
     const auto generation = ++nativeFinishGeneration;
     const std::weak_ptr<ReadingBook *> guard = alive;
     bridge->finishReading([guard, generation](NativeActivityResult result) {
+        // Whatever the bridge did, its reading save is no longer pending.
+        saves::settled();
         if (const auto book = guard.lock())
             (*book)->finishNativeReading(generation, result);
     });
@@ -421,6 +424,7 @@ void ReadingBook::writeActivity(std::shared_ptr<ActivitySave> save, int attempt)
                                 return;
                             }
                             book->activityPending = false;
+                            saves::settled();
                             if (ok) {
                                 book->activitySaved.restart();
                                 book->activityFailed.invalidate();
@@ -549,6 +553,7 @@ void ReadingBook::writeAppearance(int attempt)
                                 return;
                             }
                             book->appearancePending = false;
+                            saves::settled();
                             book->appearanceDirty = !ok;
                             if (ok)
                                 book->appearanceFailed.invalidate();
@@ -1086,8 +1091,9 @@ void ReadingBook::finishCloseCheckpoint(const QJsonObject &checkpoint, bool save
                                         std::function<void(bool)> done)
 {
     if (history && history->saving()) {
+        // The history writer reports when its write ends.
         const std::weak_ptr<ReadingBook *> guard = alive;
-        QTimer::singleShot(10, QCoreApplication::instance(), [guard, checkpoint, saved, done] {
+        saveWait.after([guard, checkpoint, saved, done] {
             if (const auto book = guard.lock())
                 (*book)->finishCloseCheckpoint(checkpoint, saved, done);
         });
@@ -1095,6 +1101,7 @@ void ReadingBook::finishCloseCheckpoint(const QJsonObject &checkpoint, bool save
     }
     saved = (!history || history->savesSucceeded()) && saved;
     closeCheckpointPending = false;
+    saves::settled();
     if (saved) {
         savedCheckpoint = checkpoint;
         appearanceCheckpointSaved(checkpoint);

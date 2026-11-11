@@ -4,6 +4,7 @@
 #include "ui/style/theme.h"
 #include <QIconEngine>
 #include <QCache>
+#include <QHash>
 #include <QDataStream>
 #include <QIODevice>
 #include <QPainter>
@@ -709,6 +710,37 @@ void iconAction(QPushButton *button, ControlIcon icon, const QString &label)
     control->setAccessibleName(label);
     control->setIconConfiguration({ icon, IconRendition::Action });
     control->setIconSize(QSize(metrics::control::iconSize, metrics::control::iconSize));
+}
+
+int iconInkOffset(ControlIcon icon, int size)
+{
+    // Icons are drawn in square boxes, but some glyphs, such as the trash
+    // can, sit low or high in theirs. Measure the ink once per icon and size.
+    static QHash<qint64, int> offsets;
+    const qint64 key = (qint64(int(icon)) << 32) | quint32(size);
+    const auto found = offsets.constFind(key);
+    if (found != offsets.constEnd())
+        return *found;
+    QImage image(size, size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    {
+        QPainter painter(&image);
+        controlIcon(icon, Qt::black).paint(&painter, QRect(0, 0, size, size));
+    }
+    int top = -1, bottom = -1;
+    for (int y = 0; y < size; ++y) {
+        const auto *line = reinterpret_cast<const QRgb *>(image.constScanLine(y));
+        for (int x = 0; x < size; ++x)
+            if (qAlpha(line[x]) > 64) {
+                if (top < 0)
+                    top = y;
+                bottom = y;
+                break;
+            }
+    }
+    const int offset = top < 0 ? 0 : (size - (bottom - top + 1)) / 2 - top;
+    offsets.insert(key, offset);
+    return offset;
 }
 
 } // namespace kobalt::ui

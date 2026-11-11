@@ -43,7 +43,10 @@ protected:
         const int iconSize = metrics::control::iconSize, left = metrics::chrome::inset;
         if (item.hasIcon)
             controlIcon(item.icon, foreground)
-                    .paint(&painter, QRect(left, (height() - iconSize) / 2, iconSize, iconSize));
+                    .paint(&painter,
+                           QRect(left,
+                                 (height() - iconSize) / 2 + iconInkOffset(item.icon, iconSize),
+                                 iconSize, iconSize));
         const int textLeft = left + iconSize + metrics::chrome::selectorGap;
         painter.setFont(interfaceFont(metrics::chrome::labelText));
         painter.setPen(isEnabled() ? foreground : colors.color(QPalette::Mid));

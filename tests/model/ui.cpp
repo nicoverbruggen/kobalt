@@ -5561,6 +5561,23 @@ int main(int argc, char **argv)
                     "Disabled modal action label disappeared");
             button->setEnabled(true);
         }
+        // Async descriptions must resize nested headings after the initial short message.
+        choice.descriptionLabel()->setText(
+                kobalt::strings::get("kosync.position_comparison")
+                        .arg("12.3", "Local chapter", "45.6", "Remote chapter", "Test reader",
+                             "Synced: 8 Nov 2026 09:00", "The synced position is ahead."));
+        choice.fitCard();
+        app.processEvents();
+        auto *body = choice.descriptionLabel();
+        require(body->height() >= body->heightForWidth(body->width()),
+                "Updated modal description is clipped inside its heading");
+        const int expandedHeight = choice.card()->height();
+        body->setText("A short result");
+        choice.fitCard();
+        app.processEvents();
+        require(choice.card()->height() < expandedHeight
+                        && body->height() >= body->heightForWidth(body->width()),
+                "Updated modal kept the previous description's height");
         choice.primaryButton()->setText("Use this font as my default for all books");
         choice.card()->fitToWidth(400);
         app.processEvents();

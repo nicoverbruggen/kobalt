@@ -44,6 +44,8 @@
 #include "support/engine_fixtures.h"
 #include "support/font_fixtures.h"
 #include "support/input_clock.h"
+#include "support/kosync_reply.h"
+#include <QNetworkAccessManager>
 #include "support/literary_book.h"
 #include "support/screenshot_gallery.h"
 #include "support/screenshot_runner.h"
@@ -383,6 +385,24 @@ protected:
 private:
     QWidget *notice;
     QElapsedTimer visibleTime;
+};
+
+// Supplies controlled progress to the production reader without an external account.
+class ChoiceProgressHttp final : public QNetworkAccessManager
+{
+public:
+    explicit ChoiceProgressHttp(std::shared_ptr<QByteArray> body) : body(std::move(body)) { }
+
+protected:
+    QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request,
+                                 QIODevice *) override
+    {
+        return new test::KosyncReply(request, *body, operation == GetOperation ? 200 : 500,
+                                     QNetworkReply::NoError, this);
+    }
+
+private:
+    std::shared_ptr<QByteArray> body;
 };
 
 struct Fixture
@@ -10542,6 +10562,78 @@ private slots:
         QVERIFY(capture(fixture, name + "-fonts-kf-default"));
     }
 
+    void kosyncChoice_data() { screenshotVariants(); }
+
+    // The real async progress choice must show every body line after its loading message.
+    void kosyncChoice()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        auto body = std::make_shared<QByteArray>("{}");
+        Fixture fixture(dark, false, false, true, false, false,
+                        [body](ReaderHostServices &services) {
+                            services.kosyncHttp = [body] {
+                                return std::make_unique<ChoiceProgressHttp>(body);
+                            };
+                        });
+        QVERIFY(fixture.prepared);
+        QVERIFY(storage::writeJson(fixture.paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "local" },
+                                     { "automatic", false } }));
+        selectPreview(fixture, preset);
+        const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        const auto earlier = fixture.state().value("position").toString();
+        for (int i = 0; i < 5; ++i)
+            QVERIFY(fixture.turnPage(1));
+        const auto later = fixture.state().value("position").toString();
+        QVERIFY(earlier != later);
+        for (const bool backward : { true, false }) {
+            if (!backward)
+                for (int i = 0; i < 5; ++i)
+                    QVERIFY(fixture.turnPage(-1));
+            *body = QJsonDocument(
+                            QJsonObject{
+                                    { "progress", backward ? earlier : later },
+                                    { "percentage", backward ? 0.1 : 0.5 },
+                                    { "device",
+                                      "A reader with a deliberately long device name for comparison" },
+                                    { "device_id",
+                                      backward ? "remote-backward" : "remote-forward" },
+                                    { "timestamp", 1794124800 } })
+                            .toJson();
+            fixture.window.readerWindow()->findChild<QPushButton *>("rrKosyncNow")->click();
+            QPointer<ui::ChoiceModal> dialog;
+            QTRY_VERIFY((dialog = dynamic_cast<ui::ChoiceModal *>(fixture.widget("rrKosyncChoice")))
+                        && dialog->isVisible() && dialog->primaryButton()->isEnabled());
+            const auto direction = strings::get(backward ? "kosync.direction_backward"
+                                                         : "kosync.direction_forward");
+            auto *description = dialog->descriptionLabel();
+            QVERIFY(description->text().contains(direction));
+            QVERIFY(capture(
+                    fixture,
+                    name + (backward ? "-kosync-choice-backward" : "-kosync-choice-forward")));
+            QVERIFY2(description->height() >= description->heightForWidth(description->width()),
+                     qPrintable(QString("body %1, required %2")
+                                        .arg(description->height())
+                                        .arg(description->heightForWidth(description->width()))));
+            QCOMPARE(description->visibleRegion().boundingRect(), description->rect());
+            QVERIFY(dialog->rect().contains(dialog->card()->geometry()));
+            auto *title = dialog->findChild<QLabel *>("rrModalTitle");
+            QVERIFY(title->height() >= title->heightForWidth(title->width()));
+            dialog->secondaryButton()->click();
+            QTRY_VERIFY(!dialog);
+        }
+    }
+
     void kosyncManual_data() { screenshotVariants(); }
 
     void kosyncManual()
@@ -12265,6 +12357,7 @@ int main(int argc, char **argv)
     }
     const bool worker = arguments.size() >= 4 && arguments.at(1) == "--screenshot-worker";
     const bool lightTests = arguments.size() == 2 && arguments.at(1) == "--light-tests";
+    const bool screenTests = arguments.size() >= 2 && arguments.at(1) == "--screen-tests";
     const bool lightGallery = arguments.size() == 4 && arguments.at(3) == "--light";
     const bool screenshots = arguments.size() >= 2 && arguments.at(1) == "--screenshots";
     QString output;
@@ -12368,9 +12461,12 @@ int main(int argc, char **argv)
     } else {
         if (lightTests)
             arguments = { arguments.first(), "primaryViews" };
+        else if (screenTests)
+            arguments.removeAt(1);
         QTimer::singleShot(0, &app, [&] {
             mainthread::checkEventsOnly(true);
-            app.exit(QTest::qExec(lightTests ? static_cast<QObject *>(&screens) : &tests,
+            app.exit(QTest::qExec((lightTests || screenTests) ? static_cast<QObject *>(&screens)
+                                                              : &tests,
                                   arguments));
         });
         return app.exec();

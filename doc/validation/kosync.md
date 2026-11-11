@@ -8,6 +8,7 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | --- | --- |
 | `model.kosync` | The sync client: document identity, accounts, schedule, responses, retries and hostname lookups |
 | `model.sync-coordinator` | Book-scoped attempts, late connection answers, hidden readiness and final-upload handoffs without a reader window |
+| `desktop.kosyncChoice` | The real asynchronous forward and backward choice, text height, visible bounds and card fit across gallery viewports and text scales |
 | `component.kosync-ui` | The KOSync Settings tab, the Automatic sync sheet, the password editor and the sync notice |
 | `platform.native-sync-network` | The Kobo connection controller, Wi-Fi release, the Kobo side of the Wi-Fi power saver and the hold on Nickel's background connections |
 | `lifecycle.kosyncAccountGating` | No sync work without a usable account, and the toolbar sync button |
@@ -48,6 +49,8 @@ The reference server returns an empty successful response for absent progress. T
 Sources, pinned for this comparison: [reference server](https://github.com/koreader/koreader-sync-server/blob/46ef6b84a3930b3f0265efac74899f2256c158f1/app/controllers/1/syncs_controller.lua), [KOReader API description](https://github.com/koreader/koreader/blob/9040116701c888889bd35233b23b83283be66745/plugins/kosync.koplugin/api.json), [KOReader upload and pull](https://github.com/koreader/koreader/blob/9040116701c888889bd35233b23b83283be66745/plugins/kosync.koplugin/main.lua), and [Techy-Notes server source](https://github.com/jadehawk/koreader-sync/blob/3d8948333ff6379b082bf86ca4c89aac943e5eb1/src/index.tsx). These sources establish implementation behavior, not the version deployed by a public service. KoSync.eu's missing-record response has not been verified.
 
 `model.kosync` checks absent-progress responses, first upload, malformed and ambiguous 404 responses, endpoint isolation and transport failures. `lifecycle.kosyncMissingProgress` runs Sync now through the production reader and verifies that absent progress permits an upload while route, authentication and server errors do not. Existing reconciliation checks retain remote conflict protection.
+
+The choice check supplies controlled HTTP replies to the production reader. It checks text height as well as widget visibility: a label can be fully visible while its text is clipped inside it. The gallery uses the same case for `kosync-choice-forward` and `kosync-choice-backward`, including a long device name. Run `KOBALT_GALLERY_CASE=kosyncChoice` with the screenshot preset for these scenes before a full gallery has indexed them.
 
 ## Captures
 

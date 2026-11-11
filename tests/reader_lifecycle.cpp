@@ -9076,6 +9076,7 @@ private:
                 "Synced position · " + QLocale().toString(remotePercent * 100, 'f', 1) + "%"));
         QCOMPARE(description->textFormat(), Qt::PlainText);
         QVERIFY(host.window()->rect().contains(dialog->card()->geometry()));
+        QVERIFY(description->height() >= description->heightForWidth(description->width()));
         QCOMPARE(description->visibleRegion().boundingRect(), description->rect());
         QCOMPARE(host.session()->state().value("position").toString(), localPosition);
         if (!invalid && !forward) {

@@ -238,6 +238,13 @@ void PopupCard::fitToWidth(int width)
         label->setMaximumHeight(QWIDGETSIZE_MAX);
         label->setFixedHeight(qMax(0, label->heightForWidth(textWidth)));
     }
+    // A changed label invalidates its own layout immediately, but the parent
+    // layout still caches the heading widget's height until LayoutRequest is
+    // delivered. fitCard() can run in that same callback, so invalidate the
+    // enclosing widget measurements before asking for the card's height.
+    for (auto *widget : findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+        if (widget->layout())
+            widget->updateGeometry();
     // Measure nested wrapped content at the fixed width. adjustSize() uses
     // the layout's natural width and can leave too little height for a footer.
     const int height = contentRows->hasHeightForWidth() ? contentRows->totalHeightForWidth(width)

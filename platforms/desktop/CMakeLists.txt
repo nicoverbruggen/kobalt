@@ -306,6 +306,12 @@ if(BUILD_TESTING)
         -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
     set_tests_properties(desktop.primaryViews PROPERTIES ENVIRONMENT "${headless_environment}"
         LABELS "desktop;light" TIMEOUT 125)
+    add_test(NAME desktop.kosyncChoice COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_EXECUTABLE=$<TARGET_FILE:kobalt-desktop-tests>" "-DTEST_ARGUMENTS=--screen-tests;kosyncChoice"
+        "-DTEST_TIMEOUT=120" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
+    set_tests_properties(desktop.kosyncChoice PROPERTIES ENVIRONMENT "${headless_environment}"
+        LABELS "desktop;integration" TIMEOUT 125)
     foreach(check startup reading errors storageDiagnostics galleryIntegrity galleryWorkerFailure)
         set_property(TEST desktop.${check} APPEND PROPERTY LABELS light)
     endforeach()
@@ -709,7 +715,7 @@ if(BUILD_TESTING)
     set(kobalt_test_areas
         "gallery:^(build\\.screenshotBooks|desktop\\.(gallery.*|phoneFrame|primaryViews))$"
         "evaluation:^(build\\.(loadLock|eval-device-outcomes)|desktop\\.timingEvents|platform\\.scenario-sleep|lifecycle\\.benchmarkNoticeAfterRun)$"
-        "kosync:^(lifecycle\\.(kosync.*|wifi.*)|model\\.(kosync|sync-coordinator)|component\\.kosync-ui|platform\\.native-sync-network)$"
+        "kosync:^(lifecycle\\.(kosync.*|wifi.*)|desktop\\.kosyncChoice|model\\.(kosync|sync-coordinator)|component\\.kosync-ui|platform\\.native-sync-network)$"
         "keyboard:^ui\\.widgetKeyboard.*$"
         "brightness:^(desktop\\.lightGesture.*|lifecycle\\.lightReplacesDefaultMenu|model\\.brightness-gesture)$"
         "dictionary:^(desktop\\.dictionary.*|model\\.dictionary-store|platform\\.nickel-dictionary-selection)$"

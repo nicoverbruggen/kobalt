@@ -235,6 +235,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "settings-animations-uncertain", "Page animations with compatibility warning" },
         { "settings-animations-unsupported", "Page animations unavailable" },
         { "settings-kosync", "Sync settings" },
+        { "kosync-choice-forward", "Resume synced reading" },
+        { "kosync-choice-backward", "Resume earlier synced reading" },
         { "kosync-manual-toolbar", "Manual sync toolbar" },
         { "kosync-manual-prompt", "Manual sync explanation" },
         { "kosync-manual-settings", "Manual sync settings" },

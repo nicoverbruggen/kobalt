@@ -1,4 +1,5 @@
 #include "render/page_refresh_regions.h"
+#include "render/page_content.h"
 #include "check.h"
 
 #include <QImage>
@@ -12,6 +13,34 @@ int main()
     require(kobalt::hasVisibleColor(qRgb(100, 111, 100)),
             "Colour threshold excluded a visible tint");
     QImage page(100, 100, QImage::Format_RGB32);
+    const auto unknown = kobalt::pageContent(page);
+    require(!unknown.images.known && !unknown.colours.known && !unknown.textOnly
+                    && !unknown.imageOnly,
+            "Uninspected image must not claim known-empty content");
+    kobalt::PageContent content;
+    content.images = { true, { QRect(-20, 0, 30, 100), QRect(100, 0, 10, 10) } };
+    content.colours = { true, {} };
+    kobalt::setPageContent(page, content);
+    const auto clipped = kobalt::pageContent(page);
+    require(clipped.images.known
+                    && clipped.images.rectangles == QVector<QRect>{ QRect(0, 0, 10, 100) }
+                    && clipped.colours.known && clipped.colours.rectangles.isEmpty(),
+            "Content regions must retain known-empty state and clip to the page");
+    require(!kobalt::pageHasColour(page), "Known-empty colour regions became coloured content");
+    kobalt::setImageContentId(page, "illustration-identity");
+    const QImage previous = page;
+    content.images = { true, {} };
+    content.textOnly = true;
+    kobalt::setPageContent(page, content);
+    require(kobalt::pageTextOnly(page) && !kobalt::pageTextOnly(previous)
+                    && kobalt::pageContent(previous).images.rectangles == clipped.images.rectangles,
+            "Updating content metadata changed a previously completed image");
+    require(kobalt::imageContentId(page) == "illustration-identity"
+                    && kobalt::imageContentId(page.copy()) == "illustration-identity",
+            "Content updates or image copies lost the illustration identity");
+    kobalt::setPageContent(page, {});
+    require(!kobalt::pageContent(page).images.known && !kobalt::pageTextOnly(page),
+            "Replacing content with unknown retained old page classification");
     page.setText("kobalt.image_regions", "[[10,10,60,80]]");
     require(kobalt::pageImageAtPoint(page, { 40, 50 }), "Cover was not an image target");
     require(!kobalt::pageImageAtPoint(page, { 0, 0 }), "Paper outside the image became a target");
@@ -28,6 +57,10 @@ int main()
     require(kobalt::pageSingleImage(page).isEmpty(), "Small images offered zoom suggestion");
     require(!kobalt::pageImageAtPoint(page, { 15, 15 }), "Small ornament became an image target");
     require(!kobalt::pageImageAtPoint(page, { 50, 52 }), "Narrow wordmark became an image target");
+    page.setText("kobalt.image_regions", "[[0,0,10,10],null]");
+    const auto invalid = kobalt::pageContent(page).images;
+    require(!invalid.known && invalid.rectangles.isEmpty(),
+            "A partially valid record exposed incomplete image regions");
     page.setText("kobalt.image_regions", "malformed");
     require(!kobalt::pageImageAtPoint(page, { 40, 50 }), "Invalid metadata became an image target");
     page.setText("kobalt.image_regions", QString());
@@ -72,6 +105,8 @@ int main()
     page.setText("kobalt.image_regions", "[]");
     page.setText("kobalt.colour_regions", "not-json");
     page.setText("kobalt.animation_text_only", "false");
+    require(kobalt::pageHasColour(page) && !kobalt::pageContent(page).colours.known,
+            "Unrecognized colour metadata lost the existing conservative display hint");
     require(kobalt::pageRefreshRegions(page, true) == full,
             "Malformed colour metadata did not use the old fallback");
 

@@ -1,3 +1,4 @@
+#include "render/page_content.h"
 #include "ui/controls/rows.h"
 #include "ui/controls/text.h"
 #include "ui/panel_timing.h"
@@ -39,8 +40,8 @@ void Reader::refreshRenderNotice()
     }
     const auto text = strings::get(message);
     const int percent = progress.overallPercent();
-    const QRect progressRect = showNotice && !property("reader_dark").toBool()
-                    && page->image.text("kobalt.animation_text_only") == "true"
+    const QRect progressRect =
+            showNotice && !property("reader_dark").toBool() && pageTextOnly(page->image)
             ? busyNotice->progressUpdateRect(percent, text)
             : QRect();
     setProperty("reader_progress_update", progressRect);

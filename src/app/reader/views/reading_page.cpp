@@ -1,3 +1,4 @@
+#include "render/page_content.h"
 #include "render/highlight_paint.h"
 #include "ui/style/theme.h"
 #include "support/qt_font.h"
@@ -590,10 +591,7 @@ void ReadingPage::setSavedHighlights(const QVector<HighlightGeometry> &groups)
             QVariant::fromValue(window()->property("reader_annotation_repairs").value<QRegion>()
                                 | (previousColor | annotationColorRegion).translated(offset)));
     window()->setProperty("reader_colour_regions",
-                          !annotationColorRegion.isEmpty()
-                                  || (!image.text("kobalt.colour_regions").isEmpty()
-                                      && image.text("kobalt.colour_regions") != "[]"
-                                      && image.text("kobalt.animation_text_only") != "true"));
+                          !annotationColorRegion.isEmpty() || pageHasColour(image));
     damageAnnotations(dirty);
 }
 
@@ -789,11 +787,10 @@ void ReadingPage::refreshContent(bool reading, bool now)
                                   showFooter(),     showProgress(),     progressFraction,
                                   width(),          footerTextPixels(), colors.cacheKey(),
                                   weight,           font().family() };
-    kobalt::platform::pageRefresh(
-            this, false,
-            reading && !geometryChanged && renderedPalette == colors.cacheKey()
-                    && renderedBody.text("kobalt.animation_text_only") == "true"
-                    && image.text("kobalt.animation_text_only") == "true");
+    kobalt::platform::pageRefresh(this, false,
+                                  reading && !geometryChanged
+                                          && renderedPalette == colors.cacheKey()
+                                          && pageTextOnly(renderedBody) && pageTextOnly(image));
     QRegion dirty((preparedFrom && preparedFrom == renderedBody.cacheKey()
                                    && renderedBody.size() == image.size()
                            ? preparedDamage
@@ -814,10 +811,7 @@ void ReadingPage::refreshContent(bool reading, bool now)
                     (pageRefreshRegions(renderedBody, false) | pageRefreshRegions(image, false))
                             .translated(mapTo(window(), QPoint(0, topHeight())))));
     window()->setProperty("reader_colour_regions",
-                          !annotationColorRegion.isEmpty()
-                                  || (!image.text("kobalt.colour_regions").isEmpty()
-                                      && image.text("kobalt.colour_regions") != "[]"
-                                      && image.text("kobalt.animation_text_only") != "true"));
+                          !annotationColorRegion.isEmpty() || pageHasColour(image));
     renderedBody = image;
     if (geometryChanged || nextHeader != headerState) {
         auto next = renderStrip(topHeight(), [this](QPainter &p) { paintHeader(p); });

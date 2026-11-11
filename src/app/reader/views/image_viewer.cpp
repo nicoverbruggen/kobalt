@@ -1,3 +1,4 @@
+#include "render/page_content.h"
 #include "image_viewer.h"
 #include "ui/controls/buttons.h"
 #include "ui/style/fonts.h"
@@ -391,7 +392,7 @@ void ImageViewer::open()
 
 void ImageViewer::setImage(QImage image, const QJsonObject &view)
 {
-    imageId = image.text("kobalt.image_id");
+    imageId = imageContentId(image);
     canvas->setImage(std::move(image), view);
 }
 

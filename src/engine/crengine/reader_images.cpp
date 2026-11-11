@@ -1,4 +1,5 @@
 #include "engine_document.h"
+#include "render/page_content.h"
 #include "column_view.h"
 #include "publication/image_policy.h"
 #include <lvdrawbuf.h>
@@ -41,7 +42,7 @@ QImage EngineDocument::imageAt(QPoint point)
         identity.addData(
                 QByteArray::fromRawData(reinterpret_cast<const char *>(pixels), image.width() * 4));
     }
-    image.setText("kobalt.image_id", QString::fromLatin1(identity.result().toHex()));
+    setImageContentId(image, QString::fromLatin1(identity.result().toHex()));
     return image;
 }
 } // namespace kobalt

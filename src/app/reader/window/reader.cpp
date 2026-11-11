@@ -1,3 +1,4 @@
+#include "render/page_content.h"
 #include "reading/remaining_time.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
@@ -768,8 +769,7 @@ bool Reader::event(QEvent *event)
                     && !lookupPending && !acknowledgments->isVisible() && !closeSaveError
                     && !services.suspended() && !overlayVisible;
             setProperty("reader_navigation_dismissal", dismissed);
-            setProperty("reader_navigation_dismissal_plain",
-                        page->image.text("kobalt.animation_text_only") == "true");
+            setProperty("reader_navigation_dismissal_plain", pageTextOnly(page->image));
         }
         // Only the plain reading bars can cross an unchanged text page
         // with a partial refresh. Other panels may contain color.
@@ -782,7 +782,7 @@ bool Reader::event(QEvent *event)
                             && !busyNotice->isVisible() && !syncDialog && !kosyncDialog
                             && !finishDialog && !annotationErrorDialog && !formattingWarningDialog
                             && !settingsWriteErrorDialog && !closeSaveError && !services.suspended()
-                            && page->image.text("kobalt.animation_text_only") == "true");
+                            && pageTextOnly(page->image));
         // These panels hold text and line controls. Changes inside them can
         // use a partial refresh; showing the whole panel keeps its policy.
         QWidget *partialPanel = nullptr;
@@ -2930,7 +2930,7 @@ void Reader::save(bool snapshot, bool background, bool persist)
 #endif
     state["resource_cache"] = session->resourceStats();
     state["busy"] = resizeTimer.isActive() || session->busy();
-    state["page_text_only"] = session->image().text("kobalt.animation_text_only") == "true";
+    state["page_text_only"] = pageTextOnly(session->image());
     state["page_quality_mono"] = !kobalt::pageRefreshRegions(session->image(), false).isEmpty();
     state["page_quality_colour"] = !kobalt::pageRefreshRegions(session->image(), true).isEmpty();
     state["native_ui_font"] = services.uiFont().family();

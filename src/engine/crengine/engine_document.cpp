@@ -15,6 +15,7 @@
 #include "document_cache.h"
 #include "font_weight.h"
 #include "render/page_refresh_regions.h"
+#include "render/page_content.h"
 #include "page_pixels.h"
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -275,20 +276,6 @@ private:
     bool dark;
     QMap<std::tuple<quintptr, int, int>, bool> *inversion;
 };
-
-QString regionMetadata(const QVector<QRect> &regions)
-{
-    QJsonArray array;
-    for (const QRect &rect : regions) {
-        QJsonArray values;
-        values.append(rect.x());
-        values.append(rect.y());
-        values.append(rect.width());
-        values.append(rect.height());
-        array.append(values);
-    }
-    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
-}
 
 QVector<QRect> colorTileRegions(const QVector<uchar> &tiles, int columns, int rows,
                                 const QSize &size)
@@ -1485,17 +1472,16 @@ QImage EngineDocument::image(int pageNumber)
     hasColor = normalizePagePixels(result, darkMode_, boundedTiles ? &colorTiles : nullptr,
                                    tileColumns, format == QImage::Format_RGBX8888);
     usePageFormat(result, format);
-    result.setText("kobalt.image_regions", regionMetadata(buffer.imageRegions));
-    result.setText("kobalt.image_only",
-                   buffer.imageRegions.size() == 1 && !buffer.hasText ? "true" : "false");
-    result.setText(
-            "kobalt.colour_regions",
-            regionMetadata(
-                    hasColor ? (boundedTiles ? colorTileRegions(colorTiles, tileColumns, tileRows,
-                                                                result.size())
-                                             : QVector<QRect>{ QRect(QPoint(0, 0), result.size()) })
-                             : QVector<QRect>{}));
-    result.setText("kobalt.animation_text_only", !buffer.hasImages && !hasColor ? "true" : "false");
+    PageContent content;
+    content.images = { true, buffer.imageRegions };
+    content.imageOnly = buffer.imageRegions.size() == 1 && !buffer.hasText;
+    content.colours.known = true;
+    content.colours.rectangles = hasColor
+            ? (boundedTiles ? colorTileRegions(colorTiles, tileColumns, tileRows, result.size())
+                            : QVector<QRect>{ QRect(QPoint(0, 0), result.size()) })
+            : QVector<QRect>{};
+    content.textOnly = !buffer.hasImages && !hasColor;
+    setPageContent(result, content);
     // A turn can skip several physical pages of non-linear text.
     const int current = page();
     if (pageNumber == current || pageNumber == turnTarget(current, -1)

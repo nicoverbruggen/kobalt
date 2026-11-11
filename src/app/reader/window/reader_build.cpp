@@ -1,3 +1,4 @@
+#include "render/page_content.h"
 #include "ui/controls/text.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
@@ -562,7 +563,7 @@ void Reader::buildReadingPage()
         session->imageAt(point, [guard, request](QImage image) {
             if (guard && guard->imageRequest == request && guard->imageViewer->isVisible()
                 && !guard->lifecycleHidden && !guard->closing) {
-                const auto id = image.text("kobalt.image_id");
+                const auto id = imageContentId(image);
                 guard->imageViewer->setImage(std::move(image), guard->book->imageView(id));
             }
         });

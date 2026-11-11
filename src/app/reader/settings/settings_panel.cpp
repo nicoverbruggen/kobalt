@@ -1534,6 +1534,7 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
     auto *section = new ui::ListHeader(card);
     section->setObjectName("rrSettingsFontSection");
     section->setShaded(true);
+    section->setTopDivider(true);
     section->setFixedHeight(section->sizeHint().height());
     rows->addWidget(section);
     auto *choices = new ui::RadioList(card);

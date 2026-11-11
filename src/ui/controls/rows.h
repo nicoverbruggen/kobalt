@@ -143,6 +143,13 @@ public:
     void setTrailingInset(int pixels);
     void setShaded(bool shaded);
 
+    // List popups can add a top rule without changing headers in other contexts.
+    void setTopDivider(bool shown)
+    {
+        topDivider = shown;
+        update();
+    }
+
     QLabel *leftLabel() const { return left; }
 
     QLabel *rightLabel() const { return right; }
@@ -156,7 +163,7 @@ protected:
 private:
     QLabel *left, *right;
     int trailingInset = 0;
-    bool shaded = false;
+    bool shaded = false, topDivider = false;
 };
 
 // Caption and controls share a row when both have room. Narrow screens put

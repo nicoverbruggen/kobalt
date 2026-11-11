@@ -248,6 +248,7 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
     fontSectionBar = new ui::Panel(this);
     fontSectionBar->setObjectName("rrFontSectionBar");
     fontSectionBar->setFill(QPalette::Midlight);
+    fontSectionBar->setDividers(Qt::TopEdge);
     fontSection = new ui::InterfaceLabel(fontSectionBar);
     fontSection->setObjectName("rrFontSection");
     fontSection->setFont(ui::captionFont(ui::px(18)));

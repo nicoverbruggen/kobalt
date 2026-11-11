@@ -534,6 +534,8 @@ void ListHeader::paintEvent(QPaintEvent *)
     // Styles can replace Midlight when a list creates headers after theme replay.
     const auto background = shaded ? sectionColor(this) : palette().color(QPalette::Window);
     painter.fillRect(rect(), background);
+    if (topDivider)
+        painter.fillRect(0, 0, width(), metrics::control::border, dividerColor(this));
     painter.fillRect(0, height() - metrics::control::border, width(), metrics::control::border,
                      dividerColor(this));
 }

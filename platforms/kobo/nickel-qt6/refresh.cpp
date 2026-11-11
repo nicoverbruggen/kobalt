@@ -1,3 +1,4 @@
+#include "display_format.h"
 #include "support/diagnostics.h"
 #include "../display/annotation_damage.h"
 #include "platform/api/kobo_refresh.h"
@@ -89,6 +90,7 @@ void setReaderRefreshWindow(QWidget *widget)
     cancelPageAnimation();
     keyboardPixels.clear();
     readerWindow = widget;
+    setDisplayFormatWindow(widget);
     previousDark = false;
 }
 
@@ -107,6 +109,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         nativeFlush(store, region, target, offset, flags);
         return;
     }
+    verifyDisplayFormat(store);
     choosePageFormat(store);
     if (!readerOwnsScreen() || store->window() != readerWindow->windowHandle()
         || (target && target != store->window()) || !offset.isNull() || region.isEmpty()

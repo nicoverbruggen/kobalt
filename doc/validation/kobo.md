@@ -10,6 +10,16 @@ The portable platform checks keep their original assertions with path and fixtur
 
 An unavailable authorization check at wake closes the hidden reader through local-only disposal. It must not write native progress or reading time without a confirmed account. Active Qt 5 account checks retry failed reads between event-loop turns with no SQLite busy wait.
 
+## Qt6 display format guard
+
+On a MediaTek backend that reports `RGBA8888`, Kobalt checks premultiplied drawing before enabling the reader-window allocation hook. Already-optimized formats and other display drivers remain unchanged. The check uses the actual screen format rather than a firmware version or panel colour.
+
+Only fresh window-image allocations made during the registered Kobalt reader's native backing-store resize or begin-paint call use `RGBA8888_Premultiplied`. Nested calls for other windows disable the allocation scope. Existing images are never relabelled. Nickel windows, separate native dialogs, the shared compositor image and the framebuffer retain their native formats. Translucent child controls still use Qt's format-aware painting.
+
+`display-format-hook` records installation with scope `reader-window`. The reader's first flush records `display-format-verified` with its actual image format and allocation count. A missed initial allocation fails verification and disables further substitutions. Set `KOBALT_DISABLE_DISPLAY_FORMAT_HOOK=1` before Nickel starts for a control run.
+
+`pewter.display-format` checks format selection, translucent drawing equivalence and nested allocation scopes in the Qt6 SDK. Firmware validation must also check the real reader format, page turns, panels, annotations, rotation, sleep/wake and return to Nickel. These checks do not establish physical-device display behavior.
+
 ## Pewter: the fake Nickel
 
 Pewter tests the firmware adapters in `platforms/kobo/nickel-qt5/` and `nickel-qt6/` with the Kobo SDKs. Run `bash platforms/kobo/build.sh qt5 --check` or `qt6 --check` from the repository root, or `cmake --build --preset mac-kobo-checks` from `platforms/desktop/` for both. The check builds the tests with the mod library and runs them with CTest in the prepared image. CI runs the same check in each Kobo build job before the package build, and a failure stops the job before the package is built. `pewter.progress` runs in both SDKs. `pewter.qt5-refresh`, the [Qt5 refresh check](display.md#qt5-refresh-adapter), runs in the Qt5 SDK. To run them by hand in the image, configure with `-DKOBALT_BUILD_TESTS=ON`, build the `kobo-tests` target and run `ctest --test-dir ../../build/kobo-qt5` from `platforms/kobo/`.

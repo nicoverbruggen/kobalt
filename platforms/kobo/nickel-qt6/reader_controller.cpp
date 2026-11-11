@@ -1,3 +1,4 @@
+#include "display_format.h"
 #include "../common/diagnostics.h"
 #include "platforms/kobo/common/native_symbol.h"
 #include "support/qt_compat.h"
@@ -542,6 +543,7 @@ int initialize()
     kobalt::diagnostic("installation", { { "temporary", false } });
 #  endif
 #endif
+    kobalt::installDisplayFormatHook();
     kobalt::initializeNativeTileCoverProbe();
     auto *startup = new Startup(qApp);
     beginOpening = [startup](const void *volume, const void *context) {

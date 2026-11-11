@@ -212,6 +212,17 @@ if(KOBALT_BUILD_TESTS)
     set_tests_properties(pewter.event-history PROPERTIES LABELS "pewter;kobo;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
     set(tests kobalt-pewter-tests kobalt-tile-cover-tests kobalt-event-history-tests)
+    if(KOBALT_QT_MAJOR EQUAL 6)
+        add_executable(kobalt-display-format-tests "${KOBALT_ROOT}/tests/pewter/display_format.cpp")
+        set_target_properties(kobalt-display-format-tests PROPERTIES AUTOMOC OFF)
+        target_include_directories(kobalt-display-format-tests PRIVATE "${KOBALT_ROOT}")
+        target_compile_options(kobalt-display-format-tests PRIVATE ${kobo_warning_options})
+        target_link_libraries(kobalt-display-format-tests PRIVATE Qt6::Gui)
+        add_test(NAME pewter.display-format COMMAND kobalt-display-format-tests)
+        set_tests_properties(pewter.display-format PROPERTIES LABELS "pewter;kobo;qt6"
+            ENVIRONMENT "${test_environment}" TIMEOUT 30)
+        list(APPEND tests kobalt-display-format-tests)
+    endif()
     set_tests_properties(pewter.progress PROPERTIES LABELS "pewter;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
 

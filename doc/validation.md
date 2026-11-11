@@ -108,6 +108,7 @@ Diagnostic event writes run on their own thread. `flushDiagnostics()` waits for 
 | Forwarded blocking reasons | `blocking-forwarders.allow` | An `AllowBlocking` scope that takes its reason from a caller, outside a listed function |
 | Reader names | `reader-properties.allow` | A `"reader_*"` string in `src/`, `platforms/` or `tests/` that is not listed with its meaning. Most are Qt properties, and a misspelled property reads as empty. |
 | Short timers | `short-timers.allow` | A literal timer from 1 to 99 ms in `src/app/` or `src/ui/`, outside a listed function. 0 ms is allowed. |
+| Reading headers below `reading/` | `reading-leaf.allow` | An include of a `reading/` header that is not listed, in `src/engine/`, `src/storage/`, `src/render/`, `src/platform/`, `src/ui/`, `src/publication/` or `src/support/`. These folders sit below `reading/`. List only headers with plain types that need nothing else from `reading/`. |
 
 Run `cmake -P platforms/checks/source-checks.cmake` from the repository root, or `ctest --preset mac -R build.sourceChecks`, which also checks that planted matches and stale entries fail. The checks read source text. They do not follow calls through other functions, so a write that a helper hides is a matter for the [main-thread guard](#main-thread-guard).
 

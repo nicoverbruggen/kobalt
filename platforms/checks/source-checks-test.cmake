@@ -41,8 +41,15 @@ void Planted::wait(const char *reason)
 }
 ]=])
 file(WRITE "${scratch}/src/ui/clean.cpp" "void Clean::run() { QTimer::singleShot(250, this, [] {}); }\n")
+file(WRITE "${scratch}/src/engine/planted.cpp" [=[#include "engine/planted.h"
+// #include "reading/comment.h" does not count.
+#include "reading/planted.h"
+]=])
+# A reading/ include above reading/ is not checked.
+file(WRITE "${scratch}/src/app/above.cpp" "#include \"reading/above.h\"\n")
 set(empty "${scratch}/empty")
-foreach(list IN ITEMS storage-io blocking-reasons blocking-forwarders reader-properties short-timers)
+foreach(list IN ITEMS storage-io blocking-reasons blocking-forwarders reader-properties short-timers
+        reading-leaf)
     file(WRITE "${empty}/${list}.allow" "# Nothing is allowed.\n")
 endforeach()
 run_check("${scratch}" "${empty}" result output)
@@ -51,7 +58,8 @@ foreach(expected IN ITEMS
         "timer shorter than 100 ms: src/app/planted.cpp:9 in Planted::save"
         "unlisted reader_ name: `reader_planted` at src/app/planted.cpp:11"
         "unlisted AllowBlocking reason: `planted wait` at src/app/planted.cpp:16"
-        "blocks with a reason from its caller: src/app/planted.cpp:17 in Planted::wait")
+        "blocks with a reason from its caller: src/app/planted.cpp:17 in Planted::wait"
+        "includes an unlisted reading/ header below reading/: `reading/planted.h` at src/engine/planted.cpp:3")
     string(FIND "${output}" "${expected}" position)
     if(result EQUAL 0 OR position EQUAL -1)
         message(FATAL_ERROR "Planted match not reported as `${expected}`:\n${output}")
@@ -60,6 +68,9 @@ endforeach()
 if(output MATCHES "planted.cpp:(7|10)[^0-9]" OR output MATCHES "clean.cpp")
     message(FATAL_ERROR "A comment, a 0 ms timer or a 250 ms timer was reported:\n${output}")
 endif()
+if(output MATCHES "reading/(comment|above)\\.h")
+    message(FATAL_ERROR "A reading/ include in a comment or above reading/ was reported:\n${output}")
+endif()
 
 set(lists "${scratch}/lists")
 file(WRITE "${lists}/storage-io.allow" "src/app/planted.cpp|Planted::save|Fixture.\n")
@@ -67,6 +78,7 @@ file(WRITE "${lists}/short-timers.allow" "src/app/planted.cpp|Planted::save|Fixt
 file(WRITE "${lists}/blocking-forwarders.allow" "src/app/planted.cpp|Planted::wait|Fixture.\n")
 file(WRITE "${lists}/blocking-reasons.allow" "planted wait\n")
 file(WRITE "${lists}/reader-properties.allow" "reader_planted|Fixture.\n")
+file(WRITE "${lists}/reading-leaf.allow" "reading/planted.h\n")
 run_check("${scratch}" "${lists}" result output)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "Allowlisted matches failed:\n${output}")
@@ -75,9 +87,10 @@ endif()
 file(APPEND "${lists}/storage-io.allow" "src/app/planted.cpp|Planted::gone|Fixture.\n")
 file(APPEND "${lists}/blocking-reasons.allow" "gone wait\n")
 file(APPEND "${lists}/reader-properties.allow" "reader_gone|Fixture.\n")
+file(APPEND "${lists}/reading-leaf.allow" "reading/gone.h\n")
 run_check("${scratch}" "${lists}" result output)
 foreach(expected IN ITEMS "remove it: src/app/planted.cpp|Planted::gone" "without a use, remove it: gone wait"
-        "remove it: reader_gone")
+        "remove it: reader_gone" "remove it: reading/gone.h")
     string(FIND "${output}" "${expected}" position)
     if(result EQUAL 0 OR position EQUAL -1)
         message(FATAL_ERROR "Stale allowlist entry not reported as `${expected}`:\n${output}")

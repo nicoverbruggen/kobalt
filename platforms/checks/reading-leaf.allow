@@ -1,0 +1,13 @@
+# reading/ headers that code below reading/ may include, checked by
+# source-checks.cmake. The lower folders are src/engine, src/storage,
+# src/render, src/platform, src/ui, src/publication and src/support. Each line
+# is one header. List only headers with plain types that need nothing else
+# from reading/. Remove a line when its last include goes.
+reading/appearance_settings.h
+reading/chapter.h
+reading/header_footer.h
+reading/logical_word_counter.h
+reading/page_turn_animation.h
+reading/reading_density.h
+reading/reading_progress.h
+reading/sleep_screen.h

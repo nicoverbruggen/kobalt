@@ -7,6 +7,7 @@
 #   blocking-forwarders.allow  scopes whose reason comes from a caller
 #   reader-properties.allow  "reader_*" names with their meaning
 #   short-timers.allow       app and UI timers shorter than 100 ms
+#   reading-leaf.allow       reading/ headers that the lower folders may include
 #
 # A change to an allowlist is a decision for the user. Run:
 #
@@ -82,6 +83,15 @@ kobalt_check_names("unlisted reader_ name" "${hits}" "${LISTS}/reader-properties
 kobalt_scan("${ROOT}" "${interface_sources}"
     "(singleShot|setInterval|[.>]start)[ \t]*\\([ \t]*([1-9][0-9]?)[ \t]*[,)]" hits)
 kobalt_check_sites("timer shorter than 100 ms" "${hits}" "${LISTS}/short-timers.allow" problems)
+
+# engine, storage, render, platform, ui, publication and support sit below
+# reading/. They may include only the listed reading/ headers, which hold
+# plain types and need nothing else from reading/.
+kobalt_list_sources("${ROOT}"
+    "src/engine;src/storage;src/render;src/platform;src/ui;src/publication;src/support" lower_sources)
+kobalt_scan("${ROOT}" "${lower_sources}" "#[ \t]*include[ \t]*[<\"](reading/[^\">]+)[\">]" hits)
+kobalt_check_names("includes an unlisted reading/ header below reading/" "${hits}"
+    "${LISTS}/reading-leaf.allow" problems)
 
 if(problems)
     list(REMOVE_DUPLICATES problems)

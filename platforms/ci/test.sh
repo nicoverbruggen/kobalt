@@ -47,16 +47,27 @@ mkdir -p "build/kobo-$1"
 suffix=
 [[ $KOBALT_VERBOSE_DIAGNOSTICS != ON ]] || suffix=-diagnostic
 printf '%s' "$KOBALT_VERBOSE_DIAGNOSTICS" > "build/kobo-$1/Kobalt-$1$suffix.zip"
+printf '%s' "$JOBS" > "build/kobo-$1/jobs"
+printf '%s' "$KOBALT_DOCKER_CPUS" > "build/kobo-$1/cpus"
 SH
 for target in qt5 qt6; do
     for channel in release interim; do
         if [[ $channel == release ]]; then ref=refs/tags/v1.0-beta.6; expected=OFF
         else ref=refs/heads/develop; expected=ON; fi
-        GITHUB_REF=$ref KOBALT_RELEASE_VERSION=v1.0-beta.6 PATH="$scratch/ci-bin:$PATH" \
+        KOBALT_DOCKER_CPUS=2 JOBS=3 GITHUB_REF=$ref KOBALT_RELEASE_VERSION=v1.0-beta.6 PATH="$scratch/ci-bin:$PATH" \
             bash "$scratch/ci/platforms/ci/build.sh" "$target"
         [[ $(cat "$scratch/ci/build/release/Kobalt-$target.zip") == "$expected" ]]
+        [[ $(cat "$scratch/ci/build/kobo-$target/jobs") == 3 ]]
+        [[ $(cat "$scratch/ci/build/kobo-$target/cpus") == 2 ]]
     done
 done
+env -u JOBS -u KOBALT_DOCKER_CPUS GITHUB_REF=refs/heads/develop KOBALT_RELEASE_VERSION=v1.0-beta.6 PATH="$scratch/ci-bin:$PATH" \
+    bash "$scratch/ci/platforms/ci/build.sh" qt6
+[[ $(cat "$scratch/ci/build/kobo-qt6/jobs") == "$(getconf _NPROCESSORS_ONLN)" ]]
+[[ $(cat "$scratch/ci/build/kobo-qt6/cpus") == "$(getconf _NPROCESSORS_ONLN)" ]]
+if JOBS=invalid PATH="$scratch/ci-bin:$PATH" bash "$scratch/ci/platforms/ci/build.sh" qt6 > "$scratch/error" 2>&1; then
+    echo 'CI accepted invalid compiler parallelism' >&2; exit 1
+fi
 # Run the native wrapper with fake tools, including its container command.
 # Tags cannot request reduced coverage; branches keep the everyday mode.
 mkdir -p "$scratch/native/platforms/ci" "$scratch/native/dependencies" "$scratch/native-bin"
@@ -65,17 +76,27 @@ cp dependencies/cache.cmake "$scratch/native/dependencies/"
 cp platforms/sdk-image.sh "$scratch/native/platforms/"
 cat > "$scratch/native-bin/cmake" <<'SH'
 #!/bin/bash
-if [[ $1 == -P ]]; then printf '%s/cache\n' "$KOBALT_NATIVE_FIXTURE"; fi
+if [[ $1 == -P ]]; then
+    printf '%s/cache\n' "$KOBALT_NATIVE_FIXTURE"
+else
+    for argument in "$@"; do
+        if [[ $argument == -DKOBALT_SDK_ID=* ]]; then
+            printf '%s' "${argument#*=}" > "$KOBALT_NATIVE_FIXTURE/sdk-id"
+        fi
+    done
+fi
 SH
 cat > "$scratch/native-bin/ctest" <<'SH'
 #!/bin/bash
 printf '%s\n' "$KOBALT_TEST_ALL_VARIANTS" > "$KOBALT_NATIVE_FIXTURE/variants"
+printf '%s\n' "$*" > "$KOBALT_NATIVE_FIXTURE/ctest-args"
 exit "${KOBALT_NATIVE_FAILURE:-0}"
 SH
 cat > "$scratch/native-bin/docker" <<'SH'
 #!/bin/bash
 set -eu
 [[ $1 != pull ]] || exit 0
+if [[ $1 == image && $2 == inspect ]]; then printf 'fixture-sdk\n'; exit 0; fi
 [[ $1 == run ]]
 shift
 environment=()
@@ -93,13 +114,26 @@ for ref in refs/heads/develop refs/heads/main refs/tags/v1.0-beta.6 refs/tags/v1
         CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
         PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh"
     [[ $(cat "$scratch/native/variants") == "$expected" ]]
+    [[ $(cat "$scratch/native/sdk-id") == fixture-sdk ]]
 done
 if GITHUB_REF=refs/tags/v1.0 KOBALT_NATIVE_FAILURE=7 JOBS=2 \
     CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
     PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh"; then
     echo 'Native CI ignored a failed test suite' >&2; exit 1
 fi
-echo 'PASS: native CI coverage selection and failure propagation'
+GITHUB_REF=refs/heads/develop JOBS=2 KOBALT_TEST_SHARD=2 KOBALT_TEST_SHARDS=3 \
+    CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
+    PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh" test
+[[ $(cat "$scratch/native/ctest-args") == '--preset linux --parallel 2 -I 2,,3' ]]
+rm "$scratch/native/ctest-args"
+GITHUB_REF=refs/heads/develop JOBS=2 \
+    CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
+    PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh" build
+[[ ! -e "$scratch/native/ctest-args" ]]
+if KOBALT_TEST_SHARD=3 KOBALT_TEST_SHARDS=2 bash platforms/ci/native-tests.sh test; then
+    echo 'Native CI accepted an invalid shard' >&2; exit 1
+fi
+echo 'PASS: native CI coverage selection, sharding and failure propagation'
 # Source manifests must have disjoint names and complete checksums.
 jq -es '([.[0]|keys[]] + [.[1]|keys[]]) as $keys | ($keys|length)==($keys|unique|length) and (all(.[]|to_entries[]; (.key|test("^[a-z0-9-]+$")) and (.value.url|startswith("https://")) and (.value.sha256|test("^[a-f0-9]{64}$"))))' dependencies/manifest.json dependencies/release-sources.json > /dev/null
 # Fail closed before consulting tools or producing an APK when secrets are absent.

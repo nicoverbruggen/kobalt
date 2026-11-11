@@ -6,6 +6,9 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 version=$(bash platforms/ci/version.sh)
 export KOBALT_RELEASE_VERSION=$version
+export JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
+[[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || { echo 'JOBS must be positive' >&2; exit 2; }
+echo "CI compiler jobs: $JOBS"
 image=$(sh platforms/sdk-image.sh "$1")
 docker pull "$image"
 mkdir -p build/release
@@ -19,6 +22,7 @@ if [[ $1 == android ]]; then
         bash platforms/android/test-signing.sh "build/android-$arch/android-build/build/outputs/apk/release/android-build-release-unsigned.apk"
     cp "$package" "$package.signing.txt" build/release/
 else
+    export KOBALT_DOCKER_CPUS=${KOBALT_DOCKER_CPUS:-$JOBS}
     verbose=$(bash platforms/ci/diagnostics.sh "$version")
     # The adapter tests run first, with the package's logging, so the package
     # build reuses their objects.

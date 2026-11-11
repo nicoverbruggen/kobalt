@@ -1,5 +1,5 @@
 {
-  "sdk_image": "ghcr.io/nicoverbruggen/kobuild@sha256:bb32726522eec89ea849ca85916d6819d492c8dfdcf3855c868bfa96dc21964c",
+  "sdk_image": "ghcr.io/nicoverbruggen/kobuild@sha256:d42aac6284da20c197d8ebcd9e17629e6e47842e5d00279523e3abb91cc95d5e",
   "qt_version": "6.11.3",
   "qtbase_revision": "138f955f0b5e50e4a6c2ee1e78a2279db52ae9e3",
   "qtsensors_revision": "30f06d8b10eb1e5f3d7d592fb2802bebee1ea541",

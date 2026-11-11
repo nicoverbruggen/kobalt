@@ -1777,26 +1777,58 @@ int main(int argc, char **argv)
                 "Short-book bars exceed their width cap or are not centered");
         require(!graph.findChild<QPushButton *>("rrGraphNext")->isVisible(),
                 "A short graph exposed paging controls");
-        // One scale for the whole book, capped so that one outlier does not flatten the rest.
+        // Long chapters retain their ratios even when all exceed three times
+        // the median. The maximum on another graph page still sets the scale.
         QVector<kobalt::ChapterLink> even;
         for (int i = 0; i < 21; ++i)
             even.append({ QString::number(i), QString::number(i), i, 0, 1000 });
-        even.last().words = 10000000;
+        even[18].words = 6500;
+        even[19].words = 9500;
+        even[20].words = 10000;
         graph.setData(even, {}, true, {});
         QApplication::processEvents();
         require(graph.graphPages() == 1, "Twenty-one chapters did not fit on one dense chart");
-        const auto capped = bars->grab().toImage();
-        const int evenWidth = (capped.width() - 20 * chapterMetrics::gapWide) / 21,
-                  evenLeft = (capped.width() - 21 * evenWidth - 20 * chapterMetrics::gapWide) / 2;
-        const int outlierLeft = evenLeft + 20 * (evenWidth + chapterMetrics::gapWide);
-        require(qGray(capped.pixel(evenLeft,
-                                   chartHeight - chartHeight / chapterMetrics::scaleCap + 2))
-                        == 0,
-                "An outlier flattened the other chapters");
-        // A capped chapter reaches the top of the chart with an unbroken outline.
-        for (int y = 0; y < chartHeight; ++y)
-            require(qGray(capped.pixel(outlierLeft, y)) == 0,
-                    "A capped chapter lacks its full height or is marked");
+        auto barHeight = [&](const QImage &image, int x) {
+            for (int y = 0; y < chartHeight; ++y)
+                if (qGray(image.pixel(x, y)) == 0)
+                    return chartHeight - y;
+            return 0;
+        };
+        const auto proportional = bars->grab().toImage();
+        const int evenWidth = (proportional.width() - 20 * chapterMetrics::gapWide) / 21,
+                  evenLeft = (proportional.width() - 21 * evenWidth - 20 * chapterMetrics::gapWide)
+                / 2;
+        auto barLeft = [&](int index) {
+            return evenLeft + index * (evenWidth + chapterMetrics::gapWide);
+        };
+        require(barHeight(proportional, barLeft(18)) == int(0.65 * chartHeight)
+                        && barHeight(proportional, barLeft(19)) == int(0.95 * chartHeight)
+                        && barHeight(proportional, barLeft(20)) == chartHeight,
+                "Unequal long chapters lost their proportions");
+        graph.setDense(false);
+        QApplication::processEvents();
+        const auto firstPage = bars->grab().toImage();
+        const int sparseWidth = (firstPage.width() - 19 * chapterMetrics::sparseGap) / 20;
+        const int sparseLeft =
+                (firstPage.width() - 20 * sparseWidth - 19 * chapterMetrics::sparseGap) / 2;
+        require(barHeight(firstPage, sparseLeft + 19 * (sparseWidth + chapterMetrics::sparseGap))
+                        == int(0.95 * chartHeight),
+                "Paging normalized a chapter against only the visible chapters");
+        graph.findChild<QPushButton *>("rrGraphNext")->click();
+        QApplication::processEvents();
+        const auto secondPage = bars->grab().toImage();
+        require(barHeight(secondPage, (secondPage.width() - barWidth) / 2) == chartHeight,
+                "The longest chapter lost its height on the final graph page");
+        graph.setDense(true);
+        even.last().words = 10000000;
+        graph.setData(even, {}, true, {});
+        QApplication::processEvents();
+        const auto extreme = bars->grab().toImage();
+        require(barHeight(extreme, barLeft(0)) == int(chapterMetrics::minimumBarHeight)
+                        && barHeight(extreme, barLeft(20)) == chartHeight,
+                "Short chapters lost their visible minimum or changed the longest chapter");
+        require(!graph.findChild<QLabel *>("rrGraphLengthCaption"),
+                "A length label occupies the chart padding");
         for (int i = 21; i < 80; ++i)
             even.append({ QString::number(i), QString::number(i), i, 0, 1000 });
         graph.setData(even, {}, true, {});
@@ -1995,6 +2027,57 @@ int main(int argc, char **argv)
                                         "chapter_graph.no_chapter_lengths_available")
                         && !bars->isVisible(),
                 "Empty completed counts appeared as loading or stale bars");
+    }
+    {
+        using namespace kobalt;
+        namespace cm = ui::metrics::chapters;
+        const QVector<ChapterLink> balanced{ { "One", "a", 0, 0, 1000 },
+                                             { "Two", "b", 1, 0, 1000 },
+                                             { "Three", "c", 2, 0, 1000 } };
+        auto uneven = balanced;
+        uneven.last().words = 10000;
+        for (const int ppi : { 300, 227 }) {
+            ui::setDensity(ppi);
+            for (const qreal textScale : { 1.0, 1.5 }) {
+                ui::setLargeText(textScale);
+                for (const QSize design :
+                     { QSize(1072, 1448), QSize(1264, 1680), QSize(1855, 2474), QSize(1448, 1072),
+                       QSize(720, 1600), QSize(1600, 720) }) {
+                    const bool phone = qMin(design.width(), design.height()) == 720;
+                    if (phone && textScale > 1)
+                        continue; // Phone mode supports 100% interface text.
+                    const int controls = ui::px(phone ? 224 : 300);
+                    QWidget host;
+                    host.resize(ui::px(design.width()), ui::px(design.height()));
+                    ChapterGraph graph(&host);
+                    graph.resize(host.width(), cm::graphHeight);
+                    graph.setAvailableHeight(host.height() - controls);
+                    graph.setData(balanced, {}, true, {});
+                    auto *bars = graph.findChild<QWidget *>("rrChapterBars");
+                    host.show();
+                    graph.open();
+                    const int bottom = graph.geometry().bottom();
+                    const int balancedHeight = bars->height();
+                    graph.setData(uneven, {}, true, {});
+                    require(graph.geometry().bottom() == bottom,
+                            "Chart growth moved the bottom edge into the navigation bar");
+                    const bool larger = qMin(design.width(), design.height()) > 1072;
+                    require(larger ? bars->height() > balancedHeight
+                                   : bars->height() == balancedHeight,
+                            "Chart growth ignores physical screen size or chapter lengths");
+                    require(graph.height() <= host.height() - controls,
+                            "Stats overlaps the reserved toolbars");
+                    require(bars->y() == int(cm::rowHeight) + int(cm::barsTop),
+                            "The graph lost its top padding");
+                    for (const auto *name :
+                         { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell" })
+                        require(graph.findChild<QWidget *>(name)->height() == int(cm::cellHeight),
+                                "Chart growth shrank a Stats cell");
+                }
+            }
+        }
+        ui::setDensity(300);
+        ui::setLargeText(1);
     }
     {
         using namespace kobalt;

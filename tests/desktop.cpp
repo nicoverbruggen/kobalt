@@ -11543,6 +11543,53 @@ private slots:
         QVERIFY(capture(fixture, name + "-bionic-reading"));
     }
 
+    void chapterGraphLengths_data() { screenshotVariants(); }
+
+    // Checks proportional chapter lengths and the Stats layout in every viewport.
+    void chapterGraphLengths()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavStats"));
+        auto *graph = dynamic_cast<ChapterGraph *>(fixture.widget("rrChapterGraph"));
+        QVERIFY(graph && graph->isVisible());
+        QVector<ChapterLink> chapters;
+        for (int i = 0; i < 23; ++i)
+            chapters.append({ QString("Chapter %1").arg(i + 1), QString::number(i), i, 0, 1000 });
+        chapters[5].words = 8900;
+        chapters[6].words = 9500;
+        chapters[7].words = 6500;
+        graph->setDense(true);
+        graph->setData(chapters, { 7, 8, 1, 65 }, true, {});
+        graph->setChapterNumber(8, 23);
+        graph->setProgress("The next chapter", 1, 65, 10, 100, 300);
+        graph->setReading(55, 100000, 64 * 60000, 170 * 60000);
+        const auto *bars = graph->findChild<QWidget *>("rrChapterBars");
+        QVERIFY(bars);
+        QVERIFY(!graph->findChild<QLabel *>("rrGraphLengthCaption"));
+        QVERIFY(bars->y()
+                >= int(ui::metrics::chapters::rowHeight) + int(ui::metrics::chapters::barsTop));
+        auto *navigation = fixture.widget("rrBottomNavigation");
+        QVERIFY(navigation);
+        QVERIFY(graph->geometry().bottom() < navigation->y());
+        const auto *cells = graph->findChild<QWidget *>("rrGraphChapterCell");
+        QVERIFY(cells && graph->rect().contains(cells->geometry()));
+        // The fixture replaces the data after opening Stats. Match the rule
+        // that Navigation::update positions during a normal reader refresh.
+        auto *rule = fixture.widget("rrNavigationLowerEdge");
+        QVERIFY(rule);
+        rule->move(0, graph->y());
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-stats-lengths"));
+    }
+
     void publications()
     {
         QFETCH(QString, publication);

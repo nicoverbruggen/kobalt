@@ -56,7 +56,7 @@ private:
     ChapterSelection selection;
     int first = 0;
     int topPadding = 0, availableHeight = 0;
-    // The chart's height: the design height, or less on a short screen.
+    // The chart can grow on larger screens and shrink on short ones.
     int chartHeight() const;
     bool ready = false, dense = true;
     qint64 words = -1, chapterTime = -1, bookTime = -1;

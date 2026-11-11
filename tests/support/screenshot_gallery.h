@@ -259,6 +259,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "session-timeout", "New session after sleep" },
         { "settings-time-remaining-format", "Time remaining format" },
         { "stats", "Reading statistics" },
+        { "stats-lengths", "Unequal chapter lengths" },
         { "stats-dense-graph", "Dense chapter graph" },
         { "stats-dense-reading", "Moby Dick" },
         { "stats-dense-setting", "Dense graph setting" },

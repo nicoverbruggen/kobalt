@@ -39,20 +39,11 @@ protected:
         const int visible = qMin(count, int(chapters.size()) - first);
         if (visible <= 0)
             return;
-        // One scale for the whole book, so a chapter keeps its height on every
-        // page. A single outlier is capped instead of flattening the others.
-        QVector<qint64> counts;
+        // Use the longest chapter in the whole book on every graph page.
+        // Long chapters must keep their proportions, even beside short ones.
         qint64 maximum = 1;
         for (const auto &chapter : chapters)
-            if (chapter.words > 0) {
-                counts.append(chapter.words);
-                maximum = qMax(maximum, chapter.words);
-            }
-        std::sort(counts.begin(), counts.end());
-        const double cap = counts.isEmpty()
-                ? double(maximum)
-                : double(counts[counts.size() / 2]) * chapters::scaleCap;
-        const double scale = qMax(1.0, qMin(double(maximum), cap));
+            maximum = qMax(maximum, chapter.words);
         const int chart = barsHeight;
         const int barWidth = qBound(1, (width() - (visible - 1) * gap) / visible,
                                     int(chapters::maximumBarWidth));
@@ -61,8 +52,11 @@ protected:
         auto left = [&](int index) { return offset + (index - first) * (barWidth + gap); };
         for (int i = first; i < first + visible; ++i) {
             const qint64 words = qMax<qint64>(0, chapters[i].words);
-            const bool capped = words > scale;
-            const int height = capped ? chart : qMax(2, int(double(words) * chart / scale));
+            // Keep short chapters visible without letting the minimum exceed
+            // the space left for bars on a short screen.
+            const int height = qMin(chart,
+                                    qMax(int(chapters::minimumBarHeight),
+                                         int(double(words) / double(maximum) * chart)));
             const QRect bar(left(i), chart - height, barWidth, height);
             if (selection.current >= 0 && i < selection.current) {
                 painter.fillRect(bar, ink);
@@ -477,13 +471,32 @@ int ChapterGraph::chartTop() const
 
 int ChapterGraph::chartHeight() const
 {
+    const int base = chapters::chartHeight;
     if (availableHeight <= 0)
-        return chapters::chartHeight;
+        return base;
     const int room = availableHeight - topPadding - chapters::rowHeight - chapters::cellHeight
             - (paged() ? int(chrome::actionHeight) : 0);
-    // Keep bars at least a third of their design height.
-    const int least = chapters::chartHeight - chapters::barsHeight * 2 / 3;
-    return qBound(least, room, int(chapters::chartHeight));
+    // A larger physical short edge earns some extra bar height. Wide phones
+    // and six-inch screens in landscape keep their existing chart size.
+    const int shortEdge =
+            qMin(width(), parentWidget() ? parentWidget()->height() : availableHeight);
+    const int growth = qBound(0, (shortEdge - int(chapters::growthShortEdge)) / 2,
+                              int(chapters::maximumGrowth));
+    QVector<qint64> lengths;
+    for (const auto &chapter : chapters)
+        if (chapter.words > 0)
+            lengths.append(chapter.words);
+    std::sort(lengths.begin(), lengths.end());
+    // All pages use the same book-wide distribution. Uneven books benefit
+    // most from the extra resolution, without taking all the exposed paper.
+    const double spread = lengths.isEmpty()
+            ? 1.0
+            : qBound(1.0, double(lengths.last()) / double(lengths[lengths.size() / 2]), 3.0);
+    const int extra =
+            qMin(int(growth * spread / 3), qMax(0, room - base - int(chapters::exposedPaper)));
+    // Leave the text and cells intact when only a very short chart fits.
+    const int least = base - chapters::barsHeight + 2;
+    return qBound(least, room, base + extra);
 }
 
 void ChapterGraph::paintEvent(QPaintEvent *event)
@@ -505,8 +518,12 @@ void ChapterGraph::arrange()
     const int chart = chartHeight();
     const int requiredHeight = topPadding + chapters::rowHeight + chart + chapters::cellHeight
             + (paged() ? chrome::actionHeight : 0);
-    if (height() != requiredHeight)
+    if (height() != requiredHeight) {
+        const int bottom = geometry().bottom();
         resize(width(), requiredHeight);
+        if (isVisible())
+            move(x(), bottom - height() + 1);
+    }
     const QFont captionMetrics(ui::captionFont()),
             titleMetrics(ui::interfaceFont(chrome::labelText));
     chapterCaption->setGeometry(chrome::inset, topPadding + chapters::captionTop, inner / 2,
@@ -518,7 +535,7 @@ void ChapterGraph::arrange()
                               ui::interfaceLineHeight(titleMetrics));
     chapterTitle->setText(ui::elideInterfaceText(title, chapterTitle->font(), inner));
     const int top = chartTop();
-    bars->barsHeight = chapters::barsHeight - (chapters::chartHeight - chart);
+    bars->barsHeight = chapters::barsHeight + chart - chapters::chartHeight;
     bars->setGeometry(chrome::inset, top + chapters::barsTop, inner,
                       chart - chapters::barsTop - ui::metrics::control::border);
     message->setGeometry(chrome::inset, top, inner, chart);

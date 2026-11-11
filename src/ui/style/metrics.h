@@ -216,6 +216,7 @@ inline constexpr Px textGap{ 12 }, blockTop{ 28 };
 namespace chapters {
 // Stats: the chapter row, the chart of every chapter and three figure cells.
 inline constexpr Px rowHeight{ 120 }, captionTop{ 20 }, titleTop{ 60 }, chartHeight{ 248 };
+inline constexpr Px growthShortEdge{ 1072 }, maximumGrowth{ 150 }, exposedPaper{ 180 };
 inline constexpr Px barsTop{ 30 }, barsHeight{ 150 }, tickGap{ 4 }, tickHeight{ 8 }, tickWidth{ 2 },
         numberTop{ 14 };
 // Cells have the same padding above the caption and below the detail, which
@@ -227,9 +228,10 @@ inline constexpr TextPx unitText{ chrome::descriptionText };
 inline constexpr Px graphHeight{ rowHeight + chartHeight + cellHeight };
 // Dense charts show every chapter. Past that, and in the sparse chart, a pager
 // bar appears between the chart and the cells.
-inline constexpr int wideChapters = 30, mediumChapters = 60, sparseBars = 20, scaleCap = 3;
+inline constexpr int wideChapters = 30, mediumChapters = 60, sparseBars = 20;
 inline constexpr Px gapWide{ 8 }, gapMedium{ 6 }, gapNarrow{ 4 };
-inline constexpr Px minimumBarWidth{ 6 }, maximumBarWidth{ 64 }, narrowBarWidth{ 16 };
+inline constexpr Px minimumBarHeight{ 20 }, minimumBarWidth{ 6 }, maximumBarWidth{ 64 },
+        narrowBarWidth{ 16 };
 inline constexpr Px sparseGap{ 12 };
 inline constexpr Px outline{ 2 }, fillInset{ 4 }, narrowFillInset{ 2 };
 } // namespace chapters

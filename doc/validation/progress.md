@@ -12,6 +12,8 @@ Same-timestamp KEPUB span locations that drop a positive character offset to zer
 
 Lifecycle checks also cover closing after an offset round trip or a conflict choice, saving a kept local position at the next sleep without a page turn, and delaying a progress choice until the image viewer closes.
 
+The `component.ui` assertions cover linear chapter lengths above the visible minimum height, one scale across graph pages, chart padding, and chart height at different densities and text sizes. The `chapterGraphLengths` gallery case shows unequal long chapters beside short ones in each supported viewport.
+
 These checks do not establish physical Kobo or Android behavior.
 
 ## Clara BW reading time

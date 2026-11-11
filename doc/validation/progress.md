@@ -14,6 +14,8 @@ Lifecycle checks also cover closing after an offset round trip or a conflict cho
 
 The `component.ui` assertions cover linear chapter lengths above the visible minimum height, one scale across graph pages, chart padding, and chart height at different densities and text sizes. The `chapterGraphLengths` gallery case shows unequal long chapters beside short ones in each supported viewport.
 
+`engine.columns` checks a screen shared by two chapters in both reading directions. Chapter progress follows the source position at the start of the screen for both publication and supplied chapter lists. Jumping to the next chapter's source position selects that chapter even when it starts in the second column.
+
 These checks do not establish physical Kobo or Android behavior.
 
 `engine.large-toc` generates songbooks at 1,023, 1,024, 1,025, 9,999, 10,000 and 10,001 destinations. It checks the total bound, hierarchy, source-based titles, navigation, native-list fallback, graph lengths, word-count reuse, reflow and cached reopening. `desktop.largeToc` (label `input`) opens the real reader's last chapter-list page, selects Song 10,000 and checks that row widgets stay bounded by the visible page. Unindexed content beyond the cap retains the existing last-title fallback. These fixtures do not reproduce the original reported songbook.

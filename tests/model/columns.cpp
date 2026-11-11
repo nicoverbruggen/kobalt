@@ -113,10 +113,9 @@ void chapterProgress()
                                     && !model.searchPage("B0", nextScreen).hits.isEmpty(),
                             "Shared screen lost one of its chapters");
                     const auto mixed = model.chapterProgress();
-                    require(supplied ? mixed.title == "Short chapter" && mixed.page == 2
-                                            && mixed.pages == 2
-                                     : mixed.title == "Next chapter" && mixed.page == 1
-                                            && mixed.pages == 7,
+                    // The first column still belongs to the short chapter,
+                    // regardless of where the table of contents came from.
+                    require(mixed.title == "Short chapter" && mixed.page == 2 && mixed.pages == 2,
                             "Shared-screen chapter label or page count changed");
                 }
                 require(model.goTo(chapters[1].position), "Cannot open the next chapter");

@@ -462,6 +462,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     animationOption->setEnabled(animationsSupported);
     bionicOption = check(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
                          strings::get("reader.bionic_description"));
+    // Zen mode comes first, so it is the first option Settings shows.
+    section(displayPage, generalOptions, "rrDisplayMenuSection",
+            strings::get("settings.section_reading_menu"));
+    zenModeOption = check(displayPage, "rrZenMode", strings::get("settings.zen_mode"),
+                          strings::get("settings.zen_mode_description"));
+    generalOptions->addWidget(zenModeOption);
     section(displayPage, generalOptions, "rrDisplayScreenSection",
             strings::get("settings.section_screen"));
     refreshButton = ui::makeCaptionButton(displayPage, nullptr, "rrScreenRefresh",
@@ -812,6 +818,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                                denseGraphOption,       hideTabLabelsOption,
                                                wifiPowerSaverOption,   disableStandbyOption,
                                                automaticOpeningOption, minimalAnnotationOption };
+    options.prepend(zenModeOption);
     for (auto *option : options) {
         if (!option)
             continue;

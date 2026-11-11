@@ -880,8 +880,18 @@ void ReadingPage::refreshContent(bool reading, bool now)
 void ReadingPage::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
+    // Paper over the header and footer while Zen mode's menu is open. The
+    // menu's groups lie over the rest of the page.
+    const auto paintCovers = [&] {
+        if (!stripsBlank)
+            return;
+        const auto paper = palette().color(QPalette::Window);
+        painter.fillRect(0, 0, width(), topHeight(), paper);
+        painter.fillRect(0, height() - bottomHeight(), width(), bottomHeight(), paper);
+    };
     if (pageTurnAnimation.state() == QTimeLine::NotRunning) {
         paintContents(painter);
+        paintCovers();
         return;
     }
     const QRect body(0, topHeight(), width(), renderedBody.height());
@@ -1059,6 +1069,15 @@ void ReadingPage::paintBody(QPainter &painter) const
     for (const auto &r : selection)
         painter.fillRect(r.translated(0, topHeight()), Qt::white);
     painter.restore();
+}
+
+void ReadingPage::setStripsHidden(bool hidden)
+{
+    if (stripsBlank == hidden)
+        return;
+    stripsBlank = hidden;
+    update(QRect(0, 0, width(), topHeight()));
+    update(QRect(0, height() - bottomHeight(), width(), bottomHeight()));
 }
 
 void ReadingPage::paintContents(QPainter &painter, bool sleeping) const

@@ -830,6 +830,23 @@ bool Reader::event(QEvent *event)
     }
     if (event->type() == QEvent::UpdateRequest && isVisible()) {
         setProperty("reader_navigation_dismissal", false);
+        if (flashAfterZenSwitch && !general->isVisible() && !appearanceEdit.applying()) {
+            flashAfterZenSwitch = false;
+            requestFlash("zen-mode");
+        }
+        // In Zen mode, Chapters and Bookmarks cover the page beside the bottom
+        // group, and Settings returns to a menu of separate groups. The
+        // display would refresh those disjoint parts one by one. Opening the
+        // views and returning from Settings use one screen update instead, as
+        // opening the menu does.
+        const bool zen = zenMode() && topControls->isVisible();
+        const bool zenSettings = zen && general->isVisible();
+        const bool zenView = zen && !zenSettings
+                && (bookmarkList->isVisible() || (choices->isVisible() && !choosingTypography));
+        if ((zenView && !zenViewPainted) || (zen && zenSettingsPainted && !zenSettings))
+            setProperty("reader_controls_opening", true);
+        zenViewPainted = zenView;
+        zenSettingsPainted = zenSettings;
         const bool panelVisible = navigation && navigation->isVisible() && topControls->isVisible()
                 && navigationActive >= 0;
         // Compare completed frames, not the action that requested a close.
@@ -1531,12 +1548,21 @@ void Reader::closeSearch()
     ++searchEpoch;
     pendingSearchHit = {};
     session->cancelSearch();
+    const bool searchOpen = searchPanel && searchPanel->isVisible();
     if (searchPanel) {
         searchPanel->stop();
         searchPanel->hide();
     }
     updateOrientationBlock();
     syncNavigation();
+    // Search opened from the Zen menu clears the panel as it closes, also
+    // without a jump. A pending cleanup must not wait for the next turn.
+    // Without an open Search, as when Settings opens, the flag keeps its
+    // meaning for the menu.
+    if (searchOpen && std::exchange(flashAfterMenu, false)) {
+        requestFlash("menu");
+        page->update();
+    }
 }
 
 void Reader::openSeek()
@@ -1581,7 +1607,8 @@ void Reader::openSearch(const QString &query)
         dismissLookup();
     else
         clearAnnotationDraft();
-    dismissControls();
+    const bool zenMenu = zenMode() && topControls->isVisible();
+    dismissControls(false);
     if (searchOriginal.isEmpty()) {
         searchOriginal = session->state().value("position").toString();
         searchOriginalPage = session->page();
@@ -1597,6 +1624,10 @@ void Reader::openSearch(const QString &query)
     for (auto *widget : searchPanel->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(searchPanel);
+    // Search covers the page. The Zen menu's cleanup waits for the page
+    // Search returns to.
+    if (zenMenu)
+        flashAfterMenu = true;
 }
 
 bool Reader::linksActive() const
@@ -1874,12 +1905,28 @@ void Reader::configureNavigation()
     navigation->activated = [this](kobalt::NavigationDestination destination) {
         activateNavigation(destination);
     };
+    navigation->zenStatsToggled = [this] { toggleZenStats(); };
 }
 
 void Reader::activateNavigation(kobalt::NavigationDestination destination)
 {
     using Nav = kobalt::NavigationDestination;
     session->cancelPendingTurn();
+    if (destination == Nav::Bookmarks) {
+        // The selected tab closes the list, as its close cell does.
+        if (bookmarkList->isVisible())
+            bookmarkList->back();
+        else
+            openBookmarks();
+        syncNavigation();
+        return;
+    }
+    if (destination == Nav::Annotate) {
+        bookmarkList->hide();
+        toolbarComposition.annotate->click();
+        syncNavigation();
+        return;
+    }
     bookmarkList->hide();
     if (destination != Nav::Seek) {
         pageScrubber->cancel();
@@ -2110,6 +2157,10 @@ void Reader::syncNavigation()
     QWidget *cover = fieldChooser && fieldChooser->isVisible() ? fieldChooser : nullptr;
     const bool chromeSheet = !cover && headerFooterView && headerFooterView->isVisible();
     using Nav = kobalt::NavigationDestination;
+    const bool zen = zenMode();
+    // Only Zen mode's reading stats use the estimates here.
+    const bool zenStats = zen && preferences.value("zen_stats").toBool(false);
+    const auto estimates = zenStats ? book->estimates() : decltype(book->estimates()){};
     const auto update = [&] {
         const int active = cover || chromeSheet ? int(Nav::Layout)
                 : chapters                      ? int(Nav::Chapters)
@@ -2121,7 +2172,10 @@ void Reader::syncNavigation()
                 : chapterGraph->isVisible() ? int(Nav::Stats)
                 : seekOpen                  ? int(Nav::Seek)
                                             : -1;
-        navigationActive = active;
+        // Zen mode opens Bookmarks from a tab, so closing it with that tab
+        // gets the same single screen update as closing Chapters.
+        navigationActive =
+                active < 0 && zen && bookmarkList->isVisible() ? int(Nav::Bookmarks) : active;
         const auto position = session->state().value("position").toString();
         if (imageSuggestionPosition != position) {
             imageSuggestionPosition = position;
@@ -2150,24 +2204,31 @@ void Reader::syncNavigation()
                                   .arg(linkHistory.last().chapter));
         navigation->update(
                 size(),
-                { bottomControls, menu, chapterGraph,
+                { bottomControls,
+                  menu,
+                  chapterGraph,
                   cover                               ? cover
                           : bookmarkList->isVisible() ? static_cast<QWidget *>(bookmarkList)
                                                       : static_cast<QWidget *>(choices),
                   cover || chapters || bookmarkList->isVisible(),
                   topControls->isVisible() && !searchPanel->isVisible()
                           && !acknowledgments->isVisible(),
-                  !session->busy() && !appearanceEdit.applying(), services.lightAvailable(), active,
+                  !session->busy() && !appearanceEdit.applying(),
+                  services.lightAvailable(),
+                  active,
                   linkReturnAvailable
                           ? strings::get("reader.return_page").arg(linkHistory.last().page + 1)
                           : QString(),
-                  topActions, general, lightPopup,
+                  topActions,
+                  general,
+                  lightPopup,
                   linkHistory.isEmpty() || linkHistory.last().chapter.isEmpty()
                           ? QString()
                           : strings::get("reader.jumped_from_chapter")
                                     .arg(linkHistory.last().chapter),
-                  seekOpen,
-                  pageNavigation::menuView(preferences) == pageNavigation::MenuView::Seek
+                  seekOpen && !zen,
+                  zen ? -1
+                          : pageNavigation::menuView(preferences) == pageNavigation::MenuView::Seek
                           ? int(Nav::Seek)
                           : pageNavigation::menuView(preferences) == pageNavigation::MenuView::Stats
                           ? int(Nav::Stats)
@@ -2175,7 +2236,24 @@ void Reader::syncNavigation()
                   (isNarrowWidth(width(), ui::density())
                    || preferences.value("hide_tab_labels").toBool(false)),
                   features::enabled(preferences, features::Navigate),
-                  features::enabled(preferences, features::Stats) });
+                  features::enabled(preferences, features::Stats),
+                  zen,
+                  features::enabled(preferences, features::Annotations),
+                  features::enabled(preferences, features::Bookmarks)
+                          || features::enabled(preferences, features::Annotations),
+                  annotationMode,
+                  bookmarkList->isVisible(),
+                  zenStats,
+                  int(book->sessionReadingMilliseconds() / 60000),
+                  book->sessionPageTurns(),
+                  estimates.chapterMilliseconds < 0
+                          ? -1
+                          : int(qMax<qint64>(1, (estimates.chapterMilliseconds + 30000) / 60000)),
+                  estimates.learningPace,
+                  !features::enabled(preferences, features::Bookmarks) });
+        // The Zen menu leaves the page visible beside its groups, so the
+        // header and footer hide while it is open. The page does not reflow.
+        page->setStripsHidden(zen && topControls->isVisible());
     };
     update();
     syncLinkDiscovery();
@@ -2238,7 +2316,7 @@ void Reader::showControls()
     }
     updateLinkReturn();
     syncNavigation();
-    if (!appearanceEdit.panelDestination()) {
+    if (!appearanceEdit.panelDestination() && !zenMode()) {
         switch (pageNavigation::menuView(preferences)) {
         case pageNavigation::MenuView::Seek:
             seekOpen = true;
@@ -2266,7 +2344,7 @@ void Reader::showControls()
     }
 }
 
-void Reader::dismissControls()
+void Reader::dismissControls(bool returnToPage)
 {
     setProperty("reader_navigation_dismissal", false);
     if (pageScrubber)
@@ -2284,6 +2362,10 @@ void Reader::dismissControls()
             finishPreview();
         return;
     }
+    // The Zen groups lie over the text and the header and footer return
+    // under them. Every way out of the Zen menu clears the panel.
+    if (returnToPage && zenMode() && topControls->isVisible())
+        flashAfterMenu = true;
     choices->hide();
     bookmarkList->hide();
     general->hide();

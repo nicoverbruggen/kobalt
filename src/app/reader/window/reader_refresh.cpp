@@ -111,6 +111,12 @@ void Reader::refresh()
         page->setViewportTransition(false);
     const auto nextImage = session->image();
     const auto previousPageImage = page->image.cacheKey();
+    // Zen mode's reading stats count each turn that reaches the screen once,
+    // also a page button turn with the menu open. Taps buffered during a
+    // render do not count.
+    if (!session->busy() && session->turnDirection() != 0
+        && nextImage.cacheKey() != previousPageImage)
+        book->countPageTurn();
     showPageImage(nextImage);
     syncAppearancePreview();
     syncLinkDiscovery();
@@ -135,10 +141,12 @@ void Reader::refresh()
     saveSoon();
     // Wait for the selected preview page before clearing the dimmed frame.
     // Settings can also close the menu later than the tap, after applying.
+    // Search opened from the Zen menu covers the page; the flash waits for
+    // the page it returns to.
     if ((flashAfterMenu || flashAfterPagePreview) && (!flashAfterPagePreview || !session->busy())
         && isVisible() && !appearanceEdit.panelOpen()
         && (flashAfterPagePreview || !topControls->isVisible()) && !general->isVisible()
-        && !choices->isVisible()) {
+        && !choices->isVisible() && !(searchPanel && searchPanel->isVisible())) {
         const bool preview = std::exchange(flashAfterPagePreview, false);
         flashAfterMenu = false;
         requestFlash(preview ? "page-preview" : "menu");
@@ -612,12 +620,13 @@ void Reader::syncReadingControls()
                                  != int(kobalt::reader::AppearancePage::Typography));
     findChild<QPushButton *>("rrSettings")->setChecked(general->isVisible());
     const bool settingsOpen = general->isVisible();
-    for (auto *action : std::initializer_list<QWidget *>{
-                 toolbarComposition.exitAction, toolbarComposition.settings,
-                 toolbarComposition.bookmarks, toolbarComposition.annotate,
-                 toolbarComposition.search })
+    // Zen mode moves Search, Annotate and Bookmarks to the bottom tabs.
+    const bool zen = zenMode();
+    for (auto *action : std::initializer_list<QWidget *>{ toolbarComposition.exitAction,
+                                                          toolbarComposition.settings })
         if (action)
             action->setVisible(!settingsOpen);
+    toolbarComposition.search->setVisible(!settingsOpen && !zen);
     const bool bookmarksShown = features::enabled(preferences, features::Bookmarks);
     const auto marksLabel = strings::get(
             !bookmarksShown                                                 ? "annotations.tab"
@@ -634,12 +643,13 @@ void Reader::syncReadingControls()
                       ui::IconRendition::Action });
     }
     toolbarComposition.annotate->setVisible(
-            !settingsOpen && features::enabled(preferences, features::Annotations));
+            !settingsOpen && !zen && features::enabled(preferences, features::Annotations));
     toolbarComposition.bookmarks->setVisible(
-            !settingsOpen
+            !settingsOpen && !zen
             && (features::enabled(preferences, features::Bookmarks)
                 || features::enabled(preferences, features::Annotations)));
-    toolbarComposition.formattingWarning->setVisible(!settingsOpen && session->formattingWarning());
+    toolbarComposition.formattingWarning->setVisible(!settingsOpen && !zen
+                                                     && session->formattingWarning());
     findChild<QPushButton *>("rrGraph")->setEnabled(!session->busy() && !appearanceEdit.applying());
     findChild<QPushButton *>("rrGraph")->setChecked(chapterGraph->isVisible()
                                                     || appearanceEdit.destination()
@@ -754,9 +764,13 @@ void Reader::updateMenuStatus()
             : QString();
     if (menuSession->text() != session)
         menuSession->setText(session);
-    menuSession->setVisible(!hideNativeStatus() && !session.isEmpty());
+    menuSession->setVisible(!hideNativeStatus() && !zenMode() && !session.isEmpty());
     if (clockChanged && navigation && topControls->isVisible())
         navigation->updateSessionGeometry();
+    // Zen mode centers the clock in its group and shows a low battery, and
+    // its reading stats follow the minutes read.
+    if (clockChanged && navigation && topControls->isVisible() && zenMode())
+        syncNavigation();
     if (chapterGraph && chapterGraph->isVisible())
         updateReadingStats();
 }

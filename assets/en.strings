@@ -926,6 +926,17 @@
 "navigation.layout" = "LAYOUT";
 "navigation.light" = "LIGHT";
 "navigation.stats" = "STATS";
+"navigation.search" = "SEARCH";
+"navigation.annotate" = "ANNOTATE";
+"navigation.bookmarks" = "BOOKMARKS";
+"navigation.annotations" = "ANNOTATIONS";
+"navigation.zen" = "ZEN";
+"zen.reading_stats" = "Reading stats";
+"zen.this_session" = "This session";
+"zen.pages_turned" = "Pages turned";
+"zen.chapter_left" = "Chapter left";
+"zen.hours" = "h";
+"zen.minutes" = "min";
 
 /* Arguments: %1, %2 */
 "navigation.page_count" = "%1 of %2";
@@ -1223,6 +1234,8 @@
 
 "settings.hide_tab_labels" = "Hide labels in tabs";
 "settings.hide_tab_labels_description" = "Tabs at the bottom of the screen only display an icon when this is selected.";
+"settings.zen_mode" = "Zen mode";
+"settings.zen_mode_description" = "A special mode for those who want to focus on reading. Simplifies the reading menu user interface.";
 
 "settings.justification_tracking_summary" = "Adjust letter spacing in justified text.";
 

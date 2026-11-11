@@ -211,6 +211,15 @@ inline constexpr TextPx queryText{ 36 };
 inline constexpr Px selectorGap{ 16 }, selectorIcon{ 36 };
 // A label and its description, or a caption and the text below it.
 inline constexpr Px textGap{ 12 }, blockTop{ 28 };
+// Zen mode's reading menu: centered groups of cells at today's six-inch tab
+// width, with rounded outer corners and a rule heavier than the regular bars'.
+inline constexpr Px zenCellWidth{ 214 }, zenCorner{ 28 }, zenRule{ 5 };
+// The top group's cells are wider, so the reading stats below them have room.
+// The stats panel holds one row of figures with their captions and grows with
+// large text. The ≈ of an estimate sits between the number and unit sizes.
+inline constexpr Px zenTopCellWidth{ 250 };
+inline constexpr TextPx zenStatsHeight{ 150 }, zenStatText{ 46 }, zenStatUnit{ 24 },
+        zenStatApproximate{ 34 };
 } // namespace chrome
 
 namespace chapters {

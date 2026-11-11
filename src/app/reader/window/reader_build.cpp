@@ -153,14 +153,17 @@ protected:
         const auto paper = palette().color(QPalette::Window);
         const auto ink = palette().color(QPalette::WindowText);
         painter.fillRect(rect(), pressed ? ink : paper);
-        const QRect iconCell(0, 0, metrics::chrome::cellWidth, height());
+        // Zen mode shows the arrow alone, centered in its cell.
+        const bool arrowOnly = property("reader_arrow_only").toBool();
+        const QRect iconCell =
+                arrowOnly ? rect() : QRect(0, 0, metrics::chrome::cellWidth, height());
         if (property("reader_return_divider").toBool())
             ui::paintEdges(painter, rect(), Qt::RightEdge, palette().color(QPalette::Mid));
         if (!isEnabled())
             painter.setOpacity(.45);
         const auto *title = findChild<QLabel *>("rrReturnTitle");
         qreal letterOffset = 0;
-        if (title && !title->text().isEmpty()) {
+        if (title && !arrowOnly && !title->text().isEmpty()) {
             const auto word = ui::interfaceInkBounds(title->text(), title->font());
             const auto first = ui::interfaceInkBounds(title->text().left(1), title->font());
             letterOffset = (first.top() + first.bottom() - word.top() - word.bottom()) / 2.0;
@@ -1408,6 +1411,7 @@ void Reader::buildSettings()
     minimalAnnotationOption = settings->minimalAnnotationOption;
     automaticOpeningOption = settings->automaticOpeningOption;
     hideTabLabelsOption = settings->hideTabLabelsOption;
+    zenModeOption = settings->zenModeOption;
     wifiPowerSaverOption = settings->wifiPowerSaverOption;
     disableStandbyOption = settings->disableStandbyOption;
     settings->showPowerManagement(wifiPowerSaverVisible());
@@ -1586,6 +1590,7 @@ void Reader::buildSettings()
         settingsHeaderFooterWeight = 2;
         settingsTimeRemainingFormat = "detailed";
         hideTabLabelsOption->setChecked(false);
+        zenModeOption->setChecked(false);
         if (wifiPowerSaverOption)
             wifiPowerSaverOption->setChecked(false);
         for (const auto *key : appearance::fallbackFontKeys)

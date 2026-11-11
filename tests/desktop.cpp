@@ -7952,6 +7952,305 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    // Checks Zen mode's setting, its centered menu groups, the strips it hides
+    // while the menu is open, and its tabs when the marks features are hidden.
+    void settingsZenMode_data()
+    {
+        QTest::addColumn<bool>("marks");
+        QTest::addColumn<bool>("annotationsOnly");
+        QTest::newRow("all-features") << true << false;
+        QTest::newRow("marks-hidden") << false << false;
+        QTest::newRow("annotations-only") << true << true;
+    }
+
+    void settingsZenMode()
+    {
+        QFETCH(bool, marks);
+        QFETCH(bool, annotationsOnly);
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(),
+                                   { { "disable_bookmarks", !marks || annotationsOnly },
+                                     { "disable_annotations", !marks } }));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        // Zen mode is the first option Settings shows.
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrZenMode"));
+        auto *zen = qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"));
+        QVERIFY(zen && !zen->isChecked());
+        for (auto *option : fixture.widget("rrDisplayOptions")->findChildren<QCheckBox *>())
+            if (option != zen && option->isVisible())
+                QVERIFY2(option->y() > zen->y(), qPrintable(option->objectName()));
+        QVERIFY(fixture.press("rrZenMode"));
+        // Switching modes replaces the whole menu, so the first frame after
+        // Settings closes clears the panel.
+        auto *reader = fixture.window.readerWindow();
+        reader->setProperty("reader_full_flash", false);
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool());
+        QTRY_VERIFY(fixture.visible("rrBottomNavigation"));
+        QTRY_VERIFY(reader->property("reader_full_flash").toBool());
+
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        // The header and footer hide. The groups lie over the rest of the page,
+        // clipped to their rounded shape.
+        QVERIFY(page->stripsHidden());
+        QVERIFY(!fixture.widget("rrBottomNavigation")->mask().isEmpty());
+        for (const char *name : { "rrNavChapters", "rrNavSearch", "rrReturn", "rrSettings" })
+            QVERIFY2(fixture.visible(name), name);
+        for (const char *name : { "rrNavSeek", "rrNavText", "rrNavLayout", "rrNavLight",
+                                  "rrNavStats", "rrSearchOpen", "rrAnnotate", "rrBookmarks" })
+            QVERIFY2(!fixture.visible(name), name);
+        QCOMPARE(fixture.visible("rrNavAnnotate"), marks);
+        QCOMPARE(fixture.visible("rrNavBookmarks"), marks);
+        // Both groups are centered and narrower than the window.
+        const int width = fixture.window.readerWindow()->width();
+        const auto *bar = fixture.widget("rrBottomNavigation");
+        QVERIFY(bar->width() < width);
+        QVERIFY(qAbs(bar->geometry().center().x() - width / 2) <= 1);
+        const int cell = fixture.widget("rrNavChapters")->width();
+        QVERIFY(cell <= int(ui::metrics::chrome::zenCellWidth));
+        QCOMPARE(fixture.widget("rrNavSearch")->width(), cell);
+        const auto *exit = fixture.widget("rrReturn");
+        const auto *settings = fixture.widget("rrSettings");
+        const auto *stats = fixture.widget("rrZenStats");
+        // Three equal cells: the back arrow, reading stats and Settings.
+        QCOMPARE(exit->width(), settings->width());
+        QCOMPARE(stats->width(), settings->width());
+        QCOMPARE(exit->x() + exit->width(), stats->x());
+        QCOMPARE(stats->x() + stats->width(), settings->x());
+        QVERIFY(qAbs((exit->x() + settings->geometry().right() + 1) / 2 - width / 2) <= 1);
+        QVERIFY(!fixture.visible("rrReturnTitle"));
+        QVERIFY(!fixture.visible("rrZenStatsPanel"));
+        QCOMPARE(fixture.visible("rrZenMark"), fixture.visible("rrMenuClock"));
+        // The mark keeps the same space to its left as above and below it.
+        if (const auto *mark = fixture.widget("rrZenMark"); mark && mark->isVisible()) {
+            const auto *divider = fixture.widget("rrZenStats");
+            const int above = mark->y(), below = divider->y() - (mark->y() + mark->height());
+            QVERIFY(qAbs(above - below) <= int(ui::metrics::control::border) + 1);
+            QCOMPARE(mark->x() - exit->x(), above);
+        }
+
+        if (marks) {
+            QVERIFY(fixture.press("rrNavBookmarks"));
+            QTRY_VERIFY(fixture.visible("rrBookmarkList"));
+            QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrNavBookmarks"))->isChecked());
+            QVERIFY(fixture.widget("rrZenViewBase")->isVisible());
+            // Bookmarks also ends on the attached tabs' heavy rule.
+            const auto *list = fixture.widget("rrBookmarkList");
+            QCOMPARE(list->mapTo(fixture.window.readerWindow(), QPoint(0, list->height())).y(),
+                     fixture.widget("rrZenViewBase")->y());
+            // Opened views keep the regular top bar.
+            QVERIFY(!fixture.visible("rrZenMark"));
+
+            // Closing Bookmarks with its tab is a tab-panel dismissal, as for
+            // Chapters: one screen update instead of separate partial ones.
+            struct DismissalWatch final : QObject
+            {
+                int count = 0;
+
+                bool eventFilter(QObject *object, QEvent *event) override
+                {
+                    if (event->type() == QEvent::DynamicPropertyChange
+                        && static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()
+                                == "reader_navigation_dismissal"
+                        && object->property("reader_navigation_dismissal").toBool())
+                        ++count;
+                    return false;
+                }
+            } dismissals;
+
+            fixture.window.readerWindow()->installEventFilter(&dismissals);
+            QVERIFY(fixture.press("rrNavBookmarks"));
+            QTRY_VERIFY(!fixture.visible("rrBookmarkList"));
+            QTRY_VERIFY(dismissals.count > 0);
+            fixture.window.readerWindow()->removeEventFilter(&dismissals);
+        }
+        // Opening Chapters is one screen update: the display would otherwise
+        // refresh the view and the paper beside the bottom group separately.
+        reader->setProperty("reader_controls_opening", false);
+        const auto *chaptersTab = fixture.widget("rrNavChapters");
+        const auto tabPlace = [&] {
+            return QRect(chaptersTab->mapTo(fixture.window.readerWindow(), QPoint()),
+                         chaptersTab->size());
+        };
+        const auto menuTab = tabPlace();
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
+        QTRY_VERIFY(reader->property("reader_controls_opening").toBool());
+        // The tabs attach to the view and keep their cells, so the tapped tab
+        // does not move.
+        QCOMPARE(tabPlace(), menuTab);
+        // Chapters fills the screen down to the tabs. Paper covers the page
+        // beside them, from the view's heavy rule to the bottom edge.
+        const auto *base = fixture.widget("rrZenViewBase");
+        QVERIFY(base && base->isVisible());
+        const auto *contents = fixture.widget("rrContents");
+        QCOMPARE(base->y(),
+                 contents->mapTo(fixture.window.readerWindow(), QPoint()).y() + contents->height());
+        QCOMPARE(base->x(), 0);
+        QCOMPARE(base->width(), width);
+        QCOMPARE(base->geometry().bottom(), fixture.window.readerWindow()->height() - 1);
+        QCOMPARE(base->y() + int(ui::metrics::chrome::heavyRule),
+                 chaptersTab->mapTo(fixture.window.readerWindow(), QPoint()).y());
+        {
+            const auto image = const_cast<QWidget *>(base)->grab().toImage();
+            const qreal ratio = image.devicePixelRatio();
+            const int x = image.width() / 2;
+            QCOMPARE(image.pixelColor(x, 0), base->palette().color(QPalette::WindowText));
+            QCOMPARE(image.pixelColor(x, int(ui::metrics::chrome::heavyRule * ratio)),
+                     base->palette().color(QPalette::Window));
+        }
+        // The group is square under the rule: its mask keeps its top corners.
+        QVERIFY(bar->mask().contains(QPoint(0, bar->height() - chaptersTab->height())));
+        // The regular bar's full-width rule stays hidden; the paper draws it.
+        QVERIFY(!fixture.visible("rrNavigationLowerEdge"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(!fixture.visible("rrContents"));
+        QVERIFY(!base->isVisible());
+        // Back in the menu, the group is rounded again.
+        QVERIFY(!bar->mask().contains(QPoint(0, bar->height() - chaptersTab->height())));
+        QCOMPARE(tabPlace(), menuTab);
+        // Closing the menu brings the strips back without a new layout.
+        const auto position = fixture.state().value("position");
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrBottomNavigation"));
+        QVERIFY(!page->stripsHidden());
+        QCOMPARE(fixture.state().value("position"), position);
+        // Every way out of the Zen menu clears the panel, also a chapter jump.
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavChapters"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter1"));
+        reader->setProperty("reader_full_flash", false);
+        QVERIFY(fixture.press("rrChapter1"));
+        QTRY_VERIFY(!fixture.visible("rrBottomNavigation"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(reader->property("reader_full_flash").toBool());
+        QVERIFY(!page->stripsHidden());
+        // Search covers the page, so the cleanup waits for the page it
+        // returns to.
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavSearch"));
+        reader->setProperty("reader_full_flash", false);
+        QVERIFY(fixture.press("rrNavSearch"));
+        QTRY_VERIFY(fixture.visible("rrSearchQuery"));
+        QVERIFY(!reader->property("reader_full_flash").toBool());
+        auto *query = reader->findChild<QLineEdit *>("rrSearchQuery");
+        QVERIFY(query);
+        query->setText("Trevelyan");
+        QVERIFY(fixture.press("rrSearchSubmit"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
+        QVERIFY(!reader->property("reader_full_flash").toBool());
+        QVERIFY(fixture.press("rrSearchResult0"));
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QTRY_VERIFY(!fixture.visible("rrSearch"));
+        QTRY_VERIFY(reader->property("reader_full_flash").toBool());
+        // Leaving Search without a jump clears the panel too, not on the
+        // next page turn.
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavSearch"));
+        QVERIFY(fixture.press("rrNavSearch"));
+        QTRY_VERIFY(fixture.visible("rrSearchBack"));
+        reader->setProperty("reader_full_flash", false);
+        QVERIFY(fixture.press("rrSearchBack"));
+        QTRY_VERIFY(!fixture.visible("rrSearch"));
+        QTRY_VERIFY(reader->property("reader_full_flash").toBool());
+
+        // The reading stats count this session's page turns. The stats
+        // button is a lasting toggle. The panel opens with the menu until it
+        // is turned off, and the choice is saved.
+        QVERIFY(fixture.turnPage(1));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.turnPage(1));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrZenStats"));
+        const int closedHeight = fixture.widget("rrSettings")->parentWidget()->height();
+        QVERIFY(fixture.press("rrZenStats"));
+        QTRY_VERIFY(fixture.visible("rrZenStatsPanel"));
+        QVERIFY2(fixture.widget("rrZenStatsPanel")->accessibleName().contains("2 Pages turned"),
+                 qPrintable(fixture.widget("rrZenStatsPanel")->accessibleName()));
+        QVERIFY(fixture.widget("rrSettings")->parentWidget()->height() > closedHeight);
+        // A page button turn with the menu open counts too.
+        QVERIFY(fixture.turnPage(1));
+        QTRY_VERIFY2(fixture.widget("rrZenStatsPanel")->accessibleName().contains("3 Pages turned"),
+                     qPrintable(fixture.widget("rrZenStatsPanel")->accessibleName()));
+        QVERIFY(fixture.visible("rrZenStatsPanel"));
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("zen_stats").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrBottomNavigation"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrZenStatsPanel"));
+        QVERIFY(fixture.press("rrZenStats"));
+        QTRY_VERIFY(!fixture.visible("rrZenStatsPanel"));
+        QTRY_VERIFY(!storage::readJson(fixture.paths.preferences()).value("zen_stats").toBool());
+
+        if (marks) {
+            // Without the Bookmarks feature the tab opens annotations, as the
+            // toolbar button does.
+            QCOMPARE(fixture.widget("rrNavBookmarks")->accessibleName(),
+                     strings::get(annotationsOnly ? "navigation.annotations"
+                                                  : "navigation.bookmarks"));
+            // Annotate turns highlight mode on and closes the menu.
+            auto *annotate = qobject_cast<QPushButton *>(fixture.widget("rrAnnotate"));
+            QVERIFY(fixture.press("rrNavAnnotate"));
+            QTRY_VERIFY(annotate->isChecked());
+            QTRY_VERIFY(!fixture.visible("rrBottomNavigation"));
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrNavAnnotate"));
+            QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrNavAnnotate"))->isChecked());
+            QVERIFY(fixture.press("rrNavAnnotate"));
+            QTRY_VERIFY(!annotate->isChecked());
+            QTRY_VERIFY(!fixture.visible("rrBottomNavigation"));
+        }
+
+        // Returning from Settings to the Zen menu is one screen update too.
+        if (!fixture.visible("rrBottomNavigation"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrSettingsClose"));
+        reader->setProperty("reader_controls_opening", false);
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(fixture.visible("rrNavChapters"));
+        QTRY_VERIFY(reader->property("reader_controls_opening").toBool());
+
+        // Turning Zen mode off brings back the regular menu.
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrZenMode"));
+        QVERIFY(fixture.press("rrZenMode"));
+        reader->setProperty("reader_full_flash", false);
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(!storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool());
+        QTRY_VERIFY(fixture.visible("rrNavText"));
+        QTRY_VERIFY(reader->property("reader_full_flash").toBool());
+        for (const char *name : { "rrNavLayout", "rrSearchOpen", "rrReturnTitle" })
+            QVERIFY2(fixture.visible(name), name);
+        QCOMPARE(fixture.visible("rrAnnotate"), marks);
+        for (const char *name : { "rrZenMark", "rrZenStats", "rrNavSearch", "rrNavAnnotate" })
+            QVERIFY2(!fixture.visible(name), name);
+        QVERIFY(fixture.widget("rrBottomNavigation")->mask().isEmpty());
+        QVERIFY(fixture.widget("rrSettings")->parentWidget()->mask().isEmpty());
+        QCOMPARE(fixture.widget("rrBottomNavigation")->width(),
+                 fixture.window.readerWindow()->width());
+        QCOMPARE(fixture.widget("rrSettings")->width(), int(ui::metrics::chrome::cellWidth));
+        QVERIFY(!page->stripsHidden());
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(!fixture.window.readerWindow());
+    }
+
     // Checks the shared list and toolbar when either marks feature is hidden independently.
     void settingsFeatureLists_data()
     {
@@ -8868,7 +9167,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrNavLayout"));
         QVERIFY(capture("columns-landscape"));
         // A short landscape list can leave enough space for a hint on its
-        // final page. That space must stay empty on both reader sizes.
+        // final page. That space must stay empty on both reader sizes. An
+        // earlier page shows the hint only when its rows leave room for it.
+        bool hintShown = false;
         for (int screen : { 1, 2 }) {
             fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(screen);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
@@ -8881,18 +9182,28 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(hint && next && previous);
             for (int page = 0; page < 8 && previous->isEnabled(); ++page)
                 QVERIFY(fixture.press("rrSettingsOptionsPrevious"));
-            QTRY_VERIFY(hint->isVisible());
-            for (int page = 0; page < 8 && next->isEnabled(); ++page)
+            bool beforeLast = false;
+            for (int page = 0; page < 8 && next->isEnabled(); ++page) {
+                QCoreApplication::processEvents();
+                beforeLast = hint->isVisible();
+                hintShown = hintShown || beforeLast;
                 QVERIFY(fixture.press("rrSettingsOptionsNext"));
+            }
             QVERIFY(!next->isEnabled());
             QTRY_VERIFY(!hint->isVisible());
             QVERIFY(capture(QString("display-last-landscape-%1").arg(screen)));
-            QVERIFY(fixture.press("rrSettingsOptionsPrevious"));
-            QTRY_VERIFY(hint->isVisible());
-            QVERIFY(fixture.press("rrSettingsOptionsNext"));
-            QTRY_VERIFY(!hint->isVisible());
+            // Coming back from a page with the hint hides it again.
+            if (beforeLast) {
+                QVERIFY(fixture.press("rrSettingsOptionsPrevious"));
+                QTRY_VERIFY(hint->isVisible());
+                QVERIFY(fixture.press("rrSettingsOptionsNext"));
+                QTRY_VERIFY(!hint->isVisible());
+            }
             QVERIFY(fixture.press("rrSettingsClose"));
         }
+        // At least one reader size has room for the hint, so the checks
+        // above saw it shown and hidden.
+        QVERIFY(hintShown);
         rotate->trigger();
         QTRY_COMPARE(fixture.window.readerWindow()->size(), portrait);
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
@@ -10273,6 +10584,85 @@ private slots:
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         ::chapterGroups(fixture, screenshotVariant(preset, dark));
+    }
+
+    void zenMenu_data() { screenshotVariants(); }
+
+    void zenMenu()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        auto saved = storage::readJson(fixture.paths.preferences());
+        saved["zen_mode"] = true;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        if (!fixture.visible("rrBottomNavigation"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavSearch"));
+        const auto name = screenshotVariant(preset, dark);
+        QVERIFY(capture(fixture, name + "-zen-menu"));
+        QVERIFY(fixture.press("rrZenStats"));
+        QTRY_VERIFY(fixture.visible("rrZenStatsPanel"));
+        QVERIFY(capture(fixture, name + "-zen-stats"));
+        QVERIFY(fixture.press("rrZenStats"));
+        QTRY_VERIFY(!fixture.visible("rrZenStatsPanel"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
+        QVERIFY(capture(fixture, name + "-zen-chapters"));
+    }
+
+    // Zen mode shows the battery only at 20% or lower.
+    void zenBattery_data() { screenshotVariants(); }
+
+    void zenBattery()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.battery = [] { return BatteryStatus{ 18, false, false }; };
+        });
+        QVERIFY(fixture.prepared);
+        auto saved = storage::readJson(fixture.paths.preferences());
+        saved["zen_mode"] = true;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        if (!fixture.visible("rrBottomNavigation"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavSearch"));
+        QCOMPARE(fixture.visible("rrMenuBattery"), fixture.visible("rrMenuClock"));
+        // The battery icon keeps the same space to its right as the Zen mark
+        // to its left, measured by their ink.
+        if (fixture.visible("rrMenuBattery")) {
+            auto *battery = fixture.widget("rrMenuBattery");
+            const auto *mark = fixture.widget("rrZenMark");
+            const int groupLeft = fixture.widget("rrReturn")->x();
+            const int groupRight = fixture.widget("rrSettings")->geometry().right();
+            const auto image = battery->grab().toImage();
+            const qreal ratio = image.devicePixelRatio();
+            const int ink = qGray(battery->palette().color(QPalette::WindowText).rgb());
+            int inkRight = -1;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = image.width() - 1; x > inkRight; --x)
+                    if (qAbs(qGray(image.pixel(x, y)) - ink) < 64)
+                        inkRight = x;
+            QVERIFY(inkRight >= 0);
+            const int right = groupRight - (battery->x() + int(inkRight / ratio));
+            QVERIFY2(qAbs(right - (mark->x() - groupLeft)) <= 1,
+                     qPrintable(QString("%1 vs %2").arg(right).arg(mark->x() - groupLeft)));
+        }
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-zen-battery"));
     }
 
     void standbySettings_data() { screenshotVariants(); }

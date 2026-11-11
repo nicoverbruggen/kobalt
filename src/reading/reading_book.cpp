@@ -233,6 +233,7 @@ void ReadingBook::observeReading(bool learnPace)
                     history->stop(completedReadingMilliseconds,
                                   session_->state().value("position").toString());
                 sessionBaseline = completedReadingMilliseconds;
+                pageTurns = 0;
             }
         }
         sleepingReading = false;

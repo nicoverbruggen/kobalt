@@ -30,13 +30,25 @@ struct ToolbarComposition
     QLayout *rows = nullptr;
     QWidget *exitAction = nullptr;
     QPushButton *settings = nullptr, *bookmarks = nullptr, *annotate = nullptr;
-    QLabel *clock = nullptr, *session = nullptr, *battery = nullptr;
+    QLabel *clock = nullptr, *session = nullptr;
+    ui::BatteryIndicator *battery = nullptr;
     ui::BluetoothIndicator *bluetooth = nullptr;
     ui::WifiIndicator *wifi = nullptr;
     QPushButton *formattingWarning = nullptr;
     QPushButton *search = nullptr, *sync = nullptr;
 };
-enum class NavigationDestination { Chapters, Seek, Text, Layout, Light, Stats, Search };
+// Search, Annotate and Bookmarks are tabs only in Zen mode.
+enum class NavigationDestination {
+    Chapters,
+    Seek,
+    Text,
+    Layout,
+    Light,
+    Stats,
+    Search,
+    Annotate,
+    Bookmarks
+};
 
 struct NavigationState
 {
@@ -51,6 +63,18 @@ struct NavigationState
     int defaultView = -1;
     bool hideTabLabels = false;
     bool navigateEnabled = true, statsEnabled = true;
+    // Zen mode keeps Chapters, Search, Annotate and Bookmarks in centered
+    // groups. Annotate and Bookmarks follow their hidden-feature choices.
+    bool zen = false;
+    bool annotationsEnabled = true, bookmarksEnabled = true;
+    bool annotating = false, bookmarksOpen = false;
+    // Zen mode's reading stats under the top group. Negative chapter minutes
+    // mean no estimate yet. An approximate estimate shows "≈".
+    bool zenStats = false;
+    int sessionMinutes = 0, pageTurns = 0, chapterMinutes = -1;
+    bool chapterApproximate = false;
+    // Without the Bookmarks feature, the Bookmarks tab opens annotations only.
+    bool annotationsOnly = false;
 };
 } // namespace kobalt
 
@@ -69,6 +93,18 @@ public:
     void setLightTab(bool shown);
     void setDefaultView(int destination, bool navigateEnabled = true, bool statsEnabled = true);
     void setLabelsHidden(bool hidden);
+    void setZen(bool zen, bool annotations, bool bookmarks, bool annotating, bool bookmarksOpen,
+                bool annotateAvailable, bool bookmarksAvailable, bool annotationsOnly);
+
+    bool zenMode() const { return zen; }
+
+    // Under a full-screen view, Zen mode's tabs keep their cells but lose the
+    // rounded frame: the view's heavy rule runs above them.
+    void setZenAttached(bool attached);
+
+    // The width of each tab in Zen mode's centered group.
+    int zenCellWidth(int available) const;
+    int zenTabCount() const;
     std::function<void()> returnRequested;
     std::function<void()> stayRequested;
     int navigationHeight() const;
@@ -82,7 +118,12 @@ private:
     void updateLabels();
     bool panelOpen = false;
     bool labelsHidden = false;
+    bool zen = false, zenAttached = false;
+    bool zenAnnotating = false, zenBookmarksOpen = false, zenAnnotateAvailable = true,
+         zenBookmarksAvailable = true;
     QVector<QPushButton *> tabs;
+    QBoxLayout *tabLayout = nullptr;
+    QWidget *zenFrame = nullptr;
     ui::CaptionButton *returnButton;
     QWidget *returnRow;
 };
@@ -98,6 +139,8 @@ public:
     std::function<void(NavigationDestination)> activated;
     std::function<void()> returnRequested;
     std::function<void()> stayRequested;
+    // Zen mode's stats button turns the reading stats panel on or off.
+    std::function<void()> zenStatsToggled;
 
     int statsTopPadding() const { return ui::metrics::chrome::statsTopPadding; }
 
@@ -119,12 +162,18 @@ public:
 
     int statusHeight() const
     {
-        const int status =
-                statusVisible && !inlineStatus ? int(ui::metrics::chrome::statusHeight) : 0;
+        // Zen mode's top group always keeps the status line above its cells.
+        const int status = statusVisible && (!inlineStatus || zenTop)
+                ? int(ui::metrics::chrome::statusHeight)
+                : 0;
         return safeTop >= status ? safeTop : safeTop + status;
     }
 
-    int toolbarHeight() const { return statusHeight() + ui::metrics::chrome::actionHeight; }
+    int toolbarHeight() const
+    {
+        return statusHeight() + ui::metrics::chrome::actionHeight
+                + (zenTop && zenStatsShown ? int(ui::metrics::chrome::zenStatsHeight) : 0);
+    }
 
     Qt::Edge panelEdge() const { return Qt::TopEdge; }
 
@@ -148,15 +197,26 @@ public:
     bool contains(QPoint global) const;
 
 private:
+    void placeToolbar(QSize size, const QVector<QWidget *> &actions, bool zen);
+    void placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
+                         const NavigationState &state);
     ui::PageScrubber *scrubber = nullptr;
     bool statusVisible = true;
+    bool zenTop = false, zenStatsShown = false;
+    QLabel *zenMark;
+    QPushButton *zenStatsButton;
+    QWidget *zenStatsPanel;
     bool inlineStatus = false;
     int safeTop = 0, safeBottom = 0;
     BottomNavigation *bar;
     ui::Panel *toolbar;
     QLayout *toolbarRows;
     QWidget *exitAction, *rules, *settings, *bookmarks, *annotate, *upperEdge, *lowerEdge;
-    QLabel *clock, *session, *battery;
+    // Paper beside Zen mode's bottom group while Chapters or Bookmarks fills
+    // the screen above it.
+    QWidget *zenViewBase;
+    QLabel *clock, *session;
+    ui::BatteryIndicator *battery;
     ui::BluetoothIndicator *bluetooth;
     ui::WifiIndicator *wifi;
     QPushButton *formattingWarning;

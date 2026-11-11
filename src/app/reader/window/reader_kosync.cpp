@@ -240,7 +240,7 @@ void Reader::updateKosyncToolbar()
         return;
     toolbarComposition.sync->setVisible(features::enabled(preferences, features::Kosync)
                                         && kosyncClient->signedIn() && !kosyncClient->automatic()
-                                        && !book->usesNativeCloudSync());
+                                        && !book->usesNativeCloudSync() && !zenMode());
     toolbarComposition.sync->setEnabled(!syncCoordinator->busy());
 }
 

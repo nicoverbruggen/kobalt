@@ -135,6 +135,9 @@ public:
     explicit BatteryIndicator(QWidget *parent);
     void setStatus(int percent, bool charging);
 
+    // The charge in percent, or a negative value while it is unknown.
+    int level() const { return percent; }
+
 protected:
     void paintEvent(QPaintEvent *) override;
 

@@ -50,6 +50,12 @@ public:
 
     const QImage &headerImage() const { return headerPixels; }
 
+    // Leaves the header and footer bands blank without changing the page's
+    // layout. Zen mode's reading menu uses it while it is open.
+    void setStripsHidden(bool hidden);
+
+    bool stripsHidden() const { return stripsBlank; }
+
     const QImage &footerImage() const { return footerPixels; }
 
     // What the header and footer show. `notice`, such as an error, replaces
@@ -182,6 +188,7 @@ private:
     void paintSlots(QPainter &painter, const QRect &bounds, bool footer,
                     bool sleeping = false) const;
     bool panelBelowHeader = false;
+    bool stripsBlank = false;
     int cornerTop = 0, cornerBottom = 0;
     HeaderState headerState;
     FooterState footerState;

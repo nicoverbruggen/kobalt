@@ -96,6 +96,11 @@ public:
 
     qint64 sessionReadingMilliseconds() const { return readingMilliseconds() - sessionBaseline; }
 
+    // Page turns in this session. A new session after sleep starts again at zero.
+    int sessionPageTurns() const { return pageTurns; }
+
+    void countPageTurn() { ++pageTurns; }
+
     bool readingActive() const { return activeReading.isValid(); }
 
     ReadingEstimates estimates() const;
@@ -202,6 +207,7 @@ private:
     bool sleepingReading = false;
     ReadingHistory::UtcClock utc;
     qint64 sleepingAt = 0, sleepingTimeout = 0, sessionBaseline = 0;
+    int pageTurns = 0;
     qint64 completedReadingMilliseconds = 0;
     ReadingPace pace_;
     std::unique_ptr<ReadingSpeed> speed;

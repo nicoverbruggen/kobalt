@@ -372,11 +372,18 @@ private:
     QCheckBox *darkOption, *inheritTextLayoutOption, *animationOption, *edgeLightOption,
             *lightGestureFeedbackOption, *denseGraphOption;
     QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
-              *hideTabLabelsOption = nullptr;
+              *hideTabLabelsOption = nullptr, *zenModeOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
     QCheckBox *disableStandbyOption = nullptr;
     QPushButton *autoRotateOption;
     bool hideNativeStatus() const;
+
+    // Zen mode keeps only Chapters, Search, Annotate and Bookmarks in the reading menu.
+    bool zenMode() const { return preferences.value("zen_mode").toBool(false); }
+
+    // Shows or hides Zen mode's reading stats and remembers the choice.
+    void toggleZenStats();
+
     QJsonObject preferences;
     QLabel *settingsError;
     kobalt::ui::ModalOverlay *busyNotice = nullptr;
@@ -548,7 +555,8 @@ private:
     void syncStatusBoundary();
     bool statusBoundaryPending = false;
     void showControls();
-    void dismissControls();
+    // returnToPage is false when another view replaces the menu, such as Search.
+    void dismissControls(bool returnToPage = true);
     void toggleLight();
     void fitSettings();
     void openSettings();
@@ -712,6 +720,12 @@ private:
     bool showNotice(const ReaderNotice &notice) override;
     void showFormattingWarning();
     bool flashAfterMenu = false, flashAfterPagePreview = false;
+    // Turning Zen mode on or off replaces the whole menu. The first frame
+    // after Settings closes clears the panel.
+    bool flashAfterZenSwitch = false;
+    // Whether the last painted frame showed Zen mode's Chapters or Bookmarks
+    // view, or Settings over the Zen menu.
+    bool zenViewPainted = false, zenSettingsPainted = false;
     int navigationActive = -1;
     bool navigationPanelPainted = false;
     void requestFlash(const char *reason);

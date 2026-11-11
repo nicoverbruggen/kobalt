@@ -303,6 +303,7 @@ void Reader::openSettings()
     settingsTimeRemainingFormat =
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
+    zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
     if (wifiPowerSaverOption)
         wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(false));
     if (disableStandbyOption)
@@ -691,6 +692,7 @@ void Reader::applySettings()
     next["dictionary_font_size"] = settingsDictionaryFontSize;
     next["header_footer_added_weight"] = settingsHeaderFooterWeight;
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
+    next["zen_mode"] = zenModeOption->isChecked();
     if (wifiPowerSaverOption)
         next[wifiPowerSaverKey] = wifiPowerSaverOption->isChecked();
     if (disableStandbyOption)
@@ -757,6 +759,8 @@ void Reader::applySettings()
         refresh();
         return;
     }
+    if (zenMode() != next.value("zen_mode").toBool(false))
+        flashAfterZenSwitch = true;
     preferences = next;
     if (!features::enabled(preferences, features::Kosync)) {
         cancelKosync();
@@ -819,6 +823,44 @@ void Reader::applySettings()
     header->setGeometry(0, 0, width(), page->topHeight());
     header->setVisible(page->topHeight() > 0);
     refresh();
+}
+
+void Reader::toggleZenStats()
+{
+    // Do not overtake a pending dark mode or button save, as writePreferences
+    // does. The button already toggled itself, so put it back.
+    if (savingButtonControls || savingDarkMode >= 0) {
+        syncNavigation();
+        return;
+    }
+    // The panel changes at once. The choice is saved on the writer thread,
+    // so the main thread never waits for storage while the menu is open.
+    const bool shown = !preferences.value("zen_stats").toBool(false);
+    preferences["zen_stats"] = shown;
+    auto next = appearance::globalPreferences(preferences);
+    appearance::rememberTextLayout(next, session->state());
+    appearance::rememberPageMargins(next, session->state());
+    if (!preferencesWriter)
+        preferencesWriter = std::make_unique<storage::RecordWriter>();
+    QPointer<Reader> guard(this);
+    preferencesWriter->post([path = book->paths().preferences(),
+                             next] { return kobalt::storage::writePreferences(path, next); },
+                            [guard, shown](bool saved) {
+                                if (saved)
+                                    return;
+                                // A failed save undoes the toggle, as the other settings do.
+                                qt::invoke(
+                                        QCoreApplication::instance(),
+                                        [guard, shown] {
+                                            if (!guard)
+                                                return;
+                                            guard->preferences["zen_stats"] = !shown;
+                                            guard->showSettingsWriteError();
+                                            guard->syncNavigation();
+                                        },
+                                        Qt::QueuedConnection);
+                            });
+    syncNavigation();
 }
 
 void Reader::applyDarkMode(bool enabled)

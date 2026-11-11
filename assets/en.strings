@@ -751,7 +751,7 @@
 "settings.system" = "System";
 "settings.automatic_book_opening" = "Open books automatically in Kobalt";
 "settings.automatic_book_opening_description" = "Use Kobalt when opening supported books from your library. This is the same setting as in Kobo's Reading settings.";
-"settings.automatic_book_opening_off_title" = "Do you want to make opening books with Kobalt the exception?";
+"settings.automatic_book_opening_off_title" = "Have Kobo open books by default?";
 "settings.automatic_book_opening_off_description" = "Books from your library will open in Kobo's built-in reader. To open a book in Kobalt, long-press it and choose Read with Kobalt.";
 "settings.automatic_book_opening_off" = "Use built-in reader";
 "settings.sleep_screen" = "Sleep and power-off screen";

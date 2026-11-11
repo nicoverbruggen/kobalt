@@ -41,12 +41,6 @@ QString pagesText(int direction, int distance)
                                    strings::get("kosync.pages_back_one"));
 }
 
-QString percentText(double percent)
-{
-    return percent < 0 ? QString()
-                       : strings::get("kosync.percent").arg(QLocale().toString(qRound(percent)));
-}
-
 // A filled triangle whose tip is at `tip`, pointing along (dx, dy).
 void arrowHead(QPainter &painter, QPointF tip, qreal dx, qreal dy, qreal length, qreal width,
                const QColor &ink)
@@ -151,6 +145,12 @@ QString syncTimeText(const QDateTime &time, const QDateTime &now)
     if (days == 1)
         return strings::get("kosync.yesterday_at").arg(clock);
     return QLocale().toString(time, QLocale::ShortFormat);
+}
+
+QString syncPercentText(double percent)
+{
+    return percent < 0 ? QString()
+                       : strings::get("kosync.percent").arg(QLocale().toString(percent, 'f', 1));
 }
 
 SyncChoiceView::SyncChoiceView(QWidget *parent) : QWidget(parent)
@@ -426,7 +426,7 @@ int SyncChoiceView::rows(int width, int top, QPainter *painter) const
     for (const auto &text : captions)
         captionWidth = qMax(captionWidth, ui::interfaceTextWidth(text, caption));
     const int valueLeft = captionWidth + metrics::captionGap;
-    const int percentWidth = ui::interfaceTextWidth(strings::get("kosync.percent").arg(100), bold);
+    const int percentWidth = ui::interfaceTextWidth(syncPercentText(100), bold);
     const int chapterWidth = qMax(1, width - valueLeft - percentWidth - metrics::captionGap);
     const int wideWidth = qMax(1, width - valueLeft);
     const auto ink = palette().color(QPalette::WindowText);
@@ -449,7 +449,7 @@ int SyncChoiceView::rows(int width, int top, QPainter *painter) const
             drawText(*painter, QRect(valueLeft, y, chapterWidth, valueLine), shown, font,
                      same ? grey : ink);
             drawText(*painter, QRect(width - percentWidth, y, percentWidth, valueLine),
-                     percentText(percent), font, destination ? ink : grey,
+                     syncPercentText(percent), font, destination ? ink : grey,
                      Qt::AlignRight | Qt::AlignTop);
             if (!same && !parent.isEmpty())
                 drawText(*painter, QRect(valueLeft, y + valueLine, chapterWidth, parentLine),

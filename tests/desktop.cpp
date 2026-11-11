@@ -11419,6 +11419,20 @@ private slots:
         const QDateTime older(QDate(2026, 11, 3), QTime(18, 40));
         QCOMPARE(reader::syncTimeText(older, now), QLocale().toString(older, QLocale::ShortFormat));
         QCOMPARE(reader::syncTimeText(QDateTime(), now), strings::get("kosync.time_unavailable"));
+
+        // Percentages keep one decimal, because a whole percent of a long book
+        // can be several pages. The decimal separator follows the locale.
+        const auto originalLocale = QLocale();
+        const auto restoreLocale =
+                qScopeGuard([originalLocale] { QLocale::setDefault(originalLocale); });
+        QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+        QCOMPARE(reader::syncPercentText(54.44), QString("54.4%"));
+        QCOMPARE(reader::syncPercentText(54.0), QString("54.0%"));
+        QCOMPARE(reader::syncPercentText(0), QString("0.0%"));
+        QCOMPARE(reader::syncPercentText(100), QString("100.0%"));
+        QVERIFY(reader::syncPercentText(-1).isEmpty());
+        QLocale::setDefault(QLocale(QLocale::Dutch, QLocale::Belgium));
+        QCOMPARE(reader::syncPercentText(54.44), QString("54,4%"));
     }
 
     void kosyncChoice_data() { screenshotVariants(); }

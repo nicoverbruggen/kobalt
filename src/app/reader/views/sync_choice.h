@@ -52,6 +52,9 @@ QVector<SyncJump::Start> syncChapterStarts(const QVector<ChapterLink> &links);
 QString syncChapterParent(const QVector<ChapterLink> &links, const QString &title, int page);
 // "Today at 09:00", "Yesterday at 21:14" or the date and time.
 QString syncTimeText(const QDateTime &time, const QDateTime &now);
+// "54.4%", or empty when the percentage is negative. One decimal, because a
+// whole percent of a long book can be several pages.
+QString syncPercentText(double percent);
 
 // The jump graph and the From, To, Device and Synced rows below it.
 class SyncChoiceView final : public QWidget

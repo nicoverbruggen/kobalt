@@ -70,8 +70,7 @@ void Reader::refresh()
     if (!restoringDefaults)
         darkOption->setChecked(dark);
     darkOption->setEnabled(darkEnabled);
-    lightPopup->setDarkModeShortcut(preferences.value("light_dark_mode_shortcut").toBool(false),
-                                    dark, darkEnabled);
+    lightPopup->setDarkModeShortcut(services.lightAvailable(), dark, darkEnabled);
     if (recordedOpening && !kosyncStarted)
         synchronizeKosync();
     showKosyncChoice();

@@ -738,8 +738,6 @@
 "settings.animations_description" = "Page animations are supported on this device.";
 "settings.unsupported_caption" = "Disabled: unsupported on this device.";
 "settings.unsupported_description" = "Disabled because this option is not supported on this device.";
-"settings.light_dark_mode" = "Show dark mode in Light";
-"settings.light_dark_mode_description" = "Add a dark-mode shortcut to the Light panel.";
 "settings.dark_description" = "Light text on a dark background.";
 "settings.display" = "Display";
 "settings.controls" = "Controls";

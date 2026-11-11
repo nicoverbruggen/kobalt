@@ -26,7 +26,7 @@ Confirmation and notice dialogs use the same patterned backdrop as settings choi
 
 ## Light
 
-Settings > Display > Show dark mode in Light adds a Dark mode checkbox to the Light panel. The shortcut is off by default. It changes the same dark-mode setting as Settings > Display > Dark mode. Hosts without Light keep the Settings entry. A failed save keeps the previous mode. On short screens, Light omits its swipe hint so the controls fit.
+The Light panel always includes a Dark mode checkbox on devices with frontlight support. It changes the same dark-mode setting as Settings > Display > Dark mode. Hosts without Light keep the Settings entry. A failed save keeps the previous mode. On short screens, Light omits its swipe hint so the controls fit.
 
 Closing Light through its tab or a tap on the visible page restores the default menu view. Switching to another panel keeps that panel open. Dismissing the reading menu keeps all its panels closed until the menu opens again.
 

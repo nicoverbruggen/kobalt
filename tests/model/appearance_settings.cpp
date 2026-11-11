@@ -73,9 +73,9 @@ int main()
     for (bool shown : { false, true }) {
         const auto preferences = appearance::cleanPreferences(
                 { { "light_dark_mode_shortcut", shown }, { "optional", "keep" } });
-        require(preferences.value("light_dark_mode_shortcut").toBool() == shown
+        require(!preferences.contains("light_dark_mode_shortcut")
                         && preferences.value("optional") == "keep",
-                "Light shortcut cleanup lost a saved choice or optional field");
+                "Light shortcut cleanup kept the retired choice or lost an optional field");
         require(appearance::same({}, preferences),
                 "Light shortcut visibility invalidated the book layout");
     }

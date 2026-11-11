@@ -1590,7 +1590,6 @@ void Reader::buildSettings()
             settingsFontFaces[key] = QString();
         showSettingsFonts();
         darkOption->setChecked(false);
-        static_cast<SettingsPanel *>(general)->lightDarkModeOption->setChecked(false);
         animationOption->setChecked(false);
         bionicOption->setChecked(false);
         settingsVerticalSpacing = "off";

@@ -326,8 +326,6 @@ void Reader::openSettings()
     settingsError->clear();
     settingsError->hide();
     darkOption->setChecked(session->state().value("dark_mode").toBool(false));
-    static_cast<SettingsPanel *>(general)->lightDarkModeOption->setChecked(
-            preferences.value("light_dark_mode_shortcut").toBool(false));
     inheritTextLayoutOption->setChecked(
             preferences.value(appearance::inheritTextLayoutKey).toBool(true));
     hideNonlinearOption->setChecked(
@@ -701,8 +699,6 @@ void Reader::applySettings()
     next["bold_reading"] =
             bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     next["dark_mode"] = darkOption->isChecked();
-    next["light_dark_mode_shortcut"] =
-            static_cast<SettingsPanel *>(general)->lightDarkModeOption->isChecked();
     next[appearance::inheritTextLayoutKey] = inheritTextLayoutOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     next["vertical_justification"] = settingsVerticalSpacing;

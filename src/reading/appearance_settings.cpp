@@ -94,6 +94,7 @@ QJsonObject globalPreferences(QJsonObject preferences)
     preferences.remove("smooth_images");
     preferences.remove("heavier_interface_text");
     preferences.remove("native_hide_status_bar");
+    preferences.remove("light_dark_mode_shortcut");
     preferences.remove("columns");
     preferences.remove("column_spacing");
     preferences.remove(pageNavigation::barVisibleKey);
@@ -130,26 +131,13 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     for (const auto *key : { "show_header", "show_footer", "show_clock", "show_progress_bar",
                              "header_text_size", "footer_text_size" })
         preferences.remove(key);
-    for (const auto *key : { "dark_mode",
-                             "light_dark_mode_shortcut",
-                             "hide_tab_labels",
-                             "disable_reader_standby",
-                             "inherit_text_layout",
-                             "two_columns_landscape",
-                             "page_animations",
-                             "edge_light_gestures",
-                             "show_light_gesture_feedback",
-                             "dense_stats_chart",
-                             "hanging_punctuation",
-                             "hide_nonlinear_fragments",
-                             "normalize_page_margins",
-                             "reduce_chapter_spacing",
-                             "minimal_annotation_mode",
-                             "show_header",
-                             "show_footer",
-                             "show_clock",
-                             "auto_rotate",
-                             "turn_off_wifi_on_open" })
+    for (const auto *key :
+         { "dark_mode", "hide_tab_labels", "disable_reader_standby", "inherit_text_layout",
+           "two_columns_landscape", "page_animations", "edge_light_gestures",
+           "show_light_gesture_feedback", "dense_stats_chart", "hanging_punctuation",
+           "hide_nonlinear_fragments", "normalize_page_margins", "reduce_chapter_spacing",
+           "minimal_annotation_mode", "show_header", "show_footer", "show_clock", "auto_rotate",
+           "turn_off_wifi_on_open" })
         if (preferences.contains(key) && !preferences.value(key).isBool())
             preferences.remove(key);
     for (const auto *key : beautifierKeys)

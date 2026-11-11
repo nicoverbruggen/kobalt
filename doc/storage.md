@@ -18,7 +18,7 @@ The retired `show_link_indicator` preference is ignored. Existing saved values r
 
 `show_light_gesture_feedback` is an optional global Boolean. Missing or invalid values use true, preserving the existing brightness and warmth popup. False hides only the gesture popup and its cleanup refresh. `edge_light_gestures` still controls whether the gestures are enabled. Both choices persist independently for all books. Settings schema 1 and reading-data formats stay unchanged.
 
-`light_dark_mode_shortcut` is an optional global Boolean. Missing or invalid values use false, preserving the existing Light panel until the shortcut is enabled in Display settings. It controls only shortcut visibility. Dark mode remains available in Settings on every host. Settings schema 1 stays unchanged.
+The retired `light_dark_mode_shortcut` preference is removed during normalization. Light always shows its Dark mode control on hosts with frontlight support. Dark mode remains available in Settings on every host. Settings schema 1 stays unchanged.
 
 `turn_off_wifi_on_open` is an optional global Boolean for the Kobo Wi-Fi power saver. Missing or invalid values use false. False keeps Wi-Fi as Nickel leaves it when a book opens and at sleep. The key keeps its name; the setting is shown as Smart Wi-Fi power saving. The feature is not final until beta 7. Until then the settings cleanup (`cleanPreferences` in `src/reading/appearance_settings.cpp`) removes this key whenever settings are read or written, so Kobalt never saves it and the power saver stays off. This keeps settings schema 1.
 

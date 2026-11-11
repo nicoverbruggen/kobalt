@@ -436,10 +436,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     };
     darkOption = check(displayPage, "rrDarkMode", strings::get("reader.dark_mode"),
                        strings::get("settings.dark_description"));
-    lightDarkModeOption =
-            check(displayPage, "rrLightDarkModeShortcut", strings::get("settings.light_dark_mode"),
-                  strings::get("settings.light_dark_mode_description"));
-    lightDarkModeOption->setVisible(inputs.lightSupported);
     const bool animationsSupported = pageAnimationsAvailable(inputs.animationSupport);
     const auto animationDescription =
             strings::get(inputs.animationSupport == PageAnimationSupport::Uncertain
@@ -459,7 +455,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     generalOptions->addWidget(animationOption);
     section(displayPage, generalOptions, "rrDisplayAppearanceSection",
             strings::get("settings.section_appearance"));
-    for (auto *option : { darkOption, lightDarkModeOption, bionicOption })
+    for (auto *option : { darkOption, bionicOption })
         generalOptions->addWidget(option);
     section(displayPage, generalOptions, "rrDisplayColumnsSection", strings::get("reader.columns"));
     landscapeColumnsOption =
@@ -797,14 +793,13 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         optionPage = 0;
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = { hideNonlinearOption,        darkOption,
-                                               lightDarkModeOption,        bionicOption,
-                                               landscapeColumnsOption,     animationOption,
-                                               inheritTextLayoutOption,    edgeLightOption,
-                                               lightGestureFeedbackOption, denseGraphOption,
-                                               hideTabLabelsOption,        wifiPowerSaverOption,
-                                               disableStandbyOption,       automaticOpeningOption,
-                                               minimalAnnotationOption };
+    QVector<ui::DescribedOption *> options = { hideNonlinearOption,    darkOption,
+                                               bionicOption,           landscapeColumnsOption,
+                                               animationOption,        inheritTextLayoutOption,
+                                               edgeLightOption,        lightGestureFeedbackOption,
+                                               denseGraphOption,       hideTabLabelsOption,
+                                               wifiPowerSaverOption,   disableStandbyOption,
+                                               automaticOpeningOption, minimalAnnotationOption };
     for (auto *option : options) {
         if (!option)
             continue;

@@ -66,6 +66,10 @@ public:
     ~SettingsPanel() override;
     void dismissRestore();
     void dismissStandbyConfirmation();
+    void dismissAutomaticOpeningConfirmation();
+    // Receives a confirmed choice for Open books automatically in Kobalt.
+    // Turning it off asks first; turning it on applies at once.
+    std::function<void(bool)> automaticOpeningChosen;
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                          const QString &current, const QString &emptyLabel,
                          std::function<void(const QString &)> chosen);
@@ -193,6 +197,7 @@ private:
     AboutPage *aboutPage = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog;
     QPointer<ui::ChoiceModal> standbyDialog;
+    QPointer<ui::ChoiceModal> automaticOpeningDialog;
     QHash<int, StyleSample> stylingSamples;
     // The open styling sheet, if any, and the option its preview shows.
     QPointer<QWidget> stylingPreview;

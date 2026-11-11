@@ -1570,8 +1570,7 @@ void Reader::buildSettings()
             textRefresh(settingsFontPopup);
         }
     });
-    connect(automaticOpeningOption, &QCheckBox::clicked, this,
-            [this](bool enabled) { applyAutomaticOpening(enabled); });
+    settings->automaticOpeningChosen = [this](bool enabled) { applyAutomaticOpening(enabled); };
     connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });
     connect(settings->openAcknowledgments, &QPushButton::clicked, this, [this] {
         kobalt::ui::PanelTiming timing("acknowledgments");

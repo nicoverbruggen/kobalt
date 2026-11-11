@@ -264,6 +264,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "settings-system", "System settings" },
         { "settings-features", "Hide features" },
         { "settings-standby-confirmation", "Disable reader standby confirmation" },
+        { "settings-automatic-opening-confirmation", "Turn off automatic opening confirmation" },
         { "session-timeout", "New session after sleep" },
         { "sleep-gallery", "Sleep screen gallery" },
         { "sleep-settings", "Sleep screen settings" },

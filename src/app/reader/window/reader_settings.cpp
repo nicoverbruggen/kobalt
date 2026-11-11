@@ -714,6 +714,7 @@ void Reader::applySettings()
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
     static_cast<SettingsPanel *>(general)->dismissStandbyConfirmation();
+    static_cast<SettingsPanel *>(general)->dismissAutomaticOpeningConfirmation();
     // Edits made before the preview opened have no session yet. Apply them
     // together with these settings once the preview holds them.
     if (appearanceEdit.queued()

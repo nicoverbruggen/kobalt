@@ -7495,6 +7495,61 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      QJsonValue(false));
     }
 
+    // Checks that turning automatic opening off in Kobalt asks first and turning it on does not.
+    void settingsAutomaticOpening()
+    {
+        auto opening = std::make_shared<bool>(true);
+        auto saves = std::make_shared<int>(0);
+        Fixture fixture(false, false, false, true, false, false,
+                        [opening, saves](ReaderHostServices &services) {
+                            services.automaticBookOpening = [opening] { return *opening; };
+                            services.setAutomaticBookOpening = [opening, saves](bool on) {
+                                *opening = on;
+                                ++*saves;
+                                return true;
+                            };
+                        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrAutomaticBookOpening"));
+        QVERIFY(option && option->isEnabled() && option->isChecked());
+        // Cancel keeps the choice and saves nothing.
+        QVERIFY(fixture.press("rrAutomaticBookOpening"));
+        QTRY_VERIFY(fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(option->isChecked());
+        QCOMPARE(*saves, 0);
+        QVERIFY(fixture.press("rrKeepAutomaticBookOpening"));
+        QVERIFY(!fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(option->isChecked() && *opening);
+        QCOMPARE(*saves, 0);
+        // Confirming turns it off.
+        QVERIFY(fixture.press("rrAutomaticBookOpening"));
+        QTRY_VERIFY(fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(fixture.press("rrConfirmAutomaticBookOpeningOff"));
+        QVERIFY(!fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(!option->isChecked() && !*opening);
+        QCOMPARE(*saves, 1);
+        // Turning it on applies at once.
+        QVERIFY(fixture.press("rrAutomaticBookOpening"));
+        QVERIFY(!fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(option->isChecked() && *opening);
+        QCOMPARE(*saves, 2);
+        // Closing Settings with an unanswered question keeps it on.
+        QVERIFY(fixture.press("rrAutomaticBookOpening"));
+        QTRY_VERIFY(fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        auto *close = qobject_cast<QPushButton *>(fixture.widget("rrSettingsClose"));
+        QVERIFY(close);
+        close->click();
+        QTRY_VERIFY(!fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(*opening);
+        QCOMPARE(*saves, 2);
+    }
+
     void dictionarySafeArea()
     {
         SafeArea safe;
@@ -10772,6 +10827,35 @@ private slots:
         QVERIFY(capture(fixture, name + "-settings-standby-confirmation"));
         QVERIFY(fixture.press("rrKeepReaderStandby"));
         QTRY_VERIFY(!fixture.visible("rrStandbyConfirmation"));
+    }
+
+    void automaticOpeningConfirmation_data() { screenshotVariants(); }
+
+    void automaticOpeningConfirmation()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        // A Kobo host supplies the reader choice. The desktop app has none.
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.automaticBookOpening = [] { return true; };
+            services.setAutomaticBookOpening = [](bool) { return true; };
+        });
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(fixture.press("rrAutomaticBookOpening"));
+        QTRY_VERIFY(fixture.visible("rrAutomaticBookOpeningConfirmation"));
+        QVERIFY(capture(fixture,
+                        screenshotVariant(preset, dark)
+                                + "-settings-automatic-opening-confirmation"));
+        QVERIFY(fixture.press("rrKeepAutomaticBookOpening"));
+        QTRY_VERIFY(!fixture.visible("rrAutomaticBookOpeningConfirmation"));
     }
 
     void viewportTransition_data() { screenshotVariants(); }

@@ -673,6 +673,41 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                     : strings::get("settings.unsupported_description"));
     automaticOpeningOption->setEnabled(inputs.automaticBookOpeningSupported);
     systemRows->addWidget(automaticOpeningOption);
+    if (inputs.automaticBookOpeningSupported) {
+        // Turning automatic opening off sends every later book to Kobo's
+        // reader. It sits where Zen mode sits on Display, so ask first.
+        automaticOpeningDialog = new ui::ChoiceModal(
+                parent,
+                { strings::get("settings.automatic_book_opening_off_description"),
+                  strings::get("settings.automatic_book_opening_off_title"),
+                  {} },
+                { strings::get("common.cancel"), "rrKeepAutomaticBookOpening" },
+                { strings::get("settings.automatic_book_opening_off"),
+                  "rrConfirmAutomaticBookOpeningOff" });
+        automaticOpeningDialog->setObjectName("rrAutomaticBookOpeningConfirmation");
+        automaticOpeningDialog->setDimmed(true);
+        connect(automaticOpeningOption, &QCheckBox::clicked, this, [this](bool checked) {
+            if (checked) {
+                if (automaticOpeningChosen)
+                    automaticOpeningChosen(true);
+                return;
+            }
+            // An unanswered confirmation must never turn the choice off.
+            automaticOpeningOption->setChecked(true);
+            automaticOpeningDialog->fitCard();
+            automaticOpeningDialog->show();
+            automaticOpeningDialog->raise();
+            automaticOpeningDialog->secondaryButton()->setFocus();
+        });
+        connect(automaticOpeningDialog->secondaryButton(), &QPushButton::clicked, this,
+                [this] { dismissAutomaticOpeningConfirmation(); });
+        connect(automaticOpeningDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+            dismissAutomaticOpeningConfirmation();
+            if (automaticOpeningChosen)
+                automaticOpeningChosen(false);
+        });
+        automaticOpeningDialog->dismissed = [this] { dismissAutomaticOpeningConfirmation(); };
+    }
     timeRemainingFormatButton =
             ui::makeCaptionButton(systemPage, nullptr, "rrTimeRemainingFormat",
                                   strings::get("settings.time_remaining_format"), [] { });
@@ -2019,6 +2054,14 @@ void SettingsPanel::dismissRestore()
     resetDefaults->setFocus();
 }
 
+void SettingsPanel::dismissAutomaticOpeningConfirmation()
+{
+    if (!automaticOpeningDialog || automaticOpeningDialog->isHidden())
+        return;
+    automaticOpeningDialog->hide();
+    automaticOpeningOption->setFocus();
+}
+
 void SettingsPanel::dismissStandbyConfirmation()
 {
     if (!standbyDialog || standbyDialog->isHidden())
@@ -2033,6 +2076,7 @@ void SettingsPanel::hideEvent(QHideEvent *event)
     sectionOpen = false;
     dismissRestore();
     dismissStandbyConfirmation();
+    dismissAutomaticOpeningConfirmation();
     dismissFontChoices();
     if (stylingHidden)
         stylingHidden();

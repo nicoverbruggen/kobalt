@@ -14,6 +14,29 @@
 #include <cmath>
 
 namespace kobalt::reader {
+void portraitSleepSnapshot(sleep::Snapshot &snapshot)
+{
+    snapshot.orientation = Qt::PortraitOrientation;
+    if (snapshot.image.width() <= snapshot.image.height())
+        return;
+    const QSize size(snapshot.image.height(), snapshot.image.width());
+    if (snapshot.mode == sleep::Mode::Cover) {
+        const QImage cover = snapshot.coverArea.isEmpty() ? snapshot.image
+                                                          : snapshot.image.copy(snapshot.coverArea);
+        snapshot.image = sleep::coverBackground(cover, size);
+        snapshot.coverArea = sleep::coverArea(cover.size(), size);
+        return;
+    }
+    QImage portrait(size, QImage::Format_RGB32);
+    portrait.fill(snapshot.dark ? Qt::black : Qt::white);
+    if (snapshot.mode != sleep::Mode::Plain) {
+        QPainter painter(&portrait);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawImage(sleep::coverArea(snapshot.image.size(), size), snapshot.image);
+    }
+    snapshot.image = std::move(portrait);
+}
+
 namespace {
 namespace sleepMetrics = ui::metrics::sleep;
 
@@ -79,9 +102,9 @@ void paintSleepBattery(QPainter &painter, const Battery &battery, int left, int 
 }
 
 void paintCard(QPainter &painter, const QRect &card, const Content &content, const QColor &ink,
-               const QColor &paper)
+               const QColor &paper, int screenWidth)
 {
-    const int padding = qMin(int(sleepMetrics::padding), painter.device()->width() / 16);
+    const int padding = qMin(int(sleepMetrics::padding), screenWidth / 16);
     const QFont title = ui::brandFont(sleepMetrics::titleText);
     const QFont detail = detailFont();
     const int titleHeight = ui::interfaceLineHeight(title);
@@ -217,20 +240,23 @@ QString sleepStatusText(SleepStatus status)
     return {};
 }
 
-QString sleepTimeLeft(qint64 milliseconds, bool approximate)
+QString sleepDuration(qint64 milliseconds, bool approximate)
 {
-    if (approximate) {
-        const auto duration = remainingTime::approximateDuration(milliseconds);
-        return duration.isEmpty() ? QString() : strings::get("sleep.time_left").arg(duration);
-    }
+    if (approximate)
+        return remainingTime::approximateDuration(milliseconds);
     if (milliseconds < 0) {
         return {};
     }
     const qint64 minutes = milliseconds / 60000 + (milliseconds % 60000 != 0);
-    const auto time = minutes <= 120
+    return minutes <= 120
             ? strings::get("stats.duration_minutes").arg(minutes)
             : strings::get("stats.duration_hours").arg(minutes / 60).arg(minutes % 60);
-    return strings::get("sleep.time_left").arg(time);
+}
+
+QString sleepTimeLeft(qint64 milliseconds, bool approximate)
+{
+    const auto duration = sleepDuration(milliseconds, approximate);
+    return duration.isEmpty() ? QString() : strings::get("sleep.time_left").arg(duration);
 }
 
 QImage sleepCoverBackground(const QImage &cover, QSize size)
@@ -268,6 +294,31 @@ void dimSleepPage(QImage &page, bool dark)
     painter.fillRect(page.rect(), ui::themeColors(dark).sleepDim);
 }
 
+void paintSleepTile(QPainter &painter, QSize size, const QString &progress,
+                    const QString &remaining, bool dark, int batteryPercent, SleepStatus status,
+                    sleep::Tile tile, int percent)
+{
+    if (tile == sleep::Tile::None)
+        return;
+    const bool poweredOff = status == SleepStatus::PoweredOff;
+    const QColor paper =
+            poweredOff ? ui::themeColors(true).paper : ui::themeColors(dark).sleepPaper;
+    const QColor ink = ui::themeColors(poweredOff || dark).ink;
+    const Content content{ status, progress, remaining, percent, batteryPercent };
+    const QRect area = sleepScreenCardRect(size, !remaining.isEmpty(), tile);
+    switch (tile) {
+    case sleep::Tile::Card:
+        paintCard(painter, area, content, ink, paper, size.width());
+        break;
+    case sleep::Tile::None:
+        break;
+    case sleep::Tile::Bookmark:
+        // Keep a contrasting outline over either a page or a cover.
+        paintBookmark(painter, area, content, paper, ink);
+        break;
+    }
+}
+
 QImage sleepScreenImage(QImage page, const QString &progress, const QString &remaining, bool dark,
                         int batteryPercent, SleepStatus status, bool dimPage, sleep::Tile tile,
                         int percent)
@@ -279,23 +330,8 @@ QImage sleepScreenImage(QImage page, const QString &progress, const QString &rem
     if (tile == sleep::Tile::None)
         return page;
     QPainter painter(&page);
-    const bool poweredOff = status == SleepStatus::PoweredOff;
-    const QColor paper =
-            poweredOff ? ui::themeColors(true).paper : ui::themeColors(dark).sleepPaper;
-    const QColor ink = ui::themeColors(poweredOff || dark).ink;
-    const Content content{ status, progress, remaining, percent, batteryPercent };
-    const QRect area = sleepScreenCardRect(page.size(), !remaining.isEmpty(), tile);
-    switch (tile) {
-    case sleep::Tile::Card:
-        paintCard(painter, area, content, ink, paper);
-        break;
-    case sleep::Tile::None:
-        break;
-    case sleep::Tile::Bookmark:
-        // Keep a contrasting outline over either a page or a cover.
-        paintBookmark(painter, area, content, paper, ink);
-        break;
-    }
+    paintSleepTile(painter, page.size(), progress, remaining, dark, batteryPercent, status, tile,
+                   percent);
     painter.end();
     return page;
 }

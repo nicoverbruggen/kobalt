@@ -191,6 +191,7 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
     else
         snapshot = storage::readSleepSnapshot(paths.sleepScreen(), token, mode);
     snapshot.tile = sleep::tile(preferences.object);
+    snapshot.design = sleep::design(preferences.object);
     poweredOff = powerOff;
     compose();
 }
@@ -225,14 +226,14 @@ void HomeSleepScreen::compose()
 {
     if (snapshot.image.isNull())
         return;
+    reader::portraitSleepSnapshot(snapshot);
     const auto battery = nativeReaderBattery();
     const auto status = poweredOff ? reader::SleepStatus::PoweredOff
             : battery.fullyCharged ? reader::SleepStatus::Charged
             : battery.charging     ? reader::SleepStatus::Charging
                                    : reader::SleepStatus::Sleeping;
-    snapshot.image = reader::sleepScreenImage(
-            std::move(snapshot.image), snapshot.progress, snapshot.remaining, snapshot.dark,
-            battery.percent, status, snapshot.dimPage, snapshot.tile, snapshot.percent);
+    snapshot.image = reader::sleepDesignImage(std::move(snapshot.image), snapshot, battery.percent,
+                                              status, &underlay);
     snapshot.dimPage = false;
 }
 
@@ -249,6 +250,7 @@ void HomeSleepScreen::clear()
     finishSave();
     presentation->clearSleepScreen();
     snapshot = {};
+    underlay.clear();
     shutdownBackdrop = {};
     poweredOff = false;
 }
@@ -261,12 +263,9 @@ void HomeSleepScreen::updateBattery()
     const auto status = battery.fullyCharged ? reader::SleepStatus::Charged
             : battery.charging               ? reader::SleepStatus::Charging
                                              : reader::SleepStatus::Sleeping;
-    snapshot.image = reader::sleepScreenImage(std::move(snapshot.image), snapshot.progress,
-                                              snapshot.remaining, snapshot.dark, battery.percent,
-                                              status, false, snapshot.tile, snapshot.percent);
-    presentation->updateSleepScreen(snapshot.image,
-                                    reader::sleepScreenCardRect(snapshot.image.size(),
-                                                                !snapshot.remaining.isEmpty(),
-                                                                snapshot.tile));
+    const auto area =
+            reader::repaintSleepStatus(snapshot.image, underlay, snapshot, battery.percent, status);
+    if (!area.isEmpty())
+        presentation->updateSleepScreen(snapshot.image, area);
 }
 } // namespace kobalt::nickel

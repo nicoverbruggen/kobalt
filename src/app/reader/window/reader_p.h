@@ -1,4 +1,5 @@
 #pragma once
+#include <future>
 #include "reading/features.h"
 // Private to the reader window: its declaration and the widgets only it uses.
 // Include it only from the reader's own translation units.
@@ -8,6 +9,7 @@
 #include "ui/controls/page_scrubber.h"
 #include "ui/controls/panels.h"
 #include "ui/dialogs/modals.h"
+#include "platform/api/keyboard_controller.h"
 #include "ui/style/theme.h"
 #include "app/reader_window.h"
 #include "app/reader_interface.h"
@@ -63,6 +65,7 @@
 class QVBoxLayout;
 
 namespace kobalt::reader {
+class SleepGallery;
 // Global preference for the Wi-Fi power saver. Missing means on.
 inline constexpr const char *wifiPowerSaverKey = "turn_off_wifi_on_open";
 inline constexpr const char *disableReaderStandbyKey = "disable_reader_standby";
@@ -330,6 +333,14 @@ private:
     QImage sleepImage, sleepCover, sleepOverlay;
     bool sleepOverlayLoading = false;
     sleep::Tile activeSleepTile = sleep::Tile::Bookmark;
+    // The design and text of the current sleep screen, without its image, and
+    // what lies under its status so a battery change can repaint only that.
+    sleep::Snapshot sleepShot;
+    QVector<QImage> sleepUnderlay;
+    // Reading finished earlier today, loaded off the GUI thread when the book
+    // opens. Sleep uses it only once it is ready.
+    std::future<qint64> todayReading;
+    qint64 todayReadingFinished = -1;
     QFileInfo sleepCoverSource;
     sleep::Snapshot exitSleepSnapshot;
     QString sleepProgress, sleepRemaining;
@@ -548,10 +559,15 @@ private:
     void prepareSleepOverlay();
     void updateSleepOverlayOption();
     sleep::Snapshot captureSleepScreen();
+    sleep::Details sleepDetails();
+    void loadTodayReading();
     void updateSleepBattery();
     void showSleepScreen();
     void openSleepScreen();
-    void openSleepTile();
+    void loadGalleryCover();
+    void showSleepOverlayHelp();
+    void editSleepGreeting();
+    sleep::Snapshot sleepPreviewSample();
     void openSessionTimeout();
 
     struct SleepOption
@@ -632,9 +648,11 @@ private:
     ui::DescribedOption *bionicOption = nullptr;
     kobalt::ui::CaptionButton *refreshButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> refreshPopup;
-    kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr,
-                              *sleepTileButton = nullptr;
+    kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> sleepPopup;
+    QPointer<kobalt::reader::SleepGallery> sleepGallery;
+    QPointer<kobalt::ui::ChoiceModal> greetingEditor;
+    std::unique_ptr<kobalt::KeyboardController> greetingKeyboard;
     kobalt::ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                               *navigationBarButton = nullptr, *chapterGroupsButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup, navigationBarPopup,

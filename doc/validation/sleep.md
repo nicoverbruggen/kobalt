@@ -20,3 +20,17 @@ These checks cover sleep screens and snapshots, sleep and wake, session timeouts
 `platform.sleep-persistence` does not measure Kobo storage. The opt-in device benchmark is described in [Sleep persistence benchmark](../release-evaluation.md#sleep-persistence-benchmark).
 
 These checks do not exercise physical power loss, firmware behavior, PIN behavior on hardware, sleep-screen refresh quality, actual hook load order, hardware suspend or physical coexistence with Nickel Screensaver. Physical sleep and wake on Kobo and Android need device validation.
+
+`model.appearance-settings` checks every gallery choice, legacy backdrop and indicator combinations, changes made by older releases, invalid designs and greeting limits. `lifecycle.sleepGreetingEditor` opens Night with a long press, saves and reopens a greeting, restores the default with an empty field, and cancels an edit through the windowless desktop host. It does not verify the native Kobo keyboard.
+
+`lifecycle.sleepDesignsRepaintOnlyTheirStatus` compares a battery-status repaint with a fresh render for each new design in both themes and orientations. `lifecycle.sleepSettingsShowWhereToAddPngs` checks gallery paging and the unavailable PNG explanation. The `sleepGallery` screenshot case captures `sleep-settings`, `sleep-gallery` and `sleep-greeting` through the production UI, including dark mode and large interface text.
+
+`lifecycle.sleepWidgetsKeepTimeAcrossSessionTimeout` keeps the Today total across a reading-session timeout. `lifecycle.sleepPowerOffWithoutCoverKeepsDesign` checks that coverless designs show the selected power-off screen after sleeping, using the reading-page fallback.
+
+`lifecycle.sleepMetadataStaysInsideItsLayout` checks that long titles, chapter names and author names do not overwrite reserved screen areas. It covers unbroken words, mixed scripts, combining characters, emoji, line breaks, markup and oversized metadata in both themes and orientations. `lifecycle.sleepLetterPreservesLiteralPlaceholders` checks that percent placeholders in a book title remain literal. The status repaint check also uses long metadata and greetings.
+
+`lifecycle.sleepFromLandscapeKeepsTheReadingPage` checks portrait presentation from a landscape reader and preserves its size and page on wake. `lifecycle.sleepBackdropsUsePortrait` checks portrait conversion for saved cover, page, PNG and plain backdrops, including repeated conversion and preservation of the source image.
+
+`lifecycle.sleepNativePreviewFollowsSettings` checks the native preview with covers hidden, inset covers, full-screen covers and full-screen information panels. Inactive options must not change the preview.
+
+`platform.kobo-power-screen` checks that the native power-screen owner renders the selected design from a prepared backdrop. A sleeping reader retains ownership of its book even after its window hides for the native sleep handoff.

@@ -2,6 +2,7 @@
 #include "page_animation_support.h"
 #include "annotation_export.h"
 #include "reading/reading_progress.h"
+#include "reading/sleep_screen.h"
 #include "page_buttons.h"
 #include "dictionary_service.h"
 #include "keyboard_controller.h"
@@ -95,6 +96,8 @@ struct ReaderHostServices
     QString coverImagePath;
     // Optional host paths for user-supplied sleep PNGs.
     QStringList sleepOverlayDirectories;
+    // Optional live native preferences for the stock sleep-screen preview.
+    std::function<sleep::NativePreview()> nativeSleepPreview;
     // Optional host reader-selection preference. Both callbacks are supplied
     // together; a successful write affects future book openings.
     std::function<bool()> automaticBookOpening;

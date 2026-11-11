@@ -244,6 +244,7 @@ ReaderHostServices readerHostServices()
         QStringLiteral(KOBALT_CONFIG_DIR "/screensaver"),
         QStringLiteral("/mnt/onboard/.adds/screensaver"),
     };
+    result.nativeSleepPreview = nativeSleepPreview;
     result.deviceName = syncDeviceModel();
     result.colorDisplay = [] { return pageAnimationPanel() == AnimationPanel::Color; };
     result.downloadableDictionaries = false;

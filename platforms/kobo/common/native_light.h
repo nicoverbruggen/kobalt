@@ -1,10 +1,12 @@
 #pragma once
+#include "reading/sleep_screen.h"
 #include <QObject>
 #include <QPointer>
 #include <QWidget>
 #include <QTime>
 
 namespace kobalt {
+sleep::NativePreview nativeSleepPreview();
 #ifndef KOBALT_READER_HARDWARE
 extern int (*lightTestIoctl)(int, unsigned long, void *);
 #endif

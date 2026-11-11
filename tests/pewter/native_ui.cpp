@@ -1,4 +1,5 @@
 #include "nickel.h"
+#include "platforms/kobo/common/native_light.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platform/api/kobo_refresh.h"
 #include <QApplication>
@@ -40,6 +41,23 @@ int main(int argc, char **argv)
                         && cover.testAttribute(Qt::WA_KoboEpdFlagDarkMode) == dark,
                 "Qt6 cover replacement lost its text waveform or dark flag");
 #endif
+    }
+    for (bool cover : { false, true }) {
+        for (bool full : { false, true }) {
+            for (bool info : { false, true }) {
+                pewter::options().sleepShowCover = cover;
+                pewter::options().sleepFullScreen = full;
+                pewter::options().sleepInfo = info;
+                pewter::clearCalls();
+                const auto preview = kobalt::nativeSleepPreview();
+                require(preview.showCover == cover && preview.fullScreen == full
+                                && preview.showInfo == info,
+                        "preview must read current native power settings");
+                requireNames(pewter::callNames(),
+                             QList<QByteArray>({ "Settings::construct", "Settings::destroy" }),
+                             "native settings are released after each query");
+            }
+        }
     }
     Volume volume(new VolumeData);
     for (bool tolino : { false, true }) {

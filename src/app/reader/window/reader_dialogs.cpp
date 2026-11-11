@@ -1,3 +1,7 @@
+#include "app/reader/settings/sleep_gallery.h"
+#include <QLineEdit>
+#include "app/reader/views/sleep_screen.h"
+#include "reading/remaining_time.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/options.h"
 #include "ui/dialogs/modals.h"
@@ -896,64 +900,6 @@ void Reader::openScreenRefresh()
 }
 
 namespace {
-QString sleepLabel(sleep::Mode mode)
-{
-    switch (mode) {
-    case sleep::Mode::Stock:
-        return strings::get("settings.sleep_stock");
-    case sleep::Mode::Cover:
-        return strings::get("settings.sleep_cover");
-    case sleep::Mode::Page:
-        return strings::get("settings.sleep_page");
-    case sleep::Mode::Overlay:
-        return strings::get("settings.sleep_overlay");
-    }
-    return {};
-}
-
-QString sleepExplanation(sleep::Mode mode)
-{
-    switch (mode) {
-    case sleep::Mode::Stock:
-        return strings::get("settings.sleep_stock_description");
-    case sleep::Mode::Cover:
-        return strings::get("settings.sleep_cover_description");
-    case sleep::Mode::Page:
-        return strings::get("settings.sleep_page_description");
-    case sleep::Mode::Overlay:
-        return strings::get("settings.sleep_overlay_description");
-    }
-    return {};
-}
-
-QString sleepTileLabel(sleep::Tile tile)
-{
-    switch (tile) {
-    case sleep::Tile::Card:
-        return strings::get("settings.sleep_tile_card");
-    case sleep::Tile::None:
-        return strings::get("settings.sleep_tile_none");
-    case sleep::Tile::Bookmark:
-        return strings::get("settings.sleep_tile_bookmark");
-    }
-    return {};
-}
-
-QString sleepTileExplanation(sleep::Tile tile)
-{
-    switch (tile) {
-    case sleep::Tile::Card:
-        return strings::get("settings.sleep_tile_card_description");
-    case sleep::Tile::None:
-        return strings::get("settings.sleep_tile_none_description");
-    case sleep::Tile::Bookmark:
-        return strings::get("settings.sleep_tile_bookmark_description");
-    }
-    return {};
-}
-} // namespace
-
-namespace {
 QString sessionTimeoutLabel(int minutes)
 {
     return strings::get(QString("settings.session_timeout_%1").arg(minutes).toLatin1().constData());
@@ -964,22 +910,24 @@ void Reader::showSleepScreen()
 {
     sessionTimeoutButton->setCaption(
             sessionTimeoutLabel(sessionTimeout::minutes(preferences)).toUpper());
-    sleepScreenButton->setCaption(sleepScreenButton->isEnabled()
-                                          ? sleepLabel(sleep::mode(preferences)).toUpper()
-                                          : strings::get("settings.unsupported_caption"));
-    sleepTileButton->setVisible(sleep::mode(preferences) != sleep::Mode::Stock);
-    sleepTileButton->setCaption(sleepTileButton->isEnabled()
-                                        ? sleepTileLabel(sleep::tile(preferences)).toUpper()
-                                        : strings::get("settings.unsupported_caption"));
+    sleepScreenButton->setCaption(
+            sleepScreenButton->isEnabled()
+                    ? SleepGallery::label(sleep::design(preferences)).toUpper()
+                    : strings::get("settings.unsupported_caption"));
 }
 
 void Reader::closeSleepScreen()
 {
+    if (sleepGallery) {
+        sleepGallery->hide();
+        sleepGallery->deleteLater();
+        sleepGallery.clear();
+    }
     if (!sleepPopup) {
+        if (sleep::mode(preferences) != sleep::Mode::Overlay)
+            sleepOverlay = {};
         return;
     }
-    if (sleep::mode(preferences) != sleep::Mode::Overlay)
-        sleepOverlay = {};
     sleepPopup->hide();
     sleepPopup->deleteLater();
     sleepPopup.clear();
@@ -999,32 +947,232 @@ bool Reader::saveSleepPreferences(const QJsonObject &next)
     return true;
 }
 
+sleep::Snapshot Reader::sleepPreviewSample()
+{
+    sleep::Snapshot sample;
+    const int percent = book && session
+            ? (book->finishedHere() ? 100 : pageProgressPercent(session->page(), session->pages()))
+            : 0;
+    sample.percent = percent;
+    sample.progress = strings::get("sleep.percent_read").arg(percent);
+    if (book) {
+        sample.remaining = sleepTimeLeft(book->estimates().bookMilliseconds,
+                                         remainingTime::approximate(preferences));
+    }
+    sample.dark = darkTheme;
+    sample.dimPage = false;
+    sample.tile = sleep::savedTile(preferences);
+    if (session && book)
+        sample.details = sleepDetails();
+    return sample;
+}
+
 void Reader::openSleepScreen()
 {
-    QVector<SleepOption> options;
-    int current = 0;
-    for (const auto mode : sleep::modes) {
-        if (mode == sleep::mode(preferences))
-            current = int(options.size());
-        const bool enabled = mode != sleep::Mode::Overlay || !sleepOverlay.isNull();
-        options.append({ sleep::value(mode), sleepLabel(mode), sleepExplanation(mode), enabled });
-    }
-    openSleepChoice("rrSleepScreen", "rrSleep_", strings::get("settings.sleep_screen"), options,
-                    current, [this](int index) {
-                        auto next = preferences;
-                        next[sleep::preferenceKey] = sleep::value(sleep::modes[index]);
-                        next.remove("kobalt_sleep_screen");
-                        if (saveSleepPreferences(next))
-                            prepareSleepCover();
-                    });
+    if (sleepGallery || sleepPopup)
+        return;
+    QVector<SleepGallery::Entry> entries;
+    for (const auto design : sleep::designs)
+        entries.append({ design, design != sleep::Design::Overlay || !sleepOverlay.isNull() });
+    sleepGallery = new SleepGallery(this, entries, sleep::design(preferences), sleepPreviewSample(),
+                                    page ? page->size() : size(),
+                                    services.nativeSleepPreview ? services.nativeSleepPreview()
+                                                                : sleep::NativePreview{});
+    sleepGallery->setGeometry(general ? general->geometry() : rect());
+    sleepGallery->chosen = [this](sleep::Design design) {
+        auto next = preferences;
+        sleep::setDesign(next, design);
+        next.remove("kobalt_sleep_screen");
+        if (saveSleepPreferences(next))
+            prepareSleepCover();
+        closeSleepScreen();
+    };
+    sleepGallery->unavailable = [this](sleep::Design design) {
+        if (design == sleep::Design::Overlay)
+            showSleepOverlayHelp();
+    };
+    sleepGallery->closed = [this] { closeSleepScreen(); };
+    sleepGallery->customize = [this](sleep::Design design) {
+        if (design == sleep::Design::Night)
+            editSleepGreeting();
+    };
+    if (!sleepCover.isNull())
+        sleepGallery->setCover(sleepCover);
+    else
+        loadGalleryCover();
+    if (page)
+        sleepGallery->setPage(page->snapshot(true));
+    if (!sleepOverlay.isNull())
+        sleepGallery->setOverlay(sleepOverlay);
+    for (auto *widget : sleepGallery->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(sleepGallery);
+    sleepGallery->show();
+    sleepGallery->raise();
     if (sleepOverlay.isNull())
         prepareSleepOverlay();
 }
 
+void Reader::loadGalleryCover()
+{
+    if (!session)
+        return;
+    const auto request = ++sleepCoverRequest;
+    QPointer<Reader> guard(this);
+    session->coverImage(
+            { 2048, 2048 },
+            [guard, request](QImage image, QFileInfo source) {
+                if (!guard || guard->sleepCoverRequest != request)
+                    return;
+                // Keep it for sleep too when the cover designs are chosen.
+                guard->sleepCover = image;
+                guard->sleepCoverSource = std::move(source);
+                if (guard->sleepGallery)
+                    guard->sleepGallery->setCover(image);
+            },
+            services.coverImagePath);
+}
+
+// A hidden option: long-pressing Night in the gallery sets its greeting.
+void Reader::editSleepGreeting()
+{
+    if (greetingEditor || !services.keyboard)
+        return;
+    auto *dialog = new ui::ChoiceModal(
+            this, { strings::get("sleep.greeting_hint"), strings::get("sleep.greeting_title"), {} },
+            { strings::get("common.cancel"), "rrSleepGreetingCancel" },
+            { strings::get("common.ok"), "rrSleepGreetingSave" });
+    greetingEditor = dialog;
+    dialog->setObjectName("rrSleepGreeting");
+    dialog->setDimmed(true);
+    dialog->setGeometry(rect());
+    auto *card = dialog->card();
+    auto *editor = new QLineEdit(card);
+    ui::prepareNativeEditor(editor);
+    editor->setObjectName("rrSleepGreetingInput");
+    dialog->setFocusProxy(editor);
+    editor->setMaxLength(sleep::greetingLength);
+    editor->setText(preferences.value(sleep::greetingKey).toString());
+    editor->setPlaceholderText(strings::get("sleep.goodnight"));
+    editor->setAccessibleName(strings::get("sleep.greeting_title"));
+    editor->setInputMethodHints(Qt::ImhNoPredictiveText);
+    ui::readerStyle(
+            editor,
+            QString("QLineEdit{border:%1px solid palette(mid);border-radius:0;padding:0;background:palette(window);color:palette(window-text);")
+                            .arg(int(metrics::control::border))
+                    + ui::styles::font(metrics::chrome::labelText) + "}");
+    editor->setTextMargins(metrics::notice::cardMargins.left(), 0,
+                           metrics::notice::cardMargins.right(), 0);
+    editor->setMinimumHeight(metrics::chrome::actionHeight);
+    auto *inputRow = new QWidget(card);
+    auto *inputLayout = new QHBoxLayout(inputRow);
+    inputLayout->setContentsMargins(metrics::notice::cardMargins.left(),
+                                    metrics::notice::cardMargins.top(),
+                                    metrics::notice::cardMargins.right(), metrics::notice::cardGap);
+    inputLayout->addWidget(editor);
+    card->rows()->insertWidget(1, inputRow);
+    const auto close = [this] {
+        if (!greetingEditor)
+            return;
+        if (greetingKeyboard) {
+            greetingKeyboard->hide();
+            greetingKeyboard->submitted = {};
+        }
+        greetingEditor->hide();
+        greetingKeyboard.reset();
+        greetingEditor->deleteLater();
+        greetingEditor.clear();
+    };
+    const auto submit = [this, editor, close] {
+        auto next = preferences;
+        const auto text = editor->text().simplified();
+        // An empty greeting brings back "Goodnight".
+        if (text.isEmpty())
+            next.remove(sleep::greetingKey);
+        else
+            next[sleep::greetingKey] = text;
+        // Native submission runs inside the controller; close after it returns.
+        greetingEditor->hide();
+        qt::later(0, this, close);
+        if (saveSleepPreferences(next) && sleepGallery)
+            sleepGallery->setSample(sleepPreviewSample());
+    };
+    connect(dialog->secondaryButton(), &QPushButton::clicked, this, close);
+    connect(dialog->primaryButton(), &QPushButton::clicked, this, submit);
+    connect(editor, &QLineEdit::returnPressed, this, submit);
+    dialog->dismissed = close;
+    greetingKeyboard = services.keyboard(dialog, editor);
+    greetingKeyboard->setSubmitText(strings::get("common.ok"));
+    greetingKeyboard->submitted = submit;
+    dialog->show();
+    dialog->raise();
+    dialog->fitCard();
+    editor->setFocus();
+    greetingKeyboard->show();
+    // Keep the card above the keyboard.
+    const auto bounds = window()->property("reader_keyboard_bounds").toRect();
+    if (!bounds.isEmpty()) {
+        const int bottom = dialog->mapFrom(window(), bounds.topLeft()).y();
+        if (card->height() > bottom && dialog->width() > dialog->height())
+            card->fitToWidth(dialog->width() - 2 * int(metrics::notice::sideClearance));
+        // Keep the input and actions above the keyboard on short landscapes.
+        // The placeholder still shows the default when the hint does not fit.
+        if (card->height() > bottom && dialog->descriptionLabel()) {
+            dialog->descriptionLabel()->hide();
+            inputLayout->setContentsMargins(metrics::notice::cardMargins.left(), 0,
+                                            metrics::notice::cardMargins.right(), 0);
+            card->fitToWidth(card->width());
+        }
+        const QRect area(0, 0, dialog->width(), qMax(1, bottom));
+        dialog->setCardArea(area);
+        // Hiding the hint invalidates nested layout constraints on the next turn.
+        qt::later(0, dialog, [dialog, area] {
+            dialog->card()->fitToWidth(dialog->card()->width());
+            dialog->setCardArea(area);
+        });
+    }
+    for (auto *widget : dialog->findChildren<QWidget *>())
+        textRefresh(widget);
+}
+
+void Reader::showSleepOverlayHelp()
+{
+    if (sleepPopup)
+        return;
+    sleepPopup = new ui::ModalOverlay(this);
+    sleepPopup->setObjectName("rrSleepOverlayHelpPopup");
+    sleepPopup->setDimmed(true);
+    sleepPopup->setGeometry(rect());
+    sleepPopup->installEventFilter(this);
+    sleepPopup->dismissed = [this] {
+        if (!sleepPopup)
+            return;
+        sleepPopup->hide();
+        sleepPopup->deleteLater();
+        sleepPopup.clear();
+    };
+    auto *card = sleepPopup->card();
+    card->heading(SleepGallery::label(sleep::Design::Overlay),
+                  strings::get("settings.sleep_overlay_description"), "rrSleepOverlayHelpTitle",
+                  "rrSleepOverlayHelpHint");
+    card->fitToWidth(
+            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
+    sleepPopup->centerCard();
+    for (auto *widget : sleepPopup->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(sleepPopup);
+    sleepPopup->show();
+    sleepPopup->raise();
+    sleepPopup->setFocus();
+}
+
 void Reader::updateSleepOverlayOption()
 {
-    if (auto *option = sleepPopup->findChild<QWidget *>("rrSleep_overlay"))
-        option->setEnabled(!sleepOverlay.isNull());
+    if (!sleepGallery)
+        return;
+    sleepGallery->setEnabled(sleep::Design::Overlay, !sleepOverlay.isNull());
+    if (!sleepOverlay.isNull())
+        sleepGallery->setOverlay(sleepOverlay);
 }
 
 void Reader::openSessionTimeout()
@@ -1047,23 +1195,6 @@ void Reader::openSessionTimeout()
                 saveSleepPreferences(next);
             },
             strings::get("settings.session_timeout_description"));
-}
-
-void Reader::openSleepTile()
-{
-    QVector<SleepOption> options;
-    int current = 0;
-    for (const auto tile : sleep::tiles) {
-        if (tile == sleep::tile(preferences))
-            current = int(options.size());
-        options.append({ sleep::value(tile), sleepTileLabel(tile), sleepTileExplanation(tile) });
-    }
-    openSleepChoice("rrSleepTile", "rrSleepTile_", strings::get("settings.sleep_tile"), options,
-                    current, [this](int index) {
-                        auto next = preferences;
-                        next[sleep::tileKey] = sleep::value(sleep::tiles[index]);
-                        saveSleepPreferences(next);
-                    });
 }
 
 void Reader::openSleepChoice(const QString &name, const QString &optionPrefix,

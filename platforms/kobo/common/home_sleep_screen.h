@@ -1,4 +1,5 @@
 #pragma once
+#include <QVector>
 #include "storage/reader_storage.h"
 #include "reading/sleep_screen.h"
 #include "platform/api/window_presentation.h"
@@ -28,6 +29,8 @@ private:
     void updateBattery();
     storage::Paths paths;
     sleep::Snapshot snapshot, shutdownBackdrop;
+    // What lies under the status, so a battery change repaints only that.
+    QVector<QImage> underlay;
     void save(const sleep::Snapshot &, const QString &identity);
     bool poweredOff = false, invalidated = false;
     void compose();

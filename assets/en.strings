@@ -751,7 +751,7 @@
 "settings.system" = "System";
 "settings.automatic_book_opening" = "Open books automatically in Kobalt";
 "settings.automatic_book_opening_description" = "Use Kobalt when opening supported books from your library. This is the same setting as in Kobo's Reading settings.";
-"settings.sleep_screen" = "Sleep screen while reading";
+"settings.sleep_screen" = "Sleep and power-off screen";
 "settings.session_timeout" = "New session after sleep";
 "settings.session_timeout_description" = "Waking your device after this amount of time starts a new reading session. You do not need to close and reopen your book, this is automatic.";
 "settings.session_timeout_15" = "15 minutes";
@@ -843,6 +843,62 @@
 "sleep.percent_read" = "%1% read";
 /* Arguments: %1 */
 "sleep.time_left" = "%1 to go";
+"sleep.read" = "read";
+/* Arguments: %1 status, %2 battery percentage */
+"sleep.state_with_battery" = "%1 (%2%)";
+"sleep.goodnight" = "Goodnight";
+/* Arguments: %1 battery percentage */
+"sleep.battery_charged" = "%1% charged";
+"sleep.greeting_title" = "Night greeting";
+"sleep.greeting_hint" = "Shown on the Night sleep screen instead of Goodnight. Leave it empty to use Goodnight.";
+/* Arguments: %1 percentage, %2 book title */
+"sleep.percent_through" = "%1% through %2";
+"sleep.now_reading" = "Now reading";
+"sleep.read_label" = "Read";
+"sleep.today" = "Today";
+"sleep.battery" = "Battery";
+"sleep.of_reading" = "of reading";
+"sleep.time_remaining_in_book" = "Time remaining\nin this book";
+/* Arguments: %1 */
+"sleep.today_minutes" = "%1m";
+/* Arguments: %1 hours, %2 minutes */
+"sleep.today_hours" = "%1h %2m";
+"sleep.letter_heading" = "Reading desk";
+"sleep.letter_greeting" = "Dear reader,";
+/* Arguments: %1 percentage with its sign, %2 book title, %3 the chapter clause or nothing */
+"sleep.letter_progress" = "I have gone to sleep. You were %1 of the way through %2%3.";
+/* Arguments: %1 percentage with its sign, %2 book title, %3 the chapter clause or nothing */
+"sleep.letter_progress_off" = "I have switched off. You were %1 of the way through %2%3.";
+/* Arguments: %1 chapter title */
+"sleep.letter_chapter" = ", in “%1”";
+/* Arguments: %1 book title */
+"sleep.letter_finished" = "I have gone to sleep. You finished %1.";
+/* Arguments: %1 book title */
+"sleep.letter_finished_off" = "I have switched off. You finished %1.";
+/* Arguments: %1 duration */
+"sleep.letter_remaining" = "About %1 of reading remains.";
+"sleep.letter_charging" = "I am charging in the meantime.";
+/* Arguments: %1 percentage with its sign */
+"sleep.letter_battery" = "The battery is at %1.";
+"sleep.letter_wake" = "Press the power button and we will carry on with this book.";
+"sleep.letter_restart" = "Press the power button to start me again.";
+"sleep.letter_closing" = "Yours,";
+"sleep.gallery_title" = "Sleep and power-off screen";
+"sleep.design_stock" = "Use Kobo’s screen";
+"sleep.design_bookmark" = "Bookmark";
+"sleep.design_card" = "Card";
+"sleep.design_cover" = "Cover only";
+"sleep.design_seal" = "Seal";
+"sleep.design_medallion" = "Stamp";
+"sleep.design_pill" = "Pill";
+"sleep.design_caption" = "Caption";
+"sleep.design_widgets" = "Widgets";
+"sleep.design_night" = "Night";
+"sleep.design_ring" = "Ring";
+"sleep.design_lines" = "Lines";
+"sleep.design_letter" = "Letter";
+"sleep.design_page" = "Reading page";
+"sleep.design_overlay" = "PNG over text";
 "settings.about" = "About";
 "settings.edge_light_description" = "Swipe up or down along the left edge for brightness, and along the right edge for warmth.";
 "settings.edge_brightness_description" = "Swipe up or down along the left edge for brightness.";

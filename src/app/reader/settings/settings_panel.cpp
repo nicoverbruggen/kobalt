@@ -69,33 +69,6 @@ QPushButton *segmentButton(QWidget *parent, QHBoxLayout *layout, QButtonGroup *g
 
 // Keep section titles on the Settings baseline. The private text bitmap
 // includes each word's descenders, so centering that bitmap moves the baseline.
-class SettingsTitle final : public ui::InterfaceLabel
-{
-public:
-    using ui::InterfaceLabel::InterfaceLabel;
-
-protected:
-    void paintEvent(QPaintEvent *event) override
-    {
-        if (!ui::needsPrivateText(text(), font())) {
-            ui::InterfaceLabel::paintEvent(event);
-            return;
-        }
-        const auto reference = ui::renderPrivateText(strings::get("settings.title"), font());
-        const auto shown = ui::renderPrivateText(text(), font());
-        const auto area = contentsRect();
-        const int baseline =
-                area.top() + (area.height() - reference.image.height()) / 2 - reference.origin.y();
-        QPainter painter(this);
-        painter.setFont(font());
-        painter.setPen(palette().color(QPalette::WindowText));
-        ui::drawInterfaceText(
-                painter,
-                QRect(area.left(), baseline + shown.origin.y(), area.width(), shown.image.height()),
-                text(), Qt::AlignLeft | Qt::AlignTop);
-    }
-};
-
 // The chevron of a section row in the narrow Settings list, as other rows
 // that open a page show it. It follows its row's size and pressed state.
 class SectionChevron final : public QWidget
@@ -309,6 +282,26 @@ QPushButton *actionButton(QWidget *parent, QBoxLayout *layout, const char *name,
     return button;
 }
 } // namespace
+
+void SettingsTitle::paintEvent(QPaintEvent *event)
+{
+    if (!ui::needsPrivateText(text(), font())) {
+        ui::InterfaceLabel::paintEvent(event);
+        return;
+    }
+    const auto reference = ui::renderPrivateText(strings::get("settings.title"), font());
+    const auto shown = ui::renderPrivateText(text(), font());
+    const auto area = contentsRect();
+    const int baseline =
+            area.top() + (area.height() - reference.image.height()) / 2 - reference.origin.y();
+    QPainter painter(this);
+    painter.setFont(font());
+    painter.setPen(palette().color(QPalette::WindowText));
+    ui::drawInterfaceText(
+            painter,
+            QRect(area.left(), baseline + shown.origin.y(), area.width(), shown.image.height()),
+            text(), Qt::AlignLeft | Qt::AlignTop);
+}
 
 SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     : ui::Panel(parent, Qt::BottomEdge)
@@ -685,12 +678,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     if (!inputs.sleepScreenSupported)
         sleepScreenButton->setCaption(strings::get("settings.unsupported_caption"));
     systemRows->addWidget(sleepScreenButton);
-    sleepTileButton = ui::makeCaptionButton(systemPage, nullptr, "rrSleepTile",
-                                            strings::get("settings.sleep_tile"), [] { });
-    sleepTileButton->setEnabled(inputs.sleepScreenSupported);
-    if (!inputs.sleepScreenSupported)
-        sleepTileButton->setCaption(strings::get("settings.unsupported_caption"));
-    systemRows->addWidget(sleepTileButton);
     sessionTimeoutButton = ui::makeCaptionButton(systemPage, nullptr, "rrSessionTimeout",
                                                  strings::get("settings.session_timeout"), [] { });
     systemRows->addWidget(sessionTimeoutButton);
@@ -848,7 +835,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           refreshButton,
                           columnSpacingButton,
                           sleepScreenButton,
-                          sleepTileButton,
                           sessionTimeoutButton,
                           pageNavigationButton,
                           buttonControlsButton,

@@ -24,6 +24,7 @@ struct Call
 // What the fake Nickel answers. start() resets these to the defaults.
 struct Options
 {
+    bool sleepShowCover = true, sleepFullScreen = false, sleepInfo = true;
     bool sleeping = false; // N3PowerWorkflowManager::sleeping
     bool tolino = false; // Device::isTolino
     bool beginFails = false; // DatabaseAdapter::beginTransaction refuses

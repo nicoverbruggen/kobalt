@@ -1,3 +1,4 @@
+#include "support/host_presentation.h"
 #include "platform/posix/diagnostics.h"
 #include "platform/qt/annotation_export.h"
 #include "storage/record_writer.h"
@@ -12127,6 +12128,51 @@ private slots:
         QVERIFY(fixture.click(page, website));
         QTRY_VERIFY(fixture.visible("rrBrowserConfirmation"));
         QVERIFY(capture(fixture, name + "-links-website"));
+    }
+
+    void sleepGallery_data() { screenshotVariants(); }
+
+    void sleepGallery()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        const auto state = std::make_shared<test::SleepPresentationState>();
+        Fixture fixture(dark, false, false, true, false, false,
+                        [state](ReaderHostServices &services) {
+                            services.presentation = [state](QWidget *) {
+                                return std::make_unique<test::HostPresentation>(state);
+                            };
+                        });
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        openPrologueBody(fixture);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrSleepScreen"));
+        const auto name = screenshotVariant(preset, dark);
+        QVERIFY(capture(fixture, name + "-sleep-settings"));
+        QVERIFY(fixture.press("rrSleepScreen"));
+        QTRY_VERIFY(fixture.visible("rrSleepGallery"));
+        capturePages(fixture, name + "-sleep-gallery", "rrSleepGallery");
+        // Capture the hidden greeting editor on Night, on page three.
+        while (fixture.widget("rrSleepGalleryPrevious")->isEnabled())
+            QVERIFY(fixture.press("rrSleepGalleryPrevious"));
+        for (int page = 0; page < 2; ++page)
+            QVERIFY(fixture.press("rrSleepGalleryNext"));
+        auto *grid = fixture.widget("rrSleepGalleryGrid");
+        QVERIFY(grid);
+        const QPoint night(grid->width() / 4, grid->height() * 3 / 4);
+        QTest::mousePress(grid, Qt::LeftButton, Qt::NoModifier, night);
+        QTRY_VERIFY(fixture.visible("rrSleepGreeting"));
+        QTest::mouseRelease(grid, Qt::LeftButton, Qt::NoModifier, night);
+
+        QVERIFY(capture(fixture, name + "-sleep-greeting"));
+        QVERIFY(fixture.press("rrSleepGreetingCancel"));
     }
 
     void screens_data() { screenshotVariants(); }

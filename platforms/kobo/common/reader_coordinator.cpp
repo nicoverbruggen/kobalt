@@ -246,8 +246,9 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         homeSleep->clear();
         if (mode == NativeLifecycle::Shutdown::Reboot)
             return;
-        if (run.reader && run.reader->isVisible() && !busy
-            && !BrowserHandoff::activeFor(run.reader))
+        // The reader hides after handing its sleep frame to Nickel, but still
+        // owns this book and the clean backdrop needed for power-off.
+        if (run.reader && !busy && !BrowserHandoff::activeFor(run.reader))
             homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
     };
     lifecycle->prepareShutdown = [this](std::function<void()> ready) {

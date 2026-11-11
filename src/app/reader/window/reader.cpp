@@ -1,3 +1,4 @@
+#include "app/reader/settings/sleep_gallery.h"
 #include "render/page_content.h"
 #include "reading/remaining_time.h"
 #include "ui/controls/buttons.h"
@@ -18,6 +19,9 @@
 #include "ui/style/styles.h"
 #include "platform/api/kobo_refresh.h"
 #include "reading/appearance_settings.h"
+#include "storage/reading_history.h"
+#include <chrono>
+#include <QDateTime>
 #include "reading/page_navigation.h"
 #include "reading/sleep_screen.h"
 #include "render/page_refresh_regions.h"
@@ -358,8 +362,7 @@ void Reader::prepareSleepOverlay()
         if (!guard)
             return;
         guard->sleepOverlayLoading = false;
-        const bool choosing = guard->sleepPopup
-                && guard->sleepPopup->objectName() == QStringLiteral("rrSleepScreenPopup");
+        const bool choosing = bool(guard->sleepGallery);
         if (!choosing && sleep::mode(guard->preferences) != sleep::Mode::Overlay)
             return;
         guard->sleepOverlay = std::move(image);
@@ -372,11 +375,69 @@ sleep::Snapshot Reader::powerScreenSnapshot()
 {
     if (exportRunning)
         return exitSleepSnapshot;
-    if (lifecycleHidden && !sleepImage.isNull())
-        return { sleepImage,     sleepOrientation, sleepProgress,
-                 sleepRemaining, darkTheme,        sleep::mode(preferences),
-                 false,          sleepPercent,     activeSleepTile };
+    if (lifecycleHidden && !sleepImage.isNull()) {
+        auto shot = sleepShot;
+        shot.dark = darkTheme;
+        shot.dimPage = false;
+        if (!sleep::tiled(shot.design)) {
+            // Newer designs draw over the whole backdrop. Give power-off a fresh
+            // one so it is not drawn twice.
+            if (shot.mode == sleep::Mode::Plain) {
+                shot.image = QImage(sleepImage.size(), QImage::Format_RGB32);
+                shot.image.fill(Qt::white);
+            } else if (shot.mode == sleep::Mode::Cover && !sleepCover.isNull()) {
+                shot.image = sleepCoverBackground(sleepCover, sleepImage.size());
+            } else if (shot.mode == sleep::Mode::Cover) {
+                // Coverless books use the reading page. Rebuild that clean backdrop
+                // rather than preserving the status already painted for sleep.
+                shot.image = page->snapshot(true);
+                shot.coverArea = {};
+                shot.dimPage = true;
+                portraitSleepSnapshot(shot);
+            }
+            if (!shot.image.isNull())
+                return shot;
+            // Without a clean backdrop, keep the sleeping screen as it is.
+            shot.design = sleep::Design::Cover;
+            shot.tile = sleep::Tile::None;
+        }
+        shot.image = sleepImage;
+        return shot;
+    }
     return captureSleepScreen();
+}
+
+sleep::Details Reader::sleepDetails()
+{
+    sleep::Details details;
+    details.title = session->title();
+    details.author = session->author();
+    details.chapter = session->chapterTitle();
+    details.clock = services.clock ? services.clock() : QString();
+    // The letter uses the reader's chosen face; private text needs it registered.
+    details.font = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
+    registerPickerFonts(details.font);
+    details.greeting = preferences.value(sleep::greetingKey).toString();
+    details.left = sleepDuration(book->estimates().bookMilliseconds,
+                                 remainingTime::approximate(preferences));
+    if (todayReadingFinished < 0 && todayReading.valid()
+        && todayReading.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        todayReadingFinished = todayReading.get();
+    // A sleep timeout starts a new session, but all time in this opening counts.
+    details.todayMilliseconds =
+            qMax<qint64>(0, todayReadingFinished) + qMax<qint64>(0, book->readingMilliseconds());
+    return details;
+}
+
+void Reader::loadTodayReading()
+{
+    if (todayReading.valid() || !book)
+        return;
+    const auto directory = book->paths().directory;
+    const qint64 midnight = QDateTime(QDate::currentDate(), QTime(0, 0)).toMSecsSinceEpoch();
+    todayReading = std::async(std::launch::async, [directory, midnight] {
+        return ReadingHistory::finishedSince(directory, midnight);
+    });
 }
 
 sleep::Snapshot Reader::captureSleepScreen()
@@ -395,8 +456,17 @@ sleep::Snapshot Reader::captureSleepScreen()
         || !foreground || pixels <= 0 || pixels > 4 * 1024 * 1024 || !readyForPresentation()
         || appearanceEdit.panelOpen() || session->temporaryTypography())
         return {};
+    const bool plain = mode == sleep::Mode::Plain;
     const bool useCover = mode == sleep::Mode::Cover && !sleepCover.isNull();
-    auto frame = useCover ? sleepCoverBackground(sleepCover, page->size()) : page->snapshot(true);
+    const QSize sleepSize(qMin(page->width(), page->height()), qMax(page->width(), page->height()));
+    QImage frame;
+    if (plain) {
+        // Designs without a cover draw the whole screen themselves.
+        frame = QImage(sleepSize, QImage::Format_RGB32);
+        frame.fill(Qt::white);
+    } else {
+        frame = useCover ? sleepCoverBackground(sleepCover, sleepSize) : page->snapshot(true);
+    }
     if (frame.isNull())
         return {};
     const bool useOverlay = mode == sleep::Mode::Overlay && !sleepOverlay.isNull();
@@ -414,14 +484,23 @@ sleep::Snapshot Reader::captureSleepScreen()
                                             remainingTime::approximate(preferences)),
                               darkTheme,
                               mode,
-                              !useCover && !useOverlay,
+                              !useCover && !useOverlay && !plain,
                               percent,
                               sleep::tile(preferences) };
+    snapshot.design = sleep::design(preferences);
+#ifdef KOBALT_SCENARIO_PLAYER
+    if (scenario::sleepPersistenceOptions().mode >= 0)
+        snapshot.design = sleep::legacyDesign(mode, snapshot.tile);
+#endif
+    snapshot.details = sleepDetails();
+    if (useCover)
+        snapshot.coverArea = sleep::coverArea(sleepCover.size(), sleepSize);
     if (useCover && sleepCoverSource.isFile()) {
         snapshot.coverPath = sleepCoverSource.absoluteFilePath();
         snapshot.coverBytes = sleepCoverSource.size();
         snapshot.coverModified = sleepCoverSource.lastModified().toMSecsSinceEpoch();
     }
+    portraitSleepSnapshot(snapshot);
     return snapshot;
 }
 
@@ -455,9 +534,10 @@ void Reader::sleepReader()
     const auto status = sleepBattery.fullyCharged ? SleepStatus::Charged
             : sleepBattery.charging               ? SleepStatus::Charging
                                                   : SleepStatus::Sleeping;
-    sleepImage = sleepScreenImage(std::move(snapshot.image), sleepProgress, sleepRemaining,
-                                  darkTheme, sleepBattery.percent, status, snapshot.dimPage,
-                                  snapshot.tile, sleepPercent);
+    sleepShot = snapshot;
+    sleepShot.image = {};
+    sleepImage = sleepDesignImage(std::move(snapshot.image), sleepShot, sleepBattery.percent,
+                                  status, &sleepUnderlay);
     services.cancelAnimation();
     page->animationDirection = 0;
     setProperty("reader_animation_direction", 0);
@@ -561,18 +641,14 @@ void Reader::updateSleepBattery()
     const auto status = battery.fullyCharged ? SleepStatus::Charged
             : battery.charging               ? SleepStatus::Charging
                                              : SleepStatus::Sleeping;
-    // Paint over the card in the retained frame. Reusing the composed background
+    // Paint over the status in the retained frame. Reusing the composed background
     // avoids another cover decode or another dimming pass while asleep.
-    const auto tile = activeSleepTile;
-    if (tile == sleep::Tile::None)
+    const auto area =
+            repaintSleepStatus(sleepImage, sleepUnderlay, sleepShot, battery.percent, status);
+    if (area.isEmpty())
         return;
-    sleepImage = sleepScreenImage(std::move(sleepImage), sleepProgress, sleepRemaining, darkTheme,
-                                  battery.percent, status, false, tile, sleepPercent);
-    if (!isVisible()) {
-        presentation->updateSleepScreen(
-                sleepImage,
-                sleepScreenCardRect(sleepImage.size(), !sleepRemaining.isEmpty(), tile));
-    }
+    if (!isVisible())
+        presentation->updateSleepScreen(sleepImage, area);
 }
 
 void Reader::cancelWake()

@@ -415,6 +415,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
             });
     resize(QGuiApplication::primaryScreen()->size());
     prepareSleepCover();
+    loadTodayReading();
     if (sleep::mode(preferences) == sleep::Mode::Overlay)
         prepareSleepOverlay();
     const auto battery = services.battery();
@@ -1396,7 +1397,6 @@ void Reader::buildSettings()
     lightGestureFeedbackOption = settings->lightGestureFeedbackOption;
     denseGraphOption = settings->denseGraphOption;
     sleepScreenButton = settings->sleepScreenButton;
-    sleepTileButton = settings->sleepTileButton;
     sessionTimeoutButton = settings->sessionTimeoutButton;
     pageNavigationButton = settings->pageNavigationButton;
     tapZonesButton = settings->tapZonesButton;
@@ -1544,7 +1544,6 @@ void Reader::buildSettings()
             [this](bool enabled) { applyBoldReading(enabled); });
     connect(sleepScreenButton, &QPushButton::clicked, this, [this] { openSleepScreen(); });
     connect(sessionTimeoutButton, &QPushButton::clicked, this, [this] { openSessionTimeout(); });
-    connect(sleepTileButton, &QPushButton::clicked, this, [this] { openSleepTile(); });
     connect(tappableLinksButton, &QPushButton::clicked, this, [this] { openTappableLinks(); });
     connect(tapZonesButton, &QPushButton::clicked, this, [this] { openTapZones(); });
     connect(chapterGroupsButton, &QPushButton::clicked, this, [this] { openChapterGroups(); });

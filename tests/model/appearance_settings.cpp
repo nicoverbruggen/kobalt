@@ -1,5 +1,6 @@
 #include "reading/appearance_settings.h"
 #include "reading/features.h"
+#include "reading/sleep_screen.h"
 #include "reading/session_timeout.h"
 #include "reading/remaining_time.h"
 #include "support/qt_compat.h"
@@ -39,6 +40,54 @@ int main()
                         && checkpoint.value("unknown").toInt() == 7,
                 "Persisted appearance must preserve null and absent keys without moving the book");
     }
+    require(sleep::design({}) == sleep::Design::Bookmark,
+            "Missing sleep preferences changed the default bookmark");
+    for (const auto mode : sleep::modes) {
+        for (const auto tile : sleep::tiles) {
+            const QJsonObject legacy{ { sleep::preferenceKey, sleep::value(mode) },
+                                      { sleep::tileKey, sleep::value(tile) } };
+            const auto migrated = appearance::cleanPreferences(legacy);
+            require(sleep::mode(migrated) == mode && sleep::tile(migrated) == tile,
+                    "Legacy sleep preferences changed their backdrop or indicator");
+            for (const auto design : sleep::designs) {
+                auto preferences = legacy;
+                sleep::setDesign(preferences, design);
+                preferences = appearance::cleanPreferences(preferences);
+                require(sleep::design(preferences) == design,
+                        "A gallery selection did not survive preference cleanup");
+                require(appearance::same({}, preferences),
+                        "A sleep design invalidated the reading layout");
+                // An older release knows only the backdrop and indicator keys.
+                preferences[sleep::preferenceKey] = sleep::value(mode);
+                preferences[sleep::tileKey] = sleep::value(tile);
+                const auto pair = sleep::legacyPair(design, tile);
+                const bool compatible = pair.first == mode
+                        && (design == sleep::Design::Stock || design == sleep::Design::Page
+                            || design == sleep::Design::Overlay || pair.second == tile);
+                require(sleep::design(preferences)
+                                == (compatible ? design : sleep::legacyDesign(mode, tile)),
+                        "A change made by an older release was ignored");
+            }
+        }
+    }
+    for (const auto &invalid : { QJsonValue("unknown"), QJsonValue(true), QJsonValue(1) }) {
+        const auto clean = appearance::cleanPreferences({ { sleep::designKey, invalid },
+                                                          { sleep::preferenceKey, "page" },
+                                                          { sleep::tileKey, "none" } });
+        require(!clean.contains(sleep::designKey) && sleep::design(clean) == sleep::Design::Page
+                        && sleep::tile(clean) == sleep::Tile::None,
+                "Invalid sleep design lost the legacy selection");
+    }
+    for (const int length : { 0, sleep::greetingLength, sleep::greetingLength + 1 }) {
+        const auto clean = appearance::cleanPreferences(
+                { { sleep::greetingKey, QString(length, QLatin1Char('a')) } });
+        require(clean.contains(sleep::greetingKey) == (length <= sleep::greetingLength),
+                "Sleep greeting length limit changed");
+    }
+    require(!appearance::cleanPreferences({ { sleep::greetingKey, true } })
+                     .contains(sleep::greetingKey),
+            "A non-text sleep greeting was accepted");
+
     for (const auto *mode : { "current", "all", "off" }) {
         const auto cleaned = appearance::cleanPreferences(
                 { { "chapter_groups", mode }, { "future_option", 42 } });

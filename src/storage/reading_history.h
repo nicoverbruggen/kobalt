@@ -45,6 +45,10 @@ public:
     // process share it; another process cannot recover or start a reader here.
     // Failed acquisition returns a diagnostic code through error.
     static std::shared_ptr<Profile> openProfile(const QString &directory, QString *error = nullptr);
+    // Active reading time of the sessions that started at or after `utcStart`
+    // and are no longer running. Waits for the profile writer: call it off the
+    // GUI thread. Returns -1 when the profile cannot be read.
+    static qint64 finishedSince(const QString &directory, qint64 utcStart);
 
 private:
     static bool recover(const QString &directory);

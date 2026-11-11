@@ -161,6 +161,11 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     choice("marks_sort", { "position", "newest", "oldest" });
     choice("sleep_screen", { "stock", "cover", "page", "overlay" });
     choice("sleep_tile", { "card", "bookmark", "none" });
+    choice(sleep::designKey, sleep::designValues());
+    if (preferences.contains(sleep::greetingKey)
+        && (!preferences.value(sleep::greetingKey).isString()
+            || preferences.value(sleep::greetingKey).toString().size() > sleep::greetingLength))
+        preferences.remove(sleep::greetingKey);
     choice("time_remaining_format", { "detailed", "approximate" });
     if (preferences.contains(sessionTimeout::preferenceKey)
         && !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))

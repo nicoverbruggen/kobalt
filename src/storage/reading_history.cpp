@@ -310,4 +310,20 @@ bool ReadingHistory::recover(const QString &directory)
         return query.exec("UPDATE reading_sessions SET status='interrupted' WHERE status='active'");
     });
 }
+qint64 ReadingHistory::finishedSince(const QString &directory, qint64 utcStart)
+{
+    qint64 total = -1;
+    const bool ok = storage::profileTransaction(directory, [&](QSqlDatabase &db) {
+        QSqlQuery query(db);
+        if (!query.prepare("SELECT coalesce(sum(active_ms),0) FROM reading_sessions "
+                           "WHERE started>=? AND status!='active'"))
+            return false;
+        query.addBindValue(utcStart);
+        if (!query.exec() || !query.next())
+            return false;
+        total = query.value(0).toLongLong();
+        return true;
+    });
+    return ok ? total : -1;
+}
 } // namespace kobalt

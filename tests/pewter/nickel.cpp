@@ -254,3 +254,30 @@ QString Image::getFileName(const Device &, const Volume &volume, const QString &
     pewter::record("Image::getFileName", { { "type", type } });
     return QStringLiteral("/covers/") + volume.getImageId() + QStringLiteral("-") + type;
 }
+
+Settings::Settings(const Device &, bool)
+{
+    pewter::record("Settings::construct");
+}
+
+Settings::~Settings()
+{
+    pewter::record("Settings::destroy");
+}
+
+PowerSettings::~PowerSettings() = default;
+
+bool PowerSettings::getShowCover()
+{
+    return pewter::options().sleepShowCover;
+}
+
+bool PowerSettings::getFullscreenCoverStretch()
+{
+    return pewter::options().sleepFullScreen;
+}
+
+bool PowerSettings::getFullscreenCoverInfoPanel()
+{
+    return pewter::options().sleepInfo;
+}

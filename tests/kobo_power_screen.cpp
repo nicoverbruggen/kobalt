@@ -215,7 +215,7 @@ private slots:
             QVERIFY(kobalt::storage::writeJson(paths.preferences(), preferences));
             const auto expected = [&](kobalt::reader::SleepStatus status, int battery) {
                 return kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress, {},
-                                                       false, battery, status, true, tile);
+                                                        false, battery, status, true, tile);
             };
             {
                 kobalt::nickel::HomeSleepScreen screen(paths, nullptr);
@@ -330,10 +330,9 @@ private slots:
         const auto rendered = frame->grab().toImage().convertToFormat(QImage::Format_RGB32);
         QCOMPARE(rendered, expected);
         QCOMPARE(rendered,
-                 kobalt::reader::sleepScreenImage(snapshot.image, snapshot.progress,
-                                                  snapshot.remaining, !dark, 67,
-                                                  kobalt::reader::SleepStatus::PoweredOff, true,
-                                                  tile, 42));
+                 kobalt::reader::sleepScreenImage(
+                         snapshot.image, snapshot.progress, snapshot.remaining, !dark, 67,
+                         kobalt::reader::SleepStatus::PoweredOff, true, tile, 42));
         const auto area = kobalt::reader::sleepScreenCardRect(rendered.size(), true, tile);
         QCOMPARE(rendered.pixel(area.center().x(), area.top() + 4), qRgb(0, 0, 0));
         QCOMPARE(rendered.pixel(area.left(), area.top() + 10), qRgb(255, 255, 255));
@@ -350,6 +349,44 @@ private slots:
         power.hide();
         power.show();
         QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+    }
+
+    void powerOffKeepsSelectedDesign_data()
+    {
+        QTest::addColumn<int>("design");
+        for (auto design : { kobalt::sleep::Design::Seal, kobalt::sleep::Design::Widgets })
+            QTest::newRow(qPrintable(kobalt::sleep::value(design))) << int(design);
+    }
+
+    void powerOffKeepsSelectedDesign()
+    {
+        QFETCH(int, design);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        MainWindowView window;
+        window.resize(800, 1200);
+        AbstractPowerView power(&window);
+        power.setGeometry(window.rect());
+        window.show();
+        power.show();
+        kobalt::nickel::HomeSleepScreen screen({ directory.path() }, nullptr);
+        kobalt::sleep::Snapshot snapshot;
+        snapshot.image = QImage(window.size(), QImage::Format_RGB32);
+        snapshot.image.fill(Qt::gray);
+        snapshot.orientation = Qt::PortraitOrientation;
+        snapshot.mode = kobalt::sleep::Mode::Cover;
+        snapshot.design = kobalt::sleep::Design(design);
+        snapshot.details.title = "Coverless shutdown check";
+        snapshot.details.todayMilliseconds = 60000;
+        snapshot.percent = 42;
+        screen.preparePowerOff(snapshot);
+        power.hide();
+        power.show();
+        auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+        QVERIFY(frame);
+        QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                 kobalt::reader::sleepDesignImage(snapshot.image, snapshot, 67,
+                                                  kobalt::reader::SleepStatus::PoweredOff));
     }
 
     void nativeViewOwnsTheFrameAndInput()

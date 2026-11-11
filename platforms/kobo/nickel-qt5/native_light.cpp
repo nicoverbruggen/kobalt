@@ -88,6 +88,12 @@ struct Api
             symbol<decltype(constructSettings)>("_ZN8SettingsC2ERK6Deviceb");
     void (*destroySettings)(void *) = symbol<decltype(destroySettings)>("_ZN8SettingsD2Ev");
     void **powerVtable = symbol<void **>("_ZTV13PowerSettings");
+    bool (*showCover)(void *) = symbol<decltype(showCover)>("_ZN13PowerSettings12getShowCoverEv");
+    bool (*fullScreenCover)(void *) =
+            symbol<decltype(fullScreenCover)>("_ZN13PowerSettings25getFullscreenCoverStretchEv");
+    bool (*coverInfo)(void *) =
+            symbol<decltype(coverInfo)>("_ZN13PowerSettings27getFullscreenCoverInfoPanelEv");
+
     bool (*automatic)(void *) =
             symbol<decltype(automatic)>("_ZN13PowerSettings16autoColorEnabledEv");
     void (*setAutomatic)(void *, bool) =
@@ -147,6 +153,17 @@ bool stored(const QString &key, const QVariant &expected)
 }
 
 } // namespace
+
+sleep::NativePreview nativeSleepPreview()
+{
+    const auto &native = api();
+    if (!native.device || !native.constructSettings || !native.destroySettings
+        || !native.powerVtable || !native.showCover || !native.fullScreenCover || !native.coverInfo)
+        return {};
+    PowerSettings settings;
+    return { native.showCover(settings.get()), native.fullScreenCover(settings.get()),
+             native.coverInfo(settings.get()) };
+}
 
 NativeLight::NativeLight(QWidget *anchor) : QObject(anchor), anchor(anchor)
 {

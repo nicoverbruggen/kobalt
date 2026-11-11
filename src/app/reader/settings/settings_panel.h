@@ -5,6 +5,7 @@
 #include "ui/controls/options.h"
 #include "ui/controls/panels.h"
 #include "ui/controls/paging.h"
+#include "ui/controls/text.h"
 #include "ui/dialogs/modals.h"
 #include "dictionaries_page.h"
 #include "kosync_page.h"
@@ -20,6 +21,17 @@ class AboutPage;
 }
 
 namespace kobalt::reader {
+// The brand-face title of a full-screen settings page. It sits where the
+// word "Settings" sits, so every page title shares one baseline.
+class SettingsTitle final : public ui::InterfaceLabel
+{
+public:
+    using ui::InterfaceLabel::InterfaceLabel;
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+};
+
 // Settings tabs, in the order of the stacked pages.
 enum class SettingsPage {
     Display,
@@ -140,7 +152,7 @@ public:
                       *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;
     ui::CaptionButton *paragraphSpacingButton = nullptr, *beautifierButton = nullptr;
     ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr,
-                      *sleepTileButton = nullptr, *menuViewButton = nullptr;
+                      *menuViewButton = nullptr;
     ui::CaptionButton *buttonControlsButton = nullptr;
     ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                       *navigationBarButton = nullptr, *tappableLinksButton = nullptr,

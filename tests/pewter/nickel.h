@@ -70,6 +70,30 @@ public:
     bool isTolino() const;
 };
 
+// The Settings base occupies seven words on Qt5 and eleven on Qt6.
+class Settings
+{
+public:
+    Settings(const Device &, bool);
+    virtual ~Settings();
+
+private:
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    void *reserved[6]{};
+#else
+    void *reserved[10]{};
+#endif
+};
+
+class PowerSettings : public Settings
+{
+public:
+    ~PowerSettings() override;
+    bool getShowCover();
+    bool getFullscreenCoverStretch();
+    bool getFullscreenCoverInfoPanel();
+};
+
 class Image
 {
 public:

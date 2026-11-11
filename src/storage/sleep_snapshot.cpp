@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QSaveFile>
 #include <QElapsedTimer>
@@ -19,6 +20,8 @@ namespace kobalt::storage {
 namespace {
 constexpr qint64 maxPixels = 4 * 1024 * 1024;
 constexpr qint64 maxBytes = 20 * 1024 * 1024;
+// Each optional text field, so the metadata stays well inside its 16 KiB limit.
+constexpr int maxText = 512;
 
 bool validSize(QSize size)
 {
@@ -40,15 +43,50 @@ QString referencePath(const QString &path)
 
 QJsonObject metadataFor(const sleep::Snapshot &snapshot, const QString &token)
 {
-    return qt::object({ { "version", 1 },
-                        { "token", token },
-                        { "mode", sleep::value(snapshot.mode) },
-                        { "orientation", int(snapshot.orientation) },
-                        { "progress", snapshot.progress },
-                        { "remaining", snapshot.remaining },
-                        { "dark", snapshot.dark },
-                        { "dim", snapshot.dimPage },
-                        { "percent", snapshot.percent } });
+    auto metadata = qt::object({ { "version", 1 },
+                                 { "token", token },
+                                 { "mode", sleep::value(snapshot.mode) },
+                                 { "orientation", int(snapshot.orientation) },
+                                 { "progress", snapshot.progress },
+                                 { "remaining", snapshot.remaining },
+                                 { "dark", snapshot.dark },
+                                 { "dim", snapshot.dimPage },
+                                 { "percent", snapshot.percent } });
+    // Optional fields for the newer designs. Older readers ignore them.
+    const auto &details = snapshot.details;
+    metadata["title"] = details.title.left(maxText);
+    metadata["author"] = details.author.left(maxText);
+    metadata["chapter"] = details.chapter.left(maxText);
+    metadata["left"] = details.left.left(maxText);
+    metadata["font"] = details.font.left(maxText);
+    metadata["greeting"] = details.greeting.left(maxText);
+    if (!snapshot.coverArea.isEmpty())
+        metadata["cover_area"] = qt::array({ snapshot.coverArea.x(), snapshot.coverArea.y(),
+                                             snapshot.coverArea.width(),
+                                             snapshot.coverArea.height() });
+    return metadata;
+}
+
+// Reads the optional fields; a missing or malformed one keeps its default.
+void readDetails(const QJsonObject &metadata, sleep::Snapshot &snapshot)
+{
+    const auto string = [&metadata](const char *key) {
+        const auto value = metadata.value(key);
+        return value.isString() ? value.toString().left(maxText) : QString();
+    };
+    snapshot.details.title = string("title");
+    snapshot.details.author = string("author");
+    snapshot.details.chapter = string("chapter");
+    snapshot.details.left = string("left");
+    snapshot.details.font = string("font");
+    snapshot.details.greeting = string("greeting");
+    const auto area = metadata.value("cover_area").toArray();
+    if (area.size() == 4) {
+        const QRect rect(area.at(0).toInt(), area.at(1).toInt(), area.at(2).toInt(),
+                         area.at(3).toInt());
+        if (!rect.isEmpty() && rect.x() >= 0 && rect.y() >= 0)
+            snapshot.coverArea = rect;
+    }
 }
 
 bool integerField(const QJsonValue &value, double minimum, double maximum, qint64 &result)
@@ -275,6 +313,7 @@ sleep::Snapshot readSleepSnapshot(const QString &path, const QString &token, sle
                               mode,
                               metadata.value("dim").toBool(),
                               percent >= 0 && percent <= 100 ? percent : -1 };
+    readDetails(metadata, snapshot);
     if (!reference) {
         snapshot.image = reader.read();
         return validSize(snapshot.image.size()) ? snapshot : sleep::Snapshot{};
@@ -307,6 +346,7 @@ sleep::Snapshot readSleepSnapshot(const QString &path, const QString &token, sle
         cover = std::move(opaque);
     }
     snapshot.image = sleep::coverBackground(cover, size);
+    snapshot.coverArea = sleep::coverArea(cover.size(), size);
     return snapshot;
 }
 } // namespace kobalt::storage

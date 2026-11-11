@@ -231,13 +231,83 @@ private:
     QRect annotationActionAnchor;
     quint64 savedHighlightEpoch = 0;
     QVector<QRect> savedHighlightRects;
-    bool annotationDragging = false, annotationDragPending = false, annotationDragReleased = false;
-    bool annotationHandleDragging = false, annotationDragAwaitingRelease = false,
-         annotationDragLoadingEdges = false;
-    int annotationDragTurn = 0;
-    kobalt::AnnotationPageEdges annotationDragEdges;
-    int annotationDragBoundary = -1;
-    QPoint annotationDragPoint, annotationDragOrigin;
+
+    // One press that selects text or moves a selection handle.
+    struct AnnotationDrag
+    {
+        // Active: the press moves the selection. AwaitingRelease: the gesture
+        // ended at a page boundary before the finger lifted; the release
+        // finishes it.
+        enum class Phase { Idle, Active, AwaitingRelease };
+        // What the press moves. None: a new selection, before its first word.
+        // Anchored: the press began on blank paper and stays a page gesture.
+        // Start and End: that end of the selection; the page passes them as 0
+        // and 1.
+        enum class Boundary { None = -1, Anchored = -2, Start = 0, End = 1 };
+
+        Phase phase = Phase::Idle;
+        Boundary boundary = Boundary::None;
+        // The press began on a selection handle.
+        bool handle = false;
+        // A hit test, range resolution or page turn for this press is running.
+        bool requestPending = false;
+        // The finger lifted while a request was running.
+        bool released = false;
+        bool loadingEdges = false;
+        // The page turn that this press asked for: -1, 1 or 0 for none.
+        int turn = 0;
+        kobalt::AnnotationPageEdges edges;
+        QPoint point, origin;
+
+        bool active() const { return phase == Phase::Active; }
+
+        // The press moves one end of an existing selection.
+        bool movesEnd() const { return boundary == Boundary::Start || boundary == Boundary::End; }
+
+        void begin(Boundary pressed, QPoint at)
+        {
+            phase = Phase::Active;
+            requestPending = released = false;
+            boundary = pressed;
+            handle = movesEnd();
+            turn = 0;
+            edges = {};
+            origin = point = at;
+        }
+
+        void end()
+        {
+            phase = Phase::Idle;
+            requestPending = false;
+        }
+
+        // The gesture is complete, but the finger may still be down.
+        void endBeforeRelease()
+        {
+            requestPending = false;
+            phase = released ? Phase::Idle : Phase::AwaitingRelease;
+        }
+
+        // True once, when the release that a completed gesture waited for arrives.
+        bool takeAwaitedRelease()
+        {
+            if (phase != Phase::AwaitingRelease)
+                return false;
+            phase = Phase::Idle;
+            return true;
+        }
+
+        void forgetAwaitedRelease() { takeAwaitedRelease(); }
+
+        // A range that resolved in reverse order swaps the end being moved.
+        void swapEnd()
+        {
+            if (movesEnd())
+                boundary = boundary == Boundary::Start ? Boundary::End : Boundary::Start;
+        }
+    };
+
+    AnnotationDrag annotationDrag;
     ReaderMarkupRequest annotationRequest;
     qint64 annotationImageKey = 0;
     bool annotationPresentationCapture = false;

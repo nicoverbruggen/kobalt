@@ -3212,7 +3212,7 @@ void Reader::save(bool snapshot, bool background, bool persist)
     state["appearance_preview_fits"] = appearancePreviewFits();
     state["appearance_preview_pending"] =
             previewPageRequested != 0 && previewPageKey != previewPageRequested;
-    state["annotation_dragging"] = annotationDragging;
+    state["annotation_dragging"] = annotationDrag.active();
     state["bookmarked"] = page->bookmarked;
     state["bookmark_count"] = bookmarks->available() ? int(bookmarks->bookmarks().size()) : -1;
     state["bookmark_pages"] = [this] {

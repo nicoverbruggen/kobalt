@@ -222,7 +222,7 @@ void Reader::leaveAnnotations()
     const bool discardSelection =
             !annotationDraft->range().start.isEmpty() || !annotationDraft->editingId().isEmpty();
     annotationMode = false;
-    annotationDragAwaitingRelease = false;
+    annotationDrag.forgetAwaitedRelease();
     annotationDraft->clear();
     page->setAnnotationHandles({});
     page->setAnnotationInputEnabled(true);
@@ -409,7 +409,7 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
 void Reader::clearAnnotationDraft()
 {
     dismissLookup(true);
-    annotationDragAwaitingRelease = false;
+    annotationDrag.forgetAwaitedRelease();
     annotationDraft->clear();
     page->setAnnotationHandles({});
     annotationColorChosen = annotationStyleChosen = false;
@@ -447,15 +447,8 @@ bool Reader::beginAnnotationDrag(QPoint point, int boundary)
         clearAnnotationDraft();
     annotationDraft->invalidate();
     annotationPopover->hide();
-    annotationDragging = true;
-    annotationDragPending = annotationDragReleased = false;
-    annotationDragBoundary = boundary;
-    annotationHandleDragging = boundary >= 0;
-    annotationDragTurn = 0;
-    annotationDragEdges = {};
-    annotationDragAwaitingRelease = false;
-    annotationDragOrigin = annotationDragPoint = point;
-    if (annotationHandleDragging)
+    annotationDrag.begin(AnnotationDrag::Boundary(boundary), point);
+    if (annotationDrag.handle)
         loadAnnotationDragEdges();
     else
         requestAnnotationDrag();
@@ -464,19 +457,20 @@ bool Reader::beginAnnotationDrag(QPoint point, int boundary)
 
 void Reader::loadAnnotationDragEdges()
 {
-    annotationDragLoadingEdges = true;
-    annotationDragPending = true;
+    annotationDrag.loadingEdges = true;
+    annotationDrag.requestPending = true;
     const auto epoch = annotationDraft->generation();
     QPointer<Reader> guard(this);
     session->annotationPageEdges([guard, epoch](AnnotationPageEdges edges) {
-        if (!guard || guard->annotationDraft->generation() != epoch || !guard->annotationDragging)
+        if (!guard || guard->annotationDraft->generation() != epoch
+            || !guard->annotationDrag.active())
             return;
-        guard->annotationDragLoadingEdges = false;
-        guard->annotationDragEdges = edges;
-        const int direction = std::exchange(guard->annotationDragTurn, 0);
-        guard->annotationDragPending = false;
+        guard->annotationDrag.loadingEdges = false;
+        guard->annotationDrag.edges = edges;
+        const int direction = std::exchange(guard->annotationDrag.turn, 0);
+        guard->annotationDrag.requestPending = false;
         if (edges.first.text.isEmpty() || edges.last.text.isEmpty()) {
-            guard->annotationDragging = false;
+            guard->annotationDrag.end();
             return;
         }
         if (!direction) {
@@ -485,23 +479,22 @@ void Reader::loadAnnotationDragEdges()
         }
         // Complete this gesture at the adjacent page boundary. Further movement
         // belongs to the old press until the user releases and grabs a handle again.
-        guard->annotationDragPending = true;
+        guard->annotationDrag.requestPending = true;
         const auto token = direction > 0 ? edges.first : edges.last;
-        const bool start = guard->annotationDragBoundary == 0;
+        const bool start = guard->annotationDrag.boundary == AnnotationDrag::Boundary::Start;
         guard->resolveAnnotationTokens(
                 start ? token : guard->annotationDraft->endpoints().start,
                 start ? guard->annotationDraft->endpoints().end : token,
                 start ? !token.punctuation : guard->annotationDraft->endpoints().startPolicy,
                 start ? guard->annotationDraft->endpoints().endPolicy : !token.punctuation,
                 [guard] {
-                    guard->annotationDragging = guard->annotationDragPending = false;
-                    guard->annotationDragAwaitingRelease = !guard->annotationDragReleased;
-                    if (guard->annotationDragReleased && !guard->annotationMode)
+                    guard->annotationDrag.endBeforeRelease();
+                    if (guard->annotationDrag.released && !guard->annotationMode)
                         guard->showAnnotationActions();
                 },
                 [guard, direction] {
                     // An adjacent saved highlight is a boundary, never an overlapping draft.
-                    guard->annotationDragging = guard->annotationDragPending = false;
+                    guard->annotationDrag.end();
                     guard->session->turn(-direction);
                 });
     });
@@ -509,7 +502,7 @@ void Reader::loadAnnotationDragEdges()
 
 int Reader::annotationDragPageDirection(QPoint point) const
 {
-    const auto &edges = annotationDragEdges;
+    const auto &edges = annotationDrag.edges;
     if (edges.first.text.isEmpty() || edges.last.text.isEmpty())
         return 0;
     const auto before = [&](const SelectionEndpoint &edge, const AnnotationToken &token,
@@ -550,54 +543,52 @@ void Reader::moveAnnotationDrag(QPoint point)
 {
     // The initial lookup hold keeps its word. Lookup handles can adjust the
     // range after release without enabling annotation mode.
-    if (!annotationDragging || (!annotationMode && !annotationHandleDragging))
+    if (!annotationDrag.active() || (!annotationMode && !annotationDrag.handle))
         return;
-    annotationDragPoint = point;
+    annotationDrag.point = point;
     requestAnnotationDrag();
 }
 
 void Reader::finishAnnotationDrag(bool cancelled)
 {
-    if (!annotationDragging) {
-        if (std::exchange(annotationDragAwaitingRelease, false) && !cancelled && !annotationMode)
+    if (!annotationDrag.active()) {
+        if (annotationDrag.takeAwaitedRelease() && !cancelled && !annotationMode)
             lookupSelection();
         return;
     }
     if (cancelled) {
-        annotationDragging = annotationDragPending = false;
+        annotationDrag.end();
         annotationDraft->invalidate();
         paintAnnotationDraft();
         return;
     }
-    annotationDragReleased = true;
+    annotationDrag.released = true;
     requestAnnotationDrag();
 }
 
 void Reader::requestAnnotationDrag()
 {
-    if (!annotationDragging || annotationDragPending || session->busy() || lifecycleHidden
-        || services.suspended())
+    if (!annotationDrag.active() || annotationDrag.requestPending || session->busy()
+        || lifecycleHidden || services.suspended())
         return;
-    if (annotationDragTurn
-        || (annotationHandleDragging && annotationDragEdges.first.text.isEmpty()))
+    if (annotationDrag.turn || (annotationDrag.handle && annotationDrag.edges.first.text.isEmpty()))
         return;
-    if (annotationHandleDragging) {
-        const int direction = annotationDragPageDirection(annotationDragPoint);
+    if (annotationDrag.handle) {
+        const int direction = annotationDragPageDirection(annotationDrag.point);
         if (direction != 0) {
             if (!annotationMode
-                || !(direction > 0 ? annotationDragEdges.continuesAfter
-                                   : annotationDragEdges.continuesBefore)) {
+                || !(direction > 0 ? annotationDrag.edges.continuesAfter
+                                   : annotationDrag.edges.continuesBefore)) {
                 const auto token =
-                        direction > 0 ? annotationDragEdges.last : annotationDragEdges.first;
-                const bool start = annotationDragBoundary == 0;
-                annotationDragPending = true;
+                        direction > 0 ? annotationDrag.edges.last : annotationDrag.edges.first;
+                const bool start = annotationDrag.boundary == AnnotationDrag::Boundary::Start;
+                annotationDrag.requestPending = true;
                 QPointer<Reader> guard(this);
                 const auto stopped = [guard] {
                     if (!guard)
                         return;
-                    guard->annotationDragging = guard->annotationDragPending = false;
-                    guard->annotationDragAwaitingRelease = !guard->annotationDragReleased;
-                    if (guard->annotationDragReleased && !guard->annotationMode)
+                    guard->annotationDrag.endBeforeRelease();
+                    if (guard->annotationDrag.released && !guard->annotationMode)
                         guard->lookupSelection();
                 };
                 resolveAnnotationTokens(
@@ -608,53 +599,53 @@ void Reader::requestAnnotationDrag()
                         stopped, stopped);
                 return;
             }
-            annotationDragTurn = direction;
-            annotationDragPending = true;
+            annotationDrag.turn = direction;
+            annotationDrag.requestPending = true;
             if (session->turn(direction))
                 return;
-            annotationDragTurn = 0;
-            annotationDragPending = false;
+            annotationDrag.turn = 0;
+            annotationDrag.requestPending = false;
         }
     }
-    if (annotationDragBoundary == -2) {
-        if (annotationDragReleased) {
-            annotationDragging = false;
-            const QPoint delta = annotationDragPoint - annotationDragOrigin;
+    if (annotationDrag.boundary == AnnotationDrag::Boundary::Anchored) {
+        if (annotationDrag.released) {
+            annotationDrag.end();
+            const QPoint delta = annotationDrag.point - annotationDrag.origin;
             if (qAbs(delta.x()) >= qMax(100, page->width() / 10)
                 && qAbs(delta.x()) > qAbs(delta.y()) * 1.5 && page->swiped)
                 page->swiped(delta.x() < 0 ? 1 : -1);
         }
         return;
     }
-    annotationDragPending = true;
+    annotationDrag.requestPending = true;
     const auto epoch = annotationDraft->generation();
-    const QPoint point = annotationDragPoint;
+    const QPoint point = annotationDrag.point;
     QPointer<Reader> guard(this);
     // At most one hit test and range resolution are in flight. Intermediate
     // pointer positions are replaced by the latest point, including release.
     session->annotationTokenAt(
             point,
             [guard, epoch, point](AnnotationToken token) {
-                if (!guard || !guard->annotationDragging
+                if (!guard || !guard->annotationDrag.active()
                     || guard->annotationDraft->generation() != epoch || guard->lifecycleHidden
                     || guard->services.suspended())
                     return;
                 auto finish = [guard, epoch, point] {
                     if (!guard || guard->annotationDraft->generation() != epoch
-                        || !guard->annotationDragging)
+                        || !guard->annotationDrag.active())
                         return;
-                    guard->annotationDragPending = false;
-                    if (guard->annotationDragBoundary == -2) {
+                    guard->annotationDrag.requestPending = false;
+                    if (guard->annotationDrag.boundary == AnnotationDrag::Boundary::Anchored) {
                         guard->requestAnnotationDrag();
                         return;
                     }
-                    if (point != guard->annotationDragPoint) {
+                    if (point != guard->annotationDrag.point) {
                         guard->requestAnnotationDrag();
-                    } else if (guard->annotationDragReleased) {
-                        guard->annotationDragging = false;
+                    } else if (guard->annotationDrag.released) {
+                        guard->annotationDrag.end();
                         if (!guard->annotationMode
                             && !guard->annotationDraft->range().start.isEmpty()) {
-                            if (!guard->annotationHandleDragging
+                            if (!guard->annotationDrag.handle
                                 && guard->selectionLinkPoint().x() >= 0)
                                 guard->showAnnotationActions();
                             else
@@ -665,18 +656,18 @@ void Reader::requestAnnotationDrag()
                 if (token.text.isEmpty()) {
                     // A drag starting on blank paper remains a page gesture. Do not
                     // start a selection later when it happens to cross a word.
-                    if (guard->annotationDragBoundary == -1)
-                        guard->annotationDragBoundary = -2;
+                    if (guard->annotationDrag.boundary == AnnotationDrag::Boundary::None)
+                        guard->annotationDrag.boundary = AnnotationDrag::Boundary::Anchored;
                     finish();
                     return;
                 }
-                const auto reject = [guard, boundary = guard->annotationDragBoundary, finish] {
+                const auto reject = [guard, boundary = guard->annotationDrag.boundary, finish] {
                     if (!guard)
                         return;
-                    guard->annotationDragBoundary = boundary;
+                    guard->annotationDrag.boundary = boundary;
                     finish();
                 };
-                if (guard->annotationDragBoundary < 0) {
+                if (!guard->annotationDrag.movesEnd()) {
                     QVector<QPair<QString, QString>> ranges;
                     QStringList ids;
                     if (guard->annotationMode)
@@ -688,33 +679,34 @@ void Reader::requestAnnotationDrag()
                             token.start, token.end, ranges,
                             [guard, epoch, token, ids, finish, reject](QVector<int> hits) {
                                 if (!guard || guard->annotationDraft->generation() != epoch
-                                    || !guard->annotationDragging)
+                                    || !guard->annotationDrag.active())
                                     return;
                                 if (!hits.isEmpty()) {
-                                    guard->annotationDragging = guard->annotationDragPending =
-                                            false;
+                                    guard->annotationDrag.end();
                                     guard->showSavedAnnotation(
                                             ids[hits.first()],
                                             token.rectangles.value(0).translated(guard->page->mapTo(
                                                     guard, QPoint(0, guard->page->topHeight()))));
                                     return;
                                 }
-                                guard->annotationDragBoundary = 1;
+                                guard->annotationDrag.boundary = AnnotationDrag::Boundary::End;
                                 guard->resolveAnnotationTokens(token, token, !token.punctuation,
                                                                !token.punctuation, finish, reject);
                             });
                     return;
                 }
                 const auto endpoints =
-                        guard->annotationDraft->moved(token, guard->annotationDragBoundary);
+                        guard->annotationDraft->moved(token, int(guard->annotationDrag.boundary));
                 guard->resolveAnnotationTokens(endpoints.start, endpoints.end,
                                                endpoints.startPolicy, endpoints.endPolicy, finish,
                                                reject);
             },
-            annotationDragBoundary == 0           ? annotationDraft->endpoints().start.start
-                    : annotationDragBoundary == 1 ? annotationDraft->endpoints().end.end
-                                                  : QString(),
-            annotationDragBoundary == 0);
+            annotationDrag.boundary == AnnotationDrag::Boundary::Start
+                    ? annotationDraft->endpoints().start.start
+                    : annotationDrag.boundary == AnnotationDrag::Boundary::End
+                    ? annotationDraft->endpoints().end.end
+                    : QString(),
+            annotationDrag.boundary == AnnotationDrag::Boundary::Start);
 }
 
 void Reader::resolveAnnotationTokens(AnnotationToken start, AnnotationToken end, bool startPolicy,
@@ -732,8 +724,8 @@ void Reader::resolveAnnotationTokens(AnnotationToken start, AnnotationToken end,
             [guard](bool reversed) {
                 if (!guard)
                     return;
-                if (reversed && guard->annotationDragging)
-                    guard->annotationDragBoundary = 1 - guard->annotationDragBoundary;
+                if (reversed && guard->annotationDrag.active())
+                    guard->annotationDrag.swapEnd();
                 guard->syncMarkupRequest();
             },
             [guard, after] {
@@ -1078,10 +1070,10 @@ void Reader::syncAnnotations()
         annotationActionAnchor = {};
         annotationPopover->hide();
     }
-    if (annotationDragTurn && annotationDragging && !annotationDragLoadingEdges) {
-        annotationDragLoadingEdges = true;
+    if (annotationDrag.turn && annotationDrag.active() && !annotationDrag.loadingEdges) {
+        annotationDrag.loadingEdges = true;
         qt::later(0, this, [this] {
-            if (annotationDragging && annotationDragTurn && !session->busy())
+            if (annotationDrag.active() && annotationDrag.turn && !session->busy())
                 loadAnnotationDragEdges();
         });
     }

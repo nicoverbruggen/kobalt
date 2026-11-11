@@ -766,6 +766,30 @@ struct Fixture
 
     bool press(const char *name) { return click(widget(name)); }
 
+    // Every visible search result row has loaded its details. A row that has
+    // not stays blank and disabled.
+    bool searchResultsReady()
+    {
+        for (const auto *row : window.readerWindow()->findChildren<QPushButton *>(
+                     QRegularExpression("^rrSearchResult\\d+$")))
+            if (row->isVisible() && !row->isEnabled())
+                return false;
+        return true;
+    }
+
+    // A result row appears before its details load and stays disabled until
+    // then, so a press right after it appears can be ignored.
+    bool pressSearchResult()
+    {
+        return QTest::qWaitFor(
+                       [&] {
+                           return visible("rrSearchResult0")
+                                   && widget("rrSearchResult0")->isEnabled();
+                       },
+                       30000)
+                && press("rrSearchResult0");
+    }
+
     // A dictionary action: its cell, or the row of the same action in the
     // narrow sheet's menu.
     bool lookupAction(const char *cell, const char *row)
@@ -1329,7 +1353,10 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     return true;
 }
 
-void capturePages(Fixture &fixture, const QString &name, const char *prefix, int limit = 20)
+// Captures each page of a paged list. READY, when given, must hold before
+// each capture, for lists that fill their rows after a page turn.
+void capturePages(Fixture &fixture, const QString &name, const char *prefix, int limit = 20,
+                  const std::function<bool()> &ready = {})
 {
     auto *counter = qobject_cast<QLabel *>(fixture.widget(qPrintable(QString(prefix) + "Page")));
     auto *next = fixture.widget(qPrintable(QString(prefix) + "Next"));
@@ -1340,6 +1367,8 @@ void capturePages(Fixture &fixture, const QString &name, const char *prefix, int
         if (seen.contains(text))
             return;
         seen.insert(text);
+        if (ready)
+            QTRY_VERIFY_WITH_TIMEOUT(ready(), 30000);
         QVERIFY(capture(fixture, name + (i == 1 ? QString() : '-' + QString::number(i))));
         if (!next || !next->isVisible() || !next->isEnabled())
             return;
@@ -2437,7 +2466,8 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QVERIFY(status);
     QTRY_VERIFY_WITH_TIMEOUT(!status->text().contains("Searching", Qt::CaseInsensitive), 30000);
     if (screenshots) {
-        capturePages(fixture, name + "-search", "rrSearch", 3);
+        capturePages(fixture, name + "-search", "rrSearch", 3,
+                     [&] { return fixture.searchResultsReady(); });
         query->setText("No matching words in this book xyzzy");
         QVERIFY(fixture.press("rrSearchSubmit"));
         QTRY_VERIFY_WITH_TIMEOUT(!status->text().contains("Searching", Qt::CaseInsensitive), 30000);
@@ -2446,6 +2476,7 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         query->setText("e");
         QVERIFY(fixture.press("rrSearchSubmit"));
         QTRY_VERIFY_WITH_TIMEOUT(!status->text().contains("Searching", Qt::CaseInsensitive), 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.searchResultsReady(), 30000);
         QVERIFY(fixture.press("rrSearchPageJump"));
         QVERIFY(scene("search-page-jump"));
         auto *number = fixture.window.readerWindow()->findChild<QLineEdit *>("rrSearchPageNumber");
@@ -2453,12 +2484,13 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         const auto *validator = static_cast<const QIntValidator *>(number->validator());
         number->setText(QString::number(validator->top()));
         QVERIFY(fixture.press("rrSearchPageGo"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.searchResultsReady(), 30000);
         QVERIFY(scene("search-last-page"));
         query->setText("Trevelyan");
         QVERIFY(fixture.press("rrSearchSubmit"));
         QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
     }
-    QVERIFY(fixture.press("rrSearchResult0"));
+    QVERIFY(fixture.pressSearchResult());
     QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
     QTRY_VERIFY(!fixture.visible("rrSearch"));
     if (!fixture.visible("rrSettings"))
@@ -6147,7 +6179,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(query->text(), QString("Trevelyan"));
         QTRY_VERIFY(fixture.visible("rrSearchResult0"));
         QTRY_VERIFY(!status->text().contains("Searching", Qt::CaseInsensitive));
-        QVERIFY(fixture.press("rrSearchResult0"));
+        QVERIFY(fixture.pressSearchResult());
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_VERIFY(!fixture.visible("rrSearch"));
         QVERIFY(fixture.state().value("position") != original);
@@ -9963,7 +9995,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSearchSubmit"));
         QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
         QVERIFY(!reader->property("reader_full_flash").toBool());
-        QVERIFY(fixture.press("rrSearchResult0"));
+        QVERIFY(fixture.pressSearchResult());
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
         QTRY_VERIFY(!fixture.visible("rrSearch"));
         QTRY_VERIFY(reader->property("reader_full_flash").toBool());
@@ -13701,7 +13733,7 @@ private slots:
         QVERIFY(fixture.press("rrSearchScope3"));
         query->setText("Trevelyan");
         QVERIFY(scene("rrSearchSubmit", "rrSearchResult0", "search"));
-        QVERIFY(fixture.press("rrSearchResult0"));
+        QVERIFY(fixture.pressSearchResult());
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         openPrologueBody(fixture);
         QVERIFY(fixture.press("rrPage"));
@@ -14853,7 +14885,7 @@ private slots:
         query->setText("Well, Prince, so Genoa and Lucca");
         QVERIFY(fixture.press("rrSearchSubmit"));
         QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
-        QVERIFY(fixture.press("rrSearchResult0"));
+        QVERIFY(fixture.pressSearchResult());
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         // Clear the search highlight, leaving the actual opening chapter visible.
         QVERIFY(fixture.turnPage(1));
@@ -14975,7 +15007,7 @@ private slots:
             query->setText("IN this chapter we go to work finding solutions");
             QVERIFY(fixture.press("rrSearchSubmit"));
             QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
-            QVERIFY(fixture.press("rrSearchResult0"));
+            QVERIFY(fixture.pressSearchResult());
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             // Leave and return to clear the transient search-result highlight.
             const int origin = fixture.state().value("page").toInt();
@@ -15070,7 +15102,7 @@ private slots:
             query->setText(QString::fromLatin1(sample.query));
             QVERIFY(fixture.press("rrSearchSubmit"));
             QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
-            QVERIFY(fixture.press("rrSearchResult0"));
+            QVERIFY(fixture.pressSearchResult());
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             // Clear the temporary search highlight before capturing the passage.
             const int page = fixture.state().value("page").toInt();
@@ -15135,7 +15167,7 @@ private slots:
             query->setText(sample.first);
             QVERIFY(fixture.press("rrSearchSubmit"));
             QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
-            QVERIFY(fixture.press("rrSearchResult0"));
+            QVERIFY(fixture.pressSearchResult());
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             const int page = fixture.state().value("page").toInt();
             QVERIFY(fixture.turnPage(1));

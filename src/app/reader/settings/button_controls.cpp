@@ -236,7 +236,6 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         choices->setObjectName("rrButtonActionChoices");
         choices->setMinimumRowHeight(ui::metrics::list::oneLine);
         choices->setUniformRows(false);
-        choices->setTopDivider(true);
         const QVector<int> directions{ -1, 1, 0 };
         QJsonObject prefs;
         prefs[pageButtons::preferenceKey] = *draft;

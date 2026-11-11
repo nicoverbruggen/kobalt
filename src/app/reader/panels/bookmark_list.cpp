@@ -450,7 +450,6 @@ void BookmarkList::openSort()
     card->heading(strings::get("marks.sort_title"));
     auto *options = new ui::RadioList(card);
     options->setMinimumRowHeight(chrome::listActionHeight);
-    options->setTopDivider(true);
     const QStringList values{ "position", "newest", "oldest" };
     const QStringList keys{ "marks.sort_position", "marks.sort_newest", "marks.sort_oldest" };
     for (int i = 0; i < values.size(); ++i) {

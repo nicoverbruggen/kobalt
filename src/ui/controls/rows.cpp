@@ -479,6 +479,8 @@ void ListRow::paintEvent(QPaintEvent *)
             painter.drawPolyline(check);
         }
     }
+    if (topDivider)
+        painter.fillRect(0, 0, width(), metrics::control::border, dividerColor(this));
     painter.fillRect(0, height() - metrics::control::border, width(), metrics::control::border,
                      dividerColor(this));
 }

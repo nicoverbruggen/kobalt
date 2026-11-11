@@ -583,7 +583,6 @@ void KosyncScheduleSheet::showIntervals()
     choices->setObjectName("rrKosyncIntervalChoices");
     choices->setUniformRows(false);
     choices->setMinimumRowHeight(chrome::listActionHeight);
-    choices->setTopDivider(true);
     const auto &values = kosync::scheduleMinutes();
     for (const int minutes : values)
         choices->add("rrKosyncInterval_" + intervalKey(minutes), intervalLabel(minutes));

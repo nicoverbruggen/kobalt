@@ -450,6 +450,8 @@ void RadioList::setMinimumRowHeight(int pixels)
 
 void RadioList::setTopDivider(bool shown)
 {
+    if (topDivider == shown)
+        return;
     topDivider = shown;
     arrange();
 }

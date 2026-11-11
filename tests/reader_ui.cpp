@@ -2660,6 +2660,151 @@ private slots:
         QCOMPARE(sheet.list->height(), sheet.list->heightForWidth(sheet.list->width()));
     }
 
+    void modalListDividers_data() { variants(); }
+
+    // Modal list boundaries have one divider, including the first visible row after paging.
+    void modalListDividers()
+    {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        QWidget host;
+        host.setProperty("reader_dark", dark);
+        auto colors = host.palette();
+        colors.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
+        colors.setColor(QPalette::WindowText, dark ? Qt::white : Qt::black);
+        host.setPalette(colors);
+        ui::readerStyle(&host, ui::styles::reader());
+        host.resize(ui::px(1072), ui::px(1448));
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        ui::ChoiceModal modal(&host, { "Choose a folder.", "Resource folders", {} },
+                              { "Cancel", "probeCancel" }, { "OK", "probeClose" });
+        modal.setObjectName("rrModalListProbe");
+        QVector<ui::ListRow *> rows;
+        for (int i = 0; i < 5; ++i) {
+            auto *row = new ui::ListRow(modal.card());
+            row->setTitle(QString("Folder %1").arg(i));
+            row->setFixedHeight(row->sizeHint().height());
+            modal.card()->rows()->insertWidget(modal.card()->rows()->count() - 1, row);
+            rows.append(row);
+        }
+        modal.setGeometry(host.rect());
+        modal.fitCard();
+        modal.show();
+        QCoreApplication::processEvents();
+        const auto divider = ui::dividerColor(modal.card());
+        const auto paper = modal.card()->palette().color(QPalette::Window);
+        const int x = ui::px(10), border = ui::metrics::control::border;
+        QCOMPARE(rows.first()->grab().toImage().pixelColor(x, 0), divider);
+        QCOMPARE(rows.first()->grab().toImage().pixelColor(x, border), paper);
+        QCOMPARE(rows[1]->grab().toImage().pixelColor(x, 0), paper);
+        QCOMPARE(rows.first()->grab().toImage().pixelColor(x, rows.first()->height() - 1), divider);
+        QCOMPARE(modal.primaryButton()->grab().toImage().pixelColor(x, 0), paper);
+        QCOMPARE(modal.secondaryButton()->grab().toImage().pixelColor(x, 0), paper);
+        modal.primaryButton()->setText(
+                "Use this folder for dictionaries, reading fonts and custom bookmark icons");
+        modal.fitCard();
+        QCoreApplication::processEvents();
+        QVERIFY(modal.primaryButton()->y() < modal.secondaryButton()->y());
+        QCOMPARE(modal.primaryButton()->grab().toImage().pixelColor(x, 0), paper);
+        QCOMPARE(modal.secondaryButton()->grab().toImage().pixelColor(x, 0), divider);
+        modal.primaryButton()->setText("OK");
+        host.resize(ui::px(1072), ui::px(600));
+        modal.setGeometry(host.rect());
+        modal.fitCard();
+        auto *next = modal.findChild<QPushButton *>("rrModalListProbeNext");
+        QVERIFY(next && next->isVisible());
+        auto *pager = next->parentWidget();
+        QCOMPARE(next->y(), 0);
+        QCOMPARE(pager->grab().toImage().pixelColor(pager->width() / 2, 0), paper);
+        QCOMPARE(modal.primaryButton()->grab().toImage().pixelColor(x, 0), divider);
+        int pages = 0;
+        do {
+            QCoreApplication::processEvents();
+            for (auto *row : rows) {
+                if (!row->isVisible())
+                    continue;
+                QCOMPARE(row->grab().toImage().pixelColor(x, 0), divider);
+                break;
+            }
+            ++pages;
+            if (!next->isEnabled())
+                break;
+            next->click();
+        } while (pages < 10);
+        QVERIFY(pages > 1 && pages < 10);
+        modal.hide();
+        host.resize(ui::px(1072), ui::px(1448));
+        const auto sheet = ui::makeChoiceSheet(&host, "rrBoundaryProbe", "Pick one");
+        sheet.list->add("probeOne", "One");
+        sheet.list->add("probeTwo", "Two");
+        ui::presentChoiceSheet(sheet.overlay, sheet.list);
+        QCoreApplication::processEvents();
+        QCOMPARE(sheet.list->options().first()->grab().toImage().pixelColor(x, 0),
+                 ui::dividerColor(sheet.list));
+        sheet.overlay->hide();
+        // Construct the same nested header/list form used by settings, without caller borders.
+        sheet.overlay->card()->rows()->removeWidget(sheet.list);
+        auto *group = new QWidget(sheet.overlay->card());
+        auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+        auto *header = new ui::ListHeader(group);
+        header->setCaptions("Options");
+        header->setFixedHeight(header->sizeHint().height());
+        layout->addWidget(header);
+        layout->addWidget(sheet.list);
+        sheet.overlay->card()->rows()->addWidget(group);
+        ui::presentChoiceSheet(sheet.overlay, sheet.list);
+        QCoreApplication::processEvents();
+        QCOMPARE(header->grab().toImage().pixelColor(x, 0), ui::dividerColor(header));
+        auto *first = sheet.list->options().first();
+        QCOMPARE(first->grab().toImage().pixelColor(x, 0),
+                 first->palette().color(QPalette::Window));
+        QCOMPARE(header->grab().toImage().pixelColor(x, header->height() - 1),
+                 ui::dividerColor(header));
+        sheet.overlay->hide();
+        // Some choosers reserve a full page, leaving a blank band after shorter pages.
+        ui::NoticeModal padded(&host, { {}, "Padded choices", {} }, { "Close", "paddedClose" });
+        auto *choices = new ui::RadioList(padded.card());
+        choices->add("paddedOne", "One");
+        choices->setFixedHeight(choices->heightForWidth(ui::px(700)) + ui::px(50));
+        auto *paddedPager = new ui::PagerBar(padded.card(), "rrPaddedProbe");
+        paddedPager->setFixedHeight(ui::metrics::chrome::actionHeight);
+        paddedPager->setPage(0, 2);
+        padded.card()->rows()->insertWidget(1, choices);
+        padded.card()->rows()->insertWidget(2, paddedPager);
+        padded.setGeometry(host.rect());
+        padded.fitCard();
+        padded.show();
+        QCoreApplication::processEvents();
+        QCOMPARE(paddedPager->grab().toImage().pixelColor(paddedPager->width() / 2, 0),
+                 ui::dividerColor(paddedPager));
+        QCOMPARE(paddedPager->next->y(), int(ui::metrics::control::border));
+        padded.hide();
+        ui::NoticeModal filled(&host, { {}, "Wrapped choices", {} }, { "Close", "filledClose" });
+        auto *wrapped = new ui::RadioList(filled.card());
+        wrapped->add(
+                "wrappedOne", "One",
+                "A description that wraps onto several lines in a narrow chooser, so its natural height changes with the available width.");
+        wrapped->add("wrappedTwo", "Two",
+                     "Another description that wraps when the chooser gets narrower.");
+        filled.card()->rows()->insertWidget(1, wrapped);
+        const int cardBorder = ui::metrics::notice::cardBorder;
+        for (const int width : { int(ui::metrics::notice::cardWidth), ui::px(420) }) {
+            filled.hide();
+            wrapped->setFixedHeight(wrapped->heightForWidth(width - 2 * cardBorder));
+            filled.card()->fitToWidth(width);
+            filled.centerCard();
+            filled.show();
+            QCoreApplication::processEvents();
+            QCOMPARE(wrapped->width(), width - 2 * cardBorder);
+            QCOMPARE(wrapped->height(), wrapped->heightForWidth(wrapped->width()));
+            QCOMPARE(filled.primaryButton()->grab().toImage().pixelColor(x, 0), paper);
+        }
+    }
+
     void connectedModalFooter_data() { variants(); }
 
     void connectedModalFooter()

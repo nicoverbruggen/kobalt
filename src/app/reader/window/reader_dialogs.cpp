@@ -1272,7 +1272,6 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix,
     choices->setObjectName(name + "Choices");
     choices->setUniformRows(false);
     choices->setMinimumRowHeight(chrome::listActionHeight);
-    choices->setTopDivider(true);
     for (const auto &option : options)
         choices->add(optionPrefix + option.value, option.label, option.explanation)
                 ->setEnabled(option.enabled);
@@ -1509,7 +1508,6 @@ void Reader::openPageNavigation()
         auto *header = new ui::ListHeader(group);
         header->setObjectName(name);
         header->setShaded(true);
-        header->setTopDivider(true);
         header->setCaptions(caption.toUpper());
         header->setFixedHeight(header->sizeHint().height());
         rows->addWidget(header);

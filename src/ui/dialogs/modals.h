@@ -52,6 +52,8 @@ private:
     QVector<QPointer<QWidget>> pagedRows;
     int rowPage = 0;
     void showRowPage(int page);
+    // The card joins list rows to headings and prose, including nested sections.
+    void updateListDividers();
     QBoxLayout *actionRows = nullptr;
     QVector<QPushButton *> actionButtons;
     QLabel *artwork = nullptr;

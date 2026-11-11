@@ -113,6 +113,7 @@ public:
 
     void setCurrent(int index);
     void setMinimumRowHeight(int pixels);
+    // PopupCard sets this from adjacent visible content; other containers choose their own rule.
     void setTopDivider(bool shown);
     // False lets each row take the height it needs.
     void setUniformRows(bool uniform);

@@ -13262,6 +13262,13 @@ private slots:
             }
             return fixture.visible(control);
         };
+        QVERIFY(reveal("rrSettingsOptions", "rrKosyncMatching"));
+        QVERIFY(fixture.press("rrKosyncMatching"));
+        QTRY_VERIFY(fixture.visible("rrKosyncMatchingDialog"));
+        QVERIFY(capture(fixture, name + "-kosync-matching"));
+        QVERIFY(fixture.press("rrKosyncMatchingCancel"));
+        QTRY_VERIFY(!fixture.visible("rrKosyncMatchingDialog"));
+        QVERIFY(reveal("rrSettingsOptions", "rrKosyncAutomatic"));
         QVERIFY(fixture.press("rrKosyncAutomatic"));
         QTRY_VERIFY(fixture.visible("rrKosyncAutomaticPopup"));
         QVERIFY(!fixture.widget("rrKosyncWhenReading")->isEnabled());

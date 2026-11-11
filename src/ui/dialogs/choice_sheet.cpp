@@ -25,7 +25,6 @@ ChoiceSheet makeChoiceSheet(QWidget *host, const QString &name, const QString &t
     auto *list = new RadioList(card);
     list->setObjectName(name + "Choices");
     list->setMinimumRowHeight(metrics::chrome::listActionHeight);
-    list->setTopDivider(true);
     card->rows()->addWidget(list);
     return { overlay, list };
 }

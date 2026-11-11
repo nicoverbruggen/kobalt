@@ -1548,13 +1548,11 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
     auto *section = new ui::ListHeader(card);
     section->setObjectName("rrSettingsFontSection");
     section->setShaded(true);
-    section->setTopDivider(true);
     section->setFixedHeight(section->sizeHint().height());
     rows->addWidget(section);
     auto *choices = new ui::RadioList(card);
     choices->setObjectName("rrSettingsFontChoices");
     choices->setMinimumRowHeight(metrics::list::oneLine);
-    choices->setTopDivider(true);
     int selected = 0;
     for (int index = 0; index < fonts.size(); ++index) {
         const auto &family = fonts[index].family;

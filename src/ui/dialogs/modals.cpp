@@ -8,6 +8,7 @@
 #include <QResizeEvent>
 #include "ui/controls/buttons.h"
 #include "ui/controls/rows.h"
+#include "ui/controls/options.h"
 #include "ui/controls/paging.h"
 #include "ui/controls/text.h"
 #include <QKeyEvent>
@@ -130,6 +131,14 @@ public:
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     }
 
+    void setTopDivider(bool shown)
+    {
+        if (topDivider == shown)
+            return;
+        topDivider = shown;
+        update();
+    }
+
     QSize sizeHint() const override
     {
         auto size = Button::sizeHint();
@@ -146,7 +155,7 @@ protected:
         const auto paper = palette().color(QPalette::Window);
         const auto ink = palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid);
         painter.fillRect(rect(), isEnabled() && isDown() ? sectionColor(this) : paper);
-        auto edges = Edges(Qt::TopEdge);
+        auto edges = topDivider ? Edges(Qt::TopEdge) : Edges{};
         if (property("reader_modal_left_rule").toBool())
             edges |= Qt::LeftEdge;
         paintEdges(painter, rect(), edges, dividerColor(this), metrics::control::border);
@@ -159,6 +168,9 @@ protected:
                                                  -metrics::control::outlinedVerticalPadding),
                                  text(), Qt::AlignCenter);
     }
+
+private:
+    bool topDivider = true;
 };
 
 PopupCard::Heading modalContent(PopupCard *card, const ModalContent &content)
@@ -172,6 +184,59 @@ PopupCard::Heading modalContent(PopupCard *card, const ModalContent &content)
                          "rrModalDescription");
 }
 } // namespace
+
+void PopupCard::updateListDividers()
+{
+    // Lists own their bottom rule. The card supplies a top rule only when
+    // the preceding visible content does not already close that boundary.
+    const auto visit = [](auto &&visit, QBoxLayout *layout, bool preceded,
+                          bool previousBottom) -> bool {
+        for (int i = 0; i < layout->count(); ++i) {
+            auto *widget = layout->itemAt(i)->widget();
+            if (!widget || widget->isHidden())
+                continue;
+            const bool top = preceded && (!previousBottom || layout->spacing() > 0);
+            if (auto *row = dynamic_cast<ListRow *>(widget)) {
+                row->setTopDivider(top);
+                previousBottom = true;
+            } else if (auto *list = dynamic_cast<RadioList *>(widget)) {
+                list->setTopDivider(top);
+                previousBottom = !list->options().isEmpty()
+                        && list->heightForWidth(list->width()) == list->height();
+            } else if (auto *header = dynamic_cast<ListHeader *>(widget)) {
+                header->setTopDivider(top);
+                previousBottom = true;
+            } else if (auto *pager = dynamic_cast<PagerBar *>(widget)) {
+                pager->setTopDivider(top);
+                previousBottom = false;
+            } else if (auto *nested = dynamic_cast<QBoxLayout *>(widget->layout());
+                       nested && nested->direction() == QBoxLayout::TopToBottom) {
+                previousBottom = visit(visit, nested, preceded,
+                                       previousBottom && layout->spacing() == 0
+                                               && nested->contentsMargins().top() == 0);
+                if (nested->contentsMargins().bottom() > 0)
+                    previousBottom = false;
+            } else {
+                previousBottom = false;
+            }
+            preceded = true;
+        }
+        return previousBottom;
+    };
+    const bool bottom = visit(visit, contentRows, false, false);
+    if (actionRows) {
+        int visible = 0;
+        for (int i = 0; i < actionRows->count(); ++i) {
+            auto *button = dynamic_cast<ModalButton *>(actionRows->itemAt(i)->widget());
+            if (!button || button->isHidden())
+                continue;
+            const bool stacked = actionRows->direction() == QBoxLayout::TopToBottom;
+            button->setTopDivider(!bottom || contentRows->spacing() > 0
+                                  || (stacked && visible > 0));
+            ++visible;
+        }
+    }
+}
 
 void PopupCard::fitToWidth(int width)
 {
@@ -259,6 +324,8 @@ void PopupCard::fitToWidth(int width)
     const int height = contentRows->hasHeightForWidth() ? contentRows->totalHeightForWidth(width)
                                                         : contentRows->totalSizeHint().height();
     resize(width, height);
+    contentRows->activate();
+    updateListDividers();
 }
 
 void PopupCard::fitToHeight(int height)
@@ -278,6 +345,8 @@ void PopupCard::fitToHeight(int height)
     const int natural = measure();
     if (natural <= height) {
         resize(width(), natural);
+        contentRows->activate();
+        updateListDividers();
         return;
     }
     if (!rowPager) {
@@ -349,6 +418,7 @@ void PopupCard::showRowPage(int page)
     resize(width(), height);
     // Place the page's rows now, so they take touches where they are drawn.
     contentRows->activate();
+    updateListDividers();
 }
 
 namespace {

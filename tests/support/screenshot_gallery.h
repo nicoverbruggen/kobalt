@@ -297,6 +297,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "kosync-no-connection", "Sync without a connection" },
         { "kosync-automatic-off", "Automatic sync off" },
         { "kosync-automatic", "Automatic sync" },
+        { "kosync-matching", "Sync book matching" },
         { "kosync-interval", "Sync while reading" },
         { "kosync-password-masked", "Sync password entry" },
         { "kosync-password-shown", "Sync password revealed" },

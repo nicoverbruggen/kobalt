@@ -75,6 +75,15 @@ public:
 
     explicit ListRow(QWidget *parent);
     void setTitle(const QString &text);
+
+    void setTopDivider(bool shown)
+    {
+        if (topDivider == shown)
+            return;
+        topDivider = shown;
+        update();
+    }
+
     // A hidden icon keeps the same text alignment unless alignWithoutIcon is false.
     void setTitleIcon(ControlIcon icon, bool visible = true, bool alignWithoutIcon = true);
     void setDetail(const QString &text);
@@ -129,7 +138,7 @@ private:
     QString labelStyles[5];
     Accessory accessory = None{};
     ControlIcon leadingIcon{};
-    bool hasLeadingIcon = false;
+    bool hasLeadingIcon = false, topDivider = false;
     QPointer<QWidget> observedParent;
     int detailLines = 1;
     int titleGap = 0;
@@ -145,7 +154,7 @@ public:
     void setTrailingInset(int pixels);
     void setShaded(bool shaded);
 
-    // List popups can add a top rule without changing headers in other contexts.
+    // PopupCard joins this to nearby list rows; other containers choose their own rule.
     void setTopDivider(bool shown)
     {
         topDivider = shown;

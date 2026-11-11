@@ -141,7 +141,7 @@ private:
 // All presets: a full-screen grid of large previews, six to a page or three
 // on a phone in portrait, with a
 // title and close cell like the sleep screen gallery. Each preview is the
-// reader's own rendering of a sample paragraph in that preset. The last tile
+// reader's own rendering of a sample paragraph in that preset. The first tile
 // saves the current text.
 class TextPresetGallery final : public ui::Panel
 {

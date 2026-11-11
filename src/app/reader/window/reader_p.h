@@ -763,7 +763,7 @@ private:
                           bool *modified);
     void setTextPresetGalleryPresets(kobalt::reader::TextPresetGallery *gallery,
                                      const QVector<kobalt::textpresets::Preset> &presets,
-                                     const QString &selected, bool modified);
+                                     const QString &selected);
     QRect textPresetGalleryBounds() const;
     // Once a book shows its first page, the reader prepares the All grid's
     // first page: from storage, or else on the engine, one tile at a time

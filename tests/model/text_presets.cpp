@@ -22,7 +22,8 @@ int main()
                     && shipped[2].name == "Modern" && shipped[3].name == "Classic"
                     && shipped[1].fontFace == "NV Ancizar Serif" && shipped[1].lineSpacing == 140
                     && shipped[2].fontFace == "NV Jost" && shipped[3].fontFace == "NV Garamond"
-                    && shipped[3].halfPoints == 24,
+                    && shipped[1].halfPoints == 23 && shipped[1].weightSteps == 2
+                    && shipped[3].halfPoints == 23 && shipped[3].weightSteps == 2,
             "The example presets changed their names or fonts");
     require(shipped[0].fontFace == defaultFontFace && shipped[0].halfPoints == 22
                     && shipped[0].lineSpacing == defaultLineSpacing,
@@ -35,6 +36,7 @@ int main()
     // Values round-trip; invalid entries, duplicates and extras are dropped.
     auto preset = shipped[2];
     preset.id = "mine";
+    preset.example = false;
     preset.name = "Evening";
     preset.weightSteps = 2;
     QJsonObject preferences;
@@ -144,7 +146,7 @@ int main()
     require(newBookChoice(choosing) == "last", "A deleted preset was still used for new books");
 
     // Restoring the examples brings back deleted ones and undoes changes to
-    // them, first and in their order. The user's own presets follow in theirs.
+    // them. The user's own presets stay first, in their saved order.
     Preset mine = shipped[0];
     mine.id = "preset-mine";
     mine.name = "Mine";
@@ -153,8 +155,22 @@ int main()
     changedClassic.name = "Evening";
     changedClassic.halfPoints = 30;
     const auto restored = restoreExamples({ mine, changedClassic });
-    require(restored.size() == 5 && restored.mid(0, 4) == shipped && restored[4] == mine,
-            "Restoring did not put the examples back before the user's presets");
+    require(restored.size() == 5 && restored.mid(1) == shipped && restored[0] == mine,
+            "Restoring did not keep the user's presets before the examples");
+    // Old lists keep their custom order, ahead of the bundled examples.
+    auto newer = mine;
+    newer.id = "preset-newer";
+    newer.name = "Newer";
+    QJsonObject ordered;
+    auto updatedExample = shipped[0];
+    updatedExample.example = false;
+    store(ordered, { updatedExample, newer, shipped[1], mine });
+    const QVector<Preset> expected{ newer, mine, updatedExample, shipped[1] };
+    require(load(ordered) == expected, "Loading did not group custom presets first");
+    clean(ordered);
+    require(load(ordered) == expected, "Settings cleanup changed the custom order");
+    require(restoreExamples(expected) == QVector<Preset>({ newer, mine }) + shipped,
+            "Restoring examples changed the custom order");
     // The user's presets are never dropped: only the examples that fit return.
     QVector<Preset> own;
     for (int index = 0; index < maximumCount - 1; ++index) {
@@ -164,7 +180,8 @@ int main()
         own.append(preset);
     }
     const auto full = restoreExamples(own);
-    require(full.size() == maximumCount && full[0] == shipped[0] && full.mid(1) == own,
+    require(full.size() == maximumCount && full.last() == shipped[0]
+                    && full.mid(0, own.size()) == own,
             "Restoring dropped a user's preset or went past the limit");
     own.append(mine);
     require(restoreExamples(own) == own, "Restoring a full list changed it");

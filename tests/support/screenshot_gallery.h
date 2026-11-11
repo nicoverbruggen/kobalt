@@ -74,12 +74,11 @@ inline bool verticalWritingTour(const QString &language)
     return QStringList{ "ja", "ko", "zh-Hans", "zh-Hant" }.contains(language);
 }
 
-// Whether a viewport shows a scene. The Text panel leaves out the text
-// presets bar in landscape, so its scenes have no landscape captures.
+// Only phones in landscape leave out the text presets bar.
 inline bool screenshotSceneShown(const QString &screen, const QString &device)
 {
     return !(screen.startsWith(QLatin1String("text-presets"))
-             && device.endsWith(QLatin1String("landscape")));
+             && device == QLatin1String("phone-landscape"));
 }
 
 // The card title of every gallery scene other than the international books.

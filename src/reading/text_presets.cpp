@@ -3,6 +3,7 @@
 #include "reading_density.h"
 #include "support/strings.h"
 
+#include <algorithm>
 #include <QUuid>
 #include <QJsonArray>
 #include <QSet>
@@ -110,16 +111,15 @@ bool Preset::operator==(const Preset &other) const
 QVector<Preset> examples()
 {
     return {
-        // Kobalt is the book defaults, and Modern the same text in the bundled
-        // sans. Ancizar Serif reads well with tighter lines. Garamond has
-        // small lowercase letters, so Classic is one point larger.
+        // Kobalt matches the book defaults. Modern uses the same text in Jost.
+        // Bookish and Classic use slightly larger, heavier text.
         example("kobalt", "text_presets.example_kobalt", defaultFontFace, 22, defaultLineSpacing,
                 "left", "off"),
-        example("bookish", "text_presets.example_bookish", "NV Ancizar Serif", 22, 140, "left",
-                "off"),
+        example("bookish", "text_presets.example_bookish", "NV Ancizar Serif", 23, 140, "left",
+                "off", 2),
         example("modern", "text_presets.example_modern", "NV Jost", 22, defaultLineSpacing, "left",
                 "off"),
-        example("classic", "text_presets.example_classic", "NV Garamond", 24, 145, "left", "off",
+        example("classic", "text_presets.example_classic", "NV Garamond", 23, 145, "left", "off",
                 // Garamond's thin strokes read better two steps heavier.
                 2),
     };
@@ -132,8 +132,8 @@ QVector<Preset> restoreExamples(const QVector<Preset> &presets)
     for (const auto &preset : presets)
         if (!find(shipped, preset.id))
             own.append(preset);
-    auto restored = shipped.mid(0, qMax(0, maximumCount - int(own.size())));
-    restored += own;
+    auto restored = own;
+    restored += shipped.mid(0, qMax(0, maximumCount - int(own.size())));
     return restored;
 }
 
@@ -152,6 +152,11 @@ QVector<Preset> load(const QJsonObject &preferences)
         if (presets.size() == maximumCount)
             break;
     }
+    // Bundled ids survive renames and updates, including older updates that
+    // cleared the example flag. Keep each group's saved order.
+    const auto shipped = examples();
+    std::stable_partition(presets.begin(), presets.end(),
+                          [&shipped](const Preset &preset) { return !find(shipped, preset.id); });
     return presets;
 }
 

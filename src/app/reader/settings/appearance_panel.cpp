@@ -224,13 +224,12 @@ int AppearanceSheet::fitHeight(int width, int availableHeight)
     ensurePolished();
     int sectionHeight = 0;
     if (topSection) {
-        // The section shows only in portrait, and only when the Typography
-        // page still fits on one page with its collapsed bar. Landscape has
-        // no room for it: it would push the controls onto extra pages.
+        // Phones in landscape have no room for presets. E-readers keep them
+        // in either orientation and page the controls when needed.
         const auto *screen = window();
         bool shown = pages->currentIndex() == int(AppearancePage::Typography)
-                && screen->height() >= screen->width();
-        if (shown) {
+                && !isShortHeight(screen->height(), ui::density());
+        if (shown && screen->height() >= screen->width()) {
             const auto base = metrics::panel::margins;
             auto *rows = pages->currentWidget()->layout();
             const int inner = qMax(1, width - base.left() - base.right());

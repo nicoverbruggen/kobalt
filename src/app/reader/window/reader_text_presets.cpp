@@ -25,6 +25,62 @@ namespace metrics = kobalt::ui::metrics;
 using textpresets::Preset;
 
 namespace {
+// Nickel clears a QLineEdit's selection immediately before forwarding a key.
+// Keep that selection for the synchronous key delivery, but let a tap or a
+// later event leave the cursor wherever the user put it.
+class PresetNameEdit final : public QLineEdit
+{
+public:
+    explicit PresetNameEdit(QWidget *parent) : QLineEdit(parent)
+    {
+        connect(this, &QLineEdit::textChanged, this, [this] { forgetSelection(); });
+        connect(this, &QLineEdit::selectionChanged, this, [this] {
+            if (hasSelectedText()) {
+                start = selectionStart();
+                length = selectedText().size();
+                ++revision;
+            } else {
+                const auto pending = revision;
+                qt::later(0, this, [this, pending] {
+                    if (revision == pending)
+                        forgetSelection();
+                });
+            }
+        });
+    }
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (property("reader_native_keyboard_editor").toBool() && !hasSelectedText() && start >= 0)
+            setSelection(start, length);
+        forgetSelection();
+        QLineEdit::keyPressEvent(event);
+        if (hasSelectedText()) {
+            start = selectionStart();
+            length = selectedText().size();
+            ++revision;
+        }
+    }
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        forgetSelection();
+        QLineEdit::mousePressEvent(event);
+    }
+
+private:
+    void forgetSelection()
+    {
+        start = -1;
+        length = 0;
+        ++revision;
+    }
+
+    int start = -1, length = 0;
+    quint64 revision = 0;
+};
+
 QString presetDetail(const Preset &preset)
 {
     return textpresets::sizeLabel(preset.halfPoints) + QStringLiteral(" · ")
@@ -123,16 +179,14 @@ void Reader::textPresetChoice(QVector<Preset> *presets, QString *selected, bool 
 }
 
 void Reader::setTextPresetGalleryPresets(TextPresetGallery *gallery, const QVector<Preset> &presets,
-                                         const QString &selected, bool modified)
+                                         const QString &selected)
 {
     QVector<TextPresetView> all;
     for (const auto &preset : presets)
         all.append(textPresetView(preset));
     gallery->setPresets(all, selected,
-                        // Saving is offered only for text that no preset holds.
-                        presets.size() < textpresets::maximumCount
-                                && (selected.isEmpty() || modified),
-                        presetSummary(textpresets::capture(textPresetSettings()->state())));
+                        // The first cell always offers Save current text.
+                        true, presetSummary(textpresets::capture(textPresetSettings()->state())));
 }
 
 void Reader::syncTextPresets()
@@ -164,7 +218,7 @@ void Reader::syncTextPresets()
     if (!textPresetChoosingNewBook)
         textPresetGalleryEntries = presets;
     if (textPresetGallery && !textPresetChoosingNewBook)
-        setTextPresetGalleryPresets(textPresetGallery, presets, selected, modified);
+        setTextPresetGalleryPresets(textPresetGallery, presets, selected);
 }
 
 void Reader::applyTextPreset(const QString &id)
@@ -271,7 +325,7 @@ void Reader::editTextPresetName(const QString &id)
     dialog->setDimmed(true);
     dialog->setGeometry(rect());
     auto *card = dialog->card();
-    auto *editor = new QLineEdit(card);
+    auto *editor = new PresetNameEdit(card);
     ui::prepareNativeEditor(editor);
     editor->setObjectName("rrTextPresetNameInput");
     dialog->setFocusProxy(editor);
@@ -336,7 +390,7 @@ void Reader::editTextPresetName(const QString &id)
         if (id.isEmpty()) {
             saved.id = textpresets::newId(presets);
             saved.example = false;
-            presets.append(saved);
+            presets.prepend(saved);
         } else {
             for (auto &entry : presets)
                 if (entry.id == id)
@@ -535,8 +589,7 @@ void Reader::openTextPresetGallery()
 QRect Reader::textPresetGalleryBounds() const
 {
     const int top = navigation ? navigation->statusHeight() : 0;
-    const int bottom = navigation ? navigation->contentBottom(size()) : height();
-    return { 0, top, width(), qMax(1, bottom - top) };
+    return { 0, top, width(), qMax(1, height() - top) };
 }
 
 storage::PreviewStore &Reader::textPresetTiles()
@@ -707,7 +760,7 @@ void Reader::prerenderTextPresets()
         TextPresetGallery probe(textPresetProbeHost);
         probe.setGeometry(textPresetGalleryBounds());
         // The presets decide whether the pager shows, so lay out after them.
-        setTextPresetGalleryPresets(&probe, presets, selected, modified);
+        setTextPresetGalleryPresets(&probe, presets, selected);
         probe.layout()->activate();
         size = probe.previewSize();
         ids = probe.visibleIds();

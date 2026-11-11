@@ -561,7 +561,10 @@ public:
 
     QString presetAt(int tile) const
     {
-        return tile >= 0 && tile < gallery->presets.size() ? gallery->presets[tile].id : QString();
+        const int index = tile - (gallery->canSave ? 1 : 0);
+        return tile >= 0 && index >= 0 && index < gallery->presets.size()
+                ? gallery->presets[index].id
+                : QString();
     }
 
 protected:
@@ -599,12 +602,12 @@ protected:
         update();
         if (tile < 0 || wasHeld || tile != was)
             return;
-        if (tile >= gallery->presets.size()) {
+        if (gallery->canSave && tile == 0) {
             if (gallery->saveRequested)
                 gallery->saveRequested();
             return;
         }
-        gallery->selected = gallery->presets[tile].id;
+        gallery->selected = presetAt(tile);
         update();
         if (gallery->chosen)
             gallery->chosen(gallery->selected);
@@ -626,7 +629,7 @@ private:
         const QFont nameFont = ui::interfaceFont(metrics::text::secondary);
         const QFont detailFont = ui::captionFont(chrome::captionText);
         const int inset = chrome::inset;
-        if (index >= gallery->presets.size()) {
+        if (gallery->canSave && index == 0) {
             // Save current text.
             const bool down = pressed == index;
             painter.fillRect(body, down ? colors.pressedPaper : colors.paper);
@@ -648,7 +651,7 @@ private:
                                   gallery->currentDetail.toUpper(), Qt::AlignCenter);
             return;
         }
-        const auto &view = gallery->presets[index];
+        const auto &view = gallery->presets[index - (gallery->canSave ? 1 : 0)];
         const bool selected = view.id == gallery->selected;
         const bool down = pressed == index;
         painter.fillRect(preview, colors.paper);
@@ -764,7 +767,7 @@ void TextPresetGallery::setPresets(const QVector<TextPresetView> &views, const Q
     selected = current;
     canSave = save;
     currentDetail = detail;
-    showPage(selectedPage());
+    showPage(canSave ? page : selectedPage());
 }
 
 int TextPresetGallery::columns() const
@@ -782,7 +785,7 @@ int TextPresetGallery::selectedPage() const
 {
     for (int index = 0; index < presets.size(); ++index)
         if (presets[index].id == selected)
-            return index / perPage();
+            return (index + (canSave ? 1 : 0)) / perPage();
     return page;
 }
 
@@ -816,8 +819,10 @@ QStringList TextPresetGallery::visibleIds() const
 {
     QStringList ids;
     const int count = perPage();
-    for (int index = page * count; index < qMin(int(presets.size()), (page + 1) * count); ++index)
-        ids.append(presets[index].id);
+    const int offset = canSave ? 1 : 0;
+    for (int tile = page * count; tile < qMin(tileCount(), (page + 1) * count); ++tile)
+        if (tile >= offset)
+            ids.append(presets[tile - offset].id);
     return ids;
 }
 
@@ -843,11 +848,11 @@ void TextPresetGallery::showPage(int target)
 void TextPresetGallery::resizeEvent(QResizeEvent *event)
 {
     ui::Panel::resizeEvent(event);
-    // The width decides the columns. When they change, the pages do too:
-    // show the one with the preset in force again.
+    // Keep All on its current page when the columns change. The new-book
+    // chooser follows the selected preset instead.
     if (perPage() != arrangedPerPage) {
         arrangedPerPage = perPage();
-        page = qBound(0, selectedPage(), pageCount() - 1);
+        page = qBound(0, canSave ? page : selectedPage(), pageCount() - 1);
         pager->setPage(page, pageCount());
         grid->update();
     }

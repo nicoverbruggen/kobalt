@@ -2172,9 +2172,9 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
 {
     const auto settled = [&fixture] { return !fixture.state().value("busy").toBool(); };
     const auto original = fixture.state();
-    // Landscape has no room for the presets bar; the Text panel leaves it out.
+    // Only phones in landscape leave out the presets bar.
     auto *reader = fixture.window.readerWindow();
-    if (reader->width() > reader->height()) {
+    if (isShortHeight(reader->height(), ui::density())) {
         QVERIFY(!fixture.visible("rrTextPresetToggle"));
         return;
     }
@@ -2241,8 +2241,8 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         QVERIFY(!fixture.visible("rrTextPresetUpdate"));
         const auto saved = textpresets::load(storage::readJson(fixture.paths.preferences()));
         QCOMPARE(saved.size(), 5);
-        QCOMPARE(saved.last().name, QString("Evening"));
-        QCOMPARE(saved.last().halfPoints, 23);
+        QCOMPARE(saved.first().name, QString("Evening"));
+        QCOMPARE(saved.first().halfPoints, 23);
     }
     QVERIFY(fixture.press("rrTextPresetAll"));
     QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
@@ -2277,9 +2277,8 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         QCOMPARE(fixture.window.readerWindow()
                          ->findChild<QLineEdit *>("rrTextPresetNameInput")
                          ->text(),
-                 // The grid opens on the page of the preset in force. With one
-                 // column that is the second page, where Evening is second.
-                 singleColumn ? QString("Evening") : QString("Bookish"));
+                 // Save current text is first, then the newest custom preset.
+                 QString("Evening"));
         QVERIFY(fixture.press("rrTextPresetNameCancel"));
         QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
     }
@@ -4863,13 +4862,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 "Missing capture: screen about, viewport phone-landscape, variant dark, page 1"));
         QCOMPARE(test::screenshotCoverage(images, { "about" }).first(),
                  QString("Capture of an undeclared screen: six-inch-light-reading.png"));
-        // The text presets bar has no landscape captures: those viewports
-        // are not expected, and every portrait one still is.
+        // Only phone landscape leaves out the presets bar.
         const auto presets = test::screenshotCoverage(images, { "reading", "text-presets" });
         QVERIFY(presets.contains("Missing capture: screen text-presets, viewport phone, "
                                  "variant dark, page 1"));
+        QVERIFY(presets.contains(
+                "Missing capture: screen text-presets, viewport six-inch-landscape, "
+                "variant dark, page 1"));
         for (const auto &problem : presets)
-            QVERIFY2(!problem.contains("landscape"), qPrintable(problem));
+            QVERIFY2(!problem.contains("phone-landscape"), qPrintable(problem));
         const auto entry = [](const QString &device, const QString &theme, int page) {
             return QJsonObject{
                 { "file", device + '-' + theme + "-reading-" + QString::number(page) + ".png" },
@@ -10621,7 +10622,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrRestorePresetsConfirmation"));
         QVERIFY(fixture.widget("rrRestorePresets")->isEnabled());
         QVERIFY(closeSettings());
-        QCOMPARE(saved(), (QVector<textpresets::Preset>{ changed, mine }));
+        QCOMPARE(saved(), (QVector<textpresets::Preset>{ mine, changed }));
 
         QVERIFY(openDefaults());
         QVERIFY(fixture.press("rrRestorePresets"));
@@ -10630,9 +10631,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrRestorePresetsConfirmation"));
         QVERIFY(!fixture.widget("rrRestorePresets")->isEnabled());
         // Nothing is saved before Settings closes.
-        QCOMPARE(saved(), (QVector<textpresets::Preset>{ changed, mine }));
+        QCOMPARE(saved(), (QVector<textpresets::Preset>{ mine, changed }));
         QVERIFY(closeSettings());
-        QTRY_COMPARE(saved(), shipped + QVector<textpresets::Preset>{ mine });
+        QTRY_COMPARE(saved(), QVector<textpresets::Preset>{ mine } + shipped);
         QCOMPARE(storage::readJson(fixture.paths.preferences())
                          .value("dictionary_font_size")
                          .toInt(),
@@ -10718,6 +10719,123 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void settingsTextPresetName()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavText"));
+        QVERIFY(fixture.press("rrNavText"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetToggle"));
+        QVERIFY(fixture.press("rrTextPresetToggle"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetAll"));
+        QVERIFY(fixture.press("rrTextPresetAll"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+        auto *grid = fixture.widget("rrTextPresetGrid");
+        QVERIFY(grid);
+        const auto save = [&] {
+            return fixture.click(grid, QPoint(grid->width() / 4, grid->height() / 6));
+        };
+        QVERIFY(save());
+        QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+        auto *input =
+                fixture.window.readerWindow()->findChild<QLineEdit *>("rrTextPresetNameInput");
+        QVERIFY(input);
+        QTRY_COMPARE(input->selectedText(), input->text());
+        auto *keyboard = fixture.widget("rrTextPresetName")->findChild<QWidget *>("widgetKeyboard");
+        QVERIFY(keyboard);
+        QTRY_VERIFY(keyboard->isVisible());
+        QPushButton *letter = nullptr;
+        for (auto *key : keyboard->findChildren<QPushButton *>())
+            if (key->property("keyboard.character").toString().compare("b", Qt::CaseInsensitive)
+                == 0)
+                letter = key;
+        QVERIFY(letter);
+        QVERIFY(fixture.click(letter));
+        QCOMPARE(input->text().toLower(), QString("b"));
+        // Nickel deselects synchronously before it delivers the key event.
+        input->setProperty("reader_native_keyboard_editor", true);
+        input->setText("Libron 11.5");
+        input->selectAll();
+        input->deselect();
+        QTest::keyClick(input, Qt::Key_Shift);
+        input->deselect();
+        QTest::keyClicks(input, "b");
+        QCOMPARE(input->text(), QString("b"));
+        QTest::keyClicks(input, "c");
+        QCOMPARE(input->text(), QString("bc"));
+        input->selectAll();
+        input->deselect();
+        QTest::keyClick(input, Qt::Key_Backspace);
+        QVERIFY(input->text().isEmpty());
+        // A deliberate deselection in an earlier event must stay deselected.
+        input->setText("name");
+        input->selectAll();
+        input->deselect();
+        QCoreApplication::processEvents();
+        QTest::keyClicks(input, "b");
+        QCOMPARE(input->text(), QString("nameb"));
+        input->setProperty("reader_native_keyboard_editor", false);
+        input->setText("Evening");
+        QVERIFY(fixture.press("rrTextPresetNameSave"));
+        QTRY_VERIFY(!fixture.widget("rrTextPresetName"));
+        const auto saved = [&] {
+            return textpresets::load(storage::readJson(fixture.paths.preferences()));
+        };
+        QTRY_COMPARE(saved().first().name, QString("Evening"));
+        QCOMPARE(saved().size(), 5);
+        QVERIFY(save());
+        QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+        input = fixture.window.readerWindow()->findChild<QLineEdit *>("rrTextPresetNameInput");
+        QVERIFY(input);
+        input->setText("Morning");
+        QVERIFY(fixture.press("rrTextPresetNameSave"));
+        QTRY_VERIFY(!fixture.widget("rrTextPresetName"));
+        QTRY_COMPARE(saved().first().name, QString("Morning"));
+        QCOMPARE(saved()[1].name, QString("Evening"));
+        QCOMPARE(saved()[2].id, QString("kobalt"));
+        const auto order = saved();
+        // Save is first, Morning second, Evening third. Applying Evening keeps the order.
+        QVERIFY(fixture.click(grid, QPoint(grid->width() / 4, grid->height() / 2)));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
+        QTRY_COMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(),
+                     QString("Evening"));
+        QCOMPARE(saved(), order);
+    }
+
+    void settingsTextPresetLandscape_data() { screenshotVariants(); }
+
+    void settingsTextPresetLandscape()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavText"));
+        QVERIFY(fixture.press("rrNavText"));
+        QTRY_VERIFY(fixture.visible("rrFont"));
+        QCOMPARE(fixture.visible("rrTextPresetToggle"), preset != 5);
+        if (preset != 5) {
+            QVERIFY(fixture.press("rrTextPresetToggle"));
+            QTRY_VERIFY(fixture.visible("rrTextPresetAll"));
+            QVERIFY(fixture.press("rrTextPresetAll"));
+            QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+            QVERIFY(fixture.press("rrTextPresetGalleryClose"));
+            QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
+        }
+    }
+
     // Checks that the All presets gallery renders each tile of its page once, although showing
     // it resizes it and refreshes the reader; that opening it again shows the same tiles at once,
     // without the engine; and that a book opened later prepares them from storage, again without
@@ -10766,6 +10884,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(gallery()->property("preview_renders").toInt()
                          + reader->property("text_preset_prerender_renders").toInt(),
                  wanted);
+        QCOMPARE(gallery()->geometry().bottom(), reader->rect().bottom());
+        auto *tab = fixture.widget("rrNavText");
+        QVERIFY(tab);
+        const QPoint tabCenter = tab->mapTo(reader, tab->rect().center());
+        auto *aboveTab = reader->childAt(tabCenter);
+        QVERIFY(aboveTab && gallery()->isAncestorOf(aboveTab));
+        auto *grid = fixture.widget("rrTextPresetGrid");
+        QVERIFY(grid);
+        QVERIFY(fixture.click(grid, QPoint(grid->width() / 4, grid->height() / 6)));
+        QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+        QVERIFY(fixture.press("rrTextPresetNameCancel"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
         shown = gallery()->grab().toImage();
         QVERIFY(closeAll());
 

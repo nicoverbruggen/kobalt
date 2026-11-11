@@ -16,7 +16,6 @@ class NativeKeyboard : public QObject
 {
     Q_OBJECT
 public:
-    // An editor's reader_keyboard_submit_text property overrides the Search key caption.
     NativeKeyboard(QWidget *parent, QLineEdit *editor);
     ~NativeKeyboard() override;
     bool show();

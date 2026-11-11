@@ -55,8 +55,7 @@ ImxCapabilities imxCapabilities()
     if (readerWindow
         && (readerWindow->property("reader_regal_supported").isValid()
             || readerWindow->property("reader_eclipse_supported").isValid())) {
-        return { readerWindow->property("reader_regal_supported").toBool()
-                         && !readerWindow->property("reader_regal_disabled").toBool(),
+        return { readerWindow->property("reader_regal_supported").toBool(),
                  readerWindow->property("reader_eclipse_supported").toBool() };
     }
     static const ImxCapabilities capabilities = [] {

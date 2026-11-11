@@ -147,6 +147,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
                              "dense_stats_chart",
                              "hanging_punctuation",
                              "hide_nonlinear_fragments",
+                             "inpage_footnotes",
                              "normalize_page_margins",
                              "reduce_chapter_spacing",
                              "minimal_annotation_mode",
@@ -268,6 +269,7 @@ QJsonObject bookDefaults(const QJsonObject &preferences)
                         : marginDesign(defaults.value(key).toInt()));
         defaults[key] = readingPixels(qBound(0, design, 120));
     }
+    defaults["inpage_footnotes"] = preferences.value("inpage_footnotes").toBool(false);
     defaults["word_spacing"] = preferences.value("word_spacing").toInt(100);
     defaults["paragraph_spacing"] = paragraphSpacing(preferences.value("paragraph_spacing"));
     defaults["paragraph_indent"] = paragraphIndent(preferences.value("paragraph_indent"));
@@ -331,6 +333,7 @@ void applyBookDefaults(QJsonObject &saved, const QJsonObject &defaults)
     saved["two_columns_landscape"] = defaults.value("two_columns_landscape").toBool(false);
     saved["column_spacing_percent"] =
             defaults.value("column_spacing_percent").toInt(defaultColumnSpacingPercent);
+    saved["inpage_footnotes"] = defaults.value("inpage_footnotes").toBool(false);
     saved["word_spacing"] = defaults.value("word_spacing").toInt(100);
     saved["paragraph_spacing"] = paragraphSpacing(defaults.value("paragraph_spacing"));
     saved["paragraph_indent"] = paragraphIndent(defaults.value("paragraph_indent"));

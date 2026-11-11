@@ -107,6 +107,33 @@ int main()
                      .contains(sleep::greetingKey),
             "A non-text sleep greeting was accepted");
 
+    require(!appearance::bookDefaults({}).value("inpage_footnotes").toBool(),
+            "Page notes must be opt-in for existing profiles");
+    for (bool enabled : { false, true }) {
+        const auto preferences = appearance::cleanPreferences(
+                { { "inpage_footnotes", enabled }, { "future_option", 42 } });
+        require(preferences.value("inpage_footnotes") == QJsonValue(enabled)
+                        && preferences.value("future_option").toInt() == 42,
+                "Page-note preferences did not survive normalization");
+        auto saved = qt::object({ { "inpage_footnotes", !enabled }, { "font_pixels", 40 } });
+        appearance::applyBookDefaults(saved, appearance::bookDefaults(preferences));
+        require(saved.value("inpage_footnotes") == QJsonValue(enabled),
+                "A stale book snapshot replaced the global page-note choice");
+        auto other = saved;
+        other["inpage_footnotes"] = !enabled;
+        require(!appearance::same(saved, other), "Page-note edits reused a stale layout");
+        QJsonObject inherited;
+        appearance::rememberTextLayout(inherited, saved);
+        require(!inherited.value(appearance::lastTextLayoutKey)
+                         .toObject()
+                         .contains("inpage_footnotes"),
+                "Page notes leaked into text preset inheritance");
+    }
+    for (const auto &invalid : { QJsonValue("true"), QJsonValue(1), QJsonValue() })
+        require(!appearance::cleanPreferences({ { "inpage_footnotes", invalid } })
+                         .contains("inpage_footnotes"),
+                "Invalid page-note setting did not use the disabled default");
+
     for (const auto *mode : { "current", "all", "off" }) {
         const auto cleaned = appearance::cleanPreferences(
                 { { "chapter_groups", mode }, { "future_option", 42 } });
@@ -287,7 +314,7 @@ int main()
             "Dictionary UI preferences invalidated the book layout");
     // Appearance settings decide the layout. The list must stay complete, because a
     // missing key would let a retained layout survive a changed setting.
-    require(appearance::keys.size() == 37, "The appearance keys changed without this check");
+    require(appearance::keys.size() == 38, "The appearance keys changed without this check");
     require(appearance::bookDefaults({}).value("paragraph_indent").toInt() == -1,
             "Paragraph indentation no longer defaults to Publisher");
     for (int percent : { -1, 0, 100, 300 }) {

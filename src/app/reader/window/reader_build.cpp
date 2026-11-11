@@ -1432,6 +1432,7 @@ void Reader::buildSettings()
     settings->showPowerManagement(wifiPowerSaverVisible());
     hideTabLabelsOption->setVisible(!services.phoneLayout);
     hideNonlinearOption = settings->hideNonlinearOption;
+    inpageFootnotesOption = settings->inpageFootnotesOption;
     connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
         settings->showColumnSpacingChoices(settingsColumnSpacing, [this, settings](int percent) {
             settingsColumnSpacing = percent;
@@ -1599,6 +1600,7 @@ void Reader::buildSettings()
     });
     connect(settings->confirmDefaults, &QPushButton::clicked, this, [this] {
         restoringDefaults = true;
+        inpageFootnotesOption->setChecked(false);
         settingsUiFontFace.clear();
         settingsUiMonoFontFace.clear();
         settingsHeaderFooterFontFace.clear();

@@ -1130,6 +1130,8 @@
 "reader.formatting_warning_description" = "This book may have formatting issues. You can keep reading, but some text or layout may not appear as intended.";
 
 "reader.hide_nonlinear_fragments" = "Hide non-linear fragments";
+"settings.inpage_footnotes" = "Footnotes below the text";
+"settings.inpage_footnotes_description" = "Show recognized notes below the text. Long notes continue on the next page. References keep their usual popup.";
 "settings.hide_nonlinear_fragments_description" = "Skip non-linear sections when turning pages. Links, Chapters and page numbers can still open them.";
 "settings.inherit_header_footer" = "Inherit header and footer from the last book";
 "settings.inherit_header_footer_description" = "New books start with the last book's header and footer. Books with saved settings keep them.";

@@ -156,6 +156,7 @@ public:
     ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,
                         *denseGraphOption = nullptr;
     ui::DescribedOption *hideNonlinearOption = nullptr;
+    ui::DescribedOption *inpageFootnotesOption = nullptr;
     ui::DescribedOption *zenModeOption = nullptr;
     // Zen mode shows one short page instead of the tabs: Dark mode, Light
     // when no edge swipe changes it, Sync when it is set up, About, and a bar

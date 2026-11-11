@@ -198,6 +198,7 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     auto &saved = job.saved;
     const auto bionic = saved.value("bold_reading");
     const auto dark = saved.value("dark_mode");
+    const auto inpageFootnotes = saved.value("inpage_footnotes");
     const auto hideNonlinear = saved.value("hide_nonlinear_fragments");
     const auto normalization = appearance::normalizationSettings(saved);
     const auto landscapeColumns = saved.value("two_columns_landscape");
@@ -213,6 +214,7 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     saved["bold_reading"] = bionic;
     saved["dark_mode"] = dark;
     saved["hide_nonlinear_fragments"] = hideNonlinear;
+    saved["inpage_footnotes"] = inpageFootnotes;
     for (const auto *key : appearance::normalizationKeys)
         saved[key] = normalization.value(key);
     saved["two_columns_landscape"] = landscapeColumns;

@@ -557,6 +557,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         properties->setString(PROP_TEXTLANG_MAIN_LANG, language);
         engine_->propsApply(properties);
     }
+    // These optional markers can be added to older parsed caches without
+    // changing source text, IDs or saved positions.
+    markPageNotes();
     // A cached book was saved with these markers and its styles. Marking it
     // again would discard the cached pages.
     if (!openedFromCache_) {

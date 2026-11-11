@@ -322,6 +322,7 @@ private:
                                    const QString &position) const;
     int chapterEndPage(const ChapterLink &next) const;
     void markKoboLinkDecorations();
+    void markPageNotes();
     EngineFontInputs fonts_;
     friend class nickel::NickelPositionCodec;
     std::shared_ptr<ReaderSource> source_;
@@ -329,6 +330,7 @@ private:
     std::unique_ptr<ColumnView> engine_;
     struct SourceIndex;
     friend struct ReaderSourceIndexProbe;
+    friend struct ReaderFootnoteProbe;
     mutable std::shared_ptr<SourceIndex> sourceIndex_;
     std::shared_ptr<SourceIndex> sourceIndex(const QStringList &positions,
                                              const std::function<bool()> &current = {}) const;
@@ -397,6 +399,7 @@ private:
     bool darkMode_ = false;
     QMap<std::tuple<quintptr, int, int>, bool> imageInversion_;
     bool hideNonlinearFragments_ = false;
+    bool inpageFootnotes_ = false;
     bool normalizePageMargins_ = true, reduceChapterSpacing_ = true;
     bool normalizeTextColors_ = false;
     QString verticalSpacing_ = "off", verticalSpacingScope_ = "all";

@@ -384,6 +384,7 @@ void Reader::openSettings()
     static_cast<SettingsPanel *>(general)->featurePreferences = preferences;
     static_cast<SettingsPanel *>(general)->updateFeatureOptions();
     showTextPresetSettings();
+    inpageFootnotesOption->setChecked(session->state().value("inpage_footnotes").toBool(false));
     hideNonlinearOption->setChecked(
             session->state().value("hide_nonlinear_fragments").toBool(false));
     auto *displaySettings = static_cast<SettingsPanel *>(general);
@@ -782,6 +783,7 @@ void Reader::applySettings()
         next[key] =
                 static_cast<SettingsPanel *>(general)->featurePreferences.value(key).toBool(false);
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
+    next["inpage_footnotes"] = inpageFootnotesOption->isChecked();
     next["vertical_justification"] = settingsVerticalSpacing;
     next["vertical_spacing_scope"] = settingsVerticalSpacingScope;
     next.remove("columns");
@@ -877,6 +879,7 @@ void Reader::applySettings()
         settings[key] = preferences.value(key).toString();
     settings["dark_mode"] = darkOption->isChecked();
     settings["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
+    settings["inpage_footnotes"] = inpageFootnotesOption->isChecked();
     settings["vertical_justification"] = preferences.value("vertical_justification");
     settings["vertical_spacing_scope"] = preferences.value("vertical_spacing_scope");
     settings["columns"] = 1;

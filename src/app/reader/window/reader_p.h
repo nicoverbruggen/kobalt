@@ -629,6 +629,7 @@ private:
     QPushButton *linkDiscoveryToggle = nullptr;
     QLabel *linkDiscoveryExit = nullptr;
     QCheckBox *hideNonlinearOption = nullptr;
+    QCheckBox *inpageFootnotesOption = nullptr;
     bool revealingLinks = false;
     QString revealedPosition;
     void syncLinkDiscovery();

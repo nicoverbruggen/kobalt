@@ -20,6 +20,54 @@ lString32 cre(const QString &s)
     return Utf8ToUnicode(s.toUtf8().constData());
 }
 
+struct PageTextRange
+{
+    ldomXPointerEx start, end;
+};
+
+QVector<PageTextRange> pageTextRanges(ColumnView &view, int columns)
+{
+    auto *doc = view.getDocument();
+    const int current = view.getCurPage();
+    QVector<PageTextRange> ranges;
+    const auto append = [&](ldomXPointerEx start, ldomXPointerEx end) {
+        if (!start.isNull() && !end.isNull() && start.compare(end) < 0)
+            ranges.append({ start, end });
+    };
+    append(ldomXPointerEx(view.getPageBookmark(current)),
+           current + 1 < view.getPageCount() ? ldomXPointerEx(view.getPageBookmark(current + 1))
+                                             : ldomXRange(doc->getRootNode(), true).getEnd());
+    // Notes can come from another source section. Resolve only the fragments
+    // drawn on this screen, so a long note does not format remote text.
+    for (int column = 0;
+         column < columns && current * columns + column < view.getPageList()->length(); ++column) {
+        const auto &page = *view.getPageList()->operator[](current * columns + column);
+        for (int i = 0; i < page.footnotes.length(); ++i) {
+            const auto &note = page.footnotes[i];
+            ldomXPointerEx start(
+                    doc->createXPointer(lvPoint(0, note.start), PT_DIR_SCAN_FORWARD_LOGICAL_FIRST));
+            ldomXPointerEx end(
+                    doc->createXPointer(lvPoint(view.columnWidth(), note.start + note.height - 1),
+                                        PT_DIR_SCAN_BACKWARD_LOGICAL_LAST));
+            if (end.isText() && end.getOffset() < end.getNode()->getText().length())
+                end.setOffset(end.getOffset() + 1);
+            append(start, end);
+        }
+    }
+    std::sort(ranges.begin(), ranges.end(), [](const PageTextRange &a, const PageTextRange &b) {
+        return a.start.compare(b.start) < 0;
+    });
+    QVector<PageTextRange> merged;
+    for (const auto &range : ranges) {
+        if (merged.isEmpty() || merged.last().end.compare(range.start) < 0) {
+            merged.append(range);
+        } else if (merged.last().end.compare(range.end) < 0) {
+            merged.last().end = range.end;
+        }
+    }
+    return merged;
+}
+
 // Collapse whitespace in search context, but keep one space at an edge that
 // had one. The match joins its context without guessing at word boundaries.
 QString contextText(const QString &text)
@@ -1295,17 +1343,13 @@ QVector<int> EngineDocument::visibleRanges(const QVector<QPair<QString, QString>
 {
     if (ranges.isEmpty() || ranges.size() > 2001 || !engine_ || pages() <= 0)
         return {};
-    auto *doc = engine_->getDocument();
-    const int current = page();
-    // Page boundaries come from the current layout, never from stored page
-    // numbers. A long passage remains visible on every intervening page.
-    const ldomXPointerEx first(engine_->getPageBookmark(current));
-    const ldomXPointerEx last = current + 1 < pages()
-            ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-            : ldomXRange(doc->getRootNode(), true).getEnd();
-    if (first.isNull() || last.isNull())
-        return {};
-    return sourceRanges(ranges)->intersections(first, last);
+    const auto index = sourceRanges(ranges);
+    QVector<int> result;
+    for (const auto &span : pageTextRanges(*engine_, columns_))
+        result += index->intersections(span.start, span.end);
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
 }
 
 bool EngineDocument::rangeVisible(const QString &start, const QString &end) const
@@ -1319,13 +1363,12 @@ bool EngineDocument::rangeVisible(const QString &start, const QString &end) cons
         return false;
     if (a.compare(b) > 0)
         std::swap(a, b);
-    const int current = page();
-    const ldomXPointerEx first(engine_->getPageBookmark(current));
-    const ldomXPointerEx last = current + 1 < pages()
-            ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-            : ldomXRange(doc->getRootNode(), true).getEnd();
-    return !first.isNull() && !last.isNull() && a.compare(b) < 0 && a.compare(last) < 0
-            && first.compare(b) < 0;
+    if (a.compare(b) >= 0)
+        return false;
+    for (const auto &span : pageTextRanges(*engine_, columns_))
+        if (a.compare(span.end) < 0 && span.start.compare(b) < 0)
+            return true;
+    return false;
 }
 
 AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, const QString &end)
@@ -1352,10 +1395,7 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
     result.vertical = pageList->hasMixedWritingModes()
             ? css_wm_is_vertical((*pageList)[current * columns_]->writing_mode)
             : engine_->isVerticalText();
-    ldomXPointerEx pageStart(engine_->getPageBookmark(current));
-    ldomXPointerEx pageEnd = current + 1 < pages()
-            ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-            : ldomXRange(doc->getRootNode(), true).getEnd();
+    const auto spans = pageTextRanges(*engine_, columns_);
     const auto endpoint = [&](ldomXPointerEx pointer, bool ending) {
         SelectionEndpoint edge;
         if (!pointer.isText() || pointer.getOffset() < 0
@@ -1373,10 +1413,12 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
         }
         // Compare source anchors before resolving caret geometry: remote ends must
         // not format another chapter merely to discover they are not visible here.
-        if (pageStart.isNull() || pageEnd.isNull() || pointer.compare(pageStart) < 0
-            || pointer.compare(pageEnd) >= 0 || !pointer.isVisible()) {
+        const bool onPage =
+                std::any_of(spans.cbegin(), spans.cend(), [&](const PageTextRange &span) {
+                    return pointer.compare(span.start) >= 0 && pointer.compare(span.end) < 0;
+                });
+        if (!onPage || !pointer.isVisible())
             return edge;
-        }
         lvRect box;
         int context = RECT_CTX_NONE;
         if (!pointer.getRectEx(box, false, &context) || box.height() <= 0) {
@@ -1461,40 +1503,36 @@ QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &e
     ldomXPointerEx a(doc->createXPointer(cre(start))), b(doc->createXPointer(cre(end)));
     if (a.isNull() || b.isNull())
         return result;
-    // Resolve geometry only for this page, even for a passage spanning chapters.
-    // Image link ranges keep their existing engine behavior.
-    if (!includeImages) {
-        if (a.compare(b) > 0) {
-            std::swap(a, b);
+    // Resolve geometry only for visible main text and note fragments. Image
+    // link ranges keep their existing engine behavior.
+    const auto spans =
+            includeImages ? QVector<PageTextRange>{ { a, b } } : pageTextRanges(*engine_, columns_);
+    if (!includeImages && a.compare(b) > 0)
+        std::swap(a, b);
+    for (const auto &span : spans) {
+        auto first = a, last = b;
+        if (!includeImages) {
+            if (first.compare(span.start) < 0)
+                first = span.start;
+            if (last.compare(span.end) > 0)
+                last = span.end;
+            if (first.compare(last) >= 0)
+                continue;
         }
-        const int current = page();
-        ldomXPointerEx first(engine_->getPageBookmark(current));
-        ldomXPointerEx last = current + 1 < pages()
-                ? ldomXPointerEx(engine_->getPageBookmark(current + 1))
-                : ldomXRange(doc->getRootNode(), true).getEnd();
-        if (!first.isNull() && a.compare(first) < 0) {
-            a = first;
+        ldomXRange range(first, last);
+        LVArray<lvRect> rectangles;
+        range.getSegmentRects(rectangles, includeImages);
+        for (int i = 0; i < rectangles.length(); ++i) {
+            const auto &r = rectangles[i];
+            lvPoint top(r.left, r.top), bottom(r.right, r.bottom);
+            if (!engine_->docToWindowPoint(top) || !engine_->docToWindowPoint(bottom, true))
+                continue;
+            const auto clipped = QRect(qMin(top.x, bottom.x), qMin(top.y, bottom.y),
+                                       qAbs(bottom.x - top.x), qAbs(bottom.y - top.y))
+                                         .intersected(QRect(QPoint(), size_));
+            if (!clipped.isEmpty())
+                result.append(clipped);
         }
-        if (!last.isNull() && b.compare(last) > 0) {
-            b = last;
-        }
-        if (a.compare(b) >= 0) {
-            return result;
-        }
-    }
-    ldomXRange range(a, b);
-    LVArray<lvRect> rectangles;
-    range.getSegmentRects(rectangles, includeImages);
-    for (int i = 0; i < rectangles.length(); ++i) {
-        const auto &r = rectangles[i];
-        lvPoint top(r.left, r.top), bottom(r.right, r.bottom);
-        if (!engine_->docToWindowPoint(top) || !engine_->docToWindowPoint(bottom, true))
-            continue;
-        const auto clipped = QRect(qMin(top.x, bottom.x), qMin(top.y, bottom.y),
-                                   qAbs(bottom.x - top.x), qAbs(bottom.y - top.y))
-                                     .intersected(QRect(QPoint(), size_));
-        if (!clipped.isEmpty())
-            result.append(clipped);
     }
     return result;
 }

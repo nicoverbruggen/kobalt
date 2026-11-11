@@ -1620,6 +1620,101 @@ bool revealSettingsOption(Fixture &fixture, const char *name)
     return false;
 }
 
+void inpageFootnotesTour(Fixture &fixture, const QString &name, bool screenshots)
+{
+    const auto scene = [&](const QString &suffix) {
+        return !screenshots || capture(fixture, name + "-footnotes-bottom-" + suffix);
+    };
+    auto files = test::linkBook();
+    const QByteArray prose =
+            "<p>The path followed the river through the quiet valley. Beyond the trees, the village waited in the morning light.</p>";
+    files["OEBPS/first.xhtml"] =
+            "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:epub='http://www.idpf.org/2007/ops'><body>"
+            "<p id='opening'>A note can stay beside the passage that refers to it.<sup><a epub:type='noteref' href='Notes/foot%20notes.xhtml#short'>1</a></sup></p>"
+            + prose.repeated(12)
+            + "<p>A longer explanation continues across pages.<sup><a epub:type='noteref' href='Notes/foot%20notes.xhtml#long'>2</a></sup></p>"
+            + prose.repeated(8) + "</body></html>";
+    const auto path = fixture.directory.path() + "/page-notes.epub";
+    QVERIFY(writeBook(fixture.directory.path(), "page-notes.epub", files));
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(path);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    const auto origin = fixture.state().value("position");
+    const auto original = static_cast<ReadingPage *>(fixture.widget("rrPage"))->image;
+    QVERIFY(scene("off"));
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsStyling"));
+    if (screenshots)
+        capturePages(fixture, name + "-footnotes-bottom-settings", "rrSettingsOptions");
+    QVERIFY(revealSettingsOption(fixture, "rrInpageFootnotes"));
+    auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrInpageFootnotes"));
+    QVERIFY(option && !option->isChecked());
+    QCOMPARE(option->font(), fixture.widget("rrHideNonlinearFragments")->font());
+    QVERIFY(fixture.press("rrInpageFootnotes"));
+    QVERIFY(!storage::readJson(fixture.paths.preferences()).value("inpage_footnotes").toBool());
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    if (fixture.visible("rrControlsTop"))
+        QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.state().value("inpage_footnotes").toBool());
+    QCOMPARE(fixture.state().value("position"), origin);
+    QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("inpage_footnotes").toBool());
+    QVERIFY(static_cast<ReadingPage *>(fixture.widget("rrPage"))->image != original);
+    QVERIFY(scene("on"));
+    auto *paper = fixture.widget("rrPage");
+    const auto point = fixture.linkPoint(path, "1");
+    QVERIFY(point.x() >= 0);
+    QVERIFY(fixture.click(paper, point));
+    QTRY_VERIFY(fixture.visible("rrLinkPanel"));
+    QVERIFY(scene("popup"));
+    QVERIFY(fixture.press("rrLinkClose"));
+    QTRY_VERIFY(!fixture.visible("rrLinkPanel"));
+    bool found = false;
+    for (int turn = 0; turn < 20; ++turn) {
+        if (fixture.linkPoint(path, "2").x() >= 0) {
+            found = true;
+            break;
+        }
+        QVERIFY(fixture.turnPage(1));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    }
+    QVERIFY(found);
+    QVERIFY(scene("overflow"));
+    QVERIFY(fixture.turnPage(1));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(scene("continuation"));
+    // Reopening the publication keeps the global choice and reading anchor.
+    const auto position = fixture.state().value("position");
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(fixture.window.idle());
+    opened.clear();
+    fixture.window.openBook(path);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.state().value("inpage_footnotes").toBool());
+    QCOMPARE(fixture.state().value("position"), position);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsStyling"));
+    QVERIFY(revealSettingsOption(fixture, "rrInpageFootnotes"));
+    option = qobject_cast<QCheckBox *>(fixture.widget("rrInpageFootnotes"));
+    QVERIFY(option && option->isChecked());
+    QVERIFY(fixture.press("rrSettingsDefaults"));
+    QVERIFY(revealSettingsOption(fixture, "rrRestoreDefaults"));
+    QVERIFY(fixture.press("rrRestoreDefaults"));
+    QTRY_VERIFY(fixture.visible("rrRestoreConfirmation"));
+    QVERIFY(fixture.press("rrConfirmDefaults"));
+    QVERIFY(!option->isChecked());
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_VERIFY(!fixture.state().value("inpage_footnotes").toBool());
+    QTRY_VERIFY(!storage::readJson(fixture.paths.preferences()).value("inpage_footnotes").toBool());
+}
+
 void verticalJustificationTour(Fixture &fixture, const QString &name, bool screenshots)
 {
     const auto scene = [&](const QString &suffix) {
@@ -9598,6 +9693,21 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      !previous);
     }
 
+    void inpageFootnotes_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+
+    void inpageFootnotes()
+    {
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        inpageFootnotesTour(fixture, dark ? "six-inch-dark" : "six-inch-light", false);
+    }
+
     // Checks the Page spacing sheet through the reader: every mode and scope, the sample, one and two columns, and saved values.
     void verticalJustification()
     {
@@ -13805,6 +13915,155 @@ private slots:
         selectPreview(fixture, preset);
         const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
         verticalJustificationTour(fixture, name, true);
+    }
+
+    void inpageFootnotes_data() { screenshotVariants(); }
+
+    void inpageFootnotes()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        inpageFootnotesTour(fixture, screenshotDevice(preset) + ('-' + screenshotTheme(dark)),
+                            true);
+    }
+
+    void corpusFootnotes_data() { screenshotVariants(); }
+
+    void corpusFootnotes()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        QFile references(QStringLiteral(KOBALT_SCREENSHOT_REFERENCES));
+        QVERIFY(references.open(QIODevice::ReadOnly));
+        captureBook = QJsonDocument::fromJson(references.readAll()).object()["maths"].toObject();
+        captureBook["fixture"] =
+                "Unmodified Gutenberg EPUB; automatic note recognition and Kobalt note styling.";
+        const auto resetBook = qScopeGuard([] { captureBook = {}; });
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["inpage_footnotes"] = true;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        const auto path =
+                QStringLiteral(KOBALT_SCREENSHOT_BOOKS) + '/' + captureBook["filename"].toString();
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromLatin1(
+                         QCryptographicHash::hash(input.readAll(), QCryptographicHash::Sha256)
+                                 .toHex()),
+                 captureBook["sha256"].toString());
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+
+        struct Sample
+        {
+            const char *query;
+            const char *label;
+            const char *scene;
+        };
+
+        for (const auto &sample :
+             { Sample{ "The witty Dean Swift", "[2]", "citation" },
+               Sample{ "small quantity of the second order", "[1]", "explanation" },
+               Sample{ "is what we set out to find", "[3]", "equations" },
+               Sample{ "slope of the original curve", "[4]", "cross-reference" } }) {
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrSearchOpen"));
+            auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+            QVERIFY(query);
+            query->setText(QString::fromLatin1(sample.query));
+            QVERIFY(fixture.press("rrSearchSubmit"));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
+            QVERIFY(fixture.press("rrSearchResult0"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            // Clear the temporary search highlight before capturing the passage.
+            const int page = fixture.state().value("page").toInt();
+            QVERIFY(fixture.turnPage(1));
+            QTRY_COMPARE(fixture.state().value("page").toInt(), page + 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.turnPage(-1));
+            QTRY_COMPARE(fixture.state().value("page").toInt(), page);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            if (fixture.linkPoint(path, sample.label).x() < 0) {
+                QVERIFY(fixture.turnPage(-1));
+                QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            }
+            QVERIFY2(fixture.linkPoint(path, sample.label).x() >= 0, sample.scene);
+            QVERIFY(capture(fixture,
+                            screenshotVariant(preset, dark) + "-footnotes-corpus-" + sample.scene));
+            if (QString::fromLatin1(sample.scene) == "citation"
+                || QString::fromLatin1(sample.scene) == "equations") {
+                QVERIFY(fixture.turnPage(1));
+                QTRY_VERIFY(!fixture.state().value("busy").toBool());
+                QVERIFY(capture(fixture,
+                                screenshotVariant(preset, dark) + "-footnotes-corpus-"
+                                        + sample.scene + "-following"));
+            }
+        }
+    }
+
+    void corpusProseFootnotes_data() { screenshotVariants(); }
+
+    void corpusProseFootnotes()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        QFile references(QStringLiteral(KOBALT_SCREENSHOT_REFERENCES));
+        QVERIFY(references.open(QIODevice::ReadOnly));
+        captureBook =
+                QJsonDocument::fromJson(references.readAll()).object()["war-and-peace"].toObject();
+        captureBook["fixture"] =
+                "Unmodified Gutenberg EPUB; original inline asterisk notes without links.";
+        const auto resetBook = qScopeGuard([] { captureBook = {}; });
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        const auto path =
+                QStringLiteral(KOBALT_SCREENSHOT_BOOKS) + '/' + captureBook["filename"].toString();
+        QFile input(path);
+        QVERIFY(input.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromLatin1(
+                         QCryptographicHash::hash(input.readAll(), QCryptographicHash::Sha256)
+                                 .toHex()),
+                 captureBook["sha256"].toString());
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        for (const auto &sample : { qMakePair(QString("la femme la plus"), QString("french")),
+                                    qMakePair(QString("humanum est errare"), QString("latin")) }) {
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrSearchOpen"));
+            auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+            QVERIFY(query);
+            query->setText(sample.first);
+            QVERIFY(fixture.press("rrSearchSubmit"));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
+            QVERIFY(fixture.press("rrSearchResult0"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            const int page = fixture.state().value("page").toInt();
+            QVERIFY(fixture.turnPage(1));
+            QTRY_COMPARE(fixture.state().value("page").toInt(), page + 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.turnPage(-1));
+            QTRY_COMPARE(fixture.state().value("page").toInt(), page);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(capture(fixture,
+                            screenshotVariant(preset, dark) + "-footnotes-prose-" + sample.second));
+            if (sample.second == "french") {
+                QVERIFY(fixture.turnPage(1));
+                QTRY_VERIFY(!fixture.state().value("busy").toBool());
+                QVERIFY(capture(fixture,
+                                screenshotVariant(preset, dark)
+                                        + "-footnotes-prose-french-following"));
+            }
+        }
     }
 
     void directLinks_data() { screenshotVariants(); }

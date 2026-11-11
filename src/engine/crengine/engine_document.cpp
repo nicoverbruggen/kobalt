@@ -548,6 +548,7 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     size_ = size;
     darkMode_ = saved.value("dark_mode").toBool(false);
     imageInversion_.clear();
+    inpageFootnotes_ = saved.value("inpage_footnotes").toBool(false);
     hideNonlinearFragments_ = saved.value("hide_nonlinear_fragments").toBool(false);
     const auto normalization = appearance::normalizationSettings(saved);
     normalizeTextColors_ = normalization.value("normalize_text_colors").toBool();
@@ -919,6 +920,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     const auto alignment = settings.value("text_alignment").toString(alignment_);
     const auto hyphenation = settings.value("hyphenation").toString(hyphenation_);
     const bool dark = settings.value("dark_mode").toBool(darkMode_);
+    const bool inpageFootnotes = settings.value("inpage_footnotes").toBool(inpageFootnotes_);
     const bool hideNonlinear =
             settings.value("hide_nonlinear_fragments").toBool(hideNonlinearFragments_);
     const bool normalizeTextColors =
@@ -966,9 +968,9 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     // Outline thickness changes pixels only. Keep the formatted page and its anchors.
     const bool thicknessChanged = weight != weight_;
     const bool styled = normalizeTextColors != normalizeTextColors_
-            || beautifierInitials != beautifierInitials_ || beautifierSpacing != beautifierSpacing_
-            || beautifierIndent != beautifierIndent_ || fallbackFaces != fallbackFaces_
-            || normalizePageMargins != normalizePageMargins_
+            || inpageFootnotes != inpageFootnotes_ || beautifierInitials != beautifierInitials_
+            || beautifierSpacing != beautifierSpacing_ || beautifierIndent != beautifierIndent_
+            || fallbackFaces != fallbackFaces_ || normalizePageMargins != normalizePageMargins_
             || reduceChapterSpacing != reduceChapterSpacing_ || wordSpacing != wordSpacing_
             || tracking != justificationTracking_ || hanging != hangingPunctuation_
             || widowsOrphans != widowsOrphans_ || bionicChanged || axisChanged || opticalChanged
@@ -1033,6 +1035,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     activateFontParameters();
     hideNonlinearFragments_ = hideNonlinear;
     normalizeTextColors_ = normalizeTextColors;
+    inpageFootnotes_ = inpageFootnotes;
     normalizePageMargins_ = normalizePageMargins;
     reduceChapterSpacing_ = reduceChapterSpacing;
     verticalSpacing_ = verticalSpacing;
@@ -1238,6 +1241,58 @@ void EngineDocument::applyStyleSheet()
         overrides +=
                 QString("[data-kobalt-prose=\"1\"], [data-kobalt-prose=\"1\"] span { text-align:%1 !important; text-align-last:auto !important; }")
                         .arg(alignment_);
+    if (inpageFootnotes_) {
+        // Only explicit note bodies become page notes. Popup heuristics also
+        // accept numeric links, which must not move ordinary chapter content.
+        overrides += R"css(
+*[type~="note"]:not(a), *[type~="footnote"]:not(a),
+*[type~="endnote"]:not(a), *[type~="rearnote"]:not(a),
+*[role~="doc-note"]:not(a), *[role~="doc-footnote"]:not(a),
+*[role~="doc-endnote"]:not(a), *[role~="doc-rearnote"]:not(a),
+._idFootnotes > ._idFootnote:not(a), [data-kobalt-page-note="start"] {
+    -cr-hint: footnote-inpage;
+    font-size: 0.8rem;
+}
+[data-kobalt-page-note="extend"] { -cr-hint: extend-footnote-inpage; }
+/* Dedicated note groups must not paint their original box around moved notes. */
+[data-kobalt-page-note="box"], ._idFootnotes {
+    -cr-hint: late;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background-color: transparent !important;
+}
+[data-kobalt-page-note="box"] > h1, [data-kobalt-page-note="box"] > h2,
+[data-kobalt-page-note="box"] > h3, [data-kobalt-page-note="box"] > h4,
+[data-kobalt-page-note="box"] > h5, [data-kobalt-page-note="box"] > h6 {
+    display: none !important;
+}
+* {
+    -cr-hint: late;
+    -cr-only-if: inside-inpage-footnote;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background-color: transparent !important;
+    text-indent: 0 !important;
+}
+p + p, ul, ol, blockquote, pre {
+    -cr-hint: late;
+    -cr-only-if: inside-inpage-footnote;
+    margin-top: 0.4em !important;
+}
+ul, ol {
+    -cr-hint: late;
+    -cr-only-if: inside-inpage-footnote;
+    padding-left: 1.4em !important;
+}
+blockquote {
+    -cr-hint: late;
+    -cr-only-if: inside-inpage-footnote;
+    margin-left: 1em !important;
+}
+)css";
+    }
     engine_->setStyleSheet(lString8(readerHtmlCss) + lString8(readerOverridesCss)
                            + lString8(overrides.toUtf8().constData()) + lString8("\n")
                            + lString8(userStyleSheet_.constData()));
@@ -1835,6 +1890,7 @@ QJsonObject EngineDocument::state() const
               { "hyphenation", hyphenation_ },
               { "dark_mode", darkMode_ },
               { "hide_nonlinear_fragments", hideNonlinearFragments_ },
+              { "inpage_footnotes", inpageFootnotes_ },
               { "normalize_page_margins", normalizePageMargins_ },
               { "normalize_text_colors", normalizeTextColors_ },
               { "reduce_chapter_spacing", reduceChapterSpacing_ },

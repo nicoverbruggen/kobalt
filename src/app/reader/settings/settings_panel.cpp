@@ -872,6 +872,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                 strings::get("reader.hide_nonlinear_fragments"),
                                 strings::get("settings.hide_nonlinear_fragments_description"));
     stylingRows->addWidget(hideNonlinearOption);
+    inpageFootnotesOption =
+            check(stylingPage, "rrInpageFootnotes", strings::get("settings.inpage_footnotes"),
+                  strings::get("settings.inpage_footnotes_description"));
+    stylingRows->addWidget(inpageFootnotesOption);
     for (const auto &[button, icon] :
          { std::pair{ beautifierButton, ui::ControlIcon::MagicWand },
            std::pair{ wordSpacingButton, ui::ControlIcon::SpreadHorizontal },
@@ -884,6 +888,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         ui::buttonIcon(button, icon);
     }
     hideNonlinearOption->setLeadingIcon(ui::ControlIcon::Hidden);
+    inpageFootnotesOption->setLeadingIcon(ui::ControlIcon::Link);
     wordSpacingButton->setDescription(strings::get("settings.word_spacing_summary"));
     trackingButton->setDescription(strings::get("settings.justification_tracking_summary"));
     widowsOrphansButton->setDescription(strings::get("settings.widows_orphans_summary"));
@@ -1151,11 +1156,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     });
     settingsTabButtons.first()->setChecked(true);
     QVector<ui::DescribedOption *> options = {
-        hideNonlinearOption,        darkOption,           bionicOption,
-        landscapeColumnsOption,     animationOption,      edgeLightOption,
-        lightGestureFeedbackOption, denseGraphOption,     hideTabLabelsOption,
-        wifiPowerSaverOption,       disableStandbyOption, automaticOpeningOption,
-        minimalAnnotationOption,    hideBookOnSleepOption
+        hideNonlinearOption,    inpageFootnotesOption,      darkOption,
+        bionicOption,           landscapeColumnsOption,     animationOption,
+        edgeLightOption,        lightGestureFeedbackOption, denseGraphOption,
+        hideTabLabelsOption,    wifiPowerSaverOption,       disableStandbyOption,
+        automaticOpeningOption, minimalAnnotationOption,    hideBookOnSleepOption
     };
     options.append(openingCoverOption);
     options.prepend(zenModeOption);

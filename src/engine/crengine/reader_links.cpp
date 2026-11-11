@@ -482,6 +482,69 @@ bool noteHtml(ldomNode *node, QString &html, NoteBudget &budget, int depth = 0)
 }
 } // namespace
 
+void EngineDocument::markPageNotes()
+{
+    auto *document = engine_->getDocument();
+    if (document->getProps()->getIntDef("kobalt.page-notes.version", 0) == 1)
+        return;
+    const auto marker = document->getAttrNameIndex("data-kobalt-page-note");
+    bool changed = false;
+    QVector<ldomNode *> groups;
+    QVector<ldomNode *> pending{ document->getRootNode() };
+    while (!pending.isEmpty()) {
+        engineActivity().checkpoint();
+        auto *node = pending.takeLast();
+        if (!node || !node->isElement())
+            continue;
+        // Source-supplied markers must not turn ordinary text into page notes.
+        if (node->hasAttribute(marker)) {
+            node->setAttributeValue(0, marker, U"");
+            changed = true;
+        }
+        auto *parent = node->getParentNode();
+        if (node->isNodeName("div") && token(node, "class", "footnote") && parent
+            && token(parent, "class", "footnotes"))
+            groups.append(node);
+        for (int i = node->getChildCount() - 1; i >= 0; --i)
+            pending.append(node->getChildNode(i));
+    }
+    // Gutenberg sometimes puts several notes in one .footnote container.
+    // A labeled backlink starts each note; unlabeled paragraphs continue it.
+    for (auto *group : groups) {
+        bool started = false;
+        for (int i = 0; i < group->getChildCount(); ++i) {
+            auto *paragraph = group->getChildNode(i);
+            if (!paragraph->isNodeName("p"))
+                continue;
+            bool label = false;
+            QVector<ldomNode *> children{ paragraph };
+            while (!children.isEmpty()) {
+                engineActivity().checkpoint();
+                auto *child = children.takeLast();
+                const auto href = child->getAttributeValue("href");
+                if (child->isNodeName("a") && token(child, "class", "label")
+                    && !child->getAttributeValue("id").empty() && !href.empty() && href[0] == '#')
+                    label = true;
+                for (int j = 0; j < child->getChildCount(); ++j)
+                    children.append(child->getChildNode(j));
+            }
+            if (label || started) {
+                paragraph->setAttributeValue(0, marker, label ? U"start" : U"extend");
+                changed = true;
+                started = true;
+                group->setAttributeValue(0, marker, U"box");
+                group->getParentNode()->setAttributeValue(0, marker, U"box");
+            }
+        }
+    }
+    document->getProps()->setInt("kobalt.page-notes.version", 1);
+    document->setCacheFileStale(true);
+    if (changed) {
+        document->forceReinitStyles();
+        engine_->requestRender();
+    }
+}
+
 QVector<PageLink> EngineDocument::pageLinks()
 {
     QVector<PageLink> result;
@@ -489,6 +552,59 @@ QVector<PageLink> EngineDocument::pageLinks()
         return result;
     ldomXRangeList links;
     engine_->getCurrentPageLinks(links);
+    // CREngine's page range contains the main flow only. Include links from
+    // the note fragments that it draws below that flow, including backlinks.
+    if (inpageFootnotes_) {
+        class NoteLinks : public ldomNodeCallback
+        {
+        public:
+            explicit NoteLinks(ldomXRangeList &links) : links(links) { }
+
+            bool onElement(ldomXPointerEx *pointer) override
+            {
+                add(pointer->getNode());
+                return true;
+            }
+
+            void onText(ldomXRange *range) override { add(range->getStart().getNode()); }
+
+        private:
+            void add(ldomNode *node)
+            {
+                while (node && !node->isNodeName("a"))
+                    node = node->getParentNode();
+                if (!node || !node->hasChildren())
+                    return;
+                for (int i = 0; i < links.length(); ++i)
+                    if (links[i]->getStart().getNode() == node)
+                        return;
+                links.add(new ldomXRange(node, true));
+            }
+
+            ldomXRangeList &links;
+        } collect(links);
+
+        const int first = engine_->getCurPage() * columns_;
+        for (int column = 0; column < columns_ && first + column < engine_->getPageList()->length();
+             ++column) {
+            const auto &page = *engine_->getPageList()->operator[](first + column);
+            for (int i = 0; i < page.footnotes.length(); ++i) {
+                const auto &note = page.footnotes[i];
+                auto *doc = engine_->getDocument();
+                ldomXPointerEx start(doc->createXPointer(lvPoint(0, note.start),
+                                                         PT_DIR_SCAN_FORWARD_LOGICAL_FIRST));
+                ldomXPointerEx end(doc->createXPointer(
+                        lvPoint(engine_->columnWidth(), note.start + note.height - 1),
+                        PT_DIR_SCAN_BACKWARD_LOGICAL_LAST));
+                if (start.isNull() || end.isNull())
+                    continue;
+                if (end.isText())
+                    end.setOffset(end.getNode()->getText().length());
+                ldomXRange range(start, end);
+                range.forEach(&collect);
+            }
+        }
+    }
     for (int i = 0; i < links.length(); ++i) {
         engineActivity().checkpoint();
         auto *range = links[i];

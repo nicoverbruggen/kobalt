@@ -28,6 +28,7 @@ public:
     void setDefinitionFont(const QString &family, int percent);
     void open(const QString &word, const DictionaryResult &result, const QRect &selection);
     void place(const QRect &selection);
+    void dismiss();
     static QString formatDefinition(const QString &html);
 
 protected:

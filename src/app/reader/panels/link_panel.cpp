@@ -99,6 +99,14 @@ void LinkPanel::open(const LinkDetails &details, const QRect &reference, const Q
     arrange();
 }
 
+void LinkPanel::dismiss()
+{
+    if (isHidden())
+        return;
+    hide();
+    text->clear();
+}
+
 void LinkPanel::resizeEvent(QResizeEvent *)
 {
     arrange();

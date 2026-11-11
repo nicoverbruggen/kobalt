@@ -1,5 +1,6 @@
 #pragma once
 #include <QImage>
+#include <QPointer>
 class QPainter;
 
 namespace kobalt::ui {
@@ -34,6 +35,7 @@ public:
 
     explicit AppearancePreview(QWidget *parent);
     void setContent(Content next);
+    void clear();
 
     bool showsText() const { return content.text; }
 
@@ -41,6 +43,7 @@ public:
     bool fillsTextCrop(const QImage &body, int cropTop) const;
     // Runs when `panel` hides or changes size, including paths that do not refresh the
     // reader. Opening a panel refreshes the reader after its stacking is final.
+    // Pass nullptr to stop callbacks before the callback owner's members are destroyed.
     void followPanel(QWidget *panel, std::function<void()> changed);
 
 protected:
@@ -64,7 +67,7 @@ private:
     QRect pageBounds() const;
     Content content;
     ui::ListHeader *textHeader = nullptr;
-    QWidget *panel = nullptr;
+    QPointer<QWidget> panel;
     std::function<void()> panelChanged;
     mutable ScaledImage scaledHeader, scaledFooter, scaledBody;
 };

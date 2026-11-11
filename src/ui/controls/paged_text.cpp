@@ -16,6 +16,15 @@ PagedText::PagedText(QWidget *parent) : QWidget(parent)
     document.setFont(font);
 }
 
+void PagedText::clear()
+{
+    source.clear();
+    document.clear();
+    current = 0;
+    stale = true;
+    update();
+}
+
 void PagedText::setHtml(const QString &html)
 {
     source = html;

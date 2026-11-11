@@ -13,3 +13,7 @@ Appearance changes use separate contracts. `appearance::Patch` changes only name
 Dark-mode saves from Settings and from the Light shortcut run on the profile writer thread. These headless checks do not establish physical touch delivery, e-ink refresh quality or device storage latency.
 
 Centered choice and confirmation dialogs use the shared `PopupCard` heading for title and description spacing. Its plain text wraps into balanced lines using the same font measurements as painting. Explicit paragraph breaks stay intact. Long prose keeps ordinary wrapping. The component checks cover orphan-line avoidance, line width, paragraph preservation and text without word spaces. Described option rows reserve extra vertical space when their supporting text determines the row height; rows without descriptions retain their size.
+
+Dismissal checks verify that appearance and Styling previews release their source images. Dictionary and footnote panels release their text and layout on dismissal, retain content while their parent is temporarily hidden, and populate again on reopening. These are ownership and behavior checks, not measurements of process RSS or Kobo memory.
+
+Reader teardown checks observe child-panel callbacks through window destruction, with Text and Layout previews ready or still rendering and with Settings open. They reject callbacks after reader teardown starts without relying on an allocator to detect a destroyed member. These checks cover the observed panel subscriptions, not every possible widget callback lifetime.

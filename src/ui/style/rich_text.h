@@ -15,6 +15,7 @@ class PrivateRichText
 public:
     PrivateRichText();
     ~PrivateRichText();
+    void clear();
     void setHtml(const QString &html);
     void setPlainText(const QString &text);
     void setFont(const QFont &font);

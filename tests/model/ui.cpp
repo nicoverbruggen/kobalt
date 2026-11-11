@@ -16,6 +16,7 @@
 #include "assets/font_catalog.h"
 #include "reader_inputs.h"
 #include "app/reader/views/opening.h"
+#include "app/reader/views/appearance_preview.h"
 #include "app/reader/settings/settings_panel.h"
 #include "host_presentation.h"
 #include "support/qt_font.h"
@@ -162,6 +163,102 @@ protected:
 };
 
 // Checks the production controls in pixels: geometry, borders, themes, labels, sliders, dictionary rendering and paging.
+// Releases dismissed content while preserving fonts, temporary hides and fresh reopening.
+void dismissedContent()
+{
+    using namespace kobalt;
+    QWidget host;
+    host.resize(1072, 1448);
+    host.show();
+    QImage image(600, 800, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    reader::AppearancePreview preview(&host);
+    preview.resize(400, 600);
+    {
+        reader::AppearancePreview::Content content;
+        content.page = image.size();
+        content.bodyHeight = image.height();
+        content.body = image;
+        content.header = image;
+        content.footer = image;
+        preview.setContent(content);
+    }
+    preview.show();
+    preview.grab();
+    require(!image.isDetached(), "Appearance preview did not retain its test image");
+    preview.hide();
+    preview.clear();
+    require(image.isDetached(), "Dismissed appearance preview retained its image");
+
+    reader::SettingsPanel settings(&host, {});
+    settings.show();
+    {
+        StyleSample sample;
+        sample.spreads = { { image, image } };
+        sample.crops = { image };
+        sample.details = { image };
+        settings.setStylingSample(reader::SettingsPanel::AdvancedText::WordSpacing, sample);
+    }
+    require(!image.isDetached(), "Styling did not retain its test sample");
+    settings.hide();
+    require(image.isDetached(), "Closed Settings retained Styling sample images");
+
+    ui::PrivateRichText rich;
+    const auto font = ui::interfaceFont(28);
+    rich.setFont(font);
+    const QString html =
+            QStringLiteral("<p>A long definition with several lines of text.</p>").repeated(80);
+    rich.setHtml(html);
+    rich.layout(300, 200);
+    require(rich.pages() > 1 && !rich.lineRectangles().isEmpty(), "Rich text fixture is empty");
+    rich.clear();
+    require(rich.lineRectangles().isEmpty() && rich.height() == 0 && rich.font() == font,
+            "Rich text clear retained layout or discarded its font");
+    rich.setHtml(html);
+    rich.layout(300, 200);
+    require(rich.pages() > 1, "Cleared rich text cannot lay out new content");
+
+    DictionaryPanel dictionary(&host);
+    DictionaryResult result;
+    result.received = result.restored = true;
+    result.html = html;
+    dictionary.open("word", result, QRect(100, 100, 30, 30));
+    auto *definition =
+            static_cast<ui::PagedText *>(dictionary.findChild<QWidget *>("rrDefinition"));
+    require(definition && definition->pages() > 1, "Dictionary fixture is not paginated");
+    const int definitionPages = definition->pages();
+    definition->setPage(1);
+    host.hide();
+    host.show();
+    require(definition->pages() == definitionPages && definition->page() == 1,
+            "Temporary reader hide discarded its dictionary");
+    dictionary.dismiss();
+    require(definition->pages() == 1 && definition->page() == 0,
+            "Dismissed dictionary retained its definition");
+    dictionary.open("word", result, QRect(100, 100, 30, 30));
+    require(definition->pages() == definitionPages, "Dictionary failed to reopen the same content");
+    host.hide();
+    dictionary.dismiss();
+    host.show();
+    require(definition->pages() == 1, "Dictionary dismissal while the reader hid retained text");
+
+    LinkPanel link(&host);
+    LinkDetails details;
+    details.kind = LinkKind::Footnote;
+    details.html = html;
+    link.open(details, QRect(100, 100, 30, 30));
+    auto *note = static_cast<ui::PagedText *>(link.findChild<QWidget *>("rrLinkText"));
+    require(note && note->pages() > 1, "Footnote fixture is not paginated");
+    const int notePages = note->pages();
+    host.hide();
+    host.show();
+    require(note->pages() == notePages, "Temporary reader hide discarded its footnote");
+    link.dismiss();
+    require(note->pages() == 1 && note->page() == 0, "Dismissed footnote retained its text");
+    link.open(details, QRect(100, 100, 30, 30));
+    require(note->pages() == notePages, "Footnote failed to reopen the same content");
+}
+
 int main(int argc, char **argv)
 {
 #ifdef Q_OS_LINUX
@@ -215,6 +312,7 @@ int main(int argc, char **argv)
                     && QFontInfo(kobalt::ui::chromeFont()).family() == "IBM Plex Mono"
                     && QFontInfo(kobalt::ui::brandFont(32)).family() == "Instrument Serif",
             "Component font substitution");
+    dismissedContent();
     {
         int loads = 0;
         kobalt::setDiagnosticObserver([&](const QJsonObject &event) {

@@ -15,6 +15,7 @@ class LinkPanel : public ui::Panel
 public:
     explicit LinkPanel(QWidget *parent);
     void open(const LinkDetails &details, const QRect &reference, const QRect &readingArea = {});
+    void dismiss();
     std::function<void()> dismissed;
     std::function<void(const QString &)> navigate;
 

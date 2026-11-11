@@ -299,6 +299,17 @@ void DictionaryPanel::open(const QString &word, const DictionaryResult &result,
     arrange();
 }
 
+void DictionaryPanel::dismiss()
+{
+    if (isHidden())
+        return;
+    hide();
+    definitionHtml.clear();
+    renderedHtml.clear();
+    sourceText.clear();
+    text->clear();
+}
+
 QFont DictionaryPanel::bookFont(int pixels) const
 {
     QFont font = bookFamily.isEmpty() ? ui::interfaceFont(pixels) : QFont(bookFamily);

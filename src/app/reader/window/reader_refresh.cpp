@@ -303,8 +303,10 @@ void Reader::syncAppearancePreview()
         appearancePreviewAxis = Axis::None;
     if ((!layoutOpen && !textOpen) || !appearancePreviewFits()) {
         // Navigation can cancel this request without changing the reading image.
-        previewPageRequested = 0;
+        previewPageKey = previewPageRequested = 0;
+        previewPage = {};
         appearancePreview->hide();
+        appearancePreview->clear();
         return;
     }
     // Each kind of preview draws its own bookmark page.

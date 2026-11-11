@@ -395,6 +395,13 @@ PrivateRichText::PrivateRichText() : data(std::make_unique<Data>())
 
 PrivateRichText::~PrivateRichText() = default;
 
+void PrivateRichText::clear()
+{
+    PrivateRichText empty;
+    empty.setFont(font());
+    data.swap(empty.data);
+}
+
 void PrivateRichText::setHtml(const QString &html)
 {
     data->breaks.clear();

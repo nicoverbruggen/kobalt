@@ -19,6 +19,7 @@ class PagedText : public QWidget
 public:
     explicit PagedText(QWidget *parent = nullptr);
     void setHtml(const QString &html);
+    void clear();
     void setTextFont(const QFont &font);
     // Minimum leading relative to the font. Zero keeps the source formatting.
     void setMinimumLineHeight(int percent);

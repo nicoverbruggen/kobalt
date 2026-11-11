@@ -31,6 +31,14 @@ AppearancePreview::AppearancePreview(QWidget *parent) : QWidget(parent)
     hide();
 }
 
+void AppearancePreview::clear()
+{
+    content = {};
+    scaledHeader = {};
+    scaledFooter = {};
+    scaledBody = {};
+}
+
 void AppearancePreview::setContent(Content next)
 {
     // Every repaint is a visible e-ink update. Refreshes that change nothing stay silent.
@@ -61,9 +69,12 @@ void AppearancePreview::setContent(Content next)
 
 void AppearancePreview::followPanel(QWidget *watched, std::function<void()> changed)
 {
+    if (panel)
+        panel->removeEventFilter(this);
     panel = watched;
     panelChanged = std::move(changed);
-    panel->installEventFilter(this);
+    if (panel)
+        panel->installEventFilter(this);
 }
 
 bool AppearancePreview::eventFilter(QObject *watched, QEvent *event)

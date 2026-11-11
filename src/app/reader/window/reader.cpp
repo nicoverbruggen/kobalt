@@ -14,6 +14,7 @@
 #include "app/reader/views/sleep_screen.h"
 #include "app/reader/views/opening.h"
 #include "app/reader/views/kosync_notice.h"
+#include "app/reader/settings/settings_panel.h"
 #include "ui/style/styles.h"
 #include "platform/api/kobo_refresh.h"
 #include "reading/appearance_settings.h"
@@ -56,6 +57,11 @@ using kobalt::ui::makeButton;
 Reader::~Reader()
 {
     mainthread::AllowBlocking allow("closing reader");
+    // QWidget hides children after Reader's members are destroyed. Stop child-owned
+    // callbacks now; removing this Reader's own event filters does not stop them.
+    appearancePreview->followPanel(nullptr, {});
+    static_cast<SettingsPanel *>(general)->stylingHidden = {};
+    cancelStylingSamples();
     if (kosyncClient)
         kosyncClient->persistSyncTime();
     if (closeWithoutSaving)
@@ -1537,7 +1543,7 @@ void Reader::dismissLinks()
     linkPending = false;
     if (linkPanel) {
         const bool wasVisible = linkPanel->isVisible();
-        linkPanel->hide();
+        linkPanel->dismiss();
         if (wasVisible) {
             requestFlash("footnote");
             page->update();
@@ -1682,7 +1688,7 @@ void Reader::dismissLookup(bool keepGesture)
     page->mark({});
     if (dictionaryPanel) {
         const bool wasVisible = dictionaryPanel->isVisible();
-        dictionaryPanel->hide();
+        dictionaryPanel->dismiss();
         if (wasVisible) {
             requestFlash("dictionary");
             page->update();

@@ -2043,6 +2043,7 @@ void SettingsPanel::hideEvent(QHideEvent *event)
     dismissFontChoices();
     if (stylingHidden)
         stylingHidden();
+    stylingSamples.clear();
     ui::Panel::hideEvent(event);
 }
 

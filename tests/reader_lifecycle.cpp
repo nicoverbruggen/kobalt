@@ -20,6 +20,8 @@
 #include "ui/style/metrics.h"
 #include "ui/style/scale.h"
 #include "app/reader/views/reading_page.h"
+#include "app/reader/views/appearance_preview.h"
+#include "app/reader/settings/settings_panel.h"
 #include "app/reader/views/kosync_notice.h"
 #include "app/reader/views/image_viewer.h"
 #include "app/reader/views/sleep_screen.h"
@@ -862,6 +864,86 @@ private slots:
         QTRY_VERIFY(host.idle());
         QVERIFY2(delivered,
                  "The reader's application filter still consumed events during teardown");
+    }
+
+    void appearanceTeardownStopsPanelCallbacks_data()
+    {
+        QTest::addColumn<QString>("buttonName");
+        QTest::addColumn<bool>("pending");
+        QTest::newRow("text-ready") << "rrNavText" << false;
+        QTest::newRow("layout-ready") << "rrNavLayout" << false;
+        QTest::newRow("text-pending") << "rrNavText" << true;
+        QTest::newRow("layout-pending") << "rrNavLayout" << true;
+        QTest::newRow("settings") << "rrSettings" << false;
+    }
+
+    // Checks that panel events stop calling the reader before its members are destroyed, including cancelled previews.
+    void appearanceTeardownStopsPanelCallbacks()
+    {
+        QFETCH(QString, buttonName);
+        QFETCH(bool, pending);
+        bool destroying = false;
+        int liveCallbacks = 0, teardownCallbacks = 0;
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.presentation = [&](QWidget *) {
+                auto presentation = std::make_unique<test::HostPresentation>();
+                presentation->resumed = [&] { destroying = true; };
+                return presentation;
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QVERIFY(QTest::qWaitForWindowExposed(host.window()));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        page->tapped(page->rect().center());
+        auto *button = host.window()->findChild<QPushButton *>(buttonName);
+        QVERIFY(button);
+        const auto resume = qScopeGuard([] { engineActivity().pause(false); });
+        if (pending)
+            engineActivity().pause(true);
+        button->click();
+        if (pending)
+            QTRY_VERIFY(inspectReader(host)["preview_busy"].toBool()
+                        || inspectReader(host)["preview_queued"].toBool());
+        else
+            QTRY_VERIFY(!inspectReader(host)["preview_busy"].toBool()
+                        && !inspectReader(host)["preview_queued"].toBool());
+        // Observe the real subscription without accessing a destroyed Reader. This
+        // makes a late callback an assertion failure instead of allocator-dependent UB.
+        const auto observed = [&] {
+            if (destroying)
+                ++teardownCallbacks;
+            else
+                ++liveCallbacks;
+        };
+        if (buttonName == "rrSettings") {
+            auto *settings = static_cast<reader::SettingsPanel *>(
+                    host.window()->findChild<QWidget *>("rrGeneralSettings"));
+            QVERIFY(settings && settings->isVisible());
+            settings->stylingHidden = observed;
+            settings->hide();
+            settings->show();
+        } else {
+            auto *preview = static_cast<reader::AppearancePreview *>(
+                    host.window()->findChild<QWidget *>("rrAppearancePreview"));
+            auto *panel = host.window()->findChild<QWidget *>("rrReadingMenu");
+            QVERIFY(preview && panel && panel->isVisible());
+            preview->followPanel(panel, observed);
+            QEvent moved(QEvent::Move);
+            QCoreApplication::sendEvent(panel, &moved);
+        }
+        QCOMPARE(liveCallbacks, 1);
+        host.shutdown();
+        engineActivity().pause(false);
+        QTRY_VERIFY(host.idle());
+        QVERIFY(destroying);
+        QCOMPARE(teardownCallbacks, 0);
     }
 
     // Checks that shutdown ends at the position-conversion deadline with a stalled engine, keeps the local position and writes no native one.

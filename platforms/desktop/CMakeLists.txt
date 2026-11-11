@@ -92,7 +92,7 @@ target_include_directories(kobalt-core SYSTEM PUBLIC
     "${KOBALT_TEST_PNG_INCLUDE}")
 include("${KOBALT_ROOT}/platforms/cache-policy.cmake")
 target_compile_definitions(kobalt-core PUBLIC KOBALT_READER_HARDWARE KOBALT_VERSION="${KOBALT_VERSION}"
-    KOBALT_LAYOUT_POLICY="${layout_policy}")
+    KOBALT_LAYOUT_POLICY="${layout_policy}" KOBALT_RENDERING_POLICY="${rendering_policy}")
 if(APPLE)
     target_compile_definitions(kobalt-core PUBLIC fdatasync=fsync)
 endif()
@@ -633,6 +633,8 @@ if(BUILD_TESTING)
             endif()
             if(check STREQUAL "reader")
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/engine_positions.cpp")
+            endif()
+            if(check MATCHES "^(reader|document_cache)$")
                 target_compile_definitions(kobalt-${name}-tests PRIVATE
                     KOBALT_TEST_VARIABLE_FONT_DIRECTORY="${KOBALT_ROOT}/tests/fixtures")
             endif()

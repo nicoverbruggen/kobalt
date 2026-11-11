@@ -336,7 +336,7 @@ set(warnings -Wall -Wextra -Werror -Wno-unused-private-field -Wno-c++20-extensio
     -Wno-unused-lambda-capture -Wno-inconsistent-missing-override -Wno-overloaded-virtual -Wno-self-assign
     -Wno-undefined-internal -Wno-deprecated-non-prototype -Wimplicit-fallthrough -Wtype-limits -Wtautological-unsigned-zero-compare)
 set(qt_defines -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_NO_DEBUG)
-set(kobalt_defines "-DKOBALT_CONFIG_DIR=\"/mnt/onboard/.adds/kobalt\"" "-DKOBALT_LAYOUT_POLICY=\"syntax-check\""
+set(kobalt_defines "-DKOBALT_CONFIG_DIR=\"/mnt/onboard/.adds/kobalt\"" "-DKOBALT_LAYOUT_POLICY=\"syntax-check\"" "-DKOBALT_RENDERING_POLICY=\"syntax-check\""
     -DKOBALT_PAGE_ANIMATIONS -DKOBALT_READER_HARDWARE
     "-DKOBALT_VERSION=\"syntax-check\"" "-DNH_VERSION=\"syntax-check\""
     ${qt_defines} -DQT_DBUS_LIB -DQT_NETWORK_LIB -DQT_SENSORS_LIB -DQT_SQL_LIB -Dkobalt_EXPORTS -DHAVE_OFF64_T=1)

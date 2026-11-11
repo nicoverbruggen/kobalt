@@ -614,6 +614,7 @@ static void checkCssDensity()
             "Percentage image width changed with CSS density");
 }
 
+// Manual optical size must reach both normal text and Bold Reading prefixes.
 static void checkBionicWidth()
 {
     QString family;
@@ -630,7 +631,7 @@ static void checkBionicWidth()
                 "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0;"
                 "font-family:'"
                 + family.toHtmlEscaped().toUtf8() + "';font-weight:400;font-width:"
-                + QByteArray::number(width) + "%}</style></head><body><p>"
+                + QByteArray::number(width) + "%;font-optical-sizing:none}</style></head><body><p>"
                 + (explicitPrefix ? QByteArray("<span style='font-weight:700'>MMMM</span>MMMM")
                                   : QByteArray("MMMMMMMM"))
                 + "</p></body></html>";
@@ -657,10 +658,19 @@ static void checkBionicWidth()
         settings["bold_reading"] = "off";
         require(expected.open(publication(width, true), QSize(800, 1000), settings, &error),
                 qPrintable(error));
-        require(actual.setOpticalSize(14) && expected.setOpticalSize(14),
-                "Cannot set fixture optical size");
-        require(actual.image(0) == expected.image(0),
-                "Bold Reading lost authored font width or optical size on emphasized runs");
+        QImage smallOpticalSize;
+        for (const int points : { 12, 36 }) {
+            require(actual.setOpticalSize(points) && expected.setOpticalSize(points),
+                    "Cannot set fixture optical size");
+            const auto image = actual.image(0);
+            require(image == expected.image(0),
+                    "Bold Reading lost authored font width or optical size on emphasized runs");
+            if (points == 12)
+                smallOpticalSize = image;
+            else
+                require(image != smallOpticalSize,
+                        "Manual optical size did not override font-optical-sizing:none");
+        }
         if (width == 100)
             normalWidth = actual.image(0);
         else

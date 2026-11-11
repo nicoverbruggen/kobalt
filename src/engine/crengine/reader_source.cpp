@@ -534,7 +534,18 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         coverReady();
     source_->embeddedFonts = source_->parent ? source_->parent->embeddedFonts : embeddedFontCount();
     applyPublisherFontFallbacks();
-    engine_->getDocument()->getProps()->setInt("kobalt.bionic.mode", bionic_ == "bold" ? 1 : 0);
+    auto *document = engine_->getDocument();
+    const auto renderingPolicy = Utf8ToUnicode(lString8(KOBALT_RENDERING_POLICY));
+    // A compatible engine update keeps the parsed DOM and Kobalt's markers.
+    // Rebuild only its layout when shaping or hyphenation rules have changed.
+    if (openedFromCache_
+        && document->getProps()->getStringDef("kobalt.rendering.policy", "") != renderingPolicy) {
+        document->forceReinitStyles();
+        engine_->requestRender();
+        document->setCacheFileStale(true);
+    }
+    document->getProps()->setString("kobalt.rendering.policy", renderingPolicy);
+    document->getProps()->setInt("kobalt.bionic.mode", bionic_ == "bold" ? 1 : 0);
     openingTimes_["model_parse_ms"] = double(phase.restart());
     // The package language selects hyphenation patterns and line-breaking
     // rules for text without its own lang attribute.

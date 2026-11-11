@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <QColor>
 #include <cstdio>
+#include <lvfntman_vert_buffer.h>
 
 using namespace kobalt;
 
@@ -23,6 +24,23 @@ static QRect ink(const QImage &image)
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    // A rotated run may draw wider than it measured. Growth must preserve
+    // every row and leave overflow spacing empty, including repeated growth.
+    int width = 57;
+    constexpr int height = 46;
+    auto *buffer = new unsigned char[width * height]();
+    buffer[(height - 1) * width + width - 1] = 127;
+    ensureVerticalRotationBufferWidth(buffer, width, height, 58);
+    require(width >= 58 && buffer[(height - 1) * width + 56] == 127
+                    && buffer[(height - 1) * width + 57] == 0,
+            "Rotated text growth lost a row or retained unrelated glyph pixels");
+    const int previousWidth = width;
+    buffer[width - 1] = 91;
+    ensureVerticalRotationBufferWidth(buffer, width, height, previousWidth + 1);
+    require(width > previousWidth && buffer[previousWidth - 1] == 91 && buffer[previousWidth] == 0,
+            "Repeated rotated text growth lost pixels or left spacing uninitialized");
+    delete[] buffer;
+
     const auto chapter = [](const QByteArray &mode) {
         return QByteArray(
                        "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>body{margin:0;writing-mode:")

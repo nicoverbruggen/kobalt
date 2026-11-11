@@ -76,7 +76,7 @@ target_include_directories(kobalt_android SYSTEM PRIVATE "${CRENGINE_SOURCE}/cre
 target_compile_options(kobalt_android PRIVATE -Wall -Wextra "-iquote${KOBALT_ROOT}" "-iquote${source}")
 target_compile_definitions(kobalt_android PRIVATE KOBALT_READER_HARDWARE KOBALT_VERSION="${KOBALT_VERSION}")
 include("${KOBALT_ROOT}/platforms/cache-policy.cmake")
-target_compile_definitions(kobalt_android PRIVATE KOBALT_LAYOUT_POLICY="${layout_policy}")
+target_compile_definitions(kobalt_android PRIVATE KOBALT_LAYOUT_POLICY="${layout_policy}" KOBALT_RENDERING_POLICY="${rendering_policy}")
 set(engine "${CMAKE_CURRENT_BINARY_DIR}/libcrengine-reader.a")
 add_custom_command(OUTPUT "${engine}"
     COMMAND "${CMAKE_OBJCOPY}" --redefine-sym FT_Load_Glyph=kobalt_font_load_glyph

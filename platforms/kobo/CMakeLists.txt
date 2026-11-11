@@ -115,7 +115,7 @@ foreach(target kobalt-code kobalt)
         $<$<BOOL:${KOBALT_PAGE_ANIMATIONS}>:KOBALT_PAGE_ANIMATIONS>
         KOBALT_VERSION="${KOBALT_VERSION}" NH_VERSION="${KOBALT_VERSION}"
         KOBALT_CONFIG_DIR="/mnt/onboard/.adds/kobalt" KOBALT_SYSTEM_FONT_DIRECTORY="${KOBALT_SYSTEM_FONT_DIRECTORY}"
-        KOBALT_LAYOUT_POLICY="${layout_policy}")
+        KOBALT_LAYOUT_POLICY="${layout_policy}" KOBALT_RENDERING_POLICY="${rendering_policy}")
 endforeach()
 
 set(engine "${CMAKE_CURRENT_BINARY_DIR}/libcrengine-reader.a")

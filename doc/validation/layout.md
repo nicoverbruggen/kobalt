@@ -25,7 +25,7 @@ The terminal lists each file, its result and the reason for any failure, then pr
 
 Intentional cache-policy and stylesheet mismatches in the negative tests can print CREngine cache warnings. The normal-book diagnostic check still rejects unexpected warnings.
 
-The CREngine upgrade to `f335f7a` keeps the Kobalt patch stack. `engine.vertical-writing` and `engine.reader` cover the adaptations for the upstream combined text decorations and font-width support.
+The CREngine upgrade to `4ce1aed1` keeps the Kobalt patch stack and the manual optical-size override. Both normal text and Bold Reading prefixes use the upstream 12-point optical-size fallback when CSS sizing is enabled and render DPI is below 100. `engine.reader` checks manual optical sizes with CSS sizing disabled, including Bold Reading prefixes and authored font widths. `engine.vertical-writing` retains the vertical-layout checks. HarfBuzz 15.1.0 and FriBidi 1.0.18 also affect text shaping and bidirectional layout; use the font, layout and multilingual corpus checks when changing these pins.
 
 ## Captures
 
@@ -44,3 +44,11 @@ For an authorized local EPUB, `kobalt-beautifier-tests --compare-layout <epub> <
 ## Limits
 
 These checks do not measure river reduction or device reflow performance. Synthetic fixtures do not establish compatibility with every publisher, script or font, or physical-device rendering, touch and e-ink behavior.
+
+## Cache compatibility across engine updates
+
+Dependency and patch updates require a cache compatibility review. The parsed-book policy retains the beta 7 identity; explicit parser and engine-format versions reject incompatible records. A separate rendering version refreshes styles and pagination without rereading publication text. Hyphenation changes refresh layout through that rendering policy.
+
+Build `kobalt-document-cache-tests` against the previous and candidate sources with the same probe. Run the previous executable with `--write-compatibility <epub> <empty-output-directory>`, then the candidate with `--check-compatibility <epub> <same-output-directory>`, using Qt's minimal platform. The probe requires old-cache hits, compares every page and chapter with a fresh candidate parse, checks reading anchors and confirms the next unchanged opening does not rewrite the cache. It covers ordinary text, Bold Reading, variable optical sizes and vertical writing. Use an isolated directory, never a user's profile. The ordinary document-cache suite runs the same comparisons within one engine version.
+
+The vertical-writing buffer regression covers a run measured at 57 pixels that draws 58 pixels. Rotating the old allocation read beyond its last row and could paint unrelated glyph fragments, making cached and fresh pages differ. The local buffer patch grows and zero-fills the allocation before compositing and rotation. It adapts the buffer-safety part of the upstream vertical fork's fix without its experimental glyph-origin changes.

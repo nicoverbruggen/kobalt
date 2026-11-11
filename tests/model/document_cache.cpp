@@ -21,14 +21,111 @@ static QByteArray hash(const QImage &image)
             QCryptographicHash::Sha256);
 }
 
+// Run the writer with the previous engine and the checker with its replacement.
+// The checker requires a real cache hit, then compares it with a fresh parse.
+static void checkCompatibility(const QByteArray &bytes, const QString &root, bool write)
+{
+    QString variableFamily;
+    for (const auto &font : kobalt::discoverReadingFonts(kobalt::test::readerFonts().sources))
+        if (font.opticalSizeAxis.available()) {
+            variableFamily = font.family;
+            break;
+        }
+    require(!variableFamily.isEmpty(), "Missing compatibility variable-font fixture");
+    const auto fingerprint = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+    const QByteArray policy(KOBALT_LAYOUT_POLICY);
+    for (int scene = 0; scene < 5; ++scene) {
+        const auto directory = root + "/" + QString::number(scene) + "/.cache";
+        require(QDir().mkpath(QFileInfo(directory).absolutePath()),
+                "Cannot create compatibility cache root");
+        const QSize viewport(1072, 1328);
+        auto settings = kobalt::qt::object(
+                { { "text_alignment", "left" }, { "bold_reading", scene == 1 ? "bold" : "off" } });
+        if (scene == 2 || scene == 3) {
+            settings["font_face"] = variableFamily;
+            settings["font_optical_size"] = scene == 2 ? 12 : 36;
+        }
+        const QByteArray css =
+                scene == 4 ? QByteArray("body{writing-mode:vertical-rl}") : QByteArray();
+        QString error;
+        const auto prepare = [&](kobalt::EngineDocument &document, bool cached) {
+            document.setUserStyleSheet(css);
+            if (cached)
+                document.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+            require(document.open(bytes, viewport, settings, &error), qPrintable(error));
+        };
+        if (write) {
+            kobalt::EngineDocument document(kobalt::test::readerFonts());
+            prepare(document, true);
+            require(!document.openedFromCache(), "Compatibility writer requires an empty cache");
+            require(document.saveDocumentCache(), "Cannot write compatibility cache");
+        } else {
+            const auto before = QDir(directory).entryList({ "*.cr3" }, QDir::Files);
+            require(before.size() == 1, "Missing previous-engine compatibility cache");
+            {
+                kobalt::EngineDocument cached(kobalt::test::readerFonts()),
+                        fresh(kobalt::test::readerFonts());
+                prepare(cached, true);
+                require(cached.openedFromCache(),
+                        "The upgraded engine discarded the previous cache");
+                prepare(fresh, false);
+                require(cached.pages() == fresh.pages() && cached.title() == fresh.title(),
+                        "Previous-engine cache changed page count or title");
+                for (int page = 0; page < fresh.pages(); ++page) {
+                    require(fresh.go(page) && cached.go(page), "Cannot select compatibility page");
+                    const auto freshImage = fresh.image(page), cachedImage = cached.image(page);
+                    require(hash(freshImage) == hash(cachedImage),
+                            "Previous-engine cached page differs from a fresh upgraded parse");
+                }
+                const int middle = fresh.pages() / 2;
+                require(cached.goTo(fresh.pageStart(middle)) && cached.page() == middle,
+                        "Previous-engine cache changed a reading anchor");
+                const auto a = cached.chapters(), b = fresh.chapters();
+                require(a.size() == b.size(), "Previous-engine cache lost chapters");
+                for (int i = 0; i < a.size(); ++i)
+                    require(a[i].title == b[i].title && a[i].page == b[i].page
+                                    && a[i].position == b[i].position,
+                            "Previous-engine cache changed a chapter anchor");
+                require(cached.saveDocumentCache(), "Cannot save the upgraded cached layout");
+            }
+            require(QDir(directory).entryList({ "*.cr3" }, QDir::Files) == before,
+                    "A compatible update replaced the parsed-book cache identity");
+            const auto path = directory + "/" + before.first();
+            const auto oldTime = QDateTime::fromSecsSinceEpoch(946684800);
+            QFile file(path);
+            require(file.open(QIODevice::ReadWrite)
+                            && file.setFileTime(oldTime, QFileDevice::FileModificationTime),
+                    "Cannot set compatibility cache timestamp");
+            file.close();
+            kobalt::EngineDocument reopened(kobalt::test::readerFonts());
+            prepare(reopened, true);
+            require(reopened.openedFromCache() && reopened.saveDocumentCache(),
+                    "Cannot reopen the upgraded cache");
+            require(QFileInfo(path).lastModified() == oldTime,
+                    "The upgraded cache rebuilt its layout on every reopening");
+        }
+    }
+    puts(write ? "PASS: previous-engine caches written"
+               : "PASS: previous-engine cache reuse, pixels, anchors and stable reopening");
+}
+
 // Checks parsed and cached pixel equality, chapters, typography changes, Bionic modes, fingerprints and cache policies.
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
-    require(argc == 2, "Pass the document-cache EPUB fixture");
-    QFile file(QString::fromLocal8Bit(argv[1]));
+    const bool compatibility = argc == 4
+            && (QByteArray(argv[1]) == "--write-compatibility"
+                || QByteArray(argv[1]) == "--check-compatibility");
+    require(argc == 2 || compatibility,
+            "Pass the document-cache EPUB fixture or compatibility mode");
+    QFile file(QString::fromLocal8Bit(argv[compatibility ? 2 : 1]));
     require(file.open(QIODevice::ReadOnly), "Cannot read document-cache fixture");
     const auto bytes = file.readAll();
+    if (compatibility) {
+        checkCompatibility(bytes, QString::fromLocal8Bit(argv[3]),
+                           QByteArray(argv[1]) == "--write-compatibility");
+        return 0;
+    }
     QString error;
     {
         // A book saved to the document cache opens without parsing. It must
@@ -172,5 +269,9 @@ int main(int argc, char **argv)
         require(otherPolicy.openedFromCache() && otherBook.openedFromCache(),
                 "Cache cleanup lost the replacement, another book or their index entries");
     }
+    QTemporaryDir compatibilityRoot;
+    require(compatibilityRoot.isValid(), "Cannot create the cache compatibility fixture");
+    checkCompatibility(bytes, compatibilityRoot.path(), true);
+    checkCompatibility(bytes, compatibilityRoot.path(), false);
     puts("PASS: document-cache pixels, chapters, typography, Bionic modes, fingerprints and obsolete entries");
 }

@@ -1,14 +1,17 @@
-# Cache compatibility follows rendering dependencies and patterns, not the app release or UI.
-# Bump the documentCacheChecksum format version for incompatible Kobalt parser changes.
-file(GLOB cache_patches CONFIGURE_DEPENDS "${KOBALT_ROOT}/dependencies/patches/*")
+# Parsed-book compatibility is explicit, not a fingerprint of build inputs.
+# Retain the beta 7 policy token so compatible updates can reuse its caches.
+# Bump documentCacheChecksum's format for incompatible parser/preprocessing changes.
+set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35b2a")
+
+# Increment for layout/metrics changes not covered by CREngine's formatting
+# version. This update changes font axes and shaping, but not the parsed DOM.
+set(rendering_version 1)
 file(GLOB cache_patterns CONFIGURE_DEPENDS "${KOBALT_ROOT}/assets/hyph/*.pattern")
-set(cache_inputs "${KOBALT_ROOT}/dependencies/manifest.json"
-    "${KOBALT_ROOT}/dependencies/CMakeLists.txt" ${cache_patches} ${cache_patterns})
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_inputs})
-set(cache_hashes "")
-foreach(input IN LISTS cache_inputs)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})
+set(cache_hashes "${rendering_version};")
+foreach(input IN LISTS cache_patterns)
     file(SHA256 "${input}" digest)
     file(RELATIVE_PATH name "${KOBALT_ROOT}" "${input}")
     string(APPEND cache_hashes "${name}:${digest};")
 endforeach()
-string(SHA256 layout_policy "${cache_hashes}")
+string(SHA256 rendering_policy "${cache_hashes}")

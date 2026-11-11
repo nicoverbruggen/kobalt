@@ -1,0 +1,71 @@
+# Rotated-run buffer safety adapted from m-tky/crengine, GPL v2 or later.
+# Source: https://github.com/m-tky/crengine/commit/86d3ffb73b460b88374265a4524d65b20e605442
+
+--- /dev/null
++++ b/crengine/include/lvfntman_vert_buffer.h
+@@ -0,0 +1,26 @@
++#ifndef LVFNTMAN_VERT_BUFFER_H_INCLUDED
++#define LVFNTMAN_VERT_BUFFER_H_INCLUDED
++
++#include <cstddef>
++#include <cstring>
++#include <limits>
++
++// Preserve rows when a rotated horizontal run outgrows its measured width.
++inline void ensureVerticalRotationBufferWidth(unsigned char *&buffer, int &width,
++                                              int height, int needed_width)
++{
++    if (needed_width <= width)
++        return;
++    int expanded_width = needed_width;
++    if (width <= std::numeric_limits<int>::max() / 2 && width * 2 > expanded_width)
++        expanded_width = width * 2;
++    unsigned char *expanded = new unsigned char[(std::size_t)expanded_width * height]();
++    for (int row = 0; row < height; row++)
++        std::memcpy(expanded + (std::size_t)row * expanded_width,
++                    buffer + (std::size_t)row * width, width);
++    delete[] buffer;
++    buffer = expanded;
++    width = expanded_width;
++}
++
++#endif // LVFNTMAN_VERT_BUFFER_H_INCLUDED
+--- a/crengine/src/lvfntman.cpp
++++ b/crengine/src/lvfntman.cpp
+@@ -19,6 +19,7 @@
+
+ #include "../include/lvfntman.h"
+ #include "../include/lvfntman_vert.h"  // fork-only: TTB glyph metrics cache
++#include "../include/lvfntman_vert_buffer.h"
+ #include "../include/lvtextfm_vert_diag.h"
+ #include "../include/lvstream.h"
+ #include "../include/lvdrawbuf.h"
+@@ -4696,7 +4697,7 @@
+             int rr_font_h = _height;
+             lUInt8 * rr_buf = NULL;
+             if (is_render_rotate && rr_word_w > 0 && rr_font_h > 0) {
+-                rr_buf = new lUInt8[rr_word_w * rr_font_h]();
++                rr_buf = new lUInt8[(size_t)rr_word_w * rr_font_h]();
+             }
+             if ( _hb_features_is_vertical != (is_vertical_draw ? 1 : 0) )
+                 setupHBFeatures(is_vertical_draw);
+@@ -5241,6 +5242,7 @@
+                                         int bw = item->bmp_width;
+                                         int bh = item->bmp_height;
+                                         int pitch = item->bmp_pitch > 0 ? item->bmp_pitch : bw;
++                                        ensureVerticalRotationBufferWidth(rr_buf, rr_word_w, rr_font_h, tx + bw);
+                                         for (int py = 0; py < bh; py++) {
+                                             int by = ty + py;
+                                             if (by < 0 || by >= rr_font_h) continue;
+@@ -5357,7 +5359,10 @@
+                 int actual_w = x - x0;
+                 if (actual_w <= 0) actual_w = rr_word_w;  // fallback (empty word, degenerate)
+                 int rot_h = actual_w;
+-                lUInt8 * rot_buf = new lUInt8[rot_w * rot_h]();
++                // Drawing can advance further than measurement, notably with
++                // synthetic bold. Preserve glyphs and zero-fill extra spacing.
++                ensureVerticalRotationBufferWidth(rr_buf, rr_word_w, rr_font_h, rot_h);
++                lUInt8 * rot_buf = new lUInt8[(size_t)rot_w * rot_h]();
+                 for (int ny = 0; ny < rot_h; ny++) {
+                     for (int nx = 0; nx < rot_w; nx++) {
+                         rot_buf[ny * rot_w + nx] = rr_buf[(rr_font_h - 1 - nx) * rr_word_w + ny];

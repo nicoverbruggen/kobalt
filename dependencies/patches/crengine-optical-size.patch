@@ -1,19 +1,19 @@
 --- a/crengine/include/lvrend.h
 +++ b/crengine/include/lvrend.h
-@@ -215,6 +215,10 @@
- // Set/get global document base font weight.
+@@ -216,6 +216,10 @@
  void LVRendSetBaseFontWeight(int weight);
  int LVRendGetBaseFontWeight();
-+
+
 +// A positive value overrides optical size in points; zero follows CSS.
 +void LVRendSetFontOpticalSize(float points);
 +float LVRendGetFontOpticalSize();
-
++
  int measureBorder(ldomNode *enode,int border);
  int lengthToPx( ldomNode *node, css_length_t val, int base_px, int base_em = -1, bool unspecified_as_em=false );
+ int scaleForRenderDPI( int value );
 --- a/crengine/src/lvrend.cpp
 +++ b/crengine/src/lvrend.cpp
-@@ -2668,6 +2668,17 @@
+@@ -2671,6 +2671,17 @@
      return rend_font_base_weight;
  }
 
@@ -31,28 +31,32 @@
  /// docFragmentIdx: pass the node's DocFragment sibling index if the caller already
  /// knows it (eg. from a traversal that tracks it), or leave at the default to
  /// have it looked up by walking up from node (see ldomNode::getDocFragmentIdx()).
-@@ -2712,7 +2723,9 @@
-     // GetFont's computeVariations() derives those from weight/italic and
-     // ignores requested.wght/requested.ital.
+@@ -2717,7 +2728,9 @@
      LVFontVariations variations;
--    if (style->font_optical_sizing != css_fos_none && gRenderDPI >= 100)
+     // opsz in points. A user-set gRenderDPI approximates the screen DPI;
+     // the default (96) or "off" (0) doesn't, so use a fixed fallback.
+-    if (style->font_optical_sizing != css_fos_none) {
 +    if (rend_font_optical_size > 0)
 +        variations.set(LVFONT_TAG_OPSZ, rend_font_optical_size);
-+    else if (style->font_optical_sizing != css_fos_none && gRenderDPI >= 100)
-         variations.set(LVFONT_TAG_OPSZ, sz * 72.0f / (float)gRenderDPI);
-     // font-width: selects among static width faces, and sets the wdth axis of variable ones.
-     if (style->font_width != css_fwd_normal)
-@@ -3698,7 +3711,9 @@
++    else if (style->font_optical_sizing != css_fos_none) {
+         float opsz = gRenderDPI >= 100 ? sz * 72.0f / (float)gRenderDPI : OPSZ_FALLBACK_PT;
+         variations.set(LVFONT_TAG_OPSZ, opsz);
+     }
+@@ -3705,8 +3718,12 @@
              return LVFontRef();
      }
      LVFontVariations variations;
 -    if (style->font_optical_sizing != css_fos_none && gRenderDPI >= 100)
+-        variations.set(LVFONT_TAG_OPSZ, font->getSize() * 72.0f / (float)gRenderDPI);
 +    if (rend_font_optical_size > 0)
 +        variations.set(LVFONT_TAG_OPSZ, rend_font_optical_size);
-+    else if (style->font_optical_sizing != css_fos_none && gRenderDPI >= 100)
-         variations.set(LVFONT_TAG_OPSZ, font->getSize() * 72.0f / (float)gRenderDPI);
++    else if (style->font_optical_sizing != css_fos_none) {
++        float opsz = gRenderDPI >= 100 ? font->getSize() * 72.0f / (float)gRenderDPI : OPSZ_FALLBACK_PT;
++        variations.set(LVFONT_TAG_OPSZ, opsz);
++    }
      if (style->font_width != css_fwd_normal)
          variations.set(LVFONT_TAG_WDTH, style->font_width / 10.0f);
+     return fontMan->GetFont(font->getSize(), 700,
 --- a/crengine/src/lvtinydom.cpp
 +++ b/crengine/src/lvtinydom.cpp
 @@ -468,6 +468,7 @@

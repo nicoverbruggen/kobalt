@@ -7,8 +7,8 @@ std::unique_ptr<ReaderOpeningView> createOpening(QWidget *background,
                                                  const QJsonObject &preferences,
                                                  PresentationFactory presentation);
 // The standalone host sizes this loading view and handles system Back itself.
-std::unique_ptr<ReaderOpeningView> createEmbeddedOpening(QWidget *parent,
-                                                         PresentationFactory presentation);
+std::unique_ptr<ReaderOpeningView>
+createEmbeddedOpening(QWidget *parent, PresentationFactory presentation, bool showCover = true);
 
 class SaveErrorView final : public ui::ChoiceModal
 {

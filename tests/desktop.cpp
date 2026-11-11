@@ -8010,6 +8010,55 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettingsClose"));
     }
 
+    void settingsOpeningCover_data()
+    {
+        QTest::addColumn<bool>("initialCover");
+        QTest::newRow("cover-default") << true;
+        QTest::newRow("logo-cold-open") << false;
+    }
+
+    // Checks both cold-opening modes and saving a different choice for each reopening.
+    void settingsOpeningCover()
+    {
+        QFETCH(bool, initialCover);
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        if (!initialCover) {
+            auto preferences = storage::readJson(fixture.paths.preferences());
+            preferences["show_opening_cover"] = false;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        }
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        // No cached cover on the first opening. Later ones can use the library cache.
+        for (int pass = 0; pass < 3; ++pass) {
+            const bool showCover = pass == 1 ? !initialCover : initialCover;
+            fixture.window.openBook(book);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), pass + 1, 30000);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            auto *start = fixture.window.findChild<standalone::StartScreen *>();
+            auto *opening = start->openingCanvas()->content->findChild<QDialog *>("rrOpening");
+            QVERIFY(opening);
+            auto *brand = opening->findChild<QLabel *>("rrOpeningBrand");
+            auto *cover = opening->findChild<QWidget *>("rrOpeningCover");
+            QCOMPARE(brand->isHidden(), showCover);
+            QCOMPARE(cover->isHidden(), !showCover);
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsSystem"));
+            QVERIFY(revealSettingsOption(fixture, "rrHideOpeningCover"));
+            auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrHideOpeningCover"));
+            QVERIFY(option);
+            QCOMPARE(option->isChecked(), !showCover);
+            if (pass < 2)
+                QVERIFY(fixture.press("rrHideOpeningCover"));
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("show_opening_cover"),
+                         QJsonValue(pass < 2 ? !showCover : showCover));
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(!fixture.window.readerWindow());
+        }
+    }
+
     // Checks that turning automatic opening off in Kobalt asks first and turning it on does not.
     void settingsAutomaticOpening()
     {
@@ -12803,6 +12852,25 @@ private slots:
         baseline->window()->raise();
         QVERIFY(baseline->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
         QVERIFY(capture(fixture, name + "-loading-no-cover", baseline->window()));
+        baseline.reset();
+        auto splash =
+                createEmbeddedOpening(reader, desktop::readerHostServices().presentation, false);
+        splash->window()->setGeometry(reader->rect());
+        splash->setCover(metadata.cover);
+        splash->setProgress(45);
+        splash->window()->show();
+        splash->window()->raise();
+        QVERIFY(splash->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+        QVERIFY(capture(fixture, name + "-loading-splash", splash->window()));
+        splash->setReopening();
+        QVERIFY(capture(fixture, name + "-loading-splash-reopening", splash->window()));
+        splash.reset();
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrHideOpeningCover"));
+        QVERIFY(fixture.press("rrHideOpeningCover"));
+        QVERIFY(capture(fixture, name + "-settings-opening-cover-logo"));
     }
 
     void saving_data() { screenshotVariants(); }

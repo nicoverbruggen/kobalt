@@ -1,5 +1,7 @@
 # Settings and controls checks
 
+`desktop.settingsOpeningCover` checks the cover default, saving the logo choice, reopening with the logo and restoring the cover. `ui.openingCoverDisabled` checks that cached and late cover delivery cannot replace the logo or repaint the view, while progress, reopening status and native-reader handoff remain available. The loading gallery includes logo and logo-reopening screens. These checks use headless hosts; physical e-ink refresh remains unverified.
+
 `desktop.settingsStandby` checks supported and unsupported hosts, the default state, confirmation, cancellation, unanswered-warning dismissal, persistence after reopening and re-enabling standby. The gallery includes the System settings pages and the standby confirmation.
 
 `desktop.settingsAutomaticOpening` gives the reader a host reader choice. It checks that turning Open books automatically in Kobalt off shows a confirmation, that Cancel and closing Settings keep it on and save nothing, that confirming turns it off and that turning it on applies at once. The gallery includes the confirmation.

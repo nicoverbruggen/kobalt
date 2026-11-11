@@ -1,5 +1,7 @@
 # Settings
 
+System ends with Opening books, which includes Do not show book cover while opening. It is off by default. Select it to use the Kobalt logo while opening and reopening books. This global choice also applies to the built-in reader handoff screen. Sleep screens keep their own settings.
+
 On Kobo, System > Advanced ends with Disable standby. It is off by default. Selecting it opens a confirmation that warns about reduced battery life and says it may help with intermittent freezes or missed page turns. Cancel leaves standby enabled. Confirm selects the setting; closing Settings applies and saves it. Clearing the checkbox restores standby without a warning. The setting affects standby while reading, not the sleep screen, closing a book, USB export or shutdown.
 
 On Kobo, the System tab sits above About. Open books automatically in Kobalt uses the same preference as Kobo's Reading settings. A change in either place appears when the other settings page opens. Turning it off keeps the current book open and uses Kobo's reader for future library openings. Turning it off in Kobalt asks first: Have Kobo open books by default? The dialog explains that a long press offers Read with Kobalt. Cancel, or closing Settings without an answer, keeps it on. Turning it on, and the switch in Kobo's Reading settings, apply without a question. A failed save keeps the previous selection.

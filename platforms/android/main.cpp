@@ -412,7 +412,7 @@ private:
 
     void showOpening(const QString &key = {})
     {
-        start->showOpening(key);
+        start->showOpening(key, controller.preferences().value("show_opening_cover").toBool(true));
         new android::CanvasRefresh(start->openingCanvas(), android::refreshAvailable,
                                    submitRefresh);
     }

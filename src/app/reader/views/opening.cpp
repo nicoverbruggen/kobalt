@@ -151,10 +151,11 @@ class OpeningDialog final : public QDialog
 {
 public:
     OpeningDialog(QWidget *background, bool dark, PresentationFactory makePresentation,
-                  bool embedded = false)
+                  bool embedded = false, bool showCover = true)
         : QDialog(background, embedded ? Qt::SubWindow : Qt::Dialog | Qt::FramelessWindowHint),
           presentation(makePresentation(this)),
-          embedded(embedded)
+          embedded(embedded),
+          showCover(showCover)
     {
         Q_ASSERT(presentation);
         // Start as a child. Creating a dialog under an embedded reader first
@@ -214,7 +215,7 @@ public:
     void setCover(QImage image)
     {
         // An early cache miss is not proof that the publication has no cover.
-        if (image.isNull())
+        if (!showCover || image.isNull())
             return;
         // Compare the source pixels per painted pixel after fitting the cover.
         // A late thumbnail must not replace a sharper image delivered earlier.
@@ -247,7 +248,7 @@ public:
 
     void loadCover(const QString &path)
     {
-        if (path.isEmpty())
+        if (!showCover || path.isEmpty())
             return;
         if (coverRead)
             coverRead->cancelled.store(true);
@@ -576,7 +577,7 @@ private:
     bool storageFailure = false;
     bool fallback = false, automatic = false;
     std::unique_ptr<WindowPresentation> presentation;
-    const bool embedded;
+    const bool embedded, showCover;
     QTimer hintTimer;
     ui::Button *cancel;
     bool painted = false;
@@ -589,7 +590,8 @@ public:
     OpeningView(QWidget *background, const QJsonObject &preferences,
                 PresentationFactory presentation, bool embedded = false)
         : dialog(new OpeningDialog(background, preferences.value("dark_mode").toBool(false),
-                                   std::move(presentation), embedded))
+                                   std::move(presentation), embedded,
+                                   preferences.value("show_opening_cover").toBool(true)))
     {
         if (embedded)
             return;
@@ -667,11 +669,12 @@ createOpening(QWidget *background, const QJsonObject &preferences, PresentationF
     return std::make_unique<OpeningView>(background, preferences, std::move(presentation));
 }
 
-std::unique_ptr<ReaderOpeningView> createEmbeddedOpening(QWidget *parent,
-                                                         PresentationFactory presentation)
+std::unique_ptr<ReaderOpeningView>
+createEmbeddedOpening(QWidget *parent, PresentationFactory presentation, bool showCover)
 {
     QJsonObject preferences;
     preferences["dark_mode"] = ui::darkTheme(parent);
+    preferences["show_opening_cover"] = showCover;
     return std::make_unique<OpeningView>(parent, preferences, std::move(presentation), true);
 }
 

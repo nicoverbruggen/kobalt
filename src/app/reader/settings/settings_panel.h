@@ -148,7 +148,8 @@ public:
     QJsonObject featurePreferences;
     void showDisabledFeatures();
     void updateFeatureOptions();
-    ui::DescribedOption *darkOption = nullptr, *animationOption = nullptr;
+    ui::DescribedOption *darkOption = nullptr, *animationOption = nullptr,
+                        *openingCoverOption = nullptr;
     // Defaults: what new books start with. The reader opens the preset grid.
     ui::CaptionButton *textForNewBooksButton = nullptr;
     ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,

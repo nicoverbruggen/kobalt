@@ -739,6 +739,9 @@
 "settings.unsupported_caption" = "Disabled: unsupported on this device.";
 "settings.unsupported_description" = "Disabled because this option is not supported on this device.";
 "settings.dark_description" = "Light text on a dark background.";
+"settings.section_opening" = "Opening books";
+"settings.opening_cover" = "Do not show book cover while opening";
+"settings.opening_cover_description" = "Always show the Kobalt logo when opening a book.";
 "settings.display" = "Display";
 "settings.controls" = "Controls";
 "settings.defaults" = "Defaults";

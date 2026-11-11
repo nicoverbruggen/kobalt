@@ -23,7 +23,7 @@ public:
     StartScreen(PresentationFactory presentation, library::Store &store,
                 std::function<qreal()> textScale = {}, QWidget *parent = nullptr);
     ~StartScreen() override;
-    void showOpening(const QString &bookKey = {});
+    void showOpening(const QString &bookKey = {}, bool showCover = true);
     void setProgress(int percent);
     void setReopening();
     void setCover(QImage cover);

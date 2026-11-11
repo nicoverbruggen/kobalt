@@ -227,6 +227,28 @@ int main()
                         .toBool(true),
                 "Invalid feedback preference did not use visible feedback");
 
+    for (bool show : { false, true }) {
+        const auto cleaned = appearance::cleanPreferences(
+                { { "schema", 1 }, { "show_opening_cover", show }, { "future_option", 42 } });
+        require(cleaned.value("show_opening_cover").toBool() == show
+                        && cleaned.value("schema").toInt() == 1
+                        && cleaned.value("future_option").toInt() == 42,
+                "Opening cover cleanup lost the choice, schema or unrelated fields");
+        require(appearance::same({}, cleaned), "Opening cover choice invalidated book layout");
+        const auto merged =
+                appearance::readerPreferences(cleaned, { { "show_opening_cover", !show } });
+        require(merged.value("show_opening_cover").toBool() == show,
+                "A book snapshot overrode the global opening cover choice");
+    }
+    require(appearance::cleanPreferences({}).value("show_opening_cover").toBool(true),
+            "Old preferences no longer default to the opening cover");
+    for (const auto &invalid :
+         { QJsonValue(), QJsonValue(0), QJsonValue("false"), QJsonValue(QJsonArray{}) })
+        require(appearance::cleanPreferences({ { "show_opening_cover", invalid } })
+                        .value("show_opening_cover")
+                        .toBool(true),
+                "Invalid opening cover preference did not use the cover default");
+
     const auto dictionary =
             appearance::cleanPreferences(qt::object({ { "dictionary_font_face", "Libron" },
                                                       { "dictionary_font_size", 120 },

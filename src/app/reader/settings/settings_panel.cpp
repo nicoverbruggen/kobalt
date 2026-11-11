@@ -1027,6 +1027,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         });
         standbyDialog->dismissed = [this] { dismissStandbyConfirmation(); };
     }
+    section(systemPage, systemRows, "rrSystemOpeningSection",
+            strings::get("settings.section_opening"));
+    openingCoverOption =
+            check(systemPage, "rrHideOpeningCover", strings::get("settings.opening_cover"),
+                  strings::get("settings.opening_cover_description"));
+    systemRows->addWidget(openingCoverOption);
     systemRows->addStretch(1);
     aboutPage = new AboutPage(settingsPages);
     settingsPages->addWidget(aboutPage);
@@ -1146,6 +1152,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         wifiPowerSaverOption,       disableStandbyOption, automaticOpeningOption,
         minimalAnnotationOption
     };
+    options.append(openingCoverOption);
     options.prepend(zenModeOption);
     options.append(zenDarkOption);
     for (auto *option : options) {

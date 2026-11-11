@@ -377,6 +377,8 @@ void Reader::openSettings()
     settingsError->clear();
     settingsError->hide();
     darkOption->setChecked(session->state().value("dark_mode").toBool(false));
+    static_cast<SettingsPanel *>(general)->openingCoverOption->setChecked(
+            !preferences.value("show_opening_cover").toBool(true));
     static_cast<SettingsPanel *>(general)->featurePreferences = preferences;
     static_cast<SettingsPanel *>(general)->updateFeatureOptions();
     showTextPresetSettings();
@@ -801,6 +803,8 @@ void Reader::applySettings()
         next["page_animations"] = animationOption->isChecked();
     next["edge_light_gestures"] = edgeLightOption->isChecked();
     next["show_light_gesture_feedback"] = lightGestureFeedbackOption->isChecked();
+    next["show_opening_cover"] =
+            !static_cast<SettingsPanel *>(general)->openingCoverOption->isChecked();
     next["dense_stats_chart"] = denseGraphOption->isChecked();
     next.remove(pageNavigation::barVisibleKey);
     next["minimal_annotation_mode"] = minimalAnnotationOption->isChecked();

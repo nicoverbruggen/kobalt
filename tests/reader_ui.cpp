@@ -4062,6 +4062,58 @@ private slots:
         }
     }
 
+    // Disabling the cover keeps the logo through cached and late images, progress and handoff.
+    void openingCoverDisabled()
+    {
+        for (bool embedded : { false, true }) {
+            QWidget owner;
+            owner.resize(600, 800);
+            auto opening = embedded
+                    ? createEmbeddedOpening(&owner, test::makeHostPresentation, false)
+                    : createOpening(&owner, { { "show_opening_cover", false } },
+                                    test::makeHostPresentation);
+            auto *view = opening->window();
+            view->setGeometry(owner.rect());
+            QImage cover(100, 150, QImage::Format_RGB32);
+            cover.fill(Qt::red);
+            QTemporaryDir directory;
+            QVERIFY(directory.isValid());
+            const auto path = directory.filePath("cover.png");
+            QVERIFY(cover.save(path));
+            opening->loadCover(path);
+            opening->setCover(cover);
+            owner.show();
+            view->show();
+            QCoreApplication::processEvents();
+            auto *brand = view->findChild<QLabel *>("rrOpeningBrand");
+            auto *surface = view->findChild<QWidget *>("rrOpeningCover");
+            auto *bar = view->findChild<QProgressBar *>("rrOpeningProgress");
+            auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+            QVERIFY(brand->isVisible());
+            QVERIFY(surface->isHidden());
+            const auto before = view->grab().toImage();
+            PaintRegions paints;
+            view->installEventFilter(&paints);
+            opening->setCover(cover);
+            opening->setCover({});
+            QCoreApplication::processEvents();
+            QCOMPARE(paints.count, 0);
+            QCOMPARE(view->grab().toImage(), before);
+            opening->setProgress(45);
+            opening->setReopening();
+            QCOMPARE(bar->value(), 45);
+            QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.reopening")));
+            for (auto fallback : { OpeningFallback::Protected, OpeningFallback::Remembered }) {
+                opening->showFallback(fallback);
+                opening->setCover(cover);
+                QVERIFY(brand->isVisible());
+                QVERIFY(surface->isHidden());
+                QCOMPARE(bar->value(), 100);
+                QVERIFY(bar->isVisible());
+            }
+        }
+    }
+
     void openingCoverUpgrade()
     {
         QWidget owner;

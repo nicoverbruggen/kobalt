@@ -780,7 +780,7 @@
 "settings.tap_zones_hint" = "Choose where to tap to turn pages. The marked middle zone always opens the menu.";
 "settings.tap_one_handed_hint" = "One-handed: tap to go forward, swipe to go back or forward.";
 "settings.navigation_needs_swipes" = "Choose another tap-zone preset to turn off swipes.";
-"settings.section_appearance" = "Appearance";
+"settings.section_modes" = "Modes";
 "settings.section_screen" = "Screen refresh";
 "settings.section_navigation" = "Navigation";
 "settings.section_links" = "Links";

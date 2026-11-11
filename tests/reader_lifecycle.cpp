@@ -1910,6 +1910,7 @@ private slots:
         if (host.session()->state().value("bold_reading").toString() != "off") {
             menu();
             QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsStyling")));
             auto *option = host.window()->findChild<QCheckBox *>("rrBionicReading");
             QVERIFY(option && option->isChecked());
             QVERIFY(click(canvas, option));
@@ -1993,6 +1994,7 @@ private slots:
         QVERIFY(host.session()->state().value("margin_pixels") != oldMargin);
         menu();
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsStyling")));
         auto *bionic = host.window()->findChild<QCheckBox *>("rrBionicReading");
         QVERIFY(bionic && !bionic->isChecked());
         QVERIFY(click(canvas, bionic));

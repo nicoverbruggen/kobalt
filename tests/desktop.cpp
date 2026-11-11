@@ -8669,15 +8669,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_VERIFY(!change("zen_stats").isEmpty());
             QCOMPARE(change("zen_stats").value("value").toBool(false), true);
 
-            // A choice token is logged with its values. Bold reading is
-            // on Display, which returns once a held press leaves Zen mode.
+            // A choice token is logged with its values. Bold reading is on
+            // Styling, which returns with the other tabs once a held press
+            // leaves Zen mode.
             QVERIFY(fixture.press("rrSettings"));
             QTRY_VERIFY(fixture.visible("rrZenLeave"));
             auto *leave = qobject_cast<QPushButton *>(fixture.widget("rrZenLeave"));
             leave->setProperty("reader_hold_step_ms", 10);
             QTest::mousePress(leave, Qt::LeftButton);
-            QTRY_VERIFY(fixture.visible("rrBionicReading"));
+            QTRY_VERIFY(fixture.visible("rrSettingsRail"));
             QTest::mouseRelease(leave, Qt::LeftButton);
+            QVERIFY(fixture.press("rrSettingsStyling"));
+            QVERIFY(revealSettingsOption(fixture, "rrBionicReading"));
             QVERIFY(fixture.press("rrBionicReading"));
             QTRY_VERIFY(!change("bold_reading").isEmpty());
             const auto bold = change("bold_reading");
@@ -12827,7 +12830,7 @@ private slots:
         QTRY_VERIFY(previewSettled(fixture));
         QVERIFY(capture(fixture, name + "-text-spacing-preview"));
         QVERIFY(fixture.press("rrSettings"));
-        QVERIFY(fixture.press("rrSettingsDisplay"));
+        QVERIFY(fixture.press("rrSettingsStyling"));
         QVERIFY(revealSettingsOption(fixture, "rrBionicReading"));
         QVERIFY(fixture.press("rrBionicReading"));
         QVERIFY(capture(fixture, name + "-bionic-setting"));

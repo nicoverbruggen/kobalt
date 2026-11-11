@@ -679,22 +679,19 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     animationOption->setEnabled(animationsSupported);
     bionicOption = check(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
                          strings::get("reader.bionic_description"));
-    // Zen mode comes first, so it is the first option Settings shows.
-    section(displayPage, generalOptions, "rrDisplayMenuSection",
-            strings::get("settings.section_reading_menu"));
+    // The two modes come first, so they are the first options Settings shows.
+    section(displayPage, generalOptions, "rrDisplayModesSection",
+            strings::get("settings.section_modes"));
     zenModeOption = check(displayPage, "rrZenMode", strings::get("settings.zen_mode"),
                           strings::get("settings.zen_mode_description"));
     generalOptions->addWidget(zenModeOption);
+    generalOptions->addWidget(darkOption);
     section(displayPage, generalOptions, "rrDisplayScreenSection",
             strings::get("settings.section_screen"));
     refreshButton = ui::makeCaptionButton(displayPage, nullptr, "rrScreenRefresh",
                                           strings::get("reader.refresh_the_screen"), [] { });
     generalOptions->addWidget(refreshButton);
     generalOptions->addWidget(animationOption);
-    section(displayPage, generalOptions, "rrDisplayAppearanceSection",
-            strings::get("settings.section_appearance"));
-    for (auto *option : { darkOption, bionicOption })
-        generalOptions->addWidget(option);
     section(displayPage, generalOptions, "rrDisplayColumnsSection", strings::get("reader.columns"));
     landscapeColumnsOption =
             check(displayPage, "rrLandscapeColumns", strings::get("settings.landscape_columns"),
@@ -831,6 +828,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             ui::makeCaptionButton(stylingPage, stylingRows, "rrHangingPunctuation",
                                   strings::get("settings.hanging_punctuation"), [] { });
     hangingPunctuationButton->setDescription(strings::get("settings.hanging_punctuation_summary"));
+    // Bold reading reflows the book, so it sits with the other styling
+    // choices rather than among the quick display switches.
+    stylingRows->addWidget(bionicOption);
+    bionicOption->setLeadingIcon(ui::ControlIcon::Bold);
     section(stylingPage, stylingRows, "rrParagraphSpacingSection",
             strings::get("settings.section_paragraphs"));
     paragraphSpacingButton =

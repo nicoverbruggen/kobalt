@@ -116,6 +116,83 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(QStringLiteral("door-open"), path);
+    } else if (icon == ControlIcon::Bold) {
+        // Bold reading: a bold B beside a regular o, as the feature sets the
+        // start of a word in bold. The outlines come from IBM Plex Sans, on
+        // Phosphor's canvas; assets/icons/bold-reading.svg is the same shape.
+        result.canvas = 256;
+        result.filled = true;
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(28, 63.63);
+        path.lineTo(89.47, 63.63);
+        path.cubicTo(99.99, 63.63, 108.18, 66.59, 114.04, 72.51);
+        path.cubicTo(119.9, 78.44, 122.83, 86.3, 122.83, 96.09);
+        path.cubicTo(122.83, 100.92, 122.2, 105.03, 120.93, 108.42);
+        path.cubicTo(119.66, 111.8, 117.97, 114.58, 115.85, 116.76);
+        path.cubicTo(113.74, 118.93, 111.26, 120.54, 108.42, 121.56);
+        path.cubicTo(105.58, 122.59, 102.52, 123.16, 99.26, 123.29);
+        path.lineTo(99.26, 124.37);
+        path.cubicTo(102.28, 124.37, 105.46, 124.92, 108.78, 126.01);
+        path.cubicTo(112.1, 127.09, 115.16, 128.82, 117.94, 131.17);
+        path.cubicTo(120.72, 133.53, 123.04, 136.58, 124.92, 140.33);
+        path.cubicTo(126.79, 144.08, 127.73, 148.67, 127.73, 154.11);
+        path.cubicTo(127.73, 159.07, 126.91, 163.75, 125.28, 168.16);
+        path.cubicTo(123.65, 172.58, 121.38, 176.41, 118.48, 179.68);
+        path.cubicTo(115.58, 182.94, 112.13, 185.51, 108.15, 187.38);
+        path.cubicTo(104.16, 189.26, 99.8, 190.19, 95.09, 190.19);
+        path.lineTo(28, 190.19);
+        path.lineTo(28, 63.63);
+        path.closeSubpath();
+        path.moveTo(55.56, 166.98);
+        path.lineTo(87.29, 166.98);
+        path.cubicTo(90.92, 166.98, 93.79, 165.99, 95.91, 163.99);
+        path.cubicTo(98.02, 162, 99.08, 159.19, 99.08, 155.56);
+        path.lineTo(99.08, 149.4);
+        path.cubicTo(99.08, 145.77, 98.02, 142.96, 95.91, 140.96);
+        path.cubicTo(93.79, 138.97, 90.92, 137.97, 87.29, 137.97);
+        path.lineTo(55.56, 137.97);
+        path.lineTo(55.56, 166.98);
+        path.closeSubpath();
+        path.moveTo(55.56, 115.49);
+        path.lineTo(82.94, 115.49);
+        path.cubicTo(86.57, 115.49, 89.41, 114.46, 91.46, 112.41);
+        path.cubicTo(93.52, 110.35, 94.55, 107.51, 94.55, 103.88);
+        path.lineTo(94.55, 98.44);
+        path.cubicTo(94.55, 94.82, 93.52, 91.98, 91.46, 89.92);
+        path.cubicTo(89.41, 87.87, 86.57, 86.84, 82.94, 86.84);
+        path.lineTo(55.56, 86.84);
+        path.lineTo(55.56, 115.49);
+        path.closeSubpath();
+        path.moveTo(185.75, 192.37);
+        path.cubicTo(179.47, 192.37, 173.72, 191.22, 168.53, 188.92);
+        path.cubicTo(163.33, 186.63, 158.89, 183.33, 155.2, 179.04);
+        path.cubicTo(151.51, 174.75, 148.64, 169.61, 146.59, 163.63);
+        path.cubicTo(144.53, 157.65, 143.5, 150.91, 143.5, 143.41);
+        path.cubicTo(143.5, 136.04, 144.53, 129.33, 146.59, 123.29);
+        path.cubicTo(148.64, 117.24, 151.51, 112.07, 155.2, 107.78);
+        path.cubicTo(158.89, 103.49, 163.33, 100.2, 168.53, 97.9);
+        path.cubicTo(173.72, 95.6, 179.47, 94.46, 185.75, 94.46);
+        path.cubicTo(192.04, 94.46, 197.75, 95.6, 202.89, 97.9);
+        path.cubicTo(208.02, 100.2, 212.47, 103.49, 216.21, 107.78);
+        path.cubicTo(219.96, 112.07, 222.86, 117.24, 224.92, 123.29);
+        path.cubicTo(226.97, 129.33, 228, 136.04, 228, 143.41);
+        path.cubicTo(228, 150.91, 226.97, 157.65, 224.92, 163.63);
+        path.cubicTo(222.86, 169.61, 219.96, 174.75, 216.21, 179.04);
+        path.cubicTo(212.47, 183.33, 208.02, 186.63, 202.89, 188.92);
+        path.cubicTo(197.75, 191.22, 192.04, 192.37, 185.75, 192.37);
+        path.closeSubpath();
+        path.moveTo(185.75, 179.5);
+        path.cubicTo(193.61, 179.5, 200.02, 177.08, 204.97, 172.24);
+        path.cubicTo(209.93, 167.41, 212.41, 160.03, 212.41, 150.12);
+        path.lineTo(212.41, 136.7);
+        path.cubicTo(212.41, 126.79, 209.93, 119.42, 204.97, 114.58);
+        path.cubicTo(200.02, 109.75, 193.61, 107.33, 185.75, 107.33);
+        path.cubicTo(177.89, 107.33, 171.49, 109.75, 166.53, 114.58);
+        path.cubicTo(161.58, 119.42, 159.1, 126.79, 159.1, 136.7);
+        path.lineTo(159.1, 150.12);
+        path.cubicTo(159.1, 160.03, 161.58, 167.41, 166.53, 172.24);
+        path.cubicTo(171.49, 177.08, 177.89, 179.5, 185.75, 179.5);
+        path.closeSubpath();
     } else if (icon == ControlIcon::BookmarkAdd || icon == ControlIcon::BookmarkRemove
                || icon == ControlIcon::ExportAction) {
         result.canvas = 256;
@@ -646,7 +723,7 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::PreviousChapter && icon != ControlIcon::NextChapter
             && icon != ControlIcon::Sync && icon != ControlIcon::Sort
             && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
-            && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
+            && icon != ControlIcon::Bold && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)
             && (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Diamond)))
         return {};

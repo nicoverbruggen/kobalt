@@ -142,7 +142,7 @@ void lookupChecks(const QString &path)
         network.response = "{\"document\":\"" + document + "\"}";
         network.failures = 1;
         stallNext.store(true);
-        client.push(document, { "local", {}, {}, 0.5 }, done);
+        client.push(document, { "local", {}, {}, 0.5 }, {}, done);
         recover(2, 4, true);
         require(callbacks == 3 && network.operation == QNetworkAccessManager::PutOperation,
                 "upload DNS recovery does not enable replay after an HTTP transport failure");
@@ -347,7 +347,7 @@ int liveServer(const QString &server, const QString &certificate)
     require(error.isEmpty() && !received.found,
             qPrintable("new account has no reading progress: " + error));
     kosync::Progress progress{ "/body/DocFragment[2]/body/p[3]/text().0", {}, {}, 0.42 };
-    first.push(document, progress, done);
+    first.push(document, progress, {}, done);
     wait(first, 12000);
     require(error.isEmpty(), qPrintable("send reading progress: " + error));
     second.pull(document, pulled);
@@ -363,7 +363,7 @@ int liveServer(const QString &server, const QString &certificate)
             "first reader recognizes its saved position");
     progress.position = "/body/DocFragment[5]/body/p[7]/text().0";
     progress.percentage = 0.73;
-    second.push(document, progress, done);
+    second.push(document, progress, {}, done);
     wait(second, 12000);
     require(error.isEmpty(), "second reader advances the publication");
     first.pull(document, pulled);
@@ -457,7 +457,7 @@ void failureChecks(const QString &path)
         network.transportError = QNetworkReply::ContentAccessDenied;
         network.failures = pair.first >= 400 ? 1 : 0;
         const int before = network.calls;
-        client.push(document, progress, done);
+        client.push(document, progress, {}, done);
         wait(client);
         require(network.calls == before + 1,
                 "HTTP failures never replay an upload or redirect credentials");
@@ -490,7 +490,7 @@ void failureChecks(const QString &path)
     check("kosync.auth_error", "sign-in");
     network.status = 200;
     network.response = R"({"document":"PRIVATE-SENTINEL"})";
-    client.push(document, progress, done);
+    client.push(document, progress, {}, done);
     wait(client);
     check("kosync.invalid_response", "upload-position");
     {
@@ -509,12 +509,12 @@ void failureChecks(const QString &path)
                 "a resolver error stays distinct from a lookup deadline and sends no credentials");
     }
     network.response = QByteArray(17000, 'x') + "PRIVATE-SENTINEL";
-    client.push(document, progress, done);
+    client.push(document, progress, {}, done);
     wait(client);
     check("kosync.response_too_large", "upload-position");
     network.response = "{}";
     network.held = true;
-    client.push(document, progress, done);
+    client.push(document, progress, {}, done);
     QList<QSslError> certificateErrors;
     for (int i = 0; i < 40; ++i)
         certificateErrors.append(QSslError(QSslError::HostNameMismatch));
@@ -529,7 +529,7 @@ void failureChecks(const QString &path)
     check("kosync.timeout_error", "upload-position");
     error = "unchanged";
     lastFailure = {};
-    client.push(document, progress, done);
+    client.push(document, progress, {}, done);
     client.cancel();
     drainEvents();
     require(error == "unchanged" && lastFailure.isEmpty() && !client.busy(),
@@ -842,7 +842,7 @@ int main(int argc, char **argv)
                 return;
             network.status = 200;
             network.response = "{\"document\":\"" + digest + "\",\"timestamp\":124}";
-            client.push(digest, local, [&](QString failure) {
+            client.push(digest, local, {}, [&](QString failure) {
                 uploaded = failure.isEmpty();
                 done(failure);
             });
@@ -899,7 +899,7 @@ int main(int argc, char **argv)
     client.login("https://another.example", "reader", "secret", done);
     wait(client);
     require(!error.isEmpty(), "missing-progress JSON cannot authenticate an account");
-    client.push(digest, local, done);
+    client.push(digest, local, {}, done);
     wait(client);
     require(!error.isEmpty(), "missing-progress JSON cannot acknowledge an upload");
     network.failures = 1;
@@ -916,7 +916,7 @@ int main(int argc, char **argv)
                     && received.deviceId == "other",
             "KOReader progress parses without changing its XPointer");
     network.response = "{\"document\":\"" + digest + "\",\"timestamp\":124}";
-    client.push(digest, received, done);
+    client.push(digest, received, {}, done);
     wait(client);
     const auto payload = QJsonDocument::fromJson(network.payload).object();
     require(error.isEmpty() && network.operation == QNetworkAccessManager::PutOperation
@@ -926,6 +926,51 @@ int main(int argc, char **argv)
                     && payload.value("percentage").toDouble() == 0.42
                     && payload.value("device").toString() == QString::fromUtf8("Nico’s Kobo"),
             "upload uses stable document and device identity with precise position");
+    {
+        // KOReader's "Send document metadata": off by default, and then the
+        // upload has no metadata at all.
+        const kosync::Metadata metadata{ "Type Tester.epub", "Trevelyan's Type Tester", {} };
+        require(!client.sendMetadata() && !payload.contains("metadata"),
+                "document metadata is not sent by default");
+        client.push(digest, received, metadata, done);
+        wait(client);
+        require(error.isEmpty()
+                        && !QJsonDocument::fromJson(network.payload).object().contains("metadata"),
+                "metadata stays local until the user opts in");
+        require(client.setSendMetadata(true) && client.sendMetadata(), "opt in to metadata");
+        client.push(digest, received, metadata, done);
+        wait(client);
+        const auto sent =
+                QJsonDocument::fromJson(network.payload).object().value("metadata").toObject();
+        require(error.isEmpty() && sent.value("filename").toString() == metadata.filename
+                        && sent.value("title").toString() == metadata.title
+                        && !sent.contains("authors") && sent.size() == 2,
+                "opted-in uploads carry KOReader's metadata object without empty fields");
+        client.push(digest, received, {}, done);
+        wait(client);
+        require(error.isEmpty()
+                        && !QJsonDocument::fromJson(network.payload).object().contains("metadata"),
+                "a book without any metadata sends no empty object");
+        kosync::Client restarted(path, nullptr, &network);
+        require(restarted.sendMetadata(), "the metadata choice survives restart");
+        require(client.setSendMetadata(false) && !client.sendMetadata(), "opt out again");
+        client.push(digest, received, metadata, done);
+        wait(client);
+        require(error.isEmpty()
+                        && !QJsonDocument::fromJson(network.payload).object().contains("metadata"),
+                "opting out stops sending metadata");
+        QFile stored(path);
+        require(stored.open(QIODevice::ReadOnly), "read the metadata choice");
+        auto invalid = QJsonDocument::fromJson(stored.readAll()).object();
+        stored.close();
+        invalid["send_metadata"] = "yes";
+        const auto invalidPath = path + ".metadata";
+        save(invalidPath, QJsonDocument(invalid).toJson());
+        kosync::Client fallback(invalidPath, nullptr, &network);
+        require(!fallback.sendMetadata() && fallback.storageError().isEmpty()
+                        && fallback.setAutomatic(fallback.automatic()),
+                "an invalid metadata choice reads as off and does not block writes");
+    }
     for (const auto &body :
          { QByteArray("[{}]"), QByteArray("[null]"), QByteArray("null"), QByteArray("oops"),
            QByteArray(R"({"percentage":0.5})"), QByteArray(17000, 'x') }) {
@@ -940,7 +985,7 @@ int main(int argc, char **argv)
     wait(client);
     require(error == strings::get("kosync.invalid_response"),
             "an empty array cannot authenticate an account");
-    client.push(digest, local, done);
+    client.push(digest, local, {}, done);
     wait(client);
     require(error == strings::get("kosync.invalid_response"),
             "an empty array cannot acknowledge an upload");
@@ -1069,7 +1114,7 @@ int main(int argc, char **argv)
         retryNetwork.transportError = QNetworkReply::ConnectionRefusedError;
         retryNetwork.failures = 1;
         before = retryNetwork.calls;
-        retrying.push(digest, { "local", {}, {}, 0.5 }, done);
+        retrying.push(digest, { "local", {}, {}, 0.5 }, {}, done);
         wait(retrying);
         require(!error.isEmpty() && retryNetwork.calls == before + 1,
                 "uploads are never retried after an ambiguous transport failure");

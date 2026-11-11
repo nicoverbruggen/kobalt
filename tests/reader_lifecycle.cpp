@@ -196,6 +196,7 @@ struct KosyncHttpState
     int requests = 0, uploads = 0;
     int readStatus = 200, uploadStatus = 200;
     QByteArray readBody = "{}";
+    QJsonObject lastUpload;
     bool hold = false;
     QList<QPointer<test::KosyncReply>> held;
 };
@@ -215,6 +216,7 @@ protected:
             ++state->uploads;
             const auto upload =
                     QJsonDocument::fromJson(data ? data->readAll() : QByteArray()).object();
+            state->lastUpload = upload;
             body = QJsonDocument(QJsonObject{ { "document", upload.value("document") },
                                               { "timestamp", 1 } })
                            .toJson(QJsonDocument::Compact);
@@ -6050,6 +6052,49 @@ private slots:
         QVERIFY(!kosync::Client(paths.syncAccount()).manualExplanation());
     }
 
+    // The reader sends the book's file name and title only while Send document metadata is checked.
+    void kosyncMetadata()
+    {
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "fixture" },
+                                     { "automatic", false },
+                                     { "send_metadata", true } }));
+        auto http = std::make_shared<KosyncHttpState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [http](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        host.window()->findChild<QPushButton *>("rrSettingsKosync")->click();
+        auto *checkbox = host.window()->findChild<QCheckBox *>("rrKosyncMetadata");
+        QVERIFY(checkbox && checkbox->isChecked());
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        QTRY_COMPARE(http->uploads, 1);
+        const auto metadata = http->lastUpload.value("metadata").toObject();
+        QCOMPARE(metadata.value("filename").toString(), QFileInfo(textBook).fileName());
+        QVERIFY(!host.session()->title().isEmpty());
+        QCOMPARE(metadata.value("title").toString(), host.session()->title().trimmed());
+        // Unchecking saves the choice through the reader's own handler. The
+        // checkbox is disabled until the sync has finished.
+        QTRY_VERIFY(checkbox->isEnabled());
+        checkbox->click();
+        QVERIFY(!checkbox->isChecked());
+        QCOMPARE(storage::readJson(paths.syncAccount()).value("send_metadata").toBool(true), false);
+    }
+
     void kosyncMissingProgress_data()
     {
         QTest::addColumn<int>("statusCode");
@@ -9331,7 +9376,7 @@ private:
         bool seeded = false;
         QString failure;
         seed.push(host.session()->syncDigest(),
-                  { host.session()->state().value("position").toString(), {}, {}, 0 },
+                  { host.session()->state().value("position").toString(), {}, {}, 0 }, {},
                   [&](QString error) {
                       failure = error;
                       seeded = true;
@@ -9607,7 +9652,7 @@ private:
         bool seeded = false;
         QString seedError;
         seed.push(host.session()->syncDigest(),
-                  { host.session()->state().value("position").toString(), {}, {}, 0 },
+                  { host.session()->state().value("position").toString(), {}, {}, 0 }, {},
                   [&](QString error) {
                       seedError = error;
                       seeded = true;
@@ -9686,7 +9731,7 @@ private:
         const auto document = host.session()->syncDigest();
         bool completed = false;
         QString failure;
-        other.push(document, { remotePosition, {}, {}, remotePercent }, [&](QString error) {
+        other.push(document, { remotePosition, {}, {}, remotePercent }, {}, [&](QString error) {
             failure = error;
             completed = true;
         });

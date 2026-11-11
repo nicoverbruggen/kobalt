@@ -241,6 +241,7 @@ std::unique_ptr<ReaderSession> ReaderSession::retained()
     retained->fingerprint = fingerprint;
     retained->syncDigest_ = syncDigest_;
     retained->syncFilenameDigest_ = syncFilenameDigest_;
+    retained->syncFilename_ = syncFilename_;
     retained->desired = desired;
     retained->temporaryAppearance = temporaryAppearance;
     retained->originalAppearance = originalAppearance;
@@ -332,8 +333,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                          std::function<void()> reusing)
 {
     syncDigest_.clear();
-    syncFilenameDigest_ = kosync::filenameDigest(
-            request.syncFilename.isNull() ? request.path : request.syncFilename);
+    syncFilename_ = QFileInfo(request.syncFilename.isNull() ? request.path : request.syncFilename)
+                            .fileName();
+    syncFilenameDigest_ = kosync::filenameDigest(syncFilename_);
     if (ownsLease_)
         cancelSource();
     ++revision;
@@ -791,8 +793,10 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                         guard->fingerprint = digest;
                                         guard->syncDigest_ =
                                                 outcome.ready() ? syncDigest : QByteArray();
-                                        if (!outcome.ready())
+                                        if (!outcome.ready()) {
                                             guard->syncFilenameDigest_.clear();
+                                            guard->syncFilename_.clear();
+                                        }
                                         guard->savedMatched = savedMatches;
                                         guard->identity_ = identity;
                                         finished(outcome);

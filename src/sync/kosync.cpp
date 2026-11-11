@@ -315,6 +315,8 @@ Client::Client(QString accountPath, QObject *parent, QNetworkAccessManager *netw
     lastSync_ = QDateTime::fromString(object.value("last_sync").toString(), Qt::ISODate);
     deviceName_ = object.value("device_name").toString().trimmed();
     filenameMatching_ = object.value("match_method").toString() == "filename";
+    // Optional, and off when missing or invalid. It does not block writes.
+    sendMetadata_ = object.value("send_metadata").toBool(false);
     // The schedule fields are optional. Invalid values use the defaults and
     // do not block writes, because they only tune background syncs.
     const auto minutes = object.value("sync_interval_minutes");
@@ -377,7 +379,7 @@ struct Account
     QUrl server;
     QString username, deviceId, deviceName;
     QByteArray key;
-    bool automatic, filenameMatching, manualExplanation;
+    bool automatic, filenameMatching, sendMetadata, manualExplanation;
     QDateTime lastSync;
     Schedule schedule;
 };
@@ -400,6 +402,7 @@ bool writeAccount(const QString &path, const Account &account)
     object["manual_explanation"] = account.manualExplanation;
     object["match_method"] =
             account.filenameMatching ? QStringLiteral("filename") : QStringLiteral("binary");
+    object["send_metadata"] = account.sendMetadata;
     if (account.deviceName.isEmpty())
         object.remove("device_name");
     else
@@ -426,15 +429,17 @@ bool writeAccount(const QString &path, const Account &account)
 
 bool Client::save(const QUrl &server, const QString &username, const QByteArray &key,
                   bool automatic, const QDateTime &lastSync, const QString &deviceName,
-                  bool filenameMatching, bool manualExplanation, const Schedule &schedule)
+                  bool filenameMatching, bool sendMetadata, bool manualExplanation,
+                  const Schedule &schedule)
 {
     if (!writable_)
         return false;
     // Known exception: sign-in and account settings wait for their write, so
     // the page can show a storage error and keep the previous values.
     mainthread::AllowBlocking allow("kosync account settings");
-    const Account account{ server,    username,         deviceId_,         deviceName, key,
-                           automatic, filenameMatching, manualExplanation, lastSync,   schedule };
+    const Account account{ server,    username,         deviceId_,    deviceName,        key,
+                           automatic, filenameMatching, sendMetadata, manualExplanation, lastSync,
+                           schedule };
     if (!accountWriter().writeNow(
                 [path = accountPath_, account] { return writeAccount(path, account); })) {
         storageError_ = message("kosync.storage_error");
@@ -449,6 +454,7 @@ bool Client::save(const QUrl &server, const QString &username, const QByteArray 
     syncTimeDirty_ = false;
     deviceName_ = deviceName;
     filenameMatching_ = filenameMatching;
+    sendMetadata_ = sendMetadata;
     schedule_ = schedule;
     storageError_.clear();
     return true;
@@ -466,7 +472,7 @@ bool Client::setDeviceName(const QString &name)
     if (!validDeviceName(name))
         return false;
     return save(server_, username_, key_, automatic_, lastSync_, name.trimmed(), filenameMatching_,
-                manualExplanation_, schedule_);
+                sendMetadata_, manualExplanation_, schedule_);
 }
 
 bool Client::setFilenameMatching(bool enabled)
@@ -475,14 +481,22 @@ bool Client::setFilenameMatching(bool enabled)
         return false;
     if (enabled == filenameMatching_)
         return true;
-    return save(server_, username_, key_, automatic_, {}, deviceName_, enabled, manualExplanation_,
-                schedule_);
+    return save(server_, username_, key_, automatic_, {}, deviceName_, enabled, sendMetadata_,
+                manualExplanation_, schedule_);
+}
+
+bool Client::setSendMetadata(bool enabled)
+{
+    if (enabled == sendMetadata_)
+        return true;
+    return save(server_, username_, key_, automatic_, lastSync_, deviceName_, filenameMatching_,
+                enabled, manualExplanation_, schedule_);
 }
 
 bool Client::setAutomatic(bool enabled)
 {
     return save(server_, username_, key_, enabled, lastSync_, deviceName_, filenameMatching_,
-                manualExplanation_, schedule_);
+                sendMetadata_, manualExplanation_, schedule_);
 }
 
 bool Client::setSchedule(const Schedule &schedule)
@@ -490,20 +504,20 @@ bool Client::setSchedule(const Schedule &schedule)
     if (!validScheduleMinutes(schedule.minutes))
         return false;
     return save(server_, username_, key_, automatic_, lastSync_, deviceName_, filenameMatching_,
-                manualExplanation_, schedule);
+                sendMetadata_, manualExplanation_, schedule);
 }
 
 bool Client::setManualExplanation(bool enabled)
 {
     return save(server_, username_, key_, automatic_, lastSync_, deviceName_, filenameMatching_,
-                enabled, schedule_);
+                sendMetadata_, enabled, schedule_);
 }
 
 bool Client::logout()
 {
     cancel();
     return save(server_, username_, {}, false, lastSync_, deviceName_, filenameMatching_,
-                manualExplanation_, schedule_);
+                sendMetadata_, manualExplanation_, schedule_);
 }
 
 bool Client::recordSyncSuccess()
@@ -841,7 +855,8 @@ void Client::login(const QString &server, const QString &username, const QString
                 if (error.isEmpty()
                     && !save(url, username, key, true,
                              url == server_ && username == username_ ? lastSync_ : QDateTime{},
-                             deviceName_, filenameMatching_, manualExplanation_, schedule_))
+                             deviceName_, filenameMatching_, sendMetadata_, manualExplanation_,
+                             schedule_))
                     error = message("kosync.storage_error");
                 done(error);
             });
@@ -868,7 +883,8 @@ void Client::pull(const QByteArray &document, std::function<void(Progress, QStri
             retryTransient);
 }
 
-void Client::push(const QByteArray &document, const Progress &progress, Done done)
+void Client::push(const QByteArray &document, const Progress &progress, const Metadata &metadata,
+                  Done done)
 {
     if (!signedIn() || !hexDigest(document) || progress.position.isEmpty()
         || progress.position.size() > 4096 || !std::isfinite(progress.percentage)
@@ -882,6 +898,19 @@ void Client::push(const QByteArray &document, const Progress &progress, Done don
     object["percentage"] = progress.percentage;
     object["device"] = deviceName();
     object["device_id"] = deviceId_;
+    // The same object as KOReader's "Send document metadata". Missing values
+    // are left out, as KOReader leaves out nil fields, and so is an empty object.
+    if (sendMetadata_) {
+        QJsonObject fields;
+        if (!metadata.filename.isEmpty())
+            fields["filename"] = metadata.filename;
+        if (!metadata.title.isEmpty())
+            fields["title"] = metadata.title;
+        if (!metadata.authors.isEmpty())
+            fields["authors"] = metadata.authors;
+        if (!fields.isEmpty())
+            object["metadata"] = fields;
+    }
     request("PUT", "/syncs/progress", server_, username_, key_, object,
             [done, document](int status, QJsonObject response, QString error) {
                 if (error.isEmpty()

@@ -6,11 +6,11 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 
 | Test | Checks |
 | --- | --- |
-| `model.kosync` | The sync client: document identity, accounts, schedule, responses, retries and hostname lookups |
-| `model.sync-coordinator` | Book-scoped attempts, late connection answers, hidden readiness and final-upload handoffs without a reader window |
+| `model.kosync` | The sync client: document identity, accounts, schedule, the opt-in document metadata, responses, retries and hostname lookups |
+| `model.sync-coordinator` | Book-scoped attempts, late connection answers, hidden readiness, final-upload handoffs and the reader's document metadata in uploads, without a reader window |
 | `desktop.syncChoiceView` | The choice's scales and their thresholds, the jump label, chapter starts and parents in nested contents, and the sync time text, with a long synthetic book |
 | `desktop.kosyncChoice` | The real asynchronous forward, backward and longer forward choice: titles, actions and focus, the scale, view height, visible bounds and card fit across gallery viewports and text scales |
-| `component.kosync-ui` | The KOSync Settings tab, the Automatic sync sheet, the password editor and the sync notice |
+| `component.kosync-ui` | The KOSync Settings tab with the Send document metadata checkbox, the Automatic sync sheet, the password editor and the sync notice |
 | `platform.native-sync-network` | The Kobo connection controller, Wi-Fi release, the Kobo side of the Wi-Fi power saver and the hold on Nickel's background connections |
 | `lifecycle.kosyncAccountGating` | No sync work without a usable account, and the toolbar sync button |
 | `lifecycle.kosyncBackgroundWifi` | Periodic syncs and their silent Wi-Fi connection |
@@ -41,7 +41,7 @@ The client uses the KOReader v1 API with HTTPS, `Accept: application/vnd.koreade
 | `GET /syncs/progress/:document` | HTTP 200 with a progress object, or an absent-progress response below |
 | `PUT /syncs/progress` | HTTP 200 with an object whose `document` matches the uploaded digest |
 
-A progress object contains a nonempty string `progress` of at most 4096 characters, a numeric `percentage` from 0 to 1 and a string `device`. Optional `device_id` must be a string. Optional `timestamp` must be a finite number from 0 to 10^12. The client keeps the position string unchanged. Uploads send `document`, `progress`, `percentage`, `device` and `device_id`.
+A progress object contains a nonempty string `progress` of at most 4096 characters, a numeric `percentage` from 0 to 1 and a string `device`. Optional `device_id` must be a string. Optional `timestamp` must be a finite number from 0 to 10^12. The client keeps the position string unchanged. Uploads send `document`, `progress`, `percentage`, `device` and `device_id`. With Send document metadata on, they also send `metadata` with the string fields `filename`, `title` and `authors`, as KOReader does since [koreader/koreader#15306](https://github.com/koreader/koreader/pull/15306). Empty fields are left out. No KOSync request reports whether a server stores this object.
 
 An absent-progress response is HTTP 200 with `{}` or `[]`, or HTTP 404 with the exact JSON object `{"status":"not found"}`. Whitespace does not matter. The 404 form is accepted only for a progress GET, with no transport error other than Qt's `ContentNotFoundError`. It must fit the 16 KiB response limit and finish before the deadline. Extra fields, other JSON shapes, malformed JSON, HTML, empty bodies and other HTTP errors remain failures. The same object cannot authenticate an account or acknowledge an upload.
 

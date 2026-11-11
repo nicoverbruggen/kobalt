@@ -24,6 +24,7 @@ public:
     void setLastSync(const QDateTime &time);
     void setDeviceName(const QString &name, const QString &defaultName);
     void setFilenameMatching(bool enabled);
+    void setSendMetadata(bool enabled);
     void setStatus(const QString &status, bool busy);
     void fitWidth(int width);
 
@@ -53,6 +54,7 @@ public:
     std::function<void(const kosync::Schedule &)> scheduleChanged;
     std::function<void(const QString &)> deviceNameChanged;
     std::function<void(bool)> filenameMatchingChanged;
+    std::function<void(bool)> sendMetadataChanged;
 
 protected:
     void hideEvent(QHideEvent *event) override;
@@ -87,6 +89,7 @@ private:
     bool sleepWake_ = false, wifi_ = false;
     ui::CaptionButton *serverButton_, *usernameButton_, *passwordButton_, *deviceNameButton_,
             *matchingButton_;
+    ui::DescribedOption *metadataOption_;
     QPushButton *login_, *logout_, *sync_, *learnMore_;
     ui::CaptionButton *automaticButton_;
     QLabel *description_, *sideloadGuidance_, *status_, *lastSync_;

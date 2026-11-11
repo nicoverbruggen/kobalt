@@ -142,6 +142,9 @@ public:
 
     QByteArray syncFilenameDigest() const { return syncFilenameDigest_; }
 
+    // The file name that filename matching hashes, for KOSync document metadata.
+    QString syncFilename() const { return syncFilename_; }
+
     // Whether the saved state passed to open belongs to this version of the book.
     bool savedStateMatched() const { return savedMatched; }
 
@@ -411,6 +414,7 @@ private:
     QByteArray fingerprint;
     QByteArray syncDigest_;
     QByteArray syncFilenameDigest_;
+    QString syncFilename_;
     bool importPosition(const QString &location, bool native,
                         std::function<void(QString)> finished);
     bool savedMatched = false;

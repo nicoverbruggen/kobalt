@@ -308,6 +308,7 @@ void Reader::openSettings()
                            kosyncClient->signedIn(), kosyncClient->automatic());
     kosyncPage->setLastSync(kosyncClient->lastSync());
     kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
+    kosyncPage->setSendMetadata(kosyncClient->sendMetadata());
     kosyncPage->setDeviceName(kosyncClient->customDeviceName(), kosyncClient->defaultDeviceName());
     kosyncPage->setStatus(kosyncMessage, syncCoordinator->busy());
     session->cancelPendingTurn();

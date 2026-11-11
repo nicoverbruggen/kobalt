@@ -11,6 +11,7 @@
 #include <QLabel>
 #include "ui/controls/keyboard.h"
 #include <QApplication>
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QLocale>
 #include <QFontInfo>
@@ -684,8 +685,31 @@ int main(int argc, char **argv)
     page->setStatus(strings::get("kosync.matching_changed"), false);
     panel.fitContent(window.size());
     QApplication::processEvents();
-    require(lastSync->visibleRegion().boundingRect() == lastSync->rect(),
-            "last sync remains visible after a matching change");
+    // A small screen pages the Sync page. Turn to the first page, then forward
+    // until the control is fully on screen.
+    const auto turn = [&](const char *name) {
+        auto *button = panel.findChild<QPushButton *>(name);
+        if (!button || !button->isVisible() || !button->isEnabled())
+            return false;
+        button->click();
+        QApplication::processEvents();
+        return true;
+    };
+    const auto firstPage = [&] {
+        for (int i = 0; i < 10 && turn("rrSettingsOptionsPrevious"); ++i) { }
+    };
+    const auto reachable = [&](QWidget *control) {
+        firstPage();
+        for (int i = 0; i < 10; ++i) {
+            if (control->isVisible() && control->visibleRegion().boundingRect() == control->rect())
+                return true;
+            if (!turn("rrSettingsOptionsNext"))
+                break;
+        }
+        return false;
+    };
+    require(reachable(lastSync), "last sync can be reached after a matching change");
+    firstPage();
     matching->click();
     matchingDialog = dynamic_cast<ui::NoticeModal *>(
             window.findChildren<QWidget *>("rrKosyncMatchingDialog").last());
@@ -698,6 +722,22 @@ int main(int argc, char **argv)
     matchingDialog->findChild<QAbstractButton *>("rrKosyncBinary")->click();
     require(matchingChanges == 2 && matching->caption() == "Binary (default)",
             "binary selection can be restored");
+    // KOReader's opt-in metadata is a checkbox that starts off.
+    auto *metadata = page->findChild<QCheckBox *>("rrKosyncMetadata");
+    require(metadata && metadata->isVisible() && !metadata->isChecked()
+                    && metadata->text() == strings::get("kosync.send_metadata"),
+            "document metadata is an unchecked checkbox");
+    QVector<bool> metadataChanges;
+    page->sendMetadataChanged = [&](bool enabled) {
+        metadataChanges.append(enabled);
+        page->setSendMetadata(enabled);
+    };
+    metadata->click();
+    require(metadataChanges == QVector<bool>{ true } && metadata->isChecked(),
+            "checking document metadata reaches the owner");
+    metadata->click();
+    require(metadataChanges == (QVector<bool>{ true, false }) && !metadata->isChecked(),
+            "unchecking document metadata reaches the owner");
     matching->click();
     QPointer<QWidget> dismissedMatching =
             window.findChildren<QWidget *>("rrKosyncMatchingDialog").last();
@@ -706,7 +746,7 @@ int main(int argc, char **argv)
             "sleep cleanup dismisses matching choices");
     page->setStatus("Syncing progress…", true);
     require(!login->isEnabled() && !server->isEnabled() && !automatic->isEnabled()
-                    && !matching->isEnabled(),
+                    && !matching->isEnabled() && !metadata->isEnabled(),
             "busy state blocks overlapping edits");
     page->setStatus("Reading progress is up to date.", false);
     panel.fitContent(window.size());
@@ -716,11 +756,9 @@ int main(int argc, char **argv)
     while (logout->visibleRegion().boundingRect() != logout->rect() && settled.elapsed() < 1000)
         QApplication::processEvents(QEventLoop::AllEvents, 10);
     require(!password->isVisible() && !login->isVisible(), "signed-in page hides sign-in controls");
-    require(sync->visibleRegion().boundingRect() == sync->rect()
-                    && logout->visibleRegion().boundingRect() == logout->rect(),
-            "signed-in controls fit on one page");
-    require(lastSync->visibleRegion().boundingRect() == lastSync->rect(),
-            "last sync fits on the signed-in page");
+    require(reachable(sync) && reachable(logout), "signed-in controls can be reached");
+    require(reachable(lastSync), "last sync can be reached on the signed-in page");
+    firstPage();
     auto *status = page->findChild<QLabel *>("rrKosyncStatus");
     require(status->palette().color(QPalette::WindowText) == ui::noteColor(status)
                     && lastSync->palette().color(QPalette::WindowText) == ui::noteColor(lastSync),
@@ -747,6 +785,7 @@ int main(int argc, char **argv)
                                  deviceName, static_cast<QPushButton *>(matching) })
         require(control && !control->isVisible(),
                 "Kobo-managed books hide all account and sync actions");
+    require(!metadata->isVisible(), "Kobo-managed books hide the document metadata choice");
     require(!automatic->isVisible() && !lastSync->isVisible()
                     && !page->findChild<QLabel *>("rrKosyncStatus")->isVisible(),
             "Kobo-managed books hide automatic sync and account status");

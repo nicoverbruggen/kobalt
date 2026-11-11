@@ -42,6 +42,8 @@ void Reader::buildKosync()
                 state.local.position = session->state().value("position").toString();
                 state.local.percentage =
                         session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
+                state.metadata = { session->syncFilename(), session->title().trimmed(),
+                                   session->author().trimmed() };
                 const bool hidden =
                         lifecycleHidden || services.suspended() || (!isVisible() && !kosyncOpening);
                 const bool waiting = book->pendingProgress() || book->deviceTransition() || closing
@@ -103,6 +105,7 @@ void Reader::buildKosync()
     kosyncPage->setNativeCloudSync(book->nativeSyncPolicy());
     const auto account = [this] {
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
+        kosyncPage->setSendMetadata(kosyncClient->sendMetadata());
         kosyncPage->setDeviceName(kosyncClient->customDeviceName(),
                                   kosyncClient->defaultDeviceName());
         kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
@@ -127,6 +130,12 @@ void Reader::buildKosync()
                                           : enabled && session->syncFilenameDigest().isEmpty()
                                           ? "kosync.filename_unavailable"
                                           : "kosync.matching_changed"));
+    };
+    kosyncPage->sendMetadataChanged = [this](bool enabled) {
+        // Applies from the next upload. A failed save keeps the old choice.
+        if (!kosyncClient->setSendMetadata(enabled))
+            kosyncStatus(strings::get("kosync.storage_error"));
+        kosyncPage->setSendMetadata(kosyncClient->sendMetadata());
     };
     kosyncPage->deviceNameChanged = [this](const QString &name) {
         const bool saved = kosyncClient->setDeviceName(name);

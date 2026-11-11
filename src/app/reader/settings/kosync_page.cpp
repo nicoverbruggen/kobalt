@@ -60,6 +60,27 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
     matchingButton_ =
             ui::makeCaptionButton(this, rows, "rrKosyncMatching", strings::get("kosync.matching"),
                                   [this] { showMatchingChoices(); });
+    // KOReader's opt-in "Send document metadata", as a checkbox like the
+    // General settings options. It is off until the user turns it on.
+    metadataOption_ =
+            new ui::DescribedOption(strings::get("kosync.send_metadata"),
+                                    strings::get("kosync.send_metadata_description"), this);
+    metadataOption_->setObjectName("rrKosyncMetadata");
+    auto presentation = metadataOption_->presentation();
+    presentation.indicator = ui::DescribedOption::Indicator::Square;
+    presentation.pressedFill = true;
+    presentation.dividers = Qt::BottomEdge;
+    presentation.horizontalInset = metrics::chrome::inset;
+    presentation.labelPixels = metrics::chrome::labelText;
+    presentation.descriptionPixels = metrics::chrome::descriptionText;
+    presentation.indicatorSize = { metrics::chrome::checkSize, metrics::chrome::checkSize };
+    presentation.minimumRowHeight = metrics::chrome::optionHeight;
+    metadataOption_->setPresentation(presentation);
+    rows->addWidget(metadataOption_);
+    connect(metadataOption_, &QCheckBox::clicked, this, [this](bool checked) {
+        if (sendMetadataChanged)
+            sendMetadataChanged(checked);
+    });
     login_ = ui::makeButton(this, rows, "rrKosyncLogin", strings::get("kosync.login"), [this] {
         if (loginRequested)
             loginRequested();
@@ -260,6 +281,11 @@ void KosyncPage::setFilenameMatching(bool enabled)
             strings::get(enabled ? "kosync.match_filename" : "kosync.match_binary"));
 }
 
+void KosyncPage::setSendMetadata(bool enabled)
+{
+    metadataOption_->setChecked(enabled);
+}
+
 QString KosyncPage::takePassword()
 {
     const auto value = password_;
@@ -309,6 +335,8 @@ void KosyncPage::setStatus(const QString &status, bool busy)
     usernameButton_->setVisible(!nativeCloudSync_);
     deviceNameButton_->setVisible(!nativeCloudSync_);
     matchingButton_->setVisible(!nativeCloudSync_);
+    metadataOption_->setVisible(!nativeCloudSync_);
+    metadataOption_->setEnabled(!busy);
     syncInformation_->setVisible(!nativeCloudSync_);
     const bool authenticating = !nativeCloudSync_ && (!signedIn_ || accountEdited_);
     passwordButton_->setVisible(authenticating);

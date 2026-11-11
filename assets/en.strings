@@ -1384,6 +1384,8 @@
 "kosync.synced" = "Synced";
 "kosync.same_chapter" = "Same chapter";
 "kosync.today_at" = "Today at %1";
+"kosync.send_metadata" = "Send document metadata";
+"kosync.send_metadata_description" = "Adds the file name, title and authors to each sync. Only some servers use them.";
 "kosync.yesterday_at" = "Yesterday at %1";
 
 /* widget keyboard */

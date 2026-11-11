@@ -42,6 +42,13 @@ struct Progress
 
 bool parseProgress(const QJsonObject &object, Progress *progress);
 
+// What KOReader's opt-in "Send document metadata" adds to an upload. The
+// official server ignores it; other servers can show the book with it.
+struct Metadata
+{
+    QString filename, title, authors;
+};
+
 // A failed fetch never reaches this reconciler. A remote choice must be
 // acknowledged before any local position can be uploaded.
 class Reconciler
@@ -114,6 +121,11 @@ public:
 
     bool setFilenameMatching(bool enabled);
 
+    // Off unless the user turns it on. Uploads then carry the book's metadata.
+    bool sendMetadata() const { return sendMetadata_; }
+
+    bool setSendMetadata(bool enabled);
+
     QString storageError() const { return storageError_; }
 
     using Done = std::function<void(QString error)>;
@@ -142,7 +154,8 @@ public:
     void cancel();
     void pull(const QByteArray &document, std::function<void(Progress, QString)> done,
               bool retryTransient = true);
-    void push(const QByteArray &document, const Progress &progress, Done done);
+    void push(const QByteArray &document, const Progress &progress, const Metadata &metadata,
+              Done done);
 
 private:
     using Response = std::function<void(int, QJsonObject, QString)>;
@@ -164,7 +177,7 @@ private:
     QElapsedTimer requestElapsed_;
     bool save(const QUrl &server, const QString &username, const QByteArray &key, bool automatic,
               const QDateTime &lastSync, const QString &deviceName, bool filenameMatching,
-              bool manualExplanation, const Schedule &schedule);
+              bool sendMetadata, bool manualExplanation, const Schedule &schedule);
     QString accountPath_, username_, deviceId_, storageError_;
     QString deviceName_, defaultDeviceName_ = QStringLiteral("Kobalt");
     QUrl server_;
@@ -173,6 +186,7 @@ private:
     QByteArray key_;
     bool automatic_ = true, writable_ = true;
     bool filenameMatching_ = false;
+    bool sendMetadata_ = false;
     bool manualExplanation_ = true;
     Schedule schedule_;
     QNetworkAccessManager ownedNetwork_;

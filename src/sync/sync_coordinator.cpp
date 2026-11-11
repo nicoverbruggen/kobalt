@@ -333,11 +333,12 @@ void SyncCoordinator::exchange(bool finalUpload)
     }
     const auto epoch = epoch_;
     const auto snapshot = initial.local;
+    const auto metadata = initial.metadata;
     QPointer<SyncCoordinator> guard(this);
     client_.pull(
             document,
-            [this, guard, document, epoch, finalUpload, snapshot](Progress remote,
-                                                                  const QString &error) {
+            [this, guard, document, epoch, finalUpload, snapshot, metadata](Progress remote,
+                                                                            const QString &error) {
                 if (!guard || epoch != epoch_)
                     return;
                 if (!error.isEmpty()) {
@@ -348,7 +349,8 @@ void SyncCoordinator::exchange(bool finalUpload)
                     complete(strings::get("kosync.retry_later"));
                     return;
                 }
-                auto apply = [this, guard, document, epoch, finalUpload, snapshot, remote] {
+                auto apply = [this, guard, document, epoch, finalUpload, snapshot, metadata,
+                              remote] {
                     if (!guard || epoch != epoch_)
                         return;
                     const auto local = finalUpload ? snapshot : context().local;
@@ -367,7 +369,8 @@ void SyncCoordinator::exchange(bool finalUpload)
                         return;
                     }
                     client_.push(
-                            document, local, [this, guard, epoch, local](const QString &error) {
+                            document, local, metadata,
+                            [this, guard, epoch, local](const QString &error) {
                                 if (!guard || epoch != epoch_)
                                     return;
                                 if (error.isEmpty())

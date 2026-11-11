@@ -15,6 +15,8 @@ public:
     {
         QByteArray document;
         Progress local;
+        // Sent only when the account has Send document metadata on.
+        Metadata metadata;
         Readiness readiness = Readiness::Ready;
         bool finalWriteAllowed = true;
         bool queueSyncTime = false;

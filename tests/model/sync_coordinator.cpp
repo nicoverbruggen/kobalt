@@ -162,6 +162,36 @@ void waitingRead(const QString &path)
             "Settled reading state did not complete its retained exchange");
 }
 
+// The reader's book details reach the upload only when the account opts in.
+void documentMetadata(const QString &path, const QJsonObject &account)
+{
+    const auto upload = [&](bool optedIn) {
+        auto opted = account;
+        if (optedIn)
+            opted["send_metadata"] = true;
+        kosync::overrideAccount(opted);
+        Http http;
+        kosync::Client client(path, nullptr, &http);
+        require(client.sendMetadata() == optedIn, "The account's metadata choice was not read");
+        auto current = context();
+        current.metadata = { "book.epub", "A Title", "An Author" };
+        Coordinator owner(
+                client, {}, [&] { return current; }, [](const Coordinator::Event &) {}, false);
+        owner.start(Coordinator::Connection::Existing, false);
+        http.finish(0);
+        await([&] { return http.uploads.size() == 1; });
+        http.finish(1);
+        await([&] { return !owner.busy(); });
+        return http.uploads.first();
+    };
+    require(!upload(false).contains("metadata"), "Document metadata was sent without opting in");
+    const auto sent = upload(true).value("metadata").toObject();
+    require(sent.value("filename") == "book.epub" && sent.value("title") == "A Title"
+                    && sent.value("authors") == "An Author",
+            "The reader's document metadata did not reach the upload");
+    kosync::overrideAccount(account);
+}
+
 void observerLifetime(const QString &path)
 {
     Http http;
@@ -284,15 +314,17 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     QTemporaryDir directory;
     require(directory.isValid(), "Coordinator fixture directory unavailable");
-    kosync::overrideAccount(QJsonObject{ { "schema", 1 },
-                                         { "server", "https://127.0.0.1:9" },
-                                         { "username", "fixture" },
-                                         { "key", QString(32, 'a') },
-                                         { "device_id", "fixture-device" },
-                                         { "automatic", true } });
+    const QJsonObject account{ { "schema", 1 },
+                               { "server", "https://127.0.0.1:9" },
+                               { "username", "fixture" },
+                               { "key", QString(32, 'a') },
+                               { "device_id", "fixture-device" },
+                               { "automatic", true } };
+    kosync::overrideAccount(account);
     const auto path = directory.filePath("account.json");
     lateConnection(path);
     waitingRead(path);
+    documentMetadata(path, account);
     observerLifetime(path);
     finalUpload(path, false);
     finalUpload(path, true);

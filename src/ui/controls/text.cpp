@@ -462,6 +462,14 @@ bool InterfaceLabel::event(QEvent *event)
     return handled;
 }
 
+void InterfaceLabel::setOpticalCentering(bool enabled)
+{
+    if (opticalCentering == enabled)
+        return;
+    opticalCentering = enabled;
+    update();
+}
+
 void InterfaceLabel::paintEvent(QPaintEvent *event)
 {
     if ((!usesBalancedWrapping() && !needsPrivateText(text(), font())) || text().isEmpty()) {
@@ -482,6 +490,10 @@ void InterfaceLabel::paintEvent(QPaintEvent *event)
                 alignment() & Qt::AlignVCenter ? (bounds.height() - document.height()) / 2 : 0;
         painter.translate(bounds.x(), bounds.y() + offset);
         document.draw(painter, QRectF(0, -offset, bounds.width(), bounds.height()), palette());
+        return;
+    }
+    if (opticalCentering && !wordWrap()) {
+        drawOpticalPrivateText(painter, bounds, text(), alignment() & Qt::AlignHorizontal_Mask);
         return;
     }
     if (wordWrap())

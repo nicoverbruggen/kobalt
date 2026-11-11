@@ -118,6 +118,7 @@ public class KobaltActivity extends QtActivity {
             if (booxRefresh != null) booxRefresh.publish(decor, resumed && hasWindowFocus());
             WindowInsets insets = decor.getRootWindowInsets();
             boolean hidden = false;
+            boolean libraryBarsVisible = false;
             int left = 0, top = 0, right = 0, bottom = 0, corner = 0;
             if (insets != null) {
                 // Android 12 reports rounded screen corners; footer text keeps clear of them.
@@ -137,6 +138,11 @@ public class KobaltActivity extends QtActivity {
                     hidden = insets.getSystemWindowInsetTop() <= (cutout == null ? 0 : cutout.getSafeInsetTop())
                         && insets.getSystemWindowInsetBottom() <= (cutout == null ? 0 : cutout.getSafeInsetBottom());
                 }
+                // BOOX gesture navigation can keep the navigation bar hidden even
+                // after show(systemBars()). Wait for the status bar and use the
+                // actual navigation inset, which can legitimately be zero.
+                libraryBarsVisible = Build.VERSION.SDK_INT >= 30
+                    ? insets.isVisible(WindowInsets.Type.statusBars()) : !hidden;
                 if (Build.VERSION.SDK_INT >= 30) {
                     android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                     left = safe.left; top = safe.top; right = safe.right; bottom = safe.bottom;
@@ -160,7 +166,7 @@ public class KobaltActivity extends QtActivity {
                 surfaceResized(width, height, left, top, right, bottom, corner);
             }
             readingGeometryReady = reading && hidden && barAnimations.isEmpty();
-            libraryGeometryReady = !reading && insets != null && !hidden && barAnimations.isEmpty();
+            libraryGeometryReady = !reading && libraryBarsVisible && barAnimations.isEmpty();
             if (libraryGeometryReady) {
                 libraryContentSize = ((long)Math.max(0, width - 2 * Math.max(left, right)) << 32)
                     | (Math.max(0, height - top - bottom) & 0xffffffffL);

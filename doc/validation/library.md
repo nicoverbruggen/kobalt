@@ -7,3 +7,5 @@ These checks cover Library onboarding, folder scanning, covers, list and grid la
 The About checks open the screen from an empty Library without requesting a book. They cover shared version fields, project-row painting through the standalone canvas, project paging, nested Back navigation, both themes, portrait and landscape sizes, and interface text at 100% and 150%. The gallery includes the Library entry and all About pages.
 
 Android Open With uses the same import callback as the Library, but its delivery and rendering need Android device validation. These checks do not validate Nickel database actions or reopening on a physical Kobo or Android device.
+
+On Android, check book-to-Library return with both the system navigation bar and gesture navigation. On BOOX, select Settings > Gestures > Bottom > Gestures, open a book, then tap Library. The Library must replace the reader and accept input with the navigation bar still hidden. Repeat with Navigation Bar selected and restore the original setting after testing. A visible status bar is sufficient for the Library handoff; gesture navigation can leave the navigation inset at zero.

@@ -7984,6 +7984,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto *settings = fixture.widget("rrSettings");
         const auto *marks = fixture.widget("rrBookmarks");
         QCOMPARE(marks->geometry().right() + 1, settings->geometry().left());
+        // A changed label and icon keep the flat style of the other toolbar buttons.
+        const auto *marksButton = dynamic_cast<const ui::Button *>(marks);
+        const auto *settingsButton = dynamic_cast<const ui::Button *>(settings);
+        QVERIFY(marksButton && settingsButton);
+        QCOMPARE(marksButton->paintMode(), settingsButton->paintMode());
         QVERIFY(fixture.press("rrBookmarks"));
         QTRY_VERIFY(fixture.visible("rrBookmarkList"));
         QCOMPARE(fixture.visible("rrBookmarksTab"), bookmarks);

@@ -626,9 +626,12 @@ void Reader::syncReadingControls()
     if (toolbarComposition.bookmarks->accessibleName() != marksLabel) {
         toolbarComposition.bookmarks->setAccessibleName(marksLabel);
         toolbarComposition.bookmarks->setToolTip(marksLabel);
-        ui::iconAction(toolbarComposition.bookmarks,
-                       bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
-                       marksLabel);
+        // Change only the icon. ui::iconAction would also reset the toolbar
+        // button to the outlined action style.
+        if (auto *button = dynamic_cast<ui::Button *>(toolbarComposition.bookmarks))
+            button->setIconConfiguration(
+                    { bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
+                      ui::IconRendition::Action });
     }
     toolbarComposition.annotate->setVisible(
             !settingsOpen && features::enabled(preferences, features::Annotations));

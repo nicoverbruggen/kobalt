@@ -13,7 +13,7 @@ const deviceNames = {
 };
 const deviceName = device => deviceNames[device] || device;
 const filters = ['group', 'orientation', 'status'];
-const state = { round: null, feedback: { items: {} }, earlier: null, latest: false, current: null, target: ['before', 'previous'].includes(recall('compare')) ? recall('compare') : 'none', baseline: null, peek: false, diff: false, side: recall('side') === 'on', activePin: -1, zoom: null, fit: 1, steps: [], newest: 0, bezel: recall('bezel') === 'on',
+const state = { round: null, feedback: { items: {} }, earlier: null, latest: false, current: null, target: ['before', 'previous'].includes(recall('compare')) ? recall('compare') : 'none', baseline: null, queue: {}, peek: false, diff: false, side: recall('side') === 'on', activePin: -1, zoom: null, fit: 1, steps: [], newest: 0, bezel: recall('bezel') === 'on',
     showReference: recall('hide-reference') !== 'yes', showSubject: recall('hide-subject') !== 'yes' };
 let saving = Promise.resolve();
 let pending = null;
@@ -40,6 +40,7 @@ function matches(item) {
     if ($('group').value && item.group !== $('group').value) return false;
     if ($('orientation').value && item.orientation !== $('orientation').value) return false;
     switch ($('status').value) {
+    case 'queued': return Boolean(state.queue[item.id]);
     case 'open': return !wasSeen(state.feedback.items[item.id]);
     case 'seen': return wasSeen(state.feedback.items[item.id]);
     case 'needs-changes': return verdict === 'needs-changes';
@@ -87,6 +88,17 @@ async function loadRound(number, screen) {
     state.earlier = data.previousFeedback;
     state.baseline = data.baseline;
     state.latest = data.latest;
+    state.queue = data.queue || {};
+    // A round with a queue opens on it once. Afterwards the reviewer's own
+    // filter choice stays.
+    const queued = Object.keys(state.queue).length > 0;
+    $('status').querySelector('option[value="queued"]').hidden = !queued;
+    if (queued && state.latest && recall('queue-round') !== String(number)) {
+        $('status').value = 'queued';
+        remember('status', 'queued');
+        remember('queue-round', String(number));
+    }
+    if (!queued && $('status').value === 'queued') $('status').value = '';
     const group = $('group');
     const chosen = group.value || recall('group');
     group.length = 1;
@@ -118,6 +130,7 @@ function render() {
     renderImages(item);
     renderPins(item, saved);
     renderEarlier(item);
+    renderQuestion(item);
     renderAnswer(item);
 }
 
@@ -133,6 +146,7 @@ function renderStatus(item, saved) {
     };
     const since = item.previous ? ` since round ${item.previous.round}` : '';
     const chips = [];
+    if (state.queue[item.id]) chips.push(chip('Queued for you', 'queued', 'The developer asks you to look at this screen'));
     if (saved.verdict === 'needs-changes') chips.push(chip('Needs changes', 'needs-changes'));
     else if (!saved.seen) chips.push(chip('Unseen', 'unseen'));
     chips.push(chip({ new: 'New', changed: `Changed${since}`, unchanged: `Unchanged${since}` }[item.status], item.status,
@@ -472,6 +486,14 @@ function focusPin(index) {
 
 // Notes that were answered without a change to the screen: the reviewer's
 // notes, quiet, and the reply below them.
+// The developer's question for a queued screen. The reviewer answers in
+// the notes.
+function renderQuestion(item) {
+    const question = state.queue[item.id]?.question || '';
+    $('question').hidden = !question;
+    $('question-text').textContent = question;
+}
+
 function renderAnswer(item) {
     const resolved = state.feedback.items[item.id]?.resolved;
     $('answer').hidden = !resolved;

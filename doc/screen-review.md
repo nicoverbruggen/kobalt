@@ -38,6 +38,18 @@ Run these commands from the repository root.
 
    The reply waits in `build/review/replies.json` for the next round. `notes` lists the screens that have one. The server does not need a restart. The open page notices the new round and offers it. After a change to the review tool itself, restart the server.
 
+## Queue screens for the reviewer
+
+A round can hold many screens that need no attention. Queue the ones the reviewer should look at, each with an optional question:
+
+```sh
+node platforms/review/review.mjs ask text-presets "Should the value sit on the heading's baseline?"
+```
+
+SCREEN is a screen name, which queues all its pages and orientations, or one item id such as `phone/text-presets/1`. Asking again replaces the question. `ask --clear` empties the queue. The queue belongs to the latest round, in `rounds/<round>/queue.json`, and a new round starts without one.
+
+The page marks a queued screen Queued for you and shows its question above the notes. Its status filter has Queued for you, and the first time the reviewer opens a round with a queue, the page selects that filter. After that, the reviewer's own filter choice stays. The reviewer answers in the general note or with pins, as for any screen. `notes` lists each queued screen with its question, whether it was seen and the reviewer's notes.
+
 ## Rounds
 
 A round is a set of screens with their feedback. Each `round` command creates the next round in `build/review/rounds/`. Only the latest round takes feedback. Earlier rounds open read only. While the page is open and visible, it checks every 5 seconds for a newer round. A round older than the newest one shows a banner below the header with an Open button for the newest round, which keeps the current screen. When the open round is superseded, the page also turns read only at once, so notes do not fail to save.

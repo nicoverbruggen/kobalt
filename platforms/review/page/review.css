@@ -91,6 +91,10 @@ main { flex: 1; min-width: 0; padding: 16px 24px; }
 .chip.needs-changes { color: var(--reject); border-color: #b23b3255; background: #b23b3212; }
 .chip.unseen { color: #8a5a00; border-color: #c08a1d55; background: #c08a1d14; }
 .chip.changed { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.chip.queued { color: #5a3d99; border-color: #5a3d9955; background: #5a3d9912; }
+.question { margin: 10px 0 0; padding-left: 12px; border-left: 2px solid #5a3d9966; font-size: 13px; line-height: 1.45; }
+.question .label { margin: 0 0 4px; }
+.question-text { margin: 0; color: var(--ink); white-space: pre-wrap; }
 .progress { display: grid; gap: 5px; margin-top: 2px; }
 .progress-bar { display: flex; height: 4px; overflow: hidden; border-radius: 2px; background: var(--line); }
 .progress-bar span { display: block; height: 100%; }

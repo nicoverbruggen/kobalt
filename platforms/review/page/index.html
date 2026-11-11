@@ -28,6 +28,7 @@
         </select>
         <select id="status" aria-label="Status">
                 <option value="">All screens</option>
+                <option value="queued">Queued for you</option>
                 <option value="open">Unseen</option>
                 <option value="needs-changes">Needs changes</option>
                 <option value="seen">Seen</option>
@@ -95,6 +96,7 @@
                 <div class="side-head">
                     <p class="where" id="where"></p>
                     <p class="chips" id="state"></p>
+                    <section class="question" id="question" hidden><p class="label">Question</p><p class="question-text" id="question-text"></p></section>
                     <div class="progress"><div class="progress-bar" aria-hidden="true"><span id="progress-seen"></span><span id="progress-changes"></span></div>
                         <p class="tally"><span id="tally"></span><span class="saved" id="saved" aria-live="polite"></span></p></div>
                 </div>

@@ -183,3 +183,46 @@ test('a reply answers notes in the next round until the reviewer has seen it', a
         await fs.rm(data, { recursive: true, force: true });
     }
 });
+
+test('the developer queues screens with questions, and notes show the answers', async () => {
+    await fs.mkdir(path.join(root, 'build'), { recursive: true });
+    const data = await fs.mkdtemp(path.join(root, 'build/review-test-'));
+    const source = path.join(data, 'source');
+    await fs.mkdir(source);
+    const images = [];
+    for (const screen of ['first', 'second'])
+        for (const [device, width, height] of [['phone', 720, 1600], ['six-inch', 1072, 1448]]) {
+            const file = `${device}-${screen}.png`, bytes = Buffer.from(`image ${device} ${screen}`);
+            await fs.writeFile(path.join(source, file), bytes);
+            const sha256 = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex');
+            images.push({ file, sha256, device, width, height, screen, scene: screen, group: 'Test', theme: 'light', capture_page: 1 });
+        }
+    await fs.writeFile(path.join(source, 'manifest.json'), JSON.stringify({ images }));
+    const review = (...args) => execFileSync(process.execPath, ['platforms/review/review.mjs', ...args, '--data', data], { cwd: root, encoding: 'utf8', stdio: 'pipe' });
+    const queue = async () => JSON.parse(await fs.readFile(path.join(data, 'rounds/001/queue.json'), 'utf8'));
+    try {
+        assert.throws(() => review('ask', 'first'), /no review rounds/);
+        review('round', '--source', source);
+        assert.throws(() => review('ask', 'missing'), /has no screen missing/);
+        // A screen name queues its items; a question is optional and a new
+        // one replaces the old.
+        assert.match(review('ask', 'first', 'Is', 'the', 'gap', 'right?'), /Queued 1 item of first/);
+        review('ask', 'phone/second/1');
+        review('ask', 'first', 'Is the gap too wide?');
+        assert.deepEqual(await queue(), { 'phone/first/1': { question: 'Is the gap too wide?' }, 'phone/second/1': { question: '' } });
+        let notes = review('notes');
+        assert.match(notes, /QUEUED: phone\/first\/1 .*not seen yet, no notes\n {2}question: Is the gap too wide\?/);
+        assert.match(notes, /QUEUED: phone\/second\/1/);
+        // The reviewer's note is the answer.
+        await fs.writeFile(path.join(data, 'rounds/001/feedback.json'), JSON.stringify({ items: { 'phone/first/1': { seen: true, note: 'Yes, halve it.', pins: [] } } }));
+        notes = review('notes');
+        assert.match(notes, /QUEUED: phone\/first\/1 .*, seen\n/);
+        assert.match(notes, /note: Yes, halve it\./);
+        // A new round starts without a queue.
+        review('round', '--source', source);
+        assert.doesNotMatch(review('notes'), /QUEUED/);
+        review('ask', '--clear');
+    } finally {
+        await fs.rm(data, { recursive: true, force: true });
+    }
+});

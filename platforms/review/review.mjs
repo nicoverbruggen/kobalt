@@ -19,6 +19,7 @@ const usage = `Usage:
   node platforms/review/review.mjs serve [--port 8765]
   node platforms/review/review.mjs notes [--round N]
   node platforms/review/review.mjs reply SCREEN TEXT
+  node platforms/review/review.mjs ask SCREEN [QUESTION] | ask --clear
   node platforms/review/review.mjs baseline --source DIR [--theme light] [--match SCREEN=BEFORE]... [--commit SHA] [--base-ref REF]
 All commands accept --data DIR (default build/review).`;
 
@@ -34,6 +35,7 @@ const { values: options, positionals } = parseArgs({
         theme: { type: 'string', default: 'light' },
         pair: { type: 'string', multiple: true },
         fresh: { type: 'boolean', default: false },
+        clear: { type: 'boolean', default: false },
         port: { type: 'string', default: '8765' },
         round: { type: 'string' },
         match: { type: 'string', multiple: true },
@@ -244,6 +246,37 @@ function recordReply() {
     console.log(`Replied to ${id}. The next round shows the answer.`);
 }
 
+// The developer's queue for the reviewer in one round: screens to look at,
+// each with an optional question. Answers are the reviewer's usual notes.
+const queueFile = number => path.join(roundDir(number), 'queue.json');
+function readQueue(number) {
+    return readJson(queueFile(number), {});
+}
+
+// Queues a screen of the latest round for the reviewer. SCREEN is a screen
+// name, which queues each of its pages and orientations, or one item id.
+// A question asked again replaces the earlier one.
+function recordAsk() {
+    const number = roundNumbers().at(-1);
+    if (!number) fail('There are no review rounds yet.');
+    if (options.clear) {
+        fs.rmSync(queueFile(number), { force: true });
+        console.log(`Cleared the queue of round ${number}.`);
+        return;
+    }
+    const [, target, ...words] = positionals;
+    if (!target) fail(usage);
+    const { round } = loadRound(number);
+    const items = round.items.filter(item => item.id === target || item.screen === target);
+    if (!items.length) fail(`Round ${number} has no screen ${target}.`);
+    const queue = readQueue(number);
+    const question = words.join(' ').trim().slice(0, maxNote);
+    for (const item of items) queue[item.id] = { question };
+    writeJson(queueFile(number), queue);
+    console.log(`Queued ${items.length} item${items.length === 1 ? '' : 's'} of ${target} in round ${number}.` +
+        ` ${Object.keys(queue).length} queued in all.`);
+}
+
 // Records captures from before the feature, usually of the branch's base
 // commit. Each round's screen then shows its Before image from the same
 // device: the same screen, or the one --match names for a screen that the
@@ -314,8 +347,15 @@ function printNotes() {
     console.log(feedback.finished ? `Finished by the reviewer at ${feedback.finished}.` : 'Not finished yet.');
     const replies = Object.entries(readJson(repliesFile, {})).filter(([, reply]) => reply.round === number);
     if (replies.length) console.log(`Replies for the next round: ${replies.map(([id]) => id).join(', ')}.`);
+    const queue = readQueue(number);
     for (const item of round.items) {
         const entry = feedback.items[item.id];
+        if (queue[item.id]) {
+            const answer = [entry?.note, ...(entry?.pins || []).map(pin => pin.note)].filter(Boolean);
+            console.log(`\nQUEUED: ${item.id} · ${item.title}, ${wasSeen(entry) ? 'seen' : 'not seen yet'}` +
+                (answer.length ? '' : ', no notes'));
+            if (queue[item.id].question) console.log(`  question: ${queue[item.id].question.replace(/\n/g, ' ')}`);
+        }
         if (entry?.resolved && !hasAnnotations(entry))
             console.log(`\nANSWERED: ${item.id} · ${item.title}, ${wasSeen(entry) ? 'reply seen' : 'reply not seen yet'}`);
         if (!entry || (reviewVerdict(entry) !== 'needs-changes' && !entry.note && !entry.pins?.length)) continue;
@@ -397,7 +437,7 @@ function serve() {
                     item.referenceBefore = beforeImage(baseline, item, item.reference?.device);
                     item.previousReference = item.previous ? earlier.get(item.id)?.reference || null : null;
                 }
-                send(response, 200, { ...current, latest: number === numbers.at(-1),
+                send(response, 200, { ...current, latest: number === numbers.at(-1), queue: readQueue(number),
                     previousFeedback: before ? loadRound(before).feedback : null });
             } else if (request.method === 'PUT' && (match = route.match(/^\/api\/rounds\/(\d+)\/items\/(.+)$/))) {
                 const number = Number(match[1]), id = decodeURIComponent(match[2]);
@@ -472,4 +512,5 @@ else if (command === 'serve') serve();
 else if (command === 'notes') printNotes();
 else if (command === 'baseline') recordBaseline();
 else if (command === 'reply') recordReply();
+else if (command === 'ask') recordAsk();
 else fail(usage);

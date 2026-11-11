@@ -8,6 +8,7 @@ mkdir -p build
 scratch=$(mktemp -d "$root/build/release-check.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 cmake "-DTEST_TMP_ROOT=$scratch" -P platforms/strings-test.cmake
+cmake "-DTEST_TMP_ROOT=$scratch" -P platforms/checks/source-checks-test.cmake
 cmake "-DTEST_TMP_ROOT=$scratch" -P platforms/test-validation-record.cmake
 cat > "$scratch/version.cmake" <<'CMAKE'
 include("$ENV{KOBALT_TEST_ROOT}/platforms/release-version.cmake")

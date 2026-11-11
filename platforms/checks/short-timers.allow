@@ -1,0 +1,2 @@
+# App and UI timers shorter than 100 ms, checked by source-checks.cmake.
+# Each line is `path|function|reason`. Remove a line when its timer goes.

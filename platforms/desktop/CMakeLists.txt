@@ -240,6 +240,10 @@ if(BUILD_TESTING)
         "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
         -P "${KOBALT_ROOT}/platforms/strings-test.cmake")
     set_tests_properties(build.strings PROPERTIES LABELS "fast;build" TIMEOUT 30)
+    add_test(NAME build.sourceChecks COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
+        -P "${KOBALT_ROOT}/platforms/checks/source-checks-test.cmake")
+    set_tests_properties(build.sourceChecks PROPERTIES LABELS "fast;build" TIMEOUT 30)
     add_test(NAME build.screenshotBooks COMMAND "${CMAKE_COMMAND}"
         "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/screenshot-book-test"
         "-DPREPARE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/prepare-screenshot-books.cmake"

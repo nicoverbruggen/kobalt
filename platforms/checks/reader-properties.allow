@@ -1,0 +1,58 @@
+# "reader_*" names in C and C++ sources under src/, platforms/ and tests/,
+# checked by source-checks.cmake. Most are Qt properties that carry refresh
+# intent or a widget role from the reader to the platform adapters and tests.
+# A misspelled property reads as empty, so a new name must be added here.
+# Each line is `name|meaning`. Remove a line when its last use goes.
+reader_animation_direction|Reader window: direction of the page-turn animation for the next flush, or 0 for none.
+reader_annotation_regions|Reader window: annotation colour areas on the current page, for the colour refresh.
+reader_annotation_repairs|Reader window: areas where annotation colour appeared or went, repaired with a colour update. The adapter clears it.
+reader_arrow_only|Toolbar return action: show the arrow alone, centered in its cell, as in Zen mode.
+reader_button_callout|Button controls callout: stylesheet selector for its left rule.
+reader_colour_regions|Reader window: the page shows colour, so the turn may need a colour waveform.
+reader_controls_opening|Reader window: the reading bars are opening, so their frame is flushed as one update.
+reader_dark|Reader window or modal: dark theme on. Theming and refresh read it from the nearest ancestor.
+reader_eclipse_supported|Reader window: test override that says the panel supports the Eclipse waveform, set by pewter.
+reader_entry|Acknowledgments row button: index of the entry it opens.
+reader_exit_clean_pending|Reader window: the Qt6 adapter owes a clean refresh when the reader exits.
+reader_font_family|Settings font option: font family that the option selects, empty for publisher fonts.
+reader_full_flash|Reader window: the next flush is a full flash. The adapter clears it.
+reader_group_end|Bottom tab: last tab of its group, which draws the group's heavy rule in Zen mode.
+reader_hold_step|Zen leave hold button: current step of the hold, read by tests.
+reader_hold_step_ms|Zen leave hold button: test override for the hold step interval.
+reader_image_repairs|Reader window: colour image areas that changed on this turn, repaired with a colour update.
+reader_invert_pressed|Button: invert its content while pressed, as keyboard keys do.
+reader_keyboard_bounds|Host window: area of the on-screen keyboard, so panels and refresh can avoid it.
+reader_keyboard_editor_bounds|Host window: area of the field that the on-screen keyboard edits.
+reader_keyboard_widget|Host window: the keyboard that owns the keyboard bounds.
+reader_modal_left_rule|Modal action button: draw a left rule between side-by-side actions.
+reader_mono_repairs|Reader window: black and white image areas that changed on this turn, repaired with a grey update.
+reader_native_colors|Native keyboard frame: Nickel paints it, so theming leaves its colours alone.
+reader_native_keyboard_editor|Text field: edited by Nickel's keyboard, so its text refreshes in partial mode.
+reader_navigation_bar|Bottom navigation bar: marks the widget for the navigation refresh rules.
+reader_navigation_dismissal|Reader window: the reading bars just closed over a plain reading page.
+reader_navigation_dismissal_plain|Reader window: the page under the closed bars is text only, so a partial refresh is enough.
+reader_owns_swipes|Widget: handles its own swipes, so an enclosing pager ignores them.
+reader_page_turn|Reader window: this flush is a page turn. The adapter clears it.
+reader_paging|Pager bar: stylesheet selector that keeps its background transparent.
+reader_palette_regions|Reader window: colour areas of the highlight palette.
+reader_palette_repairs|Reader window: highlight palette areas that changed, repaired with a colour update.
+reader_partial_controls|Reader window: area of the controls that may refresh in partial mode.
+reader_plain_controls|Reader window: only the plain reading bars are open, so they can cross a text page with a partial refresh.
+reader_popup_overlay|Pop-up overlay: stylesheet selector that keeps its background transparent.
+reader_preparing_handoff|Reader window: the reader is preparing to hand the screen to Nickel for sleep.
+reader_preparing_wake|Reader window: the reader is preparing its first frame after wake.
+reader_primary_action|Button: primary action, drawn filled with inverted content.
+reader_progress_update|Reader window: area of the progress indicator that changed. The adapter clears it.
+reader_refresh_backend|Reader window: test override for the display driver name, set by pewter.
+reader_regal_supported|Reader window: test override that says the panel supports the REGAL waveform, set by pewter.
+reader_return_divider|Toolbar return action: draw a divider after it.
+reader_safe_top|Reader window: height of the camera band at the top, for panels that place themselves.
+reader_sleep_clean_pending|Reader window: the Qt6 adapter owes a clean refresh after sleep.
+reader_sleep_handoff|Reader window: the screen is being handed to Nickel for sleep.
+reader_standard_modal|Modal overlay: fits its card to the window on resize instead of only centering it.
+reader_style|Widget: its stylesheet source, kept so a theme change can apply it again.
+reader_swipe_hold|Widget: a long press on it is a hold, so the release after a hold does not turn the page.
+reader_tab_icon|Settings tab button: its icon, set again when the tabs switch between rail and section list.
+reader_tab_label|Settings tab button: its label, uppercase in the rail and as written in the section list.
+reader_transition_save_failed|Reader window: the save before USB, shutdown or closing failed three times.
+reader_waiting|KOSync diagnostic field: the reader was waiting for the sync. Not a property.

@@ -97,6 +97,20 @@ The native tests run with `KOBALT_STRICT_MAIN_THREAD=1`, set by `platforms/deskt
 
 Diagnostic event writes run on their own thread. `flushDiagnostics()` waits for that worker and calls the main-thread guard; reader callers must be at a lifecycle boundary. Tests that read `events.jsonl` call it first.
 
+## Source checks
+
+`platforms/checks/source-checks.cmake` searches the sources for patterns that caused regressions before. Each check compares its matches with an allowlist in `platforms/checks/`. A new match fails, and so does an allowlist entry that no longer matches, so the lists only change on purpose. A change to an allowlist is a decision for the user.
+
+| Check | Allowlist | What fails |
+| --- | --- | --- |
+| Storage writes in interface code | `storage-io.allow` | `writeJson`, `QSaveFile`, `QSettings`, `QSql*`, `storage::checkpointProfile` or a file opened for writing in `src/app/` or `src/ui/`, outside a listed function |
+| Blocking reasons | `blocking-reasons.allow` | An `AllowBlocking` scope in `src/` or `platforms/` with a reason that is not listed. Name a new reason in [Main-thread guard](#main-thread-guard) as well. |
+| Forwarded blocking reasons | `blocking-forwarders.allow` | An `AllowBlocking` scope that takes its reason from a caller, outside a listed function |
+| Reader names | `reader-properties.allow` | A `"reader_*"` string in `src/`, `platforms/` or `tests/` that is not listed with its meaning. Most are Qt properties, and a misspelled property reads as empty. |
+| Short timers | `short-timers.allow` | A literal timer from 1 to 99 ms in `src/app/` or `src/ui/`, outside a listed function. 0 ms is allowed. |
+
+Run `cmake -P platforms/checks/source-checks.cmake` from the repository root, or `ctest --preset mac -R build.sourceChecks`, which also checks that planted matches and stale entries fail. The checks read source text. They do not follow calls through other functions, so a write that a helper hides is a matter for the [main-thread guard](#main-thread-guard).
+
 ## Page-turn diagnostics
 
 Kobo builds can log input, render, display-flush and standby events that explain a delayed or doubled page turn. Verbose logging is opt-in at startup through `.adds/kobalt/diagnostics-enabled` or `KOBALT_DIAGNOSTICS=1`, and direct Kobo builds and diagnostic packages enable it automatically. [Page-turn diagnostics](validation/diagnostics.md#page-turn-diagnostics) describes the events and their limits, the Qt5 standby input guard and how to collect a report.
@@ -105,7 +119,7 @@ Kobo builds can log input, render, display-flush and standby events that explain
 
 | Group | Checks | Purpose |
 | --- | --- | --- |
-| Build compatibility | `cachePolicy`, `strings` | Cache identity policy; sorted English string generation, UTF-8 and escape preservation, invalid input and missing literal UI-key rejection, and automatic rebuilds after copy changes |
+| Build compatibility | `cachePolicy`, `strings`, `sourceChecks` | Cache identity policy; sorted English string generation, UTF-8 and escape preservation, invalid input and missing literal UI-key rejection, and automatic rebuilds after copy changes; [source checks](#source-checks) |
 | Fast model checks | `storage-assets`, `android-assets`, `profile-storage`, `record-writer`, `main-thread`, `reading-history`, `bookmark-store`, `highlight-store`, `annotation-database`, `appearance-settings`, `header-footer`, `layout-cache`, `resource-cache`, `layout-compatibility`, `reading-pace`, `reading-speed`, `engine-activity`, `local-resources`, `zip-resource`, `diagnostics`, `crash-reports`, `dictionary-store`, `image-damage`, `page-pixels`, `logical-word-counter`, `brightness-gesture`, `qt-compat`, `page-refresh-regions`, `screen-refresh`, `plain-archive`, `reading-progress`, `library`, `font-axes`, `touch-rotation` | Persistence, corrupt input, limits, recovery and portable state |
 | Fast desktop checks | `startup`, `libraryOnboarding`, `reading`, `errors`, `storageDiagnostics`, `annotationTwoFingerTapConsumesWholeSequence`, `annotationRightClickRejectsChords` | Empty-library startup, picker cancellation, first-folder scanning, cover display, rendered pages, page turns, saved positions, opening failure, cancellation and engine diagnostic behavior |
 | Engine integration | `vertical-spacing`, `source-index`, `columns`, `advanced-text`, `alignment`, `indentation`, `page-layout`, `vertical-writing`, `mathml`, `line-breaking`, `fallback-styles`, `svg-limits`, `image-proportions`, `whitespace`, `links`, `search`, `word-selection`, `reader`, `publisher-markup`, `local-reader`, `document-word-count`, `document-cache` | CREngine, publisher markup, fonts, images, source positions, logical counts and cached reopening |

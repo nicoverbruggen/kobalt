@@ -1,0 +1,23 @@
+# Reasons that mainthread::AllowBlocking scopes in src/ and platforms/ may
+# name, checked by source-checks.cmake. Each scope lets the main thread wait
+# where no input can arrive before the wait ends. A new reason is a decision
+# for the user: name it in doc/validation.md#main-thread-guard as well, or
+# remove the wait. Remove a line when its last scope goes.
+annotation read
+application quits
+closing reader
+final native progress before storage handoff
+host checkpoint
+kosync account settings
+library opening
+library progress
+library save
+native progress
+opening status before reader input
+remembered layout before reader input
+scenario wifi step
+settings write
+sleep
+wifi-off at sleep
+wifi-off before reader input
+wifi-off while closing

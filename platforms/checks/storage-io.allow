@@ -1,0 +1,5 @@
+# App and UI code that writes storage itself, checked by source-checks.cmake.
+# Each line is `path|function|reason`. Prefer a storage helper that runs on a
+# writer thread. Remove a line when its call goes.
+src/app/reader/window/reader.cpp|Reader::sleepReader|Folds waiting saves into the profile at sleep, under the sleep scope.
+src/app/reader/window/reader.cpp|Reader::save|Posts the inspection report to its own record writer thread.

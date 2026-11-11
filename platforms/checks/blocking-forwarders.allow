@@ -1,0 +1,5 @@
+# mainthread::AllowBlocking scopes whose reason comes from a caller, checked by
+# source-checks.cmake. Each line is `path|function|reason`. The reasons the
+# callers pass belong in blocking-reasons.allow.
+platforms/kobo/common/native_wifi_power.cpp|saveNativeWifiPower|Nickel turns Wi-Fi off before reader input or at sleep. The caller names which.
+src/sync/sync_coordinator.cpp|SyncCoordinator::releaseConnection|A sync that ends at sleep or while closing releases Wi-Fi. The reader names which.

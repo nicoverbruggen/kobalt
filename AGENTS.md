@@ -48,6 +48,8 @@ Block the main thread only where it is absolutely necessary: where no input can 
 
 `src/support/main_thread.h` enforces this rule. Every operation that writes storage or waits for another thread must call `mainthread::blocking()`, including a new storage helper or a new firmware call. The native tests run with `KOBALT_STRICT_MAIN_THREAD=1` and abort on a violation. Run them with `KOBALT_STRICT_MAIN_THREAD=trace` to list every violation with its call stack. Kobo logs a `main-thread-blocked` event instead. See [the main-thread guard](doc/validation.md#main-thread-guard).
 
+The [source checks](doc/validation.md#source-checks) in `platforms/checks/` fail on storage writes in interface code, unlisted `AllowBlocking` reasons, unlisted `reader_*` names and short timers. Run `cmake -P platforms/checks/source-checks.cmake` after such a change. A change to an allowlist there is a decision for the user: say so and wait.
+
 ## UI integration and verification
 
 Before changing UI, identify the closest existing control or screen. Trace its construction, shared styling, metrics and later presentation adjustments. Reusing its widget class alone is not enough.

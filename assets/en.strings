@@ -622,6 +622,7 @@
 "reader.exit" = "Exit Kobalt";
 "reader.fail_next_native_save" = "Fail next native save";
 "reader.font" = "Font";
+"reader.choose_typeface" = "Choose a typeface";
 "reader.close_fonts" = "Close fonts";
 "reader.default_font" = "Default font";
 "reader.set_default_font" = "Set default font";

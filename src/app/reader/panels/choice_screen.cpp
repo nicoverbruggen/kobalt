@@ -220,7 +220,7 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
     setObjectName("rrChoices");
     fontHeader = new ui::Panel(this, ui::Edges(Qt::TopEdge));
     fontHeader->setEdgeWidth(metrics::chrome::heavyRule);
-    fontTitle = new ui::InterfaceLabel(strings::get("reader.font"), fontHeader);
+    fontTitle = new ui::InterfaceLabel(strings::get("reader.choose_typeface"), fontHeader);
     fontTitle->setObjectName("rrFontTitle");
     readerStyle(fontTitle, styles::font(metrics::text::body, true) + "background:transparent;");
     auto *close = new ui::CellButton(ui::ControlIcon::Close, fontHeader);

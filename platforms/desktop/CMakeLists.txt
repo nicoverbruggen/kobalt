@@ -59,14 +59,9 @@ endforeach()
 string(REGEX REPLACE "^v([0-9]+\\.[0-9]+(\\.[0-9]+)?).*$" "\\1" KOBALT_BUNDLE_VERSION "${KOBALT_VERSION}")
 
 set(source "${KOBALT_ROOT}/src")
-file(READ "${CRENGINE_SOURCE}/cr3gui/data/html5.css" READER_HTML_CSS)
-configure_file("${source}/engine/crengine/reader_styles.h.in" reader_styles.h @ONLY)
-file(GLOB patterns RELATIVE "${CRENGINE_SOURCE}/cr3gui/data/hyph" "${CRENGINE_SOURCE}/cr3gui/data/hyph/*.pattern")
-list(SORT patterns)
-list(TRANSFORM patterns PREPEND "\"")
-list(TRANSFORM patterns APPEND "\"")
-list(JOIN patterns ", " READER_HYPHENATION_PATTERNS)
-configure_file("${source}/engine/crengine/reader_hyphenation.h.in" reader_hyphenation.h @ONLY)
+# The generated engine headers, the cache policy, the annotation storage
+# default, kobalt_shared_definitions and kobalt_notice_resources.
+include("${KOBALT_ROOT}/platforms/shared-inputs.cmake")
 include("${KOBALT_ROOT}/platforms/source-info.cmake")
 kobalt_source_info("${KOBALT_ROOT}")
 configure_file("${source}/support/build_info.h.in" build_info.h @ONLY)
@@ -92,9 +87,7 @@ target_include_directories(kobalt-core SYSTEM PUBLIC
     "${KOBALT_TEST_DEPENDENCIES}/include" "${KOBALT_TEST_DEPENDENCIES}/include/harfbuzz"
     "${KOBALT_TEST_DEPENDENCIES}/include/freetype2" "${KOBALT_TEST_DEPENDENCIES}/include/fribidi"
     "${KOBALT_TEST_PNG_INCLUDE}")
-include("${KOBALT_ROOT}/platforms/cache-policy.cmake")
-target_compile_definitions(kobalt-core PUBLIC KOBALT_READER_HARDWARE KOBALT_VERSION="${KOBALT_VERSION}"
-    KOBALT_LAYOUT_POLICY="${layout_policy}" KOBALT_RENDERING_POLICY="${rendering_policy}")
+target_compile_definitions(kobalt-core PUBLIC ${kobalt_shared_definitions})
 if(APPLE)
     target_compile_definitions(kobalt-core PUBLIC fdatasync=fsync)
 endif()
@@ -104,14 +97,6 @@ else()
     target_compile_definitions(kobalt-core PUBLIC KOBALT_NO_SENSORS)
 endif()
 target_compile_options(kobalt-core PRIVATE -Wall -Wextra)
-option(KOBALT_SQLITE_ANNOTATIONS_DEFAULT "Use SQLite annotation storage by default" ON)
-if(KOBALT_SQLITE_ANNOTATIONS_DEFAULT)
-    set_source_files_properties("${source}/storage/annotation_database.cpp" PROPERTIES
-        COMPILE_DEFINITIONS KOBALT_SQLITE_ANNOTATIONS_DEFAULT=1)
-else()
-    set_source_files_properties("${source}/storage/annotation_database.cpp" PROPERTIES
-        COMPILE_DEFINITIONS KOBALT_SQLITE_ANNOTATIONS_DEFAULT=0)
-endif()
 target_link_libraries(kobalt-core PUBLIC Qt6::Widgets Qt6::Network Qt6::Sql
     "${CRENGINE_BUILD}/libcrengine.a"
     "${KOBALT_TEST_DEPENDENCIES}/lib/libharfbuzz.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libxxhash.a"
@@ -193,11 +178,8 @@ target_compile_definitions(Kobalt PRIVATE KOBALT_PROFILE_NAME="${KOBALT_PROFILE_
 set_target_properties(Kobalt PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in")
 set(resources "${KOBALT_ROOT}/assets")
-file(GLOB notices CONFIGURE_DEPENDS "${resources}/notices/*")
 qt_add_resources(kobalt-desktop desktop_artwork PREFIX "/desktop" BASE "${resources}" FILES "${resources}/kobalt-android.svg")
-qt_add_resources(kobalt-desktop notices PREFIX "/kobalt" BASE "${resources}" FILES "${resources}/acknowledgments.json" ${notices}
-    "${resources}/samples/words-and-letters.html" "${resources}/samples/layout.html"
-    "${resources}/samples/hanging-punctuation.html")
+qt_add_resources(kobalt-desktop notices PREFIX "/kobalt" BASE "${kobalt_notice_base}" FILES ${kobalt_notice_resources})
 if(APPLE)
     set(bundle_assets "${CMAKE_CURRENT_BINARY_DIR}/Kobalt.app/Contents/Resources/assets")
     add_custom_command(OUTPUT "${bundle_assets}/manifest.json"

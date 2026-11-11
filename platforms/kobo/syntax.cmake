@@ -29,6 +29,9 @@
 # folder in the cache and then renamed into place, so a concurrent run sees a
 # whole copy or none. The script never pulls or builds an image.
 #
+# The sources, definitions and compile options come from
+# platforms/kobo/sources.cmake, which the Kobo build also reads.
+#
 # Kobalt's generated headers and the dependency headers come from the
 # configured desktop build. Those headers do not depend on the target, except
 # HAVE_OFF64_T in crsetup.h, which macOS leaves undefined. The check defines it
@@ -278,37 +281,39 @@ endforeach()
 write_if_changed("${generated}/embedded_resources.h"
     "#include <resources.h>\nstatic const struct nh_resource nh_embedded_resources[] = {{NULL, NULL, 0}};\n")
 
-# Select the sources the same way as platforms/kobo/CMakeLists.txt. Keep both
-# lists the same.
-set(kobo "${root}/platforms/kobo")
-set(hooks "${kobo}/toolchains/nickelhook-qt6")
-file(GLOB_RECURSE shared "${root}/src/*.cpp")
-list(FILTER shared EXCLUDE REGEX "/src/scenario/")
-list(FILTER shared EXCLUDE REGEX "/(library|app/library)/")
-set(c_sources "${kobo}/common/install.c" "${kobo}/common/startup_recovery.c" "${hooks}/nh.c" "${hooks}/resources.c")
+# platforms/kobo/sources.cmake holds what the Kobo builds compile. Read it
+# once for each SDK. The check compiles the sources, not the headers.
+set(KOBALT_ROOT "${root}")
+# A syntax check has no version and no cache policy.
+set(KOBALT_VERSION "syntax-check")
+set(layout_policy "syntax-check")
+set(rendering_policy "syntax-check")
+include("${root}/platforms/shared-inputs.cmake")
 foreach(sdk qt5 qt6)
-    file(GLOB adapters "${kobo}/common/*.cpp" "${kobo}/nickel-${sdk}/*.cpp" "${kobo}/display/*.cpp")
-    set(${sdk}_cxx_sources ${shared} ${adapters})
+    string(REPLACE "qt" "" KOBALT_QT_MAJOR "${sdk}")
+    include("${root}/platforms/kobo/sources.cmake")
+    set(${sdk}_cxx_sources ${kobo_shared_sources} ${kobo_adapter_sources})
+    list(FILTER ${sdk}_cxx_sources INCLUDE REGEX "\\.cpp$")
     list(SORT ${sdk}_cxx_sources)
-    set(${sdk}_c_sources ${c_sources})
+    set(${sdk}_c_sources ${kobo_c_sources} ${kobo_hook_sources})
     # An evaluation package adds the scenario player.
-    set(${sdk}-eval_cxx_sources ${${sdk}_cxx_sources} "${root}/src/scenario/player.cpp")
-    set(${sdk}-eval_c_sources ${c_sources})
+    set(${sdk}-eval_cxx_sources ${${sdk}_cxx_sources} ${kobo_eval_sources})
+    set(${sdk}-eval_c_sources ${${sdk}_c_sources})
     set(${sdk}-eval_test_sources "")
+    # KOBALT_BUILD_TESTS adds the pewter tests. The Qt5 lane also has the Qt5
+    # refresh check.
+    set(${sdk}_test_sources ${kobo_pewter_sources} ${kobo_test_sources} ${kobo_pewter_sdk_sources}
+        ${kobo_sdk_test_sources})
+    set(${sdk}_defines "-DKOBALT_SYSTEM_FONT_DIRECTORY=\"${kobo_system_font_directory}\"")
 endforeach()
-# KOBALT_BUILD_TESTS adds the pewter tests. The Qt5 lane also has the Qt5
-# refresh check.
-set(pewter "${root}/tests/pewter")
-set(pewter_sources "${pewter}/pewter.cpp" "${pewter}/nickel.cpp" "${pewter}/progress.cpp" "${pewter}/keyboard.cpp" "${pewter}/native_ui.cpp" "${pewter}/tile_cover.cpp")
-set(qt5_test_sources ${pewter_sources} "${pewter}/nickel_qt5.cpp" "${pewter}/refresh_qt5.cpp")
-set(qt6_test_sources ${pewter_sources} "${pewter}/nickel_qt6.cpp")
+set(hooks "${kobo_hooks}")
 
 # AUTOMOC output is not available here. An empty file is enough for a syntax
 # check; -Wno-undefined-internal accepts the missing moc definitions.
 set(moc "${work}/moc")
 file(MAKE_DIRECTORY "${moc}")
 set(moc_sources ${qt5_cxx_sources} ${qt6_cxx_sources} ${qt5_test_sources} ${qt6_test_sources}
-    "${root}/src/scenario/player.cpp")
+    ${kobo_eval_sources})
 list(REMOVE_DUPLICATES moc_sources)
 foreach(source IN LISTS moc_sources)
     file(STRINGS "${source}" lines REGEX "^#include \"([^\"]+\\.moc|moc_[^\"]+\\.cpp)\"")
@@ -320,9 +325,9 @@ foreach(source IN LISTS moc_sources)
     endforeach()
 endforeach()
 
-# Flags of the Kobo builds: the compiler wrappers of the images (made by
-# kobuild) and platforms/kobo/CMakeLists.txt. Keep them the same as those
-# files.
+# Flags of the Kobo builds: those of the compiler wrappers of the images (made
+# by kobuild), which this script repeats, and those of
+# platforms/kobo/sources.cmake.
 find_program(clang clang++ REQUIRED)
 execute_process(COMMAND "${clang}" -print-resource-dir
     RESULT_VARIABLE status OUTPUT_VARIABLE resources OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -332,13 +337,17 @@ endif()
 set(target -target armv7a-unknown-linux-gnueabihf -mfloat-abi=hard -mfpu=neon -fPIC -fsyntax-only -nostdinc -DNDEBUG)
 # GCC's -Werror set, without the clang warnings that GCC 11 does not report,
 # and with the GCC -Wextra warnings that clang leaves out of -Wextra.
-set(warnings -Wall -Wextra -Werror -Wno-unused-private-field -Wno-c++20-extensions
+set(warnings ${kobo_warning_options} -Wno-unused-private-field -Wno-c++20-extensions
     -Wno-unused-lambda-capture -Wno-inconsistent-missing-override -Wno-overloaded-virtual -Wno-self-assign
     -Wno-undefined-internal -Wno-deprecated-non-prototype -Wimplicit-fallthrough -Wtype-limits -Wtautological-unsigned-zero-compare)
 set(qt_defines -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_NO_DEBUG)
-set(kobalt_defines "-DKOBALT_CONFIG_DIR=\"/mnt/onboard/.adds/kobalt\"" "-DKOBALT_LAYOUT_POLICY=\"syntax-check\"" "-DKOBALT_RENDERING_POLICY=\"syntax-check\""
-    -DKOBALT_PAGE_ANIMATIONS -DKOBALT_READER_HARDWARE
-    "-DKOBALT_VERSION=\"syntax-check\"" "-DNH_VERSION=\"syntax-check\""
+# The definitions of sources.cmake that do not depend on the SDK. The font
+# directory, which does, follows as ${sdk}_defines.
+set(shared_definitions ${kobo_definitions})
+list(FILTER shared_definitions EXCLUDE REGEX "^KOBALT_SYSTEM_FONT_DIRECTORY=")
+list(TRANSFORM shared_definitions PREPEND "-D")
+list(TRANSFORM kobo_animation_definitions PREPEND "-D" OUTPUT_VARIABLE animation_defines)
+set(kobalt_defines ${shared_definitions} ${animation_defines}
     ${qt_defines} -DQT_DBUS_LIB -DQT_NETWORK_LIB -DQT_SENSORS_LIB -DQT_SQL_LIB -Dkobalt_EXPORTS -DHAVE_OFF64_T=1)
 set(kobalt_includes "-iquote${root}" "-iquote${root}/src" "-I${hooks}" "-I${generated}" "-I${moc}")
 foreach(include IN LISTS dependency_includes)
@@ -349,7 +358,6 @@ endforeach()
 set(sdk "${qt5_sdk}")
 set(qt "${sdk}/sysroot/usr/include")
 set(qt5_target "--sysroot=${sdk}/sysroot")
-set(qt5_defines "-DKOBALT_SYSTEM_FONT_DIRECTORY=\"/usr/local/Trolltech/QtEmbedded-4.6.2-arm/lib/fonts\"")
 # Same order as the Qt5 build: the overlay replaces one Qt header.
 set(qt5_qt_includes -isystem "${sdk}/overlay")
 foreach(module QtWidgets QtGui QtCore QtNetwork QtSensors QtSql QtDBus)
@@ -370,7 +378,6 @@ set(qt5_system_includes -isystem "${resources}/include" -isystem "${sdk}/cross-i
 set(sdk "${qt6_sdk}")
 set(qt "${sdk}/qt/include")
 set(qt6_target -mthumb)
-set(qt6_defines "-DKOBALT_SYSTEM_FONT_DIRECTORY=\"/usr/share/fonts\"")
 # Same order as the Qt6 build.
 set(qt6_qt_includes -isystem "${qt}/QtWidgets" -isystem "${qt}" -isystem "${qt}/QtCore"
     -isystem "${sdk}/qt/mkspecs/linux-arm-kobo-gnueabihf-g++" -isystem "${qt}/QtGui")
@@ -391,24 +398,28 @@ foreach(lane qt5 qt6 qt5-eval qt6-eval)
     string(REGEX REPLACE "-eval$" "" sdk "${lane}")
     set(lane_defines ${kobalt_defines} ${${sdk}_defines})
     if(lane MATCHES "-eval$")
-        list(APPEND lane_defines -DKOBALT_SCENARIO_PLAYER)
+        list(TRANSFORM kobo_eval_definitions PREPEND "-D" OUTPUT_VARIABLE eval_defines)
+        list(APPEND lane_defines ${eval_defines})
     endif()
     set(lane_target ${target} ${${sdk}_target})
     set(lane_qt ${${sdk}_qt_includes})
     file(MAKE_DIRECTORY "${work}/${lane}")
-    write_response_file("${work}/${lane}/cxx.rsp" ${lane_target} ${warnings} -Wno-missing-field-initializers
-        -fvisibility=hidden ${lane_defines} ${kobalt_includes} ${lane_qt} ${${sdk}_cxx_library} ${${sdk}_system_includes})
-    write_response_file("${work}/${lane}/c.rsp" ${lane_target} ${warnings} -Wno-missing-field-initializers
-        -fvisibility=hidden ${lane_defines} ${kobalt_includes} ${lane_qt} ${${sdk}_system_includes})
-    write_response_file("${work}/${lane}/test.rsp" ${lane_target} ${warnings} ${qt_defines} -DKOBALT_PAGE_ANIMATIONS
+    write_response_file("${work}/${lane}/cxx.rsp" ${lane_target} ${warnings} ${kobo_code_options} ${lane_defines} ${kobalt_includes} ${lane_qt} ${${sdk}_cxx_library} ${${sdk}_system_includes})
+    write_response_file("${work}/${lane}/c.rsp" ${lane_target} ${warnings} ${kobo_code_options} ${lane_defines} ${kobalt_includes} ${lane_qt} ${${sdk}_system_includes})
+    write_response_file("${work}/${lane}/test.rsp" ${lane_target} ${warnings} ${qt_defines} ${animation_defines}
         "-I${root}" "-I${root}/src" "-I${root}/tests/support" "-I${moc}" ${lane_qt} ${${sdk}_cxx_library} ${${sdk}_system_includes})
 endforeach()
 
-# Per-source definitions of platforms/kobo/CMakeLists.txt with its defaults.
-set(defines_annotation_database.cpp -DKOBALT_SQLITE_ANNOTATIONS_DEFAULT=1)
-set(defines_diagnostics.cpp -DKOBALT_VERBOSE_DIAGNOSTICS=1)
-# The pewter tests use the device build's view of the adapter headers.
-set(defines_progress.cpp -DKOBALT_READER_HARDWARE)
+# Definitions of single sources, with the defaults of the options in
+# platforms/kobo/CMakeLists.txt. The file name selects them below.
+get_filename_component(name "${kobalt_annotations_source}" NAME)
+set(defines_${name} "-D${kobalt_annotations_definition}=1")
+get_filename_component(name "${kobo_diagnostics_source}" NAME)
+list(TRANSFORM kobo_diagnostics_definitions PREPEND "-D" OUTPUT_VARIABLE defines_${name})
+foreach(source IN LISTS kobo_progress_test_sources)
+    get_filename_component(name "${source}" NAME)
+    list(TRANSFORM kobo_progress_test_definitions PREPEND "-D" OUTPUT_VARIABLE defines_${name})
+endforeach()
 
 # One stamp per lane and source, and one phony target per lane. Ninja reruns
 # a source when it, a header in its depfile or its response file changes. The

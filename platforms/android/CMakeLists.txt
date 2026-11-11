@@ -44,14 +44,9 @@ foreach(index RANGE ${last})
     list(APPEND bundled "${asset}")
 endforeach()
 
-file(READ "${CRENGINE_SOURCE}/cr3gui/data/html5.css" READER_HTML_CSS)
-configure_file("${source}/engine/crengine/reader_styles.h.in" reader_styles.h @ONLY)
-file(GLOB patterns RELATIVE "${CRENGINE_SOURCE}/cr3gui/data/hyph" "${CRENGINE_SOURCE}/cr3gui/data/hyph/*.pattern")
-list(SORT patterns)
-list(TRANSFORM patterns PREPEND "\"")
-list(TRANSFORM patterns APPEND "\"")
-list(JOIN patterns ", " READER_HYPHENATION_PATTERNS)
-configure_file("${source}/engine/crengine/reader_hyphenation.h.in" reader_hyphenation.h @ONLY)
+# The generated engine headers, the cache policy, the annotation storage
+# default, kobalt_shared_definitions and kobalt_notice_resources.
+include("${KOBALT_ROOT}/platforms/shared-inputs.cmake")
 set(KOBALT_COMMIT "" CACHE STRING "Source commit, passed by the container launcher")
 option(KOBALT_COMMIT_MODIFIED "Source has uncommitted changes" OFF)
 configure_file("${source}/support/build_info.h.in" build_info.h @ONLY)
@@ -62,21 +57,11 @@ list(FILTER shared EXCLUDE REGEX "/src/scenario/")
 list(REMOVE_ITEM shared "${source}/assets/system_fonts.cpp")
 file(GLOB adapters CONFIGURE_DEPENDS "*.cpp" "*.h" "../standalone/*.cpp" "../standalone/*.h")
 qt_add_executable(kobalt_android ${shared} ${adapters})
-option(KOBALT_SQLITE_ANNOTATIONS_DEFAULT "Use SQLite annotation storage by default" ON)
-if(KOBALT_SQLITE_ANNOTATIONS_DEFAULT)
-    set_source_files_properties("${source}/storage/annotation_database.cpp" PROPERTIES
-        COMPILE_DEFINITIONS KOBALT_SQLITE_ANNOTATIONS_DEFAULT=1)
-else()
-    set_source_files_properties("${source}/storage/annotation_database.cpp" PROPERTIES
-        COMPILE_DEFINITIONS KOBALT_SQLITE_ANNOTATIONS_DEFAULT=0)
-endif()
 target_include_directories(kobalt_android PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kobalt_android SYSTEM PRIVATE "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
     "${prefix}/include" "${prefix}/include/harfbuzz" "${prefix}/include/freetype2" "${prefix}/include/fribidi")
 target_compile_options(kobalt_android PRIVATE -Wall -Wextra "-iquote${KOBALT_ROOT}" "-iquote${source}")
-target_compile_definitions(kobalt_android PRIVATE KOBALT_READER_HARDWARE KOBALT_VERSION="${KOBALT_VERSION}")
-include("${KOBALT_ROOT}/platforms/cache-policy.cmake")
-target_compile_definitions(kobalt_android PRIVATE KOBALT_LAYOUT_POLICY="${layout_policy}" KOBALT_RENDERING_POLICY="${rendering_policy}")
+target_compile_definitions(kobalt_android PRIVATE ${kobalt_shared_definitions})
 set(engine "${CMAKE_CURRENT_BINARY_DIR}/libcrengine-reader.a")
 add_custom_command(OUTPUT "${engine}"
     COMMAND "${CMAKE_OBJCOPY}" --redefine-sym FT_Load_Glyph=kobalt_font_load_glyph
@@ -93,11 +78,7 @@ set_target_properties(kobalt_android PROPERTIES QT_ANDROID_EXTRA_LIBS "${openssl
 qt_add_resources(kobalt_android android_assets BIG_RESOURCES PREFIX "/android-assets" FILES ${bundled})
 set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/asset-manifest.json" PROPERTIES QT_RESOURCE_ALIAS manifest.json)
 qt_add_resources(kobalt_android android_manifest PREFIX "/android-assets" FILES "${CMAKE_CURRENT_BINARY_DIR}/asset-manifest.json")
-set(resources "${KOBALT_ROOT}/assets")
-file(GLOB notices CONFIGURE_DEPENDS "${resources}/notices/*")
-qt_add_resources(kobalt_android notices PREFIX "/kobalt" BASE "${resources}" FILES "${resources}/acknowledgments.json" ${notices}
-    "${resources}/samples/words-and-letters.html" "${resources}/samples/layout.html"
-    "${resources}/samples/hanging-punctuation.html")
+qt_add_resources(kobalt_android notices PREFIX "/kobalt" BASE "${kobalt_notice_base}" FILES ${kobalt_notice_resources})
 
 if(KOBALT_ANDROID_RELEASE)
     set(KOBALT_ANDROID_PACKAGE com.nicoverbruggen.kobalt)

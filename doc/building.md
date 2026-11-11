@@ -43,7 +43,7 @@ From the repository root, use `bash platforms/kobo/build.sh qt5 --check` or `qt6
 
 The syntax check uses empty placeholders for generated `.moc` and `moc_*.cpp` includes. The SDK builds generate and compile the real meta-object code.
 
-Run `cmake -P platforms/kobo/syntax.cmake` from the repository root to find Kobo compile errors on the Mac in seconds. It checks every source that the Kobo Qt5 and Qt6 builds compile, including the C files and the Kobo test programs. The Mac's clang reads each source in syntax-only mode against the headers of the prepared images. Each lane uses the flags, definitions and warnings of its Kobo build.
+Run `cmake -P platforms/kobo/syntax.cmake` from the repository root to find Kobo compile errors on the Mac in seconds. It checks every source that the Kobo Qt5 and Qt6 builds compile, including the C files and the Kobo test programs. The Mac's clang reads each source in syntax-only mode against the headers of the prepared images. Each lane uses the flags, definitions and warnings of its Kobo build. The check and `platforms/kobo/CMakeLists.txt` read the same source lists, definitions and compile options from `platforms/kobo/sources.cmake`. Add a Kobo source, definition or option there, so the check and the build cannot differ. The check repeats only the flags of the image's compiler wrappers. It uses the placeholder `syntax-check` for the version and the cache policies.
 
 | Lane | Headers |
 | --- | --- |
@@ -123,6 +123,8 @@ Linux provides the same light, fast, integration and full test lanes, performanc
 ## Assets
 
 `assets/manifest.json` records the runtime file selection, version, sizes and SHA-256 checksums. Font metadata records upstream sources and revisions. The selected eBook font collection is checked in under `assets/fonts/ebook-core/`; builds do not fetch fonts. Keep the manifest consistent when changing runtime assets. All platforms include bundled hyphenation pattern names and contents in the cache policy. Pattern changes rebuild disposable book caches without changing saved reading data.
+
+The desktop, Kobo and Android projects include `platforms/shared-inputs.cmake` for the inputs they share: the generated `reader_styles.h` and `reader_hyphenation.h`, the cache policy, the default of the annotation store, the list of notice resources and the definitions of every target that compiles shared sources (`kobalt_shared_definitions`). The file sets variables and runs steps. Each project keeps its own targets, resource code and source lists. Change a shared input there, not in one project.
 
 Each platform uses `assets/CMakeLists.txt` to verify and stage the selected files under its own output directory. CMake tracks these inputs and removes retired files from the staging directory. The Mac app copies the runtime bundle into its Resources directory; Kobo packages it under `.adds/kobalt/assets`; Android embeds it as Qt resources. After verifying its current extracted bundle, Android removes old digest-named bundle directories. Failed installation keeps old bundles. Cleanup preserves unrelated entries and does not follow sibling symlinks. Artwork, notices and the two Styling sample HTML files are compiled from root `assets/`. Source metadata and unused font files are not copied into the runtime bundle.
 

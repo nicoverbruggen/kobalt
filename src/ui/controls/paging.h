@@ -9,7 +9,7 @@ namespace kobalt::ui {
 bool turnVisiblePageControl(QWidget *scope, int direction);
 
 // A full-width bar with a cell at each end and the count between them.
-// It hides itself when there is only one page.
+// It hides itself when there is only one page unless showSinglePage is set.
 // Horizontal swipes in the parent panel use its arrows. Controls with their
 // own gestures can opt out with the reader_owns_swipes property.
 // reader_swipe_hold preserves a row's long-press action
@@ -31,7 +31,7 @@ public:
     }
 
     void setPage(int page, int count, const QString &label = {}, bool wrap = false,
-                 const QRect &blank = {});
+                 const QRect &blank = {}, bool showSinglePage = false);
     // Coordinates in the pager's parent. Never reserve space or cover list rows.
     void setBlankArea(const QRect &bounds);
     // Resolve a user turn using the last presented page and list bounds.

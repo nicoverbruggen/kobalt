@@ -17,6 +17,7 @@
 #include "ui/controls/options.h"
 #include <QGridLayout>
 #include <QIntValidator>
+#include <QLocale>
 
 namespace kobalt {
 namespace metrics = ui::metrics;
@@ -106,6 +107,7 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
     status = new ui::InterfaceLabel(strings::get("search_panel.search_this_book"), this);
     status->setObjectName("rrSearchStatus");
     ui::captionLabel(status);
+    status->hide();
     scopeStatus = new ui::InterfaceLabel(this);
     scopeStatus->setObjectName("rrSearchScopeStatus");
     ui::captionLabel(scopeStatus);
@@ -226,6 +228,7 @@ void SearchPanel::chooseScope()
             hits.clear();
             shownCount = 0;
             submittedQuery.clear();
+            searched = complete = false;
             scanning = false;
             status->setText(strings::get("search_panel.search_this_book"));
             if (requested)
@@ -490,6 +493,8 @@ void SearchPanel::run()
     shownCount = 0;
     resultPage = 0;
     scanning = true;
+    searched = true;
+    complete = false;
     status->setText(strings::get("search_panel.searching"));
     redraw();
     if (requested)
@@ -511,10 +516,11 @@ void SearchPanel::append(const SearchBatch &batch, int totalPages)
     const bool firstResults = hits.isEmpty() && !batch.hits.isEmpty();
     scanning = !batch.done;
     hits += batch.hits;
-    pendingStatus = batch.done
-            ? (hits.isEmpty() ? strings::get("search_panel.no_matches_found")
-                              : strings::get("search_panel.matches").arg(hits.size()))
-            : strings::get("search_panel.matches_searching").arg(hits.size());
+    searched = true;
+    complete = batch.done;
+    pendingStatus = strings::get(batch.done ? (hits.isEmpty() ? "search_panel.no_matches_found"
+                                                              : "search_panel.search_complete")
+                                            : "search_panel.searching");
     Q_UNUSED(totalPages);
     if (batch.reset || firstResults || batch.done) {
         flush();
@@ -541,7 +547,7 @@ void SearchPanel::stop()
     QGuiApplication::inputMethod()->hide();
     restartOnOpen = restartOnOpen || scanning;
     if (scanning)
-        status->setText(strings::get("search_panel.search_stopped_matches").arg(hits.size()));
+        status->setText(strings::get("search_panel.search_stopped"));
     scanning = false;
 }
 
@@ -556,8 +562,9 @@ void SearchPanel::paintEvent(QPaintEvent *event)
 {
     ui::Panel::paintEvent(event);
     QPainter painter(this);
-    ui::paintHeaderRules(painter, this);
-    painter.fillRect(0, chrome::headerHeight() + chrome::statusHeight - metrics::control::border,
+    painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule,
+                     palette().color(QPalette::WindowText));
+    painter.fillRect(0, chrome::actionHeight + chrome::statusHeight - metrics::control::border,
                      width(), metrics::control::border, palette().color(QPalette::Mid));
 }
 
@@ -584,43 +591,45 @@ void SearchPanel::redraw()
                          metrics::search::excerptTop + qCeil(lines) + metrics::search::rowBottom);
     }
     const bool returning = canReturn && shownCount > 0;
-    const int scopeBottom = chrome::headerHeight() + chrome::statusHeight;
-    scopeStatus->setText(strings::get("search_panel.now_searching").arg(scopeLabel()));
-    scopeStatus->setGeometry(chrome::inset, chrome::headerHeight(), textWidth,
-                             chrome::statusHeight);
+    const int scopeBottom = chrome::actionHeight + chrome::statusHeight;
+    const auto matches =
+            strings::get(shownCount == 1 ? "search_panel.match" : "search_panel.matches")
+                    .arg(QLocale().toString(shownCount));
+    scopeStatus->setText(searched ? strings::get(complete ? "search_panel.matches_in_scope"
+                                                          : "search_panel.matches_so_far_in_scope")
+                                            .arg(matches, scopeLabel())
+                                  : strings::get("search_panel.now_searching").arg(scopeLabel()));
+    scopeStatus->setAccessibleDescription(status->text());
+    scopeStatus->setGeometry(chrome::inset, chrome::actionHeight, textWidth, chrome::statusHeight);
     const int listTop = scopeBottom + (returning ? metrics::list::twoLines : 0);
     pageSize = qMax(1, (height() - listTop - chrome::actionHeight) / rowHeight);
     const int count = qMax(1, (shownCount + pageSize - 1) / pageSize);
     resultPageCount = count;
     resultPage = qBound(0, first / pageSize, count - 1);
-    status->setGeometry(chrome::inset, 0, textWidth,
-                        chrome::statusHeight - metrics::control::border);
     const int cellHeight = chrome::actionHeight - chrome::heavyRule;
-    back->setGeometry(0, chrome::statusHeight, chrome::cellWidth, cellHeight);
-    submit->setGeometry(width() - chrome::cellWidth, chrome::statusHeight, chrome::cellWidth,
-                        cellHeight);
-    query->setGeometry(chrome::cellWidth, chrome::statusHeight,
-                       qMax(1, width() - 3 * chrome::cellWidth), cellHeight);
+    back->setGeometry(0, 0, chrome::cellWidth, cellHeight);
+    submit->setGeometry(width() - chrome::cellWidth, 0, chrome::cellWidth, cellHeight);
+    query->setGeometry(chrome::cellWidth, 0, qMax(1, width() - 3 * chrome::cellWidth), cellHeight);
     clear->setGeometry(query->width() - metrics::search::clearWidth - metrics::search::clearRight,
                        0, metrics::search::clearWidth, query->height());
     pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     const int used =
             listTop + qMin(pageSize, qMax(0, shownCount - resultPage * pageSize)) * rowHeight;
-    pager->setPage(resultPage, count,
-                   strings::get("search_panel.result_range")
-                           .arg(resultPage * pageSize + 1)
-                           .arg(qMin((resultPage + 1) * pageSize, shownCount)),
-                   true, { chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used });
-    scopeButton->setGeometry(width() - 2 * chrome::cellWidth, chrome::statusHeight,
-                             chrome::cellWidth, cellHeight);
+    const auto pageCaption =
+            strings::get(complete ? "search_panel.result_pages"
+                                  : "search_panel.result_pages_so_far")
+                    .arg(QLocale().toString(resultPage + 1), QLocale().toString(count));
+    pager->setPage(resultPage, count, pageCaption, true,
+                   { chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used },
+                   shownCount > 0);
+    pageJump->setEnabled(count > 1);
+    scopeButton->setGeometry(width() - 2 * chrome::cellWidth, 0, chrome::cellWidth, cellHeight);
     scopeButton->setGlyph(scopeIcon(searchScope));
     scopeButton->setAccessibleName(strings::get("search_panel.scope") + ": " + scopeLabel());
     pageJump->setGeometry(chrome::cellWidth, metrics::control::border,
                           qMax(1, width() - 2 * chrome::cellWidth),
                           pager->height() - metrics::control::border);
-    pageJump->setAccessibleName(
-            strings::get("search_panel.go_to_page") + ". "
-            + strings::get("common.page_fraction").arg(resultPage + 1).arg(count));
+    pageJump->setAccessibleName(strings::get("search_panel.go_to_page") + ". " + pageCaption);
     original->setVisible(returning);
     original->setGeometry(0, scopeBottom, width(), metrics::list::twoLines);
     const bool waiting = shownCount == 0 && !scanning;

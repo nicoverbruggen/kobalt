@@ -736,15 +736,11 @@
 "search_panel.find_a_word_or_phrase" = "Find a word or phrase";
 /* Arguments: %1 */
 "search_panel.matches" = "%1 matches";
-/* Arguments: %1, %2 */
-"search_panel.matches_searching" = "%1 matches · Searching…";
 "search_panel.no_matches_found" = "No matches";
 /* Arguments: %1, %2 */
 "search_panel.page_detail" = "Page %1: %2";
 "search_panel.return_to_original_position" = "Return to original position";
 "search_panel.search" = "Search";
-/* Arguments: %1 */
-"search_panel.search_stopped_matches" = "Search stopped · %1 matches";
 "search_panel.searching" = "Searching…";
 
 /* settings */
@@ -973,9 +969,6 @@
 /* search_panel */
 /* Arguments: %1 */
 "search_panel.empty_query" = "No matches for “%1”";
-/* Arguments: %1 */
-/* Arguments: %1, %2 */
-"search_panel.result_range" = "Results %1–%2";
 /* Arguments: %1 */
 "search_panel.page_number" = "Page %1";
 
@@ -1613,3 +1606,13 @@
 "library.icon_folder" = "Custom icons";
 "library.folder_not_selected" = "Choose a folder";
 "library.clear_folder" = "Clear folder choice";
+
+/* Search match counts use localized numbers and the existing scope labels. */
+"search_panel.match" = "%1 match";
+"search_panel.matches_in_scope" = "%1 in %2";
+"search_panel.matches_so_far_in_scope" = "%1 so far in %2";
+"search_panel.search_complete" = "Search complete";
+"search_panel.search_stopped" = "Search stopped";
+/* These pages contain search results, not EPUB pages. */
+"search_panel.result_pages" = "Page %1 of %2";
+"search_panel.result_pages_so_far" = "Page %1 of at least %2";

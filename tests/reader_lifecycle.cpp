@@ -3291,7 +3291,7 @@ private slots:
         QVERIFY(click(canvas, host.window()->findChild<QAbstractButton *>("rrSearchScope3")));
         query->setText("reader");
         emit query->returnPressed();
-        QTRY_COMPARE(status->text(), strings::get("search_panel.matches").arg(hits.size()));
+        QTRY_COMPARE(status->text(), strings::get("search_panel.search_complete"));
         auto *result = host.window()->findChild<QPushButton *>("rrSearchResult0");
         QTRY_VERIFY(result && result->isVisible());
         QVERIFY(click(canvas, result));
@@ -3364,6 +3364,11 @@ private slots:
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchOpen")));
         auto *scopeStatus = host.window()->findChild<QLabel *>("rrSearchScopeStatus");
         QVERIFY(scopeStatus && scopeStatus->isVisible());
+        QCOMPARE(host.window()->findChild<QWidget *>("rrSearchQuery")->y(), 0);
+        QVERIFY(host.window()->findChild<QWidget *>("rrMenuClock")->isVisible());
+        QVERIFY(host.window()->findChild<QWidget *>("rrMenuBattery")->isVisible());
+        const auto *searchView = host.window()->findChild<QWidget *>("rrSearch");
+        QVERIFY(searchView->y() > 0);
         // Center the visible caption ink, not the font's ascent/descent box.
         const auto scopeImage = scopeStatus->grab().toImage();
         int inkTop = scopeImage.height(), inkBottom = -1;
@@ -3388,8 +3393,13 @@ private slots:
         QVERIFY(query && status);
         query->setText("e");
         emit query->returnPressed();
-        QTRY_COMPARE_WITH_TIMEOUT(status->text(),
-                                  strings::get("search_panel.matches").arg(referenceCount), 15000);
+        QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("search_panel.search_complete"),
+                                  15000);
+        QCOMPARE(scopeStatus->text(),
+                 strings::get("search_panel.matches_in_scope")
+                         .arg(strings::get("search_panel.matches")
+                                      .arg(QLocale().toString(referenceCount)),
+                              strings::get("search_panel.whole_book")));
         auto *jump = host.window()->findChild<QPushButton *>("rrSearchPageJump");
         QVERIFY(jump && click(canvas, jump));
         auto *number = host.window()->findChild<QLineEdit *>("rrSearchPageNumber");
@@ -3416,6 +3426,9 @@ private slots:
         QVERIFY(last && last->isVisible());
         QTRY_VERIFY(last->isEnabled());
         QVERIFY(!last->accessibleName().isEmpty());
+        QCOMPARE(host.window()->findChild<QLabel *>("rrSearchPage")->text(),
+                 strings::get("search_panel.result_pages")
+                         .arg(QLocale().toString(lastPage), QLocale().toString(lastPage)));
         // A delayed reply for the previous results page cannot replace the current rows.
         auto *panel = dynamic_cast<SearchPanel *>(host.window()->findChild<QWidget *>("rrSearch"));
         QVERIFY(panel);
@@ -3446,8 +3459,9 @@ private slots:
         QVERIFY(whole && whole->isChecked());
         QVERIFY(click(canvas, host.window()->findChild<QAbstractButton *>("rrSearchScope1")));
         QCOMPARE(scopeStatus->text(),
-                 strings::get("search_panel.now_searching")
-                         .arg(strings::get("search_panel.up_to_here")));
+                 strings::get("search_panel.matches_so_far_in_scope")
+                         .arg(strings::get("search_panel.matches").arg(QLocale().toString(0)),
+                              strings::get("search_panel.up_to_here")));
         QTRY_VERIFY_WITH_TIMEOUT(status->text() != strings::get("search_panel.searching"), 10000);
         query->clear();
         for (int id : { 0, 1, 2, 3 }) {
@@ -3478,7 +3492,7 @@ private slots:
         auto *counter = panel->findChild<QLabel *>("rrSearchPage");
         QVERIFY(counter);
         const auto firstCounter = counter->text();
-        const auto firstStatus = status->text();
+        const auto firstStatus = scopeStatus->text();
         QElapsedTimer progressTime;
         progressTime.start();
         progress.reset = false;
@@ -3488,14 +3502,70 @@ private slots:
         panel->append(progress, 100);
         panel->resize(panel->width() - 1, panel->height());
         QCOMPARE(counter->text(), firstCounter);
-        QCOMPARE(status->text(), firstStatus);
-        QTRY_VERIFY_WITH_TIMEOUT(status->text() != firstStatus, 3000);
+        QCOMPARE(scopeStatus->text(), firstStatus);
+        QTRY_VERIFY_WITH_TIMEOUT(scopeStatus->text() != firstStatus, 3000);
         QVERIFY(progressTime.elapsed() >= 2000);
         QVERIFY(counter->text() != firstCounter);
         progress.hits.clear();
         progress.done = true;
         panel->append(progress, 100);
-        QCOMPARE(status->text(), strings::get("search_panel.matches").arg(41));
+        QCOMPARE(status->text(), strings::get("search_panel.search_complete"));
+        QVERIFY(!status->isVisible());
+        const auto exactPages = counter->text();
+        QVERIFY(exactPages.startsWith("Page 1 of "));
+        QVERIFY(!exactPages.contains("at least"));
+        // Count grammar and locale grouping apply to every existing scope.
+        const auto previousLocale = QLocale();
+
+        struct RestoreLocale
+        {
+            QLocale locale;
+
+            ~RestoreLocale() { QLocale::setDefault(locale); }
+        } restoreLocale{ previousLocale };
+
+        QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+        const char *scopeKeys[] = { "search_panel.current_chapter", "search_panel.up_to_here",
+                                    "search_panel.after_here", "search_panel.whole_book" };
+        for (int id : { 0, 1, 2, 3 }) {
+            QVERIFY(click(canvas, scope));
+            QVERIFY(click(canvas,
+                          host.window()->findChild<QAbstractButton *>(
+                                  QString("rrSearchScope%1").arg(id))));
+            for (int count : { 0, 1, 1288 }) {
+                SearchBatch sample;
+                sample.reset = sample.done = true;
+                for (int i = 0; i < count; ++i)
+                    sample.hits.append(
+                            { QString::number(i), "end", "Before", "match", "after", i });
+                panel->append(sample, 100);
+                QCOMPARE(scopeStatus->text(),
+                         strings::get("search_panel.matches_in_scope")
+                                 .arg(strings::get(count == 1 ? "search_panel.match"
+                                                              : "search_panel.matches")
+                                              .arg(QLocale().toString(count)),
+                                      strings::get(scopeKeys[id])));
+                QCOMPARE(counter->isVisible(), count > 0);
+                if (count == 1)
+                    QCOMPARE(counter->text(), QString("Page 1 of 1"));
+            }
+        }
+        QCOMPARE(scopeStatus->text(), QString("1,288 matches in Whole book"));
+        QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
+        panel->resize(panel->width() - 1, panel->height());
+        QCOMPARE(scopeStatus->text(), QString("1.288 matches in Whole book"));
+        SearchBatch partial;
+        partial.reset = true;
+        partial.hits.append({ "first", "end", "Before", "match", "after", 0 });
+        panel->append(partial, 100);
+        QCOMPARE(counter->text(), QString("Page 1 of at least 1"));
+        QVERIFY(!status->isVisible());
+        QVERIFY(scopeStatus->text().contains("1 match so far"));
+        panel->stop();
+        QCOMPARE(status->text(), strings::get("search_panel.search_stopped"));
+        panel->resize(panel->width() - 1, panel->height());
+        QVERIFY(scopeStatus->text().contains("1 match so far"));
+        QCOMPARE(counter->text(), QString("Page 1 of at least 1"));
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchBack")));
     }
 
@@ -3582,8 +3652,7 @@ private slots:
         } else if (interruption == "partial-results" || interruption == "reopen-partial") {
             application->afterEvent = [&](QObject *object, QEvent *event) {
                 if (object != qApp || event->type() != QEvent::MetaCall || interrupted
-                    || status->text() == strings::get("search_panel.searching")
-                    || status->text() == strings::get("search_panel.matches").arg(referenceCount)) {
+                    || status->text() == strings::get("search_panel.search_complete")) {
                     return;
                 }
                 auto *result = host.window()->findChild<QPushButton *>("rrSearchResult0");
@@ -3607,8 +3676,7 @@ private slots:
         query->setText("reader");
         emit query->returnPressed();
         if (interruption == "completed-results") {
-            QTRY_COMPARE_WITH_TIMEOUT(status->text(),
-                                      strings::get("search_panel.matches").arg(referenceCount),
+            QTRY_COMPARE_WITH_TIMEOUT(status->text(), strings::get("search_panel.search_complete"),
                                       10000);
             auto *first = panel->findChild<QPushButton *>("rrSearchResult0");
             QVERIFY(first);
@@ -3656,7 +3724,7 @@ private slots:
         } else {
             const auto expected = interruption == "replaced-query"
                     ? none
-                    : strings::get("search_panel.matches").arg(referenceCount);
+                    : strings::get("search_panel.search_complete");
             QTRY_COMPARE_WITH_TIMEOUT(status->text(), expected, 10000);
         }
         if (interruption == "completed-results") {
@@ -3673,7 +3741,16 @@ private slots:
         QCOMPARE(status->text(),
                  interruption == "replaced-query" || interruption == "closed-query"
                          ? none
-                         : strings::get("search_panel.matches").arg(referenceCount));
+                         : strings::get("search_panel.search_complete"));
+        const int expectedCount = interruption == "replaced-query" || interruption == "closed-query"
+                ? 0
+                : referenceCount;
+        QCOMPARE(panel->findChild<QLabel *>("rrSearchScopeStatus")->text(),
+                 strings::get("search_panel.matches_in_scope")
+                         .arg(strings::get(expectedCount == 1 ? "search_panel.match"
+                                                              : "search_panel.matches")
+                                      .arg(QLocale().toString(expectedCount)),
+                              strings::get("search_panel.whole_book")));
     }
 
 #ifndef KOBALT_NO_SENSORS

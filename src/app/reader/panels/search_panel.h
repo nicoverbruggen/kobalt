@@ -65,6 +65,7 @@ private:
     int resultPage = 0, pageSize = 1, resultPageCount = 1;
     int shownCount = 0;
     bool scanning = false;
+    bool searched = false, complete = false;
     QTimer updates;
     QString pendingStatus;
     int rowHeight = 0, measuredWidth = 0;

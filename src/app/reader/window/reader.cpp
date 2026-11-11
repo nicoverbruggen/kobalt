@@ -1588,6 +1588,8 @@ void Reader::closeSearch()
         searchPanel->stop();
         searchPanel->hide();
     }
+    if (searchOpen)
+        topControls->hide();
     updateOrientationBlock();
     syncNavigation();
     // Search opened from the Zen menu clears the panel as it closes, also
@@ -1655,6 +1657,11 @@ void Reader::openSearch(const QString &query)
     searchPanel->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
     searchPanel->open(session->state().value("position").toString() != searchOriginal,
                       searchOriginalPage, query);
+    topControls->show();
+    updateMenuStatus();
+    syncNavigation();
+    topControls->raise();
+    searchPanel->raise();
     if (orientation)
         orientation->setBlocked(true);
     for (auto *widget : searchPanel->findChildren<QWidget *>())
@@ -2332,7 +2339,8 @@ void Reader::syncNavigation()
                           ? -1
                           : int(qMax<qint64>(1, (estimates.chapterMilliseconds + 30000) / 60000)),
                   estimates.learningPace,
-                  !features::enabled(preferences, features::Bookmarks) });
+                  !features::enabled(preferences, features::Bookmarks),
+                  searchPanel->isVisible() });
         // The Zen menu leaves the page visible beside its groups, so the
         // header and footer hide while it is open. The page does not reflow.
         page->setStripsHidden(zen && topControls->isVisible());
@@ -2364,6 +2372,11 @@ void Reader::syncNavigation()
         }
         headerFooterView->setGeometry(0, bottom - sheetHeight, width(), sheetHeight);
         headerFooterView->raise();
+    }
+    if (searchPanel->isVisible()) {
+        const auto safe = safeArea();
+        searchPanel->setGeometry(rect().adjusted(0, navigation->statusHeight(), 0, -safe.bottom));
+        searchPanel->raise();
     }
     // Use the current toolbar and tab bounds, including after rotation.
     syncPinnedBookmarks();

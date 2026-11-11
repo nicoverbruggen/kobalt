@@ -11785,6 +11785,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(image.pixelColor(ribbon.center().x(), 0), marked ? ink : paper);
             QCOMPARE(image.pixelColor(ribbon.center().x(), page->y() - 1), marked ? ink : paper);
             QCOMPARE(image.pixelColor(ribbon.left() - 2, 0), paper);
+            if (marked) {
+                QVERIFY(fixture.press("rrPage"));
+                QVERIFY(fixture.press("rrSearchOpen"));
+                const auto searchImage = reader->grab().toImage();
+                QCOMPARE(searchImage.pixelColor(ribbon.center().x(), 0), paper);
+                QCOMPARE(searchImage.pixelColor(ribbon.center().x(), 1), paper);
+                QVERIFY(fixture.press("rrSearchBack"));
+                QVERIFY(!fixture.visible("rrSearch"));
+            }
         }
     }
 
@@ -12982,6 +12991,14 @@ private slots:
         QTRY_VERIFY(fixture.visible("rrNavSearch"));
         const auto name = screenshotVariant(preset, dark);
         QVERIFY(capture(fixture, name + "-zen-menu"));
+        QVERIFY(fixture.press("rrNavSearch"));
+        QTRY_VERIFY(fixture.visible("rrSearch"));
+        QVERIFY(fixture.visible("rrMenuClock"));
+        QVERIFY(fixture.visible("rrMenuBattery"));
+        QVERIFY(fixture.widget("rrControlsTop")->mask().isEmpty());
+        QVERIFY(fixture.press("rrSearchBack"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrZenStats"));
         QVERIFY(fixture.press("rrZenStats"));
         QTRY_VERIFY(fixture.visible("rrZenStatsPanel"));
         QVERIFY(capture(fixture, name + "-zen-stats"));

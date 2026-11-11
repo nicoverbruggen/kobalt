@@ -270,7 +270,8 @@ void PagerBar::paintEvent(QPaintEvent *)
         painter.fillRect(0, 0, width(), metrics::control::border, dividerColor(this));
 }
 
-void PagerBar::setPage(int page, int count, const QString &label, bool wrap, const QRect &blank)
+void PagerBar::setPage(int page, int count, const QString &label, bool wrap, const QRect &blank,
+                       bool showSinglePage)
 {
     count = qMax(1, count);
     page = qBound(0, page, count - 1);
@@ -284,7 +285,7 @@ void PagerBar::setPage(int page, int count, const QString &label, bool wrap, con
     updateHint();
     previous->setEnabled(count > 1 && (wrap || page > 0));
     next->setEnabled(count > 1 && (wrap || page + 1 < count));
-    setVisible(count > 1);
+    setVisible(count > 1 || showSinglePage);
 }
 
 int PagerBar::turnTarget(int direction) const

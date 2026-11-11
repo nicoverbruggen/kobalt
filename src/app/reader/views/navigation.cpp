@@ -1189,8 +1189,8 @@ void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions, boo
 void Navigation::update(QSize size, const NavigationState &state)
 {
     // Zen mode's top group belongs to the reading menu alone. Chapters,
-    // Bookmarks and Settings keep the regular top bar.
-    zenTop = state.zen && !state.chaptersOpen && !state.settings->isVisible();
+    // Bookmarks, Search and Settings keep the regular top bar.
+    zenTop = state.zen && !state.chaptersOpen && !state.settings->isVisible() && !state.searchOpen;
     zenStatsShown = zenTop && state.zenStats;
     state.footer->hide();
     toolbar->setGeometry(0, 0, size.width(), toolbarHeight());

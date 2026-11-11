@@ -75,6 +75,7 @@ struct NavigationState
     bool chapterApproximate = false;
     // Without the Bookmarks feature, the Bookmarks tab opens annotations only.
     bool annotationsOnly = false;
+    bool searchOpen = false;
 };
 } // namespace kobalt
 

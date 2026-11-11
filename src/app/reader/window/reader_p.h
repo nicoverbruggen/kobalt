@@ -311,6 +311,7 @@ private:
     bool syncFontPicker();
     void showChapterText();
     void showPageImage(const QImage &nextImage);
+    void sampleReflowText();
     QRect appearancePreviewSpace() const;
     bool appearancePreviewFits() const;
     void syncAppearancePreview();

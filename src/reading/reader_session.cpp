@@ -1388,6 +1388,30 @@ void ReaderSession::bookmarkLocations(QStringList positions,
             Qt::QueuedConnection);
 }
 
+void ReaderSession::displayedText(int page, std::function<void(QString)> finished)
+{
+    auto engine = engine_;
+    QPointer<ReaderSession> guard(this);
+    const auto lease = lease_;
+    const bool ready = layoutReady_;
+    kobalt::qt::invoke(
+            engineWorker(),
+            [engine, guard, page, finished, lease, ready] {
+                EngineJob activity;
+                QString text;
+                if (ready && lease && !lease->revoked())
+                    text = engine->pageExcerpt(page);
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, text, finished, lease] {
+                            if (guard && guard->lease_ == lease && lease && !lease->revoked())
+                                finished(text);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
 void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> finished)
 {
     auto engine = engine_;

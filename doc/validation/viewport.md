@@ -10,6 +10,8 @@ Desktop builds are sensorless by default. Configure with `KOBALT_DESKTOP_SENSORS
 
 ## Focused runs and captures
 
+`desktop.viewportChanges` also checks that a page turn does not read the page's text for the transition placeholder and that a rotation does. The gallery's transition scene queues the engine hold after the rotation, so the sample arrives and the reflow waits.
+
 Build `kobalt-alternate-layout-tests`, then run `ctest --preset mac -R '^engine.alternate-layout$'` for the alternate-layout check alone. Set `KOBALT_VIEWPORT_VIDEO` to an absolute output directory when you run `desktop.viewportChanges` to capture timestamped PNG frames of the headless desktop window. The recording uses real render timing, and the held-worker check runs after the recording ends.
 
 ## Touch rotation

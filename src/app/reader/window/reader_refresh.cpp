@@ -392,7 +392,6 @@ void Reader::showPageImage(const QImage &nextImage)
     page->setPageAnimationStyle(services.softwarePageAnimations ? pageTurn::selected(preferences)
                                                                 : pageTurn::Style::Off);
     auto displayedImage = nextImage;
-    QPointer<ReaderSession> displayedSource = session;
     if (appearanceEdit.edited() && appearanceEdit.ready() && appearanceEdit.preview()) {
         const auto *preview = appearanceEdit.preview();
         // Opening a panel keeps the current book frame. Use the isolated
@@ -401,7 +400,6 @@ void Reader::showPageImage(const QImage &nextImage)
             || preview->displayedAppearance().settings != session->displayedAppearance().settings
             || preview->image().size() != nextImage.size()) {
             displayedImage = preview->image();
-            displayedSource = appearanceEdit.preview();
         }
     }
     if (displayedImage.cacheKey() != page->image.cacheKey()) {
@@ -419,31 +417,32 @@ void Reader::showPageImage(const QImage &nextImage)
                 ? session->turnDirection()
                 : 0;
     }
-    if (!page->viewportTransition()) {
-        const bool changed = displayedImage.cacheKey() != page->image.cacheKey();
+    if (!page->viewportTransition())
         page->image = std::move(displayedImage);
-        if (changed) {
-            page->setReflowText({});
-            const auto key = page->image.cacheKey();
-            const auto source = displayedSource;
-            // Prepare the sample only after the page is visible. Engine access
-            // stays on the worker thread and never delays this frame's paint.
-            ui::afterNextPaint(page, [this, source, key] {
-                if (!source || source->busy() || page->image.cacheKey() != key
-                    || page->viewportTransition() || lifecycleHidden || closing)
-                    return;
-                const QPointer<Reader> guard(this);
-                source->pageSummary(source->page(), [guard, key](QString, QString text) {
-                    if (guard && guard->page->image.cacheKey() == key
-                        && !guard->page->viewportTransition())
-                        guard->page->setReflowText(text);
-                });
-            });
-        }
-    }
     // Only a turn forward counts towards the session's pace; jumps and reflows do not.
     if (!session->busy())
         book->pace().observe(session->page(), session->turnDirection() > 0);
+}
+
+// The reflow placeholder repeats the word lengths of the displayed page. Read
+// that text only now, when a viewport change is about to show the placeholder:
+// a page turn never asks for it. The engine thread reads it and this thread
+// does not wait; until the answer arrives the placeholder draws plain lines.
+void Reader::sampleReflowText()
+{
+    page->setReflowText({});
+    auto *preview = appearanceEdit.preview();
+    ReaderSession *source =
+            preview && preview->image().cacheKey() == page->image.cacheKey() ? preview : session;
+    if (source->busy() || source->image().cacheKey() != page->image.cacheKey() || lifecycleHidden
+        || closing)
+        return;
+    const auto key = page->image.cacheKey();
+    const QPointer<Reader> guard(this);
+    source->displayedText(source->page(), [guard, key](QString text) {
+        if (guard && guard->page->image.cacheKey() == key && guard->page->viewportTransition())
+            guard->page->setReflowText(text);
+    });
 }
 
 void Reader::paintTurn()

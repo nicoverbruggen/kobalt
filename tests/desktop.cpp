@@ -3611,8 +3611,23 @@ private slots:
         auto *picker = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
         auto *rotate = fixture.window.findChild<QAction *>("desktopRotateDevice");
         QVERIFY(reader && page && picker && rotate);
-        QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
-        const auto sampledWords = page->reflowWordLengths();
+        // A page turn does not read the page's text for the placeholder.
+        const int startPage = fixture.state().value("page").toInt();
+        // The preceding navigation used the same 200 ms input guard.
+        test::skipPageTurnWindow();
+        reader->pageButton(1);
+        QTRY_VERIFY(fixture.state().value("page").toInt() > startPage
+                    && !fixture.state().value("busy").toBool());
+        test::skipPageTurnWindow();
+        reader->pageButton(-1);
+        QTRY_VERIFY(fixture.state().value("page").toInt() == startPage
+                    && !fixture.state().value("busy").toBool());
+        // Let the engine thread answer anything the turns queued.
+        const auto idle = std::make_shared<QSemaphore>();
+        qt::invoke(engineWorker(), [idle] { idle->release(); }, Qt::QueuedConnection);
+        QVERIFY(idle->tryAcquire(1, 10000));
+        QCoreApplication::processEvents();
+        QVERIFY(page->reflowWordLengths().isEmpty());
         const auto position = fixture.state().value("position");
         // Optional real-time capture of the production desktop surface. No
         // worker delay is injected into these rotation, preset or resize steps.
@@ -3648,7 +3663,9 @@ private slots:
         }
         rotate->trigger();
         QVERIFY(page->viewportTransition());
-        QCOMPARE(page->reflowWordLengths(), sampledWords);
+        // The rotation reads the displayed page's text. The answer survives
+        // the reflow that follows it.
+        QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QVERIFY(!page->viewportTransition());
         QCOMPARE(page->image.size(),
@@ -11243,11 +11260,13 @@ private slots:
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         auto *page = dynamic_cast<ReadingPage *>(fixture.widget("rrPage"));
         QVERIFY(page);
-        QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
+        // The rotation queues the read of the page's text. Hold the engine
+        // behind it, so the sample arrives and the reflow waits.
         const auto release = std::make_shared<QSemaphore>();
-        qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
         const auto unblock = qScopeGuard([release] { release->release(); });
         rotate->trigger();
+        qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
+        QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
         QTest::qWait(1100);
         QVERIFY(page->viewportTransition());
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-viewport-transition"));

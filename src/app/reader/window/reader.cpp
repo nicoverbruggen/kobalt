@@ -1362,6 +1362,11 @@ void Reader::paintEvent(QPaintEvent *event)
 
 void Reader::resizeEvent(QResizeEvent *)
 {
+    // This resize shows the reflow placeholder below. Ask for the page's text
+    // first, so the engine thread reads it while this thread lays out the reader.
+    if (isVisible() && !page->image.isNull() && !page->viewportTransition()
+        && bodySize() != page->image.size())
+        sampleReflowText();
     // Paper fills the cutout bands; the page and the menu bars stay inside them.
     const auto safe = safeArea();
     layout()->setContentsMargins(0, safe.top, 0, safe.bottom);

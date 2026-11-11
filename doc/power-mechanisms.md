@@ -62,6 +62,12 @@ The diagnostic log and the profile writer each use their own thread. They wait w
 
 The reader once checked Nickel's state every 250 ms. That poll is gone; the minute tick above is what remains.
 
+## What a page turn does not do
+
+A page turn paints the new page and then lets the rest follow from the event loop. That second pass leaves out work whose result nothing shows:
+
+- The text of the page is not read for the rotation placeholder. A rotation reads it.
+
 ## Wi-Fi
 
 ### When Kobalt turns Wi-Fi on

@@ -195,6 +195,11 @@ public:
     void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                        bool rangeEndpoints = false);
     void pageSummary(int page, std::function<void(QString position, QString excerpt)> finished);
+    // The start of the text on `page` in the layout shown now. A layout that
+    // is requested after this call does not discard the answer, because the
+    // engine thread reads the text before it starts that layout. Call it only
+    // while the session is not busy.
+    void displayedText(int page, std::function<void(QString text)> finished);
     // Renders a bounded thumbnail with saved highlights without moving the reading position. Only
     // the latest request can finish; navigation, reflow and cancellation drop it.
     void previewPage(int page, QSize bounds, std::function<void(QImage)> finished);

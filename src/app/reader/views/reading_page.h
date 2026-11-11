@@ -37,8 +37,8 @@ public:
     };
 
     ReflowLayout reflowLayout;
-    // A short sample from the displayed page, prepared after its first paint.
-    // Lengths are in Unicode characters; transition widths remain estimates.
+    // A short sample from the displayed page, read when a viewport transition
+    // starts. Lengths are in Unicode characters; transition widths remain estimates.
     void setReflowText(const QString &text);
 
     const QVector<int> &reflowWordLengths() const { return wordLengths; }

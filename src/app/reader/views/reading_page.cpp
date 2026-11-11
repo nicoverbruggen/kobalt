@@ -734,6 +734,9 @@ void ReadingPage::setReflowText(const QString &text)
         if (reasons & QTextBoundaryFinder::StartOfItem)
             start = words.position();
     } while (words.toNextBoundary() >= 0 && wordLengths.size() < 64);
+    // The sample arrives while the placeholder is shown.
+    if (changingViewport)
+        update();
 }
 
 void ReadingPage::setViewportTransition(bool active)

@@ -21,6 +21,7 @@
 #include <QPointer>
 #include <QProgressBar>
 #include <QPainter>
+#include <QFontMetricsF>
 #include <QScreen>
 #include <QImageReader>
 #include <QFile>
@@ -228,9 +229,19 @@ public:
         };
         if (!cover->image.isNull() && density(image) < density(cover->image))
             return;
+        const bool logo = !brand->isHidden();
         cover->setImage(std::move(image));
         cover->show();
         showBrand();
+        // The cover's drawn shape decides where the whole group sits. Lay out
+        // again only when that moves something, so an identical or sharper
+        // copy of the cover damages nothing outside the cover itself.
+        const auto nextLift = centringLift();
+        if (logo != !brand->isHidden() || nextLift != lift
+            || placed(coverRect(), nextLift) != cover->geometry()) {
+            layoutWidgets();
+            update();
+        }
     }
 
     ~OpeningDialog() override
@@ -380,7 +391,7 @@ protected:
                 scheduleAfterPaint(std::move(firstPaint));
             }
         }
-        painter.translate(origin());
+        painter.translate(origin() + QPointF(0, lift));
         painter.scale(scale(), scale());
         const auto ink = palette().color(QPalette::WindowText);
         if (cover->image.isNull() && (!fallback || automatic)) {
@@ -398,11 +409,7 @@ protected:
     {
         namespace opening = ui::metrics::opening;
         const auto place = [this](QWidget *widget, const QRectF &rect) {
-            const auto offset = origin();
-            const auto factor = scale();
-            widget->setGeometry(qRound(offset.x() + rect.x() * factor),
-                                qRound(offset.y() + rect.y() * factor),
-                                qRound(rect.width() * factor), qRound(rect.height() * factor));
+            widget->setGeometry(placed(rect, lift));
         };
         const auto textStyle = [this](QLabel *widget, qreal pixels, bool italic, int minimum = 1) {
             const auto font = ui::brandFont(qMax(minimum, qRound(pixels * scale())), italic);
@@ -421,7 +428,8 @@ protected:
         // A caption in capitals, like the reader's other captions.
         ui::captionLabel(hint,
                          qMax(phone ? int(ui::px(22)) : 1, qRound(opening::hintText * scale())));
-        place(cover, opening::cover);
+        lift = centringLift();
+        place(cover, coverRect());
         place(hint, opening::hint);
         progress->setFixedHeight(qMax(1, qRound(opening::progress.height() * scale())));
         place(brand, fallback && !automatic ? opening::failureBrand : opening::brand);
@@ -506,6 +514,41 @@ private:
         });
     }
 
+    // A rectangle in reference units, in pixels on this screen.
+    QRect placed(const QRectF &rect, qreal shift) const
+    {
+        const auto offset = origin() + QPointF(0, shift);
+        const auto factor = scale();
+        return { qRound(offset.x() + rect.x() * factor), qRound(offset.y() + rect.y() * factor),
+                 qRound(rect.width() * factor), qRound(rect.height() * factor) };
+    }
+
+    // The cover as drawn: its own shape fitted to the cover area, resting on
+    // the area's bottom edge so the text below keeps its distance from it.
+    QRectF coverRect() const
+    {
+        const auto area = ui::metrics::opening::cover;
+        if (cover->image.isNull())
+            return area;
+        const auto drawn = QSizeF(cover->image.size()).scaled(area.size(), Qt::KeepAspectRatio);
+        return { area.left(), area.bottom() - drawn.height(), area.width(), drawn.height() };
+    }
+
+    // The vertical shift, in pixels, that centres the visible group on the
+    // screen: from the top of the drawn cover, or of the logo, down to the
+    // baseline of the hint's capitals. The failure card has its own layout.
+    qreal centringLift() const
+    {
+        namespace opening = ui::metrics::opening;
+        if (fallback && !automatic)
+            return 0;
+        const qreal top = cover->image.isNull() ? opening::icon.top() : coverRect().top();
+        const QFontMetricsF metrics(hint->font());
+        const qreal hintBaseline =
+                opening::hint.center().y() * scale() + (metrics.ascent() - metrics.descent()) / 2;
+        return (height() - (2 * origin().y() + top * scale() + hintBaseline)) / 2;
+    }
+
     qreal scale() const
     {
         return qMin(width() / ui::metrics::opening::referenceWidth,
@@ -519,6 +562,7 @@ private:
     }
 
     OpeningCover *cover;
+    qreal lift = 0;
     bool delayed = false;
     std::shared_ptr<CoverRead> coverRead;
     QTimer coverPoll;

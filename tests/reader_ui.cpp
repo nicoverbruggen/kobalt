@@ -3784,6 +3784,24 @@ private slots:
             owner.show();
             view->show();
             QVERIFY(view->findChild<QLabel *>("rrOpeningBrand")->isVisible());
+            {
+                // Without a cover, the group runs from the logo's top to the hint.
+                namespace opening = ui::metrics::opening;
+                const qreal scale = qMin(screen.width() / opening::referenceWidth,
+                                         screen.height() / opening::referenceHeight);
+                auto *brand = view->findChild<QLabel *>("rrOpeningBrand");
+                auto *hint = view->findChild<QLabel *>("rrOpeningHint");
+                const qreal logoTop =
+                        brand->y() - (opening::brand.top() - opening::icon.top()) * scale;
+                const QFontMetricsF metrics(hint->font());
+                const qreal baseline = hint->geometry().center().y() + 0.5
+                        + (metrics.ascent() - metrics.descent()) / 2;
+                QVERIFY2(qAbs((logoTop + baseline) / 2 - screen.height() / 2.0) <= 1.5,
+                         qPrintable(QString("Logo group %1..%2 on %3")
+                                            .arg(logoTop)
+                                            .arg(baseline)
+                                            .arg(screen.height())));
+            }
             for (const QSize size : { QSize(200, 300), QSize(300, 100), QSize(100, 400) }) {
                 // Each shape is a separate opening, not a lower-quality replacement.
                 opening = createEmbeddedOpening(&owner, test::makeHostPresentation);
@@ -3806,19 +3824,35 @@ private slots:
                 QVERIFY(progress->geometry().bottom() < hint->geometry().top());
                 const qreal scale = qMin(screen.width() / ui::metrics::opening::referenceWidth,
                                          screen.height() / ui::metrics::opening::referenceHeight);
-                const QPointF origin(
-                        (screen.width() - ui::metrics::opening::referenceWidth * scale) / 2,
-                        (screen.height() - ui::metrics::opening::referenceHeight * scale) / 2);
                 const auto area = ui::metrics::opening::cover;
-                const auto fit = QSizeF(size).scaled(area.size(), Qt::KeepAspectRatio);
-                const QRectF bounds(
-                        origin
-                                + (area.center() - QPointF(fit.width() / 2, fit.height() / 2))
-                                        * scale,
-                        fit * scale);
+                const auto fit = QSizeF(size).scaled(area.size(), Qt::KeepAspectRatio) * scale;
+                const auto surface = view->findChild<QWidget *>("rrOpeningCover")->geometry();
+                QVERIFY(qAbs(surface.height() - fit.height()) <= 1);
+                const QRectF bounds(surface.center().x() + 0.5 - fit.width() / 2, surface.y(),
+                                    fit.width(), fit.height());
                 const auto pixels = view->grab().toImage();
                 QCOMPARE(pixels.pixelColor(bounds.center().toPoint()), QColor(Qt::red));
-                QVERIFY(bounds.bottom() < label->y());
+                // The text keeps its distance from the cover's bottom edge,
+                // whatever the cover's shape.
+                const qreal gap =
+                        (ui::metrics::opening::label.center().y() - area.bottom()) * scale;
+                QVERIFY2(qAbs(label->geometry().center().y() + 0.5 - (bounds.bottom() + gap)) <= 3,
+                         qPrintable(QString("Label centre %1, cover bottom %2, gap %3 on %4x%5")
+                                            .arg(label->geometry().center().y())
+                                            .arg(bounds.bottom())
+                                            .arg(gap)
+                                            .arg(screen.width())
+                                            .arg(screen.height())));
+                // From the cover's top to the baseline of the hint's capitals,
+                // the group is centred on the screen.
+                const QFontMetricsF metrics(hint->font());
+                const qreal baseline = hint->geometry().center().y() + 0.5
+                        + (metrics.ascent() - metrics.descent()) / 2;
+                QVERIFY2(qAbs((bounds.top() + baseline) / 2 - screen.height() / 2.0) <= 1.5,
+                         qPrintable(QString("Group %1..%2 on %3")
+                                            .arg(bounds.top())
+                                            .arg(baseline)
+                                            .arg(screen.height())));
                 QCOMPARE(pixels.pixelColor(
                                  QPoint(qRound(bounds.left()) - 2, qRound(bounds.center().y()))),
                          view->palette().color(QPalette::Window));
@@ -4094,7 +4128,11 @@ private slots:
         const auto bounds = hint->geometry();
         const auto group = surface->geometry().united(bounds);
         QVERIFY(qAbs(group.center().x() - view->rect().center().x()) <= 1);
-        QVERIFY(qAbs(group.center().y() - view->rect().center().y()) <= 1);
+        // From the cover's top to the baseline of the hint's capitals.
+        const QFontMetricsF metrics(hint->font());
+        const qreal baseline =
+                bounds.center().y() + 0.5 + (metrics.ascent() - metrics.descent()) / 2;
+        QVERIFY(qAbs((surface->y() + baseline) / 2 - view->height() / 2.0) <= 1.5);
         QTRY_COMPARE_WITH_TIMEOUT(
                 hint->text(), QLocale().toUpper(strings::get("opening.may_take_a_while")), 5000);
         QCOMPARE(hint->geometry(), bounds);

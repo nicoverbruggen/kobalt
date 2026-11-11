@@ -152,14 +152,43 @@ void updatePrerendering()
     nh_log("reader: background prerendering %s", next ? "suppressed" : "returned to native policy");
 }
 
-bool setAlternativeEnabled(bool on)
+// The reader choice changes only on a user's tap: on Kobalt's Settings >
+// System or on Nickel's Reading Settings. Log which one, so a book opening
+// in the other reader can be traced back to the tap.
+void logReaderChoice(bool previous, bool on, const char *source)
+{
+    if (previous != on)
+        kobalt::diagnostic(
+                "setting-changed",
+                kobalt::qt::object({ { "setting", QStringLiteral("open_books_in_kobalt") },
+                                     { "previous", previous },
+                                     { "value", on },
+                                     { "source", QString::fromLatin1(source) } }),
+                kobalt::DiagnosticSeverity::Activity);
+}
+
+bool setAlternativeEnabled(bool on, const char *source)
 {
     auto config = readJson(selectionPath);
+    // Reuse this read for the log. An empty object is a missing file, which
+    // means Kobalt opens books, as alternativeEnabled() treats it.
+    const bool previous = config.value("enabled").toBool(config.isEmpty());
     config["enabled"] = on;
     if (!writeJson(selectionPath, config))
         return false;
+    logReaderChoice(previous, on, source);
     updatePrerendering();
     return true;
+}
+
+bool setAlternativeFromKobalt(bool on)
+{
+    return setAlternativeEnabled(on, "kobalt");
+}
+
+bool setAlternativeFromNickel(bool on)
+{
+    return setAlternativeEnabled(on, "nickel");
 }
 
 extern "C" __attribute__((visibility("default"))) void kobalt_settings_constructor(QWidget *view,
@@ -168,7 +197,7 @@ extern "C" __attribute__((visibility("default"))) void kobalt_settings_construct
     settingsConstructor(view, parent);
     if (!settingsReady)
         return;
-    kobalt::installNativeReaderSetting(view, alternativeEnabled, setAlternativeEnabled);
+    kobalt::installNativeReaderSetting(view, alternativeEnabled, setAlternativeFromNickel);
 }
 #ifdef KOBALT_READER_HARDWARE
 #  ifdef KOBALT_READER_TEMPORARY
@@ -376,7 +405,7 @@ public:
         }
         CoordinatorBindings bindings{ enabled };
         bindings.automaticBookOpening = alternativeEnabled;
-        bindings.setAutomaticBookOpening = setAlternativeEnabled;
+        bindings.setAutomaticBookOpening = setAlternativeFromKobalt;
         auto *candidate = new ReaderCoordinator(environment(), bindings, qApp);
         if (!candidate->available() || reentered) {
             delete candidate;

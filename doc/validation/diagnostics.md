@@ -6,6 +6,12 @@ Label `diagnostics`. Build `mac-tests`, then run `ctest --preset mac -L diagnost
 
 These checks cover the diagnostic log, its batches and limits, descriptor-exhaustion reports, crash reports, the storage diagnostics in the desktop app and the Kobo standby input guard and diagnostics. `platform.standby-input` and `platform.standby-diagnostics` run the Kobo standby code with injected reads, writes and hooks, in processes with and without verbose diagnostics. [Page-turn diagnostics](#page-turn-diagnostics) describes the events that these checks protect.
 
+## Setting changes
+
+Normal logging, as in release builds, writes one `setting-changed` event for each reader setting that a user changes. `setting` names the preference key. `previous` and `value` hold the old and new values when they are true/false, numbers or short lowercase choice tokens such as `bold` or `smart`. Other text values, such as font names, are logged by key only, so the log keeps no input text. `restore_defaults` marks changes made by Restore defaults. The open-books-in-Kobalt choice in `config.json` is logged as `open_books_in_kobalt`, with `source` set to `kobalt` for Kobalt's Settings > System or `nickel` for Nickel's Reading Settings. A key that the preferences file did not hold yet is not logged, because the first save of Settings writes every key. A value that Settings corrects while it saves, such as an unavailable font, is logged as a change. Events are queued to the logging worker; the main thread does not wait for the log.
+
+`desktop.settingChangesLogged` turns on Zen mode, the Zen reading stats and Bold reading, and checks that each one is logged once with its old and new value, that unchanged keys are not logged and that no logged value is free text. The Kobo reader-choice event needs a device or VirtualNickel.
+
 ## Crash reports
 
 `model.crash-reports` crashes child processes. Register capture and stack scanning for ARM Linux run only on a Kobo, so read a report on a device after a crash to check them. On Linux, software-generated signals record the sender PID and UID, and synchronous faults record the fault address. Reports cannot capture `SIGKILL`.

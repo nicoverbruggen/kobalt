@@ -8251,6 +8251,83 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.window.readerWindow());
     }
 
+    // Checks that a user's setting changes are logged per key, without free-text values.
+    void settingChangesLogged()
+    {
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        kobalt::initializeDiagnostics(logs.path());
+        QMutex mutex;
+        QVector<QJsonObject> changes;
+        kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event").toString() != QLatin1String("setting-changed"))
+                return;
+            QMutexLocker lock(&mutex);
+            changes.append(event);
+        });
+        const auto change = [&](const char *setting) {
+            QMutexLocker lock(&mutex);
+            for (const auto &event : changes)
+                if (event.value("setting").toString() == QLatin1String(setting))
+                    return event;
+            return QJsonObject();
+        };
+        {
+            Fixture fixture;
+            QVERIFY(fixture.prepared);
+            // The keys exist, as after any earlier save of Settings.
+            QVERIFY(storage::writeJson(
+                    fixture.paths.preferences(),
+                    { { "zen_mode", false }, { "zen_stats", false }, { "bold_reading", "off" } }));
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE(opened.count(), 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrSettings"));
+            QVERIFY(fixture.press("rrSettings"));
+            QTRY_VERIFY(fixture.visible("rrZenMode"));
+            QVERIFY(fixture.press("rrZenMode"));
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QTRY_VERIFY(!change("zen_mode").isEmpty());
+            const auto zen = change("zen_mode");
+            QCOMPARE(zen.value("previous").toBool(true), false);
+            QCOMPARE(zen.value("value").toBool(false), true);
+            QVERIFY(!zen.contains("restore_defaults"));
+            // Keys that did not change are not logged.
+            QVERIFY(change("bold_reading").isEmpty());
+
+            // A switch saved on the writer thread is logged too.
+            QTRY_VERIFY(fixture.visible("rrZenStats"));
+            QVERIFY(fixture.press("rrZenStats"));
+            QTRY_VERIFY(!change("zen_stats").isEmpty());
+            QCOMPARE(change("zen_stats").value("value").toBool(false), true);
+
+            // A choice token is logged with its values.
+            QVERIFY(fixture.press("rrSettings"));
+            QTRY_VERIFY(fixture.visible("rrBionicReading"));
+            QVERIFY(fixture.press("rrBionicReading"));
+            QTRY_VERIFY(!change("bold_reading").isEmpty());
+            const auto bold = change("bold_reading");
+            QCOMPARE(bold.value("previous").toString(), QStringLiteral("off"));
+            QCOMPARE(bold.value("value").toString(), QStringLiteral("bold"));
+
+            // No logged value is free text.
+            static const QRegularExpression token(QStringLiteral("^[a-z0-9_-]{1,32}$"));
+            QMutexLocker lock(&mutex);
+            for (const auto &event : changes)
+                for (const char *field : { "previous", "value" }) {
+                    const auto value = event.value(QLatin1String(field));
+                    QVERIFY2(!value.isString() || token.match(value.toString()).hasMatch(),
+                             qPrintable(event.value("setting").toString()));
+                }
+        }
+        kobalt::setDiagnosticObserver({});
+        kobalt::pauseDiagnostics(true);
+    }
+
     // Checks the shared list and toolbar when either marks feature is hidden independently.
     void settingsFeatureLists_data()
     {

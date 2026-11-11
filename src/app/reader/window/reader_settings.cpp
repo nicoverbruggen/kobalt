@@ -20,6 +20,7 @@
 #include "app/reader/settings/style_illustrations.h"
 #include "assets/bundled_fonts.h"
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QFontDatabase>
 
 namespace kobalt::reader {
@@ -32,6 +33,39 @@ using kobalt::ui::ControlIcon;
 using kobalt::ui::readerStyle;
 
 namespace {
+// A user changed these reader settings. Each changed key is one
+// `setting-changed` event, so a surprising behavior can be traced back to a
+// tap. Values are logged for true/false, numbers and short lowercase choice
+// tokens such as "bold" or "smart". Other text, such as font names, is logged
+// by key only: logs keep no input text. A key the file did not hold yet is
+// skipped: the first save of Settings writes every key, mostly defaults the
+// reader never touched. Later saves compare every key.
+void logSettingChanges(const QJsonObject &previous, const QJsonObject &next, bool defaults = false)
+{
+    const auto loggable = [](const QJsonValue &value) {
+        static const QRegularExpression token(QStringLiteral("^[a-z0-9_-]{1,32}$"));
+        return value.isBool() || value.isDouble()
+                || (value.isString() && token.match(value.toString()).hasMatch());
+    };
+    for (auto it = next.begin(); it != next.end(); ++it) {
+        const auto before = previous.value(it.key());
+        const auto after = it.value();
+        if (before == after)
+            continue;
+        if (before.isUndefined())
+            continue;
+        QJsonObject fields;
+        fields["setting"] = it.key();
+        if (loggable(before))
+            fields["previous"] = before;
+        if (loggable(after))
+            fields["value"] = after;
+        if (defaults)
+            fields["restore_defaults"] = true;
+        kobalt::diagnostic("setting-changed", fields, kobalt::DiagnosticSeverity::Activity);
+    }
+}
+
 QStringList fallbackFontDefaults(const QStringList &families)
 {
     return { QString(defaultFontFace),
@@ -620,6 +654,9 @@ void Reader::saveButtonControls(const QJsonObject &actions)
     appearance::rememberTextLayout(next, session->state());
     appearance::rememberPageMargins(next, session->state());
     next[pageButtons::preferenceKey] = actions;
+    logSettingChanges(qt::object({ { pageButtons::preferenceKey,
+                                     preferences.value(pageButtons::preferenceKey).toObject() } }),
+                      qt::object({ { pageButtons::preferenceKey, actions } }));
     savingButtonControls = true;
     static_cast<SettingsPanel *>(general)->buttonControlsButton->setEnabled(false);
     if (!preferencesWriter)
@@ -666,6 +703,7 @@ bool Reader::writePreferences(const QJsonObject &next)
         showSettingsWriteError();
         return false;
     }
+    logSettingChanges(preferences, next, restoringDefaults);
     return true;
 }
 
@@ -836,6 +874,8 @@ void Reader::toggleZenStats()
     // The panel changes at once. The choice is saved on the writer thread,
     // so the main thread never waits for storage while the menu is open.
     const bool shown = !preferences.value("zen_stats").toBool(false);
+    logSettingChanges(qt::object({ { "zen_stats", !shown } }),
+                      qt::object({ { "zen_stats", shown } }));
     preferences["zen_stats"] = shown;
     auto next = appearance::globalPreferences(preferences);
     appearance::rememberTextLayout(next, session->state());
@@ -874,6 +914,8 @@ void Reader::applyDarkMode(bool enabled)
     appearance::rememberTextLayout(next, session->state());
     appearance::rememberPageMargins(next, session->state());
     next["dark_mode"] = enabled;
+    logSettingChanges(qt::object({ { "dark_mode", preferences.value("dark_mode").toBool(false) } }),
+                      qt::object({ { "dark_mode", enabled } }));
     savingDarkMode = enabled;
     if (!preferencesWriter)
         preferencesWriter = std::make_unique<storage::RecordWriter>();

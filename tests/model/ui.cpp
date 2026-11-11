@@ -2683,6 +2683,42 @@ int main(int argc, char **argv)
             }
             host.hide();
         }
+    // "Currently:" and its value stay whole, apart and on one line when the
+    // text is too wide for the caption column, as "11.5 pt" is at 150% text.
+    for (const qreal scale : { 1.0, 1.5 }) {
+        using namespace kobalt::ui;
+        const qreal originalScale = textScale();
+        setLargeText(scale);
+        QWidget host;
+        host.resize(1072, 1448);
+        readerStyle(&host, styles::reader());
+        auto *rows = new QVBoxLayout(&host);
+        rows->setContentsMargins(metrics::panel::contentMargins);
+        sliderRow(&host, rows, "size", "size-value", "Text size", "less", "more", 12, 96, 1, {});
+        rows->addStretch(1);
+        auto *prefix = host.findChild<QLabel *>("sizeCurrentPrefix");
+        auto *value = host.findChild<QLabel *>("size-value");
+        require(prefix && value, "The slider row has no Currently line");
+        value->setText("11.5 pt");
+        host.show();
+        app.processEvents();
+        require(!host.findChild<QWidget *>("size")
+                         ->parentWidget()
+                         ->property("caption_stacked")
+                         .toBool(),
+                "The slider row stacked its caption on a six-inch screen");
+        require(prefix->width() >= prefix->sizeHint().width(),
+                "The Currently prefix is narrower than its text, which clips the colon");
+        require(value->width() >= value->sizeHint().width(),
+                "The current value is narrower than its text");
+        require(value->x() >= prefix->geometry().right() + 1 + px(6),
+                "The current value has no gap after the Currently prefix");
+        require(prefix->y() == value->y(), "Currently and its value are not on one line");
+        require(prefix->parentWidget()->rect().contains(value->geometry()),
+                "The current value leaves the caption");
+        host.hide();
+        setLargeText(originalScale);
+    }
     {
         using namespace kobalt::ui;
         BackButton back("Back", nullptr);

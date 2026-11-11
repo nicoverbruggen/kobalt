@@ -471,8 +471,11 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name,
     auto *caption = row->caption();
     auto *captionRows = new QVBoxLayout(caption);
     const int labelHeight = markerLabels.isEmpty() ? 0 : int(metrics::control::sliderLabelHeight);
-    captionRows->setContentsMargins(0, labelHeight, metrics::control::captionRight, 0);
+    captionRows->setContentsMargins(0, labelHeight, 0, 0);
     row->setMarkerBand(labelHeight);
+    // The caption includes the gap before the controls. The title keeps it
+    // free; the "Currently:" line below may use it.
+    row->setCaptionOverhang(true);
     captionRows->setSpacing(px(2));
     auto *heading = new QHBoxLayout;
     heading->setContentsMargins(0, 0, 0, 0);
@@ -502,16 +505,22 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name,
     // even when the row gives them different heights.
     for (auto *part : { prefixLabel, value })
         part->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    // "Currently:" keeps the width of its text. A label that may shrink loses
+    // its colon when the line is too wide for the caption, as "Currently:
+    // 11.5 pt" is at 150% text. The line then takes the room it needs from
+    // the caption's right margin and the gap before the controls.
+    prefixLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     current->addWidget(prefixLabel, 0, Qt::AlignTop);
     current->addWidget(value, 0, Qt::AlignTop);
     current->addStretch(1);
     // A caption above the controls has the full width. Its value moves up
     // beside the title, which keeps the row one line shorter.
-    row->stackedChanged = [captionRows, heading, current, prefixLabel, value](bool stacked) {
+    row->stackedChanged = [heading, current, prefixLabel, value](bool stacked) {
         // Above the controls, the value ends at the plus button's edge.
-        auto margins = captionRows->contentsMargins();
-        margins.setRight(stacked ? 0 : int(metrics::control::captionRight));
-        captionRows->setContentsMargins(margins);
+        // Beside them, the title stays clear of the controls.
+        heading->setContentsMargins(
+                0, 0, stacked ? 0 : int(metrics::control::captionRight + metrics::control::itemGap),
+                0);
         // Collapse "Currently:" rather than hide it: some rows hide it
         // themselves, and that choice must survive the move. It takes no
         // height either, so the emptied second line adds no gap.

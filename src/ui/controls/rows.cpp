@@ -590,10 +590,23 @@ void ControlRow::setMarkerBand(int height)
     arrange(width());
 }
 
+void ControlRow::setCaptionOverhang(bool enabled)
+{
+    if (overhang == enabled)
+        return;
+    overhang = enabled;
+    arrange(width());
+}
+
+int ControlRow::captionWidth() const
+{
+    return metrics::control::captionWidth + (overhang ? int(metrics::control::itemGap) : 0);
+}
+
 int ControlRow::heightForWidth(int width) const
 {
     const bool compact = stackedAt(width);
-    const int captionWidth = compact ? width : int(metrics::control::captionWidth);
+    const int captionWidth = compact ? width : this->captionWidth();
     const auto measure = [](QLayout *layout, int width) {
         return !layout                        ? 0
                 : layout->hasHeightForWidth() ? layout->totalHeightForWidth(qMax(1, width))
@@ -604,7 +617,8 @@ int ControlRow::heightForWidth(int width) const
             - (captionLayout ? captionLayout->contentsMargins().top() : 0)
             + (compact ? 0 : markerBand);
     const int controlsHeight = measure(
-            controlLayout, compact ? width : width - captionWidth - metrics::control::itemGap);
+            controlLayout,
+            compact ? width : width - metrics::control::captionWidth - metrics::control::itemGap);
     return compact ? captionHeight + metrics::control::itemGap + controlsHeight
                    : qMax(captionHeight, controlsHeight);
 }
@@ -642,8 +656,8 @@ void ControlRow::arrange(int width)
     setProperty("caption_stacked", stacked);
     if (stacked != wasStacked && stackedChanged)
         stackedChanged(stacked);
-    captionArea->setMinimumWidth(stacked ? 0 : int(metrics::control::captionWidth));
-    captionArea->setMaximumWidth(stacked ? QWIDGETSIZE_MAX : int(metrics::control::captionWidth));
+    captionArea->setMinimumWidth(stacked ? 0 : captionWidth());
+    captionArea->setMaximumWidth(stacked ? QWIDGETSIZE_MAX : captionWidth());
     if (auto *rows = captionArea->layout()) {
         auto margins = rows->contentsMargins();
         margins.setTop(stacked ? 0 : markerBand);
@@ -654,6 +668,8 @@ void ControlRow::arrange(int width)
     grid->removeWidget(controlArea);
     grid->addWidget(captionArea, 0, 0, 1, stacked ? 2 : 1);
     grid->addWidget(controlArea, stacked ? 1 : 0, stacked ? 0 : 1, 1, stacked ? 2 : 1);
+    // A caption with an overhang contains the gap before the controls.
+    grid->setHorizontalSpacing(!stacked && overhang ? 0 : int(metrics::control::itemGap));
     grid->setColumnStretch(0, stacked ? 1 : 0);
     grid->setColumnStretch(1, stacked ? 0 : 1);
     updateGeometry();

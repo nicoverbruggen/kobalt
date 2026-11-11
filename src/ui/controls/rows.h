@@ -171,6 +171,12 @@ public:
     QHBoxLayout *controls() const { return controlLayout; }
 
     void setMarkerBand(int height);
+    // Gives the caption the gap before the controls as well. The caption's
+    // own layout then keeps that gap free, except for a line that may need
+    // it, such as a slider's "Currently:" line at 150% text.
+    void setCaptionOverhang(bool enabled);
+    // The caption's width beside the controls.
+    int captionWidth() const;
     // Called when the caption moves above the controls or back beside them.
     std::function<void(bool stacked)> stackedChanged;
 
@@ -191,7 +197,7 @@ private:
     QWidget *captionArea, *controlArea;
     QHBoxLayout *controlLayout;
     int markerBand = 0;
-    bool stacked = false;
+    bool stacked = false, overhang = false;
     static bool stackedAt(int width);
     void arrange(int width);
 };

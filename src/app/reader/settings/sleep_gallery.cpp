@@ -326,9 +326,15 @@ QImage SleepGallery::preview(const Entry &entry, QSize size)
         // Kobo owns the real screen; these proportions represent its current cover options.
         painter.fillRect(image.rect(), Qt::white);
         painter.setPen(Qt::black);
-        QFont font(QStringLiteral("Libron"));
-        font.setPixelSize(qMax(1, qRound(size.width() * 0.05)));
-        painter.setFont(font);
+        // Kobalt's interface font stands in for Kobo's. The bundled faces are
+        // private on Kobo, so a family name alone would draw a fallback font.
+        const auto font = [&](qreal share) {
+            painter.setFont(ui::interfaceFont(qMax(1, qRound(size.width() * share))));
+        };
+        font(0.05);
+        const auto draw = [&](const QRectF &area, Qt::Alignment alignment, const QString &value) {
+            ui::drawSegmentPrivateText(painter, area.toAlignedRect(), value, alignment);
+        };
         const QString status = sleepStatusText(SleepStatus::Sleeping);
         const bool showCover = native_.showCover && !cover_.isNull();
         if (showCover && native_.fullScreen) {
@@ -341,32 +347,28 @@ QImage SleepGallery::preview(const Entry &entry, QSize size)
                 painter.setPen(QPen(Qt::black, qMax<qreal>(0.5, size.width() / 1072.0)));
                 const qreal inset = size.width() * 0.02;
                 painter.drawRect(panel.adjusted(-1, inset, -inset, -inset));
-                painter.drawText(
-                        panel.adjusted(size.width() * 0.06, inset, -inset, -panel.height() * 0.45),
-                        Qt::AlignLeft | Qt::AlignVCenter, status);
-                font.setPixelSize(qMax(1, qRound(size.width() * 0.032)));
-                painter.setFont(font);
-                painter.drawText(
-                        panel.adjusted(size.width() * 0.06, panel.height() * 0.55, -inset, -inset),
-                        Qt::AlignLeft | Qt::AlignVCenter, sample_.progress);
+                draw(panel.adjusted(size.width() * 0.06, inset, -inset, -panel.height() * 0.45),
+                     Qt::AlignLeft | Qt::AlignVCenter, status);
+                font(0.032);
+                draw(panel.adjusted(size.width() * 0.06, panel.height() * 0.55, -inset, -inset),
+                     Qt::AlignLeft | Qt::AlignVCenter, sample_.progress);
             }
         } else if (showCover) {
-            painter.drawText(QRectF(0, size.height() * 0.025, size.width(), size.height() * 0.06),
-                             Qt::AlignCenter, status);
+            draw(QRectF(0, size.height() * 0.025, size.width(), size.height() * 0.06),
+                 Qt::AlignCenter, status);
             const QRect room(qRound(size.width() * 0.12), qRound(size.height() * 0.12),
                              qRound(size.width() * 0.76), qRound(size.height() * 0.79));
             const QSize fitted = cover_.size().scaled(room.size(), Qt::KeepAspectRatio);
             painter.drawImage(
                     QRect(room.center() - QPoint(fitted.width() / 2, fitted.height() / 2), fitted),
                     cover_);
-            font.setPixelSize(qMax(1, qRound(size.width() * 0.032)));
-            painter.setFont(font);
-            painter.drawText(QRectF(0, size.height() * 0.94, size.width(), size.height() * 0.04),
-                             Qt::AlignCenter, sample_.progress);
+            font(0.032);
+            draw(QRectF(0, size.height() * 0.94, size.width(), size.height() * 0.04),
+                 Qt::AlignCenter, sample_.progress);
         } else {
-            painter.drawText(QRectF(size.width() * 0.11, size.height() * 0.82, size.width() * 0.78,
-                                    size.height() * 0.07),
-                             Qt::AlignLeft | Qt::AlignVCenter, status);
+            draw(QRectF(size.width() * 0.11, size.height() * 0.82, size.width() * 0.78,
+                        size.height() * 0.07),
+                 Qt::AlignLeft | Qt::AlignVCenter, status);
         }
     } else {
         auto shot = sample_;

@@ -28,6 +28,7 @@ enum class Design {
     Widgets,
     Night,
     Ring,
+    Framed,
     Lines,
     Letter,
     Page,
@@ -173,7 +174,8 @@ inline constexpr Design designs[] = { Design::Stock,     Design::Page,   Design:
                                       Design::Card,      Design::Cover,  Design::Seal,
                                       Design::Medallion, Design::Pill,   Design::Caption,
                                       Design::Widgets,   Design::Night,  Design::Ring,
-                                      Design::Lines,     Design::Letter, Design::Overlay };
+                                      Design::Framed,    Design::Lines,  Design::Letter,
+                                      Design::Overlay };
 inline constexpr auto designKey = "sleep_design";
 // The Night screen's own greeting. Long-pressing Night in the gallery sets it.
 inline constexpr auto greetingKey = "sleep_greeting";
@@ -204,6 +206,8 @@ inline QString value(Design design)
         return QStringLiteral("night");
     case Design::Ring:
         return QStringLiteral("ring");
+    case Design::Framed:
+        return QStringLiteral("framed");
     case Design::Lines:
         return QStringLiteral("lines");
     case Design::Letter:

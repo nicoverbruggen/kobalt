@@ -65,6 +65,12 @@ Palette palette(bool dark)
              dark ? QColor(0x3a3a3a) : QColor(0xd8d8d8) };
 }
 
+// Designs that draw the book's cover themselves, on paper.
+bool drawsCover(Design design)
+{
+    return design == Design::Widgets || design == Design::Framed;
+}
+
 struct Content
 {
     const sleep::Snapshot &shot;
@@ -480,7 +486,7 @@ void paintPill(QPainter &painter, const Frame &frame, const Content &content, co
     rule(x);
     x += gap;
     const auto read = strings::get("sleep.percent_read").arg(content.shot.percent);
-    label(read, colors.gray);
+    label(read, colors.ink);
     x += ui::interfaceTextWidth(read, font);
     if (content.charging()) {
         rule(x);
@@ -654,7 +660,7 @@ void paintWidgets(QPainter &painter, const Frame &frame, const Content &content,
     const QFont label = mono(1.9 * u, 0.2);
     const qreal textLeft = layout.cover.right() + 4 * u;
     const qreal textWidth = layout.book.right() - pad - textLeft;
-    text(painter, label, colors.gray,
+    text(painter, label, colors.ink,
          QRectF(textLeft, layout.labelTop, textWidth, lineHeight(label)),
          strings::get("sleep.now_reading").toUpper());
     drawBlock(painter, *layout.title, QPointF(textLeft, layout.titleTop), colors.ink);
@@ -669,7 +675,7 @@ void paintWidgets(QPainter &painter, const Frame &frame, const Content &content,
     const auto tileText = [&](const QRectF &tile, const QString &caption, const QString &value) {
         const qreal x = tile.left() + pad;
         qreal y = tile.top() + pad;
-        text(painter, label, colors.gray, QRectF(x, y, tile.width() - 2 * pad, lineHeight(label)),
+        text(painter, label, colors.ink, QRectF(x, y, tile.width() - 2 * pad, lineHeight(label)),
              caption.toUpper());
         y += lineHeight(label);
         text(painter, figure, colors.ink, QRectF(x, y, tile.width() - 2 * pad, lineHeight(figure)),
@@ -914,6 +920,74 @@ QVector<QRect> ringAreas(const Frame &frame, QSize size)
                      .toAlignedRect() };
 }
 
+// ---------------------------------------------------------------- Framed
+
+// The cover on paper with the status under it, so nothing covers the art.
+struct FramedLayout
+{
+    QRectF room, word, detail, battery;
+};
+
+FramedLayout framedLayout(const Frame &frame)
+{
+    const QFont word = serif(7 * frame.u), detail = sans(3 * frame.u);
+    FramedLayout layout;
+    layout.room = QRectF(frame.x(14), frame.y(7), 72 * frame.u, 69 * frame.v);
+    layout.word = QRectF(frame.box.left(), frame.y(79), frame.box.width(), lineHeight(word));
+    layout.detail = QRectF(frame.x(8), layout.word.bottom() + 0.6 * frame.v, 84 * frame.u,
+                           lineHeight(detail));
+    layout.battery = QRectF(frame.box.left(), frame.bottom(5) - lineHeight(detail),
+                            frame.box.width(), lineHeight(detail));
+    return layout;
+}
+
+void paintFramed(QPainter &painter, const Frame &frame, const Content &content, QSize size,
+                 const QImage &cover, const Palette &colors)
+{
+    const auto layout = framedLayout(frame);
+    paper(painter, size, colors);
+    // A coverless book keeps a cover-shaped space, so the status stays put.
+    const QSizeF shape = cover.isNull() ? QSizeF(2, 3) : QSizeF(cover.size());
+    const QSizeF fitted = shape.scaled(layout.room.size(), Qt::KeepAspectRatio);
+    const QRectF art(layout.room.center() - QPointF(fitted.width() / 2, fitted.height() / 2),
+                     fitted);
+    if (cover.isNull())
+        painter.fillRect(art, colors.soft);
+    else
+        painter.drawImage(art, cover);
+    // A hairline keeps a white cover's edge visible on the paper.
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(colors.gray, qMax<qreal>(1, 0.2 * frame.u)));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(art);
+    painter.restore();
+    text(painter, serif(7 * frame.u), colors.ink, layout.word, content.word(),
+         Qt::AlignHCenter | Qt::AlignVCenter);
+    const QFont detail = sans(3 * frame.u);
+    QString line = content.shot.progress;
+    if (!content.shot.remaining.isEmpty())
+        line += QStringLiteral(" · ") + content.shot.remaining;
+    text(painter, detail, colors.ink, layout.detail,
+         ui::elideInterfaceText(line, detail, qRound(layout.detail.width())),
+         Qt::AlignHCenter | Qt::AlignVCenter);
+    if (content.charging()) {
+        const qreal width = batteryWidth(detail, content.battery);
+        battery(painter, detail, colors.ink, colors.paper,
+                QPointF(frame.box.center().x() - width / 2, layout.battery.center().y()),
+                content.battery, true);
+    }
+}
+
+QVector<QRect> framedAreas(const Frame &frame, QSize size)
+{
+    const auto layout = framedLayout(frame);
+    return { QRectF(0, layout.word.top() - 2, size.width(), layout.word.height() + 4)
+                     .toAlignedRect(),
+             QRectF(0, layout.battery.top() - 2, size.width(), layout.battery.height() + 4)
+                     .toAlignedRect() };
+}
+
 // ---------------------------------------------------------------- C14
 
 struct LinesLayout
@@ -1005,9 +1079,9 @@ void paintLines(QPainter &painter, const Frame &frame, const Content &content, Q
                      colors.ink);
     const QFont footer = mono(2.1 * frame.u, 0);
     const qreal footerTop = frame.bottom(5) - lineHeight(footer);
-    text(painter, footer, colors.gray, QRectF(left, footerTop, width / 2, lineHeight(footer)),
+    text(painter, footer, colors.ink, QRectF(left, footerTop, width / 2, lineHeight(footer)),
          ui::elideInterfaceText(content.shot.details.title, footer, qRound(width / 2)));
-    text(painter, footer, colors.gray,
+    text(painter, footer, colors.ink,
          QRectF(left + width / 2, footerTop, width / 2, lineHeight(footer)), content.shot.remaining,
          Qt::AlignRight | Qt::AlignVCenter);
 }
@@ -1029,10 +1103,12 @@ constexpr qreal letterLeading = 2.0;
 constexpr qreal letterSize = 4.0;
 
 // The figures in the letter are marked like highlights: paper on ink, which
-// inverts with the theme. Spacing belongs outside the highlight.
+// inverts with the theme. Rich text has no padding, so a no-break space inside
+// each side pads the highlight; thin spaces outside it keep it off the words.
 QString mark(const QString &value, const Palette &colors)
 {
-    return QStringLiteral("&#8201;<span style=\"background-color:%1;color:%2\">%3</span>&#8201;")
+    return QStringLiteral("&#8201;<span style=\"background-color:%1;color:%2\">&nbsp;%3&nbsp;"
+                          "</span>&#8201;")
             .arg(colors.ink.name(), colors.paper.name(), escaped(value));
 }
 
@@ -1198,6 +1274,9 @@ void paintDesign(QPainter &painter, QSize size, const sleep::Snapshot &shot, con
     case Design::Ring:
         paintRing(painter, frame, content, size, colors);
         break;
+    case Design::Framed:
+        paintFramed(painter, frame, content, size, cover, colors);
+        break;
     case Design::Lines:
         paintLines(painter, frame, content, size, colors);
         break;
@@ -1242,7 +1321,7 @@ QImage sleepDesignImage(QImage backdrop, const sleep::Snapshot &source, int batt
     }
     if (underlay)
         *underlay = sleepStatusUnderlay(backdrop, sleepStatusAreas(backdrop.size(), snapshot));
-    const QImage cover = snapshot.design == Design::Widgets && !snapshot.coverArea.isEmpty()
+    const QImage cover = drawsCover(snapshot.design) && !snapshot.coverArea.isEmpty()
             ? backdrop.copy(snapshot.coverArea)
             : QImage();
     QPainter painter(&backdrop);
@@ -1285,6 +1364,9 @@ QVector<QRect> sleepStatusAreas(QSize size, const sleep::Snapshot &source)
         break;
     case Design::Ring:
         areas = ringAreas(frame, size);
+        break;
+    case Design::Framed:
+        areas = framedAreas(frame, size);
         break;
     case Design::Lines:
         areas = linesAreas(frame, snapshot, size);
@@ -1391,7 +1473,7 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
                        SleepStatus::Sleeping, snapshot.tile, snapshot.percent);
     } else {
         QImage tileCover;
-        if (snapshot.design == Design::Widgets)
+        if (drawsCover(snapshot.design))
             tileCover = cover;
         paintGround(painter, size, shot);
         paintDesign(painter, size, shot, tileCover, -1, SleepStatus::Sleeping);

@@ -4074,7 +4074,7 @@ private slots:
         QTest::addColumn<QString>("design");
         QTest::addColumn<bool>("landscape");
         QTest::addColumn<bool>("dark");
-        for (const auto *design : { "seal", "medallion", "pill", "caption", "widgets" })
+        for (const auto *design : { "seal", "medallion", "pill", "caption", "widgets", "framed" })
             for (const bool landscape : { false, true })
                 for (const bool dark : { false, true }) {
                     const auto name = QString::fromLatin1(design)
@@ -4911,9 +4911,9 @@ private slots:
                 QVERIFY(click(canvas,
                               host.window()->findChild<QPushButton *>("rrSleepGalleryNext")));
         }
-        // PNG over text is the third entry on the last page. Without PNGs it is
+        // PNG over text is the fourth entry on the last page. Without PNGs it is
         // unavailable, and a tap explains where to add them.
-        const auto cell = QPoint(grid->width() / 4, grid->height() * 3 / 4);
+        const auto cell = QPoint(grid->width() * 3 / 4, grid->height() * 3 / 4);
         QVERIFY(clickAt(canvas, grid->mapTo(canvas.surface(), cell)));
         auto *help = host.window()->findChild<QWidget *>("rrSleepOverlayHelpPopup");
         QTRY_VERIFY(help && help->isVisible());

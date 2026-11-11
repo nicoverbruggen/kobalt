@@ -25,6 +25,11 @@ set(kobalt_shared_definitions KOBALT_READER_HARDWARE KOBALT_VERSION="${KOBALT_VE
 set(kobalt_annotations_source "${KOBALT_ROOT}/src/storage/annotation_database.cpp")
 set(kobalt_annotations_definition KOBALT_SQLITE_ANNOTATIONS_DEFAULT)
 
+# Directory discovery must accept 64-bit inode numbers in a 32-bit process.
+# A compiler's forced includes can read system headers before the source.
+set(kobalt_custom_pins_source "${KOBALT_ROOT}/src/storage/custom_pins.cpp")
+set(kobalt_custom_pins_definition _FILE_OFFSET_BITS=64)
+
 # Files for the "/kobalt" resource prefix: the acknowledgments, the license
 # notices and the sample texts of the settings previews. Paths below
 # kobalt_notice_base are the resource aliases.
@@ -47,6 +52,8 @@ if(KOBALT_SQLITE_ANNOTATIONS_DEFAULT)
 endif()
 set_source_files_properties("${kobalt_annotations_source}" PROPERTIES
     COMPILE_DEFINITIONS ${kobalt_annotations_definition}=${kobalt_annotations_default})
+set_source_files_properties("${kobalt_custom_pins_source}" PROPERTIES
+    COMPILE_DEFINITIONS ${kobalt_custom_pins_definition})
 
 # reader_styles.h holds the engine's default style sheet.
 file(READ "${CRENGINE_SOURCE}/cr3gui/data/html5.css" READER_HTML_CSS)

@@ -12,6 +12,9 @@
 #include <unistd.h>
 
 namespace kobalt::storage {
+static_assert(sizeof(ino_t) >= 8 && sizeof(off_t) >= 8,
+              "Custom pin discovery requires 64-bit filesystem metadata");
+
 const CustomPin *CustomPins::find(const QString &id) const
 {
     for (const auto &icon : icons)

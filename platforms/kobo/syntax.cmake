@@ -414,6 +414,8 @@ endforeach()
 # platforms/kobo/CMakeLists.txt. The file name selects them below.
 get_filename_component(name "${kobalt_annotations_source}" NAME)
 set(defines_${name} "-D${kobalt_annotations_definition}=1")
+get_filename_component(name "${kobalt_custom_pins_source}" NAME)
+set(defines_${name} "-D${kobalt_custom_pins_definition}")
 get_filename_component(name "${kobo_diagnostics_source}" NAME)
 list(TRANSFORM kobo_diagnostics_definitions PREPEND "-D" OUTPUT_VARIABLE defines_${name})
 foreach(source IN LISTS kobo_progress_test_sources)

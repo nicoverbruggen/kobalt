@@ -95,7 +95,9 @@ int main()
     require(QFile::link(pins + "/cat.svg", pins + "/link.svg"), "Cannot make link");
     require(::mkfifo((pins + "/pipe.svg").toUtf8().constData(), 0600) == 0, "Cannot make FIFO");
     auto catalog = readCustomPins(pins);
-    require(catalog.icons.size() == 1 && catalog.skipped == 4, "Unsafe files not skipped");
+    require(catalog.icons.size() == 1 && catalog.icons.first().id == "custom:cat.svg",
+            "Valid SVG file not discovered");
+    require(catalog.skipped == 4, "Unsafe files not skipped");
     require(catalog.failedFiles
                     == QStringList({ "bad.svg", "link.svg", "pipe.svg", "too-big.svg" }),
             "Failed filenames not retained");

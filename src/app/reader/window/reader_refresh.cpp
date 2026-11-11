@@ -142,11 +142,13 @@ void Reader::refresh()
     // Wait for the selected preview page before clearing the dimmed frame.
     // Settings can also close the menu later than the tap, after applying.
     // Search opened from the Zen menu covers the page; the flash waits for
-    // the page it returns to.
-    if ((flashAfterMenu || flashAfterPagePreview) && (!flashAfterPagePreview || !session->busy())
-        && isVisible() && !appearanceEdit.panelOpen()
-        && (flashAfterPagePreview || !topControls->isVisible()) && !general->isVisible()
-        && !choices->isVisible() && !(searchPanel && searchPanel->isVisible())) {
+    // the page it returns to. A chapter chosen in the menu is still
+    // rendering when the menu closes: flash the new page, not the old one,
+    // so the jump is one flash and not a flash and then the page.
+    if ((flashAfterMenu || flashAfterPagePreview) && !session->busy() && isVisible()
+        && !appearanceEdit.panelOpen() && (flashAfterPagePreview || !topControls->isVisible())
+        && !general->isVisible() && !choices->isVisible()
+        && !(searchPanel && searchPanel->isVisible())) {
         const bool preview = std::exchange(flashAfterPagePreview, false);
         flashAfterMenu = false;
         requestFlash(preview ? "page-preview" : "menu");

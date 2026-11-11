@@ -4,8 +4,8 @@
 set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35b2a")
 
 # Increment for layout/metrics changes not covered by CREngine's formatting
-# version. This update changes font axes and shaping, but not the parsed DOM.
-set(rendering_version 1)
+# version. Figure keep-together defaults require repagination, not reparsing.
+set(rendering_version 2)
 file(GLOB cache_patterns CONFIGURE_DEPENDS "${KOBALT_ROOT}/assets/hyph/*.pattern")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})
 set(cache_hashes "${rendering_version};")

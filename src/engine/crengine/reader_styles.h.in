@@ -11,6 +11,8 @@ html, DocFragment { hyphens: none; }
 body { margin: 0; padding: 0; background-color: transparent; text-align: start; }
 blockquote { margin-left: 40px; margin-right: 40px; }
 ol, ul { padding-left: 40px; }
+/* Keep normal block figures together after publisher layout is resolved. */
+figure { page-break-inside: -cr-avoid-normal-block; }
 pre { max-width: 100%; }
 table { max-width: 100%; font-size: 100%; word-break: normal; }
 a[href] { color: black; text-decoration: underline; }

@@ -1,0 +1,83 @@
+--- a/crengine/src/lvrend.cpp
++++ b/crengine/src/lvrend.cpp
+@@ -6813,11 +6813,14 @@
+             if ( avoid_pb_inside_just_toggled_on ) {
+                 avoid_pb_inside_just_toggled_on = false;
+                 // Previous added line may allow a break after, so dont prevent it
+-                flags = RN_GET_SPLIT_BEFORE(flags) | RN_SPLIT_AFTER_AVOID;
++                flags = (flags & ~(0x7 << RN_SPLIT_AFTER)) | RN_SPLIT_AFTER_AVOID;
+             }
+             else {
+-                flags = RN_SPLIT_BOTH_AVOID;
+-            }
++                flags = (flags & ~((0x7 << RN_SPLIT_BEFORE) | (0x7 << RN_SPLIT_AFTER))) | RN_SPLIT_BOTH_AVOID;
++            }
++            // Keep geometry metadata when changing break flags. This group is
++            // protected by break-inside, not specifically by widows/orphans.
++            flags &= ~RN_LINE_PARAGRAPH_PROTECTION;
+         }
+         // Push vertical margin with active pb
+         if ( vm_has_some ) { // avoid expensive call if not needed
+@@ -6828,6 +6831,11 @@
+             resetFloatsLevelToTopLevel();
+         }
+         if ( force_next_content_split_before ) {
++            // A forced publisher break still wins inside a keep-together block.
++            // The discarded margin path must cancel the preceding avoid flag,
++            // just as the retained margin path in pushVerticalMargin() does.
++            if ( last_split_after_flag == RN_SPLIT_AVOID )
++                context.AddLine( flowPos(), flowPos(), RN_SPLIT_BOTH_AUTO|line_dir_flag );
+             flags = setSplitBeforeAlways(flags);
+             force_next_content_split_before = false;
+         }
+--- a/crengine/include/cssdef.h
++++ b/crengine/include/cssdef.h
+@@ -216,7 +216,8 @@
+     css_pb_right,
+     css_pb_page,
+     css_pb_recto,
+-    css_pb_verso
++    css_pb_verso,
++    css_pb_avoid_normal_block // internal default, resolved after the CSS cascade
+ };
+ 
+ /// list-style-type property values
+--- a/crengine/src/lvstsheet.cpp
++++ b/crengine/src/lvstsheet.cpp
+@@ -4288,8 +4288,10 @@
+                 prop_code = cssd_page_break_inside;
+                 IF_g_SET_n_AND_break(false, css_pb_inherit, css_pb_auto);
+                 n = parse_name( decl, css_pb_names, -1 );
+-                // Only a subset of css_pb_names are accepted
+-                if (n > css_pb_avoid)
++                // The internal default waits for inline layout styles too.
++                if (n == -1 && substr_icompare("-cr-avoid-normal-block", decl))
++                    n = css_pb_avoid_normal_block;
++                else if (n > css_pb_avoid)
+                     n = -1;
+                 break;
+             case cssd_page_break_after:
+--- a/crengine/src/lvrend.cpp
++++ b/crengine/src/lvrend.cpp
+@@ -12341,6 +12341,21 @@
+         // (No risk to override all the 'display' fixups done above, as they never leave it as 'inherit')
+     }
+ 
++    // Resolve the reader's default only after publisher and inline styles.
++    // Authored auto/avoid values have already replaced this internal value.
++    if (pstyle->page_break_inside == css_pb_avoid_normal_block) {
++        bool normal = pstyle->display == css_d_block && pstyle->float_ == css_f_none;
++        for (ldomNode *parent = enode->getParentNode();
++                normal && parent && !parent->isRoot(); parent = parent->getParentNode()) {
++            css_style_ref_t ancestor = parent->getStyle();
++            if (ancestor.isNull()) continue;
++            normal = ancestor->float_ == css_f_none &&
++                (ancestor->display == css_d_block || ancestor->display == css_d_list_item_block ||
++                 ancestor->display == css_d_list_item_legacy);
++        }
++        pstyle->page_break_inside = normal ? css_pb_avoid : css_pb_auto;
++    }
++
+     // font-family (and our internal font-name)
+     if ( pstyle->font_family == css_ff_inherit ) {
+         pstyle->font_family = parent_style->font_family;

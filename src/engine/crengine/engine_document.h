@@ -354,6 +354,7 @@ private:
     struct SourceIndex;
     friend struct ReaderSourceIndexProbe;
     friend struct ReaderFootnoteProbe;
+    friend struct ReaderFigureProbe;
     mutable std::shared_ptr<SourceIndex> sourceIndex_;
     std::shared_ptr<SourceIndex> sourceIndex(const QStringList &positions,
                                              const std::function<bool()> &current = {}) const;

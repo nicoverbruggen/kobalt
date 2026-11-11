@@ -27,6 +27,16 @@ Intentional cache-policy and stylesheet mismatches in the negative tests can pri
 
 The CREngine upgrade to `4ce1aed1` keeps the Kobalt patch stack and the manual optical-size override. Both normal text and Bold Reading prefixes use the upstream 12-point optical-size fallback when CSS sizing is enabled and render DPI is below 100. `engine.reader` checks manual optical sizes with CSS sizing disabled, including Bold Reading prefixes and authored font widths. `engine.vertical-writing` retains the vertical-layout checks. HarfBuzz 15.1.0 and FriBidi 1.0.18 also affect text shaping and bidirectional layout; use the font, layout and multilingual corpus checks when changing these pins.
 
+## Figure pagination
+
+`engine.figure-layout` covers fitting and boundary-positioned figures, oversized figures, long captions, publisher split overrides and forced breaks with retained or discarded margins. It checks one and two columns in both themes at 96 and 300 PPI, image dimensions, source order, caption links and selection, reflow, previews and cached reopening. Set `KOBALT_TEST_FIGURE_CAPTURE_DIR` to retain its focused page captures at 96 PPI. Plain images with adjacent captions keep their existing behavior. Non-block fixtures verify that the default break rule is absent and that pages match a reference without it, including floated and inline figures and block figures inside floats, inline boxes or table cells.
+
+The regular `engine.figure-layout` check also opens the accepted `tests/fixtures/figure-caption.epub` review book. Its SHA-256 is pinned in the test. The check first confirms separation with the default disabled, then requires the image and caption together on page two.
+
+For a dedicated before/after EPUB, run `kobalt-figure-layout-tests --review-document <output-directory>`. It writes `figure-caption.epub` and two page captures at 600 × 800 pixels and 96 PPI. Pass that EPUB as a third argument to capture the same bytes with another build. Set `KOBALT_TEST_FIGURE_EXPECT_SPLIT=1` only for the baseline build: the check requires the image on page one and the caption on page two. The candidate requires both on page two. The command uses the same checked-in fixture as the regular test. The document uses ordinary prose to reach the page boundary. It contains no fixed-height spacer.
+
+The default keeps a fitting figure together. It does not defer figures past later prose to fill gaps. The original MobileRead report supplied no book sample; the synthetic fixtures do not establish compatibility with every publisher layout.
+
 ## Captures
 
 Set `KOBALT_TEST_CAPTURE_DIR` for app captures of the column checks, or `KOBALT_TEST_COLUMN_SPACING_CAPTURE_DIR` for the engine comparison of text-size and margin-relative column spacing. Set `KOBALT_TEST_SPACING_CAPTURE_DIR` to keep local before and after images of the decorative page-spacing matrix.

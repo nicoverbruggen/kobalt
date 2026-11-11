@@ -20,7 +20,7 @@ The Text panel starts with a grey Text presets bar under its top rule. Its right
 
 Tapping a card applies its text to the open book, like moving the sliders, and the book remembers the preset. A later change to the text puts an asterisk directly after the preset's name, on the bar and on the card. With the row open, Update and Save as new appear under the cards. Update saves the current text into that preset. Save and Save as new ask for a name and suggest one such as Libron 11.5. Names are unique without regard to case.
 
-All opens a full screen with the tab bar still visible. Each tile is a sample paragraph at 80% of the preset's size, with its line spacing and alignment, rendered by the reader in the background. Tap a tile to apply it, or hold it for its actions: an edit cell in the menu header renames the preset, and the rows are Update from current text and Delete preset. When the current text matches no preset, a last tile saves it. Settings > Defaults > Text for new books uses the same grid, with Book default and Last used before the presets. Editing or deleting a preset does not change books that used it.
+All opens a full screen with the tab bar still visible. Each tile is a sample paragraph at 80% of the preset's size, with its line spacing and alignment, rendered by the reader in the background. Tap a tile to apply it, or hold it for its actions: an edit cell in the menu header renames the preset, and the rows are Update from current text and Delete preset. When the current text matches no preset, a last tile saves it. Settings > Defaults > Text for new books uses the same grid, with Book default and Same as last book before the presets. Editing or deleting a preset does not change books that used it.
 
 ## Fonts
 

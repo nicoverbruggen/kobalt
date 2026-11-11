@@ -1503,5 +1503,5 @@
 "settings.text_for_new_books_title" = "Text for New Books";
 "settings.new_book_text_heading" = "A new book starts with";
 "settings.new_book_book_default" = "Book default";
-"settings.new_book_last_used" = "Last used";
+"settings.new_book_last_used" = "Same as last book";
 "text_presets.used_for_new_books" = "Used for new books";

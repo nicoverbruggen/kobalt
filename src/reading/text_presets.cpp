@@ -3,6 +3,7 @@
 #include "reading_density.h"
 #include "support/strings.h"
 
+#include <QUuid>
 #include <QJsonArray>
 #include <QSet>
 
@@ -51,9 +52,10 @@ bool fromJson(const QJsonValue &value, Preset &preset)
     const auto object = value.toObject();
     const auto id = object.value("id").toString();
     const auto name = object.value("name").toString().simplified();
+    // An empty face is Publisher Fonts, as in book state.
     const auto face = object.value("font_face").toString();
     if (id.isEmpty() || id.size() > 64 || name.isEmpty() || name.size() > maximumName
-        || face.isEmpty() || face.size() > 512
+        || !object.value("font_face").isString() || face.size() > 512
         || !integer(object.value("half_points"), minimumHalfPoints, maximumHalfPoints))
         return false;
     preset = {};
@@ -210,8 +212,11 @@ const Preset *find(const QVector<Preset> &presets, const QString &id)
 
 QString newId(const QVector<Preset> &presets)
 {
-    for (int number = 1;; ++number) {
-        const auto id = QStringLiteral("preset-%1").arg(number);
+    // Ids are never reused: a book keeps the id of the preset it applied, and
+    // a new preset must not take over a deleted one's books.
+    for (;;) {
+        const auto id =
+                QStringLiteral("preset-") + QUuid::createUuid().toString().remove('{').remove('}');
         if (!find(presets, id))
             return id;
     }
@@ -228,7 +233,8 @@ bool nameTaken(const QVector<Preset> &presets, const QString &name, const QStrin
 
 QString suggestedName(const QVector<Preset> &presets, const Preset &preset)
 {
-    auto face = preset.fontFace;
+    auto face =
+            preset.fontFace.isEmpty() ? strings::get("reader.publisher_fonts") : preset.fontFace;
     if (face.startsWith("NV ") || face.startsWith("KF "))
         face = face.mid(3);
     const auto size = QString::number(preset.halfPoints / 2.0, 'f', preset.halfPoints % 2);

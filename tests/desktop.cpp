@@ -1865,14 +1865,29 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
     QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), QString("Comfort"));
     QVERIFY(scene("text-presets"));
     if (!screenshots) {
-        QVERIFY(fixture.press("rrTextPreset_large"));
-        QTRY_VERIFY_WITH_TIMEOUT(
-                fixture.state().value("font_face").toString() == "NV Charis" && settled(), 30000);
-        QTRY_COMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(),
-                     QString("Large"));
-        QVERIFY(fixture.press("rrTextPreset_comfort"));
-        QTRY_VERIFY_WITH_TIMEOUT(
-                fixture.state().value("font_face").toString() == "Libron" && settled(), 30000);
+        // A preset applies to the preview; closing the panel keeps it.
+        const auto applied = [&](const char *card, const QString &face, const QString &label) {
+            QVERIFY(fixture.press(card));
+            QTRY_COMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), label);
+            QTRY_VERIFY_WITH_TIMEOUT(settled(), 30000);
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(!fixture.visible("rrFont"));
+            QTRY_VERIFY_WITH_TIMEOUT(
+                    fixture.state().value("font_face").toString() == face && settled(), 30000);
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrNavText"));
+            QVERIFY(fixture.press("rrNavText"));
+            QTRY_VERIFY(fixture.visible("rrFont"));
+            // The row stays open.
+            QTRY_VERIFY(fixture.visible("rrTextPreset_comfort"));
+            QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(), label);
+        };
+        applied("rrTextPreset_large", "NV Charis", "Large");
+        if (QTest::currentTestFailed())
+            return;
+        applied("rrTextPreset_comfort", "Libron", "Comfort");
+        if (QTest::currentTestFailed())
+            return;
     }
     // A change after a preset marks it and offers to update it or save a new one.
     QVERIFY(fixture.press("rrLarger"));
@@ -1892,7 +1907,8 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         // A taken name keeps the dialog open; a new one saves and selects the preset.
         input->setText("comfort");
         QVERIFY(fixture.press("rrTextPresetNameSave"));
-        QTRY_VERIFY(fixture.visible("rrTextPresetName"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetNameNote"));
+        QVERIFY(fixture.visible("rrTextPresetName"));
         input->setText("Evening");
         QVERIFY(fixture.press("rrTextPresetNameSave"));
         QTRY_VERIFY(!fixture.visible("rrTextPresetName"));

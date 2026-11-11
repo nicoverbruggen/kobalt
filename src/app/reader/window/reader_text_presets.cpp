@@ -7,6 +7,8 @@
 #include "reading/text_presets.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
+#include "ui/controls/text.h"
+#include "ui/style/styles.h"
 #include "ui/dialogs/action_menu.h"
 #include "ui/style/font_preview.h"
 #include "ui/style/metrics.h"
@@ -255,6 +257,17 @@ void Reader::editTextPresetName(const QString &id)
                                     metrics::notice::cardMargins.top(),
                                     metrics::notice::cardMargins.right(), metrics::notice::cardGap);
     inputLayout->addWidget(editor);
+    // The dialog has no description, so it has no description label. A taken
+    // name shows its note here, in the description's type, under the input.
+    auto *note = new ui::InterfaceLabel(QString(), inputRow);
+    note->setObjectName("rrTextPresetNameNote");
+    note->setTextFormat(Qt::PlainText);
+    note->setWordWrap(true);
+    note->setAlignment(Qt::AlignCenter);
+    ui::readerStyle(note, ui::styles::font(int(metrics::chrome::descriptionText)));
+    note->hide();
+    inputLayout->addSpacing(metrics::notice::headingGap);
+    inputLayout->addWidget(note);
     card->rows()->insertWidget(1, inputRow);
     const auto close = [this] {
         if (!textPresetEditor)
@@ -268,14 +281,14 @@ void Reader::editTextPresetName(const QString &id)
         textPresetEditor->deleteLater();
         textPresetEditor.clear();
     };
-    const auto submit = [this, dialog, editor, close, id, preset] {
+    const auto submit = [this, dialog, editor, note, close, id, preset] {
         auto name = editor->text().simplified();
         auto presets = textpresets::load(preferences);
         if (name.isEmpty())
             name = textpresets::suggestedName(presets, preset);
         if (textpresets::nameTaken(presets, name, id)) {
-            dialog->descriptionLabel()->setText(strings::get("text_presets.name_taken"));
-            dialog->descriptionLabel()->show();
+            note->setText(strings::get("text_presets.name_taken"));
+            note->show();
             dialog->fitCard();
             return;
         }

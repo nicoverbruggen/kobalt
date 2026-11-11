@@ -80,7 +80,17 @@ int main()
     readingPpi = previousPpi;
 
     // Ids and names stay unique.
-    require(newId(shipped) == "preset-1", "A new id was not free");
+    // Ids are never reused, so a book that applied a deleted preset does not
+    // follow a new one.
+    auto growing = shipped;
+    for (int i = 0; i < 3; ++i) {
+        auto added = shipped[0];
+        added.id = newId(growing);
+        require(!find(growing, added.id), "A new id was not free");
+        growing.append(added);
+    }
+    const auto deleted = growing.takeLast().id;
+    require(newId(growing) != deleted, "The id of a deleted preset was reused");
     auto named = shipped;
     named[0].name = "Libron 11";
     require(suggestedName(named, shipped[0]) == "Libron 11 (2)",
@@ -89,6 +99,25 @@ int main()
             "A suggested name kept the NV prefix");
     require(nameTaken(shipped, "  comfort ") && !nameTaken(shipped, "Comfort", "comfort"),
             "Names were not compared without case and spaces");
+
+    // Publisher Fonts is an empty face. It saves, loads and gets a name.
+    auto publisher = capture(qt::object({ { "font_face", "" } }));
+    require(publisher.fontFace.isEmpty(), "Publisher Fonts was not captured");
+    publisher.id = "publisher";
+    publisher.name = suggestedName(shipped, publisher);
+    require(!publisher.name.startsWith(' ') && publisher.name.size() > 3,
+            "Publisher Fonts got no suggested name");
+    QJsonObject withPublisher;
+    store(withPublisher, { publisher });
+    const auto reloaded = load(withPublisher);
+    require(reloaded.size() == 1 && reloaded[0].fontFace.isEmpty() && reloaded[0] == publisher,
+            "A preset with Publisher Fonts was dropped");
+    auto missingFace = withPublisher.value(listKey).toArray();
+    auto entry = missingFace[0].toObject();
+    entry.remove("font_face");
+    missingFace[0] = entry;
+    withPublisher[listKey] = missingFace;
+    require(load(withPublisher).isEmpty(), "A preset without a face was kept");
 
     // The new-book choice: a preset, the last book, or the book defaults.
     require(newBookChoice({}) == "last", "New books no longer follow the last book by default");

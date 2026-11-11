@@ -1,5 +1,6 @@
 #include <QKeyEvent>
 #include "reading/remaining_time.h"
+#include "reading/sleep_screen.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
 #include "ui/style/theme.h"
@@ -37,7 +38,8 @@ namespace {
 // `setting-changed` event, so a surprising behavior can be traced back to a
 // tap. Values are logged for true/false, numbers and short lowercase choice
 // tokens such as "bold" or "smart". Other text, such as font names, is logged
-// by key only: logs keep no input text. A key the file did not hold yet is
+// by key only: logs keep no input text. Text the user types, such as the
+// sleep greeting, is logged by key only even when it looks like a token. A key the file did not hold yet is
 // skipped: the first save of Settings writes every key, mostly defaults the
 // reader never touched. Later saves compare every key.
 void logSettingChanges(const QJsonObject &previous, const QJsonObject &next, bool defaults = false)
@@ -47,6 +49,7 @@ void logSettingChanges(const QJsonObject &previous, const QJsonObject &next, boo
         return value.isBool() || value.isDouble()
                 || (value.isString() && token.match(value.toString()).hasMatch());
     };
+    const QStringList typed = { QString::fromLatin1(kobalt::sleep::greetingKey) };
     for (auto it = next.begin(); it != next.end(); ++it) {
         const auto before = previous.value(it.key());
         const auto after = it.value();
@@ -56,9 +59,10 @@ void logSettingChanges(const QJsonObject &previous, const QJsonObject &next, boo
             continue;
         QJsonObject fields;
         fields["setting"] = it.key();
-        if (loggable(before))
+        const bool values = !typed.contains(it.key());
+        if (values && loggable(before))
             fields["previous"] = before;
-        if (loggable(after))
+        if (values && loggable(after))
             fields["value"] = after;
         if (defaults)
             fields["restore_defaults"] = true;

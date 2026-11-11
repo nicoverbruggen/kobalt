@@ -8672,9 +8672,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(bold.value("previous").toString(), QStringLiteral("off"));
             QCOMPARE(bold.value("value").toString(), QStringLiteral("bold"));
 
-            // No logged value is free text.
+            // No logged value is free text, and each change is logged once.
             static const QRegularExpression token(QStringLiteral("^[a-z0-9_-]{1,32}$"));
             QMutexLocker lock(&mutex);
+            for (const char *setting : { "zen_mode", "zen_stats", "bold_reading" }) {
+                int count = 0;
+                for (const auto &event : changes)
+                    count += event.value("setting").toString() == QLatin1String(setting);
+                QVERIFY2(count == 1, setting);
+            }
             for (const auto &event : changes)
                 for (const char *field : { "previous", "value" }) {
                     const auto value = event.value(QLatin1String(field));

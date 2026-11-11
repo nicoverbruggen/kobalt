@@ -3,6 +3,7 @@
 #include "reader_storage.h"
 #include "record_writer.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include <cstring>
 #include <QCoreApplication>
 #include <QDir>
@@ -483,11 +484,16 @@ private:
         }
         path_ = path;
         profileUnsynced = false;
-        // Mac and Android leave through Qt; close the file cleanly then.
+        // Mac and Android leave through Qt, and so does Nickel when it quits;
+        // close the file cleanly then. Qt sends aboutToQuit after the event
+        // loop has ended, so the wait for queued writes delays no input.
         static bool closesAtExit = false;
         if (!std::exchange(closesAtExit, true) && QCoreApplication::instance())
             QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
-                             QCoreApplication::instance(), [] { storage::closeProfile(); });
+                             QCoreApplication::instance(), [] {
+                                 mainthread::AllowBlocking allow("application quits");
+                                 storage::closeProfile();
+                             });
         diagnostic("profile-open",
                    { { "sqlite", scalar(db, "SELECT sqlite_version()").toString() },
                      { "write_ahead", wal },

@@ -1,9 +1,13 @@
 #include "support/main_thread.h"
 #include "storage/record_writer.h"
+#include "storage/profile_database.h"
+#include "storage/reader_storage.h"
 #include "support/diagnostics.h"
 #include <QTemporaryDir>
 #include <QCoreApplication>
+#include <QJsonObject>
 #include <QStringList>
+#include <QTimer>
 #include <cstdio>
 #include <thread>
 #include "check.h"
@@ -61,9 +65,26 @@ int main(int argc, char **argv)
     }
     require(!mainthread::interactive() && write() && violations.isEmpty(),
             "A destroyed screen still made writes report");
+
+    // The application closes the shared profile when it quits, after its event
+    // loop has ended. No input can arrive then, even while a screen still
+    // counts as taking input, so the drain is not a violation.
+    QTemporaryDir profile;
+    require(storage::writeRecord(profile.path(), "quit-check", {}, { { "saved", true } }),
+            "The profile was not opened");
+    {
+        mainthread::Interaction screen([] { return true; });
+        QTimer::singleShot(0, &app, &QCoreApplication::quit);
+        app.exec();
+        require(violations.isEmpty(), "Closing the profile at quit was reported");
+    }
+    require(storage::readRecord(profile.path(), "quit-check", {}).object.value("saved").toBool(),
+            "The record was lost when the application quit");
+    storage::closeProfile();
     mainthread::setViolationHandler({});
     setDiagnosticObserver({});
     flushDiagnostics();
     std::puts(
-            "PASS: main-thread blocking reports, deliberate waits, other threads and screen lifetime");
+            "PASS: main-thread blocking reports, deliberate waits, other threads, screen lifetime "
+            "and quit");
 }

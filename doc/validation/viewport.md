@@ -4,6 +4,8 @@ Label `viewport`. Build `mac-tests`, then run `ctest --preset mac -L viewport` f
 
 These checks cover manual and sensor orientation, orientation handoff at sleep and close, viewport changes, alternate layouts when rotating, full-width panels, safe areas and the Kobo touch-rotation guard.
 
+`lifecycle.settingsOrientationHandoff` uses the production sensor adapter and Settings close cell. It checks that Settings holds a turn until dismissal, that closing Settings hides the reading controls and delivers the queued turn without another sample, and that portrait and landscape locks still reject the other axis. It also checks inverted landscape with a landscape lock. This check requires `KOBALT_DESKTOP_SENSORS=ON`.
+
 ## Sensors
 
 Desktop builds are sensorless by default. Configure with `KOBALT_DESKTOP_SENSORS=ON` and a matching prepared Qt Sensors module to add the sensor checks: `platform.reader-orientation` then keeps the production debounce and checks sensor delivery behind the PIN screen, and `lifecycle.sleepRequestFreezesOrientationBeforeHandoff` and `lifecycle.closePublishesHeldOrientationBeforeBackgroundPaint` are registered. These sensor checks stay outside the fast lane.

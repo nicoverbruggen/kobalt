@@ -1358,6 +1358,7 @@ void Reader::buildSettings()
         if (appearanceEdit.applying())
             return;
         guardCloseTap();
+        appearanceEdit.request(AppearanceDestination::Reading);
         applySettings();
     });
     settings->showDictionaries(services.downloadableDictionaries

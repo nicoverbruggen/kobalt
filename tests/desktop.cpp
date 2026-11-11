@@ -1461,6 +1461,8 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
                  QString("all"));
     QCOMPARE(groups->caption(), strings::get("settings.chapter_groups_all").toUpper());
     QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+    QVERIFY(fixture.press("rrPage"));
     QVERIFY(fixture.press("rrNavChapters"));
     QVERIFY(revealChapter("rrChapter4"));
     QVERIFY(revealChapter("rrChapter1"));
@@ -1481,6 +1483,8 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QTRY_VERIFY(fixture.visible("rrChapterGroupsPopup"));
     QVERIFY(fixture.press("rrChapterGroups_current"));
     QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+    QVERIFY(fixture.press("rrPage"));
     QVERIFY(fixture.press("rrNavChapters"));
     QTRY_VERIFY(fixture.visible("rrChapter1"));
     QVERIFY(!fixture.visible("rrChapter4"));
@@ -1493,6 +1497,8 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("chapter_groups").toString(),
                  QString("off"));
     QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+    QVERIFY(fixture.press("rrPage"));
     QVERIFY(fixture.press("rrNavChapters"));
     QVERIFY(revealChapter("rrChapter4"));
     QVERIFY(revealChapter("rrChapter0"));
@@ -2301,10 +2307,10 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     }
     QVERIFY(fixture.press("rrSettingsClose"));
     QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
-    if (screenshots) {
+    if (screenshots)
         openPrologueBody(fixture);
-        QVERIFY(fixture.press("rrPage"));
-    }
+    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+    QVERIFY(fixture.press("rrPage"));
     QTRY_VERIFY(fixture.visible("rrAnnotate"));
     QVERIFY(fixture.press("rrAnnotate"));
     QVERIFY(!fixture.visible("rrControlsTop"));
@@ -2752,6 +2758,8 @@ void checkPinnedBookmarks(int preset, bool dark)
                 QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), nextDark);
                 QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
                 QVERIFY(fixture.press("rrSettingsClose"));
+                QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+                QVERIFY(fixture.press("rrPage"));
                 QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
                 backdrop.show();
                 bar->raise();
@@ -7720,6 +7728,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_face"), originalFace);
         QCOMPARE(fixture.state().value("default_font_face").toString(), QString(defaultFontFace));
         // Reopening Settings must retain Publisher rather than repair it to Libron.
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsDefaults"));
         QVERIFY(revealSettingsOption(fixture, "rrDefaultFont"));
@@ -8163,7 +8173,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                          .toInt(),
                  140);
         QCOMPARE(fixture.state().value("position"), position);
-        QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!fixture.visible("rrControlsTop"));
         QVERIFY(fixture.selectWord(page, fixture.wordPoint()));
         QTRY_VERIFY(fixture.visible("rrDictionary"));
@@ -8499,6 +8508,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             for (const auto *key : keys)
                 QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value(key).toBool(),
                              pass == 0);
+            QVERIFY(!fixture.visible("rrControlsTop"));
+            QVERIFY(fixture.press("rrPage"));
             QCOMPARE(fixture.visible("rrNavSeek"), pass == 1);
             QCOMPARE(fixture.visible("rrNavStats"), pass == 1);
             QCOMPARE(fixture.visible("rrAnnotate"), pass == 1);
@@ -8555,6 +8566,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool());
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBottomNavigation"));
         QTRY_VERIFY(reader->property("reader_full_flash").toBool());
 
@@ -8781,6 +8794,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         reader->setProperty("reader_controls_opening", false);
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(!reader->property("reader_controls_opening").toBool());
+        QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrNavChapters"));
         QTRY_VERIFY(reader->property("reader_controls_opening").toBool());
 
@@ -8801,6 +8817,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_VERIFY(!storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool());
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrNavText"));
         QTRY_VERIFY(reader->property("reader_full_flash").toBool());
         for (const char *name : { "rrNavLayout", "rrSearchOpen", "rrReturnTitle" })
@@ -8867,6 +8885,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(change("bold_reading").isEmpty());
 
             // A switch saved on the writer thread is logged too.
+            QVERIFY(!fixture.visible("rrControlsTop"));
+            QVERIFY(fixture.press("rrPage"));
             QTRY_VERIFY(fixture.visible("rrZenStats"));
             QVERIFY(fixture.press("rrZenStats"));
             QTRY_VERIFY(!change("zen_stats").isEmpty());
@@ -8993,6 +9013,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrSettingsClose"));
             QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(!fixture.visible("rrControlsTop"));
+            QVERIFY(fixture.press("rrPage"));
             if (available) {
                 QVERIFY(!storage::readJson(fixture.paths.preferences())
                                  .contains("light_dark_mode_shortcut"));
@@ -9215,6 +9237,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value(it.key()),
                          it.value());
         const auto saved = storage::readJson(fixture.paths.preferences());
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
@@ -9297,9 +9321,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             if (!fixture.press("rrSettingsClose")
                 || !QTest::qWaitFor([&] { return !fixture.visible("rrGeneralSettings"); }))
                 return false;
-            // Closing Settings can leave the reading menu open.
-            if (fixture.visible("rrControlsTop"))
-                fixture.press("rrPage");
             return QTest::qWaitFor([&] {
                 return !fixture.visible("rrControlsTop") && !fixture.state().value("busy").toBool();
             });
@@ -9360,9 +9381,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 || !QTest::qWaitFor([&] { return !fixture.visible("rrWordSpacingPopup"); })
                 || !fixture.press("rrSettingsClose"))
                 return false;
-            // Closing Settings can leave the reading menu open.
-            if (fixture.visible("rrControlsTop"))
-                fixture.press("rrPage");
             return QTest::qWaitFor([&] {
                 return !fixture.visible("rrControlsTop") && !fixture.visible("rrGeneralSettings")
                         && !fixture.state().value("busy").toBool();
@@ -9762,8 +9780,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QVERIFY(!fixture.window.idle());
-        QVERIFY(fixture.visible("rrReturn"));
-        QVERIFY(fixture.visible("rrSettings"));
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(!fixture.visible("rrReturn"));
+        QVERIFY(!fixture.visible("rrSettings"));
         QVERIFY(!fixture.visible("rrSettingsClose"));
         // Exit-guard timing has its own lifecycle check. Here the settings
         // reflow can outlast that guard; close only after layout has settled.
@@ -10062,7 +10081,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 2);
         QCOMPARE(fixture.state().value("column_spacing").toInt(),
                  fixture.state().value("font_pixels").toInt() * 2);
-        QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!fixture.visible("rrNavLayout"));
         QVERIFY(capture("columns-landscape"));
         // A short landscape list can leave enough space for a hint on its
@@ -11395,6 +11413,8 @@ void checkPageAnimationCompatibility(int preset, bool dark)
             QVERIFY(fixture.press("rrPageAnimations"));
             QVERIFY(option->isChecked());
             QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+            QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrSettings"));
             QTRY_VERIFY(fixture.visible("rrPageAnimations") || fixture.visible("rrSettingsRail"));
             if (!fixture.visible("rrPageAnimations"))
@@ -12544,6 +12564,8 @@ private slots:
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrNavLight"));
         QTRY_VERIFY(fixture.visible("rrLightDarkMode"));
         QCoreApplication::processEvents();
@@ -13118,6 +13140,8 @@ private slots:
         QVERIFY(!fixture.state().value("beautifier_spacing").toBool());
         QVERIFY(fixture.state().value("normalize_page_margins").toBool());
         QVERIFY(fixture.state().value("reduce_chapter_spacing").toBool());
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsStyling"));
         QVERIFY(revealSettingsOption(fixture, "rrBeautifierSettings"));
@@ -13375,6 +13399,8 @@ private slots:
             QVERIFY(dense->isChecked());
             QVERIFY(capture(fixture, name + "-setting"));
             QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+            QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
             auto *graph = dynamic_cast<ChapterGraph *>(fixture.widget("rrChapterGraph"));

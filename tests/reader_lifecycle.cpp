@@ -2115,6 +2115,8 @@ private slots:
         engineActivity().pause(false);
         QTRY_VERIFY_WITH_TIMEOUT(!panel->isVisible() && !host.session()->busy(), 10000);
         QCOMPARE(host.session()->state()["font_pixels"], draft["font_pixels"]);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
         QVERIFY(click(canvas, text));
         QTRY_VERIFY_WITH_TIMEOUT(
                 larger->isVisible() && larger->isEnabled() && !host.session()->busy(), 10000);
@@ -3462,6 +3464,75 @@ private slots:
     }
 
 #ifndef KOBALT_NO_SENSORS
+    // Settings holds rotation, then applies the last permitted sample without another movement.
+    void settingsOrientationHandoff_data()
+    {
+        QTest::addColumn<bool>("automatic");
+        QTest::addColumn<int>("initial");
+        QTest::addColumn<int>("sample");
+        QTest::addColumn<int>("expected");
+        QTest::newRow("auto-landscape")
+                << true << int(Qt::PortraitOrientation) << int(QOrientationReading::LeftUp)
+                << int(Qt::LandscapeOrientation);
+        QTest::newRow("auto-portrait")
+                << true << int(Qt::LandscapeOrientation) << int(QOrientationReading::TopUp)
+                << int(Qt::PortraitOrientation);
+        QTest::newRow("portrait-lock")
+                << false << int(Qt::PortraitOrientation) << int(QOrientationReading::LeftUp)
+                << int(Qt::PortraitOrientation);
+        QTest::newRow("landscape-lock")
+                << false << int(Qt::LandscapeOrientation) << int(QOrientationReading::TopUp)
+                << int(Qt::LandscapeOrientation);
+        QTest::newRow("inverted-landscape-lock")
+                << false << int(Qt::LandscapeOrientation) << int(QOrientationReading::RightUp)
+                << int(Qt::InvertedLandscapeOrientation);
+    }
+
+    void settingsOrientationHandoff()
+    {
+        QFETCH(bool, automatic);
+        QFETCH(int, initial);
+        QFETCH(int, sample);
+        QFETCH(int, expected);
+        QVERIFY(storage::writeJson(testPaths().preferences(),
+                                   { { "auto_rotate", automatic }, { "orientation", initial } }));
+        test::Factory factory;
+        test::SensorRegistration registration("kobalt-settings-test", &factory);
+        QOrientationSensor sensor;
+        sensor.setIdentifier("kobalt-settings-test");
+        QVERIFY(sensor.start());
+        factory.backend->sample(initial == int(Qt::LandscapeOrientation)
+                                        ? QOrientationReading::LeftUp
+                                        : QOrientationReading::TopUp);
+        auto shown = Qt::ScreenOrientation(initial);
+        ReaderOrientation rotation(&sensor, [&](Qt::ScreenOrientation value) { shown = value; });
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        host.rotation = &rotation;
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        rotation.start(Qt::PortraitOrientation);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+        auto *panel = host.window()->findChild<QWidget *>("rrGeneralSettings");
+        QTRY_VERIFY(panel->isVisible());
+        factory.backend->sample(QOrientationReading::Orientation(sample));
+        auto *debounce = rotation.findChild<QTimer *>("rrOrientationDebounce");
+        QVERIFY(debounce);
+        QTRY_VERIFY(!debounce->isActive());
+        QCOMPARE(shown, Qt::ScreenOrientation(initial));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
+        QTRY_VERIFY(!panel->isVisible() && !host.session()->busy());
+        QVERIFY(!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
+        QTRY_COMPARE(shown, Qt::ScreenOrientation(expected));
+    }
+
     void sleepRequestFreezesOrientationBeforeHandoff_data()
     {
         QTest::addColumn<bool>("handoff");

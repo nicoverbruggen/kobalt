@@ -1377,6 +1377,62 @@ void openPrologueBody(Fixture &fixture)
     advanceIntoBody(fixture);
 }
 
+// Exercises the existing navigation chooser and its independent swipe direction checkbox.
+void swipeChoices(Fixture &fixture, const QString &name = {})
+{
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    openPrologueBody(fixture);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsControls"));
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-swipe-controls", "rrSettingsOptions");
+    QVERIFY(fixture.press("rrPageNavigation"));
+    QTRY_VERIFY(fixture.visible("rrPageNavigationPopup"));
+    auto *popup = static_cast<ui::ModalOverlay *>(fixture.widget("rrPageNavigationPopup"));
+    QVERIFY(popup->rect().contains(popup->card()->geometry()));
+    auto *modes = dynamic_cast<ui::RadioList *>(fixture.widget("rrPageNavigationChoices"));
+    auto *reverse = dynamic_cast<ui::DescribedOption *>(fixture.widget("rrReverseSwipeDirection"));
+    QVERIFY(modes && reverse);
+    QVERIFY(fixture.revealCardRow(reverse));
+    QVERIFY(popup->rect().contains(popup->card()->geometry()));
+    const QRect checkboxBounds(reverse->mapTo(popup->card(), QPoint()), reverse->size());
+    QVERIFY(popup->card()->rect().contains(checkboxBounds));
+    QCOMPARE(reverse->presentation().indicator, ui::DescribedOption::Indicator::Square);
+    QCOMPARE(reverse->text(), strings::get("settings.reverse_swipe_direction"));
+    QVERIFY(fixture.revealCardRow(modes));
+    QVERIFY(fixture.widget("rrNavigation_taps_and_swipes")->property("checked").toBool());
+    QVERIFY(!reverse->isChecked());
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-page-navigation", "rrPageNavigationPopup");
+    QVERIFY(fixture.press("rrNavigation_taps_only"));
+    QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
+    QVERIFY(fixture.press("rrPageNavigation"));
+    QVERIFY(fixture.press("rrReverseSwipeDirection"));
+    QVERIFY(fixture.visible("rrPageNavigationPopup"));
+    QTRY_VERIFY(
+            storage::readJson(fixture.paths.preferences()).value("reverse_page_swipes").toBool());
+    QCOMPARE(storage::readJson(fixture.paths.preferences()).value("page_navigation").toString(),
+             QString("taps_only"));
+    QVERIFY(fixture.widget("rrNavigation_taps_only")->property("checked").toBool());
+    QVERIFY(fixture.widget("rrReverseSwipeDirection")->property("checked").toBool());
+    if (!name.isEmpty())
+        capturePages(fixture, name + "-swipe-direction-taps-only", "rrPageNavigationPopup");
+    QVERIFY(fixture.press("rrNavigation_swipes_only"));
+    QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
+    QVERIFY(fixture.press("rrPageNavigation"));
+    QVERIFY(fixture.widget("rrReverseSwipeDirection")->property("checked").toBool());
+    QVERIFY(fixture.press("rrReverseSwipeDirection"));
+    QTRY_VERIFY(!storage::readJson(fixture.paths.preferences())
+                         .value("reverse_page_swipes")
+                         .toBool(true));
+    QCOMPARE(storage::readJson(fixture.paths.preferences()).value("page_navigation").toString(),
+             QString("swipes_only"));
+}
+
 // Exercises the real EPUB hierarchy, disclosure hit areas, navigation and reopening.
 void chapterGroups(Fixture &fixture, const QString &name = {})
 {
@@ -3694,6 +3750,154 @@ private slots:
                     static_cast<ui::ModalOverlay *>(fixture.widget(popup.constData())), backdrop));
             QTRY_VERIFY(!fixture.widget(popup.constData()));
         }
+    }
+
+    // Checks horizontal swipe reversal, mode changes and restart without changing tap or button direction.
+    void pageSwipes_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("rtl");
+        QTest::addColumn<bool>("landscape");
+        QTest::addColumn<bool>("reversed");
+        for (bool dark : { false, true })
+            for (bool rtl : { false, true })
+                for (bool landscape : { false, true })
+                    for (bool reversed : { false, true })
+                        QTest::newRow(qPrintable(QString("%1-%2-%3-%4")
+                                                         .arg(dark)
+                                                         .arg(rtl)
+                                                         .arg(landscape)
+                                                         .arg(reversed)))
+                                << dark << rtl << landscape << reversed;
+    }
+
+    void pageSwipes()
+    {
+        QFETCH(bool, dark);
+        QFETCH(bool, rtl);
+        QFETCH(bool, landscape);
+        QFETCH(bool, reversed);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, landscape ? 4 : 1);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["reverse_page_swipes"] = reversed;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        auto files = test::engineBook(false, 3, 60);
+        if (rtl)
+            files["OEBPS/book.opf"].replace("page-progression-direction=\"ltr\"",
+                                            "page-progression-direction=\"rtl\"");
+        QVERIFY(writeBook(fixture.directory.path(), "swipes.epub", files));
+        const auto path = fixture.directory.filePath("swipes.epub");
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(fixture.state().value("page_progression_rtl").toBool(), rtl);
+        // Logical hardware turns keep their direction, independently of swipes.
+        QVERIFY(fixture.turnPage(1));
+        QVERIFY(fixture.turnPage(1));
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        auto *page = fixture.widget("rrPage");
+        const auto swipe = [&](bool left, int expected) {
+            const int before = fixture.state().value("page").toInt();
+            const auto center = page->rect().center();
+            const QPoint travel(page->width() / 5, 0);
+            test::skipPageTurnWindow();
+            QVERIFY(fixture.drag(page, center + (left ? travel : -travel),
+                                 center + (left ? -travel : travel)));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QTRY_COMPARE(fixture.state().value("page").toInt(), before + expected);
+        };
+        swipe(true, rtl != reversed ? -1 : 1);
+        swipe(false, rtl != reversed ? 1 : -1);
+        // Ordinary tap zones follow the book, regardless of swipe direction.
+        const int beforeTap = fixture.state().value("page").toInt();
+        test::skipPageTurnWindow();
+        QVERIFY(fixture.click(page, QPoint(page->width() * (rtl ? 1 : 5) / 6, page->height() / 2)));
+        QTRY_COMPARE(fixture.state().value("page").toInt(), beforeTap + 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        // A vertical reading gesture is not a page turn.
+        const int beforeVertical = fixture.state().value("page").toInt();
+        test::skipPageTurnWindow();
+        QVERIFY(fixture.drag(page, page->rect().center(),
+                             page->rect().center() + QPoint(0, page->height() / 4)));
+        QCOMPARE(fixture.state().value("page").toInt(), beforeVertical);
+        // Change modes without losing the direction, then flip it in the same reader.
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(fixture.press("rrPageNavigation"));
+        QVERIFY(fixture.press("rrNavigation_taps_only"));
+        QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        swipe(true, 0);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(fixture.press("rrPageNavigation"));
+        QVERIFY(fixture.press("rrReverseSwipeDirection"));
+        QVERIFY(fixture.widget("rrNavigation_taps_only")->property("checked").toBool());
+        QVERIFY(fixture.press("rrNavigation_swipes_only"));
+        QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        swipe(true, rtl != !reversed ? -1 : 1);
+        swipe(false, rtl != !reversed ? 1 : -1);
+        const auto beforeDisabledTap = fixture.state().value("page");
+        test::skipPageTurnWindow();
+        QVERIFY(fixture.click(page, QPoint(page->width() * 5 / 6, page->height() / 2)));
+        QCOMPARE(fixture.state().value("page"), beforeDisabledTap);
+        // Close and reopen through a fresh controller to verify saved settings.
+        fixture.window.close();
+        QTRY_VERIFY(fixture.window.idle());
+        desktop::Window relaunched(fixture.paths, fixture.fontInputs, fixturePlaceholder(), {},
+                                   [](ReaderHostServices &services) {
+                                       services.inputMilliseconds = test::inputMilliseconds;
+                                   });
+        relaunched.resize(920, 800);
+        relaunched.show();
+        QSignalSpy reopened(&relaunched, &desktop::Window::bookOpened);
+        relaunched.openBook(path);
+        QTRY_COMPARE(reopened.count(), 1);
+        auto state = [&] {
+            relaunched.readerWindow()->checkpoint();
+            return storage::readJson(fixture.paths.stateReport);
+        };
+        QTRY_VERIFY(!state().value("busy").toBool());
+        auto *reader = relaunched.readerWindow();
+        auto *paper = dynamic_cast<ReadingPage *>(reader->findChild<QWidget *>("rrPage"));
+        QVERIFY(paper);
+        const int beforeRestartSwipe = state().value("page").toInt();
+        test::skipPageTurnWindow();
+        paper->swiped(rtl != !reversed ? -1 : 1);
+        QTRY_COMPARE(state().value("page").toInt(), beforeRestartSwipe + 1);
+        QCOMPARE(storage::readJson(fixture.paths.preferences())
+                         .value("reverse_page_swipes")
+                         .toBool(),
+                 !reversed);
+        relaunched.close();
+        QTRY_VERIFY(relaunched.idle());
+    }
+
+    // Checks independent navigation and swipe-direction choices through the production modal.
+    void swipeChoices_data() { screenshotVariants(); }
+
+    void swipeChoices()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false,
+                        [preset](ReaderHostServices &services) {
+                            services.pageButtons = [preset] { return preset == 2; };
+                        });
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        ::swipeChoices(fixture);
     }
 
     void chapterGroups_data() { variants(); }
@@ -11540,6 +11744,21 @@ private slots:
                         });
         selectPreview(fixture, preset);
         ::buttonMapping(fixture, screenshotVariant(preset, dark), volume);
+    }
+
+    void swipeChoices_data() { screenshotVariants(); }
+
+    void swipeChoices()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, false, false,
+                        [preset](ReaderHostServices &services) {
+                            services.pageButtons = [preset] { return preset == 2; };
+                        });
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        ::swipeChoices(fixture, screenshotVariant(preset, dark));
     }
 
     void chapterGroups_data() { screenshotVariants(); }

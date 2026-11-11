@@ -20,6 +20,8 @@ Chapter-group checks cover separate disclosure and title hit areas, disclosure s
 
 `desktop.buttonMapping`, `desktop.buttonMappingActions` and `desktop.buttonMappingUnavailable` use the production Controls entry, device diagram, action chooser and asynchronous preference writer. They check Cancel, Do nothing, both buttons advancing, native direction fallback, unsupported hardware, persistence after reopening, preview paging and preservation of unknown button mappings across e-reader and phone layouts. The `buttonMapping` gallery case captures the Controls entry, mapping modal, action chooser and Do nothing draft, including all pages of cards that need paging. These host fixtures do not verify physical Kobo or Android key delivery.
 
+`desktop.swipeChoices` checks the navigation-mode radios and independent Reverse swipe direction checkbox, mode changes and preference saves. Its `swipeChoices` gallery case captures the Controls entry, default chooser and checked reversal with Taps only in all viewports and themes. `desktop.pageSwipes` checks normal and reversed horizontal page turns with LTR and RTL spine progression, portrait and landscape, both themes, unchanged tap and logical button directions, vertical drags, disabling taps and swipes, changing direction in the same reader and restoration through a fresh controller. The appearance-settings model check covers missing and invalid values without changing layout or navigation mode.
+
 ## Limits
 
 These headless checks do not establish physical Kobo or Android touch behavior, touch-driver behavior or physical key delivery. Native operating-system cursor display and physical touch interaction still need manual checks.

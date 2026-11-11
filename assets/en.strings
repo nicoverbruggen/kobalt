@@ -826,6 +826,10 @@
 "settings.navigation_swipes_only_description" = "Swipe left and right to turn pages.";
 "settings.navigation_buttons_only" = "Hardware page turn buttons only";
 "settings.navigation_buttons_only_description" = "Use the page buttons to turn pages.";
+"settings.navigation_choice" = "Navigation Choice";
+"settings.swipe_direction" = "Swipe Direction";
+"settings.reverse_swipe_direction" = "Reverse swipe direction";
+"settings.reverse_swipe_direction_hint" = "Applies when page swipes are enabled. Does not change taps or buttons.";
 "settings.navigation_menu_hint" = "Tap the middle of the page to open the menu in any mode.";
 "settings.sleep_stock" = "Kobo's built-in sleep screen";
 "settings.sleep_stock_description" = "Uses Kobo’s normal sleep screen.";

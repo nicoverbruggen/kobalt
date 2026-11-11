@@ -1,4 +1,5 @@
 #include "reading/appearance_settings.h"
+#include "reading/page_navigation.h"
 #include "reading/features.h"
 #include "reading/opening_job.h"
 #include "reading/sleep_screen.h"
@@ -41,6 +42,23 @@ int main()
                         && checkpoint.value("unknown").toInt() == 7,
                 "Persisted appearance must preserve null and absent keys without moving the book");
     }
+    require(!QJsonObject().value(pageNavigation::reverseSwipesKey).toBool(),
+            "Old profiles must retain normal swipe direction");
+    for (const bool reversed : { false, true }) {
+        const auto preferences =
+                appearance::cleanPreferences({ { pageNavigation::reverseSwipesKey, reversed },
+                                               { "page_navigation", "taps_only" },
+                                               { "future_option", 42 } });
+        require(preferences.value(pageNavigation::reverseSwipesKey).toBool() == reversed
+                        && pageNavigation::mode(preferences, true) == pageNavigation::Mode::TapsOnly
+                        && preferences.value("future_option").toInt() == 42,
+                "Swipe direction cleanup changed navigation mode or lost preferences");
+        require(appearance::same({}, preferences), "Swipe direction invalidated book layout");
+    }
+    for (const auto &invalid : { QJsonValue("true"), QJsonValue(1), QJsonValue() })
+        require(!appearance::cleanPreferences({ { pageNavigation::reverseSwipesKey, invalid } })
+                         .contains(pageNavigation::reverseSwipesKey),
+                "Invalid swipe direction did not fall back to normal");
     require(sleep::design({}) == sleep::Design::Bookmark,
             "Missing sleep preferences changed the default bookmark");
     for (const auto mode : sleep::modes) {

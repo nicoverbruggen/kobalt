@@ -154,7 +154,8 @@ QJsonObject cleanPreferences(QJsonObject preferences)
                              "show_footer",
                              "show_clock",
                              "auto_rotate",
-                             "turn_off_wifi_on_open" })
+                             "turn_off_wifi_on_open",
+                             "reverse_page_swipes" })
         if (preferences.contains(key) && !preferences.value(key).isBool())
             preferences.remove(key);
     for (const auto *key : beautifierKeys)

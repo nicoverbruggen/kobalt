@@ -1856,8 +1856,9 @@ void Reader::connectPageInput()
             || appearanceEdit.preview() || general->isVisible() || choices->isVisible()
             || topControls->isVisible())
             return;
-        turnPage(session->state().value("page_progression_rtl").toBool() ? -direction : direction,
-                 page->gestureTimestamp());
+        const bool reverse = session->state().value("page_progression_rtl").toBool()
+                != preferences.value(pageNavigation::reverseSwipesKey).toBool();
+        turnPage(reverse ? -direction : direction, page->gestureTimestamp());
     };
     page->tapped = [this](QPoint point) {
         const QPoint bodyPoint = point - QPoint(0, page->topHeight());

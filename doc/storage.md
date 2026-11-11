@@ -215,3 +215,5 @@ After the move, settings start from the defaults, the sync account is signed out
 When a saved file cannot be read at all, or Kobalt cannot move it into `backups/`, Kobalt does not use the profile. Kobo shows an alert that recommends a file system repair or a device reset, and offers Kobo's built-in reader. Android and desktop refuse to open the book with the same advice. The next opening checks again.
 
 Settings that become damaged, too large or of a newer version while a book is open stay in place. The close and the synchronous checkpoint then skip the layout memory and still save the reading position. A read error still fails those saves, so the close offers Retry.
+
+`reverse_page_swipes` is an optional global Boolean in settings schema 1. Missing or invalid values use false. True reverses horizontal reading page-turn swipes relative to the book’s page progression. It is independent of the navigation mode and tap-zone layout. It changes no book data or cache format.

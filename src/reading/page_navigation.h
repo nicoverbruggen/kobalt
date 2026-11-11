@@ -56,6 +56,7 @@ enum class Mode { TapsAndSwipes, TapsOnly, SwipesOnly, ButtonsOnly };
 inline constexpr Mode modes[] = { Mode::TapsAndSwipes, Mode::TapsOnly, Mode::SwipesOnly,
                                   Mode::ButtonsOnly };
 inline constexpr auto preferenceKey = "page_navigation";
+inline constexpr auto reverseSwipesKey = "reverse_page_swipes";
 
 inline QString value(Mode mode)
 {

@@ -4,6 +4,7 @@
 #include "reading/remaining_time.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/options.h"
+#include "ui/controls/rows.h"
 #include "ui/dialogs/modals.h"
 #include "ui/style/theme.h"
 #include "assets/font_catalog.h"
@@ -1456,16 +1457,74 @@ void Reader::openPageNavigation()
                                      : navigationExplanation(mode),
                          !needsSwipes });
     }
-    openChoicePopup(pageNavigationPopup, "rrPageNavigation",
-                    strings::get("settings.page_navigation"),
-                    strings::get("settings.navigation_menu_hint"), options, current,
-                    [this, modes](int index) {
-                        auto next = preferences;
-                        next[pageNavigation::preferenceKey] = pageNavigation::value(modes[index]);
-                        if (savePreferences(next))
-                            showPageNavigation();
-                        closePopup(pageNavigationPopup);
-                    });
+    if (pageNavigationPopup)
+        return;
+    const auto sheet =
+            ui::makeChoiceSheet(this, "rrPageNavigation", strings::get("settings.page_navigation"),
+                                strings::get("settings.navigation_menu_hint"),
+                                "rrPageNavigationTitle", "rrPageNavigationHint");
+    // Leave room for the section strips on short landscape screens. Text still
+    // determines each row's height when it needs more than this compact minimum.
+    if (width() > height())
+        sheet.list->setMinimumRowHeight(metrics::settings::optionHeight);
+    pageNavigationPopup = sheet.overlay;
+    pageNavigationPopup->dismissed = [this] { closePopup(pageNavigationPopup); };
+    for (const auto &option : options)
+        sheet.list->add(option.name, option.label, option.description)->setEnabled(option.enabled);
+    sheet.list->setCurrent(current);
+    sheet.list->chosen = [this, modes](int index) {
+        auto next = preferences;
+        next[pageNavigation::preferenceKey] = pageNavigation::value(modes[index]);
+        if (savePreferences(next))
+            showPageNavigation();
+        closePopup(pageNavigationPopup);
+    };
+    auto *card = pageNavigationPopup->card();
+    // Each header pages with its controls on short screens.
+    const auto section = [card](const QString &caption, const QString &name, QWidget *control) {
+        card->rows()->removeWidget(control);
+        auto *group = new QWidget(card);
+        auto *rows = new QVBoxLayout(group);
+        rows->setContentsMargins(0, 0, 0, 0);
+        rows->setSpacing(0);
+        auto *header = new ui::ListHeader(group);
+        header->setObjectName(name);
+        header->setShaded(true);
+        header->setTopDivider(true);
+        header->setCaptions(caption.toUpper());
+        header->setFixedHeight(header->sizeHint().height());
+        rows->addWidget(header);
+        rows->addWidget(control);
+        card->rows()->addWidget(group);
+    };
+    section(strings::get("settings.navigation_choice"), "rrNavigationChoiceSection", sheet.list);
+    auto *reverse =
+            new ui::DescribedOption(strings::get("settings.reverse_swipe_direction"),
+                                    strings::get("settings.reverse_swipe_direction_hint"), card);
+    reverse->setObjectName("rrReverseSwipeDirection");
+    auto look = sheet.list->options().first()->presentation();
+    look.indicator = ui::DescribedOption::Indicator::Square;
+    look.dividers = {};
+    reverse->setPresentation(look);
+    reverse->setChecked(preferences.value(pageNavigation::reverseSwipesKey).toBool());
+    // Direction is independent of the navigation mode, including when swipes are disabled.
+    connect(reverse, &QCheckBox::clicked, this, [this, reverse](bool checked) {
+        auto next = preferences;
+        next[pageNavigation::reverseSwipesKey] = checked;
+        if (!savePreferences(next))
+            reverse->setChecked(!checked);
+    });
+    section(strings::get("settings.swipe_direction"), "rrSwipeDirectionSection", reverse);
+    const int width = qMin<int>(metrics::notice::cardWidth,
+                                this->width() - 2 * metrics::notice::sideClearance);
+    card->fitToWidth(width);
+    pageNavigationPopup->centerCard();
+    for (auto *widget : pageNavigationPopup->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(pageNavigationPopup);
+    pageNavigationPopup->show();
+    pageNavigationPopup->raise();
+    pageNavigationPopup->setFocus();
 }
 
 void Reader::showChapterGroups()

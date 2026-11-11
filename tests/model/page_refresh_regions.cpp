@@ -95,6 +95,17 @@ int main()
             "Colour text regions were not included");
     require(kobalt::pageRefreshRegions(page, false).isEmpty(),
             "Colour regions were used on a monochrome device");
+    // One read of the metadata gives both answers.
+    page.setText("kobalt.image_regions", "[[40,0,40,25]]");
+    const auto both = kobalt::pageRefreshRegions(page);
+    require(both.mono == kobalt::pageRefreshRegions(page, false)
+                    && both.colour == kobalt::pageRefreshRegions(page, true)
+                    && both.mono != both.colour,
+            "The combined regions differ from the separate ones");
+    require(kobalt::pageRefreshRegions(QImage()).mono.isEmpty()
+                    && kobalt::pageRefreshRegions(QImage()).colour.isEmpty(),
+            "A null page has refresh regions");
+    page.setText("kobalt.image_regions", "[]");
 
     page.setText("kobalt.image_regions", "[[0,0,10,1.5]]");
     require(kobalt::pageRefreshRegions(page, false) == full,

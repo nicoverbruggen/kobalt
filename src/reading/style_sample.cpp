@@ -300,11 +300,22 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
         engine = std::make_unique<EngineDocument>(fonts);
         QMap<QString, qint64> sizes;
         QString error;
-        if (!engine->openResources(
-                    sampleBook(document, variant, &sizes, request.key == "paragraph_spacing"),
-                    sizes, request.page, settings, &error)
+        const bool opening =
+                request.key == "paragraph_spacing" || (request.firstPageOnly && !pages);
+        if (!engine->openResources(sampleBook(document, variant, &sizes, opening), sizes,
+                                   request.page, settings, &error)
             || engine->pages() < 1)
             return {};
+        // The opening paragraphs give the first page its own lines only when
+        // they continue onto a second page. Otherwise lay out all of it.
+        if (opening && request.key != "paragraph_spacing" && engine->pages() < 2) {
+            engine = std::make_unique<EngineDocument>(fonts);
+            sizes.clear();
+            if (!engine->openResources(sampleBook(document, variant, &sizes, false), sizes,
+                                       request.page, settings, &error)
+                || engine->pages() < 1)
+                return {};
+        }
         if (!pages) {
             result.differs = true;
             break;
@@ -360,7 +371,8 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
         if (!apply(*engine, request, value))
             return {};
         QVector<QImage> spread;
-        for (int index = result.page; index < qMin(result.page + 2, engine->pages()); ++index) {
+        const int drawn = request.firstPageOnly && !pages ? 1 : 2;
+        for (int index = result.page; index < qMin(result.page + drawn, engine->pages()); ++index) {
             const auto image = engine->image(index);
             if (index == 0 && !pages) {
                 result.crops.append(image.copy(QRect(request.cropOrigin, request.crop)));
@@ -440,6 +452,11 @@ QJsonObject styleSampleSettings(QJsonObject state)
 {
     for (const auto *key :
          { "position", "dom_version", "imported_native_location", "language", "pages" })
+        state.remove(key);
+    // These describe the displayed frame and change with a page turn. The
+    // sample does not depend on them, and a kept sample must not either.
+    for (const auto *key :
+         { "page", "next_page", "cached_pages", "chapter_title", "chapter_page", "chapter_pages" })
         state.remove(key);
     // The sample shows one column, even when the book uses two in landscape.
     state["columns"] = 1;

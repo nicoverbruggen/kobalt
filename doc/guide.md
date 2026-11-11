@@ -107,4 +107,4 @@ Kobalt never turns Bluetooth on or off. When you turn pages with a Bluetooth rem
 
 ### Background activity
 
-While you read, Kobalt reacts to signals from Kobo's software, for example when a sync finishes or the device wakes, instead of checking again and again. About once a minute it updates the clock and refreshes its estimate of your reading speed. It checks for a newer position from another device only after Kobo's software reports a sync. KOSync while reading follows the schedule you choose. While the device is asleep, none of this runs.
+While you read, Kobalt reacts to signals from Kobo's software, for example when a sync finishes or the device wakes, instead of checking again and again. About once a minute it updates the clock, and it refreshes its estimate of your reading speed while the page or the menu shows the time left. It checks for a newer position from another device only after Kobo's software reports a sync. KOSync while reading follows the schedule you choose. While the device is asleep, none of this runs.

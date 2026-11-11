@@ -950,12 +950,25 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
         lastPressTime = quint32(static_cast<QInputEvent *>(event)->timestamp());
     if (watched == bookmarkList && type == QEvent::Hide)
         closeMarksActions();
+    // A show event arrives before the first paint of the shown control.
+    if (controlsStale && type == QEvent::Show
+        && (watched == topControls || watched == bottomControls || watched == menu
+            || watched == general || watched == choices || watched == chapterGraph))
+        syncStaleControls();
     if (type == QEvent::Show
         && (watched == topControls || watched == general || watched == choices
             || watched == dictionaryPanel || watched == searchPanel || watched == linkPanel
             || watched == linkDialog || watched == syncDialog || watched == kosyncDialog
             || watched == finishDialog)) {
         book->pauseLocalPace();
+    }
+    // The menu shows a clock and can show time left. Both rest while only the
+    // page is visible and no field needs them.
+    if (type == QEvent::Show && watched == topControls && clockTimer && isVisible()
+        && !services.suspended()) {
+        if (!clockTimer->isActive())
+            startClock();
+        book->minuteTick();
     }
     if (watched == menu && type == QEvent::Hide && fieldChooser) {
         fieldChooser->hide();
@@ -1877,12 +1890,37 @@ void Reader::startClock()
     startClock(millisecondsOfDay());
 }
 
+// The minute tick serves the host's minute work, a header or footer field
+// that changes with time and the reading menu's status row.
+bool Reader::clockNeeded() const
+{
+    // The clock starts before the menu is built.
+    return minuteTicked || chromeTicks() || (topControls && topControls->isVisible());
+}
+
+// The platform's reading pace feeds the time-left fields, the menu's Zen
+// stats and the Stats view. Nothing else reads it between two lifecycle saves.
+bool Reader::paceNeeded() const
+{
+    using kobalt::headerfooter::Field;
+    for (const auto field : page->chrome.slotFields)
+        if (field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
+            return true;
+    return topControls && topControls->isVisible();
+}
+
 // Wake once a minute, just after the wall-clock minute changes. The session
 // minutes appear only in the reading menu, which pauses the reading clock and
 // refreshes its status when it opens, so no other minute needs a wakeup. The
 // reader's other periodic work runs on the same tick.
 void Reader::startClock(int now)
 {
+    // Without a consumer the reader does not wake at all. A consumer that
+    // appears later starts the clock: see the callers of startClock().
+    if (!clockNeeded()) {
+        clockTimer->stop();
+        return;
+    }
     // A restart after the minute changed, before its tick ran, keeps that tick.
     if (clockTimer->isActive() && now / 60000 != clockMinute) {
         clockTimer->start(0);
@@ -2300,9 +2338,13 @@ void Reader::showControls()
     kobalt::ui::PanelTiming timing("menu");
     session->cancelPendingTurn();
     if (opening) {
-        // A page turn can defer control updates until after its first paint.
-        // Opening the menu needs the completed page's navigation state now.
-        syncReadingControls();
+        // A page turn can defer control updates until after its first paint,
+        // and skips them while the menu is hidden. Opening the menu needs the
+        // completed page's navigation state now.
+        if (controlsStale)
+            syncStaleControls();
+        else
+            syncReadingControls();
         flashAfterMenu = property("reader_dark").toBool();
         if (flashAfterMenu) {
             requestFlash("menu-open");

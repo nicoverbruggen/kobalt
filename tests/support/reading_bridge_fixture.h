@@ -22,6 +22,8 @@ struct HostProgress
     bool rejectWriteWhileFinishing = false;
     int finishAttempts = 0;
     int stopAttempts = 0, destroyed = 0;
+    // Minute ticks that asked the platform for its reading pace.
+    int minuteTicks = 0;
     std::function<void(bool)> finishDone;
 
     void completeFinish(bool saved)
@@ -128,6 +130,8 @@ public:
     }
 
     void observeReading(const ReadingActivity &) override { }
+
+    void minuteTick() override { ++progress->minuteTicks; }
 
     void stopReading() override
     {

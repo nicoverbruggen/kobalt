@@ -6507,6 +6507,152 @@ private slots:
         QCOMPARE(timer->interval(), 60000);
     }
 
+    // Checks that the minute clock rests while no strip field, menu or host needs it, and that only a visible consumer asks for the reading pace.
+    void clockRestsWithoutConsumers()
+    {
+        auto paths = testPaths();
+        // The phone strips show pages left and a percentage: nothing that changes with time.
+        QVERIFY(storage::writePreferences(paths.preferences(),
+                                          QJsonObject{ { "header_footer", "phone" } }));
+        int timeOfDay = 10 * 3600000 + 30000;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&timeOfDay](ReaderHostServices &services) {
+            services.millisecondsOfDay = [&timeOfDay] { return timeOfDay; };
+        };
+        CloseHost cleanup{ host };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
+        auto *page = host.window()->findChild<QWidget *>("rrPage");
+        auto *menu = host.window()->findChild<QWidget *>("rrControlsTop");
+        QVERIFY(timer && page && menu);
+        // Nothing needs the minute: the reader does not wake for it.
+        QVERIFY(!timer->isActive());
+        QCOMPARE(host.progress->minuteTicks, 0);
+
+        // The menu shows a clock, so it starts the timer and asks for the pace.
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(menu->isVisible());
+        QVERIFY(timer->isActive());
+        QCOMPARE(timer->interval(), 30050);
+        QCOMPARE(host.progress->minuteTicks, 1);
+        timeOfDay = 10 * 3600000 + 60050;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(host.progress->minuteTicks, 2);
+        QVERIFY(timer->isActive());
+
+        // With the menu closed, the next tick does not ask and does not re-arm.
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(!menu->isVisible());
+        timeOfDay = 10 * 3600000 + 120050;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(host.progress->minuteTicks, 2);
+        QVERIFY(!timer->isActive());
+
+        // A host with minute work keeps the clock, but not the pace query.
+        int ticks = 0;
+        host.window()->minuteTicked = [&ticks] { ++ticks; };
+        host.window()->hide();
+        host.window()->show();
+        QTRY_VERIFY(timer->isActive());
+        timeOfDay = 10 * 3600000 + 180050;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(ticks, 1);
+        QCOMPARE(host.progress->minuteTicks, 2);
+        QVERIFY(timer->isActive());
+    }
+
+    // Checks that a strip field with time left asks for the reading pace on each minute tick.
+    void clockAsksPaceForTimeLeft()
+    {
+        auto paths = testPaths();
+        QVERIFY(storage::writePreferences(
+                paths.preferences(),
+                QJsonObject{ { "header_footer", "custom" },
+                             { "header_footer_custom",
+                               QJsonObject{ { "top_left", "book_time_left" },
+                                            { "top_right", "nothing" } } } }));
+        int timeOfDay = 10 * 3600000 + 30000;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&timeOfDay](ReaderHostServices &services) {
+            services.millisecondsOfDay = [&timeOfDay] { return timeOfDay; };
+        };
+        CloseHost cleanup{ host };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
+        QVERIFY(timer && timer->isActive());
+        const int before = host.progress->minuteTicks;
+        timeOfDay = 10 * 3600000 + 60050;
+        QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+        QCOMPARE(host.progress->minuteTicks, before + 1);
+    }
+
+    // Checks that a page turn with the menu hidden leaves the menu's controls alone, and that opening the menu brings them up to date.
+    void turnSkipsHiddenControls()
+    {
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *page = host.window()->findChild<QWidget *>("rrPage");
+        auto *menu = host.window()->findChild<QWidget *>("rrControlsTop");
+        auto *scrubber = dynamic_cast<ui::PageScrubber *>(
+                host.window()->findChild<QWidget *>("rrPageScrubber"));
+        QVERIFY(page && menu && scrubber);
+        // Opening syncs the controls once, hidden.
+        QCoreApplication::processEvents();
+        const int start = host.session()->page();
+        const int shown = scrubber->slider()->value();
+        test::skipPageTurnWindow();
+        host.window()->pageButton(1);
+        QTRY_COMPARE(host.session()->page(), start + 1);
+        QTRY_VERIFY(!host.session()->busy());
+        // The refresh after the painted turn runs from the event loop.
+        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();
+        QCOMPARE(scrubber->slider()->value(), shown);
+        QVERIFY(!menu->isVisible());
+        // The menu opens with the page that is shown now.
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(menu->isVisible());
+        QVERIFY(scrubber->slider()->value() != shown);
+        const int open = scrubber->slider()->value();
+        // With the menu open, a page button turn updates the controls at once.
+        test::skipPageTurnWindow();
+        host.window()->pageButton(1);
+        QTRY_COMPARE(host.session()->page(), start + 2);
+        QTRY_VERIFY(scrubber->slider()->value() != open);
+    }
+
     // While a book sits open and nobody reads, nothing on the main thread may
     // wake more often than the reader's minute clock.
     void idleTimers()

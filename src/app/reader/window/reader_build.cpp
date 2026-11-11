@@ -624,8 +624,10 @@ void Reader::startClockTimer()
         startClock(now);
         if (!due)
             return;
-        // The minute work runs whether or not a clock is shown.
-        book->minuteTick();
+        // The host's minute work runs whether or not a clock is shown. The
+        // reading pace query runs only while something shows its result.
+        if (paceNeeded())
+            book->minuteTick();
         if (minuteTicked)
             minuteTicked();
         if (topControls->isVisible()) {

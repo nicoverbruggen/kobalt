@@ -27,12 +27,10 @@ QRect pageSingleImage(const QImage &image)
     return regions.rectangles.first();
 }
 
-QRegion pageRefreshRegions(const QImage &image, bool colorDevice)
+namespace {
+QRegion refreshRegions(const QImage &image, const PageContent &content, bool colorDevice)
 {
-    if (image.isNull())
-        return {};
     const QRegion fullPage(QRect(QPoint(0, 0), image.size()));
-    const auto content = pageContent(image);
     if (!content.images.known || (colorDevice && !content.colours.known))
         return content.textOnly ? QRegion() : fullPage;
 
@@ -46,6 +44,22 @@ QRegion pageRefreshRegions(const QImage &image, bool colorDevice)
         for (const QRect &rect : content.colours.rectangles)
             regions += rect;
     return regions;
+}
+} // namespace
+
+QRegion pageRefreshRegions(const QImage &image, bool colorDevice)
+{
+    if (image.isNull())
+        return {};
+    return refreshRegions(image, pageContent(image), colorDevice);
+}
+
+PageRefreshRegions pageRefreshRegions(const QImage &image)
+{
+    if (image.isNull())
+        return {};
+    const auto content = pageContent(image);
+    return { refreshRegions(image, content, false), refreshRegions(image, content, true) };
 }
 
 } // namespace kobalt

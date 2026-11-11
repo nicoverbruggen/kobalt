@@ -9098,6 +9098,104 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks the Styling sheets in Settings: rendered samples, every option, drafts until Settings closes and global persistence.
+    // Checks that a Styling sample is rendered once for each orientation: opening it again shows it without the engine.
+    void settingsStylingSamples()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *rotate = fixture.window.findChild<QAction *>("desktopRotateDevice");
+        QVERIFY(rotate);
+        const auto openStyling = [&fixture] {
+            return fixture.press("rrPage")
+                    && QTest::qWaitFor([&] { return fixture.visible("rrSettings"); })
+                    && fixture.press("rrSettings") && fixture.press("rrSettingsStyling")
+                    && revealSettingsOption(fixture, "rrWordSpacing");
+        };
+        const auto ready = [&fixture] {
+            auto *preview = fixture.widget("rrStylingPreview");
+            return preview && preview->property("sample_ready").toBool();
+        };
+        const auto closeStyling = [&fixture] {
+            if (!fixture.press("rrWordSpacingClose")
+                || !QTest::qWaitFor([&] { return !fixture.visible("rrWordSpacingPopup"); })
+                || !fixture.press("rrSettingsClose"))
+                return false;
+            // Closing Settings can leave the reading menu open.
+            if (fixture.visible("rrControlsTop"))
+                fixture.press("rrPage");
+            return QTest::qWaitFor([&] {
+                return !fixture.visible("rrControlsTop") && !fixture.visible("rrGeneralSettings")
+                        && !fixture.state().value("busy").toBool();
+            });
+        };
+
+        // Holds the engine thread, so only a kept sample can appear.
+        struct Gate
+        {
+            QSemaphore release;
+            std::atomic_bool entered{ false };
+        };
+
+        const auto holdEngine = [] {
+            auto gate = std::make_shared<Gate>();
+            qt::invoke(
+                    engineWorker(),
+                    [gate] {
+                        EngineJob activity;
+                        gate->entered.store(true);
+                        gate->release.acquire();
+                    },
+                    Qt::QueuedConnection);
+            return gate;
+        };
+
+        // The first opening lays the sample out on the engine thread.
+        QVERIFY(openStyling());
+        QVERIFY(fixture.press("rrWordSpacing"));
+        QVERIFY(!ready());
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 10000);
+        const auto portrait = fixture.widget("rrStylingPreview")->grab().toImage();
+        QVERIFY(closeStyling());
+
+        // Settings forgets its samples when it closes. The reader keeps them.
+        QVERIFY(openStyling());
+        {
+            const auto gate = holdEngine();
+            const auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            QTRY_VERIFY(gate->entered.load());
+            QVERIFY(fixture.press("rrWordSpacing"));
+            QVERIFY(ready());
+            QCOMPARE(fixture.widget("rrStylingPreview")->grab().toImage(), portrait);
+        }
+        QVERIFY(closeStyling());
+
+        // Landscape has its own sample, and portrait keeps the first one.
+        rotate->trigger();
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 10000);
+        QVERIFY(openStyling());
+        QVERIFY(fixture.press("rrWordSpacing"));
+        QVERIFY(!ready());
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 10000);
+        QVERIFY(closeStyling());
+        for (int turn = 0; turn < 3; ++turn) {
+            rotate->trigger();
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 10000);
+        }
+        QVERIFY(openStyling());
+        {
+            const auto gate = holdEngine();
+            const auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            QTRY_VERIFY(gate->entered.load());
+            QVERIFY(fixture.press("rrWordSpacing"));
+            QVERIFY(ready());
+            QCOMPARE(fixture.widget("rrStylingPreview")->grab().toImage(), portrait);
+        }
+    }
+
     void advancedText_data()
     {
         QTest::addColumn<int>("dpi");

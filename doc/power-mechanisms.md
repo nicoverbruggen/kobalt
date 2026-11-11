@@ -13,15 +13,15 @@ Firmware 4.x runs the Qt 5 package (`platforms/kobo/nickel-qt5/`). Firmware 5.x 
 
 ## Timers that repeat while reading
 
-While a book is open and the device is awake, Kobalt wakes once a minute, just after the wall-clock minute changes. That one tick does all of the periodic work:
+While a book is open and the device is awake, Kobalt wakes at most once a minute, just after the wall-clock minute changes. That one tick does all of the periodic work:
 
 | Work on the minute tick | What it does | Code |
 | --- | --- | --- |
 | Clock | Updates the header clock, battery and time-left fields when the page shows them, and the menu status when the menu is open | `clockTimer` and `Reader::startClock` (`src/app/reader/window/reader.cpp`, `reader_build.cpp`) |
-| Reading pace | Asks Nickel for the reading pace on Nickel's worker thread, for the time estimates. At most once a minute | `ReadingBook::minuteTick` → `ReadingBridge::minuteTick` → `ReadingPaceCache::tick` (`common/reading_pace_cache.h`) |
+| Reading pace | Asks Nickel for the reading pace on Nickel's worker thread, for the time estimates. At most once a minute, and only while something shows the result: a time-left field in the header or footer, or the open reading menu with its Stats view. Opening the menu and adding a time-left field ask at once when the last answer is a minute old | `ReadingBook::minuteTick` → `ReadingBridge::minuteTick` → `ReadingPaceCache::tick` (`common/reading_pace_cache.h`) |
 | Reader check | Repeats the visibility checks. Reads Nickel's saved position, for a position from another device, only when Nickel has reported a sync, an account update or USB. If those signals are unavailable, it reads at most once a minute and logs `native-progress-signals-unavailable` | `ReaderWindow::minuteTicked` → `ReaderCoordinator::poll` (`common/reader_coordinator.cpp`) |
 
-The timer is precise and armed for 50 ms after the next minute. If it ever fires before the minute changes, it only re-arms, so the minute work runs once a minute. The tick runs whether or not the page shows a clock. It stops when the reader hides or the device sleeps. The reading-time minutes in the menu need no tick of their own: opening the menu pauses the reading clock and refreshes the status.
+The timer is precise and armed for 50 ms after the next minute. If it ever fires before the minute changes, it only re-arms, so the minute work runs once a minute. The timer runs while something needs the minute: the host's reader check, a header or footer field that changes with time (clock, battery or time left), or the open reading menu. On Kobo the reader check always needs it, so the tick runs whether or not the page shows a clock. On Android and desktop, a reader without such a field does not wake until the menu opens or a field is added. The timer stops when the reader hides or the device sleeps. Between two queries the reader keeps the last reading pace, so a sleep screen or a progress save without a visible time-left field uses the pace from the start of the reading interval or from the last time the menu was open. The reading-time minutes in the menu need no tick of their own: opening the menu pauses the reading clock and refreshes the status.
 
 One other timer can repeat:
 
@@ -68,6 +68,8 @@ Closing, sleep, USB and shutdown wait for pending saves without a poll. Each sav
 
 A page turn paints the new page and then lets the rest follow from the event loop. That second pass leaves out work whose result nothing shows:
 
+- The reading menu, the Text and Layout panels and Settings are not brought up to date while they are hidden. They are marked stale and sync before they show.
+- The page's image and colour regions are read from the page image once for each page, not for every refresh.
 - The text of the page is not read for the rotation placeholder. A rotation reads it.
 - On Kobo, the page event reuses Nickel's record of the book; see [Progress and statistics](reader/progress.md).
 

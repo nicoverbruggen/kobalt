@@ -33,6 +33,10 @@ struct StyleSampleRequest
     QSize crop;
     QPoint cropOrigin;
     bool marginGuides = false;
+    // Only the crop of the first page is wanted. The sample then lays out its
+    // opening paragraphs, or all of it when they fit on one page, and draws
+    // one page. The crop's pixels are the same as from the whole sample.
+    bool firstPageOnly = false;
     // Draws the sample's chapter heading in bold, as books do by default.
     // Styling previews keep it regular so the heading does not distract.
     bool boldHeading = false;

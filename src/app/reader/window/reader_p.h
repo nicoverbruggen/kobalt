@@ -40,6 +40,7 @@
 #include "app/reader/settings/appearance_panel.h"
 #include "app/reader/settings/text_presets_panel.h"
 #include "reading/text_presets.h"
+#include "reading/style_sample_cache.h"
 #include "support/save_wait.h"
 #include "appearance_edit_session.h"
 #include "app/reader/views/navigation.h"
@@ -322,6 +323,14 @@ private:
     void syncAppearanceControls(bool pickingFont);
     void fitAppearance();
     void syncReadingControls();
+    // After a page turn with the menu and every panel hidden, refresh() skips
+    // the control syncs and marks the controls stale. They sync before they
+    // show: showControls() and openPanel() sync on their own, and the event
+    // filter catches every other way a control container becomes visible.
+    bool controlsHidden() const;
+    void syncReadingState();
+    void syncStaleControls();
+    bool controlsStale = false;
     void publishResize();
     void openPendingDestination();
     kobalt::ReaderHostServices services;
@@ -462,6 +471,8 @@ private:
     void closeFieldChooser();
     // True when a slot shows something that changes with the clock.
     bool chromeTicks() const;
+    bool clockNeeded() const;
+    bool paceNeeded() const;
     kobalt::ui::SettingSlider *sizeSlider, *opticalSizeSlider, *weightSlider, *variableWeightSlider,
             *spacingSlider, *marginSlider, *verticalMarginSlider, *bookSlider;
     kobalt::reader::AppearanceEditSession appearanceEdit;
@@ -727,6 +738,9 @@ private:
     std::array<std::shared_ptr<std::atomic_bool>, 6> stylingSampleRenders;
     // Includes queued renders until their results reach the GUI thread.
     int stylingSamplesPending = 0;
+    // Rendered samples of this book, kept until their inputs change, the
+    // size limit removes them or the book closes with this reader.
+    kobalt::StyleSampleCache stylingSampleCache;
     void cancelStylingSamples();
     static QString refreshExplanation(kobalt::ScreenRefresh mode);
     static QString refreshLabel(kobalt::ScreenRefresh mode);

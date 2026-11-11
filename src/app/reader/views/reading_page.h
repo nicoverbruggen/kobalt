@@ -2,6 +2,7 @@
 #include <QPainterPath>
 #include "ui/style/metrics.h"
 #include "reading/header_footer.h"
+#include "render/page_refresh_regions.h"
 #include "reading/page_turn_animation.h"
 #include "reading/highlight_geometry.h"
 #include "ui/input/brightness_gesture.h"
@@ -193,6 +194,18 @@ private:
     HeaderState headerState;
     FooterState footerState;
     QImage renderedBody, headerPixels, footerPixels;
+
+    // The refresh regions of the last two page images, by image cache key, so
+    // a turn reads each page's region metadata once. A null image has key 0
+    // and no regions, as the empty entries do.
+    struct RegionEntry
+    {
+        qint64 key = 0;
+        PageRefreshRegions regions;
+    };
+
+    std::array<RegionEntry, 2> regionCache;
+    PageRefreshRegions refreshRegions(const QImage &source);
     QSize renderedSize;
     qint64 renderedPalette = 0;
     int renderedTop = -1, renderedBottom = -1;

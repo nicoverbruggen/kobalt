@@ -13,6 +13,14 @@ inline bool hasVisibleColor(QRgb pixel)
 
 // Return the page areas that need a full refresh after a page turn.
 QRegion pageRefreshRegions(const QImage &image, bool colorDevice);
+
+// Both answers of pageRefreshRegions from one read of the page's regions.
+struct PageRefreshRegions
+{
+    QRegion mono, colour;
+};
+
+PageRefreshRegions pageRefreshRegions(const QImage &image);
 // Image-viewer targets use displayed size, independently of source resolution.
 bool pageImageAtPoint(const QImage &image, QPoint point);
 // Empty unless the page has exactly one eligible image and no body text.

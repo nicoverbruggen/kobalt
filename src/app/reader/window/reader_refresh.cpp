@@ -85,6 +85,8 @@ void Reader::refresh()
     // new page is painted, in the refresh that paintTurn() requests.
     if (!turnFrame)
         syncKosyncWhileReading();
+    // The refresh that paintTurn() requested: the same page, already painted.
+    const bool afterTurn = turnPainted && !turnFrame;
     if (!turnFrame)
         turnPainted = false;
     if (!darkReady)
@@ -134,8 +136,16 @@ void Reader::refresh()
         paintTurn();
         return;
     }
-    syncAppearanceControls(pickingFont);
-    syncReadingControls();
+    if (afterTurn && controlsHidden()) {
+        // A page turn changes only what the hidden menu and panels show.
+        // They sync when they open; see syncStaleControls().
+        controlsStale = true;
+        syncReadingState();
+    } else {
+        controlsStale = false;
+        syncAppearanceControls(pickingFont);
+        syncReadingControls();
+    }
     // Jumps and layout changes join the activity batch. Layout memory is
     // saved separately because it is a user setting.
     saveSoon();
@@ -581,6 +591,33 @@ void Reader::syncAppearanceControls(bool pickingFont)
         button->setChecked(button->property("hyphenation").toString() == settings->hyphenation());
     for (auto *button : alignmentButtons)
         button->setChecked(button->property("alignment").toString() == settings->alignment());
+}
+
+bool Reader::controlsHidden() const
+{
+    return !topControls->isVisible() && !bottomControls->isVisible() && !menu->isVisible()
+            && !general->isVisible() && !choices->isVisible() && !chapterGraph->isVisible()
+            && !appearanceEdit.panelOpen();
+}
+
+void Reader::syncStaleControls()
+{
+    if (!std::exchange(controlsStale, false))
+        return;
+    syncAppearanceControls(choosingTypography && choices->isVisible() && choices->isFontPicker());
+    syncReadingControls();
+}
+
+// The part of syncReadingControls() that does not depend on a visible control.
+void Reader::syncReadingState()
+{
+    if (session->busy())
+        pageScrubber->cancel();
+    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    if (!session->busy())
+        applyingText = false;
+    refreshRenderNotice();
+    updateOrientationBlock();
 }
 
 void Reader::syncReadingControls()

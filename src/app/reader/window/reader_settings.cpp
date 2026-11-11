@@ -177,6 +177,13 @@ bool Reader::saveChrome(kobalt::headerfooter::Preset preset,
 void Reader::syncChromeControls()
 {
     using namespace kobalt::headerfooter;
+    // A changed field can start or end the need for the minute clock, and a
+    // time-left field needs the reading pace.
+    if (clockTimer && isVisible() && !services.suspended()) {
+        startClock();
+        if (paceNeeded())
+            book->minuteTick();
+    }
     const auto values = chromeValues();
     const auto contents = [&values](const Layout &layout) {
         kobalt::reader::SlotContents result;
@@ -608,17 +615,28 @@ void Reader::renderStylingSamples(int requested)
         auto &render = stylingSampleRenders[feature];
         if (render)
             render->store(true);
+        // The same request in the same orientation shows its earlier result
+        // at once, without the engine.
+        const bool landscape = width() > height();
+        const auto key = styleSampleKey(session->fontInputs(), request);
+        StyleSample cached;
+        if (stylingSampleCache.find(landscape, key, &cached)) {
+            render.reset();
+            panel->setStylingSample(entry.feature, cached);
+            continue;
+        }
         panel->setStylingSample(entry.feature, {});
         render = request.cancelled = std::make_shared<std::atomic_bool>(false);
         ++stylingSamplesPending;
-        renderStyleSample(
-                session->fontInputs(), request, this,
-                [this, panel, entry = entry.feature, cancelled = render](StyleSample sample) {
-                    --stylingSamplesPending;
-                    if (cancelled->load() || !sample.valid())
-                        return;
-                    panel->setStylingSample(entry, sample);
-                });
+        renderStyleSample(session->fontInputs(), request, this,
+                          [this, panel, entry = entry.feature, cancelled = render, landscape,
+                           key](StyleSample sample) {
+                              --stylingSamplesPending;
+                              if (cancelled->load() || !sample.valid())
+                                  return;
+                              stylingSampleCache.insert(landscape, key, sample);
+                              panel->setStylingSample(entry, sample);
+                          });
     }
 }
 

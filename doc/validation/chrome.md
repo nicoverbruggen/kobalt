@@ -6,6 +6,6 @@ These checks cover the header and footer, the reading strips, the status strip, 
 
 Set `KOBALT_READING_TIME_CAPTURE_DIR` to an absolute directory to capture the status strip in `lifecycle.readingTimeStatus`. Set `KOBALT_CAPTURE_HEADER_FOOTER` to a workspace directory to save the strip images of `ui.chapterPageSurvivesLongTitles`.
 
-`lifecycle.minuteClock` and `lifecycle.idleTimers` check timers on the main thread only. Worker-thread timers and Kobo-only timers are out of scope. `platform.nickel-reading-pace-cache` checks the pace cache, but the reader coordinator's 65-second fallback timer has no automated check.
+`lifecycle.clockRestsWithoutConsumers` checks that the minute clock rests while no strip field, menu or host needs it, and that the menu starts it. With `lifecycle.clockAsksPaceForTimeLeft` it also checks that the reading pace is asked only for a visible consumer. `lifecycle.minuteClock` and `lifecycle.idleTimers` check timers on the main thread only. Worker-thread timers and Kobo-only timers are out of scope. `platform.nickel-reading-pace-cache` checks the pace cache, but the reader coordinator's 65-second fallback timer has no automated check.
 
 These headless checks do not establish physical-device refresh or behavior.

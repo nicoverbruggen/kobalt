@@ -767,6 +767,18 @@ void ReadingPage::setPageAnimationStyle(pageTurn::Style style)
             : QImage();
 }
 
+PageRefreshRegions ReadingPage::refreshRegions(const QImage &source)
+{
+    const auto key = source.cacheKey();
+    for (const auto &entry : regionCache)
+        if (entry.key == key)
+            return entry.regions;
+    // Keep the page shown and the one before it: a turn asks for both, twice.
+    regionCache[1] = regionCache[0];
+    regionCache[0] = { key, pageRefreshRegions(source) };
+    return regionCache[0].regions;
+}
+
 void ReadingPage::refreshContent(bool reading, bool now)
 {
     const auto colors = palette();
@@ -802,17 +814,17 @@ void ReadingPage::refreshContent(bool reading, bool now)
     preparedFrom = 0;
     dirty += annotationFrameDamage.translated(0, topHeight());
     annotationFrameDamage = {};
-    const auto oldRegions = pageRefreshRegions(renderedBody, true);
-    const auto newRegions = pageRefreshRegions(image, true);
+    // Copies: the second lookup can replace the entry of the first.
+    const auto oldRegions = refreshRegions(renderedBody);
+    const auto newRegions = refreshRegions(image);
     window()->setProperty(
             "reader_image_repairs",
-            QVariant::fromValue(
-                    (oldRegions | newRegions).translated(mapTo(window(), QPoint(0, topHeight())))));
+            QVariant::fromValue((oldRegions.colour | newRegions.colour)
+                                        .translated(mapTo(window(), QPoint(0, topHeight())))));
     window()->setProperty(
             "reader_mono_repairs",
-            QVariant::fromValue(
-                    (pageRefreshRegions(renderedBody, false) | pageRefreshRegions(image, false))
-                            .translated(mapTo(window(), QPoint(0, topHeight())))));
+            QVariant::fromValue((oldRegions.mono | newRegions.mono)
+                                        .translated(mapTo(window(), QPoint(0, topHeight())))));
     window()->setProperty("reader_colour_regions",
                           !annotationColorRegion.isEmpty() || pageHasColour(image));
     renderedBody = image;

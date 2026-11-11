@@ -754,7 +754,7 @@ void Reader::syncPinnedBookmarks()
             && topControls->isVisible() && !session->busy() && !lifecycleHidden && !closing
             && !services.suspended() && !annotationMode && !seekOpen && !appearanceEdit.panelOpen()
             && !general->isVisible() && !menu->isVisible() && !choices->isVisible()
-            && !chapterGraph->isVisible() && !lightPopup->isVisible() && !bookmarkList->isVisible()
+            && !lightPopup->isVisible() && !bookmarkList->isVisible()
             && !acknowledgments->isVisible() && !searchPanel->isVisible()
             && !dictionaryPanel->isVisible() && !linksActive() && !lookupPending && !syncDialog
             && !kosyncDialog && !finishDialog && !(fieldChooser && fieldChooser->isVisible())
@@ -764,10 +764,9 @@ void Reader::syncPinnedBookmarks()
         return;
     const int padding = ui::px(12), edgeGap = ui::px(20);
     const int top = topControls->geometry().bottom() + 1;
-    const int bottom = navigation         ? navigation->navigationTop()
+    int bottom = navigation               ? navigation->navigationTop()
             : bottomControls->isVisible() ? bottomControls->y()
                                           : height();
-    const int room = qMax(1, bottom - top);
     // A short screen, such as a phone in landscape, cannot stack every
     // shortcut at a usable size. Add columns instead of shrinking below
     // the buttons' minimum size, including with large interface text.
@@ -777,23 +776,42 @@ void Reader::syncPinnedBookmarks()
         minimumSide = qMax(minimumSide, qMax(button->minimumWidth(), button->minimumHeight()));
     }
     const int cell = qMax<int>(metrics::chrome::actionHeight, minimumSide + 2 * padding);
-    const int capacity = qBound(1, (room - 2 * padding) / cell, BookmarkStore::maxPins);
-    const int used = (pins.size() + capacity - 1) / capacity;
-    const int columnRows = (pins.size() + used - 1) / used;
-    const int side = qMax(1, cell - 2 * padding);
     const int gap = ui::px(16);
+    const bool stats = chapterGraph->isVisible();
+    // Prefer the exposed paper above Stats, keeping its text at full width.
+    // Short landscape screens instead leave room beside it for one column.
+    const bool besideStats = stats && chapterGraph->y() - top < cell + 2 * padding;
+    if (stats && !besideStats)
+        bottom = chapterGraph->y();
+    const int room = qMax(1, bottom - top);
+    const int capacity = qBound(1, (room - 2 * padding) / cell, BookmarkStore::maxPins);
+    const int columns = besideStats ? 1 : qMax(1, (width() - 2 * edgeGap + gap) / (cell + gap));
+    // Bookmarks retains any pins that do not fit at their usual button size.
+    const int count = stats ? qMin(int(pins.size()), capacity * columns) : int(pins.size());
+    const int used = (count + capacity - 1) / capacity;
+    const int columnRows = (count + used - 1) / used;
+    const int side = qMax(1, cell - 2 * padding);
     const int trayHeight = cell * columnRows + 2 * padding;
     const int trayWidth = cell * used + gap * (used - 1);
+    if (besideStats) {
+        if (room < cell + 2 * padding) {
+            pinnedBookmarks->hide();
+            return;
+        }
+        const int panelWidth = qMax(1, width() - trayWidth - 2 * edgeGap);
+        chapterGraph->setGeometry(0, bottom - chapterGraph->height(), panelWidth,
+                                  chapterGraph->height());
+    }
     pinnedBookmarks->setGeometry(width() - trayWidth - edgeGap, top + (room - trayHeight) / 2,
                                  trayWidth, trayHeight);
     for (int i = 0; i < pinnedButtons.size(); ++i) {
         auto *button = pinnedButtons[i];
-        button->setVisible(i < pins.size());
-        if (i >= pins.size())
+        button->setVisible(i < count);
+        if (i >= count)
             continue;
         const auto &pin = pins[i];
         const int column = i / columnRows;
-        const int rows = qMin(columnRows, int(pins.size()) - column * columnRows);
+        const int rows = qMin(columnRows, count - column * columnRows);
         const int columnTop = (trayHeight - (cell * rows + 2 * padding)) / 2;
         button->setGeometry(padding + column * (cell + gap),
                             columnTop + padding + i % columnRows * cell + (cell - side) / 2, side,

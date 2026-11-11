@@ -12,7 +12,7 @@ Right-click annotation entry is a host capability. Desktop enables it; other hos
 
 Physical-device touch and e-ink refresh still need device validation.
 
-The pinned-bookmark checks require an opaque theme background inside each shortcut capsule, including after switching themes. Rounded corners and gaps between columns remain transparent. The gallery includes a contrasting backdrop so a transparent interior cannot hide over a blank page margin.
+The pinned-bookmark checks require an opaque theme background inside each shortcut capsule, including after switching themes. Rounded corners and gaps between columns remain transparent. The gallery includes a contrasting backdrop so a transparent interior cannot hide over a blank page margin. Stats checks cover bounded shortcuts without overlap with the chart, figures or navigation, reopening with Stats as the default, switching views and rotation. The same jump and return handlers serve both shortcut layouts.
 
 ## Export
 

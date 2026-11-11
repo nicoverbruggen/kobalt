@@ -2146,15 +2146,16 @@ void Reader::syncLinkDiscovery()
 
 void Reader::syncNavigation()
 {
-    syncPinnedBookmarks();
     updateKosyncToolbar();
     syncStatusBoundary();
     if (navigation) {
         navigation->setStatusVisible(!hideNativeStatus());
     }
     syncLinkDiscovery();
-    if (!navigation)
+    if (!navigation) {
+        syncPinnedBookmarks();
         return;
+    }
     if (topControls->isVisible()) {
         auto *settings = appearanceEdit.edited() && appearanceEdit.ready()
                 ? appearanceEdit.preview()
@@ -2307,6 +2308,8 @@ void Reader::syncNavigation()
         headerFooterView->setGeometry(0, bottom - sheetHeight, width(), sheetHeight);
         headerFooterView->raise();
     }
+    // Use the current toolbar and tab bounds, including after rotation.
+    syncPinnedBookmarks();
 }
 
 void Reader::showControls()

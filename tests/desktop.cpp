@@ -2539,6 +2539,43 @@ void checkHeaderFooterSizes(int preset, bool dark)
 }
 } // namespace
 
+// Stats keeps full-size pins clear of its figures, chart and navigation.
+void checkStatsPins(Fixture &fixture, int pins)
+{
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+    auto *bar = fixture.widget("rrPinnedBookmarks");
+    auto *stats = fixture.widget("rrChapterGraph");
+    auto *reader = fixture.window.readerWindow();
+    const int top = fixture.widget("rrControlsTop")->geometry().bottom() + 1;
+    const int bottom = fixture.widget("rrNavText")->mapTo(reader, QPoint()).y();
+    QVERIFY(reader->rect().contains(bar->geometry()));
+    QVERIFY(bar->y() >= top && bar->geometry().bottom() < bottom);
+    QVERIFY(!bar->geometry().intersects(stats->geometry()));
+    QVERIFY(stats->y() >= top && stats->geometry().bottom() < bottom);
+    int visible = 0;
+    bool hidden = false;
+    for (int i = 0; i < BookmarkStore::maxPins; ++i) {
+        auto *button = fixture.widget(QString("rrPinnedBookmark%1").arg(i).toLatin1().constData());
+        if (!button->isVisible()) {
+            hidden = true;
+            continue;
+        }
+        QVERIFY(!hidden);
+        ++visible;
+        QVERIFY(bar->rect().contains(button->geometry()));
+        QVERIFY(button->width() >= button->minimumWidth());
+        QVERIFY(button->height() >= button->minimumHeight());
+        QTRY_VERIFY(button->isEnabled());
+    }
+    QVERIFY(visible > 0 && visible <= pins);
+    for (const auto *name :
+         { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell", "rrChapterBars" }) {
+        auto *widget = fixture.widget(name);
+        QVERIFY(widget->isVisible());
+        QVERIFY(stats->rect().contains(QRect(widget->mapTo(stats, QPoint()), widget->size())));
+    }
+}
+
 void checkPinnedBookmarks(int preset, bool dark)
 {
     Fixture fixture(dark);
@@ -2727,11 +2764,19 @@ void checkPinnedBookmarks(int preset, bool dark)
             }
 
             QVERIFY(capture(fixture, name + "-pinned-bookmark-single"));
+        }
+        if (i == 0 || i == 7) {
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
-            QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+            checkStatsPins(fixture, i + 1);
+            QVERIFY(capture(fixture,
+                            name
+                                    + (i == 0 ? "-pinned-bookmark-stats-single"
+                                              : "-pinned-bookmark-stats-eight")));
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+            QCOMPARE(bar->geometry().right(),
+                     fixture.window.readerWindow()->width() - 1 - ui::px(20));
         }
         const int navigationTop =
                 fixture.widget("rrNavText")->mapTo(fixture.window.readerWindow(), QPoint()).y();
@@ -2954,6 +2999,59 @@ void checkPinnedBookmarks(int preset, bool dark)
             break;
         }
     QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks"), remaining);
+
+    // Recreate the reader with Stats saved as the default, rather than
+    // relying only on a tab switch in an already initialized reader.
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(fixture.window.idle());
+    auto preferences = storage::readJson(fixture.paths.preferences());
+    preferences["default_menu_view"] = "stats";
+    QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+    const int openingCount = opened.count();
+    fixture.window.openBook(book);
+    QTRY_COMPARE(opened.count(), openingCount + 1);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+    checkStatsPins(fixture, 7);
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-stats-default"));
+    const auto destination = fixture.widget("rrPinnedBookmark0")->property("bookmark_position");
+    QVERIFY(fixture.press("rrPinnedBookmark0"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(fixture.state().value("position").toString(), destination.toString());
+    QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+    QVERIFY(fixture.press("rrPage"));
+    checkStatsPins(fixture, 7);
+    QVERIFY(fixture.press("rrNavSeek"));
+    QTRY_VERIFY(fixture.visible("rrPageScrubber"));
+    QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+    auto *scrubber = static_cast<ui::PageScrubber *>(fixture.widget("rrPageScrubber"));
+    QTRY_VERIFY(scrubber->previewReady());
+    // The default view has no tab; closing Navigate restores Stats.
+    QVERIFY(fixture.press("rrNavSeek"));
+    checkStatsPins(fixture, 7);
+    QVERIFY(fixture.press("rrBookmarks"));
+    QTRY_VERIFY(fixture.visible("rrBookmarkList"));
+    QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+    QVERIFY(fixture.press("rrBookmarkListClose"));
+    checkStatsPins(fixture, 7);
+    // Rotation runs through resize/reflow with a previously narrowed Stats
+    // panel. Returning must not retain the other orientation's pin capacity.
+    const int rotated = preset == 3 ? 5 : preset == 5 ? 3 : preset == 4 ? 1 : 4;
+    selectPreview(fixture, rotated);
+    QTRY_COMPARE(fixture.window.readerWindow()->size(), screenshotSize(rotated));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    if (!fixture.visible("rrControlsTop"))
+        QVERIFY(fixture.press("rrPage"));
+    checkStatsPins(fixture, 7);
+    selectPreview(fixture, preset);
+    QTRY_COMPARE(fixture.window.readerWindow()->size(), screenshotSize(preset));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    if (!fixture.visible("rrControlsTop"))
+        QVERIFY(fixture.press("rrPage"));
+    checkStatsPins(fixture, 7);
+    QCOMPARE(storage::readJson(fixture.paths.preferences()).value("default_menu_view").toString(),
+             QString("stats"));
 }
 
 void checkPageAnimationCompatibility(int preset, bool dark);

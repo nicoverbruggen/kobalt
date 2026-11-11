@@ -231,9 +231,15 @@ public:
 
     const QVector<PageLink> &pageLinks() const { return frame.links; }
 
-    // Layout changes restart an unfinished query. Its first batch replaces prior results.
+    // Layout changes restart unfinished queries and completed deferred-detail queries.
+    // Their first batch replaces prior results.
     // Explicit cancellation or a new source discards both running and queued searches.
-    void search(const QString &query, std::function<void(SearchBatch)> finished);
+    void search(const QString &query, std::function<void(SearchBatch)> finished,
+                SearchScope scope = SearchScope::Book, const QString &origin = {},
+                bool details = true);
+    void searchDetails(QVector<SearchHit> hits, SearchScope scope, const QString &origin,
+                       std::function<void(QVector<SearchHit>)> finished);
+    void prepareSearch();
     void cancelSearch();
     void annotationGeometry(const QString &start, const QString &end,
                             std::function<void(AnnotationGeometry)> finished);
@@ -459,11 +465,14 @@ private:
     std::shared_ptr<std::atomic<quint64>> newestPreview = std::make_shared<std::atomic<quint64>>(0);
     std::shared_ptr<std::atomic_int> neighbourJobs = std::make_shared<std::atomic_int>(0);
     std::shared_ptr<std::atomic_bool> searchCancelled;
-    QString searchQuery;
+    QString searchQuery, searchOrigin;
+    SearchScope searchScope = SearchScope::Book;
+    bool searchWithDetails = true;
+    void prepareSearchNext(quint64 job, std::shared_ptr<std::atomic_bool> cancelled);
     std::function<void(SearchBatch)> searchFinished;
     void interruptSearch();
     void startPendingSearch();
-    void searchNext(QString query, int page, int count, quint64 job,
+    void searchNext(QString query, SearchCursor cursor, int count, quint64 job,
                     std::shared_ptr<std::atomic_bool> cancelled,
                     std::function<void(SearchBatch)> finished, bool reset);
     void request(bool appearanceChange = false, RenderReason reason = RenderReason::Appearance);

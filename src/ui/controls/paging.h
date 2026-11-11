@@ -19,7 +19,8 @@ class PagerBar : public QWidget
 public:
     PagerBar(QWidget *parent, const QString &prefix);
     ~PagerBar() override;
-    void setPage(int page, int count, const QString &label = {}, bool wrap = false);
+    void setPage(int page, int count, const QString &label = {}, bool wrap = false,
+                 const QRect &blank = {});
     // Coordinates in the pager's parent. Never reserve space or cover list rows.
     void setBlankArea(const QRect &bounds);
     // Resolve a user turn using the last presented page and list bounds.

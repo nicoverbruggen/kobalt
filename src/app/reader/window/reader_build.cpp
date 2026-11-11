@@ -510,12 +510,27 @@ void Reader::buildReadingPage()
     searchPanel->requested = [this](const QString &query) {
         const auto epoch = ++searchEpoch;
         QPointer<Reader> guard(this);
-        this->session->search(query, [guard, epoch](kobalt::SearchBatch batch) {
-            if (!guard || guard->searchEpoch != epoch || guard->lifecycleHidden)
-                return;
-            guard->searchPanel->append(batch, guard->session->pages());
-        });
+        this->session->search(
+                query,
+                [guard, epoch](kobalt::SearchBatch batch) {
+                    if (!guard || guard->searchEpoch != epoch || guard->lifecycleHidden)
+                        return;
+                    guard->searchPanel->append(batch, guard->session->pages());
+                },
+                searchPanel->scope(), searchOriginal, false);
     };
+    searchPanel->detailsRequested =
+            [this](QVector<kobalt::SearchHit> hits,
+                   std::function<void(QVector<kobalt::SearchHit>)> finished) {
+                const auto epoch = searchEpoch;
+                QPointer<Reader> guard(this);
+                this->session->searchDetails(
+                        std::move(hits), searchPanel->scope(), searchOriginal,
+                        [guard, epoch, finished](QVector<kobalt::SearchHit> resolved) {
+                            if (guard && guard->searchEpoch == epoch && !guard->lifecycleHidden)
+                                finished(std::move(resolved));
+                        });
+            };
     searchPanel->dismissed = [this] { closeSearch(); };
     searchPanel->returnToStart = [this] {
         // Returning ends the search trip; the next search starts from here.

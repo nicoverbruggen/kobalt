@@ -21,3 +21,4 @@ crengine-alternate-layout.patch
 crengine-render-overflow.patch
 crengine-embedded-font-limit.patch
 crengine-vertical-buffer.patch
+crengine-search-preparation.patch

@@ -1636,6 +1636,7 @@ void Reader::openSearch(const QString &query)
         searchOriginal = session->state().value("position").toString();
         searchOriginalPage = session->page();
     }
+    session->prepareSearch();
     searchPanel->setExcerptFont(bookFace());
     searchPanel->setChapters(session->chapters());
     const auto safe = safeArea();

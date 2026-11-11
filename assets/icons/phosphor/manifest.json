@@ -19,6 +19,14 @@
       "sha256": "3c2001cf957d182fc54927e4b286cc8cf66dd97830f441ca2650d42a63a9006a"
     },
     {
+      "file": "arrow-line-left.svg",
+      "sha256": "6bf9dfd3202beb9a788459dab4e2003d6d06a5edf46ae9ba21bfd3e3c918de1a"
+    },
+    {
+      "file": "arrow-line-right.svg",
+      "sha256": "289f2728e235a4e3f548978b7c602631ec20c86cc1dc767c3e2cc156d133234d"
+    },
+    {
       "file": "arrow-u-up-left.svg",
       "sha256": "37975867f2e89f745250d3601a5674ca37883a8d79f52abcb082beba4df28df7"
     },
@@ -37,6 +45,10 @@
     {
       "file": "book-bookmark.svg",
       "sha256": "ca4cd8a5383e6863699fcb5c30d6568f9b4a5948a43c94afb6c9a9142c966f16"
+    },
+    {
+      "file": "book-open-text.svg",
+      "sha256": "5eb0c8daceb5a6ffa004118720ea712a3eb8b7d2b6ab5bae750c3efca9d35450"
     },
     {
       "file": "book-open.svg",

@@ -93,6 +93,7 @@
 #include <QLabel>
 #include "app/reader/views/sleep_screen.h"
 #include <QLineEdit>
+#include <QIntValidator>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -2316,6 +2317,13 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QCOMPARE(searchDone->text(), strings::get("search_panel.search"));
     if (screenshots)
         QVERIFY(scene("search-empty"));
+    QVERIFY(fixture.press("rrSearchScope"));
+    if (screenshots) {
+        capturePages(fixture, name + "-search-scopes", "rrSearchScopes");
+        while (!fixture.visible("rrSearchScope3"))
+            QVERIFY(fixture.press("rrSearchScopesPrevious"));
+    }
+    QVERIFY(fixture.press("rrSearchScope3"));
     query->setText("Trevelyan");
     QVERIFY(fixture.press("rrSearchSubmit"));
     QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
@@ -2329,6 +2337,17 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QTRY_VERIFY_WITH_TIMEOUT(!status->text().contains("Searching", Qt::CaseInsensitive), 30000);
         QTRY_VERIFY(!fixture.visible("rrSearchResult0"));
         QVERIFY(scene("search-no-results"));
+        query->setText("e");
+        QVERIFY(fixture.press("rrSearchSubmit"));
+        QTRY_VERIFY_WITH_TIMEOUT(!status->text().contains("Searching", Qt::CaseInsensitive), 30000);
+        QVERIFY(fixture.press("rrSearchPageJump"));
+        QVERIFY(scene("search-page-jump"));
+        auto *number = fixture.window.readerWindow()->findChild<QLineEdit *>("rrSearchPageNumber");
+        QVERIFY(number);
+        const auto *validator = static_cast<const QIntValidator *>(number->validator());
+        number->setText(QString::number(validator->top()));
+        QVERIFY(fixture.press("rrSearchPageGo"));
+        QVERIFY(scene("search-last-page"));
         query->setText("Trevelyan");
         QVERIFY(fixture.press("rrSearchSubmit"));
         QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrSearchResult0"), 30000);
@@ -12842,6 +12861,8 @@ private slots:
         QVERIFY(scene("rrSearchOpen", "rrSearchQuery", "search-empty"));
         auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
         QVERIFY(query);
+        QVERIFY(fixture.press("rrSearchScope"));
+        QVERIFY(fixture.press("rrSearchScope3"));
         query->setText("Trevelyan");
         QVERIFY(scene("rrSearchSubmit", "rrSearchResult0", "search"));
         QVERIFY(fixture.press("rrSearchResult0"));

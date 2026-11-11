@@ -327,6 +327,7 @@ EngineDocument::EngineDocument(EngineFontInputs fonts) : fonts_(std::move(fonts)
 
 EngineDocument::~EngineDocument()
 {
+    searchText_.reset();
     sourceIndex_.reset();
     engine_.reset();
     source_.reset();
@@ -530,6 +531,7 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     appearance::migrateLineSpacing(saved);
     // Outline thickness must not affect layout-time italic overhang measurements.
     setExtraFontWeight(0);
+    searchText_.reset();
     sourceIndex_.reset();
     contentsIndex_ = {};
     graphIndex_ = {};
@@ -984,8 +986,10 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     if (!verticalChanged && !styled && !resized && weight == weight_ && dark == darkMode_
         && hideNonlinear == hideNonlinearFragments_)
         return true;
-    if (styled || resized || verticalChanged)
+    if (styled || resized || verticalChanged) {
+        searchText_.reset();
         sourceIndex_.reset();
+    }
     const QString anchor = position();
     auto *document = engine_->getDocument();
     // Snapshots belong to this live publication and parser instance. Invalidate

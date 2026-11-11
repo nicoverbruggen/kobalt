@@ -1,4 +1,5 @@
 #include "app/reader/views/annotation_exporter.h"
+#include "app/reader/panels/search_panel.h"
 #include <QVariant>
 #include <QSqlQuery>
 #include "storage/annotation_database.h"
@@ -74,6 +75,7 @@
 #include <QNetworkAccessManager>
 #include <QLabel>
 #include <QLineEdit>
+#include <QIntValidator>
 #ifndef KOBALT_NO_SENSORS
 #  include <QOrientationSensor>
 #endif
@@ -3273,6 +3275,8 @@ private slots:
         auto *query = host.window()->findChild<QLineEdit *>("rrSearchQuery");
         auto *status = host.window()->findChild<QLabel *>("rrSearchStatus");
         QVERIFY(query && status);
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchScope")));
+        QVERIFY(click(canvas, host.window()->findChild<QAbstractButton *>("rrSearchScope3")));
         query->setText("reader");
         emit query->returnPressed();
         QTRY_COMPARE(status->text(), strings::get("search_panel.matches").arg(hits.size()));
@@ -3322,11 +3326,174 @@ private slots:
         QCOMPARE(page->snapshot(), applied);
     }
 
+    // Searches beyond both old caps and switches scope through the production controls.
+    void searchScopesAndPagination()
+    {
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        canvas.setUpdatesEnabled(true);
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        int referenceCount = 0;
+        bool referenceDone = false;
+        host.session()->search("e", [&](SearchBatch batch) {
+            referenceCount += batch.hits.size();
+            referenceDone = batch.done;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(referenceDone, 15000);
+        QVERIFY(referenceCount > 1000);
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchOpen")));
+        auto *scopeStatus = host.window()->findChild<QLabel *>("rrSearchScopeStatus");
+        QVERIFY(scopeStatus && scopeStatus->isVisible());
+        // Center the visible caption ink, not the font's ascent/descent box.
+        const auto scopeImage = scopeStatus->grab().toImage();
+        int inkTop = scopeImage.height(), inkBottom = -1;
+        for (int y = 0; y < scopeImage.height(); ++y)
+            for (int x = 0; x < scopeImage.width(); ++x)
+                if (qGray(scopeImage.pixel(x, y)) < 128) {
+                    inkTop = qMin(inkTop, y);
+                    inkBottom = qMax(inkBottom, y);
+                }
+        QVERIFY(inkBottom >= inkTop);
+        QVERIFY(qAbs(inkTop - (scopeImage.height() - 1 - inkBottom)) <= 2);
+        QCOMPARE(scopeStatus->text(),
+                 strings::get("search_panel.now_searching")
+                         .arg(strings::get("search_panel.whole_book")));
+        auto *scope = host.window()->findChild<QPushButton *>("rrSearchScope");
+        QVERIFY(scope && click(canvas, scope));
+        auto *defaultScope = host.window()->findChild<QAbstractButton *>("rrSearchScope3");
+        QVERIFY(defaultScope && defaultScope->isChecked());
+        QVERIFY(click(canvas, host.window()->findChild<QAbstractButton *>("rrSearchScope3")));
+        auto *query = host.window()->findChild<QLineEdit *>("rrSearchQuery");
+        auto *status = host.window()->findChild<QLabel *>("rrSearchStatus");
+        QVERIFY(query && status);
+        query->setText("e");
+        emit query->returnPressed();
+        QTRY_COMPARE_WITH_TIMEOUT(status->text(),
+                                  strings::get("search_panel.matches").arg(referenceCount), 15000);
+        auto *jump = host.window()->findChild<QPushButton *>("rrSearchPageJump");
+        QVERIFY(jump && click(canvas, jump));
+        auto *number = host.window()->findChild<QLineEdit *>("rrSearchPageNumber");
+        auto *go = host.window()->findChild<QPushButton *>("rrSearchPageGo");
+        QVERIFY(number && go);
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchPageKey1")));
+        QCOMPARE(number->text(), QString("2"));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchPageKey11")));
+        QVERIFY(number->text().isEmpty());
+        QVERIFY(!go->isEnabled());
+        number->setText("12");
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchPageKey9")));
+        QVERIFY(number->text().isEmpty());
+        number->setText("0");
+        QVERIFY(!go->isEnabled());
+        number->setText("999999");
+        QVERIFY(!go->isEnabled());
+        const auto *validator = static_cast<const QIntValidator *>(number->validator());
+        const int lastPage = validator->top();
+        number->setText(QString::number(lastPage));
+        QVERIFY(go->isEnabled() && click(canvas, go));
+        auto *last = host.window()->findChild<QPushButton *>(
+                QString("rrSearchResult%1").arg(referenceCount - 1));
+        QVERIFY(last && last->isVisible());
+        QTRY_VERIFY(last->isEnabled());
+        QVERIFY(!last->accessibleName().isEmpty());
+        // A delayed reply for the previous results page cannot replace the current rows.
+        auto *panel = dynamic_cast<SearchPanel *>(host.window()->findChild<QWidget *>("rrSearch"));
+        QVERIFY(panel);
+        const auto resolve = panel->detailsRequested;
+        QVector<std::function<void()>> replies;
+        panel->detailsRequested = [&](QVector<SearchHit> hits,
+                                      std::function<void(QVector<SearchHit>)> finished) {
+            resolve(hits, [&, finished](QVector<SearchHit> resolved) {
+                replies.append([finished, resolved] { finished(resolved); });
+            });
+        };
+        const auto lastDescription = last->accessibleName();
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchPrevious")));
+        QTRY_COMPARE(replies.size(), 1);
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchNext")));
+        QTRY_COMPARE(replies.size(), 2);
+        last = host.window()->findChild<QPushButton *>(
+                QString("rrSearchResult%1").arg(referenceCount - 1));
+        QVERIFY(last && !last->isEnabled());
+        replies[0]();
+        QVERIFY(!last->isEnabled() && last->accessibleName().isEmpty());
+        replies[1]();
+        QVERIFY(last->isEnabled());
+        QCOMPARE(last->accessibleName(), lastDescription);
+        panel->detailsRequested = resolve;
+        QVERIFY(click(canvas, scope));
+        auto *whole = host.window()->findChild<QAbstractButton *>("rrSearchScope3");
+        QVERIFY(whole && whole->isChecked());
+        QVERIFY(click(canvas, host.window()->findChild<QAbstractButton *>("rrSearchScope1")));
+        QCOMPARE(scopeStatus->text(),
+                 strings::get("search_panel.now_searching")
+                         .arg(strings::get("search_panel.up_to_here")));
+        QTRY_VERIFY_WITH_TIMEOUT(status->text() != strings::get("search_panel.searching"), 10000);
+        query->clear();
+        for (int id : { 0, 1, 2, 3 }) {
+            QVERIFY(click(canvas, scope));
+            auto *option =
+                    host.window()->findChild<QAbstractButton *>(QString("rrSearchScope%1").arg(id));
+            auto *icon =
+                    host.window()->findChild<QWidget *>(QString("rrSearchScopeIcon%1").arg(id));
+            QVERIFY(option && icon && icon->isVisible());
+            QVERIFY(icon->geometry().center().x() > option->width() / 2);
+            const QSize iconSize = icon->size();
+            const auto expected = icon->grab().toImage().convertToFormat(QImage::Format_RGB32);
+            QVERIFY(click(canvas, option));
+            const auto actual = scope->grab()
+                                        .toImage()
+                                        .copy((scope->width() - iconSize.width()) / 2,
+                                              (scope->height() - iconSize.height()) / 2,
+                                              iconSize.width(), iconSize.height())
+                                        .convertToFormat(QImage::Format_RGB32);
+            QCOMPARE(actual, expected);
+        }
+        // Progress arrivals and incidental redraws must not churn the pagination counter.
+        host.session()->cancelSearch();
+        SearchBatch progress;
+        progress.reset = true;
+        progress.hits.append({ "first", "end", "Before", "match", "after", 0 });
+        panel->append(progress, 100);
+        auto *counter = panel->findChild<QLabel *>("rrSearchPage");
+        QVERIFY(counter);
+        const auto firstCounter = counter->text();
+        const auto firstStatus = status->text();
+        QElapsedTimer progressTime;
+        progressTime.start();
+        progress.reset = false;
+        progress.hits.clear();
+        for (int i = 0; i < 40; ++i)
+            progress.hits.append({ QString::number(i), "end", "Before", "match", "after", i });
+        panel->append(progress, 100);
+        panel->resize(panel->width() - 1, panel->height());
+        QCOMPARE(counter->text(), firstCounter);
+        QCOMPARE(status->text(), firstStatus);
+        QTRY_VERIFY_WITH_TIMEOUT(status->text() != firstStatus, 3000);
+        QVERIFY(progressTime.elapsed() >= 2000);
+        QVERIFY(counter->text() != firstCounter);
+        progress.hits.clear();
+        progress.done = true;
+        panel->append(progress, 100);
+        QCOMPARE(status->text(), strings::get("search_panel.matches").arg(41));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSearchBack")));
+    }
+
     void searchSurvivesReflow_data()
     {
         QTest::addColumn<QString>("interruption");
         QTest::newRow("queued-reply") << QString("queued-reply");
         QTest::newRow("partial-results") << QString("partial-results");
+        QTest::newRow("reopen-partial") << QString("reopen-partial");
+        QTest::newRow("completed-results") << QString("completed-results");
         QTest::newRow("busy-submit") << QString("busy-submit");
         QTest::newRow("replaced-query") << QString("replaced-query");
         QTest::newRow("closed-query") << QString("closed-query");
@@ -3363,6 +3530,10 @@ private slots:
         auto *back = host.window()->findChild<QPushButton *>("rrSearchBack");
         QVERIFY(panel && query && status && back);
         QTRY_VERIFY(panel->isVisible());
+        auto *scope = host.window()->findChild<QPushButton *>("rrSearchScope");
+        QVERIFY(scope && click(canvas, scope));
+        auto *whole = host.window()->findChild<QAbstractButton *>("rrSearchScope3");
+        QVERIFY(whole && click(canvas, whole));
         // Drain prior worker replies before intercepting this search's delivery.
         bool drained = false;
         host.session()->pageSummary(host.session()->page(),
@@ -3396,7 +3567,7 @@ private slots:
                 // must not append after resize invalidates that layout.
                 host.session()->resize(resized);
             };
-        } else if (interruption == "partial-results") {
+        } else if (interruption == "partial-results" || interruption == "reopen-partial") {
             application->afterEvent = [&](QObject *object, QEvent *event) {
                 if (object != qApp || event->type() != QEvent::MetaCall || interrupted
                     || status->text() == strings::get("search_panel.searching")
@@ -3404,15 +3575,18 @@ private slots:
                     return;
                 }
                 auto *result = host.window()->findChild<QPushButton *>("rrSearchResult0");
-                if (!result || !result->isVisible()) {
+                if (!result || !result->isVisible() || !result->isEnabled()) {
                     return;
                 }
                 application->afterEvent = {};
                 interrupted = true;
-                // A restarted query must replace the already appended batch.
-                host.session()->resize(resized);
+                if (interruption == "reopen-partial")
+                    result->click();
+                else
+                    // A restarted query must replace the already appended batch.
+                    host.session()->resize(resized);
             };
-        } else {
+        } else if (interruption != "completed-results") {
             engineActivity().pause(true);
             host.session()->resize(resized);
             QVERIFY(host.session()->busy());
@@ -3420,6 +3594,21 @@ private slots:
         }
         query->setText("reader");
         emit query->returnPressed();
+        if (interruption == "completed-results") {
+            QTRY_COMPARE_WITH_TIMEOUT(status->text(),
+                                      strings::get("search_panel.matches").arg(referenceCount),
+                                      10000);
+            auto *first = panel->findChild<QPushButton *>("rrSearchResult0");
+            QVERIFY(first);
+            QTRY_VERIFY(first->isEnabled());
+            engineActivity().pause(true);
+            host.session()->resize(resized);
+            QVERIFY(host.session()->busy());
+            // A new visible range asks for details while rendering rejects the request.
+            panel->resize(panel->width(), panel->height() - 240);
+            QVERIFY(!first->isEnabled());
+            interrupted = true;
+        }
         if (interruption == "replaced-query") {
             query->setText("zqxjv");
             emit query->returnPressed();
@@ -3431,6 +3620,12 @@ private slots:
         QTRY_VERIFY(interrupted);
         QTRY_VERIFY_WITH_TIMEOUT(!host.session()->busy(), 10000);
         const auto none = strings::get("search_panel.no_matches_found");
+        if (interruption == "reopen-partial") {
+            QVERIFY(!panel->isVisible());
+            QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+            QTRY_VERIFY(openSearch->isVisible());
+            QVERIFY(click(canvas, openSearch));
+        }
         if (interruption == "closed-query") {
             drained = false;
             host.session()->pageSummary(host.session()->page(),
@@ -3451,6 +3646,12 @@ private slots:
                     ? none
                     : strings::get("search_panel.matches").arg(referenceCount);
             QTRY_COMPARE_WITH_TIMEOUT(status->text(), expected, 10000);
+        }
+        if (interruption == "completed-results") {
+            auto *first = panel->findChild<QPushButton *>("rrSearchResult0");
+            QVERIFY(first);
+            QTRY_VERIFY(first->isEnabled());
+            QVERIFY(!first->accessibleName().isEmpty());
         }
         drained = false;
         host.session()->pageSummary(host.session()->page(),

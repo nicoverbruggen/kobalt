@@ -62,10 +62,18 @@ struct SearchHit
     int page = -1;
 };
 
+enum class SearchScope { Book, Chapter, Before, After };
+
+struct SearchCursor
+{
+    int block = 0, offset = 0;
+};
+
 struct SearchBatch
 {
     QVector<SearchHit> hits;
     int nextPage = 0;
+    SearchCursor cursor;
     bool done = false, limited = false;
     // A restarted scan replaces results from the previous layout.
     bool reset = false;
@@ -225,6 +233,14 @@ public:
     QVector<PageLink> pageLinks();
     LinkDetails linkDetails(const QString &source, bool preview = true);
     SearchBatch searchPage(const QString &query, int page);
+    // Worker-only, incremental preparation. The cache belongs to this layout.
+    bool prepareSearch();
+    SearchBatch searchText(const QString &query, SearchCursor cursor, int maximum,
+                           SearchScope scope = SearchScope::Book, const QString &origin = {},
+                           bool details = true);
+    QVector<SearchHit> searchDetails(QVector<SearchHit> hits, SearchScope scope,
+                                     const QString &origin);
+
     // Source-only current-page intersection. Does not resolve remote geometry.
     // Returns input indices in order; at most 2000 saved ranges plus one draft.
     QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) const;
@@ -328,6 +344,10 @@ private:
     std::shared_ptr<ReaderSource> source_;
     QJsonObject openingTimes_;
     std::unique_ptr<ColumnView> engine_;
+    struct SearchText;
+    std::shared_ptr<SearchText> searchText_;
+    void ensureSearchText();
+    bool ensureSearchScope(SearchScope scope, const QString &origin);
     struct SourceIndex;
     friend struct ReaderSourceIndexProbe;
     friend struct ReaderFootnoteProbe;

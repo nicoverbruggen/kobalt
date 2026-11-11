@@ -1201,7 +1201,13 @@ int main(int argc, char **argv)
     }
     {
         using namespace kobalt::ui;
-        for (int id = int(ControlIcon::Search); id <= int(ControlIcon::More); ++id) {
+        QVector<int> icons;
+        for (int id = int(ControlIcon::Search); id <= int(ControlIcon::More); ++id)
+            icons.append(id);
+        for (const auto icon :
+             { ControlIcon::SearchChapter, ControlIcon::SearchBefore, ControlIcon::SearchAfter })
+            icons.append(int(icon));
+        for (const int id : icons) {
             const auto black = controlIcon(ControlIcon(id))
                                        .pixmap(64, 64)
                                        .toImage()

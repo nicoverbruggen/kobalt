@@ -292,6 +292,29 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path = outline.createStroke(strokes);
         return true;
     }
+    if (name == QStringLiteral("arrow-line-left") || name == QStringLiteral("arrow-line-right")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(232, 128);
+        path.cubicTo(232, 132.418277999, 228.418277999, 136, 224, 136);
+        path.lineTo(91.31, 136);
+        path.lineTo(149.66, 194.34);
+        path.cubicTo(152.785931684, 197.465931684, 152.785931684, 202.534068316, 149.66, 205.66);
+        path.cubicTo(146.534068316, 208.785931684, 141.465931684, 208.785931684, 138.34, 205.66);
+        path.lineTo(66.34, 133.66);
+        path.cubicTo(64.8377836558, 132.159453943, 63.9937067487, 130.123273985, 63.9937067487, 128);
+        path.cubicTo(63.9937067487, 125.876726015, 64.8377836558, 123.840546057, 66.34, 122.34);
+        path.lineTo(138.34, 50.34);
+        path.cubicTo(141.465931684, 47.214068316, 146.534068316, 47.214068316, 149.66, 50.34);
+        path.cubicTo(152.785931684, 53.465931684, 152.785931684, 58.534068316, 149.66, 61.66);
+        path.lineTo(91.31, 120);
+        path.lineTo(224, 120);
+        path.cubicTo(228.418277999, 120, 232, 123.581722001, 232, 128);
+        path.closeSubpath();
+        path.addRoundedRect(QRectF(32, 32, 16, 192), 8, 8);
+        if (name == QStringLiteral("arrow-line-right"))
+            path = QTransform(-1, 0, 0, 1, 256, 0).map(path);
+        return true;
+    }
     if (name == QStringLiteral("arrow-left")) {
         path.setFillRule(Qt::WindingFill);
         path.moveTo(224, 128);
@@ -414,7 +437,7 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path.closeSubpath();
         return true;
     }
-    if (name == QStringLiteral("book-open")) {
+    if (name == QStringLiteral("book-open") || name == QStringLiteral("book-open-text")) {
         path.setFillRule(Qt::WindingFill);
         path.moveTo(232, 48);
         path.lineTo(160, 48);
@@ -449,6 +472,11 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path.cubicTo(136, 74.7451660041, 146.745166004, 64, 160, 64);
         path.lineTo(224, 64);
         path.closeSubpath();
+        if (name == QStringLiteral("book-open-text")) {
+            path.addRoundedRect(QRectF(152, 88, 56, 16), 8, 8);
+            path.addRoundedRect(QRectF(152, 120, 56, 16), 8, 8);
+            path.addRoundedRect(QRectF(152, 152, 56, 16), 8, 8);
+        }
         return true;
     }
     if (name == QStringLiteral("bookmark-simple")) {

@@ -1507,12 +1507,16 @@ void ReaderSession::cancelSearch()
     interruptSearch();
 }
 
-void ReaderSession::search(const QString &query, std::function<void(SearchBatch)> finished)
+void ReaderSession::search(const QString &query, std::function<void(SearchBatch)> finished,
+                           SearchScope scope, const QString &origin, bool details)
 {
     cancelSearch();
+    searchWithDetails = details;
     if (query.trimmed().isEmpty() || query.size() > 256 || !finished) {
         return;
     }
+    searchScope = scope;
+    searchOrigin = origin;
     searchQuery = query.trimmed();
     searchFinished = std::move(finished);
     startPendingSearch();
@@ -1528,72 +1532,122 @@ void ReaderSession::startPendingSearch()
         return;
     }
     searchCancelled = std::make_shared<std::atomic_bool>(false);
-    searchNext(searchQuery, 0, 0, revision, searchCancelled, searchFinished, true);
+    searchNext(searchQuery, {}, 0, revision, searchCancelled, searchFinished, true);
 }
 
-void ReaderSession::searchNext(QString query, int page, int count, quint64 job,
-                               std::shared_ptr<std::atomic_bool> cancelled,
-                               std::function<void(SearchBatch)> finished, bool reset)
+void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, const QString &origin,
+                                  std::function<void(QVector<SearchHit>)> finished)
 {
-    auto engine = engine_;
+    if (running || retiring || !lease_ || lease_->revoked())
+        return;
+    const auto engine = engine_;
+    const auto lease = lease_;
+    const auto job = revision;
+    const auto latest = newest;
+    QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [engine, lease, job, latest, guard, hits, scope, origin, finished] {
+                if (lease->revoked() || latest->load() != job)
+                    return;
+                EngineJob activity;
+                if (lease->revoked() || latest->load() != job)
+                    return;
+                const auto result = engine->searchDetails(hits, scope, origin);
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, lease, job, result, finished] {
+                            if (guard && guard->lease_ == lease && !lease->revoked()
+                                && guard->revision == job && !guard->running)
+                                finished(result);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
+void ReaderSession::prepareSearch()
+{
+    if (running || searchCancelled || !searchQuery.isEmpty() || retiring || !lease_
+        || lease_->revoked())
+        return;
+    searchCancelled = std::make_shared<std::atomic_bool>(false);
+    prepareSearchNext(revision, searchCancelled);
+}
+
+void ReaderSession::prepareSearchNext(quint64 job, std::shared_ptr<std::atomic_bool> cancelled)
+{
+    const auto engine = engine_;
     const auto lease = lease_;
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, query, page, count, job, cancelled, finished, reset, lease] {
-                if (cancelled->load() || !lease || lease->revoked()) {
+            [engine, lease, guard, job, cancelled] {
+                if (cancelled->load() || !lease || lease->revoked())
                     return;
-                }
-                SearchBatch result;
+                EngineJob activity;
+                if (cancelled->load() || lease->revoked())
+                    return;
+                const bool done = engine->prepareSearch();
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, lease, job, cancelled, done] {
+                            if (!guard || cancelled->load() || lease->revoked()
+                                || guard->lease_ != lease || guard->revision != job
+                                || guard->running)
+                                return;
+                            if (done)
+                                guard->searchCancelled.reset();
+                            else
+                                guard->prepareSearchNext(job, cancelled);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
+void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, quint64 job,
+                               std::shared_ptr<std::atomic_bool> cancelled,
+                               std::function<void(SearchBatch)> finished, bool reset)
+{
+    const auto engine = engine_;
+    const auto lease = lease_;
+    const auto scope = searchScope;
+    const bool details = searchWithDetails;
+    const auto origin = searchOrigin;
+    QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [engine, guard, query, cursor, count, job, cancelled, finished, reset, lease, scope,
+             origin, details] {
+                if (cancelled->load() || !lease || lease->revoked())
+                    return;
+                EngineJob activity;
+                if (cancelled->load() || lease->revoked())
+                    return;
+                auto result = engine->searchText(query, cursor, count ? (details ? 32 : 512) : 1,
+                                                 scope, origin, details);
                 result.reset = reset;
-                result.nextPage = page;
-                QElapsedTimer budget;
-                budget.start();
-                // Bound each worker turn, but avoid a GUI round trip for every empty page.
-                do {
-                    if (cancelled->load() || lease->revoked()) {
-                        return;
-                    }
-                    EngineJob activity;
-                    if (cancelled->load() || lease->revoked()) {
-                        return;
-                    }
-                    auto part = engine->searchPage(query, result.nextPage);
-                    result.nextPage = part.nextPage;
-                    result.done = part.done;
-                    result.limited = part.limited;
-                    result.hits += part.hits;
-                    if (count + result.hits.size() >= 500) {
-                        result.hits.resize(qMax(0, 500 - count));
-                        result.limited = result.done = true;
-                    }
-                    // Deliver the first matches without waiting for the batch to fill.
-                    if (!count && !result.hits.isEmpty())
-                        break;
-                } while (!result.done && result.nextPage - page < 16 && budget.elapsed() < 12);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, query, count, job, cancelled, finished, result, lease] {
                             if (!guard || cancelled->load() || lease->revoked()
                                 || guard->lease_ != lease || guard->revision != job
-                                || guard->running) {
+                                || guard->running)
                                 return;
-                            }
-                            if (result.done) {
+                            // Keep the UI subscription after completion so reflow can replace
+                            // its anchors and details. Eager callers remain one-shot searches.
+                            if (result.done && guard->searchWithDetails) {
                                 guard->searchQuery.clear();
                                 guard->searchFinished = {};
                                 guard->searchCancelled.reset();
                             }
                             finished(result);
-                            // Schedule the next batch from the GUI. Closing the session cancels
-                            // it before the GUI can enqueue work behind the USB drain barrier.
                             if (guard && !cancelled->load() && !lease->revoked() && !result.done
                                 && guard->searchCancelled == cancelled && guard->revision == job
-                                && !guard->running) {
-                                guard->searchNext(query, result.nextPage,
-                                                  count + result.hits.size(), job, cancelled,
-                                                  finished, false);
-                            }
+                                && !guard->running)
+                                guard->searchNext(query, result.cursor, count + result.hits.size(),
+                                                  job, cancelled, finished, false);
                         },
                         Qt::QueuedConnection);
             },

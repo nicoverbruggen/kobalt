@@ -723,7 +723,7 @@
 /* Arguments: %1 */
 "search_panel.matches" = "%1 matches";
 /* Arguments: %1, %2 */
-"search_panel.matches_searching" = "%1 matches · Searching %2%";
+"search_panel.matches_searching" = "%1 matches · Searching…";
 "search_panel.no_matches_found" = "No matches";
 /* Arguments: %1, %2 */
 "search_panel.page_detail" = "Page %1: %2";
@@ -957,11 +957,9 @@
 "navigation.page_count" = "%1 of %2";
 
 /* search_panel */
-"search_panel.edit" = "Edit search";
 /* Arguments: %1 */
 "search_panel.empty_query" = "No matches for “%1”";
 /* Arguments: %1 */
-"search_panel.limited" = "%1 matches · Limit reached";
 /* Arguments: %1, %2 */
 "search_panel.result_range" = "Results %1–%2";
 /* Arguments: %1 */
@@ -1524,3 +1522,25 @@
 "settings.new_book_book_default" = "Book default";
 "settings.new_book_last_used" = "Same as last book";
 "text_presets.used_for_new_books" = "Used for new books";
+
+"search_panel.scope" = "Search in";
+"search_panel.current_chapter" = "Current chapter";
+"search_panel.up_to_here" = "Up to this page";
+"search_panel.after_here" = "After this page";
+"search_panel.whole_book" = "Whole book";
+
+"search_panel.go_to_page" = "Go to results page";
+/* %1 is the last results page. */
+"search_panel.page_range" = "Enter a page from 1 to %1";
+"search_panel.go" = "Go";
+"search_panel.clear_page" = "Clear page number";
+"search_panel.erase_digit" = "Erase digit";
+
+/* %1 is the selected search scope. */
+"search_panel.now_searching" = "Now searching: %1";
+"search_panel.clear_number" = "Clear";
+
+"search_panel.whole_book_description" = "Searches the whole book for your search term.";
+"search_panel.current_chapter_description" = "Searches the current chapter only, including unread pages.";
+"search_panel.up_to_here_description" = "Searches all previous pages, but nothing after the page that's open.";
+"search_panel.after_here_description" = "Searches all upcoming pages, but nothing from prior pages.";

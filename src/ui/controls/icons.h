@@ -137,7 +137,10 @@ enum class ControlIcon {
     FitImage,
     Door,
     Redirect,
-    Bold
+    Bold,
+    SearchChapter,
+    SearchBefore,
+    SearchAfter
 };
 // Paint vectors at the target resolution without an intermediate icon bitmap.
 void paintOpeningIcon(QPainter &painter, ControlIcon icon, const QRectF &bounds, QColor color);

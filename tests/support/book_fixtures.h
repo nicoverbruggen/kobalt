@@ -103,6 +103,8 @@ inline QMap<QString, QByteArray> lookupBook()
                   "<p id='multilingual'>Astral A𐐀word. Bonjour. 日本語の言葉。中文词语。</p>"
                   "<p id='annotation-punctuation'><span>“</span>quoted<span>…”</span> [bracket], adjacent. Next <em>𐐀token</em>。</p>"
                   "<p id='annotation-sentences'>Al<span>pha</span> finishes clearly. Beta completes fully! “Quotation ending.” (Nested closing?) Dr. Smith waits. Value 3.14 remains. 東京。 Ends with ellipsis… “Earlier completed.” Later rests.” We're arriving.' <span>(“</span>Layered pairing<span>.</span><span>”)</span> “Greeting,” she murmured softly. “First one. Second two.”</p>")
+                  + QByteArray("<p id='dense-search'>") + QByteArray("Densemarker ").repeated(600)
+                  + "</p><p>ﬃ Straße e‑mail a&#x200b;b</p>"
                   + QByteArray("<p>More fixture text.</p>").repeated(80) + "</body></html>" },
         { "two.xhtml",
           "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Lookup fixture</title></head><body><p id='boundary'>Chapter boundary. Hello again.</p></body></html>" }

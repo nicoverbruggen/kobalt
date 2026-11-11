@@ -7,6 +7,8 @@
 #include <QSet>
 #include <QHash>
 #include <vector>
+#include <algorithm>
+#include <QElapsedTimer>
 
 namespace kobalt {
 namespace {
@@ -1534,6 +1536,254 @@ QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &e
                 result.append(clipped);
         }
     }
+    return result;
+}
+
+namespace {
+constexpr lUInt32 searchFlags = LDOM_FIND_TEXT_MATCH_ACROSS_TEXT_NODES
+        | LDOM_FIND_TEXT_COLLAPSE_CONSECUTIVE_SPACES | LDOM_FIND_TEXT_NORMALIZE_CANONICAL
+        | LDOM_FIND_TEXT_NORMALIZE_COMPATIBILITY | LDOM_FIND_TEXT_IGNORE_FORMAT_CONTROL_CHARS
+        | LDOM_FIND_TEXT_FOLD_SPACES | LDOM_FIND_TEXT_FOLD_APOSTROPHES
+        | LDOM_FIND_TEXT_FOLD_HYPHENS;
+}
+
+struct EngineDocument::SearchText
+{
+    struct Run
+    {
+        int start, length;
+        ldomNode *node;
+        int offset;
+    };
+
+    struct Block
+    {
+        QString text;
+        QVector<Run> runs;
+
+        ldomXPointerEx at(int offset) const
+        {
+            auto it = std::upper_bound(runs.begin(), runs.end(), offset,
+                                       [](int value, const Run &run) { return value < run.start; });
+            --it;
+            return ldomXPointerEx(it->node, it->offset + offset - it->start);
+        }
+    };
+
+    quint64 layout = 0;
+    ldomXPointerEx next, end;
+    QVector<Block> blocks;
+    bool done = false;
+    QString query, pattern, origin;
+    SearchScope scope = SearchScope::Book;
+    ldomXPointerEx lower, upper;
+};
+
+void EngineDocument::ensureSearchText()
+{
+    const auto layout = layoutSignature();
+    if (searchText_ && searchText_->layout == layout)
+        return;
+    searchText_ = std::make_shared<SearchText>();
+    auto &cache = *searchText_;
+    cache.layout = layout;
+    ldomXRange range(engine_->getDocument()->getRootNode(), true);
+    cache.next = range.getStart();
+    cache.end = range.getEnd();
+}
+
+bool EngineDocument::prepareSearch()
+{
+    if (!engine_)
+        return true;
+    ensureSearchText();
+    auto &cache = *searchText_;
+    QElapsedTimer budget;
+    budget.start();
+    while (!cache.done && budget.elapsed() < 8) {
+        lString32 text;
+        LVArray<ldomSearchOrigin> origins;
+        if (!ldomPrepareSearchBlock(cache.next, cache.end, text, origins, searchFlags)) {
+            cache.done = true;
+            break;
+        }
+        SearchText::Block block;
+        block.text.reserve(text.length());
+        // Most text maps one-to-one. Only node boundaries, normalization expansions
+        // and skipped characters need another run; never retain one pointer per letter.
+        for (int i = 0; i < text.length(); ++i) {
+            const auto ch = text[i];
+            const auto &origin = origins[i];
+            const auto append = [&](QChar unit) {
+                const int at = block.text.size();
+                if (!block.runs.isEmpty() && block.runs.last().node == origin.node
+                    && block.runs.last().offset + block.runs.last().length == origin.offset)
+                    ++block.runs.last().length;
+                else
+                    block.runs.append({ at, 1, origin.node, origin.offset });
+                block.text.append(unit);
+            };
+            if (ch > 0xffff) {
+                append(QChar(QChar::highSurrogate(ch)));
+                append(QChar(QChar::lowSurrogate(ch)));
+            } else {
+                append(QChar(ushort(ch)));
+            }
+        }
+        cache.blocks.append(std::move(block));
+        cache.done = cache.next.compare(cache.end) >= 0;
+    }
+    return cache.done;
+}
+
+bool EngineDocument::ensureSearchScope(SearchScope scope, const QString &origin)
+{
+    ensureSearchText();
+    auto &cache = *searchText_;
+    if (cache.scope == scope && cache.origin == origin && !cache.lower.isNull())
+        return true;
+    cache.scope = scope;
+    cache.origin = origin;
+    ldomXRange document(engine_->getDocument()->getRootNode(), true);
+    cache.lower = document.getStart();
+    cache.upper = document.getEnd();
+    if (scope != SearchScope::Book) {
+        ldomXPointerEx position(engine_->getDocument()->createXPointer(cre(origin)));
+        if (position.isNull()) {
+            cache.lower = ldomXPointerEx();
+            return false;
+        }
+        if (scope == SearchScope::Chapter) {
+            const auto links = chapters();
+            const auto selected = chapterAround(links, origin);
+            if (selected.current >= 0)
+                cache.lower = ldomXPointerEx(engine_->getDocument()->createXPointer(
+                        cre(links[selected.current].position)));
+            if (selected.next >= 0)
+                cache.upper = ldomXPointerEx(
+                        engine_->getDocument()->createXPointer(cre(links[selected.next].position)));
+        } else {
+            const int page = engine_->getBookmarkPage(position);
+            const auto boundary = page + 1 < pages()
+                    ? ldomXPointerEx(engine_->getPageBookmark(page + 1))
+                    : cache.upper;
+            if (scope == SearchScope::Before)
+                cache.upper = boundary;
+            else
+                cache.lower = boundary;
+        }
+    }
+    return true;
+}
+
+QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, SearchScope scope,
+                                                 const QString &origin)
+{
+    if (!engine_ || !ensureSearchScope(scope, origin))
+        return {};
+    const auto &cache = *searchText_;
+    auto *doc = engine_->getDocument();
+    for (auto &hit : hits) {
+        ldomXPointerEx start(doc->createXPointer(cre(hit.start)));
+        ldomXPointerEx end(doc->createXPointer(cre(hit.end)));
+        if (start.isNull() || end.isNull())
+            continue;
+        ldomXRange match(start, end);
+        auto before = start, after = end;
+        for (int n = 0; n < 48; ++n) {
+            auto previous = before;
+            if (!previous.prevVisibleChar(true)
+                || (scope != SearchScope::Book && previous.compare(cache.lower) < 0))
+                break;
+            before = previous;
+        }
+        for (int n = 0; n < 96; ++n) {
+            auto next = after;
+            if (!next.nextVisibleChar(true)
+                || (scope != SearchScope::Book && next.compare(cache.upper) > 0))
+                break;
+            after = next;
+        }
+        ldomXRange prefix(before, start), suffix(end, after);
+        hit = { hit.start,
+                hit.end,
+                contextText(qstring(prefix.getRangeText())),
+                qstring(match.getRangeText()).simplified(),
+                contextText(qstring(suffix.getRangeText())),
+                engine_->getBookmarkPage(start) };
+    }
+    return hits;
+}
+
+SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor, int maximum,
+                                       SearchScope scope, const QString &origin, bool details)
+{
+    SearchBatch result;
+    result.cursor = cursor;
+    if (!engine_ || query.isEmpty() || query.size() > 256 || maximum <= 0) {
+        result.done = true;
+        return result;
+    }
+    ensureSearchText();
+    auto &cache = *searchText_;
+    if (cache.query != query) {
+        cache.query = query;
+        cache.pattern = qstring(ldomFoldSearchPattern(cre(query), searchFlags));
+    }
+    if (!ensureSearchScope(scope, origin)) {
+        result.done = true;
+        return result;
+    }
+
+    if (cache.pattern.isEmpty()) {
+        result.done = true;
+        return result;
+    }
+    QElapsedTimer budget;
+    budget.start();
+    while (budget.elapsed() < 8 && result.hits.size() < maximum) {
+        if (cursor.block >= cache.blocks.size()) {
+            if (cache.done) {
+                result.done = true;
+                break;
+            }
+            prepareSearch();
+            if (cursor.block >= cache.blocks.size())
+                break;
+        }
+        const auto &block = cache.blocks[cursor.block];
+        if (block.text.isEmpty()
+            || (scope != SearchScope::Book
+                && block.at(block.text.size() - 1).compare(cache.lower) < 0)) {
+            ++cursor.block;
+            cursor.offset = 0;
+            continue;
+        }
+        if (scope != SearchScope::Book && block.at(0).compare(cache.upper) >= 0) {
+            result.done = true;
+            break;
+        }
+        const int found = block.text.indexOf(cache.pattern, cursor.offset, Qt::CaseSensitive);
+        if (found < 0) {
+            ++cursor.block;
+            cursor.offset = 0;
+            continue;
+        }
+        // CREngine's literal search includes overlapping matches.
+        cursor.offset = found + 1;
+        auto start = block.at(found), end = block.at(found + cache.pattern.size() - 1);
+        end.setOffset(end.getOffset() + 1);
+        if (scope != SearchScope::Book
+            && (start.compare(cache.lower) < 0 || end.compare(cache.upper) > 0))
+            continue;
+        SearchHit hit{ qstring(start.toString()), qstring(end.toString()), {}, {}, {}, -1 };
+        if (details)
+            hit = searchDetails({ hit }, scope, origin).first();
+        result.hits.append(std::move(hit));
+    }
+    result.cursor = cursor;
+    // Progress is deliberately coarse; computing page geometry for empty text is expensive.
+    result.nextPage = cache.done && cursor.block >= cache.blocks.size() ? pages() : 0;
     return result;
 }
 

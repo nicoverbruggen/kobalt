@@ -80,7 +80,13 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         path.moveTo(x1, y1);
         path.lineTo(x2, y2);
     };
-    if (icon == ControlIcon::WidowsOrphans) {
+    if (icon >= ControlIcon::SearchChapter && icon <= ControlIcon::SearchAfter) {
+        result.canvas = 256;
+        result.filled = true;
+        const char *names[] = { "book-open-text", "arrow-line-left", "arrow-line-right" };
+        phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::SearchChapter)]),
+                         path);
+    } else if (icon == ControlIcon::WidowsOrphans) {
         line(11, 18, 34, 18);
         line(11, 32, 37, 32);
         line(11, 46, 29, 46);
@@ -722,7 +728,9 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::PreviousChapter && icon != ControlIcon::NextChapter
             && icon != ControlIcon::Sync && icon != ControlIcon::Sort
             && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
-            && icon != ControlIcon::Bold && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
+            && icon != ControlIcon::Bold
+            && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
+            && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)
             && (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Diamond)))
         return {};

@@ -1,0 +1,55 @@
+--- a/crengine/include/lvtinydom.h
++++ b/crengine/include/lvtinydom.h
+@@ -2165,6 +2165,17 @@
+ };
+ 
+ /// DOM range
++// Search preparation uses the same normalization and source offsets as findText.
++// The caller owns the buffers and must discard them before changing the DOM/layout.
++struct ldomSearchOrigin {
++    ldomNode * node;
++    int offset;
++};
++
++lString32 ldomFoldSearchPattern(const lString32 & pattern, lUInt32 flags);
++bool ldomPrepareSearchBlock(ldomXPointerEx & next, const ldomXPointerEx & end,
++                           lString32 & text, LVArray<ldomSearchOrigin> & origins, lUInt32 flags);
++
+ class ldomXRange {
+     ldomXPointerEx _start;
+     ldomXPointerEx _end;
+--- a/crengine/src/lvtinydom.cpp
++++ b/crengine/src/lvtinydom.cpp
+@@ -13817,6 +13817,32 @@
+     return buffer.hasNodes;
+ }
+ 
++lString32 ldomFoldSearchPattern(const lString32 & pattern, lUInt32 flags)
++{
++    return buildFoldedFindTextPattern(pattern, true, flags);
++}
++
++bool ldomPrepareSearchBlock(ldomXPointerEx & next, const ldomXPointerEx & end,
++                           lString32 & text, LVArray<ldomSearchOrigin> & origins, lUInt32 flags)
++{
++    text.clear();
++    origins.clear();
++    if (next.isNull() || next.compare(end) >= 0)
++        return false;
++    if (!next.isText() && !next.nextVisibleText())
++        return false;
++    EnhancedSearchBlockBuffer buffer;
++    if (!buildForwardEnhancedSearchBlock(next, end, true, flags, buffer))
++        return false;
++    text = buffer.text;
++    for (int i = 0; i < buffer.origins.length(); ++i)
++        origins.add({buffer.origins[i].node, buffer.origins[i].offset});
++    next = buffer.lastNode;
++    if (!next.nextVisibleText() || next.compare(end) >= 0)
++        next = end;
++    return true;
++}
++
+ static bool buildReverseEnhancedSearchBlock(const ldomXPointerEx & end, const ldomXPointerEx & rangeStart, bool caseInsensitive, lUInt32 searchFlags, EnhancedSearchBlockBuffer & buffer)
+ {
+     buffer.clear();

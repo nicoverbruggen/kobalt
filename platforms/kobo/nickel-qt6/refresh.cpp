@@ -2,6 +2,7 @@
 #include "../display/annotation_damage.h"
 #include "platform/api/kobo_refresh.h"
 #include "refresh.h"
+#include "platforms/kobo/display/single_update.h"
 #include "engine/crengine/engine_document.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/display/keyboard_refresh.h"
@@ -19,6 +20,7 @@
 #include <QImage>
 #include <QWindow>
 #include <algorithm>
+#include <functional>
 
 namespace kobalt::platform {
 LookupRefreshFlags nativeRefreshFlags = nullptr;
@@ -115,6 +117,41 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         nativeFlush(store, region, target, offset, flags);
         return;
     }
+    // On MTK, every update of one reader paint is collected and sent as one
+    // screen update when the flush ends; see singleUpdate.
+    QList<QPair<QRegion, FlushFlags>> batch;
+    const bool batching = refreshBackend(readerWindow) == RefreshBackend::Mtk;
+    auto submit = [&](const QRegion &damage, const FlushFlags &chosen) {
+        if (batching)
+            batch.append({ damage, chosen });
+        else
+            nativeFlush(store, damage, target, offset, chosen);
+    };
+
+    struct SendAtEnd
+    {
+        std::function<void()> send;
+
+        ~SendAtEnd() { send(); }
+    } sendAtEnd{ [&] {
+        if (batch.isEmpty())
+            return;
+        UpdateBits bits;
+        bits.waveforms = bit(Qt::WA_KoboEpdWfModeAutoText) | bit(Qt::WA_KoboEpdWfModeAutoImage)
+                | bit(Qt::WA_KoboEpdWfModeGL16) | bit(Qt::WA_KoboEpdWfModeGLK16)
+                | bit(Qt::WA_KoboEpdWfModeGC16) | bit(Qt::WA_KoboEpdWfModeGCK16);
+        bits.cleanups = bit(Qt::WA_KoboEpdWfModeAutoImage) | bit(Qt::WA_KoboEpdWfModeGC16)
+                | bit(Qt::WA_KoboEpdWfModeGCK16);
+        bits.modes = bit(Qt::WA_KoboEpdUpdateModeHeuristic) | bit(Qt::WA_KoboEpdUpdateModeFull)
+                | bit(Qt::WA_KoboEpdUpdateModePartial);
+        bits.full = bit(Qt::WA_KoboEpdUpdateModeFull);
+        bits.partial = bit(Qt::WA_KoboEpdUpdateModePartial);
+        bits.text = bit(Qt::WA_KoboEpdWfModeAutoText);
+        bits.kept = bit(Qt::WA_KoboEpdFlagDarkMode) | bit(Qt::WA_KoboEpdScreenFlush);
+        for (const auto &call : singleUpdate(batch, bits))
+            nativeFlush(store, call.first, target, offset, call.second);
+    } };
+
     const int direction = readerWindow->property("reader_animation_direction").toInt();
     readerWindow->setProperty("reader_animation_direction", 0);
     const QRect progressUpdate = readerWindow->property("reader_progress_update").toRect();
@@ -139,7 +176,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         readerWindow->setProperty("reader_palette_repairs", QVariant::fromValue(QRegion()));
         const QRect screen = readerWindow->rect();
         const auto clean = repairPolicy(dark);
-        nativeFlush(store, QRegion(screen), target, offset, { { screen, clean } });
+        submit(QRegion(screen), { { screen, clean } });
         return;
     }
     previousDark = dark;
@@ -150,12 +187,11 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             // Nickel turns onto and away from coloured highlights with its
             // full-mode reading refresh, without a flash. Edits keep the cleanup.
             const QRect screen = readerWindow->rect();
-            nativeFlush(store, QRegion(screen), target, offset,
-                        { { screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush) } });
+            submit(QRegion(screen),
+                   { { screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush) } });
             consumeAnnotationRepairs(readerWindow, QRegion(screen));
         } else {
-            nativeFlush(store, region, target, offset,
-                        { { region.boundingRect(), repairPolicy(dark) } });
+            submit(region, { { region.boundingRect(), repairPolicy(dark) } });
             consumeAnnotationRepairs(readerWindow, region);
         }
         return;
@@ -191,7 +227,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                 bit(Qt::WA_KoboEpdScreenFlush),
                 !dark && readerWindow->property("reader_navigation_dismissal_plain").toBool(),
                 [&](const QRegion &damage, const FlushFlags &policies) {
-                    nativeFlush(store, damage, target, offset, policies);
+                    submit(damage, policies);
                 }))
         return;
     if (controlsOpening && compatible && ordinaryControls
@@ -201,7 +237,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         auto policy = ordinaryPolicy(dark);
         if (!dark && readerWindow->property("reader_plain_controls").toBool())
             policy = (policy & ~(heuristic | full)) | partialMode;
-        nativeFlush(store, QRegion(screen), target, offset, { { screen, policy } });
+        submit(QRegion(screen), { { screen, policy } });
         return;
     }
     const QRect keyboardBounds = readerWindow->property("reader_keyboard_bounds").toRect();
@@ -224,7 +260,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                               readerWindow->property("reader_keyboard_editor_bounds").toRect())) {
         const QRect bounds = region.boundingRect();
         const auto policy = (ordinaryPolicy(false) & ~(heuristic | full)) | partialMode;
-        nativeFlush(store, QRegion(bounds), target, offset, { { bounds, policy } });
+        submit(QRegion(bounds), { { bounds, policy } });
         return;
     }
     const bool progressDamage = !progressUpdate.isEmpty()
@@ -238,10 +274,10 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                                     ordinaryPolicy(false), heuristic | full | partialMode,
                                     partialMode, bit(Qt::WA_KoboEpdScreenFlush),
                                     [&](const QRegion &part, const FlushFlags &selected) {
-                                        nativeFlush(store, part, target, offset, selected);
+                                        submit(part, selected);
                                     });
         } else {
-            nativeFlush(store, damage, target, offset, policies);
+            submit(damage, policies);
         }
     };
     auto completedFlush = [&](const QRegion &damage, const FlushFlags &policies) {
@@ -271,8 +307,8 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             if (!images.isEmpty()
                 || (color && readerWindow->property("reader_colour_regions").toBool())) {
                 const QRect screen = readerWindow->rect();
-                nativeFlush(store, QRegion(screen), target, offset,
-                            { { screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush) } });
+                submit(QRegion(screen),
+                       { { screen, ordinaryPolicy(dark) | bit(Qt::WA_KoboEpdScreenFlush) } });
                 return;
             }
         }
@@ -284,7 +320,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             && (policies[0].second == ordinaryPolicy(false)
                 || policies[0].second == ((ordinaryPolicy(false) & ~full) | heuristic))) {
             const quint64 policy = (policies[0].second & ~(heuristic | full)) | partialMode;
-            nativeFlush(store, damage, target, offset, { { policies[0].first, policy } });
+            submit(damage, { { policies[0].first, policy } });
             return;
         }
         if ((pageTurn || plainControls) && !direction && compatible
@@ -295,7 +331,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             FlushFlags partial = policies;
             for (auto &entry : partial)
                 entry.second = (entry.second & ~(heuristic | full)) | partialMode;
-            nativeFlush(store, damage, target, offset, partial);
+            submit(damage, partial);
             return;
         }
         // Edits inside an open appearance panel change a slider row or a
@@ -325,7 +361,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             && policies[0].second == ordinaryPolicy(dark)) {
             // Older and unknown backends keep their reading policy over the whole screen.
             const QRect screen = readerWindow->rect();
-            nativeFlush(store, QRegion(screen), target, offset, { { screen, policies[0].second } });
+            submit(QRegion(screen), { { screen, policies[0].second } });
             return;
         }
         submitControls(damage, policies);

@@ -174,17 +174,16 @@ int main(int argc, char **argv)
         flushes = 0;
         expectImmediate = 1;
         submit();
-        require(flushes == 2 && updates.size() == 2,
-                "MTK did not separate the panel and navigation refresh modes");
-        QRegion coverage;
-        for (const auto &update : updates) {
+        // One paint is one screen update: the panel and the tabs together, in
+        // partial mode, so unchanged tab pixels are not driven.
+        require(flushes == 1 && updates.size() == 1,
+                "MTK split one paint of a panel and its tabs into several updates");
+        {
+            const auto &update = updates[0];
             const QRect rect{ int(update[1]), int(update[0]), int(update[2]), int(update[3]) };
-            require(coverage.intersected(rect).isEmpty(), "MTK navigation damage overlaps");
-            coverage += rect;
-            require(update[5] == (navigation.geometry().contains(rect) ? 0U : 1U),
-                    "MTK flashed unchanged tab pixels or downgraded the panel refresh");
+            require(rect == panelAndBar, "MTK's one update lost painted pixels");
+            require(update[5] == 0U, "MTK drove unchanged tab pixels in full mode");
         }
-        require(coverage == QRegion(panelAndBar), "MTK navigation split lost painted pixels");
         for (bool plain : { true, false }) {
             reader.setProperty("reader_navigation_dismissal", true);
             reader.setProperty("reader_navigation_dismissal_plain", plain);
@@ -200,7 +199,7 @@ int main(int argc, char **argv)
             updates.clear();
             flushes = 0;
             submit();
-            require(flushes == 2 && updates.size() == 2,
+            require(flushes == 1 && updates.size() == 1 && updates[0][5] == 0U,
                     "An unrelated paint reused the navigation dismissal transaction");
         }
         QWidget overlay(&reader);
@@ -251,6 +250,39 @@ int main(int argc, char **argv)
                         && updates[0][2] == uint32_t(bounds.width())
                         && updates[0][3] == uint32_t(bounds.height()),
                 "Keyboard edit update lost key or field damage");
+    }
+    for (bool legacy : { true, false }) {
+        // A rounded mask cuts a paint into one rectangle per row, and their
+        // policies can differ. MTK must still show the paint as one update.
+        setReaderRefreshWindow(&reader);
+        reader.setProperty("reader_dark", false);
+        reader.setProperty("reader_keyboard_bounds", QRect());
+        reader.setProperty("reader_keyboard_editor_bounds", QRect());
+        const quint64 waveform = legacy ? quint64(1) << 10 : quint64(1) << 38;
+        QRegion rows;
+        FlushFlags wideFlags;
+        QList<QPair<QRect, quint32>> narrowFlags;
+        for (int row = 0; row < 12; ++row) {
+            const QRect rect(20 + row % 3, 30 + row * 2, 120 - 2 * (row % 3), 1);
+            const quint64 policy = waveform | (row % 2 ? 1U << 3 : 1U << 1);
+            rows += rect;
+            wideFlags.append({ rect, policy });
+            narrowFlags.append({ rect, quint32(policy) });
+        }
+        updates.clear();
+        flushes = 0;
+        expectImmediate = -1;
+        if (legacy)
+            flushReader32(&store, rows, reader.windowHandle(), {}, narrowFlags);
+        else
+            flushReader(&store, rows, reader.windowHandle(), {}, wideFlags);
+        require(flushes == 1 && updates.size() == 1,
+                "MTK split one masked paint into an update per row");
+        const auto bounds = rows.boundingRect();
+        require(updates[0][0] == uint32_t(bounds.top()) && updates[0][1] == uint32_t(bounds.left())
+                        && updates[0][2] == uint32_t(bounds.width())
+                        && updates[0][3] == uint32_t(bounds.height()) && updates[0][5] == 0,
+                "MTK's one update for a masked paint is not partial over its rows");
     }
     std::puts("PASS: Qt5 flush ABIs preserve sweeps and keep MTK tab feedback partial");
 }

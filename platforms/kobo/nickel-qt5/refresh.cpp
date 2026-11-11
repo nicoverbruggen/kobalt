@@ -2,6 +2,7 @@
 #include "../display/annotation_damage.h"
 #include "platform/api/kobo_refresh.h"
 #include "refresh.h"
+#include "platforms/kobo/display/single_update.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/display/keyboard_refresh.h"
 #include "platforms/kobo/display/panel_damage.h"
@@ -19,6 +20,7 @@
 #include <QWindow>
 #include <QSettings>
 #include <algorithm>
+#include <functional>
 #include <dlfcn.h>
 #include <limits>
 
@@ -140,9 +142,41 @@ void setReaderRefreshWindow(QWidget *widget)
 
 template <class Submit>
 static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindow *target,
-                             const QPoint &offset, const FlushFlags &flags, Submit submit,
+                             const QPoint &offset, const FlushFlags &flags, Submit deliver,
                              bool wide = true)
 {
+    // On MTK, every update of one reader paint is collected and sent as one
+    // screen update when the flush ends; see singleUpdate.
+    QList<QPair<QRegion, FlushFlags>> batch;
+    bool batching = false;
+    auto submit = [&](const QRegion &damage, const FlushFlags &chosen) {
+        if (batching)
+            batch.append({ damage, chosen });
+        else
+            deliver(damage, chosen);
+    };
+
+    struct SendAtEnd
+    {
+        std::function<void()> send;
+
+        ~SendAtEnd() { send(); }
+    } sendAtEnd{ [&] {
+        if (batch.isEmpty())
+            return;
+        const bool darkUpdate = readerWindow && readerWindow->property("reader_dark").toBool();
+        UpdateBits bits;
+        bits.waveforms = automatic | autoText | autoImage | glr16 | glkw16 | gl16 | gc16 | gck16;
+        bits.cleanups = autoImage | gc16 | gck16;
+        bits.modes = heuristic | full | partialMode;
+        bits.full = full;
+        bits.partial = partialMode;
+        bits.text = ordinaryPolicy(darkUpdate, wide) & bits.waveforms;
+        bits.kept = darkFlag | bit(128);
+        for (const auto &call : singleUpdate(batch, bits))
+            deliver(call.first, call.second);
+    } };
+
     cancelPageAnimation();
     if (qApp && QThread::currentThread() == qApp->thread() && readerWindow
         && ((readerWindow->property("reader_preparing_handoff").toBool()
@@ -174,6 +208,7 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
         submit(region, flags);
         return;
     }
+    batching = refreshBackend(readerWindow) == RefreshBackend::Mtk;
     const int direction = readerWindow->property("reader_animation_direction").toInt();
     readerWindow->setProperty("reader_animation_direction", 0);
     const QRect progressUpdate = readerWindow->property("reader_progress_update").toRect();
@@ -360,7 +395,7 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
                                          // Submit now so the animation hook runs before the sweep is cancelled.
                                          for (const auto &part : parts.rects())
                                              selected.append({ part, policy | bit(128) });
-                                         submit(parts, selected);
+                                         deliver(parts, selected);
                                      }))
                 return;
         }

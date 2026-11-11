@@ -111,9 +111,10 @@ void submitNavigationRefresh(const Policies &policies, const QRegion &damage,
     const auto selected =
             partialNavigationRefresh(policies, damage, partial, ordinary, modeMask, partialMode);
     // MTK chooses one mode for each damage rectangle even when its policy
-    // table names smaller pieces. Submit the panel and tabs separately, or
-    // the panel's full mode wins over the tab's partial mode again. Flush
-    // each part now so the compositor cannot merge the queued calls either.
+    // table names smaller pieces, so the panel and the tabs are handed over
+    // as separate parts. The MTK adapters then merge one frame's parts into
+    // one partial update (singleUpdate), which leaves unchanged tab pixels
+    // alone; other callers still receive the parts separately.
     for (const auto &region : { damage.subtracted(partial), partial }) {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
         const auto rects = region.rects();

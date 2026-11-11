@@ -1,4 +1,5 @@
 #include "reading/appearance_settings.h"
+#include "reading/features.h"
 #include "reading/session_timeout.h"
 #include "reading/remaining_time.h"
 #include "support/qt_compat.h"
@@ -69,6 +70,34 @@ int main()
                         && !remainingTime::approximate(preferences),
                 "Invalid time format did not fall back to detailed estimates");
     }
+
+    for (int i = 0; i < 5; ++i) {
+        const auto feature = features::Feature(i);
+        require(features::enabled({}, feature), "A feature was hiddenFeatures by default");
+        for (const auto &invalid : { QJsonValue("true"), QJsonValue(1), QJsonValue() }) {
+            const auto clean = appearance::cleanPreferences({ { features::keys[i], invalid } });
+            require(features::enabled(clean, feature), "Invalid feature flag hid a feature");
+        }
+    }
+    const auto hiddenFeatures =
+            appearance::cleanPreferences({ { "disable_navigate", true },
+                                           { "disable_stats", true },
+                                           { "disable_annotations", true },
+                                           { "disable_bookmarks", true },
+                                           { "default_menu_view", "stats" },
+                                           { "dense_stats_chart", true },
+                                           { "navigation_bar_buttons", "pages" },
+                                           { "minimal_annotation_mode", true },
+                                           { "marks_sort", "newest" },
+                                           { "future_option", 42 } });
+    require(hiddenFeatures.value("default_menu_view") == "none"
+                    && !hiddenFeatures.contains("navigation_bar_buttons")
+                    && !hiddenFeatures.contains("dense_stats_chart")
+                    && !hiddenFeatures.contains("minimal_annotation_mode")
+                    && !hiddenFeatures.contains("marks_sort")
+                    && hiddenFeatures.value("future_option").toInt() == 42,
+            "Hidden features retained incompatible options or lost unrelated preferences");
+    require(appearance::same({}, hiddenFeatures), "Hiding features invalidated book layout");
 
     for (bool shown : { false, true }) {
         const auto preferences = appearance::cleanPreferences(

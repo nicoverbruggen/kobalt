@@ -39,6 +39,7 @@ public:
     void showBookmarks(QVector<BookmarkRow> rows);
     void showAnnotations(QVector<BookmarkRow> rows, bool loading = false);
     void setSortOrder(const QString &order);
+    void setFeatures(bool bookmarks, bool annotations);
 
     QString sortOrder() const { return order; }
 

@@ -1355,3 +1355,18 @@
 "buttons.while_reading" = "Decide what this hardware button should do when you're reading.";
 
 "buttons.hardware_title" = "Hardware buttons";
+
+"settings.hidden_features" = "Hidden features";
+"settings.hidden_features_none" = "None";
+"settings.disable_features" = "Hide unneeded features";
+"settings.disable_features_description" = "Maybe you find yourself not needing some of the features Kobalt offers. You can hide what you don't need.";
+"features.navigate" = "Navigation";
+"features.navigate_description" = "Hides the Navigate tab and its options. If it is your default menu view, the default returns to None.";
+"features.stats" = "Stats";
+"features.stats_description" = "Hides the Stats tab and its options. Reading history and time estimates continue.";
+"features.annotations" = "Annotations";
+"features.annotations_description" = "Hides annotation tools and the Annotations list. Saved highlights stay visible in your books.";
+"features.bookmarks" = "Bookmarks";
+"features.bookmarks_description" = "Hides bookmark controls, ribbons and pinned shortcuts. Saved bookmarks are kept.";
+"features.kosync" = "KOSync";
+"features.kosync_description" = "Stops KOSync and hides its controls. Your saved account is kept. Kobo’s own sync is unaffected.";

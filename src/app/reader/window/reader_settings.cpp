@@ -326,6 +326,8 @@ void Reader::openSettings()
     settingsError->clear();
     settingsError->hide();
     darkOption->setChecked(session->state().value("dark_mode").toBool(false));
+    static_cast<SettingsPanel *>(general)->featurePreferences = preferences;
+    static_cast<SettingsPanel *>(general)->updateFeatureOptions();
     inheritTextLayoutOption->setChecked(
             preferences.value(appearance::inheritTextLayoutKey).toBool(true));
     hideNonlinearOption->setChecked(
@@ -699,6 +701,9 @@ void Reader::applySettings()
     next["bold_reading"] =
             bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
     next["dark_mode"] = darkOption->isChecked();
+    for (const auto *key : features::keys)
+        next[key] =
+                static_cast<SettingsPanel *>(general)->featurePreferences.value(key).toBool(false);
     next[appearance::inheritTextLayoutKey] = inheritTextLayoutOption->isChecked();
     next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
     next["vertical_justification"] = settingsVerticalSpacing;
@@ -740,6 +745,7 @@ void Reader::applySettings()
     const auto rotation = orientation->settings();
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
+    next = appearance::cleanPreferences(next);
     if (!writePreferences(next)) {
         bionicOption->setChecked(
                 session->requestedAppearance().fields().value("bold_reading").toString("off")
@@ -752,6 +758,17 @@ void Reader::applySettings()
         return;
     }
     preferences = next;
+    if (!features::enabled(preferences, features::Kosync)) {
+        cancelKosync();
+        kosyncClient->cancel();
+        syncCoordinator->resetProgress();
+        hideKosyncOpening();
+    }
+    if (!features::enabled(preferences, features::Annotations) && annotationMode)
+        leaveAnnotations();
+    bookmarkList->setSortOrder(preferences.value("marks_sort").toString("position"));
+    showMenuView();
+    showNavigationBarButtons();
     ui::setHeaderFooterAddedWeight(settingsHeaderFooterWeight);
     applyInterfaceFonts();
     dictionaryPanel->setDefinitionFont(settingsDictionaryFontFace, settingsDictionaryFontSize);

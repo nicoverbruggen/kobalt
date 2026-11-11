@@ -50,6 +50,7 @@ struct NavigationState
     bool scrubberVisible = true;
     int defaultView = -1;
     bool hideTabLabels = false;
+    bool navigateEnabled = true, statsEnabled = true;
 };
 } // namespace kobalt
 
@@ -66,7 +67,7 @@ public:
     void setTextFace(const QString &face);
     void setReturnLabel(const QString &label, const QString &note);
     void setLightTab(bool shown);
-    void setDefaultView(int destination);
+    void setDefaultView(int destination, bool navigateEnabled = true, bool statsEnabled = true);
     void setLabelsHidden(bool hidden);
     std::function<void()> returnRequested;
     std::function<void()> stayRequested;

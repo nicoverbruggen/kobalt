@@ -7824,6 +7824,118 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrBrightnessNotice"));
     }
 
+    // Checks feature visibility, dependent defaults, persistence and re-enabling through System.
+    void settingsFeatures()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto saved = storage::readJson(fixture.paths.preferences());
+        saved["default_menu_view"] = "stats";
+        saved["dense_stats_chart"] = true;
+        saved["navigation_bar_buttons"] = "pages";
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        const char *keys[] = { "disable_navigate", "disable_stats", "disable_annotations",
+                               "disable_bookmarks", "disable_kosync" };
+        for (int pass = 0; pass < 2; ++pass) {
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE(opened.count(), 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            if (pass) {
+                QVERIFY(!fixture.visible("rrNavSeek"));
+                QVERIFY(!fixture.visible("rrNavStats"));
+                QVERIFY(!fixture.visible("rrAnnotate"));
+                QVERIFY(!fixture.visible("rrBookmarks"));
+            }
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsSystem"));
+            QVERIFY(revealSettingsOption(fixture, "rrDisabledFeatures"));
+            auto *featuresButton =
+                    static_cast<ui::CaptionButton *>(fixture.widget("rrDisabledFeatures"));
+            const QString allHidden = "Navigation, Stats, Annotations, Bookmarks, KOSync";
+            QCOMPARE(featuresButton->caption(), pass ? allHidden : QString("None"));
+            QVERIFY(fixture.press("rrDisabledFeatures"));
+            QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
+            if (!pass) {
+                QVERIFY(fixture.press("rrDisableFeature_disable_stats"));
+                QVERIFY(fixture.press("rrDisabledFeaturesCancel"));
+                QTRY_VERIFY(!fixture.widget("rrDisabledFeaturesPopup"));
+                QCOMPARE(featuresButton->caption(), QString("None"));
+                QVERIFY(fixture.press("rrDisabledFeatures"));
+                QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
+            }
+            for (const auto *key : keys) {
+                const auto name = QString("rrDisableFeature_%1").arg(key);
+                auto *option = qobject_cast<QCheckBox *>(fixture.widget(name.toUtf8().constData()));
+                QVERIFY(option);
+                QVERIFY(fixture.revealCardRow(option));
+                QCOMPARE(option->isChecked(), bool(pass));
+                QVERIFY(fixture.press(name.toUtf8().constData()));
+            }
+            QVERIFY(fixture.press("rrDisabledFeaturesDone"));
+            QCOMPARE(featuresButton->caption(), pass ? QString("None") : allHidden);
+            QCOMPARE(fixture.widget("rrSettingsKosync")->isHidden(), pass == 0);
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            for (const auto *key : keys)
+                QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value(key).toBool(),
+                             pass == 0);
+            QCOMPARE(fixture.visible("rrNavSeek"), pass == 1);
+            QCOMPARE(fixture.visible("rrNavStats"), pass == 1);
+            QCOMPARE(fixture.visible("rrAnnotate"), pass == 1);
+            QCOMPARE(fixture.visible("rrBookmarks"), pass == 1);
+            const auto preferences = storage::readJson(fixture.paths.preferences());
+            QCOMPARE(preferences.value("default_menu_view").toString(), QString("none"));
+            QVERIFY(!preferences.value("dense_stats_chart").toBool());
+            QVERIFY(!preferences.contains("navigation_bar_buttons"));
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(!fixture.window.readerWindow());
+        }
+    }
+
+    // Checks the shared list and toolbar when either marks feature is hidden independently.
+    void settingsFeatureLists_data()
+    {
+        QTest::addColumn<bool>("bookmarks");
+        QTest::addColumn<bool>("annotations");
+        QTest::newRow("bookmarks-only") << true << false;
+        QTest::newRow("annotations-only") << false << true;
+        QTest::newRow("both") << true << true;
+    }
+
+    void settingsFeatureLists()
+    {
+        QFETCH(bool, bookmarks);
+        QFETCH(bool, annotations);
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(storage::writeJson(
+                fixture.paths.preferences(),
+                { { "disable_bookmarks", !bookmarks }, { "disable_annotations", !annotations } }));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QCOMPARE(fixture.visible("rrAnnotate"), annotations);
+        const auto label = strings::get(!bookmarks            ? "annotations.tab"
+                                                : annotations ? "reader.bookmarks"
+                                                              : "bookmarks.title");
+        QCOMPARE(fixture.widget("rrBookmarks")->accessibleName(), label);
+        const auto *settings = fixture.widget("rrSettings");
+        const auto *marks = fixture.widget("rrBookmarks");
+        QCOMPARE(marks->geometry().right() + 1, settings->geometry().left());
+        QVERIFY(fixture.press("rrBookmarks"));
+        QTRY_VERIFY(fixture.visible("rrBookmarkList"));
+        QCOMPARE(fixture.visible("rrBookmarksTab"), bookmarks);
+        QCOMPARE(fixture.visible("rrAnnotationsTab"), annotations);
+        const auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
+        QCOMPARE(list->annotationsShown(), !bookmarks);
+        QVERIFY(fixture.press("rrBookmarkListClose"));
+    }
+
     // Checks the always-present Light dark-mode control, unsupported hosts, a busy writer and save failure.
     void lightDarkModeShortcut_data()
     {
@@ -10119,6 +10231,12 @@ private slots:
         QVERIFY(fixture.press("rrSettingsSystem"));
         const auto name = screenshotVariant(preset, dark);
         capturePages(fixture, name + "-settings-system", "rrSettingsOptions");
+        QVERIFY(revealSettingsOption(fixture, "rrDisabledFeatures"));
+        QVERIFY(fixture.press("rrDisabledFeatures"));
+        QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
+        capturePages(fixture, name + "-settings-features", "rrDisabledFeaturesPopup");
+        QVERIFY(fixture.press("rrDisabledFeaturesDone"));
+
         QVERIFY(revealSettingsOption(fixture, "rrDisableReaderStandby"));
         QVERIFY(fixture.press("rrDisableReaderStandby"));
         QTRY_VERIFY(fixture.visible("rrStandbyConfirmation"));

@@ -265,10 +265,12 @@ void BottomNavigation::setLightTab(bool shown)
     updateLabels();
 }
 
-void BottomNavigation::setDefaultView(int destination)
+void BottomNavigation::setDefaultView(int destination, bool navigateEnabled, bool statsEnabled)
 {
     for (auto tab : { NavigationDestination::Seek, NavigationDestination::Stats })
-        tabs[int(tab)]->setVisible(int(tab) != destination);
+        tabs[int(tab)]->setVisible(
+                int(tab) != destination
+                && (tab == NavigationDestination::Seek ? navigateEnabled : statsEnabled));
     updateLabels();
 }
 
@@ -495,9 +497,13 @@ void Navigation::update(QSize size, const NavigationState &state)
     rules->setGeometry(toolbar->rect());
     rules->show();
     rules->raise();
-    const int syncActions = sync && !sync->isHidden() ? 1 : 0;
-    const int rightActions = (formattingWarning && !formattingWarning->isHidden() ? 3 : 2)
-            + (annotate ? 1 : 0) + (search ? 1 : 0) + syncActions;
+    const QVector<QWidget *> actions{
+        settings, bookmarks, annotate, search, sync, formattingWarning
+    };
+    int rightActions = 0;
+    for (auto *action : actions)
+        if (action && !action->isHidden())
+            ++rightActions;
     // A large interface scale can leave too little room for the exit caption.
     // The arrow then keeps a cell of its own, as each action does.
     // When the caption nearly reaches the actions, the exit action meets them,
@@ -548,28 +554,12 @@ void Navigation::update(QSize size, const NavigationState &state)
             placeStatus(wifi);
     }
     updateSessionGeometry();
-    settings->setGeometry(size.width() - chrome::cellWidth, statusHeight(), chrome::cellWidth,
-                          chrome::actionHeight);
-    bookmarks->setGeometry(size.width() - 2 * chrome::cellWidth, statusHeight(), chrome::cellWidth,
-                           chrome::actionHeight);
-    if (annotate) {
-        annotate->setGeometry(size.width() - 3 * chrome::cellWidth, statusHeight(),
-                              chrome::cellWidth, chrome::actionHeight);
-    }
-    if (search) {
-        search->setGeometry(size.width() - (annotate ? 4 : 3) * chrome::cellWidth, statusHeight(),
-                            chrome::cellWidth, chrome::actionHeight);
-    }
-    if (sync) {
-        sync->setGeometry(size.width()
-                                  - ((annotate ? 4 : 3) + (search ? 1 : 0)) * chrome::cellWidth,
-                          statusHeight(), chrome::cellWidth, chrome::actionHeight);
-    }
-    if (formattingWarning) {
-        formattingWarning->setGeometry(
-                size.width()
-                        - ((annotate ? 4 : 3) + (search ? 1 : 0) + syncActions) * chrome::cellWidth,
-                statusHeight(), chrome::cellWidth, chrome::actionHeight);
+    int actionRight = size.width();
+    for (auto *action : actions) {
+        if (!action || action->isHidden())
+            continue;
+        actionRight -= chrome::cellWidth;
+        action->setGeometry(actionRight, statusHeight(), chrome::cellWidth, chrome::actionHeight);
     }
     exitAction->setGeometry(0, statusHeight(), exitCell, chrome::actionHeight);
     if (rules->property("right_actions").toInt() != rightActions) {
@@ -603,7 +593,7 @@ void Navigation::update(QSize size, const NavigationState &state)
         return;
     }
     bar->setLightTab(state.lightAvailable);
-    bar->setDefaultView(state.defaultView);
+    bar->setDefaultView(state.defaultView, state.navigateEnabled, state.statsEnabled);
     bar->setLabelsHidden(state.hideTabLabels);
     for (auto *panel : { state.appearance, state.stats })
         if (panel->isVisible())

@@ -1,4 +1,5 @@
 #pragma once
+#include "reading/features.h"
 // Private to the reader window: its declaration and the widgets only it uses.
 // Include it only from the reader's own translation units.
 #include "ui/controls/buttons.h"
@@ -120,7 +121,8 @@ public:
     // has paused them for the whole process.
     bool kosyncAutomatic() const
     {
-        return kosyncClient->automatic() && !kobalt::kosync::automaticPaused();
+        return features::enabled(preferences, features::Kosync) && kosyncClient->automatic()
+                && !kobalt::kosync::automaticPaused();
     }
 
     void setOpeningTiming(const QElapsedTimer &started, const QJsonObject &stages) override;

@@ -2,6 +2,8 @@
 
 `desktop.settingsStandby` checks supported and unsupported hosts, the default state, confirmation, cancellation, unanswered-warning dismissal, persistence after reopening and re-enabling standby. The gallery includes the System settings pages and the standby confirmation.
 
+`desktop.settingsFeatures` checks the checklist, persistence, re-enabling and dependent defaults. The gallery captures the checklist beside System settings. `lifecycle.kosyncAccountGating` includes a signed-in account with KOSync disabled and checks that opening, reading and closing make no connection.
+
 Label `settings`. Build `mac-tests`, then run `ctest --preset mac -L settings` from `platforms/desktop/`. `ctest --preset mac -N -L settings` lists its tests.
 
 These checks cover Settings drafts, apply and persistence, appearance previews and their failures, the Light shortcut for dark mode, shared controls, borders, themes and the acknowledgment and license pages. `component.ui` renders the shared controls in pixels in both themes and at 212 and 300 PPI. Its border checks use fractional scales and pixel offsets, because rounding a strip width separately from its boundaries gives uneven borders. The `lifecycle.appearance*` checks drive previews and their failures in the production reader.

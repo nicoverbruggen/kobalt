@@ -616,6 +616,24 @@ void Reader::syncReadingControls()
                  toolbarComposition.search })
         if (action)
             action->setVisible(!settingsOpen);
+    const bool bookmarksShown = features::enabled(preferences, features::Bookmarks);
+    const auto marksLabel = strings::get(
+            !bookmarksShown                                                 ? "annotations.tab"
+                    : features::enabled(preferences, features::Annotations) ? "reader.bookmarks"
+                                                                            : "bookmarks.title");
+    if (toolbarComposition.bookmarks->accessibleName() != marksLabel) {
+        toolbarComposition.bookmarks->setAccessibleName(marksLabel);
+        toolbarComposition.bookmarks->setToolTip(marksLabel);
+        ui::iconAction(toolbarComposition.bookmarks,
+                       bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
+                       marksLabel);
+    }
+    toolbarComposition.annotate->setVisible(
+            !settingsOpen && features::enabled(preferences, features::Annotations));
+    toolbarComposition.bookmarks->setVisible(
+            !settingsOpen
+            && (features::enabled(preferences, features::Bookmarks)
+                || features::enabled(preferences, features::Annotations)));
     toolbarComposition.formattingWarning->setVisible(!settingsOpen && session->formattingWarning());
     findChild<QPushButton *>("rrGraph")->setEnabled(!session->busy() && !appearanceEdit.applying());
     findChild<QPushButton *>("rrGraph")->setChecked(chapterGraph->isVisible()

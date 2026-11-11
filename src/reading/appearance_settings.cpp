@@ -1,4 +1,5 @@
 #include "appearance_settings.h"
+#include "features.h"
 #include "support/qt_compat.h"
 #include "page_navigation.h"
 #include "header_footer.h"
@@ -105,6 +106,7 @@ QJsonObject globalPreferences(QJsonObject preferences)
                 pageNavigation::value(pageNavigation::menuView(preferences));
     preferences.remove("pin_stats");
     preferences.remove(pageNavigation::thumbnailsKey);
+    features::normalize(preferences);
     return preferences;
 }
 

@@ -4,6 +4,7 @@
 #include "ui/style/theme.h"
 #include "assets/font_catalog.h"
 #include "reader_p.h"
+#include "app/reader/settings/settings_panel.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "ui/style/styles.h"
@@ -573,6 +574,11 @@ void Reader::askRemoveBookmark(const QString &position)
 
 void Reader::openBookmarks()
 {
+    const bool bookmarksEnabled = features::enabled(preferences, features::Bookmarks);
+    const bool annotationsEnabled = features::enabled(preferences, features::Annotations);
+    if (!bookmarksEnabled && !annotationsEnabled)
+        return;
+    bookmarkList->setFeatures(bookmarksEnabled, annotationsEnabled);
     annotationPopover->hide();
     if (!bookmarks->available())
         return;
@@ -597,7 +603,7 @@ void Reader::openBookmarks()
     const int top = navigation ? navigation->statusHeight() : 0;
     bookmarkList->setGeometry(0, top, width(),
                               (navigation ? navigation->contentBottom(size()) : height()) - top);
-    if (!highlights->highlights().isEmpty()) {
+    if (annotationsEnabled && (!bookmarksEnabled || !highlights->highlights().isEmpty())) {
         const bool ready = highlights->resolved() || highlights->sync();
         bookmarkList->showAnnotations(ready ? annotationRows() : QVector<BookmarkRow>(), !ready);
     } else {
@@ -739,14 +745,14 @@ void Reader::syncPinnedBookmarks()
         const int aPage = bookmarks->pageOf(a.position), bPage = bookmarks->pageOf(b.position);
         return (aPage < 0 ? INT_MAX : aPage) < (bPage < 0 ? INT_MAX : bPage);
     });
-    const bool visible = !pins.isEmpty() && topControls->isVisible() && !session->busy()
-            && !lifecycleHidden && !closing && !services.suspended() && !annotationMode && !seekOpen
-            && !appearanceEdit.panelOpen() && !general->isVisible() && !menu->isVisible()
-            && !choices->isVisible() && !chapterGraph->isVisible() && !lightPopup->isVisible()
-            && !bookmarkList->isVisible() && !acknowledgments->isVisible()
-            && !searchPanel->isVisible() && !dictionaryPanel->isVisible() && !linksActive()
-            && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog
-            && !(fieldChooser && fieldChooser->isVisible())
+    const bool visible = features::enabled(preferences, features::Bookmarks) && !pins.isEmpty()
+            && topControls->isVisible() && !session->busy() && !lifecycleHidden && !closing
+            && !services.suspended() && !annotationMode && !seekOpen && !appearanceEdit.panelOpen()
+            && !general->isVisible() && !menu->isVisible() && !choices->isVisible()
+            && !chapterGraph->isVisible() && !lightPopup->isVisible() && !bookmarkList->isVisible()
+            && !acknowledgments->isVisible() && !searchPanel->isVisible()
+            && !dictionaryPanel->isVisible() && !linksActive() && !lookupPending && !syncDialog
+            && !kosyncDialog && !finishDialog && !(fieldChooser && fieldChooser->isVisible())
             && !(headerFooterView && headerFooterView->isVisible());
     pinnedBookmarks->setVisible(visible);
     if (!visible)
@@ -1662,7 +1668,15 @@ void Reader::openMenuView()
     choices->setObjectName("rrMenuViewChoices");
     choices->setMinimumRowHeight(chrome::listActionHeight);
     choices->setTopDivider(true);
+    QVector<pageNavigation::MenuView> modes;
+    const auto featurePreferences = static_cast<SettingsPanel *>(general)->featurePreferences;
     for (const auto mode : pageNavigation::menuViews) {
+        if ((mode == pageNavigation::MenuView::Seek
+             && !features::enabled(featurePreferences, features::Navigate))
+            || (mode == pageNavigation::MenuView::Stats
+                && !features::enabled(featurePreferences, features::Stats)))
+            continue;
+        modes.append(mode);
         const auto description = mode == pageNavigation::MenuView::None
                 ? strings::key("settings.menu_view_none_description")
                 : mode == pageNavigation::MenuView::Seek
@@ -1674,9 +1688,9 @@ void Reader::openMenuView()
             choices->setCurrent(choices->options().size() - 1);
         }
     }
-    choices->chosen = [this](int index) {
+    choices->chosen = [this, modes](int index) {
         auto next = preferences;
-        next[pageNavigation::menuViewKey] = pageNavigation::value(pageNavigation::menuViews[index]);
+        next[pageNavigation::menuViewKey] = pageNavigation::value(modes[index]);
         next.remove("pin_stats");
         next.remove(pageNavigation::thumbnailsKey);
         if (writePreferences(next)) {

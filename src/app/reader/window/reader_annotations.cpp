@@ -199,6 +199,8 @@ void Reader::buildAnnotations()
 
 void Reader::enterAnnotations()
 {
+    if (!features::enabled(preferences, features::Annotations))
+        return;
     if (session->busy() || !highlights->writable() || appearanceEdit.panelOpen()
         || general->isVisible()) {
         return;
@@ -1250,6 +1252,8 @@ void Reader::editAnnotation(const QString &id, bool navigate)
 
 void Reader::showSavedAnnotation(const QString &id, QRect anchor, bool navigate)
 {
+    if (!features::enabled(preferences, features::Annotations))
+        return;
     const auto epoch = annotationDraft->generation();
     for (const auto &item : highlights->highlights()) {
         if (item.id != id)
@@ -1275,6 +1279,8 @@ void Reader::showSavedAnnotation(const QString &id, QRect anchor, bool navigate)
 
 void Reader::showSavedAnnotationAt(const QString &id, QRect anchor, bool navigate)
 {
+    if (!features::enabled(preferences, features::Annotations))
+        return;
     for (const auto &item : highlights->highlights()) {
         if (item.id == id) {
             annotationColor = item.color;

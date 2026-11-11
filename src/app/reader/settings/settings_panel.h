@@ -117,6 +117,10 @@ public:
     ui::DescribedOption *disableStandbyOption = nullptr;
     QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> settingsTabButtons;
+    ui::CaptionButton *disabledFeaturesButton = nullptr;
+    QJsonObject featurePreferences;
+    void showDisabledFeatures();
+    void updateFeatureOptions();
     ui::DescribedOption *darkOption = nullptr, *inheritTextLayoutOption = nullptr,
                         *animationOption = nullptr;
     ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,

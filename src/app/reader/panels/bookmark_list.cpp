@@ -500,6 +500,13 @@ int BookmarkList::listTop() const
     return chrome::actionHeight + strip::stripHeight;
 }
 
+void BookmarkList::setFeatures(bool bookmarks, bool annotations)
+{
+    bookmarksTab->setVisible(bookmarks);
+    annotationsTab->setVisible(annotations);
+    arrange();
+}
+
 void BookmarkList::showAnnotations(QVector<BookmarkRow> list, bool pending)
 {
     showItems(std::move(list), true, pending);
@@ -645,11 +652,12 @@ void BookmarkList::arrange()
     const int barHeight = chrome::actionHeight - chrome::heavyRule;
     moreButton->setEnabled(bool(actionsRequested) && !loading);
     const int reserved = 3 * chrome::cellWidth;
-    const int tabWidth = qMax(1, (width() - reserved) / 2);
+    const bool both = !bookmarksTab->isHidden() && !annotationsTab->isHidden();
+    const int tabWidth = qMax(1, (width() - reserved) / (both ? 2 : 1));
     close->setGeometry(0, 0, chrome::cellWidth, barHeight);
     annotationsTab->setGeometry(chrome::cellWidth, 0, tabWidth, barHeight);
-    bookmarksTab->setGeometry(chrome::cellWidth + tabWidth, 0,
-                              qMax(1, width() - reserved - tabWidth), barHeight);
+    bookmarksTab->setGeometry(chrome::cellWidth + (both ? tabWidth : 0), 0,
+                              qMax(1, width() - reserved - (both ? tabWidth : 0)), barHeight);
     moreButton->setGeometry(width() - chrome::cellWidth, 0, chrome::cellWidth, barHeight);
     listHeader->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
     sortButton->setGeometry(width() - 2 * chrome::cellWidth, 0, chrome::cellWidth, barHeight);

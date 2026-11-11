@@ -986,6 +986,9 @@ void Reader::buildOverlays()
         }
     };
     bookmarkList->tabRequested = [this](bool annotations) {
+        if (!features::enabled(preferences,
+                               annotations ? features::Annotations : features::Bookmarks))
+            return;
         annotationPopover->hide();
         if (annotations) {
             const bool ready = highlights->resolved() || highlights->sync();
@@ -1792,14 +1795,14 @@ void Reader::connectPageInput()
     page->annotationDragMoved = [this](QPoint point) { moveAnnotationDrag(point); };
     page->annotationDragFinished = [this](bool cancelled) { finishAnnotationDrag(cancelled); };
     page->annotationRequested = [this] {
-        if (annotationMode || !isEnabled() || !isVisible() || lifecycleHidden || closing
-            || exitPending || exportRunning || services.suspended() || book->deviceTransition()
-            || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()
-            || general->isVisible() || choices->isVisible() || topControls->isVisible()
-            || revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible()
-            || linksActive() || lookupPending || acknowledgments->isVisible()
-            || bookmarkList->isVisible() || lightPopup->isVisible() || chapterGraph->isVisible()
-            || !highlights->writable()) {
+        if (!features::enabled(preferences, features::Annotations) || annotationMode || !isEnabled()
+            || !isVisible() || lifecycleHidden || closing || exitPending || exportRunning
+            || services.suspended() || book->deviceTransition() || session->busy()
+            || appearanceEdit.panelOpen() || appearanceEdit.applying() || general->isVisible()
+            || choices->isVisible() || topControls->isVisible() || revealingLinks
+            || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive()
+            || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible()
+            || lightPopup->isVisible() || chapterGraph->isVisible() || !highlights->writable()) {
             return;
         }
         const auto *modal = QApplication::activeModalWidget();
@@ -1880,7 +1883,8 @@ void Reader::connectPageInput()
         if (!annotationMode && point.y() >= page->topHeight()
             && point.y() < page->height() - page->bottomHeight() && openLink(bodyPoint, true))
             return;
-        if (bookmarks->available() && page->bookmarkCorner().contains(point)) {
+        if (features::enabled(preferences, features::Bookmarks) && bookmarks->available()
+            && page->bookmarkCorner().contains(point)) {
             toggleBookmark();
             return;
         }

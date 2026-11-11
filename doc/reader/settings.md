@@ -24,6 +24,12 @@ Settings has the following tabs:
 
 Confirmation and notice dialogs use the same patterned backdrop as settings choices. Their headings have a divider above the message. Actions share a connected footer, with Cancel on the left and the primary action on the right. If either label does not fit on one line, the actions become full-width stacked rows, with the primary action above Cancel. Labels can wrap with padding. Single-action notices use the full footer width. Bookmark and annotation removal show the page number when available and a shortened excerpt of the saved passage.
 
+## Hide unneeded features
+
+System > User Interface > Hidden features shows the hidden feature names, or None. It opens the Hide unneeded features checklist for Navigation, Stats, annotations, bookmarks and KOSync. Done accepts the checklist; Cancel or tapping outside discards its changes. Accepted items are hidden when Settings closes. The remaining toolbar actions and tabs fill the available space. Navigate and Stats choices also disappear from the default menu view selector. An incompatible default menu view resets to None; related feature options return to their defaults. Unchecking an item restores its UI.
+
+Bookmarks and annotations stay saved. Existing highlighted text stays visible, but annotation controls are hidden. Bookmark ribbons, pins and corner taps are hidden with bookmarks. Stats visibility does not change reading history or time estimates. KOSync is different: checking it cancels active sync work and stops manual, opening, periodic, sleep, wake and closing syncs. The account is retained. Kobo’s own sync is unaffected.
+
 ## Light
 
 The Light panel always includes a Dark mode checkbox on devices with frontlight support. It changes the same dark-mode setting as Settings > Display > Dark mode. Hosts without Light keep the Settings entry. A failed save keeps the previous mode. On short screens, Light omits its swipe hint so the controls fit.

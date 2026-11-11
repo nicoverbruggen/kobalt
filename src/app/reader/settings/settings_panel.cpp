@@ -9,6 +9,7 @@
 #include "ui/style/theme.h"
 #include "ui/panel_timing.h"
 #include "settings_panel.h"
+#include "reading/features.h"
 #include "app/about/about_page.h"
 #include "reading/reading_density.h"
 #include "app/reader/panels/dictionary_panel.h"
@@ -42,6 +43,27 @@ using ui::readerStyle;
 using ReaderOption = ui::DescribedOption;
 
 namespace {
+ui::DescribedOption *checklistOption(QWidget *parent, const QString &name, const QString &label,
+                                     const QString &description, bool first)
+{
+    auto *option = new ui::DescribedOption(label, description, parent);
+    option->setObjectName(name);
+    auto presentation = option->presentation();
+    presentation.indicator = ui::DescribedOption::Indicator::Square;
+    presentation.pressedFill = true;
+    presentation.leadingIndicator = true;
+    presentation.dividers = Qt::BottomEdge;
+    if (first)
+        presentation.dividers |= Qt::TopEdge;
+    presentation.horizontalInset = chrome::inset;
+    presentation.labelPixels = chrome::labelText;
+    presentation.descriptionPixels = chrome::descriptionText;
+    presentation.indicatorSize = { chrome::checkSize, chrome::checkSize };
+    presentation.minimumRowHeight = chrome::optionHeight;
+    option->setPresentation(presentation);
+    return option;
+}
+
 QPushButton *segmentButton(QWidget *parent, QHBoxLayout *layout, QButtonGroup *group,
                            const QString &name, const QString &text);
 
@@ -682,6 +704,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     }
     section(systemPage, systemRows, "rrSystemInterfaceSection",
             strings::get("settings.section_user_interface"));
+    disabledFeaturesButton = ui::makeCaptionButton(systemPage, systemRows, "rrDisabledFeatures",
+                                                   strings::get("settings.hidden_features"),
+                                                   [this] { showDisabledFeatures(); });
     uiFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiFont",
                                          strings::get("settings.ui_font"), [] { });
     uiMonoFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiMonoFont",
@@ -832,6 +857,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           tappableLinksButton,
                           navigationBarButton,
                           menuViewButton,
+                          disabledFeaturesButton,
                           uiFontButton,
                           uiMonoFontButton,
                           headerFooterFontButton,
@@ -1363,23 +1389,9 @@ void SettingsPanel::showBeautifier(const QJsonObject &current,
                               "settings.beautifier_indent" };
     for (int i = 0; i < int(appearance::normalizationKeys.size()); ++i) {
         const auto prefix = labels[i];
-        auto *option = new ui::DescribedOption(
-                strings::get(prefix.toUtf8().constData()),
-                strings::get((prefix + "_description").toUtf8().constData()), card);
-        option->setObjectName(names[i]);
-        auto presentation = option->presentation();
-        presentation.indicator = ui::DescribedOption::Indicator::Square;
-        presentation.pressedFill = true;
-        presentation.leadingIndicator = true;
-        presentation.dividers = Qt::BottomEdge;
-        if (i == 0)
-            presentation.dividers |= Qt::TopEdge;
-        presentation.horizontalInset = chrome::inset;
-        presentation.labelPixels = chrome::labelText;
-        presentation.descriptionPixels = chrome::descriptionText;
-        presentation.indicatorSize = { chrome::checkSize, chrome::checkSize };
-        presentation.minimumRowHeight = chrome::optionHeight;
-        option->setPresentation(presentation);
+        auto *option = checklistOption(card, names[i], strings::get(prefix.toUtf8().constData()),
+                                       strings::get((prefix + "_description").toUtf8().constData()),
+                                       i == 0);
         option->setChecked(draft->value(appearance::normalizationKeys[i]).toBool());
         connect(option, &QCheckBox::clicked, card, [draft, presets, i](bool checked) {
             (*draft)[appearance::normalizationKeys[i]] = checked;
@@ -2049,6 +2061,83 @@ void SettingsPanel::showDictionaries(bool visible)
     if (!visible && settingsPages->currentIndex() == int(SettingsPage::Dictionaries))
         settingsPages->setCurrentIndex(int(SettingsPage::Display));
     fitRail();
+}
+
+void SettingsPanel::updateFeatureOptions()
+{
+    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync" };
+    QStringList hidden;
+    for (int i = 0; i < 5; ++i)
+        if (featurePreferences.value(features::keys[i]).toBool(false))
+            hidden.append(strings::get((QString("features.") + names[i]).toUtf8().constData()));
+    disabledFeaturesButton->setCaption(
+            hidden.isEmpty() ? strings::get("settings.hidden_features_none") : hidden.join(", "));
+    const bool navigate = features::enabled(featurePreferences, features::Navigate);
+    const bool stats = features::enabled(featurePreferences, features::Stats);
+    navigationBarButton->setVisible(navigate);
+    menuViewButton->setVisible(navigate || stats);
+    denseGraphOption->setVisible(stats);
+    findChild<QWidget *>("rrDisplayGraphsSection")->setVisible(stats);
+    auto *syncTab = settingsTabButtons[int(SettingsPage::Kosync)];
+    syncTab->setVisible(features::enabled(featurePreferences, features::Kosync));
+    if (syncTab->isHidden() && settingsPages->currentIndex() == int(SettingsPage::Kosync))
+        settingsPages->setCurrentIndex(int(SettingsPage::System));
+}
+
+void SettingsPanel::showDisabledFeatures()
+{
+    if (fontDialog)
+        return;
+    fontDialog = new ui::ModalOverlay(parentWidget());
+    fontDialog->setObjectName("rrDisabledFeaturesPopup");
+    fontDialog->setDimmed(true);
+    fontDialog->setGeometry(parentWidget()->rect());
+    fontDialog->dismissed = [this] { dismissFontChoices(); };
+    auto *card = fontDialog->card();
+    auto *rows = card->rows();
+    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
+                             metrics::control::border, metrics::control::border);
+    rows->setSpacing(0);
+    card->heading(strings::get("settings.disable_features"),
+                  strings::get("settings.disable_features_description"));
+    auto draft = std::make_shared<QJsonObject>(featurePreferences);
+    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync" };
+    QVector<ui::DescribedOption *> options;
+    for (int i = 0; i < 5; ++i) {
+        const auto *key = features::keys[i];
+        const auto prefix = QString("features.") + names[i];
+        auto *option = checklistOption(card, QString("rrDisableFeature_%1").arg(key),
+                                       strings::get(prefix.toUtf8().constData()),
+                                       strings::get((prefix + "_description").toUtf8().constData()),
+                                       i == 0);
+        option->setChecked(draft->value(key).toBool(false));
+        rows->addWidget(option);
+        options.append(option);
+        connect(option, &QCheckBox::clicked, card,
+                [draft, key](bool hidden) { (*draft)[key] = hidden; });
+    }
+    auto *cancel = ui::makeModalButton(
+            card, { strings::get("common.cancel"), "rrDisabledFeaturesCancel" }, false);
+    auto *done = ui::makeModalButton(
+            card, { strings::get("common.done"), "rrDisabledFeaturesDone" }, true);
+    card->adaptiveActions({ cancel, done });
+    connect(cancel, &QPushButton::clicked, this, [this] { dismissFontChoices(); });
+    connect(done, &QPushButton::clicked, this, [this, draft] {
+        featurePreferences = *draft;
+        dismissFontChoices();
+        updateFeatureOptions();
+        if (refitRequested)
+            refitRequested();
+    });
+    const int width =
+            qMin<int>(ui::px(1064), parentWidget()->width() - 2 * metrics::notice::sideClearance);
+    for (auto *option : options)
+        option->setFixedHeight(option->heightForWidth(width - 2 * metrics::control::border));
+    card->fitToWidth(width);
+    fontDialog->centerCard();
+    fontDialog->show();
+    fontDialog->raise();
+    fontDialog->setFocus();
 }
 
 void SettingsPanel::showPowerManagement(bool visible)

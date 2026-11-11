@@ -93,7 +93,9 @@ void Reader::buildKosync()
                 }
                 }
             },
-            kosyncClient->signedIn() && !book->usesNativeCloudSync(), this);
+            features::enabled(preferences, features::Kosync) && kosyncClient->signedIn()
+                    && !book->usesNativeCloudSync(),
+            this);
     kosyncClient->setDefaultDeviceName(services.deviceName.isEmpty()
                                                ? QStringLiteral("Kobalt")
                                                : services.deviceName + QStringLiteral(" (Kobalt)"));
@@ -199,6 +201,8 @@ void Reader::buildKosync()
 // or, if those syncs are on, at sleep or close.
 void Reader::syncKosyncWhileReading()
 {
+    if (!features::enabled(preferences, features::Kosync))
+        return;
     if (!kosyncStarted)
         return;
     const auto position = session->state().value("position").toString();
@@ -233,13 +237,16 @@ void Reader::updateKosyncToolbar()
 {
     if (!toolbarComposition.sync || !kosyncClient)
         return;
-    toolbarComposition.sync->setVisible(kosyncClient->signedIn() && !kosyncClient->automatic()
+    toolbarComposition.sync->setVisible(features::enabled(preferences, features::Kosync)
+                                        && kosyncClient->signedIn() && !kosyncClient->automatic()
                                         && !book->usesNativeCloudSync());
     toolbarComposition.sync->setEnabled(!syncCoordinator->busy());
 }
 
 void Reader::requestManualKosync()
 {
+    if (!features::enabled(preferences, features::Kosync))
+        return;
     if (!kosyncClient->signedIn() || kosyncClient->automatic() || book->usesNativeCloudSync()
         || kosyncDialog)
         return;
@@ -369,6 +376,10 @@ void Reader::finishKosyncPresentation()
 
 void Reader::synchronizeKosync(bool interactive)
 {
+    if (!features::enabled(preferences, features::Kosync)) {
+        kosyncStarted = true;
+        return;
+    }
     if (book->usesNativeCloudSync()) {
         kosyncStarted = true;
         if (interactive)
@@ -523,6 +534,8 @@ void Reader::flushKosync(std::function<void()> finished, bool enabled)
 
 void Reader::showKosyncChoice()
 {
+    if (!features::enabled(preferences, features::Kosync))
+        return;
     if (!syncCoordinator->pendingProgress() || kosyncPositionFailed || kosyncPromptDeferred
         || kosyncDialog || closing || lifecycleHidden || !isVisible() || session->busy()
         || services.suspended() || book->deviceTransition() || book->pendingProgress() || syncDialog

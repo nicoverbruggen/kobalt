@@ -5060,8 +5060,9 @@ private slots:
     void kosyncAccountGating_data()
     {
         QTest::addColumn<QString>("account");
-        for (const auto *name : { "missing", "signed-out", "not-authenticated", "malformed",
-                                  "future-account", "automatic-off", "logout" })
+        for (const auto *name :
+             { "missing", "signed-out", "not-authenticated", "malformed", "future-account",
+               "automatic-off", "logout", "feature-disabled", "feature-disabled-manual" })
             QTest::newRow(name) << QString::fromLatin1(name);
     }
 
@@ -5073,7 +5074,8 @@ private slots:
         QSignalSpy attempts(&server, &QTcpServer::newConnection);
         const auto paths = testPaths();
         if (account != "missing") {
-            const bool authenticated = account == "automatic-off" || account == "logout";
+            const bool authenticated = account == "automatic-off" || account == "logout"
+                    || account.startsWith("feature-disabled");
             QVERIFY(storage::writeJson(
                     paths.syncAccount(),
                     { { "schema", account == "future-account" ? 2 : 1 },
@@ -5085,8 +5087,11 @@ private slots:
                                 : account == "malformed" ? QStringLiteral("invalid")
                                                          : QString() },
                       { "device_id", "test-device" },
-                      { "automatic", account != "automatic-off" } }));
+                      { "automatic",
+                        account != "automatic-off" && account != "feature-disabled-manual" } }));
         }
+        if (account.startsWith("feature-disabled"))
+            QVERIFY(storage::writeJson(paths.preferences(), { { "disable_kosync", true } }));
         const auto accountBytes = [&] {
             QFile file(paths.syncAccount());
             return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();

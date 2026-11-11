@@ -1459,6 +1459,8 @@ void Reader::closeSearch()
 
 void Reader::openSeek()
 {
+    if (!features::enabled(preferences, features::Navigate))
+        return;
     if (session->busy() || appearanceEdit.applying()) {
         return;
     }
@@ -2089,7 +2091,9 @@ void Reader::syncNavigation()
                           ? int(Nav::Stats)
                           : -1,
                   (isNarrowWidth(width(), ui::density())
-                   || preferences.value("hide_tab_labels").toBool(false)) });
+                   || preferences.value("hide_tab_labels").toBool(false)),
+                  features::enabled(preferences, features::Navigate),
+                  features::enabled(preferences, features::Stats) });
     };
     update();
     syncLinkDiscovery();
@@ -2269,6 +2273,8 @@ void Reader::showChapters()
 
 void Reader::toggleGraph()
 {
+    if (!features::enabled(preferences, features::Stats))
+        return;
     session->cancelPendingTurn();
     lightPopup->hide();
     if (chapterGraph->isVisible()) {
@@ -2291,6 +2297,8 @@ void Reader::toggleGraph()
 
 void Reader::openGraph()
 {
+    if (!features::enabled(preferences, features::Stats))
+        return;
     session->cancelPendingTurn();
     menu->hide();
     general->hide();
@@ -2442,12 +2450,17 @@ void Reader::syncBookmarks()
     if (!bookmarks->available() || session->busy() || session->pages() <= 0)
         return;
     const bool resolved = bookmarks->sync();
-    page->bookmarked = resolved && bookmarks->marked(session->page());
-    pageScrubber->setBookmarkedPages(resolved ? bookmarks->pages() : QVector<int>());
+    page->bookmarked = features::enabled(preferences, features::Bookmarks) && resolved
+            && bookmarks->marked(session->page());
+    pageScrubber->setBookmarkedPages(resolved && features::enabled(preferences, features::Bookmarks)
+                                             ? bookmarks->pages()
+                                             : QVector<int>());
 }
 
 void Reader::toggleBookmark()
 {
+    if (!features::enabled(preferences, features::Bookmarks))
+        return;
     if (session->busy())
         return;
     const auto &list = bookmarks->bookmarks();

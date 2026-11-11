@@ -498,6 +498,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                             guard->frame.resources = resources;
                             guard->frame.state["cached_pages"] = cachedPages;
                             guard->loadImages();
+                            if (guard->idle && !guard->running && !guard->loadingImage)
+                                guard->idle();
                         },
                         Qt::QueuedConnection);
             },
@@ -1967,6 +1969,8 @@ void ReaderSession::loadImages()
                                 guard->frame.resources = resources;
                                 guard->frame.state["cached_pages"] = cachedPages;
                                 guard->loadImages();
+                                if (guard->idle && !guard->running && !guard->loadingImage)
+                                    guard->idle();
                             },
                             Qt::QueuedConnection);
                 }
@@ -2014,6 +2018,8 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                             guard->frame.resources = resources;
                             guard->frame.state["cached_pages"] = cachedPages;
                             guard->loadImages();
+                            if (guard->idle && !guard->running && !guard->loadingImage)
+                                guard->idle();
                         },
                         Qt::QueuedConnection);
             },

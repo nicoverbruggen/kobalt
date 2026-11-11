@@ -737,7 +737,12 @@ private:
     void startTextPresetPrerender();
     void prerenderTextPresets();
     void prerenderNextTextPreset();
+    // Continues a prerender that waits for the engine. ReaderSession::idle
+    // calls it, so no timer wakes the reader while it sits open.
+    void resumeTextPresetPrerender();
     bool textPresetPrerenderStarted = false;
+    bool textPresetPrerenderWaiting = false;
+    QWidget *textPresetProbeHost = nullptr;
     QVector<TextPresetPreview> textPresetPrerenderQueue;
     QSize textPresetPrerenderSize;
     std::shared_ptr<std::atomic_bool> textPresetPrerenderCancel;

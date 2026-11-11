@@ -93,6 +93,7 @@ Reader::~Reader()
     renderNoticeTimer.stop();
     session->cancelPendingTurn();
     session->turnBoundary = {};
+    session->idle = {};
     page->cancelHold();
     brightnessHide.stop();
     lightFeedback.stop();
@@ -1502,6 +1503,7 @@ void Reader::closeEvent(QCloseEvent *event)
     session->updated = {};
     session->renderProgressChanged = {};
     session->turnBoundary = {};
+    session->idle = {};
     renderNoticeTimer.stop();
     busyNotice->setDelayedProgress(false, 0, 0);
     if (finished)

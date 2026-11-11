@@ -161,6 +161,10 @@ public:
     std::function<void()> renderProgressChanged;
     // A buffered request reached the first or final page without moving.
     std::function<void(int direction)> turnBoundary;
+    // The engine drew the pages beside the current one and has nothing else
+    // queued for this session. Work that may wait, such as preview tiles,
+    // starts here instead of on a timer.
+    std::function<void()> idle;
     bool style(int pixels, int spacing);
     bool style(int pixels, int spacing, const QString &face, int margin);
     bool style(int pixels, int spacing, const QString &face, int margin, const QString &alignment);

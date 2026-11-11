@@ -17,7 +17,6 @@
 
 #include <QLabel>
 #include <QLineEdit>
-#include <QTimer>
 #include <QVBoxLayout>
 
 namespace kobalt::reader {
@@ -85,6 +84,10 @@ TextPresetView Reader::textPresetView(const Preset &preset)
 
 void Reader::buildTextPresets()
 {
+    // Holds the prerender's hidden gallery probe. It inherits the reader's
+    // style sheet, so the probe measures the same tiles as the gallery.
+    textPresetProbeHost = new QWidget(this);
+    textPresetProbeHost->hide();
     textPresetSection = new TextPresetSection(menu);
     menu->setTopSection(textPresetSection);
     textPresetSection->toggled = [this] {
@@ -668,14 +671,28 @@ void Reader::startTextPresetPrerender()
     if (textPresetPrerenderStarted)
         return;
     textPresetPrerenderStarted = true;
-    // After the first page and the work that follows the opening.
-    QTimer::singleShot(1000, this, [this] { prerenderTextPresets(); });
+    // After the first page and the work that follows the opening: the
+    // engine reports idle once it has drawn the pages beside this one.
+    textPresetPrerenderWaiting = true;
+    if (!session->busy() && !session->preparingNeighbours())
+        qt::later(0, this, [this] { resumeTextPresetPrerender(); });
+}
+
+void Reader::resumeTextPresetPrerender()
+{
+    if (!std::exchange(textPresetPrerenderWaiting, false))
+        return;
+    if (textPresetPrerenderCancel)
+        prerenderNextTextPreset();
+    else
+        prerenderTextPresets();
 }
 
 void Reader::prerenderTextPresets()
 {
     // Landscape has no presets bar, so no All.
-    if (closing || exitPending || lifecycleHidden || textPresetGallery || width() > height())
+    if (closing || exitPending || lifecycleHidden || textPresetGallery || !textPresetProbeHost
+        || width() > height())
         return;
     QVector<Preset> presets;
     QString selected;
@@ -685,7 +702,9 @@ void Reader::prerenderTextPresets()
     QSize size;
     QStringList ids;
     {
-        TextPresetGallery probe(this);
+        // A child added to or removed from the reader repaints the page,
+        // so the probe lives in a hidden holder made with the window.
+        TextPresetGallery probe(textPresetProbeHost);
         probe.setGeometry(textPresetGalleryBounds());
         // The presets decide whether the pager shows, so lay out after them.
         setTextPresetGalleryPresets(&probe, presets, selected, modified);
@@ -726,7 +745,9 @@ void Reader::prerenderNextTextPreset()
     if (session->busy() || appearanceEdit.applying()
         || appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening
         || stylingSamplesPending > 0) {
-        QTimer::singleShot(500, this, [this] { prerenderNextTextPreset(); });
+        // Continue when the engine is next idle, at the latest after the
+        // next page turn.
+        textPresetPrerenderWaiting = true;
         return;
     }
     const auto preview = textPresetPrerenderQueue.takeFirst();

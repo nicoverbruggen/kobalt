@@ -4278,6 +4278,25 @@ int main(int argc, char **argv)
                                                        keyboard, query),
                 "Keyboard opening and unrelated panel damage must keep the original refresh policy");
         constexpr quint64 modes = 2 | 4 | 8, ordinary = (quint64(1) << 38) | 8;
+        {
+            // Nickel's keyboard: the edited text refreshes in partial mode;
+            // the key and a window-sized policy keep their own.
+            const QRect field(190, 392, 692, 112), glyphs(220, 410, 120, 70),
+                    screen(0, 0, 1072, 1448);
+            QVector<QPair<QRect, quint64>> typed{
+                { field, ordinary }, { glyphs, ordinary }, { key, ordinary }, { screen, ordinary }
+            };
+            kobalt::partialEditorPolicies(typed, field, modes, 4);
+            require(typed[0].second == ((ordinary & ~modes) | 4)
+                            && typed[1].second == ((ordinary & ~modes) | 4),
+                    "Text typed with Nickel's keyboard must refresh in partial mode");
+            require(typed[2].second == ordinary && typed[3].second == ordinary,
+                    "Keys and window-sized policies must keep their own refresh mode");
+            QVector<QPair<QRect, quint64>> unchanged{ { field, ordinary } };
+            kobalt::partialEditorPolicies(unchanged, {}, modes, 4);
+            require(unchanged[0].second == ordinary,
+                    "Without Nickel's keyboard editor the field keeps its policy");
+        }
         using kobalt::completeKeyboardWaveform;
         require(completeKeyboardWaveform(key, keyboard, 8, ordinary, modes) == ordinary,
                 "A native mode-only key policy must receive the text waveform so field/key damage can split");

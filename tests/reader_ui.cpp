@@ -3537,6 +3537,28 @@ private slots:
         }
     }
 
+    // A modal editor and Nickel's keyboard can share one top-level owner.
+    // A keypress repaints the edited text and the key; they must stay two
+    // updates, or the page between the dialog and the keyboard flickers.
+    void keyboardDamageStaysApartFromEditor()
+    {
+        QWidget owner;
+        owner.resize(1072, 1448);
+        QWidget overlay(&owner);
+        overlay.setGeometry(owner.rect());
+        QWidget editor(&overlay);
+        editor.setGeometry(190, 392, 692, 112);
+        QWidget keyboard(&overlay);
+        keyboard.setGeometry(0, 905, 1072, 543);
+        const QRect key(732, 1135, 95, 95);
+        const QRegion painted = QRegion(editor.geometry()) + key;
+        QCOMPARE(panelDamage(&owner, nullptr, painted).size(), 1);
+        const auto damage = panelDamage(&owner, nullptr, painted, keyboard.geometry());
+        QCOMPARE(damage.size(), 2);
+        QVERIFY(damage.contains(editor.geometry()));
+        QVERIFY(damage.contains(key));
+    }
+
     void delayedProgressPaintsAfterTheEventLoop_data() { variants(); }
 
     void delayedProgressPaintsAfterTheEventLoop()

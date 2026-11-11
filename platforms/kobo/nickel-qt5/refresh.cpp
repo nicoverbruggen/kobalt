@@ -323,6 +323,17 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
         submit(QRegion(bounds), { { bounds, policy } });
         return;
     }
+    if (!dark && !pageTurn && !direction && compatible && ordinaryControls
+        && refreshBackend(readerWindow) == RefreshBackend::Mtk) {
+        // Typing with Nickel's keyboard: refresh the edited text in partial
+        // mode, as Nickel refreshes its own keys, not every pixel of the field.
+        const auto *editor = QApplication::focusWidget();
+        if (editor && editor->property("reader_native_keyboard_editor").toBool()
+            && editor->isVisible() && readerWindow->isAncestorOf(editor))
+            partialEditorPolicies(policies,
+                                  QRect(editor->mapTo(readerWindow, QPoint()), editor->size()),
+                                  heuristic | full | partialMode, partialMode);
+    }
     const bool progressDamage = !progressUpdate.isEmpty()
             && progressUpdate.contains(region.boundingRect())
             && std::all_of(policies.cbegin(), policies.cend(),
@@ -451,7 +462,7 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
             damage = bounds;
             selected.append({ bounds, policy });
         } else {
-            for (const auto &part : panelDamage(readerWindow, pageWidget, region)) {
+            for (const auto &part : panelDamage(readerWindow, pageWidget, region, keyboardBounds)) {
                 damage += part;
                 selected.append({ part, policy });
             }
@@ -463,7 +474,7 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
         && region.rectCount() > 1 && region.subtracted(policyCoverage).isEmpty()) {
         // Qt can include a window-sized policy rectangle even when its damage
         // has a gap. Submit each panel's painted region with policies clipped to it.
-        for (const auto &part : panelDamage(readerWindow, pageWidget, region)) {
+        for (const auto &part : panelDamage(readerWindow, pageWidget, region, keyboardBounds)) {
             FlushFlags selected;
             for (const auto &entry : policies) {
                 const QRect clipped = entry.first.intersected(part);

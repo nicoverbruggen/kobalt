@@ -46,6 +46,21 @@ quint64 commonKeyboardPolicy(const Policies &policies, quint64 modeMask, quint64
     return waveform | mode;
 }
 
+// Typing with Nickel's keyboard changes only the edited text. Refresh damage
+// inside that editor in partial mode, as Nickel does for its own keys, so a
+// keystroke does not drive every pixel of the field. Other rectangles keep
+// their policy, including a policy entry that covers more than the editor.
+template <class Policies>
+void partialEditorPolicies(Policies &policies, const QRect &editor, quint64 modeMask,
+                           quint64 partialMode)
+{
+    if (editor.isEmpty())
+        return;
+    for (auto &entry : policies)
+        if (!entry.first.isEmpty() && editor.contains(entry.first))
+            entry.second = (quint64(entry.second) & ~modeMask) | partialMode;
+}
+
 class KeyboardRefreshCache
 {
 public:

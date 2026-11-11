@@ -358,7 +358,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             damage = bounds;
             selected.append({ bounds, policy });
         } else {
-            for (const auto &part : panelDamage(readerWindow, pageWidget, region)) {
+            for (const auto &part : panelDamage(readerWindow, pageWidget, region, keyboardBounds)) {
                 damage += part;
                 selected.append({ part, policy });
             }
@@ -370,7 +370,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         && region.rectCount() > 1 && region.subtracted(policyCoverage).isEmpty()) {
         // Qt can include a window-sized policy rectangle even when its damage
         // has a gap. Submit each panel's painted region with policies clipped to it.
-        for (const auto &part : panelDamage(readerWindow, pageWidget, region)) {
+        for (const auto &part : panelDamage(readerWindow, pageWidget, region, keyboardBounds)) {
             FlushFlags selected;
             for (const auto &entry : flags) {
                 const QRect clipped = entry.first.intersected(part);

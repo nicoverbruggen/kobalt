@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QGraphicsEffect>
 #include <QImage>
+#include <QLineEdit>
 #include <QPainter>
 #include <QVariant>
 
@@ -51,6 +52,9 @@ void NativeKeyboard::publishBounds()
         return;
     // The widget keyboard's editing policy does not apply to Nickel's keys.
     target->setProperty("reader_keyboard_editor_bounds", QRect());
+    // The MTK flush refreshes this editor's text in partial mode instead.
+    if (editor)
+        editor->setProperty("reader_native_keyboard_editor", true);
     if (target && owner && target->property("reader_keyboard_widget").value<QObject *>() == owner)
         target->setProperty("reader_keyboard_bounds", bounds);
 }
@@ -60,6 +64,8 @@ void NativeKeyboard::clearBounds()
     const auto target = window;
     const auto owner = boundsOwner;
     boundsOwner = nullptr;
+    if (editor)
+        editor->setProperty("reader_native_keyboard_editor", false);
     if (!target || !owner || target->property("reader_keyboard_widget").value<QObject *>() != owner)
         return;
     target->setProperty("reader_keyboard_widget", QVariant());

@@ -5616,6 +5616,26 @@ int main(int argc, char **argv)
             ActionMenu plain(&host, {}, { { "Only", "only", false, ControlIcon::More, {} } });
             require(!plain.findChild<QWidget *>("rrActionMenuHeader"), "An empty header was shown");
         }
+        {
+            // A row measured before polishing used the application font, not
+            // its style sheet font. On Kobo, Nickel's application font made
+            // option rows too short and clipped the card around them.
+            // The bundled monospace font wraps differently from the application font.
+            const auto styled = QFontInfo(kobalt::ui::chromeFont()).family();
+            require(styled != QApplication::font().family(),
+                    "Option font check needs a font other than the application font");
+            QWidget parent;
+            parent.setStyleSheet(QString("*{font-family:\"%1\";}").arg(styled));
+            const QString description =
+                    "A description that is long enough to wrap onto several lines.";
+            auto *reference = new DescribedOption("Option", description, &parent);
+            reference->ensurePolished();
+            require(reference->font().family() == styled,
+                    "Option did not take its font from the style sheet");
+            auto *early = new DescribedOption("Option", description, &parent);
+            require(early->heightForWidth(320) == reference->heightForWidth(320),
+                    "Option was measured with the application font before polishing");
+        }
         ChoiceModal choice(&host, { "A required description", "A title", {} },
                            { "Cancel", "cancel" }, { "Continue", "continue" });
         choice.card()->fitToWidth(760);

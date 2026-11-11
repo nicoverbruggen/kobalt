@@ -620,7 +620,7 @@ private:
                     - (withTag ? tagWidth + ui::px(12) : 0);
         };
         const bool showTag = view.example && nameFull <= room(true, true);
-        const bool showDetail = nameFull <= room(showTag, true) || room(false, true) >= ui::px(160);
+        const bool showDetail = nameFull <= room(showTag, true);
         // The name, size and Example tag share one baseline, so text in
         // different fonts sits on the same line.
         const int nameHeight = ui::interfaceLineHeight(nameFont);

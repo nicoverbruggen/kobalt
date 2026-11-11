@@ -2,6 +2,7 @@
 #include "engine/crengine/engine_document.h"
 #include "open_request.h"
 #include "highlight_geometry.h"
+#include "storage/custom_pins.h"
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QObject>
@@ -267,6 +268,8 @@ public:
 
     bool formattingWarning() const { return formattingWarning_; }
 
+    const storage::CustomPins &customPins() const { return customPins_; }
+
     QString imageWarning() const { return frame.resources.value("image_error").toString(); }
 
     int turnDirection() const { return frame.turnDirection; }
@@ -413,6 +416,7 @@ public:
 
 private:
     bool formattingWarning_ = false;
+    storage::CustomPins customPins_;
     QJsonObject formattingDetails_;
     ReaderSession(std::shared_ptr<EngineDocument> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;

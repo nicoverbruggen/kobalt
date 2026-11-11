@@ -836,6 +836,8 @@ void Reader::syncPinnedBookmarks()
                                     + (cell - side) / 2,
                             side, side);
         button->setGlyph(ui::bookmarkIcon(pin.icon));
+        const auto *custom = session->customPins().find(pin.icon);
+        button->setGlyphMask(custom ? custom->mask : QImage());
         const auto name = pin.name.isEmpty() ? pin.chapter : pin.name;
         button->setAccessibleName(name);
         button->setToolTip(name);

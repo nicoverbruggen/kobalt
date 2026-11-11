@@ -390,6 +390,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.layoutCachePath = layoutCachePath;
     opening.documentCachePath = documentCachePath;
     opening.userStyleSheetPath = userStyleSheetPath;
+    opening.customPinsPath = request.customPinsPath;
     opening.coverPath = coverPath;
     opening.pinnedAppearance = pinnedAppearance;
     opening.appearanceDefaults = appearanceDefaults;
@@ -431,15 +432,16 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                          digest = output.digest, syncDigest = output.syncDigest, identity,
                          savedMatches = output.savedMatches, finished, lease, job,
                          formattingWarning = output.formattingWarning,
-                         formattingDetails = output.formattingDetails]() mutable {
+                         formattingDetails = output.formattingDetails,
+                         customPins = std::move(output.customPins)]() mutable {
                             if (!guard) {
                                 return;
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
                                     [guard, outcome, digest, syncDigest, identity, savedMatches,
-                                     finished, lease, job, formattingWarning,
-                                     formattingDetails](ReaderFrame result) mutable {
+                                     finished, lease, job, formattingWarning, formattingDetails,
+                                     customPins](ReaderFrame result) mutable {
                                         if (!guard || guard->revision != job
                                             || guard->lease_ != lease)
                                             return;
@@ -460,6 +462,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                         guard->frame = result;
                                         guard->openingResult_ = outcome;
                                         guard->layoutReady_ = outcome.ready();
+                                        guard->customPins_ = outcome.ready()
+                                                ? customPins
+                                                : storage::CustomPins();
                                         guard->formattingWarning_ =
                                                 outcome.ready() && formattingWarning;
                                         guard->formattingDetails_ = guard->formattingWarning_

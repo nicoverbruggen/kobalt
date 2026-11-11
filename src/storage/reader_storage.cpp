@@ -55,6 +55,11 @@ QString Paths::annotations() const
     return child(directory, "annotations");
 }
 
+QString Paths::customPins() const
+{
+    return child(directory, "custom-pins");
+}
+
 QString Paths::database() const
 {
     return child(directory, "kobalt.sqlite");

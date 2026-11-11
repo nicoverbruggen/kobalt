@@ -217,6 +217,7 @@ void ReaderController::begin(const QString &path, QSize pixels)
 #endif
     request.restartAtStart = restartAtStart;
     request.userStyleSheetPath = paths.directory + "/userstyle.css";
+    request.customPinsPath = paths.customPins();
     request.appearanceDefaults = appearance::bookDefaults(settings);
     opening->open(
             std::move(request),

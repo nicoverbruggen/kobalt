@@ -420,6 +420,8 @@ foreach(source IN LISTS kobo_progress_test_sources)
     get_filename_component(name "${source}" NAME)
     list(TRANSFORM kobo_progress_test_definitions PREPEND "-D" OUTPUT_VARIABLE defines_${name})
 endforeach()
+list(TRANSFORM kobo_custom_pins_test_definitions PREPEND "-D" OUTPUT_VARIABLE custom_pin_defines)
+write_response_file("${work}/custom-pin-test.rsp" ${custom_pin_defines})
 
 # One stamp per lane and source, and one phony target per lane. Ninja reruns
 # a source when it, a header in its depfile or its response file changes. The
@@ -444,8 +446,15 @@ foreach(lane qt5 qt6 qt5-eval qt6-eval)
             set(stamp_${lane}_${relative} "${stamp}")
             ninja_path(stamp_line "${stamp}")
             ninja_path(source_line "${source}")
-            string(APPEND ninja "build ${stamp_line}: ${lane}_${kind} ${source_line} | ${response}\n"
-                "  source = ${relative}\n  defines = ${defines_${name}}\n")
+            set(source_defines "${defines_${name}}")
+            set(extra_response "")
+            if(source IN_LIST kobo_custom_pins_test_sources)
+                # Keep string-valued definitions quoted, including source paths with spaces.
+                set(source_defines "@\"${work}/custom-pin-test.rsp\"")
+                ninja_path(extra_response "${work}/custom-pin-test.rsp")
+            endif()
+            string(APPEND ninja "build ${stamp_line}: ${lane}_${kind} ${source_line} | ${response} ${extra_response}\n"
+                "  source = ${relative}\n  defines = ${source_defines}\n")
             list(APPEND lane_stamps "${stamp_line}")
             list(APPEND ${lane}_relative "${relative}")
         endforeach()

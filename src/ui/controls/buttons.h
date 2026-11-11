@@ -7,6 +7,7 @@
 #include <QBoxLayout>
 #include <QEvent>
 #include <QPushButton>
+#include <QImage>
 #include <functional>
 
 namespace kobalt::ui {
@@ -348,6 +349,15 @@ public:
         }
     }
 
+    // Optional bounded alpha mask, tinted by the same palette as built-in icons.
+    void setGlyphMask(const QImage &mask)
+    {
+        if (glyphMask.cacheKey() != mask.cacheKey()) {
+            glyphMask = mask;
+            update();
+        }
+    }
+
     void setRule(Edges edges)
     {
         rule = edges;
@@ -372,6 +382,7 @@ protected:
 
 private:
     ControlIcon glyph;
+    QImage glyphMask;
     int iconPixels;
     Edges rule;
     bool dropdownIndicator = false;

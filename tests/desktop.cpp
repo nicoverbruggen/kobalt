@@ -2872,6 +2872,177 @@ void checkStatsPins(Fixture &fixture, int pins)
     }
 }
 
+void checkCustomPinnedBookmarks(int preset, bool dark)
+{
+    Fixture fixture(dark);
+    QVERIFY(fixture.prepared);
+    QVERIFY(QDir().mkpath(fixture.paths.customPins()));
+    QFile catFile(QStringLiteral(KOBALT_SOURCE_ROOT) + "/tests/fixtures/custom-pins/cat.svg");
+    QVERIFY(catFile.open(QIODevice::ReadOnly));
+    const auto cat = catFile.readAll();
+    QVERIFY(!storage::customPinMask(cat).isNull());
+    QFile file(fixture.paths.customPins() + "/cat.svg");
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write(cat), qint64(cat.size()));
+    file.close();
+    for (int i = 0; i < 7; ++i) {
+        QFile bad(fixture.paths.customPins() + QString("/unsupported-export-%1.svg").arg(i));
+        QVERIFY(bad.open(QIODevice::WriteOnly));
+        QCOMPARE(bad.write("not XML"), qint64(7));
+    }
+    selectPreview(fixture, preset);
+    const auto name = screenshotVariant(preset, dark);
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    openPrologueBody(fixture);
+    auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+    QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
+    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").size(), 1);
+    fixBookmarkDates(fixture);
+    opened.clear();
+    const auto original = fixture.stored("bookmarks.json", "bookmarks").first().toObject();
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrBookmarks"));
+    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+    QTRY_VERIFY(fixture.visible("rrPinEditor"));
+    QTRY_VERIFY(fixture.visible("rrPinIcon_custom:cat.svg"));
+    QVERIFY(!fixture.widget("rrPinIconsPrevious")->isEnabled());
+    QVERIFY(fixture.visible("rrPinIcon_map"));
+    auto *iconGrid = fixture.widget("rrPinIconGrid");
+    QVERIFY(fixture.widget("rrPinIcon_custom:cat.svg")->mapTo(iconGrid, QPoint()).x()
+            < fixture.widget("rrPinIcon_map")->mapTo(iconGrid, QPoint()).x());
+    auto *input = qobject_cast<QLineEdit *>(fixture.widget("rrPinName"));
+    QVERIFY(input);
+    input->setText("Cat");
+    QVERIFY(fixture.press("rrPinIcon_custom:cat.svg"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-custom-editor"));
+    QVERIFY(!fixture.widget("rrPinHelp"));
+    auto *warning = fixture.widget("rrPinErrors");
+    QVERIFY(warning && warning->isVisible());
+    QCOMPARE(warning->geometry().topRight(), QPoint(warning->parentWidget()->width() - 1, 0));
+    QVERIFY(fixture.press("rrPinErrors"));
+    QTRY_VERIFY(fixture.visible("rrPinErrorsPopup"));
+    auto *errors = fixture.widget("rrPinErrorsPopup");
+    for (int i = 0; i < 5; ++i) {
+        auto *label = errors->findChild<QLabel *>(QString("rrPinFailedFile%1").arg(i));
+        QVERIFY(label);
+        QCOMPARE(label->text(), QString("unsupported-export-%1.svg").arg(i));
+    }
+    capturePages(fixture, name + "-pinned-bookmark-custom-errors", "rrPinErrorsPopup");
+    QVERIFY(fixture.press("rrPinErrorsClose"));
+    QTRY_VERIFY(!fixture.visible("rrPinErrorsPopup"));
+    QCOMPARE(input->text(), QString("Cat"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"))->isChecked());
+    auto *catButton = fixture.widget("rrPinIcon_custom:cat.svg");
+    auto *mapButton = fixture.widget("rrPinIcon_map");
+    const QRect catRect(catButton->mapTo(iconGrid, QPoint()), catButton->size());
+    const QRect mapRect(mapButton->mapTo(iconGrid, QPoint()), mapButton->size());
+    QCOMPARE(mapRect.x() - catRect.right() - 1, int(ui::metrics::control::border));
+    const auto gridImage = iconGrid->grab().toImage();
+    const auto divider = catButton->palette().color(QPalette::Mid).rgba();
+    QCOMPARE(gridImage.pixel(catRect.right() + 1, catRect.center().y()), divider);
+    auto *flagButton = fixture.widget("rrPinIcon_flag");
+    const QRect flagRect(flagButton->mapTo(iconGrid, QPoint()), flagButton->size());
+    if (flagRect.y() > catRect.y()) {
+        QCOMPARE(flagRect.y() - catRect.bottom() - 1, int(ui::metrics::control::border));
+        QCOMPARE(gridImage.pixel(catRect.center().x(), catRect.bottom() + 1), divider);
+    }
+    auto *list = static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"));
+    list->setCustomPinDirectory("~/Library/Application Support/Kobalt/Kobalt/config/custom-pins/");
+    QVERIFY(fixture.press("rrPinErrors"));
+    QTRY_VERIFY(fixture.visible("rrPinErrorsPopup"));
+    QVERIFY(fixture.press("rrPinErrorsHelp"));
+    QTRY_VERIFY(fixture.visible("rrPinHelpPopup"));
+    auto *helpText = fixture.widget("rrPinHelpPopup")->findChild<QLabel *>("rrModalDescription");
+    QVERIFY(helpText);
+    QVERIFY(helpText->text().contains(
+            "~/Library/Application Support/Kobalt/Kobalt/config/custom-pins/"));
+    QVERIFY(!helpText->text().contains(".adds/"));
+    QVERIFY(helpText->text().contains("You can add 120 icons"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-custom-help"));
+    QVERIFY(fixture.press("rrPinHelpClose"));
+    QTRY_VERIFY(!fixture.visible("rrPinHelpPopup"));
+    QVERIFY(fixture.visible("rrPinEditor"));
+    QCOMPARE(input->text(), QString("Cat"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"))->isChecked());
+    QVERIFY(fixture.press("rrPinIconsNext"));
+    QVERIFY(fixture.press("rrPinIconsPrevious"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"))->isChecked());
+    for (int turn = 0; turn < 3 && !fixture.visible("rrPinIcon_map"); ++turn)
+        QVERIFY(fixture.press("rrPinIconsNext"));
+    QVERIFY(fixture.visible("rrPinIcon_map"));
+    for (int turn = 0; turn < 3 && !fixture.visible("rrPinIcon_custom:cat.svg"); ++turn)
+        QVERIFY(fixture.press("rrPinIconsPrevious"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"))->isChecked());
+    QVERIFY(fixture.press("rrPinSave"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QTRY_COMPARE(
+            fixture.stored("bookmarks.json", "bookmarks").first().toObject()["icon"].toString(),
+            QString("custom:cat.svg"));
+    const auto saved = fixture.stored("bookmarks.json", "bookmarks").first().toObject();
+    QCOMPARE(saved["position"], original["position"]);
+    QCOMPARE(saved["name"].toString(), QString("Cat"));
+    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+    QTRY_VERIFY(fixture.visible("rrPinIcon_custom:cat.svg"));
+    QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"))->isChecked());
+    QVERIFY(fixture.press("rrPinCancel"));
+    QVERIFY(fixture.press("rrBookmarkListClose"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-custom-shortcut"));
+    const auto custom = fixture.widget("rrPinnedBookmark0")->grab().toImage();
+    for (int toggle = 0; toggle < 2; ++toggle) {
+        QVERIFY(fixture.press("rrSettings"));
+        if (!fixture.visible("rrDisplayOptions"))
+            QVERIFY(fixture.press("rrSettingsDisplay"));
+        QVERIFY(revealSettingsOption(fixture, "rrDarkMode"));
+        QVERIFY(fixture.press("rrDarkMode"));
+        QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), toggle == 0 ? !dark : dark);
+        QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
+        auto *button = fixture.widget("rrPinnedBookmark0");
+        const bool nextDark = toggle == 0 ? !dark : dark;
+        // Theme and frame delivery are asynchronous. Wait for the rendered ink,
+        // then check that the shortcut still has opaque paper in both themes.
+        const int iconSide = qRound(1.2 * int(ui::metrics::chrome::cellIcon));
+        const QPoint inkPoint(button->width() / 2,
+                              (button->height() - iconSide) / 2 + qRound(iconSide * 21.0 / 24));
+        QTRY_COMPARE(button->grab().toImage().pixelColor(inkPoint),
+                     QColor(nextDark ? Qt::white : Qt::black));
+        const auto frame = fixture.window.readerWindow()->grab().toImage();
+        const auto paper = button->mapTo(fixture.window.readerWindow(),
+                                         QPoint(button->width() / 2, ui::px(3)));
+        QCOMPARE(frame.pixelColor(paper), QColor(nextDark ? Qt::black : Qt::white));
+    }
+    QVERIFY(QFile::remove(fixture.paths.customPins() + "/cat.svg"));
+    QVERIFY(fixture.press("rrReturn"));
+    QTRY_VERIFY(fixture.window.idle());
+    fixture.window.openBook(book);
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
+    QVERIFY(custom != fixture.widget("rrPinnedBookmark0")->grab().toImage());
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-custom-missing"));
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject(), saved);
+    QVERIFY(fixture.press("rrBookmarks"));
+    QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+    QTRY_VERIFY(fixture.visible("rrPinEditor"));
+    QTRY_VERIFY(fixture.visible("rrPinIcon_custom:cat.svg"));
+    auto *missing = qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"));
+    QVERIFY(missing->isChecked());
+    QVERIFY(missing->accessibleName().contains("cat.svg"));
+    QCOMPARE(ui::bookmarkIcon("custom:cat.svg"), ui::ControlIcon::Pin);
+    QVERIFY(capture(fixture, name + "-pinned-bookmark-custom-placeholder"));
+    QVERIFY(fixture.press("rrPinSave"));
+    QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").first().toObject(), saved);
+}
+
 void checkPinnedBookmarks(int preset, bool dark)
 {
     Fixture fixture(dark);
@@ -2941,6 +3112,8 @@ void checkPinnedBookmarks(int preset, bool dark)
             break;
         }
         QTRY_VERIFY(fixture.visible("rrPinEditor"));
+        QVERIFY(fixture.visible("rrPinHelp"));
+        QVERIFY(!fixture.widget("rrPinErrors"));
         auto *input = qobject_cast<QLineEdit *>(fixture.widget("rrPinName"));
         QVERIFY(input);
         if (i == 0) {
@@ -5238,7 +5411,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::newRow("dark") << true;
     }
 
-    // Checks pinned bookmarks: pinning, editing, icon pages, the shortcut bar, the pin limit, jumps, returns, unpinning and removal.
+    // Checks custom icons first, built-in choices, theme changes and removed-icon placeholders.
+    void customPinnedBookmarks_data() { screenshotVariants(); }
+
+    void customPinnedBookmarks()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkCustomPinnedBookmarks(preset, dark);
+    }
+
+    // Checks pinning, editing, icon pages, the shortcut bar, pin limits, jumps and removal.
     void pinnedBookmarks_data() { screenshotVariants(); }
 
     void pinnedBookmarks()
@@ -12423,6 +12606,15 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
+    void customPinnedBookmarks_data() { screenshotVariants(); }
+
+    void customPinnedBookmarks()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkCustomPinnedBookmarks(preset, dark);
+    }
 
     void buttonMappingUnavailable_data() { screenshotVariants(); }
 

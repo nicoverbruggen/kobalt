@@ -33,5 +33,7 @@ struct OpenRequest
     bool restartAtStart = false;
     // The same optional host cover used by the sleep screen.
     QString coverImagePath{};
+    // Optional icon directory. Read and rasterized once on the opening worker.
+    QString customPinsPath{};
 };
 } // namespace kobalt

@@ -983,6 +983,8 @@ void Reader::buildOverlays()
         });
     }
     bookmarkList = new kobalt::BookmarkList(this, services.keyboard);
+    bookmarkList->setCustomPins(session->customPins());
+    bookmarkList->setCustomPinDirectory(book->paths().customPins());
     bookmarkList->pinRequested = [this](const QString &position, const QString &name,
                                         const QString &icon) {
         return bookmarks->setPin(position, name, icon);

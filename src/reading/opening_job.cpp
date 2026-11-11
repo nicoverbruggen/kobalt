@@ -402,6 +402,8 @@ OpeningOutput runOpening(OpeningJob &job)
     }
     logOpeningPhases(job, state);
     OpeningOutput output;
+    if (outcome.ready() && !job.cancelled())
+        output.customPins = storage::readCustomPins(job.customPinsPath);
     output.frame = std::move(state.frame);
     output.outcome = outcome;
     output.digest = state.digest;

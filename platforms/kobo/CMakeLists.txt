@@ -223,6 +223,16 @@ if(KOBALT_BUILD_TESTS)
             ENVIRONMENT "${test_environment}" TIMEOUT 30)
         list(APPEND tests kobalt-display-format-tests)
     endif()
+    add_executable(kobalt-custom-pins-tests ${kobo_custom_pins_test_sources})
+    set_target_properties(kobalt-custom-pins-tests PROPERTIES AUTOMOC OFF)
+    target_compile_definitions(kobalt-custom-pins-tests PRIVATE ${kobo_custom_pins_test_definitions})
+    target_include_directories(kobalt-custom-pins-tests PRIVATE "${source}" "${KOBALT_ROOT}/tests/support")
+    target_compile_options(kobalt-custom-pins-tests PRIVATE ${kobo_warning_options})
+    target_link_libraries(kobalt-custom-pins-tests PRIVATE kobalt-test-code ${kobalt_libraries})
+    add_test(NAME model.custom-pins COMMAND kobalt-custom-pins-tests)
+    set_tests_properties(model.custom-pins PROPERTIES LABELS "annotations;kobo;qt${KOBALT_QT_MAJOR}"
+        ENVIRONMENT "${test_environment}" TIMEOUT 120)
+    list(APPEND tests kobalt-custom-pins-tests)
     set_tests_properties(pewter.progress PROPERTIES LABELS "pewter;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
 

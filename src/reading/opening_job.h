@@ -20,6 +20,7 @@ struct OpeningJob
     ResourceFactory factory;
     PositionCodec positions;
     QString systemFont, layoutCachePath, documentCachePath, userStyleSheetPath, coverPath;
+    QString customPinsPath;
     QJsonObject pinnedAppearance, appearanceDefaults;
     bool restartAtStart = false;
     ReaderMarkupRequest markup;
@@ -54,6 +55,7 @@ struct OpeningJob
 // What the session publishes on the GUI thread when the job ends.
 struct OpeningOutput
 {
+    storage::CustomPins customPins;
     ReaderFrame frame;
     OpeningResult outcome;
     QByteArray digest, syncDigest;

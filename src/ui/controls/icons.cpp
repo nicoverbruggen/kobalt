@@ -47,7 +47,8 @@ ControlIcon bookmarkIcon(const QString &name)
         ControlIcon::Music,         ControlIcon::Skull,     ControlIcon::Diamond
     };
     const int index = bookmarkIconNames().indexOf(name);
-    return index < 0 ? ControlIcon::Star : icons[index];
+    return index < 0 ? (name.startsWith("custom:") ? ControlIcon::Pin : ControlIcon::Star)
+                     : icons[index];
 }
 
 namespace {

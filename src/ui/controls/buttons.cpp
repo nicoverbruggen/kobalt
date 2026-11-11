@@ -809,6 +809,19 @@ int CellButton::widthForLabel(int maximumWidth) const
 void CellButton::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
+    const auto paintGlyph = [this, &painter](const QRect &bounds, const QColor &color) {
+        if (glyphMask.isNull()) {
+            controlIcon(glyph, color).paint(&painter, bounds);
+            return;
+        }
+        auto tinted = glyphMask.copy();
+        QPainter tint(&tinted);
+        tint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        tint.fillRect(tinted.rect(), color);
+        tint.end();
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawImage(bounds, tinted);
+    };
     const bool pressed = isEnabled() && isDown();
     const bool active = isEnabled() && (isChecked() || (pressed && !grayPress));
     const auto paper = palette().color(QPalette::Window);
@@ -823,10 +836,9 @@ void CellButton::paintEvent(QPaintEvent *)
         }
         if (!isEnabled())
             painter.setOpacity(.45);
-        controlIcon(glyph, active ? paper : ink)
-                .paint(&painter,
-                       QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels,
-                             iconPixels));
+        paintGlyph(QRect((width() - iconPixels) / 2, (height() - iconPixels) / 2, iconPixels,
+                         iconPixels),
+                   active ? paper : ink);
         return;
     }
     painter.fillRect(rect(),
@@ -841,8 +853,7 @@ void CellButton::paintEvent(QPaintEvent *)
         const int indicator = dropdownIndicator ? int(metrics::chrome::selectorIcon) : 0;
         const int gap = dropdownIndicator ? px(8) : 0;
         const int left = (width() - iconPixels - gap - indicator) / 2;
-        controlIcon(glyph, color)
-                .paint(&painter, QRect(left, (height() - iconPixels) / 2, iconPixels, iconPixels));
+        paintGlyph(QRect(left, (height() - iconPixels) / 2, iconPixels, iconPixels), color);
         if (dropdownIndicator)
             controlIcon(ControlIcon::Down, color)
                     .paint(&painter,
@@ -868,8 +879,7 @@ void CellButton::paintEvent(QPaintEvent *)
         labelWidth = qMax(labelWidth, interfaceTextWidth(lines[i], label));
     }
     const int x = metrics::chrome::inset + labelWidth + metrics::chrome::selectorGap;
-    controlIcon(glyph, color)
-            .paint(&painter, QRect(x, (height() - iconPixels) / 2, iconPixels, iconPixels));
+    paintGlyph(QRect(x, (height() - iconPixels) / 2, iconPixels, iconPixels), color);
 }
 
 } // namespace kobalt::ui

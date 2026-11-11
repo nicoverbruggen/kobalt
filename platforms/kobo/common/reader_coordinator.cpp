@@ -1045,7 +1045,8 @@ void ReaderCoordinator::load()
               kobalt::appearance::bookDefaults(preferences),
               {},
               run.diskBaseline.valid && run.diskBaseline.status == 2,
-              run.nativePublication->coverPath() },
+              run.nativePublication->coverPath(),
+              environment_.paths.customPins() },
             [this](const kobalt::OpeningResult &outcome) {
                 run.openingTimings["load_and_layout_ms"] =
                         run.openingTimer.elapsed() - run.layoutStarted;

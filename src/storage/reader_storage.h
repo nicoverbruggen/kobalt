@@ -18,6 +18,7 @@ struct Paths
     QString readingSpeed() const;
     QString selection() const;
     QString annotations() const;
+    QString customPins() const;
     QString database() const;
     QString layoutCache() const;
     QString sleepScreen() const;

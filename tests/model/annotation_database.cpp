@@ -115,7 +115,7 @@ void pinnedBookmarks()
     QTemporaryDir root;
     auto pinned = bookmark();
     pinned.name = QString::fromUtf8("Carte 日本語");
-    pinned.icon = "map";
+    pinned.icon = "custom:cat.svg";
     qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");
     BookmarkStore legacy(root.path(), identity, fingerprint, "Book");
     legacy.setBookmarks({ pinned });

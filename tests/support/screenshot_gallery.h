@@ -220,6 +220,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "zen-stats", "Reading stats in Zen mode" },
         { "zen-battery", "Zen mode with a low battery" },
         { "zen-chapters", "Chapters in Zen mode" },
+        { "zen-settings", "Settings in Zen mode" },
         { "reading", "Reading" },
         { "loading-cover", "Opening a book with its cover" },
         { "loading-cover-reopening", "Reopening a cached book" },

@@ -35,6 +35,20 @@ public:
     void dismissEditor();
     QPointer<ui::ModalOverlay> editorDialog;
     std::function<void()> loginRequested, logoutRequested, syncRequested;
+
+    // Zen mode's settings page offers Sync now and Automatic sync on their
+    // own, only while this page could offer them.
+    bool syncReady() const { return signedIn_ && !nativeCloudSync_ && !accountEdited_; }
+
+    bool syncEnabled() const;
+    QString lastSyncText() const;
+    QString automaticCaption() const;
+    void syncNow();
+
+    void openSchedule() { showSchedule(); }
+
+    // Called after the account, schedule, last sync or status changes.
+    std::function<void()> stateChanged;
     std::function<void(bool)> automaticChanged;
     std::function<void(const kosync::Schedule &)> scheduleChanged;
     std::function<void(const QString &)> deviceNameChanged;

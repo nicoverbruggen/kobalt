@@ -7506,6 +7506,122 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      QJsonValue(false));
     }
 
+    // Checks Settings in Zen mode: one page with Dark mode, Light without edge swipes, Sync once set up and About, left only by a held press.
+    void settingsZenPage()
+    {
+        auto light = std::make_shared<GestureLightState>();
+        Fixture fixture(false, false, false, true, false, false,
+                        [light](ReaderHostServices &services) {
+                            services.lightAvailable = [] { return true; };
+                            services.light = [light](QWidget *) {
+                                return std::make_unique<GestureLight>(light);
+                            };
+                        });
+        QVERIFY(fixture.prepared);
+        auto saved = storage::readJson(fixture.paths.preferences());
+        saved["zen_mode"] = true;
+        saved["edge_light_gestures"] = false;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto openSettings = [&fixture] {
+            if (!fixture.visible("rrSettings"))
+                QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrSettings"));
+            QVERIFY(fixture.press("rrSettings"));
+            QTRY_VERIFY(fixture.visible("rrGeneralSettings"));
+        };
+        openSettings();
+        // One page without the rail, marked ZEN.
+        QTRY_VERIFY(fixture.visible("rrZenSettings"));
+        QVERIFY(!fixture.visible("rrSettingsRail"));
+        QVERIFY(fixture.visible("rrSettingsZenMark"));
+        QVERIFY(fixture.visible("rrSettingsClose"));
+        for (const char *name : { "rrZenDarkMode", "rrZenAbout", "rrZenLeave" })
+            QVERIFY2(fixture.visible(name), name);
+        // Without a sync account there is no Sync section.
+        QVERIFY(!fixture.visible("rrZenSyncSection"));
+        QVERIFY(!fixture.visible("rrZenSyncNow"));
+        // A signed-in account shows Sync now and Automatic sync.
+        auto *kosyncPage = dynamic_cast<reader::KosyncPage *>(fixture.widget("rrKosyncPage"));
+        QVERIFY(kosyncPage);
+        kosyncPage->setAccount("https://sync.example.com", "reader", true, true);
+        QTRY_VERIFY(fixture.visible("rrZenSyncNow"));
+        QVERIFY(fixture.visible("rrZenAutomaticSync"));
+        kosyncPage->setAccount("https://sync.example.com", "reader", false, true);
+        QTRY_VERIFY(!fixture.visible("rrZenSyncNow"));
+        // Dark mode applies at once, as the Display tab's checkbox does.
+        auto *dark = qobject_cast<QCheckBox *>(fixture.widget("rrDarkMode"));
+        QVERIFY(dark && !dark->isChecked());
+        QVERIFY(fixture.press("rrZenDarkMode"));
+        QTRY_VERIFY(fixture.state().value("dark_mode").toBool());
+        QVERIFY(dark->isChecked());
+        QVERIFY(fixture.press("rrZenDarkMode"));
+        QTRY_VERIFY(!fixture.state().value("dark_mode").toBool());
+        // About opens full width with a back cell, without the hold button.
+        QVERIFY(fixture.press("rrZenAbout"));
+        QTRY_VERIFY(fixture.visible("rrSettingsBack"));
+        QVERIFY(!fixture.visible("rrZenSettings"));
+        QVERIFY(!fixture.visible("rrZenLeave"));
+        QVERIFY(!fixture.visible("rrSettingsRail"));
+        QVERIFY(fixture.press("rrSettingsBack"));
+        QTRY_VERIFY(fixture.visible("rrZenSettings"));
+        QVERIFY(fixture.visible("rrZenLeave"));
+        // Without edge swipes, Light is the only way to change the light: it
+        // closes Settings and opens the Light panel.
+        QVERIFY(fixture.visible("rrZenLight"));
+        QVERIFY(fixture.press("rrZenLight"));
+        QTRY_VERIFY(fixture.visible("rrLightPanel"));
+        QVERIFY(!fixture.visible("rrGeneralSettings"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrLightPanel"));
+        openSettings();
+        QTRY_VERIFY(fixture.visible("rrZenSettings"));
+        // Letting go before the last step keeps Zen mode.
+        auto *leave = qobject_cast<QPushButton *>(fixture.widget("rrZenLeave"));
+        QVERIFY(leave);
+        leave->setProperty("reader_hold_step_ms", 1000000);
+        QTest::mousePress(leave, Qt::LeftButton);
+        QVERIFY(leave->isDown());
+        QTest::mouseRelease(leave, Qt::LeftButton);
+        QCOMPARE(leave->property("reader_hold_step").toInt(), 0);
+        QVERIFY(fixture.visible("rrZenSettings"));
+        QVERIFY(qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
+        // Held through all three steps, Zen mode turns off in the draft and
+        // all settings return, starting on Display.
+        leave->setProperty("reader_hold_step_ms", 10);
+        QTest::mousePress(leave, Qt::LeftButton);
+        QTRY_VERIFY(fixture.visible("rrSettingsRail"));
+        QTest::mouseRelease(leave, Qt::LeftButton);
+        QVERIFY(fixture.visible("rrDisplayOptions"));
+        QVERIFY(!fixture.visible("rrZenSettings"));
+        QVERIFY(!fixture.visible("rrSettingsZenMark"));
+        QVERIFY(!qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
+        // Closing Settings applies it.
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(!storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool(true));
+        // Settings opened outside Zen mode has the rail and no Zen page.
+        openSettings();
+        QTRY_VERIFY(fixture.visible("rrSettingsRail"));
+        QVERIFY(!fixture.visible("rrZenSettings"));
+        QVERIFY(!fixture.visible("rrZenLeave"));
+        // Back in Zen mode, the button and its note start empty again.
+        QVERIFY(fixture.press("rrZenMode"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool());
+        openSettings();
+        QTRY_VERIFY(fixture.visible("rrZenLeave"));
+        QCOMPARE(leave->property("reader_hold_step").toInt(), 0);
+        QVERIFY(!leave->isDown());
+        QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrZenLeaveNote"))->text(),
+                 strings::get("settings.zen_leave_note"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+    }
+
     // Checks that turning automatic opening off in Kobalt asks first and turning it on does not.
     void settingsAutomaticOpening()
     {
@@ -8290,11 +8406,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrNavChapters"));
         QTRY_VERIFY(reader->property("reader_controls_opening").toBool());
 
-        // Turning Zen mode off brings back the regular menu.
+        // Turning Zen mode off brings back the regular menu. In Zen mode,
+        // Settings turns it off only after a held press.
         QTRY_VERIFY(fixture.visible("rrSettings"));
         QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrZenLeave"));
+        QVERIFY(!fixture.visible("rrZenMode"));
+        auto *leave = qobject_cast<QPushButton *>(fixture.widget("rrZenLeave"));
+        leave->setProperty("reader_hold_step_ms", 10);
+        QTest::mousePress(leave, Qt::LeftButton);
         QTRY_VERIFY(fixture.visible("rrZenMode"));
-        QVERIFY(fixture.press("rrZenMode"));
+        QTest::mouseRelease(leave, Qt::LeftButton);
+        QVERIFY(!qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
         reader->setProperty("reader_full_flash", false);
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
@@ -8371,9 +8494,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_VERIFY(!change("zen_stats").isEmpty());
             QCOMPARE(change("zen_stats").value("value").toBool(false), true);
 
-            // A choice token is logged with its values.
+            // A choice token is logged with its values. Bold reading is
+            // on Display, which returns once a held press leaves Zen mode.
             QVERIFY(fixture.press("rrSettings"));
+            QTRY_VERIFY(fixture.visible("rrZenLeave"));
+            auto *leave = qobject_cast<QPushButton *>(fixture.widget("rrZenLeave"));
+            leave->setProperty("reader_hold_step_ms", 10);
+            QTest::mousePress(leave, Qt::LeftButton);
             QTRY_VERIFY(fixture.visible("rrBionicReading"));
+            QTest::mouseRelease(leave, Qt::LeftButton);
             QVERIFY(fixture.press("rrBionicReading"));
             QTRY_VERIFY(!change("bold_reading").isEmpty());
             const auto bold = change("bold_reading");
@@ -10760,6 +10889,19 @@ private slots:
         QVERIFY(fixture.press("rrNavChapters"));
         QTRY_VERIFY(fixture.visible("rrContents"));
         QVERIFY(capture(fixture, name + "-zen-chapters"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(!fixture.visible("rrContents"));
+        // Settings in Zen mode, with a signed-in sync account so the page
+        // shows every section it can.
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrZenSettings"));
+        auto *kosyncPage = dynamic_cast<reader::KosyncPage *>(fixture.widget("rrKosyncPage"));
+        QVERIFY(kosyncPage);
+        kosyncPage->setAccount("https://sync.example.com", "reader", true, true);
+        kosyncPage->setLastSync(QDateTime(QDate(2026, 11, 9), QTime(8, 12)));
+        QTRY_VERIFY(fixture.visible("rrZenSyncNow"));
+        QVERIFY(capture(fixture, name + "-zen-settings"));
+        QVERIFY(fixture.press("rrSettingsClose"));
     }
 
     // Zen mode shows the battery only at 20% or lower.

@@ -1571,6 +1571,10 @@ void Reader::buildSettings()
         }
     });
     settings->automaticOpeningChosen = [this](bool enabled) { applyAutomaticOpening(enabled); };
+    // Zen mode's settings page opens the Light panel as the Light tab would.
+    settings->zenLightRequested = [this] { toggleLight(); };
+    // Leaving Zen mode replaces the whole Settings layout.
+    settings->zenLeft = [this] { requestFlash("zen-leave"); };
     connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });
     connect(settings->openAcknowledgments, &QPushButton::clicked, this, [this] {
         kobalt::ui::PanelTiming timing("acknowledgments");

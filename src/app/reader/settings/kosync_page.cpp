@@ -67,10 +67,8 @@ KosyncPage::KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory 
     automaticButton_ =
             ui::makeCaptionButton(this, rows, "rrKosyncAutomatic", strings::get("kosync.automatic"),
                                   [this] { showSchedule(); });
-    sync_ = ui::makeButton(this, rows, "rrKosyncNow", strings::get("kosync.sync_now"), [this] {
-        if (syncRequested)
-            syncRequested();
-    });
+    sync_ = ui::makeButton(this, rows, "rrKosyncNow", strings::get("kosync.sync_now"),
+                           [this] { syncNow(); });
     logout_ = ui::makeButton(this, rows, "rrKosyncLogout", strings::get("kosync.logout"), [this] {
         if (logoutRequested)
             logoutRequested();
@@ -203,6 +201,8 @@ void KosyncPage::updateAutomaticCaption()
                                                   : "kosync.automatic_caption_wait")
                           .arg(KosyncScheduleSheet::intervalLabel(schedule_.minutes));
     automaticButton_->setCaption(caption);
+    if (stateChanged)
+        stateChanged();
 }
 
 void KosyncPage::showSchedule()
@@ -274,6 +274,29 @@ void KosyncPage::setLastSync(const QDateTime &time)
                                .arg(time.isValid() ? QLocale().toString(time.toLocalTime(),
                                                                         QLocale::ShortFormat)
                                                    : strings::get("kosync.never")));
+    if (stateChanged)
+        stateChanged();
+}
+
+bool KosyncPage::syncEnabled() const
+{
+    return sync_->isEnabled();
+}
+
+QString KosyncPage::lastSyncText() const
+{
+    return lastSync_->text();
+}
+
+QString KosyncPage::automaticCaption() const
+{
+    return automaticButton_->caption();
+}
+
+void KosyncPage::syncNow()
+{
+    if (syncRequested)
+        syncRequested();
 }
 
 void KosyncPage::setStatus(const QString &status, bool busy)
@@ -303,6 +326,8 @@ void KosyncPage::setStatus(const QString &status, bool busy)
     automaticButton_->setEnabled(!busy && signedIn_ && !accountEdited_);
     sync_->setEnabled(!busy && signedIn_ && !accountEdited_);
     logout_->setEnabled(!busy && signedIn_);
+    if (stateChanged)
+        stateChanged();
 }
 
 void KosyncPage::fitWidth(int width)

@@ -410,6 +410,7 @@ void Reader::openSettings()
         automaticOpeningOption->setChecked(services.automaticBookOpening());
     screenRefreshMode = kobalt::screenRefresh(preferences.value("screen_refresh").toString());
     showScreenRefresh();
+    static_cast<SettingsPanel *>(general)->setZenLayout(zenMode());
     fitSettings();
     general->show();
     general->raise();

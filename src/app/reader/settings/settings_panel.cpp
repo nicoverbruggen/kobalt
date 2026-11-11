@@ -33,6 +33,7 @@
 #include <QHideEvent>
 #include <QRegularExpression>
 #include <QPainter>
+#include <QTimer>
 
 namespace kobalt::reader {
 namespace metrics = ui::metrics;
@@ -43,6 +44,133 @@ using ui::readerStyle;
 using ReaderOption = ui::DescribedOption;
 
 namespace {
+// Leaves Zen mode only after a held press. While held, it inverts and fills
+// three steps, one update each, so an e-ink panel sees no animation. Letting
+// go early clears the steps. The step length is half a second; the
+// `reader_hold_step_ms` property shortens it for tests.
+class HoldButton final : public QPushButton
+{
+public:
+    HoldButton(const QString &label, const QString &holding, QWidget *parent)
+        : QPushButton(label, parent), idleLabel(label), holdingLabel(holding)
+    {
+        setFocusPolicy(Qt::StrongFocus);
+        setAccessibleName(label);
+        timer.setSingleShot(false);
+        connect(&timer, &QTimer::timeout, this, [this] { advance(); });
+        connect(this, &QPushButton::pressed, this, [this] {
+            const int interval = property("reader_hold_step_ms").toInt();
+            setStep(0);
+            timer.start(interval > 0 ? interval : 500);
+            update();
+        });
+        connect(this, &QPushButton::released, this, [this] {
+            timer.stop();
+            setStep(0);
+            update();
+        });
+    }
+
+    static constexpr int steps = 3;
+    std::function<void()> held;
+
+    // In the heading the button is a cell like the close cell: a rule on its
+    // left instead of a heavy frame.
+    void setCell(bool value)
+    {
+        if (cell == value)
+            return;
+        cell = value;
+        update();
+    }
+
+    int cellWidth() const
+    {
+        const auto font = ui::interfaceFont(chrome::labelText);
+        return qMax(ui::interfaceTextWidth(idleLabel, font),
+                    ui::interfaceTextWidth(holdingLabel, font))
+                + chrome::cellIcon + ui::px(16) + 2 * chrome::inset;
+    }
+
+    // Called when the steps change, so the note below can follow.
+    std::function<void(int)> stepChanged;
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        const bool down = isDown() || step > 0;
+        const auto paper = palette().color(QPalette::Window);
+        const auto ink = palette().color(QPalette::WindowText);
+        painter.fillRect(rect(), down ? ink : paper);
+        if (cell)
+            ui::paintEdges(painter, rect(), Qt::LeftEdge, palette().color(QPalette::Mid));
+        else
+            ui::paintEdges(painter, rect(),
+                           ui::Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge | Qt::BottomEdge,
+                           ink, chrome::heavyRule);
+        const auto color = down ? paper : ink;
+        const auto font = ui::interfaceFont(chrome::labelText);
+        const QString label = down ? holdingLabel : idleLabel;
+        const int icon = chrome::cellIcon, gap = ui::px(16);
+        const int textWidth = ui::interfaceTextWidth(label, font);
+        const int stepWidth = ui::px(64), stepHeight = ui::px(10), stepGap = ui::px(10);
+        const int labelHeight = qMax(icon, QFontMetrics(font).height());
+        const int block = labelHeight + ui::px(14) + stepHeight;
+        const int top = (height() - block) / 2;
+        int x = (width() - icon - gap - textWidth) / 2;
+        ui::controlIcon(ui::ControlIcon::Lock, color)
+                .paint(&painter, QRect(x, top + (labelHeight - icon) / 2, icon, icon));
+        painter.setPen(color);
+        painter.setFont(font);
+        ui::drawInterfaceText(painter,
+                              QRect(x + icon + gap, top, textWidth + ui::px(4), labelHeight), label,
+                              Qt::AlignLeft | Qt::AlignVCenter);
+        const int stepsLeft = (width() - steps * stepWidth - (steps - 1) * stepGap) / 2;
+        const int stepsTop = top + labelHeight + ui::px(14);
+        for (int index = 0; index < steps; ++index) {
+            const QRect box(stepsLeft + index * (stepWidth + stepGap), stepsTop, stepWidth,
+                            stepHeight);
+            if (index < step)
+                painter.fillRect(box, color);
+            else
+                ui::paintEdges(painter, box,
+                               ui::Edges(Qt::LeftEdge) | Qt::TopEdge | Qt::RightEdge
+                                       | Qt::BottomEdge,
+                               color);
+        }
+    }
+
+private:
+    void setStep(int next)
+    {
+        if (step == next)
+            return;
+        step = next;
+        setProperty("reader_hold_step", step);
+        if (stepChanged)
+            stepChanged(step);
+        update();
+    }
+
+    void advance()
+    {
+        setStep(step + 1);
+        if (step < steps)
+            return;
+        timer.stop();
+        if (held)
+            held();
+        // The next time Zen mode opens Settings, the button starts empty.
+        setStep(0);
+    }
+
+    QString idleLabel, holdingLabel;
+    QTimer timer;
+    int step = 0;
+    bool cell = false;
+};
+
 ui::DescribedOption *checklistOption(QWidget *parent, const QString &name, const QString &label,
                                      const QString &description, bool first)
 {
@@ -317,6 +445,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     heading->setEdgeWidth(chrome::heavyRule);
     heading->setFixedHeight(chrome::actionHeight);
     auto *headingRows = new QHBoxLayout(heading);
+    headingLayout = headingRows;
     headingRows->setContentsMargins(0, 0, 0, chrome::heavyRule);
     headingRows->setSpacing(0);
     closeButton = new ui::CellButton(ui::ControlIcon::Close, heading);
@@ -334,6 +463,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     headingRows->addWidget(backButton);
     connect(backButton, &QPushButton::clicked, this, [this] {
         sectionOpen = false;
+        // In Zen mode, back returns from About to the Zen page.
+        if (zen)
+            settingsPages->setCurrentIndex(int(SettingsPage::Zen));
         if (refitRequested)
             refitRequested();
     });
@@ -342,6 +474,25 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsTitle->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     readerStyle(settingsTitle, styles::brand(chrome::titleText) + "background:transparent;");
     headingRows->addWidget(settingsTitle, 1);
+    // Zen mode marks its settings page as the reading menu marks its status
+    // line: the section heading caption, inverted to paper on an ink block.
+    zenMarkBox = new QWidget(heading);
+    auto *zenMarkRows = new QHBoxLayout(zenMarkBox);
+    zenMarkRows->setContentsMargins(0, 0, chrome::inset, 0);
+    auto *zenMark = new QLabel(strings::get("navigation.zen"), zenMarkBox);
+    zenMark->setObjectName("rrSettingsZenMark");
+    zenMark->setAlignment(Qt::AlignCenter);
+    readerStyle(zenMark,
+                QString("QLabel{%1font-weight:bold;background:palette(window-text);"
+                        "color:palette(window);padding:%2px %3px;}")
+                        .arg(styles::caption(), QString::number(ui::px(2)),
+                             QString::number(ui::px(12))));
+    auto markFont = ui::captionFont();
+    markFont.setBold(true);
+    zenMark->setFont(markFont);
+    zenMarkRows->addWidget(zenMark, 0, Qt::AlignVCenter);
+    zenMarkBox->hide();
+    headingRows->addWidget(zenMarkBox);
     generalRows->addWidget(heading);
     auto *sections = new QWidget(this);
     generalRows->addWidget(sections, 1);
@@ -372,6 +523,50 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     optionsPager->next->setRule(ui::Edges(Qt::LeftEdge) | Qt::RightEdge);
     optionsRows->addWidget(optionsPager);
     optionsPager->hide();
+    // The way out of Zen mode sits on the bottom edge, where the tabs are.
+    lightSupported = inputs.lightSupported;
+    auto *leaveBar = new ui::Panel(optionsColumn, Qt::TopEdge);
+    zenLeaveBar = leaveBar;
+    leaveBar->setObjectName("rrZenLeaveBar");
+    leaveBar->setEdgeWidth(chrome::heavyRule);
+    auto *leaveRows = new QVBoxLayout(leaveBar);
+    leaveLayout = leaveRows;
+    leaveRows->setContentsMargins(chrome::inset, chrome::heavyRule + ui::px(24), chrome::inset,
+                                  ui::px(24));
+    leaveRows->setSpacing(ui::px(12));
+    auto *leave = new HoldButton(strings::get("settings.zen_leave"),
+                                 strings::get("settings.zen_leave_holding"), leaveBar);
+    leave->setObjectName("rrZenLeave");
+    // The button paints itself; the sheet only keeps button styles from
+    // changing its height.
+    readerStyle(leave,
+                QString("QPushButton{min-height:%1px;max-height:%1px;border:0;padding:0;}")
+                        .arg(int(chrome::actionHeight)));
+    leave->setFixedHeight(chrome::actionHeight);
+    leaveRows->addWidget(leave);
+    zenLeave = leave;
+    auto *leaveNote = new ui::InterfaceLabel(strings::get("settings.zen_leave_note"), leaveBar);
+    leaveNote->setObjectName("rrZenLeaveNote");
+    leaveNote->setAlignment(Qt::AlignCenter);
+    leaveNote->setWordWrap(true);
+    readerStyle(leaveNote,
+                QString("font-size:%1px;font-style:italic;background:transparent;")
+                        .arg(int(chrome::descriptionText)));
+    leaveRows->addWidget(leaveNote);
+    leave->stepChanged = [leaveNote](int step) {
+        leaveNote->setText(
+                strings::get(step > 0 ? "settings.zen_leave_release" : "settings.zen_leave_note"));
+    };
+    leave->held = [this] {
+        zenModeOption->setChecked(false);
+        setZenLayout(false);
+        if (zenLeft)
+            zenLeft();
+        if (refitRequested)
+            refitRequested();
+    };
+    optionsRows->addWidget(leaveBar);
+    leaveBar->hide();
     connect(optionsPager->previous, &QPushButton::clicked, this,
             [this] { showOptionsPage(optionsPager->turnTarget(-1)); });
     connect(optionsPager->next, &QPushButton::clicked, this,
@@ -820,6 +1015,52 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsPages->insertWidget(int(SettingsPage::Dictionaries), dictionaries);
     kosync = new KosyncPage(settingsPages, parent, inputs.keyboard);
     settingsPages->addWidget(kosync);
+    zenPage = new QWidget(settingsPages);
+    zenPage->setObjectName("rrZenSettings");
+    settingsPages->addWidget(zenPage);
+    auto *zenRows = new QVBoxLayout(zenPage);
+    zenRows->setContentsMargins(0, 0, 0, 0);
+    zenRows->setSpacing(0);
+    section(zenPage, zenRows, "rrZenDisplaySection", strings::get("settings.display"));
+    zenDarkOption = check(zenPage, "rrZenDarkMode", strings::get("reader.dark_mode"),
+                          strings::get("settings.dark_description"));
+    // The rows keep their height; the stretch below takes the spare space.
+    zenDarkOption->setSizePolicy(zenDarkOption->sizePolicy().horizontalPolicy(),
+                                 QSizePolicy::Maximum);
+    zenRows->addWidget(zenDarkOption);
+    // The Display tab's checkbox applies Dark mode at once; this one presses it.
+    connect(zenDarkOption, &QCheckBox::clicked, this, [this](bool on) {
+        if (darkOption->isChecked() != on)
+            darkOption->click();
+        zenDarkOption->setChecked(darkOption->isChecked());
+    });
+    connect(darkOption, &QCheckBox::toggled, zenDarkOption, &QCheckBox::setChecked);
+    zenLightButton = ui::makeCaptionButton(zenPage, zenRows, "rrZenLight",
+                                           strings::get("settings.zen_light"), [this] {
+                                               if (zenLightRequested)
+                                                   zenLightRequested();
+                                           });
+    zenLightButton->setCaption(strings::get(inputs.warmthSupported
+                                                    ? "settings.zen_light_caption"
+                                                    : "settings.zen_light_brightness"));
+    zenSyncSection = section(zenPage, zenRows, "rrZenSyncSection", strings::get("kosync.title"));
+    zenSyncButton =
+            ui::makeCaptionButton(zenPage, zenRows, "rrZenSyncNow", strings::get("kosync.sync_now"),
+                                  [this] { kosync->syncNow(); });
+    zenAutomaticButton = ui::makeCaptionButton(zenPage, zenRows, "rrZenAutomaticSync",
+                                               strings::get("kosync.automatic"),
+                                               [this] { kosync->openSchedule(); });
+    kosync->stateChanged = [this] { updateZenPage(); };
+    section(zenPage, zenRows, "rrZenAboutSection", strings::get("settings.about"));
+    zenAboutButton = ui::makeCaptionButton(
+            zenPage, zenRows, "rrZenAbout", strings::get("settings.zen_about"), [this] {
+                settingsPages->setCurrentIndex(int(SettingsPage::About));
+                if (refitRequested)
+                    refitRequested();
+            });
+    // The version reads as a description, not as a chosen value.
+    zenAboutButton->setDescription(aboutPage->findChild<QLabel *>("rrAboutVersion")->text());
+    zenRows->addStretch(1);
     restoreDialog = new ui::ChoiceModal(
             parent,
             { strings::get(
@@ -842,7 +1083,9 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsError->hide();
     generalRows->addWidget(settingsError);
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int index) {
-        settingsTabButtons[index]->setChecked(true);
+        // The Zen page has no tab.
+        if (index < settingsTabButtons.size())
+            settingsTabButtons[index]->setChecked(true);
         optionPage = 0;
     });
     settingsTabButtons.first()->setChecked(true);
@@ -854,6 +1097,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                                wifiPowerSaverOption,   disableStandbyOption,
                                                automaticOpeningOption, minimalAnnotationOption };
     options.prepend(zenModeOption);
+    options.append(zenDarkOption);
     for (auto *option : options) {
         if (!option)
             continue;
@@ -903,7 +1147,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           trackingButton,
                           hangingPunctuationButton,
                           widowsOrphansButton,
-                          verticalSpacingButton }) {
+                          verticalSpacingButton,
+                          zenLightButton,
+                          zenSyncButton,
+                          zenAutomaticButton,
+                          zenAboutButton }) {
         button->setRule(Qt::BottomEdge);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults)
@@ -917,7 +1165,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         if (button == beautifierButton || button == wordSpacingButton
             || button == paragraphSpacingButton || button == trackingButton
             || button == hangingPunctuationButton || button == widowsOrphansButton
-            || button == verticalSpacingButton) {
+            || button == verticalSpacingButton || button == zenSyncButton
+            || button == zenAboutButton) {
             button->setMaximumHeight(QWIDGETSIZE_MAX);
             readerStyle(
                     button,
@@ -975,15 +1224,20 @@ void SettingsPanel::styleTabs(bool list)
                                              .arg(int(metrics::control::border)))
                         .arg(selected));
     }
-    if (!list && settingsPages->currentIndex() >= 0)
-        settingsTabButtons[settingsPages->currentIndex()]->setChecked(true);
+    const int current = settingsPages->currentIndex();
+    if (!list && current >= 0 && current < settingsTabButtons.size())
+        settingsTabButtons[current]->setChecked(true);
+    // Without the rail beside it, as in a list or Zen mode, the page has no
+    // left rule.
+    const bool railless = list || zen;
     readerStyle(
             settingsPages,
-            list ? QString("QStackedWidget{border:0;}")
-                 : QString("QStackedWidget{border:0;border-left:%1px solid palette(window-text);}")
-                            .arg(int(metrics::control::border)));
+            railless
+                    ? QString("QStackedWidget{border:0;}")
+                    : QString("QStackedWidget{border:0;border-left:%1px solid palette(window-text);}")
+                              .arg(int(metrics::control::border)));
     static_cast<ui::Panel *>(optionsViewport)
-            ->setEdges(list ? ui::Edges() : ui::Edges(Qt::LeftEdge));
+            ->setEdges(railless ? ui::Edges() : ui::Edges(Qt::LeftEdge));
 }
 
 int SettingsPanel::fitContent(QSize availableSize)
@@ -1003,25 +1257,49 @@ int SettingsPanel::fitContent(QSize availableSize)
         sectionOpen = listMode && isVisible();
         styleTabs(listMode);
     }
-    const bool showList = listMode && !sectionOpen;
-    tabRail->setVisible(!listMode || showList);
+    // Zen mode has no rail or section list: its page fills the width, and
+    // About, opened from it, has a back cell, as an opened section has.
+    const bool zenPageShown = zen && settingsPages->currentIndex() == int(SettingsPage::Zen);
+    const bool sectionShown = zen ? !zenPageShown : listMode && sectionOpen;
+    const bool showList = !zen && listMode && !sectionOpen;
+    const bool rail = !zen && !listMode;
+    tabRail->setVisible(rail || showList);
     optionsColumn->setVisible(!showList);
-    backButton->setVisible(listMode && sectionOpen);
-    closeButton->setVisible(!(listMode && sectionOpen));
-    settingsTitle->setText(listMode && sectionOpen
-                                   ? settingsTabButtons[settingsPages->currentIndex()]
-                                             ->property("reader_tab_label")
-                                             .toString()
-                                   : strings::get("settings.title"));
+    backButton->setVisible(sectionShown);
+    closeButton->setVisible(!sectionShown);
+    zenMarkBox->setVisible(zen);
+    settingsTitle->setText(sectionShown ? settingsTabButtons[settingsPages->currentIndex()]
+                                                  ->property("reader_tab_label")
+                                                  .toString()
+                                        : strings::get("settings.title"));
     if (showList) {
         tabRail->setFixedWidth(availableSize.width());
         optionsPager->hide();
         return availableSize.height();
     }
-    if (!listMode)
+    if (rail)
         fitRail(availableSize.height() - headingHeight);
-    const int fullWidth = qMax(1, availableSize.width() - (listMode ? 0 : tabRail->width()));
-    const int availableHeight = qMax(1, availableSize.height() - headingHeight);
+    const int fullWidth = qMax(1, availableSize.width() - (rail ? tabRail->width() : 0));
+    // A landscape screen is short, so the hold button moves into the
+    // heading as a cell, and the bar with its note goes.
+    const bool leaveInHeading = availableSize.width() > availableSize.height();
+    auto *leave = static_cast<HoldButton *>(zenLeave);
+    if (leaveInHeading != (leave->parentWidget() != zenLeaveBar)) {
+        if (leaveInHeading) {
+            headingLayout->addWidget(leave);
+            leave->setFixedSize(leave->cellWidth(), chrome::actionHeight - chrome::heavyRule);
+        } else {
+            leaveLayout->insertWidget(0, leave);
+            leave->setMinimumWidth(0);
+            leave->setMaximumWidth(QWIDGETSIZE_MAX);
+            leave->setFixedHeight(chrome::actionHeight);
+        }
+        leave->setCell(leaveInHeading);
+    }
+    leave->setVisible(zenPageShown);
+    zenLeaveBar->setVisible(zenPageShown && !leaveInHeading);
+    const int leaveHeight = zenPageShown && !leaveInHeading ? zenLeaveBar->sizeHint().height() : 0;
+    const int availableHeight = qMax(1, availableSize.height() - headingHeight - leaveHeight);
     auto *content = settingsPages->currentWidget();
     content->ensurePolished();
     auto *rows = content->layout();
@@ -1086,7 +1364,43 @@ int SettingsPanel::fitContent(QSize availableSize)
             optionPages = { { 0, split }, { split, contentHeight } };
     }
     showOptionsPage(optionPage);
-    return panelHeight + headingHeight;
+    return panelHeight + headingHeight + leaveHeight;
+}
+
+void SettingsPanel::setZenLayout(bool value)
+{
+    if (zen != value) {
+        zen = value;
+        // Zen mode opens on its page; leaving it shows Display first.
+        settingsPages->setCurrentIndex(int(zen ? SettingsPage::Zen : SettingsPage::Display));
+        styleTabs(listMode);
+    } else if (zen) {
+        settingsPages->setCurrentIndex(int(SettingsPage::Zen));
+    }
+    updateZenPage();
+}
+
+void SettingsPanel::updateZenPage()
+{
+    zenDarkOption->setChecked(darkOption->isChecked());
+    zenDarkOption->setEnabled(darkOption->isEnabled());
+    // Without edge swipes, Zen mode has no other way to change the light.
+    const bool light = lightSupported && !edgeLightOption->isChecked();
+    const bool sync =
+            features::enabled(featurePreferences, features::Kosync) && kosync->syncReady();
+    // Rows that appear or go while the page shows change its layout.
+    const bool changed = zenLightButton->isVisibleTo(zenPage) != light
+            || zenSyncSection->isVisibleTo(zenPage) != sync;
+    zenLightButton->setVisible(light);
+    for (QWidget *row : { zenSyncSection, static_cast<QWidget *>(zenSyncButton),
+                          static_cast<QWidget *>(zenAutomaticButton) })
+        row->setVisible(sync);
+    zenSyncButton->setDescription(kosync->lastSyncText());
+    zenSyncButton->setEnabled(kosync->syncEnabled());
+    zenAutomaticButton->setCaption(kosync->automaticCaption());
+    zenAutomaticButton->setEnabled(kosync->syncEnabled());
+    if (changed && zen && isVisible() && refitRequested)
+        refitRequested();
 }
 
 void SettingsPanel::showOptionsPage(int page)

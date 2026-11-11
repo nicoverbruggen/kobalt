@@ -41,7 +41,9 @@ enum class SettingsPage {
     Dictionaries,
     System,
     About,
-    Kosync
+    Kosync,
+    // Zen mode's own page. It has no tab: the rail is hidden in Zen mode.
+    Zen
 };
 
 struct SettingsPanelInputs
@@ -143,6 +145,13 @@ public:
                         *denseGraphOption = nullptr;
     ui::DescribedOption *hideNonlinearOption = nullptr;
     ui::DescribedOption *zenModeOption = nullptr;
+    // Zen mode shows one short page instead of the tabs: Dark mode, Light
+    // when no edge swipe changes it, Sync when it is set up, About, and a bar
+    // that leaves Zen mode only after a held press. Leaving turns Zen mode
+    // off in the draft and shows all settings; closing Settings applies it.
+    void setZenLayout(bool zen);
+
+    std::function<void()> zenLightRequested, zenLeft;
     ui::DescribedOption *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr;
     ui::CaptionButton *defaultFontButton = nullptr, *uiFontButton = nullptr,
                       *uiMonoFontButton = nullptr, *headerFooterFontButton = nullptr,
@@ -179,6 +188,17 @@ private:
                             const QString &alignment, int secondary,
                             std::function<void(int, int)> pairChosen);
     QWidget *tabRail = nullptr, *optionsColumn = nullptr;
+    bool zen = false, lightSupported = false;
+    void updateZenPage();
+    QWidget *zenPage = nullptr, *zenMarkBox = nullptr, *zenLeaveBar = nullptr,
+            *zenSyncSection = nullptr;
+    // The hold button sits in the bar below the page, or in the heading on a
+    // landscape screen, where the bar would take too much height.
+    QPushButton *zenLeave = nullptr;
+    QBoxLayout *headingLayout = nullptr, *leaveLayout = nullptr;
+    ui::DescribedOption *zenDarkOption = nullptr;
+    ui::CaptionButton *zenLightButton = nullptr, *zenSyncButton = nullptr,
+                      *zenAutomaticButton = nullptr, *zenAboutButton = nullptr;
     QLabel *settingsTitle = nullptr;
     ui::CellButton *backButton = nullptr;
     // A narrow screen shows the sections as a list. Choosing one opens its

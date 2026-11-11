@@ -1239,6 +1239,14 @@
 "settings.hide_tab_labels_description" = "Tabs at the bottom of the screen only display an icon when this is selected.";
 "settings.zen_mode" = "Zen mode";
 "settings.zen_mode_description" = "A special mode for those who want to focus on reading. Simplifies the reading menu user interface.";
+"settings.zen_leave" = "Hold to leave Zen mode";
+"settings.zen_leave_holding" = "Keep holding";
+"settings.zen_leave_note" = "All settings return when Zen mode is off.";
+"settings.zen_leave_release" = "Let go to stay in Zen mode.";
+"settings.zen_light" = "Light";
+"settings.zen_light_caption" = "Brightness and warmth";
+"settings.zen_light_brightness" = "Brightness";
+"settings.zen_about" = "About Kobalt";
 
 "settings.justification_tracking_summary" = "Adjust letter spacing in justified text.";
 

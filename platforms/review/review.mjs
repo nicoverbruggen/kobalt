@@ -2,6 +2,7 @@
 // Screen review. Turns gallery captures into numbered review rounds and
 // serves a page where each screen is approved or rejected next to its
 // reference capture, with general and pinned notes. See doc/screen-review.md.
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
@@ -9,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
-import { reviewVerdict, wasSeen } from './page/feedback.mjs';
+import { hasAnnotations, reviewVerdict, sameAnnotations, wasSeen } from './page/feedback.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -17,6 +18,8 @@ const usage = `Usage:
   node platforms/review/review.mjs round [--source DIR] [--theme light] [--pair DEVICE[=REFERENCE]]... [--fresh]
   node platforms/review/review.mjs serve [--port 8765]
   node platforms/review/review.mjs notes [--round N]
+  node platforms/review/review.mjs reply SCREEN TEXT
+  node platforms/review/review.mjs baseline --source DIR [--theme light] [--match SCREEN=BEFORE]... [--commit SHA] [--base-ref REF]
 All commands accept --data DIR (default build/review).`;
 
 // Each phone capture is reviewed next to the 6-inch capture with the same orientation.
@@ -33,12 +36,17 @@ const { values: options, positionals } = parseArgs({
         fresh: { type: 'boolean', default: false },
         port: { type: 'string', default: '8765' },
         round: { type: 'string' },
+        match: { type: 'string', multiple: true },
+        commit: { type: 'string' },
+        'base-ref': { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
     },
 });
 const data = path.resolve(options.data);
 const imagesDir = path.join(data, 'images');
 const roundsDir = path.join(data, 'rounds');
+const baselineFile = path.join(data, 'baseline.json');
+const repliesFile = path.join(data, 'replies.json');
 
 function fail(message) {
     console.error(message);
@@ -164,13 +172,29 @@ function createRound() {
 
     const previousItems = new Map(previous?.round.items.map(item => [item.id, item]) || []);
     const feedback = { items: {} };
+    // A reply answers a screen's notes without a change. The screen starts
+    // unseen, with the reviewer's notes and the reply set apart as answered.
+    const replies = readJson(repliesFile, {});
+    const answer = id => {
+        const reply = replies[id];
+        const entry = previous?.feedback.items[id];
+        if (!reply || reply.round !== previous?.round.number || !entry) return null;
+        return { seen: false, verdict: null, note: '', pins: [], resolved: { note: entry.note || '', pins: entry.pins || [], reply: reply.text, round: reply.round } };
+    };
+    // An answer stays until the reviewer has seen it.
+    const carry = entry => {
+        const { resolved, ...rest } = entry;
+        return { ...(resolved && !wasSeen(entry) ? entry : rest), carried: entry.carried || previous.round.number };
+    };
     for (const item of items) {
         const before = previousItems.get(item.id);
         item.status = !before ? 'new' : before.image.sha === item.image.sha &&
             before.reference?.sha === item.reference?.sha ? 'unchanged' : 'changed';
         if (before) item.previous = { round: previous.round.number, sha: before.image.sha, width: before.image.width, height: before.image.height };
         const entry = previous?.feedback.items[item.id];
-        if (item.status === 'unchanged' && entry) feedback.items[item.id] = { ...entry, carried: entry.carried || previous.round.number };
+        const answered = answer(item.id);
+        if (answered) feedback.items[item.id] = answered;
+        else if (item.status === 'unchanged' && entry) feedback.items[item.id] = carry(entry);
     }
     // A scene-filtered capture holds only some screens. Keep the others from
     // the previous round so that every round is complete.
@@ -179,8 +203,9 @@ function createRound() {
         for (const before of previous.round.items) {
             if (captured.has(before.screen) || !pairs.some(pair => before.id.startsWith(`${pair.device}/`))) continue;
             items.push({ ...before, status: 'unchanged', previous: { round: previous.round.number, sha: before.image.sha, width: before.image.width, height: before.image.height } });
-            const entry = previous.feedback.items[before.id];
-            if (entry) feedback.items[before.id] = { ...entry, carried: entry.carried || previous.round.number };
+            const entry = previous.feedback.items[before.id], answered = answer(before.id);
+            if (answered) feedback.items[before.id] = answered;
+            else if (entry) feedback.items[before.id] = carry(entry);
             kept++;
         }
     }
@@ -194,10 +219,87 @@ function createRound() {
     fs.mkdirSync(roundDir(number), { recursive: true });
     writeJson(path.join(roundDir(number), 'feedback.json'), feedback);
     writeJson(path.join(roundDir(number), 'round.json'), round);
+    fs.rmSync(repliesFile, { force: true });
     const count = status => items.filter(item => item.status === status).length;
     console.log(`Round ${number}: ${items.length} screens, ${count('changed')} changed, ${count('new')} new, ${count('unchanged')} unchanged` +
         (kept ? ` (${kept} kept from round ${previous.round.number})` : '') + '.');
-    console.log(`Verdicts carried over: ${Object.keys(feedback.items).length}.`);
+    const answered = Object.values(feedback.items).filter(entry => entry.resolved).length;
+    console.log(`Verdicts carried over: ${Object.keys(feedback.items).length - answered}.` + (answered ? ` Answered: ${answered}.` : ''));
+}
+
+// Answers a screen's notes in the latest round without changing the screen,
+// for example a question. The next round shows the answer.
+function recordReply() {
+    const [, id, ...words] = positionals;
+    const text = words.join(' ').trim();
+    if (!id || !text) fail(usage);
+    const number = roundNumbers().at(-1);
+    if (!number) fail('There are no review rounds yet.');
+    const { round, feedback } = loadRound(number);
+    if (!round.items.some(item => item.id === id)) fail(`Round ${number} has no screen ${id}.`);
+    if (!hasAnnotations(feedback.items[id])) fail(`${id} has no notes to answer in round ${number}.`);
+    const replies = readJson(repliesFile, {});
+    replies[id] = { text: text.slice(0, maxNote), round: number };
+    writeJson(repliesFile, replies);
+    console.log(`Replied to ${id}. The next round shows the answer.`);
+}
+
+// Records captures from before the feature, usually of the branch's base
+// commit. Each round's screen then shows its Before image from the same
+// device: the same screen, or the one --match names for a screen that the
+// feature added or renamed.
+function recordBaseline() {
+    const source = path.resolve(options.source);
+    const manifestFile = path.join(source, 'manifest.json');
+    if (!fs.existsSync(manifestFile)) fail(`No gallery manifest in ${source}. Capture the base first.`);
+    const manifest = readJson(manifestFile);
+    const matches = {};
+    for (const text of options.match || []) {
+        const [screen, before] = text.split('=');
+        if (!screen || !before) fail(`--match takes SCREEN=BEFORE, not ${text}`);
+        matches[screen] = before;
+    }
+    fs.mkdirSync(imagesDir, { recursive: true });
+    const shots = {};
+    for (const shot of manifest.images) {
+        if (shot.theme !== options.theme) continue;
+        const sha = storeImage(path.join(source, shot.file));
+        if (sha !== shot.sha256) fail(`${shot.file} does not match its manifest checksum. Wait for the gallery run to finish.`);
+        const key = `${shot.device}|${shot.screen}`;
+        (shots[key] ||= []).push({ sha, width: shot.width, height: shot.height, device: shot.device, page: shot.capture_page });
+    }
+    for (const list of Object.values(shots)) list.sort((a, b) => a.page - b.page);
+    if (!Object.keys(shots).length) fail(`${source} has no ${options.theme} captures.`);
+    writeJson(baselineFile, { schema: 1, created: new Date().toISOString(), source, theme: options.theme,
+        commit: options.commit || manifest.commit || null, baseRef: options['base-ref'] || null, matches, shots });
+    const screens = new Set(Object.keys(shots).map(key => key.split('|')[1]));
+    console.log(`Before set: ${screens.size} screens, ${Object.values(shots).flat().length} images` +
+        (Object.keys(matches).length ? `, ${Object.keys(matches).length} matched to other screens` : '') + '.');
+}
+
+// Whether the Before set still matches the branch: its commit must be where
+// the branch now leaves its base ref, for example after a rebase onto a
+// newer develop. Without a base ref or Git there is nothing to check.
+function baselineState(baseline) {
+    if (!baseline?.commit) return null;
+    const state = { commit: baseline.commit, baseRef: baseline.baseRef || null, current: null, stale: false };
+    if (!state.baseRef) return state;
+    try {
+        state.current = execFileSync('git', ['merge-base', 'HEAD', state.baseRef], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        state.stale = state.current !== baseline.commit;
+    } catch {}
+    return state;
+}
+
+// The Before image for a round's screen on one device: the matched screen,
+// and the same page or the last one the base has.
+function beforeImage(baseline, item, device) {
+    if (!baseline || !device) return null;
+    const screen = baseline.matches?.[item.screen] || item.screen;
+    const list = baseline.shots[`${device}|${screen}`];
+    if (!list?.length) return null;
+    const shot = list.filter(s => s.page <= item.page).at(-1) || list[0];
+    return { ...shot, screen, commit: baseline.commit };
 }
 
 function printNotes() {
@@ -209,8 +311,13 @@ function printNotes() {
     const verdicts = round.items.map(item => reviewVerdict(feedback.items[item.id]));
     const tally = verdict => verdicts.filter(v => v === verdict).length;
     console.log(`Round ${number}: ${tally('needs-changes')} need changes, ${round.items.filter(item => wasSeen(feedback.items[item.id])).length} seen, ${round.items.filter(item => !wasSeen(feedback.items[item.id])).length} unseen.`);
+    console.log(feedback.finished ? `Finished by the reviewer at ${feedback.finished}.` : 'Not finished yet.');
+    const replies = Object.entries(readJson(repliesFile, {})).filter(([, reply]) => reply.round === number);
+    if (replies.length) console.log(`Replies for the next round: ${replies.map(([id]) => id).join(', ')}.`);
     for (const item of round.items) {
         const entry = feedback.items[item.id];
+        if (entry?.resolved && !hasAnnotations(entry))
+            console.log(`\nANSWERED: ${item.id} · ${item.title}, ${wasSeen(entry) ? 'reply seen' : 'reply not seen yet'}`);
         if (!entry || (reviewVerdict(entry) !== 'needs-changes' && !entry.note && !entry.pins?.length)) continue;
         const mark = reviewVerdict(entry) === 'needs-changes' ? 'NEEDS CHANGES' : reviewVerdict(entry) || 'no verdict';
         console.log(`\n${mark}: ${item.id} · ${item.group} · ${item.title}, ${item.orientation}, page ${item.page} of ${item.pages}` +
@@ -248,7 +355,7 @@ function cleanEntry(body) {
 function serve() {
     const port = Number(options.port);
     const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' };
-    const pageFiles = new Set(['/index.html', '/review.css', '/review.js', '/feedback.mjs']);
+    const pageFiles = new Set(['/index.html', '/review.css', '/review.js', '/feedback.mjs', '/view.mjs']);
     let writes = Promise.resolve();
     const send = (response, status, body, type = 'application/json; charset=utf-8') => {
         response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
@@ -266,6 +373,9 @@ function serve() {
                 if (!fs.existsSync(file)) return send(response, 404, { error: 'No such image' });
                 response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=31536000, immutable' });
                 fs.createReadStream(file).pipe(response);
+            } else if (request.method === 'GET' && route === '/api/latest') {
+                // The page polls this to notice a new round without loading every round.
+                send(response, 200, { number: roundNumbers().at(-1) ?? null });
             } else if (request.method === 'GET' && route === '/api/rounds') {
                 send(response, 200, roundNumbers().map(number => {
                     const { round } = loadRound(number);
@@ -277,6 +387,16 @@ function serve() {
                 if (!numbers.includes(number)) return send(response, 404, { error: 'No such round' });
                 const current = loadRound(number);
                 const before = numbers.filter(n => n < number).at(-1);
+                // Each version of a screen covers both devices: the original
+                // before the feature, the previous round and this round.
+                const baseline = readJson(baselineFile, null);
+                const earlier = before ? new Map(loadRound(before).round.items.map(item => [item.id, item])) : new Map();
+                current.baseline = baselineState(baseline);
+                for (const item of current.round.items) {
+                    item.before = beforeImage(baseline, item, item.image.device);
+                    item.referenceBefore = beforeImage(baseline, item, item.reference?.device);
+                    item.previousReference = item.previous ? earlier.get(item.id)?.reference || null : null;
+                }
                 send(response, 200, { ...current, latest: number === numbers.at(-1),
                     previousFeedback: before ? loadRound(before).feedback : null });
             } else if (request.method === 'PUT' && (match = route.match(/^\/api\/rounds\/(\d+)\/items\/(.+)$/))) {
@@ -301,14 +421,35 @@ function serve() {
                     if (!item) return 404;
                     if (!item.reference && entry.pins.some(pin => pin.target === 'reference')) return 400;
                     const feedback = readJson(file, { items: {} });
-                    if (!entry.seen && !entry.verdict && !entry.note && !entry.pins.length) delete feedback.items[id];
+                    // The page does not send what only the tool writes: an
+                    // answer, and the round that unchanged notes came from.
+                    const old = feedback.items[id];
+                    if (old?.resolved) entry.resolved = old.resolved;
+                    if (old?.carried && sameAnnotations(old, entry)) entry.carried = old.carried;
+                    if (!entry.seen && !entry.verdict && !entry.note && !entry.pins.length && !entry.resolved) delete feedback.items[id];
                     else feedback.items[id] = entry;
+                    // A change after Finish review reopens the round.
+                    delete feedback.finished;
                     writeJson(file, feedback);
                     return 200;
                 });
                 writes = job.catch(() => {});
                 const status = await job;
                 send(response, status, status === 200 ? { saved: entry.updated } : { error: 'No such screen' });
+            } else if (request.method === 'PUT' && (match = route.match(/^\/api\/rounds\/(\d+)\/finish$/))) {
+                // The reviewer is done with the round. `notes` reports it.
+                const number = Number(match[1]);
+                if (number !== roundNumbers().at(-1)) return send(response, 409, { error: 'Only the latest round takes feedback' });
+                const file = path.join(roundDir(number), 'feedback.json');
+                const finished = new Date().toISOString();
+                const job = writes.then(() => {
+                    const feedback = readJson(file, { items: {} });
+                    feedback.finished = finished;
+                    writeJson(file, feedback);
+                });
+                writes = job.catch(() => {});
+                await job;
+                send(response, 200, { finished });
             } else {
                 send(response, 404, { error: 'Not found' });
             }
@@ -329,4 +470,6 @@ if (options.help || !command) console.log(usage);
 else if (command === 'round') createRound();
 else if (command === 'serve') serve();
 else if (command === 'notes') printNotes();
+else if (command === 'baseline') recordBaseline();
+else if (command === 'reply') recordReply();
 else fail(usage);

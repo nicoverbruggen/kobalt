@@ -1,6 +1,8 @@
 /* Same palette, type, header and controls as the screenshot gallery page in platforms/desktop/. */
 :root {
     color-scheme: light;
+    --side: 320px;
+    --status: 48px;
     --paper: #f6f5f1;
     --surface: #ffffff;
     --hover: #f1f0eb;
@@ -37,13 +39,30 @@ select:focus-visible, textarea:focus-visible { outline: none; border-color: var(
 .brand svg { width: 22px; height: 22px; flex: none; }
 .brand .crumb { color: var(--edge); font-weight: normal; }
 .brand h1 { font: inherit; margin: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filters { margin-left: auto; }
+.banner { flex: 1 1 100%; display: flex; align-items: center; gap: 12px; margin: 2px -20px -12px; padding: 8px 20px; background: var(--accent-soft); border-top: 1px solid var(--accent-line); color: var(--accent); font-size: 13px; font-weight: 600; }
+.banner button { height: 28px; font-size: 12px; }
 
 .layout { display: flex; align-items: flex-start; }
-.sidebar { flex: none; width: 260px; position: sticky; top: var(--bar, 57px); height: calc(100vh - var(--bar, 57px)); display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.sidebar { flex: none; width: var(--list-open, 260px); position: sticky; top: var(--bar, 57px); height: calc(100vh - var(--bar, 57px)); display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .sidebar:has(.list[hidden]) { width: 53px; }
 .list { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 8px 16px; }
 .sidebar-foot { flex: none; padding: 10px; border-top: 1px solid var(--line); }
 .sidebar:has(.list[hidden]) .sidebar-foot { margin-top: auto; border-top: 0; }
+/* Folded, the screen list shows a map of the review: one tick per screen. */
+.minimap { display: none; }
+.sidebar:has(.list[hidden]) .minimap { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; padding: 20px 0 12px; overflow: hidden; }
+/* One short tick per screen. Unseen ticks are faint and seen ticks grey.
+   Screens that need changes have a longer blue tick, and the current screen
+   the longest. A blank space separates the groups. */
+.minimap button { flex: none; width: 28px; height: var(--pitch, 14px); padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; display: grid; place-items: center; }
+.minimap button::before { content: ""; display: block; width: 8px; height: var(--tick, 2px); border-radius: 1px; background: var(--edge); }
+.minimap button.approved::before { background: #9a978f; }
+.minimap button.needs-changes::before { width: 12px; background: var(--accent); }
+.minimap button[aria-current]::before { width: 18px; background: var(--accent); }
+.minimap button:hover::before { background: var(--ink); }
+.minimap .group-gap { flex: none; height: calc(var(--pitch, 14px) * 1.5); }
 .list h3 { display: flex; justify-content: space-between; margin: 16px 10px 4px; }
 .list h3 span { font-weight: normal; letter-spacing: 0; }
 .list h3:first-child { margin-top: 6px; }
@@ -55,56 +74,158 @@ select:focus-visible, textarea:focus-visible { outline: none; border-color: var(
 .dot.needs-changes { background: var(--reject); border-color: var(--reject); }
 
 main:focus { outline: none; }
-main { flex: 1; min-width: 0; padding: 16px 24px 40px; }
+main { flex: 1; min-width: 0; padding: 16px 24px; }
 .empty { text-align: center; color: var(--muted); padding: 80px 0; }
-.screen-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
-.screen-nav { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.screen-nav h2 { font-size: 20px; font-weight: 600; line-height: 1.3; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.screen-nav { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; min-width: 0; padding-left: 12px; border-left: 1px solid var(--line); }
+.screen-nav h2 { font-size: 15px; font-weight: 600; line-height: 1.3; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .position { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .stepper { display: flex; gap: 4px; margin-left: 4px; }
-.tally { display: flex; gap: 12px; margin: 0; color: var(--muted); font-size: 13px; }
+.tally { display: flex; flex-wrap: wrap; gap: 0 12px; margin: 0; color: var(--muted); font-size: 12px; }
 .saved:not(:empty)::before { content: "·"; margin-right: 12px; }
 .saved.error { color: var(--reject); font-weight: 600; }
-.meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
-.meta p { margin: 0; }
-.state-changed { color: var(--accent); }
+/* The notes sidebar header: where the screen is, its status as chips, and
+   the round's progress. */
+.where { margin: 0; color: var(--muted); font-size: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid var(--edge); border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface); }
+.chip.needs-changes { color: var(--reject); border-color: #b23b3255; background: #b23b3212; }
+.chip.unseen { color: #8a5a00; border-color: #c08a1d55; background: #c08a1d14; }
+.chip.changed { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.progress { display: grid; gap: 5px; margin-top: 2px; }
+.progress-bar { display: flex; height: 4px; overflow: hidden; border-radius: 2px; background: var(--line); }
+.progress-bar span { display: block; height: 100%; }
+#progress-seen { background: var(--approve); }
+#progress-changes { background: var(--reject); }
 
-.stage { display: flex; justify-content: center; align-items: flex-start; gap: 32px; margin: 18px 0 16px; }
+/* The screenshots take the window's height. Notes and controls sit in a
+   sidebar on the right, the counterpart of the screen list on the left, so
+   adding a note never moves or shrinks the images. */
+.side { display: flex; flex-direction: column; gap: 14px; }
+@media (min-width: 1101px) {
+    main { padding-right: calc(var(--side) + 24px); }
+    .side { position: fixed; z-index: 1; top: var(--bar, 57px); right: 0; bottom: 0; width: var(--side); padding: 0; gap: 0; overflow: hidden; background: var(--paper); border-left: 1px solid var(--line); }
+    .side-head { flex: none; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+    .side .notes { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; }
+    .side-foot { flex: none; padding: 12px 16px 10px; border-top: 1px solid var(--line); background: var(--paper); }
+    .statusbar { position: fixed; z-index: 1; left: var(--list, 53px); right: var(--side); bottom: 0; height: var(--status); background: var(--paper); border-top: 1px solid var(--line); }
+    /* One row; the zoom slider gives way first. */
+    .review > .statusbar { flex-wrap: nowrap; gap: 10px; }
+    .review > .statusbar > * { flex: none; }
+    /* In a narrow middle area the menu buttons give way first, then the zoom stays whole. */
+    .review > .statusbar > .menu { flex: 0 1 auto; min-width: 72px; }
+    .review > .statusbar > .zoom { margin-left: auto; }
+    body.notes-hidden .side { justify-content: flex-end; }
+}
+.stage { display: flex; justify-content: center; align-items: flex-start; gap: 32px; margin: 0; }
+/* Pop-up menus in the status bar open upward. */
+.menu { position: relative; }
+.menu-button { height: 28px; max-width: 100%; font-size: 12px; padding: 0 8px 0 10px; }
+.menu-button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-button svg { flex: none; }
+.menu-button svg { width: 14px; height: 14px; color: var(--muted); }
+.menu-panel { position: absolute; z-index: 3; bottom: calc(100% + 8px); left: 0; min-width: 220px; display: grid; gap: 6px; padding: 10px 12px 12px; background: var(--surface); border: 1px solid var(--edge); border-radius: 10px; box-shadow: 0 8px 24px #1b1b1a26; }
+.menu-panel .label { margin: 0 0 2px; }
+.menu-panel hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+.menu-panel .show { justify-content: flex-start; padding: 3px 0; }
+.menu-panel .show kbd { margin-left: auto; color: var(--muted); font-weight: 500; }
+.choices { display: grid; gap: 2px; }
+.choices label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; white-space: nowrap; font-size: 13px; }
+.choices input { margin: 0; accent-color: var(--accent); }
+.choices label:has(input:disabled) { color: var(--muted); cursor: default; }
+#peek { height: 28px; font-size: 12px; user-select: none; touch-action: none; }
+.frame canvas.diff { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* While peeking, the frames say that they show the baseline. */
+.stage.peeking .frame { outline: 3px solid var(--accent); outline-offset: 2px; }
+.stage.peeking .shot figcaption .label { color: var(--accent); }
+.stage-empty { margin: 80px 0; color: var(--muted); font-size: 14px; }
+.stage.zoomed { justify-content: safe center; overflow: auto; padding-bottom: 8px; }
 .shot { margin: 0; }
 .shot figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; margin-bottom: 8px; }
 .hint { font-size: 12px; color: var(--muted); }
-.switch { display: inline-flex; }
-.switch button { height: 26px; padding: 0 10px; font-size: 12px; border-radius: 0; box-shadow: none; }
-.switch button:first-child { border-radius: 6px 0 0 6px; }
-.switch button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 .frame { position: relative; line-height: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); box-shadow: 0 1px 2px #1b1b1a0d, 0 4px 14px #1b1b1a0a; }
 .frame img { display: block; border-radius: 3px; image-rendering: auto; }
+/* The bezel wraps the image box, so pins stay fractions of the screenshot. */
+.bezel { line-height: 0; }
+.bezel.on { background: linear-gradient(135deg, #303031, #1d1d1e); border: 1px solid #111; box-shadow: 0 6px 18px #1b1b1a40; }
+.bezel.on .frame { border: 0; border-radius: 0; box-shadow: none; }
+.bezel.on .frame img { border-radius: 0; }
 .pinnable { cursor: crosshair; }
 .marker { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%; background: var(--pin); color: #fff; font: 600 12px/24px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgb(0 0 0 / .4); cursor: pointer; }
 .marker.old { background: var(--muted); }
 .marker.active { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-.controls { display: flex; justify-content: center; gap: 8px; margin-bottom: 16px; }
-.controls button { height: 36px; font-size: 14px; }
-.add-note { padding: 0 18px; }
+.side-foot { display: grid; gap: 8px; }
+.side-bottom { display: flex; align-items: flex-end; gap: 8px; }
+.side-bottom .keys { flex: 1; margin: 0; padding: 0; }
+.side-bottom .icon-button { flex: none; }
+/* Folded, the notes sidebar keeps only its toggle, as the screen list does. */
+body.notes-hidden { --side: 53px; }
+body.notes-hidden .side > :not(.side-foot), body.notes-hidden .note-box, body.notes-hidden .side-bottom .keys { display: none; }
+body.notes-hidden .side-foot { border-top: 0; padding: 10px; }
+body.notes-hidden .resizer { display: none; }
+.note-box { display: grid; gap: 6px; }
+/* The status bar sits at the bottom of the middle area, between the two
+   sidebars: which screenshots to show, and the zoom. */
+.statusbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 24px; font-size: 13px; }
+.show { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.show input { margin: 0; accent-color: var(--accent); }
+.zoom { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.zoom .icon-button { width: 28px; height: 28px; }
+.zoom .icon-button svg { width: 14px; height: 14px; }
+.zoom input { width: 120px; flex: none; margin: 0; accent-color: var(--accent); }
+.zoom-value { min-width: 56px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.notes { max-width: 720px; margin: 0 auto; }
-.notes > label { display: grid; gap: 6px; }
+.side-head { display: grid; gap: 8px; }
+.notes-title { display: flex; gap: 6px; margin: 0 0 8px; }
+.notes-title span { font-weight: normal; letter-spacing: 0; }
+.pins-empty { margin: 0; color: var(--muted); font-size: 12px; }
+#note { min-height: 96px; max-height: 45vh; field-sizing: content; }
 textarea { width: 100%; padding: 8px 10px; font-size: 14px; line-height: 1.5; resize: vertical; }
-.pins { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
-.pins li { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: start; }
-.pins li .marker { position: static; margin: 4px 0 0; }
-.pins li button { height: 28px; padding: 0 10px; font-size: 12px; }
+.pins { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.pins li { display: grid; grid-template-columns: 24px 1fr 24px; gap: 8px; align-items: start; }
+.pins li .marker { position: static; margin: 6px 0 0; }
+.pins li textarea { min-height: 38px; max-height: 30vh; field-sizing: content; font-size: 13px; padding: 7px 9px; }
+.pins li .remove { width: 24px; height: 24px; margin-top: 6px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); }
+.pins li .remove:hover { color: var(--reject); background: var(--hover); }
+.pins li .remove svg { width: 14px; height: 14px; }
 .pins li.active textarea { border-color: var(--accent); }
-.earlier { margin-top: 18px; padding: 12px 14px; border: 1px dashed var(--edge); border-radius: 8px; background: var(--surface); }
-.earlier p { margin: 4px 0; white-space: pre-wrap; }
-.keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 32px 0 0; color: var(--muted); font-size: 12px; }
-.keys span { display: inline-flex; align-items: center; gap: 4px; }
-kbd { display: inline-block; min-width: 20px; padding: 1px 6px; font: 11px/16px system-ui, sans-serif; text-align: center; color: var(--ink); background: var(--surface); border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 5px; }
+/* The previous round's notes: a quiet, folded line at the bottom of the
+   pinned notes, just above the screen note. */
+.side .notes { display: flex; flex-direction: column; }
+.earlier { margin-top: auto; padding-top: 12px; color: var(--muted); font-size: 12px; }
+.earlier summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+.earlier summary::-webkit-details-marker { display: none; }
+.earlier summary::before { content: "›"; display: inline-block; width: 8px; transition: transform .15s; }
+.earlier[open] summary::before { transform: rotate(90deg); }
+.earlier summary:hover { color: var(--ink); }
+.earlier p { margin: 6px 0 0 14px; white-space: pre-wrap; line-height: 1.45; }
+/* An answer to the previous round's notes: those notes in grey, then the
+   reply in ink, set off by the accent line. */
+.answer { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--accent-line); font-size: 13px; line-height: 1.45; }
+.answer .label { margin: 0 0 6px; }
+.answer-asked p { margin: 0 0 4px; color: var(--muted); white-space: pre-wrap; }
+.answer-reply { margin: 8px 0 0; color: var(--ink); white-space: pre-wrap; }
+.keys { display: flex; flex-wrap: wrap; gap: 0 12px; margin: auto 0 0; padding-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.keys span { white-space: nowrap; }
+kbd { font: 600 11px/1 system-ui, sans-serif; color: var(--ink); }
+kbd + kbd { margin-left: 2px; }
+
+/* On laptop screens the header keeps only the logo. The heading stays for screen readers. */
+@media (max-width: 1600px) {
+    .brand { margin-right: 0; }
+    .brand > span, .brand h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+
+@media (max-width: 1100px) {
+    .side { margin-top: 16px; }
+    .stage { margin-bottom: 4px; }
+    .keys { margin-top: 8px; }
+}
 
 @media (max-width: 700px) {
     .top { position: static; padding: 10px 16px; }
-    .brand { flex: 1; }
+    .screen-nav { border-left: 0; padding-left: 0; }
+    .filters { margin-left: 0; flex: 1 1 100%; }
     .top select { flex: 1 1 140px; min-width: 0; }
     .layout { display: block; }
     .sidebar, .sidebar:has(.list[hidden]) { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -113,3 +234,34 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 6px; font: 11px/16px 
     main { padding: 12px 16px 40px; }
     .stage { flex-direction: column; align-items: center; }
 }
+
+/* The round's primary action, at the right end of the toolbar. */
+.finish { display: flex; align-items: center; gap: 10px; }
+.finish:has(#finish[hidden]):has(#finished:empty) { display: none; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover { background: #46609a; }
+button.primary:disabled:hover { background: var(--accent); }
+.stale { margin: 2px 0 0; max-width: 260px; color: var(--reject); font-size: 12px; line-height: 1.4; }
+.differs { flex: none; color: var(--accent); font-weight: 600; }
+.link { height: auto; padding: 0; border: 0; background: none; box-shadow: none; color: var(--muted); font-size: 11px; gap: 4px; }
+.link:hover { background: none; color: var(--ink); }
+.shortcuts { width: min(440px, calc(100vw - 32px)); padding: 18px 20px; border: 1px solid var(--edge); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 48px #1b1b1a33; }
+.shortcuts::backdrop { background: #1b1b1a40; }
+.shortcuts h2 { margin: 0 0 10px; font-size: 15px; }
+.shortcuts table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.shortcuts td { padding: 5px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.shortcuts td:first-child { width: 110px; white-space: nowrap; }
+.shortcuts kbd { display: inline-block; min-width: 20px; padding: 1px 6px; font: 600 11px/16px system-ui, sans-serif; text-align: center; border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 5px; background: var(--paper); }
+.shortcuts form { display: flex; justify-content: flex-end; margin: 14px 0 0; }
+.menu-button.warn { border-color: var(--reject); }
+
+/* Drag the inner edge of a sidebar to resize it. */
+.resizer { position: absolute; z-index: 2; top: 0; bottom: 0; width: 7px; cursor: col-resize; touch-action: none; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .15s; }
+.resizer:hover::after, .resizer.dragging::after { background: var(--accent); }
+.sidebar .resizer { right: -4px; }
+.side .resizer { left: 0; }
+.sidebar:has(.list[hidden]) .resizer { display: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+@media (max-width: 1100px) { .side .resizer { display: none; } }
+@media (max-width: 700px) { .sidebar .resizer { display: none; } }

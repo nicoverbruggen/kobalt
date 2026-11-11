@@ -10,67 +10,131 @@
 <body>
 <header class="top" id="bar">
     <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#536ca4"/><rect x="9" y="7" width="14" height="18" rx="2" fill="#fff"/><path d="M12.5 12h7M12.5 16h7M12.5 20h4" stroke="#536ca4" stroke-width="2" stroke-linecap="round"/></svg><span>Kobalt</span><span class="crumb" aria-hidden="true">/</span><h1>Screen review</h1></div>
-    <select id="round" aria-label="Round"></select>
-    <select id="group" aria-label="Group"><option value="">All groups</option></select>
-    <select id="orientation" aria-label="Orientation">
-            <option value="">Both orientations</option>
-            <option value="portrait">Portrait</option>
-            <option value="landscape">Landscape</option>
-    </select>
-    <select id="status" aria-label="Status">
-            <option value="">All screens</option>
-            <option value="open">Unseen</option>
-            <option value="needs-changes">Needs changes</option>
-            <option value="seen">Seen</option>
-            <option value="changed">Changed since last round</option>
-            <option value="noted">With notes</option>
-    </select>
+    <div class="screen-nav">
+        <h2 id="title"></h2>
+        <span class="position" id="position"></span>
+        <span class="stepper">
+            <button type="button" class="icon-button" id="previous" aria-label="Previous screen" title="Previous screen (Left arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <button type="button" class="icon-button" id="next" aria-label="Next screen" title="Next screen (Right arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+        </span>
+    </div>
+    <div class="filters">
+        <select id="round" aria-label="Round"></select>
+        <select id="group" aria-label="Group"><option value="">All groups</option></select>
+        <select id="orientation" aria-label="Orientation">
+                <option value="">Both orientations</option>
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+        </select>
+        <select id="status" aria-label="Status">
+                <option value="">All screens</option>
+                <option value="open">Unseen</option>
+                <option value="needs-changes">Needs changes</option>
+                <option value="seen">Seen</option>
+                <option value="changed">Changed since last round</option>
+                <option value="noted">With notes</option>
+                <option value="differs">Differs from baseline</option>
+        </select>
+    </div>
+    <div class="finish"><button type="button" class="primary" id="finish" title="Tell the developer that this round is reviewed">Finish review</button><span class="label" id="finished"></span></div>
+    <div class="banner" id="new-round" role="status" hidden><span id="new-round-text"></span><button type="button" id="open-new-round"></button></div>
 </header>
 <div class="layout">
-    <aside class="sidebar"><nav id="list" class="list" aria-label="Screens" hidden></nav><div class="sidebar-foot"><button id="toggle-list" class="icon-button" type="button" aria-expanded="false" aria-controls="list" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button></div></aside>
+    <aside class="sidebar"><div class="resizer" id="list-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the screen list" title="Drag to resize; double-click to reset"></div><nav id="list" class="list" aria-label="Screens" hidden></nav><nav class="minimap" id="minimap" aria-label="Review progress"></nav><div class="sidebar-foot"><button id="toggle-list" class="icon-button" type="button" aria-expanded="false" aria-controls="list" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button></div></aside>
     <main id="main" tabindex="-1">
         <p id="empty" class="empty" hidden></p>
-        <section id="screen" hidden>
-            <div class="screen-bar">
-                <div class="screen-nav">
-                    <h2 id="title"></h2>
-                    <span class="position" id="position"></span>
-                    <span class="stepper">
-                        <button type="button" class="icon-button" id="previous" aria-label="Previous screen" title="Previous screen (Left arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-                        <button type="button" class="icon-button" id="next" aria-label="Next screen" title="Next screen (Right arrow)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
-                    </span>
-                </div>
-                <p class="tally"><span id="tally"></span><span class="saved" id="saved" aria-live="polite"></span></p>
-            </div>
-            <div class="meta"><p class="label" id="where"></p><p class="label" id="state"></p></div>
+        <section id="screen" class="review" hidden>
             <div class="stage" id="stage">
+                <p class="stage-empty" id="stage-empty" hidden></p>
+                <figure class="shot" hidden>
+                    <figcaption><span class="label" id="reference-base-label"></span></figcaption>
+                    <div class="bezel"><div class="frame" id="reference-base-frame"><img id="reference-base" alt=""></div></div>
+                </figure>
                 <figure class="shot">
                     <figcaption>
                         <span class="label" id="reference-label"></span>
-                        <span class="switch" id="switch" hidden>
-                            <button type="button" id="show-reference" aria-pressed="true">Reference</button>
-                            <button type="button" id="show-previous" aria-pressed="false">Previous round</button>
-                        </span>
                     </figcaption>
-                    <div class="frame" id="reference-frame"><img id="reference" alt=""></div>
+                    <div class="bezel"><div class="frame" id="reference-frame"><img id="reference" alt=""><canvas class="diff" hidden></canvas></div></div>
+                </figure>
+                <figure class="shot" hidden>
+                    <figcaption><span class="label" id="subject-base-label"></span></figcaption>
+                    <div class="bezel"><div class="frame" id="subject-base-frame"><img id="subject-base" alt=""></div></div>
                 </figure>
                 <figure class="shot">
                     <figcaption><span class="label" id="subject-label"></span><span class="hint">Click to pin a note</span></figcaption>
-                    <div class="frame pinnable" id="subject-frame"><img id="subject" alt=""></div>
+                    <div class="bezel"><div class="frame pinnable" id="subject-frame"><img id="subject" alt=""><canvas class="diff" hidden></canvas></div></div>
                 </figure>
             </div>
-            <div class="controls">
-                <button type="button" class="add-note" id="add-note" title="Add a note (R)">Add note</button>
+            <div class="statusbar" id="statusbar">
+                <div class="menu">
+                    <button type="button" class="menu-button" id="devices-button" aria-expanded="false" aria-controls="devices-menu"><span id="devices-summary">Devices</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button>
+                    <div class="menu-panel" id="devices-menu" hidden>
+                        <p class="label">Devices</p>
+                        <label class="show"><input type="checkbox" id="show-reference-image" checked><span id="show-reference-name"></span></label>
+                        <label class="show"><input type="checkbox" id="show-subject-image" checked><span id="show-subject-name"></span></label>
+                        <hr>
+                        <label class="show" title="Show a device frame around each screenshot (B)"><input type="checkbox" id="show-bezel"><span>Bezel</span><kbd>B</kbd></label>
+                    </div>
+                </div>
+                <div class="menu">
+                    <button type="button" class="menu-button" id="compare-button" aria-expanded="false" aria-controls="compare-menu"><span id="compare-summary">Compare</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button>
+                    <div class="menu-panel" id="compare-menu" hidden>
+                        <p class="label">Compare with</p>
+                        <div class="choices" id="compare" role="radiogroup" aria-label="Compare with"></div>
+                        <p class="stale" id="stale" hidden></p>
+                        <hr>
+                        <label class="show" title="Show the baseline next to the latest images (S)"><input type="checkbox" id="show-side"><span>Side by side</span><kbd>S</kbd></label>
+                        <label class="show" title="Tint what differs from the baseline (D)"><input type="checkbox" id="show-diff"><span>Differences</span><kbd>D</kbd></label>
+                    </div>
+                </div>
+                <button type="button" id="peek" aria-pressed="false" title="Show the baseline while you hold it (hold C)">Hold to compare</button>
+                <div class="zoom"><button type="button" class="icon-button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><input type="range" id="zoom" min="0" max="1" step="1" list="zoom-ticks" aria-label="Zoom" title="Zoom (Z switches between Fit and 100%)"><datalist id="zoom-ticks"></datalist><button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="zoom-value" id="zoom-value"></span></div>
             </div>
-            <div class="notes">
-                <label id="note-box" hidden><span class="label">Requested changes</span><textarea id="note" rows="4"></textarea></label>
-                <ol class="pins" id="pins"></ol>
-                <div class="earlier" id="earlier" hidden></div>
-            </div>
-            <p class="keys"><span><kbd>←</kbd><kbd>→</kbd> Previous and next</span><span><kbd>Space</kbd> Seen and next</span><span><kbd>R</kbd> Add a note</span><span><kbd>P</kbd> Previous round</span><span><kbd>Esc</kbd> Leave a note</span></p>
+            <aside class="side">
+                <div class="resizer" id="side-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the notes sidebar" title="Drag to resize; double-click to reset"></div>
+                <div class="side-head">
+                    <p class="where" id="where"></p>
+                    <p class="chips" id="state"></p>
+                    <div class="progress"><div class="progress-bar" aria-hidden="true"><span id="progress-seen"></span><span id="progress-changes"></span></div>
+                        <p class="tally"><span id="tally"></span><span class="saved" id="saved" aria-live="polite"></span></p></div>
+                </div>
+                <div class="notes">
+                    <p class="label notes-title">Pinned notes <span id="pin-count"></span></p>
+                    <p class="pins-empty" id="pins-empty">Click a screenshot to pin a note to that spot.</p>
+                    <ol class="pins" id="pins"></ol>
+                    <section class="answer" id="answer" hidden><p class="label" id="answer-title"></p><div class="answer-asked" id="answer-asked"></div><p class="answer-reply" id="answer-reply"></p></section>
+                    <details class="earlier" id="earlier" open hidden><summary id="earlier-summary"></summary><div id="earlier-body"></div></details>
+                </div>
+                <div class="side-foot">
+                    <label class="note-box"><span class="label">Note for this screen</span><textarea id="note" rows="4" placeholder="What should change on this screen? (R)"></textarea></label>
+                    <div class="side-bottom">
+                        <p class="keys"><button type="button" class="link" id="shortcuts-open"><kbd>?</kbd> Shortcuts</button></p>
+                        <button id="toggle-notes" class="icon-button" type="button" aria-expanded="true" aria-label="Toggle notes sidebar" title="Toggle notes sidebar (N)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg></button>
+                    </div>
+                </div>
+            </aside>
         </section>
     </main>
 </div>
+<dialog class="shortcuts" id="shortcuts" aria-labelledby="shortcuts-title">
+    <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+    <table>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Previous and next screen</td></tr>
+        <tr><td><kbd>Space</kbd></td><td>Mark seen and go to the next screen</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Write a note for this screen</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Leave the note, or close a menu</td></tr>
+        <tr><td><kbd>C</kbd> (hold)</td><td>Show the baseline instead of the latest images</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Show the baseline side by side</td></tr>
+        <tr><td><kbd>D</kbd></td><td>Tint differences from the baseline</td></tr>
+        <tr><td><kbd>−</kbd> <kbd>=</kbd></td><td>Zoom out or in by one step</td></tr>
+        <tr><td><kbd>Alt</kbd> + scroll</td><td>Zoom around the pointer</td></tr>
+        <tr><td><kbd>Z</kbd></td><td>Switch between Fit and 100%</td></tr>
+        <tr><td><kbd>B</kbd></td><td>Show or hide the device bezel</td></tr>
+        <tr><td><kbd>N</kbd></td><td>Fold or open the notes sidebar</td></tr>
+        <tr><td><kbd>?</kbd></td><td>Show these shortcuts</td></tr>
+    </table>
+    <form method="dialog"><button type="submit">Close</button></form>
+</dialog>
 <script type="module" src="review.js"></script>
 </body>
 </html>

@@ -20,6 +20,8 @@ Build `kobalt-alternate-layout-tests`, then run `ctest --preset mac -R '^engine.
 
 Check portrait and landscape with and without a camera cutout. Rotate with Settings and a choice dialog open, then return to portrait. The reader must still fill its canvas in physical pixels after Qt delivers its screen-size events. Compare the Library and reader side insets after you close a book.
 
+On Android 9 or 10, open Type Tester through the document picker. The loading screen must give way to a rendered page and log `Kobalt frame ready`. Turn a page, return to the Library with Back, and reopen the book. Repeat in landscape and at a tablet size. Legacy fullscreen flags must not retain stable system-bar insets while the opening handoff waits for hidden bars. Check a current Android version too.
+
 ## Limits
 
 These controlled checks do not establish physical Kobo or Android behavior, device latency, storage behavior or e-ink refresh quality.

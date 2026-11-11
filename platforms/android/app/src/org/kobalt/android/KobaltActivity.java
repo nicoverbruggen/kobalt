@@ -204,10 +204,12 @@ public class KobaltActivity extends QtActivity {
                 }
             }
         } else {
+            // LAYOUT_STABLE retains bar insets even after the bars hide on Android 9/10.
+            // The opening handoff needs the actual hidden-bar insets, so use it only in the Library.
             getWindow().getDecorView().setSystemUiVisibility(reading ? View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE : View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                : View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | (libraryDark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR));
         }
     }

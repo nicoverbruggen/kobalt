@@ -65,6 +65,8 @@
 #  include <dlfcn.h>
 #endif
 #include <QThread>
+#include <QJsonDocument>
+#include <cstring>
 #include <utility>
 
 namespace kobalt::nickel {
@@ -81,7 +83,7 @@ QString usbPath(QString path)
 }
 
 QPointer<ReaderCoordinator> activeCoordinator;
-#ifdef KOBALT_SCENARIO_PLAYER
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
 bool benchmarkTypographyEnabled = false;
 
 bool benchmarkPublication(const QString &identity)
@@ -89,6 +91,8 @@ bool benchmarkPublication(const QString &identity)
     return identity == QStringLiteral("file:///mnt/onboard/kobalt-benchmark.kepub.epub");
 }
 
+#endif
+#ifdef KOBALT_SCENARIO_PLAYER
 // Nickel's own store sync, for the evaluation player. On firmware 4.46.23836
 // and 6.0.279225 the status-bar sync button calls N3SyncManager::sync(). The
 // call returns once the sync has started, and Nickel's workers do the rest.
@@ -120,7 +124,7 @@ struct NativeRadio
 #endif
 } // namespace
 
-#ifdef KOBALT_SCENARIO_PLAYER
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
 extern "C" __attribute__((visibility("default"))) int
 kobalt_benchmark_typography_v1(const char *contentId, int enable)
 {
@@ -128,9 +132,76 @@ kobalt_benchmark_typography_v1(const char *contentId, int enable)
         || (enable != 0 && enable != 1) || !benchmarkPublication(QString::fromUtf8(contentId))
         || !activeCoordinator || (enable && !activeCoordinator->idleForBenchmark()))
         return 0;
+    if (!enable && !activeCoordinator->clearBenchmarkReader())
+        return 0;
     benchmarkTypographyEnabled = enable != 0;
     return 1;
 }
+
+extern "C" __attribute__((visibility("default"))) int
+kobalt_benchmark_state_v1(const char *contentId, char *buffer, int capacity)
+{
+    if (!qApp || QThread::currentThread() != qApp->thread() || !contentId || !buffer
+        || capacity <= 0 || !activeCoordinator)
+        return 0;
+    const auto state = activeCoordinator->benchmarkState(QString::fromUtf8(contentId));
+    if (state.isEmpty())
+        return 0;
+    const auto json = QJsonDocument(state).toJson(QJsonDocument::Compact);
+    if (json.size() >= capacity)
+        return 0;
+    std::memcpy(buffer, json.constData(), json.size());
+    buffer[json.size()] = '\0';
+    return json.size();
+}
+
+extern "C" __attribute__((visibility("default"))) int
+kobalt_benchmark_command_v1(const char *contentId, int command, int argument)
+{
+    if (!qApp || QThread::currentThread() != qApp->thread() || !contentId || !activeCoordinator)
+        return 0;
+    return activeCoordinator->benchmarkCommand(QString::fromUtf8(contentId), command, argument);
+}
+
+extern "C" __attribute__((visibility("default"))) int
+kobalt_benchmark_reader_v1(const char *contentId, int enable)
+{
+    if (!qApp || QThread::currentThread() != qApp->thread() || !contentId
+        || (enable != 0 && enable != 1) || !benchmarkPublication(QString::fromUtf8(contentId))
+        || !benchmarkTypographyEnabled || !activeCoordinator)
+        return 0;
+    return activeCoordinator->selectBenchmarkReader(enable != 0);
+}
+
+bool ReaderCoordinator::selectBenchmarkReader(bool enabled)
+{
+    return idleForBenchmark() && bindings_.setBenchmarkReader
+            && bindings_.setBenchmarkReader(enabled ? 1 : 0);
+}
+
+bool ReaderCoordinator::clearBenchmarkReader()
+{
+    // Cleanup may run while the reader finishes its closing jobs.
+    return !bindings_.setBenchmarkReader || bindings_.setBenchmarkReader(-1);
+}
+
+QJsonObject ReaderCoordinator::benchmarkState(const QString &identity) const
+{
+    if (!benchmarkTypographyEnabled || !benchmarkPublication(identity) || identity != run.identity
+        || !run.reader)
+        return {};
+    auto state = run.reader->benchmarkState();
+    if (!state.isEmpty())
+        state["book"] = identity;
+    return state;
+}
+
+bool ReaderCoordinator::benchmarkCommand(const QString &identity, int command, int argument)
+{
+    return benchmarkTypographyEnabled && benchmarkPublication(identity) && identity == run.identity
+            && run.reader && run.reader->benchmarkCommand(command, argument);
+}
+
 #endif
 
 ReaderCoordinator::ReadingRun::ReadingRun() = default;
@@ -930,7 +1001,7 @@ void ReaderCoordinator::load()
     run.sourceLease = std::make_shared<kobalt::SourceLease>();
     const auto originalAppearance = saved;
     QJsonObject temporaryAppearance;
-#ifdef KOBALT_SCENARIO_PLAYER
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
     if (benchmarkTypographyEnabled && benchmarkPublication(run.identity))
         temporaryAppearance = kobalt::appearance::benchmarkTypography();
 #endif

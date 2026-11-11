@@ -4514,6 +4514,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *reader = fixture.window.readerWindow();
         QVERIFY(reader);
         QVERIFY(fixture.clockReads.load() > 0);
+        QVERIFY(reader->benchmarkState().isEmpty());
+        QVERIFY(!reader->benchmarkCommand(1, 0));
+        QVERIFY(!reader->benchmarkCommand(3, 0));
         QCOMPARE(reader->property("reader_dark").toBool(), dark);
         QVERIFY(fixture.state().value("pages").toInt() > 2);
         openPrologueBody(fixture);

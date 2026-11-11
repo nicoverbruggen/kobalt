@@ -41,6 +41,8 @@ struct CoordinatorBindings
                                 const QString &) = nullptr;
     bool (*automaticBookOpening)() = nullptr;
     bool (*setAutomaticBookOpening)(bool) = nullptr;
+    // -1 clears the in-memory benchmark choice; 0 and 1 select a reader.
+    bool (*setBenchmarkReader)(int) = nullptr;
 };
 
 // Called by Nickel's Home key filter before it clears native navigation.
@@ -58,6 +60,12 @@ public:
     ~ReaderCoordinator() override;
     bool available() const;
     bool idleForBenchmark() const;
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
+    QJsonObject benchmarkState(const QString &identity) const;
+    bool selectBenchmarkReader(bool enabled);
+    bool clearBenchmarkReader();
+    bool benchmarkCommand(const QString &identity, int command, int argument);
+#endif
     bool begin(const RetainOpening &retainOpening);
     bool handleHomeKey(QKeyEvent *event);
     void forgetSleepScreen();

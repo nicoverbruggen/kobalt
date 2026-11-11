@@ -107,9 +107,17 @@ bool enabled()
 #endif
 }
 
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
+int benchmarkReader = -1;
+#endif
+
 // A reader preference is independent of the installation and recovery markers.
 bool alternativeEnabled()
 {
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
+    if (benchmarkReader >= 0)
+        return benchmarkReader != 0;
+#endif
     if (!QFile::exists(selectionPath))
         return true;
     return readJson(selectionPath).value("enabled").toBool(false);
@@ -146,6 +154,17 @@ void updatePrerendering()
     }
     nh_log("reader: background prerendering %s", next ? "suppressed" : "returned to native policy");
 }
+
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
+bool setBenchmarkReader(int choice)
+{
+    if (choice < -1 || choice > 1)
+        return false;
+    benchmarkReader = choice;
+    updatePrerendering();
+    return true;
+}
+#endif
 
 // The reader choice changes only on a user's tap: on Kobalt's Settings >
 // System or on Nickel's Reading Settings. Log which one, so a book opening
@@ -401,6 +420,9 @@ public:
         CoordinatorBindings bindings{ enabled };
         bindings.automaticBookOpening = alternativeEnabled;
         bindings.setAutomaticBookOpening = setAlternativeFromKobalt;
+#if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
+        bindings.setBenchmarkReader = setBenchmarkReader;
+#endif
         auto *candidate = new ReaderCoordinator(environment(), bindings, qApp);
         if (!candidate->available() || reentered) {
             delete candidate;

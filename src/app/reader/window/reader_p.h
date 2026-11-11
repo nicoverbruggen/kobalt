@@ -120,6 +120,8 @@ public:
     void pageButton(int direction) override;
     void physicalPageButton(int key, int direction) override;
     void scriptedPageButton(int direction) override;
+    QJsonObject benchmarkState() const override;
+    bool benchmarkCommand(int command, int argument) override;
 
     bool closeGuardActive() const override { return closeGuarded; }
 

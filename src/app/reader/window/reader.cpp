@@ -2539,6 +2539,41 @@ void Reader::physicalPageButton(int key, int direction)
     pageButton(direction, 0, true, key);
 }
 
+QJsonObject Reader::benchmarkState() const
+{
+    if (!session->temporaryTypography() || closing || exportRunning || lifecycleHidden
+        || services.suspended() || !isVisible())
+        return {};
+    const auto source = session->state();
+    QJsonObject result;
+    for (const auto *key : { "page", "pages", "next_page", "position", "font_face",
+                             "default_font_face", "embedded_font_count" })
+        result[QLatin1String(key)] = source.value(QLatin1String(key));
+    result["busy"] = busy();
+    result["benchmark_typography"] = true;
+    return result;
+}
+
+bool Reader::benchmarkCommand(int command, int argument)
+{
+    if (!session->temporaryTypography() || closing || exportRunning || lifecycleHidden
+        || services.suspended() || !isVisible() || !isEnabled() || busy()
+        || appearanceEdit.panelOpen() || appearanceEdit.applying()
+        || (QApplication::activeModalWidget() && QApplication::activeModalWidget() != this)
+        || (QApplication::activePopupWidget() && QApplication::activePopupWidget() != this))
+        return false;
+    if (command == 3) {
+        if (argument < 0 || argument >= session->pages())
+            return false;
+        dismissControls();
+        return argument == session->page() || session->go(argument);
+    }
+    if ((command != 1 && command != 2) || !controlsHidden())
+        return false;
+    scriptedPageButton(command == 1 ? 1 : -1);
+    return true;
+}
+
 void Reader::scriptedPageButton(int direction)
 {
     pageButton(direction, 0, false);

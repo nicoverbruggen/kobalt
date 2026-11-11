@@ -89,6 +89,12 @@ public:
     // or drawing the pages beside the current one.
     virtual bool busy() const { return false; }
 
+    // Optional in-memory driver for a temporary benchmark session. Commands
+    // use normal reader operations: 1 forward, 2 backward, 3 jump to page.
+    virtual QJsonObject benchmarkState() const { return {}; }
+
+    virtual bool benchmarkCommand(int, int) { return false; }
+
     // When the opening began and the host's stages before and around the
     // window's construction. The window adds its own build, theme and show
     // stages and writes "reader-shown" once its page has painted.

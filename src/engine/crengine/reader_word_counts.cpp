@@ -22,11 +22,6 @@ constexpr int maximumCacheBytes = 512 * 1024;
 constexpr int maximumDepth = 512;
 constexpr int chunkCharacters = 4096;
 
-lString32 cre(const QString &value)
-{
-    return Utf8ToUnicode(value.toUtf8().constData());
-}
-
 bool excluded(ldomNode *node)
 {
     return node->isNodeName("head") || node->isNodeName("script") || node->isNodeName("style")
@@ -45,20 +40,22 @@ bool block(ldomNode *node)
 
 QByteArray encode(const DocumentWordCounts &counts)
 {
-    QJsonArray entries;
-    int remaining = maximumCacheBytes - 64;
+    QByteArray result = "{\"total\":\"" + QByteArray::number(counts.total) + "\",\"chapters\":[";
     for (const auto &chapter : counts.chapters) {
-        // JSON escaping needs at most six bytes per UTF-16 code unit.
-        // Reserve each entry before constructing the temporary JSON arrays.
-        if (remaining < 32 || chapter.position.size() > (remaining - 32) / 6) {
+        // Bound the temporary entry, then charge its actual escaped size.
+        // A worst-case estimate for the whole list rejects ordinary large TOCs.
+        if (chapter.position.size() > maximumCacheBytes / 6)
             return {};
-        }
-        remaining -= chapter.position.size() * 6 + 32;
-        entries.append(qt::array({ chapter.position, QString::number(chapter.words) }));
+        const auto entry =
+                QJsonDocument(qt::array({ chapter.position, QString::number(chapter.words) }))
+                        .toJson(QJsonDocument::Compact);
+        if (result.size() + entry.size() + 3 > maximumCacheBytes)
+            return {};
+        if (!result.endsWith('['))
+            result += ',';
+        result += entry;
     }
-    return QJsonDocument(qt::object({ { "total", QString::number(counts.total) },
-                                      { "chapters", entries } }))
-            .toJson(QJsonDocument::Compact);
+    return result + "]}";
 }
 
 DocumentWordCounts decode(const QByteArray &bytes, const QVector<ChapterLink> &chapters)
@@ -124,7 +121,14 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
         return {};
     }
     auto *document = engine_->getDocument();
-    const auto chapters = tocChapters();
+    ChapterPositions positions;
+    QVector<ChapterLink> chapters;
+    if (contents_.isEmpty()) {
+        chapters = this->chapters();
+        positions = *contentsIndex_.positions;
+    } else {
+        chapters = tocChapters(&positions);
+    }
     const auto publish = [&](DocumentWordCounts counts) {
         totalWords_ = counts.total;
         graph_ = chapters;
@@ -149,7 +153,7 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
     DocumentWordCounts result;
     for (int i = 0; i < chapters.size(); ++i) {
         result.chapters.append({ chapters[i].position, -1 });
-        auto pointer = document->createXPointer(cre(chapters[i].position));
+        const auto &pointer = positions[i];
         if (pointer.isNull()) {
             continue;
         }

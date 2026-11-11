@@ -4,7 +4,9 @@
   "books": {
     "benchmark": {"file": "tests/fixtures/kobalt-benchmark.kepub.epub", "sha256": "db5ab9da816ec6a5e5db2a8026e4137867195e152c94b9c2181a9774d3c5b9e4", "package": true},
     "war-and-peace": {"file": "build/screenshot-books/pg2600-epub3.epub", "sha256": "0353122c5a554193a8a777d8156e7a02d9c2014cce90b26891e2057edd30556c"},
-    "notes": {"file": "tests/fixtures/perf-notes.epub", "sha256": "0c2c3d7ef3f362a095cb32575da69dca01df459c0a35253cbd4aaeaa630389df"}
+    "notes": {"file": "tests/fixtures/perf-notes.epub", "sha256": "0c2c3d7ef3f362a095cb32575da69dca01df459c0a35253cbd4aaeaa630389df"},
+    "songbook-1024": {"songs": 1024},
+    "songbook-10000": {"songs": 10000}
   },
   "scenarios": [
     {
@@ -634,6 +636,16 @@
         {"settle":true}
       ],
       "sample": {"timer":true,"stages":{"turn1_ms":{"event":"turn1","field":"elapsed_ms"},"turn2_ms":{"event":"turn2","field":"elapsed_ms"},"turn3_ms":{"event":"turn3","field":"elapsed_ms"},"turn4_ms":{"event":"turn4","field":"elapsed_ms"},"turn5_ms":{"event":"turn5","field":"elapsed_ms"},"stop_save_ms":{"event":"stop-save","field":"elapsed_ms"},"start_save_ms":{"event":"start-save","field":"elapsed_ms"},"sync_ms":{"event":"sync","field":"elapsed_ms"}}}
-    }
+    },
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "songbook-1024"}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.panel", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"mark": true}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.page", "steps": [{"mark": true}, {"press": "rrContentsNext"}, {"settle": true}, {"press": "rrContentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}], "teardown": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.jump", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"mark": true}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}], "sample": {"timer": true}},
+    {"kind": "memory", "unit": "KiB", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "songbook-10000"}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.panel", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"mark": true}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.page", "steps": [{"mark": true}, {"press": "rrContentsNext"}, {"settle": true}, {"press": "rrContentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}], "teardown": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
+    {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.jump", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"mark": true}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}], "sample": {"timer": true}},
+    {"kind": "memory", "unit": "KiB", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}}
   ]
 }

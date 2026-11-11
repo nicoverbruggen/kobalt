@@ -524,6 +524,8 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     // Outline thickness must not affect layout-time italic overhang measurements.
     setExtraFontWeight(0);
     sourceIndex_.reset();
+    contentsIndex_ = {};
+    graphIndex_ = {};
     engine_.reset();
     alternateViewport_ = {};
     layoutPpi_ = readingPpi.load();
@@ -532,8 +534,6 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     contents_.clear();
     graph_.clear();
     totalWords_ = -1;
-    contentsIndex_ = {};
-    graphIndex_ = {};
     nativeLocation_ = saved.value("imported_native_location").toString();
     cache_.clear();
     spareImage_ = {};
@@ -1533,14 +1533,30 @@ const EngineDocument::ChapterIndex &EngineDocument::chapterIndex(ChapterIndex &i
     index.layout = layout;
     index.toc = toc;
     index.source = source;
-    index.links = toc ? tocChapters() : chapterPages(source);
-    auto *doc = engine_->getDocument();
-    QVector<ldomXPointerEx> pointers(index.links.size());
+    // Word counting adds lengths to the same TOC. Reuse its positions and
+    // ordering instead of resolving every XPath again for the Stats graph.
+    if (!toc && &index != &contentsIndex_ && contentsIndex_.layout == layout
+        && contentsIndex_.positions && source.size() == contentsIndex_.links.size()
+        && std::equal(source.cbegin(), source.cend(), contentsIndex_.links.cbegin(),
+                      [](const ChapterLink &a, const ChapterLink &b) {
+                          return a.position == b.position;
+                      })) {
+        index.links = source;
+        for (int i = 0; i < index.links.size(); ++i)
+            index.links[i].page = contentsIndex_.links[i].page;
+        index.positions = contentsIndex_.positions;
+        index.order = contentsIndex_.order;
+        index.sorted = contentsIndex_.sorted;
+        return index;
+    }
+    index.positions = std::make_shared<ChapterPositions>();
+    index.links =
+            toc ? tocChapters(index.positions.get()) : chapterPages(source, index.positions.get());
+    const auto &pointers = *index.positions;
     index.sorted = true;
     for (int i = 0; i < index.links.size(); ++i) {
         if (index.links[i].page < 0 || index.links[i].page >= pages())
             continue;
-        pointers[i] = ldomXPointerEx(doc->createXPointer(cre(index.links[i].position)));
         if (pointers[i].isNull())
             continue;
         if (pointers[i].isElement() && pointers[i].getOffset() > 0)
@@ -1556,21 +1572,25 @@ const EngineDocument::ChapterIndex &EngineDocument::chapterIndex(ChapterIndex &i
     return index;
 }
 
-QVector<ChapterLink> EngineDocument::tocChapters() const
+QVector<ChapterLink> EngineDocument::tocChapters(ChapterPositions *positions) const
 {
     QVector<ChapterLink> result;
     if (!engine_)
         return result;
     std::function<void(LVTocItem *, int)> visit = [&](LVTocItem *item, int depth) {
-        if (!item || depth > 32 || result.size() >= 1024)
+        if (!item || depth > 32 || result.size() >= maximumChapterEntries)
             return;
-        for (int i = 0; i < item->getChildCount() && result.size() < 1024; ++i) {
+        for (int i = 0; i < item->getChildCount() && result.size() < maximumChapterEntries; ++i) {
             auto *child = item->getChild(i);
             auto pointer = child->getXPointer();
             const int start = pointer.isNull() || pointer.toPoint().y < 0
                     ? -1
                     : engine_->getBookmarkPage(pointer);
-            result.append({ qstring(child->getName()), qstring(pointer.toString()), start, depth });
+            result.append({ qstring(child->getName()),
+                            pointer.isNull() ? QString() : qstring(child->getPath()), start,
+                            depth });
+            if (positions)
+                positions->append(ldomXPointerEx(pointer));
             visit(child, depth + 1);
         }
     };
@@ -1582,6 +1602,10 @@ void EngineDocument::setChapters(QVector<ChapterLink> contents, QVector<ChapterL
 {
     if (!engine_)
         return;
+    if (contents.size() > maximumChapterEntries)
+        contents.resize(maximumChapterEntries);
+    if (graph.size() > maximumChapterEntries)
+        graph.resize(maximumChapterEntries);
     // An unresolved native list must not hide the publication's usable TOC.
     // Keep partially resolved lists and the native word-count graph intact.
     if (std::none_of(contents.cbegin(), contents.cend(),
@@ -1592,7 +1616,8 @@ void EngineDocument::setChapters(QVector<ChapterLink> contents, QVector<ChapterL
     graph_ = std::move(graph);
 }
 
-QVector<ChapterLink> EngineDocument::chapterPages(QVector<ChapterLink> links) const
+QVector<ChapterLink> EngineDocument::chapterPages(QVector<ChapterLink> links,
+                                                  ChapterPositions *positions) const
 {
     if (!engine_)
         return {};
@@ -1600,6 +1625,7 @@ QVector<ChapterLink> EngineDocument::chapterPages(QVector<ChapterLink> links) co
         auto pointer = engine_->getDocument()->createXPointer(cre(link.position));
         link.page = pointer.isNull() || pointer.toPoint().y < 0 ? -1
                                                                 : engine_->getBookmarkPage(pointer);
+        positions->append(ldomXPointerEx(pointer));
     }
     return links;
 }
@@ -1657,18 +1683,22 @@ ChapterSelection EngineDocument::chapterAround(const QVector<ChapterLink> &links
     if (current.isNull())
         return result;
     // Lists from chapters() and chapterGraph() for this layout are sorted
-    // already, so a binary search resolves only a few entries.
+    // already, so a binary search compares only a few retained positions.
     const auto layout = layoutSignature();
+    const ChapterPositions *cachedPositions = nullptr;
     for (const auto *index : { &contentsIndex_, &graphIndex_ }) {
-        if (!index->sorted || index->layout != layout
-            || index->links.constData() != links.constData() || index->links.size() != links.size())
+        if (index->layout != layout || index->links.constData() != links.constData()
+            || index->links.size() != links.size())
             continue;
+        cachedPositions = index->positions.get();
+        if (!index->sorted)
+            break;
         const auto &order = index->order;
         int low = 0, high = order.size();
         bool resolved = true;
         while (low < high) {
             const int middle = low + (high - low) / 2;
-            const ldomXPointerEx pointer(doc->createXPointer(cre(links[order[middle]].position)));
+            const auto &pointer = index->positions->at(order[middle]);
             if (pointer.isNull()) {
                 resolved = false;
                 break;
@@ -1690,7 +1720,9 @@ ChapterSelection EngineDocument::chapterAround(const QVector<ChapterLink> &links
     for (int i = 0; i < links.size(); ++i) {
         if (links[i].page < 0 || links[i].page >= pages())
             continue;
-        const ldomXPointerEx pointer(doc->createXPointer(cre(links[i].position)));
+        const auto pointer = cachedPositions
+                ? cachedPositions->at(i)
+                : ldomXPointerEx(doc->createXPointer(cre(links[i].position)));
         if (pointer.isNull())
             continue;
         // Page numbers cannot distinguish two chapter starts on the same page.
@@ -1711,42 +1743,16 @@ ChapterSelection EngineDocument::chapterAround(const QVector<ChapterLink> &links
 ChapterProgress EngineDocument::chapterProgress() const
 {
     const auto links = chapters();
-    if (!contents_.isEmpty()) {
-        const auto selected = chapterSelection(links);
-        if (selected.current >= 0) {
-            const auto title = links[selected.current].title.trimmed();
-            return { title.isEmpty() ? strings::get("reader.untitled_chapter") : title,
-                     selected.page, selected.pages };
-        }
-        if (selected.next >= 0)
-            return { strings::get("reader.front_matter"), page() + 1,
-                     qMax(1, chapterEndPage(links[selected.next])) };
-        return {};
+    const auto selected = chapterSelection(links);
+    if (selected.current >= 0) {
+        const auto title = links[selected.current].title.trimmed();
+        return { title.isEmpty() ? strings::get("reader.untitled_chapter") : title, selected.page,
+                 selected.pages };
     }
-    const int current = page();
-    int start = -1;
-    const ChapterLink *next = nullptr;
-    ChapterProgress progress;
-    bool found = false;
-    for (const auto &chapter : links) {
-        if (chapter.page < 0 || chapter.page >= pages())
-            continue;
-        found = true;
-        if (chapter.page <= current && chapter.page >= start) {
-            start = chapter.page;
-            progress.title = chapter.title.trimmed();
-        } else if (chapter.page > current && (!next || chapter.page < next->page))
-            next = &chapter;
-    }
-    if (!found)
-        return progress;
-    if (progress.title.isEmpty())
-        progress.title = start < 0 ? strings::get("reader.front_matter")
-                                   : strings::get("reader.untitled_chapter");
-    const int first = qMax(0, start);
-    progress.page = current - first + 1;
-    progress.pages = (next ? chapterEndPage(*next) : pages()) - first;
-    return progress;
+    if (selected.next >= 0)
+        return { strings::get("reader.front_matter"), page() + 1,
+                 qMax(1, chapterEndPage(links[selected.next])) };
+    return {};
 }
 
 QString EngineDocument::textFontFace() const

@@ -12,6 +12,8 @@ Set `KOBALT_LAYOUT_TIMINGS=1` for the alternate-layout executable to run an engi
 
 ## Measuring
 
+For large tables of contents, run `KOBALT_PERF_FILTER=toc. cmake -DPARTS=perf -DRUNS=3 -P platforms/eval/run.cmake` from the repository root. The opt-in scenarios generate 1,024- and 10,000-song EPUBs locally. They measure cached opening, chapter-panel opening, paging, a row jump and resident memory through the production reader. Engine probes measure initial TOC/index construction and repeated title, progress and current-chapter lookups. Each lookup sample averages 1,000 iterations. Use the same filter and repetition count for baseline and candidate; memory includes earlier scenarios in the process. These host measurements do not establish physical Kobo responsiveness.
+
 Measure with `/usr/bin/time -p` around the commands above. Report the first build of restored targets separately from an unchanged build. A dependency recipe or patch change selects a new dependency set; application-only changes reuse it. A new worktree takes its set from the shared [dependency cache](../building.md#dependency-cache) when another worktree already built it, so its first build compiles only application objects. Do not compare different test inventories or SDKs as a measured speedup. Linux uses the same native targets and cleanup launcher through the `linux` presets; see [Linux builds](../building.md#linux). Keep host and Qt version consistent when comparing timings or image checksums.
 
 ## Measured Mac loop

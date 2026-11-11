@@ -10,6 +10,40 @@
 #include <QProcessEnvironment>
 
 namespace kobalt::test {
+// Distinct song destinations, with groups crossing both TOC boundaries.
+inline QMap<QString, QByteArray> songbook(int count)
+{
+    QByteArray body, navigation;
+    for (int i = 1; i <= count; ++i) {
+        const auto number = QByteArray::number(i);
+        body += "<p id='song" + number + "'><b>Song " + number
+                + "</b><br/>Across the fields we sing together.<br/>The morning brings us home again. "
+                  "<a href='#song"
+                + QByteArray::number(i == count ? 1 : i + 1) + "'>Next song</a></p>";
+        navigation += "<navPoint id='n" + number + "' playOrder='" + number
+                + "'><navLabel><text>Song " + number
+                + "</text></navLabel><content src='songs.xhtml#song" + number + "'/>";
+        // One parent and nine children per group, without adding extra entries.
+        if (i % 10 != 1)
+            navigation += "</navPoint>";
+        if (i % 10 == 0 || i == count)
+            navigation += "</navPoint>";
+    }
+    return {
+        { "mimetype", "application/epub+zip" },
+        { "META-INF/container.xml",
+          "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
+        { "book.opf",
+          "<package xmlns='http://www.idpf.org/2007/opf' version='2.0' unique-identifier='id'><metadata xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:identifier id='id'>songbook</dc:identifier><dc:title>Large songbook</dc:title><dc:language>en</dc:language></metadata><manifest><item id='songs' href='songs.xhtml' media-type='application/xhtml+xml'/><item id='toc' href='toc.ncx' media-type='application/x-dtbncx+xml'/></manifest><spine toc='toc'><itemref idref='songs'/></spine></package>" },
+        { "songs.xhtml",
+          "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Songbook</title></head><body>"
+                  + body + "</body></html>" },
+        { "toc.ncx",
+          "<ncx xmlns='http://www.daisy.org/z3986/2005/ncx/' version='2005-1'><head/><docTitle><text>Songbook</text></docTitle><navMap>"
+                  + navigation + "</navMap></ncx>" }
+    };
+}
+
 inline bool writeBook(const QString &directory, const QString &filename,
                       const QMap<QString, QByteArray> &files)
 {

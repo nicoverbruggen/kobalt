@@ -148,6 +148,8 @@ Annotation exports are compressed ZIP snapshots for reading outside Kobalt. Each
 
 ## Disposable caches
 
+The 10,000-entry chapter limit changes no saved-data, parsed-book or rendering format. Chapter indices rebuild from the parsed TOC for each layout. Stored word counts with a different number or order of chapter positions are rejected and recounted. Word-count JSON uses its actual encoded size within the existing 512 KiB limit; oversized counts remain usable in memory but are not cached.
+
 Parsed-book cache format 10 rebuilds paragraph markers for publisher containers with zero-width borders. These containers now allow ordinary paragraph adjustments. Visible borders keep their protection. Older rendering caches rebuild without changing settings, reading positions or annotations.
 
 Parsed-book cache format 11 rebuilds books under the embedded font size limit. Older rendering caches rebuild without changing settings, reading positions or annotations.

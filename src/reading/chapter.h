@@ -3,6 +3,9 @@
 #include <QVector>
 
 namespace kobalt {
+// Total entries in a table of contents, including headings and nested rows.
+constexpr int maximumChapterEntries = 10000;
+
 // The platform supplies source locations; the engine resolves them without
 // changing the reading position. Duplicate destinations remain separate rows.
 struct ChapterTarget
@@ -30,17 +33,18 @@ struct ChapterSelection
 inline QVector<ChapterLink> chapterPageLengths(QVector<ChapterLink> contents, int pages)
 {
     bool any = false;
-    for (int i = 0; i < contents.size(); ++i) {
+    // The nearest later entry with a greater page, even for unsorted lists.
+    // A stack keeps shared-page TOCs linear instead of rescanning every suffix.
+    QVector<int> later;
+    for (int i = int(contents.size()) - 1; i >= 0; --i) {
         auto &chapter = contents[i];
+        while (!later.isEmpty() && contents[later.last()].page <= chapter.page)
+            later.removeLast();
+        const int end = later.isEmpty() ? pages : contents[later.last()].page;
+        later.append(i);
         chapter.words = 0;
         if (chapter.page < 0 || chapter.page >= pages)
             continue;
-        int end = pages;
-        for (int j = i + 1; j < contents.size(); ++j)
-            if (contents[j].page > chapter.page) {
-                end = contents[j].page;
-                break;
-            }
         chapter.words = qMax(1, end - chapter.page);
         any = true;
     }

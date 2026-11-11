@@ -96,6 +96,7 @@ public:
     void run()
     {
         text();
+        toc();
         player();
     }
 
@@ -202,6 +203,51 @@ private:
         });
     }
 
+    // Opt-in engine probes use the same songbooks as the reader scenarios.
+    void toc()
+    {
+        if (filter.isEmpty() || !wanted("toc."))
+            return;
+        for (int count : { 1024, 10000 }) {
+            const auto prefix = QString("toc.%1.").arg(count);
+            if (!wanted(prefix))
+                continue;
+            QTemporaryDir directory;
+            if (!require(kobalt::test::writeBook(directory.path(), "songs.epub",
+                                                 kobalt::test::songbook(count)),
+                         "songbook"))
+                return;
+            QFile book(directory.filePath("songs.epub"));
+            if (!require(book.open(QIODevice::ReadOnly), "songbook bytes"))
+                return;
+            const auto bytes = book.readAll();
+            const QStringList paths{ "src/engine/crengine/", "src/reading/chapter.h" };
+            auto &index = add(prefix + "index", "micro", paths);
+            auto &lookup = add(prefix + "lookup", "micro", paths);
+            for (int sample = 0; sample < repetitions; ++sample) {
+                EngineDocument engine(fixtureFonts());
+                QString error;
+                if (!require(engine.open(bytes, QSize(600, 800), {}, &error), error))
+                    return;
+                QElapsedTimer timer;
+                timer.start();
+                const auto links = engine.chapters();
+                index.samples.append(timer.nsecsElapsed() / 1e6);
+                index.fixture = { { "destinations", count }, { "indexed", links.size() } };
+                if (!require(!links.isEmpty() && engine.goTo(links.last().position), "song jump"))
+                    return;
+                timer.restart();
+                for (int i = 0; i < 1000; ++i) {
+                    engine.chapterTitle(links[i % links.size()].position);
+                    engine.chapterProgress();
+                    engine.chapterSelection(engine.chapters());
+                }
+                lookup.samples.append(timer.nsecsElapsed() / 1e6 / 1000);
+                lookup.fixture = { { "destinations", count }, { "lookups_per_sample", 1000 } };
+            }
+        }
+    }
+
     // Runs the shared scenario file through the reader's own scenario player.
     void player()
     {
@@ -218,10 +264,24 @@ private:
             };
         });
         const auto books = file.value("books").toObject();
+        QMap<QString, QString> generatedBooks;
         kobalt::scenario::Host host;
         host.reader = [&]() -> QWidget * { return fixture.window.readerWindow(); };
         host.open = [&](const QString &key) {
-            const auto path = books.value(key).toObject().value("file").toString();
+            const auto specification = books.value(key).toObject();
+            const int songs = specification.value("songs").toInt();
+            if (songs > 0 && songs <= 10001) {
+                if (!generatedBooks.contains(key)) {
+                    const auto directory = fixture.directory.filePath(key);
+                    if (!kobalt::test::writeBook(directory, "songs.epub",
+                                                 kobalt::test::songbook(songs)))
+                        return false;
+                    generatedBooks[key] = directory + "/songs.epub";
+                }
+                fixture.window.openBook(generatedBooks[key]);
+                return true;
+            }
+            const auto path = specification.value("file").toString();
             if (path.isEmpty())
                 return false;
             fixture.window.openBook(QStringLiteral(KOBALT_SOURCE_ROOT) + '/' + path);

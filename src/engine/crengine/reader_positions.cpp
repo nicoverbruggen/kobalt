@@ -103,6 +103,8 @@ ResolvedChapters resolveChapterTargets(const EngineDocument &engine, const Posit
     auto resolve = [&](const QVector<ChapterTarget> &targets) {
         QVector<ChapterLink> links;
         for (const auto &target : targets) {
+            if (links.size() >= maximumChapterEntries)
+                break;
             engineActivity().checkpoint();
             if (!anchors.contains(target.location))
                 anchors.insert(target.location, codec.decode(engine, target.location, nullptr));

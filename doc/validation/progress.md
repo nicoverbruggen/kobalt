@@ -16,6 +16,8 @@ The `component.ui` assertions cover linear chapter lengths above the visible min
 
 These checks do not establish physical Kobo or Android behavior.
 
+`engine.large-toc` generates songbooks at 1,023, 1,024, 1,025, 9,999, 10,000 and 10,001 destinations. It checks the total bound, hierarchy, source-based titles, navigation, native-list fallback, graph lengths, word-count reuse, reflow and cached reopening. `desktop.largeToc` (label `input`) opens the real reader's last chapter-list page, selects Song 10,000 and checks that row widgets stay bounded by the visible page. Unindexed content beyond the cap retains the existing last-title fallback. These fixtures do not reproduce the original reported songbook.
+
 ## Clara BW reading time
 
 `session.reading-book` replays a Clara BW reading-time failure with a controlled boot clock. The fix was checked on a physical Clara BW with firmware 4.46.23836. In the first run, the counter recorded 382.248 seconds at the Stats check, including 330.891 seconds of kernel standby, and Stats showed 6 minutes. The page did not change during the run. Nickel saved 385 seconds when the book closed shortly afterwards. A second run checked deliberate sleep. The counter paused at 67.537 seconds, kept that total through about 6 minutes 46 seconds asleep and counted again after wake. Stats then showed 2 minutes. The final active total was 138.575 seconds, and Nickel saved 139 seconds across the two active intervals. Both native time writes were verified.

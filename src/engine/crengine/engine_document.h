@@ -24,6 +24,8 @@
 #include <utility>
 #include <tuple>
 
+class ldomXPointerEx;
+
 namespace kobalt {
 class ColumnView;
 
@@ -345,8 +347,10 @@ private:
     bool openedFromCache_ = false;
     QVector<ChapterLink> contents_, graph_;
     qint64 totalWords_ = -1;
-    QVector<ChapterLink> chapterPages(QVector<ChapterLink> links) const;
-    QVector<ChapterLink> tocChapters() const;
+    using ChapterPositions = QVector<ldomXPointerEx>;
+    QVector<ChapterLink> chapterPages(QVector<ChapterLink> links,
+                                      ChapterPositions *positions) const;
+    QVector<ChapterLink> tocChapters(ChapterPositions *positions = nullptr) const;
 
     // Chapter entries resolved for one pagination: their pages, and the
     // entries with a page sorted by source position. Resolving every entry
@@ -356,6 +360,9 @@ private:
         quint64 layout = 0;
         bool toc = false;
         QVector<ChapterLink> source, links;
+        // Keep resolved DOM positions for this layout. Parsing indexed XPath
+        // strings again walks sibling nodes in large single-file songbooks.
+        std::shared_ptr<ChapterPositions> positions;
         // Indexes into `links`, in source order. Equal positions keep list order.
         QVector<int> order;
         // CREngine places an element position with a child offset before every

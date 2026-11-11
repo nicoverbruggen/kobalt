@@ -3303,6 +3303,41 @@ private slots:
         QVERIFY(!fixture.widget("rrButtonControlsPopup"));
     }
 
+    // Drives the real reader's last TOC page without allocating one widget per song.
+    void largeToc()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(10001)));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("songs.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(fixture.state().value("chapters").toInt(), 10000);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
+        QVERIFY(fixture.press("rrContentsPrevious"));
+        QTRY_VERIFY(fixture.visible("rrChapter9990Toggle"));
+        QVERIFY(fixture.press("rrChapter9990Toggle"));
+        for (int page = 0; page < 3 && !fixture.visible("rrChapter9999"); ++page)
+            QVERIFY(fixture.press("rrContentsNext"));
+        QTRY_VERIFY(fixture.visible("rrChapter9999"));
+        QCOMPARE(fixture.widget("rrChapter9999Title")->property("text").toString(),
+                 QString("Song 10000"));
+        QVERIFY(fixture.widget("rrContents")->findChildren<QWidget *>().size() < 200);
+        QVERIFY(fixture.press("rrChapter9999"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("chapter_title").toString(), QString("Song 10000"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter9999"));
+        QVERIFY(fixture.widget("rrChapter9999")->property("checked").toBool());
+        QVERIFY(fixture.press("rrContentsPrevious"));
+        QVERIFY(fixture.press("rrContentsNext"));
+        QTRY_VERIFY(fixture.visible("rrChapter9999"));
+    }
+
     void chapterGroups_data() { variants(); }
 
     void chapterGroups()

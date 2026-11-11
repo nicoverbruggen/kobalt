@@ -495,8 +495,15 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name,
             styles::font(metrics::control::captionValueText) + "color:palette(placeholder-text);";
     readerStyle(prefixLabel, secondary);
     readerStyle(value, secondary);
-    current->addWidget(prefixLabel);
-    current->addWidget(value);
+    prefixLabel->setSecondaryInk(true);
+    value->setSecondaryInk(true);
+    // "Currently:" and its value are two labels. Align both to the top of the
+    // line and their text to the top of each label, so they share a baseline
+    // even when the row gives them different heights.
+    for (auto *part : { prefixLabel, value })
+        part->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    current->addWidget(prefixLabel, 0, Qt::AlignTop);
+    current->addWidget(value, 0, Qt::AlignTop);
     current->addStretch(1);
     // A caption above the controls has the full width. Its value moves up
     // beside the title, which keeps the row one line shorter.
@@ -515,7 +522,7 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name,
             heading->addWidget(value, 0, Qt::AlignRight | Qt::AlignVCenter);
         } else {
             heading->removeWidget(value);
-            current->insertWidget(1, value);
+            current->insertWidget(1, value, 0, Qt::AlignTop);
         }
     };
     row->stackedChanged(row->property("caption_stacked").toBool());

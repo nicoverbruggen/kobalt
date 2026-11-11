@@ -74,6 +74,14 @@ inline bool verticalWritingTour(const QString &language)
     return QStringList{ "ja", "ko", "zh-Hans", "zh-Hant" }.contains(language);
 }
 
+// Whether a viewport shows a scene. The Text panel leaves out the text
+// presets bar in landscape, so its scenes have no landscape captures.
+inline bool screenshotSceneShown(const QString &screen, const QString &device)
+{
+    return !(screen.startsWith(QLatin1String("text-presets"))
+             && device.endsWith(QLatin1String("landscape")));
+}
+
 // The card title of every gallery scene other than the international books.
 // A capture of a scene without a title fails, so this map declares the scenes.
 inline const QMap<QString, QString> &screenshotTitles()
@@ -409,6 +417,8 @@ inline QStringList screenshotCoverage(const QJsonArray &captures, const QSet<QSt
     for (const auto &screen : expected) {
         const auto variants = pages.value(screen);
         for (const auto &device : screenshotDevices()) {
+            if (!screenshotSceneShown(screen, device))
+                continue;
             const auto themed =
                     variants.value(device + "/light") | variants.value(device + "/dark");
             for (const auto &theme : screenshotThemes(device)) {

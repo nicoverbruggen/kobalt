@@ -1856,6 +1856,12 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
 {
     const auto settled = [&fixture] { return !fixture.state().value("busy").toBool(); };
     const auto original = fixture.state();
+    // Landscape has no room for the presets bar; the Text panel leaves it out.
+    auto *reader = fixture.window.readerWindow();
+    if (reader->width() > reader->height()) {
+        QVERIFY(!fixture.visible("rrTextPresetToggle"));
+        return;
+    }
     QVERIFY(fixture.visible("rrTextPresetToggle"));
     QVERIFY(!fixture.visible("rrTextPreset_comfort"));
     QVERIFY(fixture.press("rrTextPresetToggle"));
@@ -3913,6 +3919,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 "Missing capture: screen about, viewport phone-landscape, variant dark, page 1"));
         QCOMPARE(test::screenshotCoverage(images, { "about" }).first(),
                  QString("Capture of an undeclared screen: six-inch-light-reading.png"));
+        // The text presets bar has no landscape captures: those viewports
+        // are not expected, and every portrait one still is.
+        const auto presets = test::screenshotCoverage(images, { "reading", "text-presets" });
+        QVERIFY(presets.contains("Missing capture: screen text-presets, viewport phone, "
+                                 "variant dark, page 1"));
+        for (const auto &problem : presets)
+            QVERIFY2(!problem.contains("landscape"), qPrintable(problem));
         const auto entry = [](const QString &device, const QString &theme, int page) {
             return QJsonObject{
                 { "file", device + '-' + theme + "-reading-" + QString::number(page) + ".png" },

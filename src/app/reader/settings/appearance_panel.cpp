@@ -224,7 +224,25 @@ int AppearanceSheet::fitHeight(int width, int availableHeight)
     ensurePolished();
     int sectionHeight = 0;
     if (topSection) {
-        const bool shown = pages->currentIndex() == int(AppearancePage::Typography);
+        // The section shows only in portrait, and only when the Typography
+        // page still fits on one page with its collapsed bar. Landscape has
+        // no room for it: it would push the controls onto extra pages.
+        const auto *screen = window();
+        bool shown = pages->currentIndex() == int(AppearancePage::Typography)
+                && screen->height() >= screen->width();
+        if (shown) {
+            const auto base = metrics::panel::margins;
+            auto *rows = pages->currentWidget()->layout();
+            const int inner = qMax(1, width - base.left() - base.right());
+            const int content = qMax(rows->minimumSize().height(),
+                                     rows->hasHeightForWidth() ? rows->totalHeightForWidth(inner)
+                                                               : rows->sizeHint().height());
+            const int note = message->isHidden()
+                    ? 0
+                    : qMax(0, message->heightForWidth(inner)) + layout()->spacing();
+            shown = content + base.top() + base.bottom() + note + int(metrics::list::headerHeight)
+                    <= availableHeight;
+        }
         topSection->setVisible(shown);
         if (shown)
             sectionHeight = topSection->sizeHint().height();

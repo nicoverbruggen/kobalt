@@ -55,8 +55,15 @@ void drawPill(QPainter &painter, const QWidget *widget, const QRect &bounds, con
     if (inverted)
         painter.fillRect(block, ink);
     painter.setPen(inverted ? paper : ink);
-    ui::drawInterfaceText(painter, block.adjusted(padding, 0, -padding, 0), shown,
-                          Qt::AlignLeft | Qt::AlignVCenter);
+    // Centre the capitals in the block, not the line box, so the name looks
+    // centred in the inverted pill.
+    const int capitals = ui::interfaceInkBounds(QStringLiteral("H"), font).height();
+    const int baseline = block.top() + (block.height() + capitals) / 2;
+    const int ascent = ui::interfaceLineAscent(font);
+    ui::drawInterfaceText(painter,
+                          QRect(block.left() + padding, baseline - ascent,
+                                block.width() - 2 * padding, ui::interfaceLineHeight(font)),
+                          shown, Qt::AlignLeft | Qt::AlignTop);
 }
 
 // Update and Save as new: an icon and a label centred together, as one
@@ -194,17 +201,22 @@ void TextPresetToggle::paintEvent(QPaintEvent *)
     const int textWidth = ui::interfaceTextWidth(shown, font);
     const int left = (width() - textWidth - starWidth - gap - icon) / 2;
     const int body = height() - rule;
-    // Centre the capitals in the band, not the font's line box.
     const int capitals = ui::interfaceInkBounds(QStringLiteral("H"), font).height();
-    const int baseline = (body + capitals) / 2;
-    const int ascent = ui::interfaceLineAscent(font), line = ui::interfaceLineHeight(font);
-    ui::drawInterfaceText(painter, QRect(left, baseline - ascent, textWidth + 2, line), shown,
-                          Qt::AlignLeft | Qt::AlignTop);
+    // Draw the value as the heading draws its caption: the same function, a
+    // box of the same height and vertical centring, so both share a baseline.
+    QRect box(left, 0, textWidth + 2, body);
+    if (const auto *header = dynamic_cast<const ui::ListHeader *>(parentWidget())) {
+        const auto *caption = header->leftLabel();
+        const auto area = caption->contentsRect();
+        box = QRect(left, caption->y() + area.top() - y(), textWidth + 2, area.height());
+        painter.setFont(caption->font());
+    }
+    ui::drawInterfaceText(painter, box, shown, Qt::AlignLeft | Qt::AlignVCenter);
     if (starred)
         ui::drawInterfaceText(
                 painter,
-                QRect(left + textWidth, baseline - ascent - capitals / 3, starWidth + 2, line),
-                star, Qt::AlignLeft | Qt::AlignTop);
+                QRect(left + textWidth, box.top() - capitals / 3, starWidth + 2, box.height()),
+                star, Qt::AlignLeft | Qt::AlignVCenter);
     const auto glyph = open ? ui::ControlIcon::Down : ui::ControlIcon::Up;
     ui::controlIcon(glyph, color)
             .paint(&painter,

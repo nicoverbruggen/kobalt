@@ -462,6 +462,14 @@ bool InterfaceLabel::event(QEvent *event)
     return handled;
 }
 
+void InterfaceLabel::setSecondaryInk(bool enabled)
+{
+    if (secondaryInk == enabled)
+        return;
+    secondaryInk = enabled;
+    update();
+}
+
 void InterfaceLabel::setOpticalCentering(bool enabled)
 {
     if (opticalCentering == enabled)
@@ -478,7 +486,9 @@ void InterfaceLabel::paintEvent(QPaintEvent *event)
     }
     QPainter painter(this);
     painter.setFont(font());
-    painter.setPen(palette().color(isEnabled() ? QPalette::WindowText : QPalette::Mid));
+    painter.setPen(!isEnabled()           ? palette().color(QPalette::Mid)
+                           : secondaryInk ? themeColors(this).secondaryInk
+                                          : palette().color(QPalette::WindowText));
     const QRect bounds = contentsRect().adjusted(margin(), margin(), -margin(), -margin());
     if (textFormat() == Qt::RichText
         || (textFormat() == Qt::AutoText && Qt::mightBeRichText(text()))) {

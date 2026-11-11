@@ -588,6 +588,7 @@ private:
     void updateTextPreset(const QString &id);
     void saveNewTextPreset();
     void editTextPresetName(const QString &id);
+    int textPresetPreviewRound = 0;
     void renderTextPresetPreview(const kobalt::textpresets::Preset &preset, QSize size,
                                  QObject *context, std::function<void(const QImage &)> finished);
     void showTextPresetActions(const QString &id);

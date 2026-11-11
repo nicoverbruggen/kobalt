@@ -220,6 +220,13 @@ TextPresetCard::TextPresetCard(QWidget *parent) : ui::Button(parent)
 
 void TextPresetCard::setPreset(const TextPresetView &view, bool isSelected, bool isModified)
 {
+    // The reader syncs the cards after each settled render. An unchanged
+    // card must not repaint: on e-ink each repaint is a screen update.
+    if (!action && id == view.id && name == view.name && font.family == view.font.family
+        && font.files == view.font.files && font.identity == view.font.identity
+        && selected == isSelected && modified == isModified
+        && accessibleDescription() == view.detail)
+        return;
     action = false;
     id = view.id;
     name = view.name;
@@ -399,9 +406,17 @@ void TextPresetSection::setState(const QVector<TextPresetView> &views, const QSt
                             views[index].id == selected && modified);
     }
     updateButton->setText(strings::get("text_presets.update").arg(selectedName));
+    const bool showActions = open && modified && !selectedName.isEmpty();
+    const bool rearranged = resized || row->isHidden() == open || actions->isHidden() == showActions
+            || toggle->width() != qMin(toggle->sizeHint().width(), width() / 2);
     row->setVisible(open);
-    actions->setVisible(open && modified && !selectedName.isEmpty());
+    actions->setVisible(showActions);
+    // Children repaint themselves when they change. The section paints only
+    // its dividers, which move when the row or the change bar shows or hides.
+    if (!rearranged)
+        return;
     arrange();
+    update();
     if (resized)
         updateGeometry();
 }
@@ -450,7 +465,6 @@ void TextPresetSection::arrange()
     }
     if (!actions->isHidden())
         actions->setGeometry(0, y, width(), actionsHeight());
-    update();
 }
 
 // Six tiles per page, painted as one surface so a page turn redraws once.
@@ -733,9 +747,10 @@ void TextPresetGallery::setHeading(const QString &text, const QString &instructi
     hint->setCaptions(instructions.toUpper());
 }
 
-void TextPresetGallery::setPreview(const QString &id, const QImage &image)
+void TextPresetGallery::setPreviews(const QHash<QString, QImage> &images)
 {
-    previews.insert(id, image);
+    for (auto it = images.cbegin(); it != images.cend(); ++it)
+        previews.insert(it.key(), it.value());
     grid->update();
 }
 
@@ -783,6 +798,12 @@ void TextPresetGallery::showPage(int target)
 void TextPresetGallery::resizeEvent(QResizeEvent *event)
 {
     ui::Panel::resizeEvent(event);
+    // Showing the grid can resize it more than once. Render again only when
+    // the previews would change size; each round repaints the whole grid.
+    const auto size = previewSize();
+    if (size == renderedSize && !previews.isEmpty())
+        return;
+    renderedSize = size;
     previews.clear();
     if (pageChanged)
         pageChanged();

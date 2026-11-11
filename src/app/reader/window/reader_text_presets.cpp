@@ -385,8 +385,12 @@ void Reader::renderTextPresetPreview(const Preset &preset, QSize size, QObject *
     const bool dark = darkTheme;
     renderStyleSample(session->fontInputs(), request, context,
                       [size, dark, finished = std::move(finished)](StyleSample sample) {
-                          if (!sample.valid() || sample.crops.isEmpty())
+                          // A failed sample still finishes, so a page of
+                          // previews is not held back by one of them.
+                          if (!sample.valid() || sample.crops.isEmpty()) {
+                              finished(QImage());
                               return;
+                          }
                           QImage image(size, QImage::Format_ARGB32_Premultiplied);
                           image.fill(ui::themeColors(dark).paper);
                           QPainter painter(&image);
@@ -516,14 +520,36 @@ void Reader::renderTextPresetGallery()
     if (!textPresetGallery)
         return;
     const auto size = textPresetGallery->previewSize();
+    if (size.isEmpty())
+        return;
+
+    // A page's previews arrive one by one. Hand them over together, so the
+    // e-ink screen gets one update for the page, not one per preview. A newer
+    // round, after a page turn or resize, replaces an unfinished one.
+    struct Round
+    {
+        QHash<QString, QImage> images;
+        int pending = 0;
+    };
+
+    auto round = std::make_shared<Round>();
+    const int number = ++textPresetPreviewRound;
+    QVector<Preset> wanted;
     for (const auto &id : textPresetGallery->visibleIds())
         if (const auto *preset = textpresets::find(textPresetGalleryEntries, id))
-            renderTextPresetPreview(*preset, size, textPresetGallery,
-                                    [gallery = QPointer<TextPresetGallery>(textPresetGallery),
-                                     id](const QImage &image) {
-                                        if (gallery)
-                                            gallery->setPreview(id, image);
-                                    });
+            wanted.append(*preset);
+    round->pending = wanted.size();
+    for (const auto &preset : wanted)
+        renderTextPresetPreview(preset, size, textPresetGallery,
+                                [this, gallery = QPointer<TextPresetGallery>(textPresetGallery),
+                                 round, number, id = preset.id](const QImage &image) {
+                                    if (!image.isNull())
+                                        round->images.insert(id, image);
+                                    if (--round->pending > 0 || !gallery
+                                        || number != textPresetPreviewRound)
+                                        return;
+                                    gallery->setPreviews(round->images);
+                                });
 }
 
 void Reader::closeTextPresetGallery()

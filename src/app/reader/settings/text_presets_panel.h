@@ -134,8 +134,9 @@ public:
                     const QString &currentDetail);
     // Text for new books reuses the grid with its own title and hint.
     void setHeading(const QString &title, const QString &hint);
-    // The reader renders previews in the background and hands them over.
-    void setPreview(const QString &id, const QImage &image);
+    // The reader renders a page's previews in the background and hands them
+    // over together, so the grid repaints once.
+    void setPreviews(const QHash<QString, QImage> &images);
     void clearPreviews();
     QSize previewSize() const;
     // Previews the reader should render for the page on show.
@@ -155,6 +156,9 @@ private:
 
     QVector<TextPresetView> presets;
     QHash<QString, QImage> previews;
+    // The preview size the previews were rendered for. A resize that keeps
+    // it keeps them.
+    QSize renderedSize;
     QString selected, currentDetail;
     bool canSave = true;
     QLabel *title;

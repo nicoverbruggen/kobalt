@@ -688,6 +688,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           strings::get("settings.zen_mode_description"));
     generalOptions->addWidget(zenModeOption);
     generalOptions->addWidget(darkOption);
+    generalOptions->addWidget(bionicOption);
     section(displayPage, generalOptions, "rrDisplayScreenSection",
             strings::get("settings.section_screen"));
     refreshButton = ui::makeCaptionButton(displayPage, nullptr, "rrScreenRefresh",
@@ -830,10 +831,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             ui::makeCaptionButton(stylingPage, stylingRows, "rrHangingPunctuation",
                                   strings::get("settings.hanging_punctuation"), [] { });
     hangingPunctuationButton->setDescription(strings::get("settings.hanging_punctuation_summary"));
-    // Bold reading reflows the book, so it sits with the other styling
-    // choices rather than among the quick display switches.
-    stylingRows->addWidget(bionicOption);
-    bionicOption->setLeadingIcon(ui::ControlIcon::Bold);
     section(stylingPage, stylingRows, "rrParagraphSpacingSection",
             strings::get("settings.section_paragraphs"));
     paragraphSpacingButton =

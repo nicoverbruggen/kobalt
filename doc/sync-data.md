@@ -84,6 +84,14 @@ Nickel turns the start and end into the analytics events `OpenContent` and `Leav
 
 Nickel keeps these events in memory until `EventEngine::savePendingEvents` writes them to the `AnalyticsEvents` table. That function clears its buffer even when the save fails, and on firmware 4.46 it saves nothing unless it runs on the event engine's own thread. Kobalt calls it on that thread after a session starts and after it ends. It first takes Nickel's default-database transaction, waiting at most 2 seconds, and skips the save if it cannot, so the buffer survives until the next save (`saveNativeEvents` in `platforms/kobo/common/native_event_save.h`). If the outer commit fails, Kobalt rolls back its own transaction so later native saves can begin. This cleanup cannot restore events that Nickel already removed from its buffer. Nickel also saves the buffer on a timer and at shutdown.
 
+### Native page history
+
+The optional `Event::setExtraData` hook in `platforms/kobo/common/native_event_history.cpp` limits the page samples in type 46 events. At 10,000 samples, it removes the oldest paired `eventTimestamps` and `wordCounts` entries. It retains at least 5,000 samples, including the whole session that crosses that boundary. A session can therefore keep the history above either limit. Missing, malformed or ambiguous boundaries leave the history unchanged.
+
+The hook runs only on Nickel's event thread. It uses the decoded map that Nickel is already updating, reads session markers through Nickel's transient cache, and lets the normal event save persist the result. It does not write the database separately. Both Nickel's reader and Kobalt use this path while the hook is installed. Calls on the main thread or another worker pass through unchanged.
+
+All type 1020 and 1021 session markers remain. The hook changes neither `Event.count` nor reading seconds, session totals, current-session counters or unknown fields. Reading totals and session analytics therefore retain their existing source data. Pace estimates use the retained recent samples, so they can change when older samples are removed. Restart needs no migration or additional recovery state: the saved event is still in Nickel's existing format.
+
 ## What Nickel uploads
 
 ### Reading state
@@ -173,6 +181,7 @@ A book whose Nickel content ID is not a `file:///` path came through Nickel's sy
 - `platform.native-progress` and `model.reading-progress`: progress signals and position rules.
 - `platform.nickel-event-save`: the event save under a competing writer.
 - `platform.nickel-reading-save`, `lifecycle.closeWaitsForNativeTimeBeforePosition` and `lifecycle.sleepWaitsForNativeTimeBeforePosition`: the order and failure handling of time and position writes.
+- `pewter.event-history`, in both Kobo SDKs: the 10,000 trigger, whole-session retention, malformed histories, preserved fields and event-thread guard.
 - `pewter.progress`, in both Kobo SDKs: the status at opening, the position and progress write, the recent book at close, and their failure paths, as described above. It runs the firmware adapters against [pewter](validation/kobo.md#pewter-the-fake-nickel), a fake Nickel, with `bash platforms/kobo/build.sh qt5 --check` and `qt6 --check`.
 - Firmware behavior, such as the upload format and the analytics conditions, cannot be checked by the native tests or pewter. Check it on a device or an emulated Nickel after a firmware or code change, against a local sync server: the stored row after sleep and close, the `PUT .../state` body, and the `AnalyticsEvents` rows and their upload.
 

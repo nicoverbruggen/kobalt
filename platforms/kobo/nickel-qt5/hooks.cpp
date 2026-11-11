@@ -1,5 +1,6 @@
 #include "private_functions.h"
 #include "hooks.h"
+#include "platforms/kobo/common/native_event_history.h"
 #include "platforms/kobo/common/native_tile_cover.h"
 #include "touch_rotation.h"
 #include "platforms/kobo/common/book_menu.h"
@@ -33,6 +34,12 @@ bool firmwareSupported()
 
 using namespace kobalt::nickel_qt5;
 static nh_hook readerHooks[] = {
+    { .sym = "_ZN5Event12setExtraDataE4QMapI7QString8QVariantE",
+      .sym_new = "kobalt_event_set_extra_data",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nativeEventSetExtraData),
+      .desc = "Retain recent whole sessions in native page history",
+      .optional = true },
     { .sym = "_ZN10PixmapView8setImageERK6QImageRK7QString",
       .sym_new = "kobalt_tile_set_image",
       .lib = "libnickel.so.1.0.0",

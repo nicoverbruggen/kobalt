@@ -198,7 +198,15 @@ if(KOBALT_BUILD_TESTS)
     add_test(NAME pewter.tile-cover COMMAND kobalt-tile-cover-tests)
     set_tests_properties(pewter.tile-cover PROPERTIES LABELS "pewter;kobo;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
-    set(tests kobalt-pewter-tests kobalt-tile-cover-tests)
+    add_executable(kobalt-event-history-tests ${kobo_event_history_test_sources})
+    set_target_properties(kobalt-event-history-tests PROPERTIES AUTOMOC OFF ENABLE_EXPORTS ON)
+    target_include_directories(kobalt-event-history-tests PRIVATE "${KOBALT_ROOT}" "${source}")
+    target_compile_options(kobalt-event-history-tests PRIVATE ${kobo_warning_options})
+    target_link_libraries(kobalt-event-history-tests PRIVATE kobalt-test-code ${kobalt_libraries})
+    add_test(NAME pewter.event-history COMMAND kobalt-event-history-tests)
+    set_tests_properties(pewter.event-history PROPERTIES LABELS "pewter;kobo;qt${KOBALT_QT_MAJOR}"
+        ENVIRONMENT "${test_environment}" TIMEOUT 120)
+    set(tests kobalt-pewter-tests kobalt-tile-cover-tests kobalt-event-history-tests)
     set_tests_properties(pewter.progress PROPERTIES LABELS "pewter;qt${KOBALT_QT_MAJOR}"
         ENVIRONMENT "${test_environment}" TIMEOUT 120)
 

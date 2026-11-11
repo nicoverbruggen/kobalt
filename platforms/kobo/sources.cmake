@@ -71,8 +71,9 @@ set(kobo_progress_test_definitions KOBALT_READER_HARDWARE)
 set(kobo_keyboard_test_sources "${kobo_pewter}/keyboard.cpp")
 set(kobo_native_ui_test_sources "${kobo_pewter}/native_ui.cpp")
 set(kobo_tile_cover_test_sources "${kobo_pewter}/tile_cover.cpp")
+set(kobo_event_history_test_sources "${kobo_pewter}/event_history.cpp")
 set(kobo_test_sources ${kobo_progress_test_sources} ${kobo_keyboard_test_sources}
-    ${kobo_native_ui_test_sources} ${kobo_tile_cover_test_sources})
+    ${kobo_native_ui_test_sources} ${kobo_tile_cover_test_sources} ${kobo_event_history_test_sources})
 # The Qt5 refresh test fakes the display driver call itself. It compiles its
 # own copy of two adapter sources and does not use pewter's Nickel.
 set(kobo_sdk_test_sources "")

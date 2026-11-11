@@ -24,6 +24,8 @@ The tests run under `qemu-arm` with the Qt libraries of each image: firmware 4's
 
 `pewter.tile-cover` checks the native tile cover capture in both SDKs. Synthetic native accessors supply book and image identities. The check covers shared image ownership after tile destruction, hidden and ambiguous tiles, edition and image changes, null and generated covers, native invalidation, unchanged content refreshes, missing hooks, nested assignments, nested defaults and deletion during native callbacks. It does not establish when firmware delivers a real tile image. See [Native tile cover capture](diagnostics.md#native-tile-cover-capture) for the runtime evidence.
 
+`pewter.event-history` checks the native page-history hook in both SDKs. It covers the trigger and retained session boundary, oversized sessions, malformed and ambiguous histories, preservation of other fields, and pass-through on the GUI thread and unrelated workers. Firmware persistence, restart recovery and sync payloads require separate runtime checks.
+
 ### What pewter is and is not
 
 Pewter is a validation tool. It exists only to check that Kobalt's firmware adapters call Nickel correctly. It is not a replacement for Nickel, it does not reproduce Nickel's behavior beyond what these checks need, and it is never part of a Kobalt package: only the test programs link it.

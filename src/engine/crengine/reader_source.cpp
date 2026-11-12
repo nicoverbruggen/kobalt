@@ -578,9 +578,11 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
                                                                                   : cacheBytes_)));
     } else
         properties->setString(DOC_PROP_FILE_NAME, lString32(U"publication.epub"));
-    if (!source->parent) {
+    // Once for a source: showSpineItems() opens the same source again.
+    if (!source->parent && !source->contentContainer) {
         source->container =
                 LVContainerRef(new ContentContainer(source->container, std::move(skippedFonts)));
+        source->contentContainer = true;
     }
     OpeningCallback callback(engine_, std::move(progress));
     source_ = std::move(source);

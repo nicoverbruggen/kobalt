@@ -15,6 +15,8 @@ struct ReaderSource
     std::shared_ptr<ResourceCache> resources;
     QMap<QString, qint64> sizes;
     LVContainerRef container;
+    // True when `container` already cleans the content that it reads.
+    bool contentContainer = false;
     // The size in bytes of each spine item, in spine order, for rough page
     // numbers. Filled when first needed.
     QVector<qint64> spineBytes;

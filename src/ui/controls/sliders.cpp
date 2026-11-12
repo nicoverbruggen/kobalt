@@ -60,6 +60,8 @@ void SettingSlider::setMarkerLabels(const QStringList &labels)
 
 void SettingSlider::nudge(int steps)
 {
+    if (readOnlyIndicator)
+        return;
     if (adjusting)
         adjusting();
     setValue(qBound(minimum(), value() + steps * singleStep(), maximum()));
@@ -115,6 +117,13 @@ void SettingSlider::paintEvent(QPaintEvent *)
                            center - metrics::control::sliderFillHeight / 2,
                            x - metrics::control::sliderInset, metrics::control::sliderFillHeight),
                      palette().color(QPalette::WindowText));
+    if (readOnlyIndicator) {
+        const int markerWidth = metrics::control::sliderFillHeight;
+        painter.fillRect(QRect(x - markerWidth / 2, center - metrics::control::sliderRadius,
+                               markerWidth, 2 * metrics::control::sliderRadius),
+                         palette().color(QPalette::WindowText));
+        return;
+    }
     painter.setBrush(palette().color(QPalette::Window));
     painter.setPen(QPen(palette().color(QPalette::WindowText), metrics::control::border));
     painter.drawEllipse(QPoint(x, center), metrics::control::sliderRadius,
@@ -126,6 +135,25 @@ void SettingSlider::paintEvent(QPaintEvent *)
 
 bool SettingSlider::event(QEvent *event)
 {
+    if (readOnlyIndicator) {
+        switch (event->type()) {
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+        case QEvent::MouseButtonDblClick:
+        case QEvent::MouseMove:
+        case QEvent::TouchBegin:
+        case QEvent::TouchUpdate:
+        case QEvent::TouchEnd:
+        case QEvent::TouchCancel:
+        case QEvent::KeyPress:
+        case QEvent::KeyRelease:
+        case QEvent::Wheel:
+            event->accept();
+            return true;
+        default:
+            break;
+        }
+    }
     // The slider draws no hover state. See Button::event.
     if (isHoverEvent(event))
         return true;

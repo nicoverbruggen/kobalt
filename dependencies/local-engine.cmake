@@ -1,49 +1,27 @@
-# Builds CREngine from a local checkout of the koblaze fork, for engine
-# development on the desktop and for trial packages for a Kobo. See doc/building.md#local-engine-source.
-#
-# Call after kobalt_dependencies(). When KOBALT_ENGINE_SOURCE names a checkout,
-# this replaces CRENGINE_SOURCE and CRENGINE_BUILD and defines the target
-# kobalt-local-engine. The checkout is compiled in this worktree's build
-# folder, so an engine edit rebuilds only the changed engine files. The
-# shared dependency cache still supplies every other library, and no cache
-# entry is changed.
-#
-# The engine options repeat the ones of the crengine library in
-# dependencies/CMakeLists.txt. Keep both lists the same. They are not shared,
-# because a change to that file gives every dependency set a new key.
+# Builds the repository-owned koblaze source for every platform. The shared
+# dependency cache supplies its libraries; engine objects stay in this
+# worktree so changing engine source rebuilds only the affected objects.
 include(ExternalProject)
 
 function(kobalt_local_engine)
     get_filename_component(root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
-    # KOBALT_ENGINE_SOURCE in the environment names the checkout for a build
-    # in a container, which cannot follow a link to a folder of the host.
-    set(default "$ENV{KOBALT_ENGINE_SOURCE}")
-    if(NOT default AND EXISTS "${root}/vendor/koblaze/CMakeLists.txt")
-        set(default "${root}/vendor/koblaze")
+    # Retire cached paths from the former external-checkout override.
+    unset(KOBALT_ENGINE_SOURCE CACHE)
+    set(engine "${root}/src/engine/blaze")
+    if(NOT EXISTS "${engine}/crengine/include/lvdocview.h")
+        message(FATAL_ERROR "Missing repository engine source: ${engine}")
     endif()
-    set(KOBALT_ENGINE_SOURCE "${default}" CACHE PATH
-        "Local CREngine checkout to build in place of the pinned source; empty uses the pin")
-    if(NOT KOBALT_ENGINE_SOURCE)
-        return()
-    endif()
-    if(NOT EXISTS "${KOBALT_ENGINE_SOURCE}/crengine/include/lvdocview.h")
-        message(FATAL_ERROR "KOBALT_ENGINE_SOURCE is not a CREngine checkout: ${KOBALT_ENGINE_SOURCE}")
-    endif()
-    if(ANDROID)
-        message(FATAL_ERROR "A local engine source is for desktop and Kobo builds only")
-    endif()
-    file(REAL_PATH "${KOBALT_ENGINE_SOURCE}" engine)
-    message(STATUS "CREngine: local source ${engine}, not the pinned source and patches")
+    message(STATUS "CREngine: repository source ${engine}")
 
     find_program(KOBALT_HOST_PKG_CONFIG pkg-config NO_CMAKE_FIND_ROOT_PATH REQUIRED)
-    # platforms/kobo/syntax.cmake finds the engine headers by `crengine` in
-    # the include paths of the desktop build.
-    set(build "${CMAKE_CURRENT_BINARY_DIR}/crengine-local")
+    # Keep the generated-header directory in sync with the include-path filter
+    # in platforms/kobo/syntax.cmake.
+    set(build "${CMAKE_CURRENT_BINARY_DIR}/blaze")
     set(pkgconfig "${prefix}/lib/pkgconfig")
     # The same search paths as dependencies/CMakeLists.txt uses for a Kobo SDK.
     if(KOBALT_QT_MAJOR EQUAL 5)
         string(APPEND pkgconfig ":${CMAKE_SYSROOT}/usr/lib/pkgconfig")
-    elseif(KOBALT_QT_MAJOR EQUAL 6 AND CMAKE_CROSSCOMPILING)
+    elseif(KOBALT_QT_MAJOR EQUAL 6 AND CMAKE_CROSSCOMPILING AND NOT ANDROID)
         string(APPEND pkgconfig ":/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig")
     endif()
     set(environment --unset=PKG_CONFIG_SYSROOT_DIR "PKG_CONFIG_PATH=${pkgconfig}"
@@ -60,10 +38,13 @@ function(kobalt_local_engine)
     if(CMAKE_TOOLCHAIN_FILE)
         list(APPEND options "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
     endif()
+    if(ANDROID)
+        list(APPEND options "-DANDROID_ABI=${ANDROID_ABI}" "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"
+            -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON "-DANDROID_NDK=${ANDROID_NDK}")
+    endif()
     if(NOT CMAKE_CROSSCOMPILING)
-        # The desktop app also loads Qt's FreeType. The pinned source gets
-        # the same definitions from apply-patches.cmake. A Kobo build
-        # renames the two functions in the built library.
+        # The desktop app also loads Qt's FreeType. Kobo and Android rename
+        # these functions in their reader-engine archive instead.
         list(APPEND options -DKOBALT_FONT_GLYPH_FUNCTIONS=ON)
     endif()
     if(APPLE)

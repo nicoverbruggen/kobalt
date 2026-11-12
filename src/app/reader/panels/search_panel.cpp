@@ -18,6 +18,7 @@
 #include <QGridLayout>
 #include <QIntValidator>
 #include <QLocale>
+#include <algorithm>
 
 namespace kobalt {
 namespace metrics = ui::metrics;
@@ -696,7 +697,10 @@ void SearchPanel::redraw()
         visibleFirst = firstVisible;
         visibleCount = countVisible;
         const auto requestedHits = hits.mid(firstVisible, countVisible);
-        if (countVisible && detailsRequested && requestedHits.first().page < 0) {
+        const bool needsDetails =
+                std::any_of(requestedHits.cbegin(), requestedHits.cend(),
+                            [](const SearchHit &hit) { return hit.text.isEmpty(); });
+        if (countVisible && detailsRequested && needsDetails) {
             const auto epoch = detailsEpoch;
             QPointer<SearchPanel> guard(this);
             detailsRequested(requestedHits, [guard, epoch](QVector<SearchHit> resolved) {
@@ -718,7 +722,9 @@ void SearchPanel::redraw()
             continue;
         buttons[row]->setObjectName(QString("rrSearchResult%1").arg(index));
         buttons[row]->setGeometry(0, listTop + row * rowHeight, width(), rowHeight);
-        const bool ready = row < visibleHits.size() && visibleHits[row].page >= 0;
+        // An estimated page label can arrive before the excerpt, and a
+        // resolved excerpt can be opened before its book page is known.
+        const bool ready = row < visibleHits.size() && !visibleHits[row].text.isEmpty();
         buttons[row]->setEnabled(ready);
         if (!ready) {
             metadata[row]->clear();

@@ -155,6 +155,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "button-actions", "Button controls: actions" },
         { "button-controls-none", "Button controls: Do nothing" },
         { "swipe-controls", "Controls: page navigation entry" },
+        { "navigate", "Navigate: reading position and chapter jumps" },
         { "page-navigation", "Page navigation and swipe direction" },
         { "swipe-direction-taps-only", "Swipe direction saved with Taps only" },
         { "settings-chapter-navigation", "Controls: navigation and links" },

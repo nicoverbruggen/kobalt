@@ -6,10 +6,10 @@
 #include "assets/assets.h"
 #include <QTemporaryDir>
 #include <QDir>
-#include "engine/crengine/engine_document.h"
-#include "engine/crengine/document_cache.h"
-#include "engine/crengine/kobo_styles.h"
-#include "engine/crengine/page_pixels.h"
+#include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/adapter/document_cache.h"
+#include "engine/blaze/adapter/kobo_styles.h"
+#include "engine/blaze/adapter/page_pixels.h"
 #include "publication/publication.h"
 #include "support/strings.h"
 #include "publication/image_policy.h"

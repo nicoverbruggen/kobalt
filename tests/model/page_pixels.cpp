@@ -1,5 +1,5 @@
 #include "support/qt_compat.h"
-#include "engine/crengine/page_pixels.h"
+#include "engine/blaze/adapter/page_pixels.h"
 #include <random>
 #define CHECK(x)                                 \
     do {                                         \

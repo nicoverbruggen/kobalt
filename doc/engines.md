@@ -13,16 +13,16 @@ This document describes the plan to let Kobalt use more than one rendering engin
 
 | Step | State |
 | --- | --- |
-| Location format and the CREngine conversion (`src/publication/location.h`, `src/engine/crengine/reader_locations.cpp`) | Implemented and tested. Not used for saved data yet. |
+| Location format and the CREngine conversion (`src/publication/location.h`, `src/engine/blaze/adapter/reader_locations.cpp`) | Implemented and tested. Not used for saved data yet. |
 | Plain engine types in `src/engine/`, outside the CREngine adapter | Done |
 | `Engine` interface (`src/engine/engine.h`). `ReaderSession`, the opening job and style samples use it. CREngine is the only implementation. | Done. The interface repeats CREngine's page model; the result states of the [shared contract](engines/contract.md) are not in it yet. |
 | Query states and `PageInfo` (`src/engine/query.h`), and `Engine::pageInfo`. CREngine reports exact values. | Done and tested. The interface does not read `PageInfo` yet: it still reads the page integers. |
-| koblaze repository: upstream CREngine at the pinned revision, with each Kobalt patch as one commit, and a CMake option for the FreeType rename | Done in the koblaze checkout. Kobalt does not build from it yet. |
-| Local engine source: the desktop build compiles CREngine from `vendor/koblaze` | Done. See [Building](building.md#local-engine-source). |
+| Repository-owned koblaze source in `src/engine/blaze` | Imported from the tested fork. See [source provenance](engines/koblaze.md). |
+| Desktop, Kobo and Android build the repository engine source | Configured through one engine build definition. See [Building](building.md#local-engine-source). |
 | koblaze: a window of spine items (`koblazeSetSpineWindow`), and a layout that stops when the callback asks (`OnRenderCancelRequested`) | Done in the fork, as experiments. `engine.spine-window` and `engine.layout-interrupt` check them. They skip with stock CREngine. |
-| Chapter mode: Fast in the Rendering setting, the default, or `KOBALT_CHAPTER_MODE=1`, which wins over the setting. With the fork, a book opens with the spine item of the reading position and its two neighbors. Page turns and jumps load other spine items. The Chapter load time field of the header and footer shows the load time. | Works in the engine checks and on real books. Not reviewed in the app. Page numbers, percent, the scrubber, search and bookmarks cover only the loaded spine items. To show other spine items, the book is opened again; background loading is not built. |
+| Chapter mode: Fast in the Rendering setting, the default, or `KOBALT_CHAPTER_MODE=1`, which wins over the setting. With the fork, the reader loads the unit containing the reading position and prepares nearby content on the engine worker. | Whole-book links, search, saved positions and reflow pass the focused Mac parity checks. Search loading can be cancelled, and its cursor survives replacement of the prepared document. Both Kobo SDK compile/link and adapter checks pass; physical-device validation remains pending. |
 | Slices: in chapter mode one spine item is shown, laid out in slices of about 25 pages of text (`KOBALT_CHAPTER_PAGES` sets another size). Only the slice on screen has a layout. One block that is longer than a slice is laid out whole. | Works in `engine.chapter-slices` and on real books. |
-| Chapter mode in the interface: no finish prompt before the end of the book, no page numbers in the contents list, Navigate hidden, and rough page numbers in the header and footer from the page estimate | Works in the session tests. Other percent displays, search, bookmarks and highlights still cover only the slice on screen. |
+| Fast in the interface: contents, bookmarks, highlights, saved words, Stats and time-left fields use estimated whole-book pages. Slice-local pages remain internal to geometry and page marks. Navigate uses a read-only indicator, chapter jumps and adjacent page previews in Fast. | Focused headless Mac checks cover saved-list jumps, estimate updates and the finish prompt at the real book end. The Rendering engine choice reloads the publication when Settings closes. The content map and other Rendering-setting follow-ups remain deferred. |
 | Page estimate (`src/publication/page_estimate.h`): a page map of the whole book that becomes more precise as the user reads | Used by chapter mode for the rough page, the total, the saved percent and the value for Nickel. `engine.page-estimate` checks it. Not checked on a Kobo. See [the estimate](engines/migration.md#page-estimate). |
 | Everything else in [Migration and tests](engines/migration.md) | Not started |
 
@@ -30,9 +30,9 @@ This document describes the plan to let Kobalt use more than one rendering engin
 
 | Engine | Source | Revision | Status |
 | --- | --- | --- | --- |
-| CREngine | `koreader/crengine` with the patches in `dependencies/crengine-patches.txt` | `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97` (`dependencies/manifest.json`) | In use. The only engine today. |
+| CREngine upstream | `koreader/crengine` | `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97` | Base of the imported koblaze fork. |
 | Crosspoint | `crosspoint-reader/crosspoint-reader` | `0333cbbe4649f80afafe83061bf1afe9fd372fcf` | Audited only. Not forked. |
-| koblaze | A fork of CREngine that lays out one spine item at a time. Its source is in a separate checkout, not in this repository. | Branch `kobalt` on `4ce1aed1`, with the Kobalt patches as commits. The tree is the same as the patched tree that Kobalt builds. | No layout changes yet. |
+| koblaze | `src/engine/blaze`, the repository-owned CREngine fork | Imported from `6d3946edf08ef69afe19a3c457b88af126ae64aa`; subsequent changes belong to Kobalt history. | The active engine, with Accurate and Fast modes. |
 
 WPE WebKit is a possible later engine. The contract must not prevent it. No work on it is planned.
 

@@ -50,7 +50,7 @@ if(APPLE)
 endif()
 
 function(kobalt_source name)
-    cmake_parse_arguments(source "NATIVE_ENGINE" "" "PATCHES" ${ARGN})
+    cmake_parse_arguments(source "" "" "PATCHES" ${ARGN})
     string(JSON url GET "${manifest}" "${name}" url)
     string(JSON hash GET "${manifest}" "${name}" sha256)
     if(KOBALT_SOURCE_ARCHIVES)
@@ -74,7 +74,7 @@ function(kobalt_source name)
         SOURCE_SUBDIR kobalt-no-project
         PATCH_COMMAND "${CMAKE_COMMAND}" "-DSOURCE=<SOURCE_DIR>"
             "-DPATCH_EXECUTABLE=${PATCH_EXECUTABLE}" "-DPATCH_LIST=${CMAKE_BINARY_DIR}/${content}-patches.txt"
-            "-DNATIVE_ENGINE=${source_NATIVE_ENGINE}" -P "${CMAKE_CURRENT_SOURCE_DIR}/apply-patches.cmake")
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/apply-patches.cmake")
     FetchContent_MakeAvailable(${content})
     set(${name}_source "${${content}_SOURCE_DIR}" PARENT_SCOPE)
 endfunction()
@@ -134,13 +134,6 @@ endforeach()
 set(svg_patches "${koreader-base_source}/thirdparty/lunasvg")
 kobalt_source(lunasvg PATCHES "${svg_patches}/cmake_tweaks.patch" "${svg_patches}/extended.patch"
     "${svg_patches}/pkgconfig.patch" "${CMAKE_CURRENT_SOURCE_DIR}/patches/lunasvg-resource-limits.patch")
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/crengine-patches.txt" engine_patches)
-list(TRANSFORM engine_patches PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/patches/")
-if(APPLE OR (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING AND NOT ANDROID))
-    set(engine_options NATIVE_ENGINE)
-endif()
-kobalt_source(crengine ${engine_options} PATCHES ${engine_patches})
-
 # Android builds pinned libpng. The Mac reuses libpng from its Qt SDK and Kobo
 # from its prepared SDK, so Kobo keeps the same libpng ABI as Qt; cache.cmake
 # finds those. Qt itself is never configured here.
@@ -170,10 +163,6 @@ kobalt_library(libjpeg-turbo ARCHIVE libjpeg.a OPTIONS -DENABLE_SHARED=OFF -DENA
 kobalt_library(xxhash ARCHIVE libxxhash.a SUFFIX /cmake_unofficial OPTIONS -DXXHASH_BUILD_XXHSUM=OFF)
 kobalt_library(libunibreak AUTOTOOLS ARCHIVE libunibreak.a)
 kobalt_library(lunasvg ARCHIVE liblunasvg.a OPTIONS "-DXTENDED_DIR=${svg_patches}/xtended" -DLUNASVG_BUILD_EXAMPLES=OFF)
-kobalt_library(crengine NO_INSTALL ARCHIVE libcrengine.a DEPENDS dep-freetype dep-harfbuzz dep-fribidi
-    dep-utf8proc dep-libjpeg-turbo dep-xxhash dep-libunibreak dep-lunasvg OPTIONS
-    -DAUTO=OFF -DFREETYPE=ON -DHARFBUZZ=ON -DLIBPNG=ON -DLIBJPEG=ON -DGIF=ON -DLUNASVG=ON
-    -DZLIB=ON -DUTF8PROC=ON -DFRIBIDI=ON -DLIBUNIBREAK=ON -DMATHML=ON)
 if(ANDROID)
     kobalt_source(openssl PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/openssl-android-libraries.patch")
     find_program(PERL_EXECUTABLE perl REQUIRED)

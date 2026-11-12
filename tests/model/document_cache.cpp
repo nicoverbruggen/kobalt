@@ -1,7 +1,7 @@
 #include "check.h"
 #include "reader_inputs.h"
-#include "engine/crengine/engine_document.h"
-#include "engine/crengine/document_cache.h"
+#include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/adapter/document_cache.h"
 #include "support/qt_compat.h"
 #include <lvtinydom.h>
 #include <QCryptographicHash>

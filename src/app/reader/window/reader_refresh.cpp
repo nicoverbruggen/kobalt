@@ -191,6 +191,8 @@ void Reader::refresh()
     }
     openPendingDestination();
     syncNavigation();
+    if (seekOpen && !session->busy() && session->state().contains("book_fraction"))
+        pageScrubber->showCurrentPage();
     finishAnnotationPresentation();
 }
 
@@ -215,6 +217,18 @@ bool Reader::publishPendingDarkMode()
 
 void Reader::syncFrameState()
 {
+    if (choices->isVisible() && !choosingTypography) {
+        QVector<int> pages;
+        for (const auto &chapter : session->chapters())
+            pages.append(chapter.page);
+        choices->setChapterPages(pages);
+        choices->setChapterPosition(
+                session->bookPages() > 0
+                        ? strings::get("stats.page_of")
+                                  .arg(session->bookPage() + 1)
+                                  .arg(session->bookPages())
+                        : strings::get("common.percent").arg(session->progressPercent()));
+    }
     syncBookmarks();
     if (!session->busy() && !pendingSearchHit.start.isEmpty()) {
         const auto hit = std::exchange(pendingSearchHit, {});
@@ -437,8 +451,13 @@ void Reader::showPageImage(const QImage &nextImage)
     if (!page->viewportTransition())
         page->image = std::move(displayedImage);
     // Only a turn forward counts towards the session's pace; jumps and reflows do not.
-    if (!session->busy())
-        book->pace().observe(session->page(), session->turnDirection() > 0);
+    if (!session->busy()) {
+        if (session->state().contains("book_fraction"))
+            book->pace().observePosition(session->state().value("position").toString(),
+                                         session->turnDirection() > 0);
+        else
+            book->pace().observe(session->page(), session->turnDirection() > 0);
+    }
 }
 
 // The reflow placeholder repeats the word lengths of the displayed page. Read
@@ -613,8 +632,12 @@ void Reader::syncStaleControls()
 // The part of syncReadingControls() that does not depend on a visible control.
 void Reader::syncReadingState()
 {
-    if (session->busy())
-        pageScrubber->cancel();
+    if (session->busy()) {
+        if (seekOpen && session->state().contains("book_fraction"))
+            pageScrubber->beginNavigation();
+        else
+            pageScrubber->cancel();
+    }
     page->progressFraction = session->progressFraction();
     if (!session->busy())
         applyingText = false;
@@ -624,14 +647,35 @@ void Reader::syncReadingState()
 
 void Reader::syncReadingControls()
 {
-    if (session->busy())
-        pageScrubber->cancel();
+    if (session->busy()) {
+        if (seekOpen && session->state().contains("book_fraction"))
+            pageScrubber->beginNavigation();
+        else
+            pageScrubber->cancel();
+    }
+    const bool chapterBar = session->state().contains("book_fraction");
     QVector<QPair<int, QString>> chapters;
     for (const auto &chapter : session->chapters())
         chapters.append({ chapter.page, chapter.title });
-    pageScrubber->setChapterJumps(pageNavigation::barButtons(preferences)
-                                  == pageNavigation::BarButtons::Chapters);
-    pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+    pageScrubber->setChapterBar(chapterBar);
+    pageScrubber->setChapterJumps(chapterBar
+                                  || pageNavigation::barButtons(preferences)
+                                          == pageNavigation::BarButtons::Chapters);
+    if (chapterBar) {
+        const bool before =
+                session->page() > 0 || session->state().value("continues_before").toBool();
+        const bool after = session->page() + 1 < session->pages() || session->continuesAfter();
+        pageScrubber->setBook(int(before), 1 + int(before) + int(after), {},
+                              session->image().size());
+        QVector<int> chapterPages;
+        for (const auto &chapter : chapters)
+            chapterPages.append(chapter.first);
+        pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
+                                         session->chapterTitle(), session->progressPercent(),
+                                         session->bookPage(), session->bookPages(), chapterPages);
+    } else {
+        pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+    }
     pageScrubber->setEnabled(!session->busy());
     const auto chapter = session->chapterTitle().isEmpty() ? strings::get("reader.contents")
                                                            : session->chapterTitle();
@@ -768,8 +812,9 @@ void Reader::openPendingDestination()
 void Reader::updateGraph()
 {
     const bool counted = session->totalWords() >= 0;
-    const auto graph = counted ? session->chapterGraph()
-                               : kobalt::chapterPageLengths(session->chapters(), session->pages());
+    const auto graph = counted
+            ? session->chapterGraph()
+            : kobalt::chapterPageLengths(session->chapters(), session->bookPages());
     chapterGraph->setData(graph, counted ? session->graphSelection() : session->contentsSelection(),
                           true, {});
     const auto contents = session->chapters();
@@ -777,17 +822,19 @@ void Reader::updateGraph()
     int nextPages = 0;
     if (next >= 0 && next < contents.size()) {
         const int start = contents[next].page;
-        int end = session->pages();
+        int end = session->bookPages();
         for (const auto &chapter : contents)
             if (chapter.page > start)
                 end = qMin(end, chapter.page);
-        nextPages = qMax(1, end - start);
+        if (start >= 0 && end > start)
+            nextPages = end - start;
     }
     chapterGraph->setChapterNumber(session->contentsSelection().current + 1, contents.size());
     updateReadingStats();
     chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(),
-                              session->chapterPages(), nextPages, session->page(),
-                              session->pages());
+                              session->chapterPages(), nextPages, session->bookPage(),
+                              session->bookPages(),
+                              session->bookPages() > 0 ? -1 : session->progressFraction());
 }
 
 void Reader::updateMenuStatus()

@@ -3,6 +3,7 @@
 #include <QHash>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QXmlStreamReader>
 #include "support/qt_compat.h"
 #include <climits>
@@ -188,6 +189,12 @@ void PageEstimateMeasurer::start(const QString &name)
         ++skip_;
         return;
     }
+    if (wordSkip_ || name == QLatin1String("rt") || name == QLatin1String("rp"))
+        ++wordSkip_;
+    if (!wordSkip_
+        && (blockNames().contains(name) || name == QLatin1String("br")
+            || name == QLatin1String("hr")))
+        wordCounter_.boundary();
     if (name == QLatin1String("br")) {
         flush(PageEstimateBlock::Line);
     } else if (name == QLatin1String("hr")) {
@@ -221,6 +228,10 @@ void PageEstimateMeasurer::end(const QString &name)
         --skip_;
         return;
     }
+    if (wordSkip_)
+        --wordSkip_;
+    if (!wordSkip_ && blockNames().contains(name))
+        wordCounter_.boundary();
     if (blockNames().contains(name)) {
         flush(PageEstimateBlock::Text);
         if (scales_.size() > 1)
@@ -237,12 +248,16 @@ void PageEstimateMeasurer::text(const QString &text)
     for (int i = 0; i < text.size(); ++i) {
         const QChar unit = text[i];
         if (whitespace(unit)) {
+            if (!wordSkip_)
+                wordCounter_.append(unit.unicode());
             pendingSpace_ = content_;
             continue;
         }
         char32_t c = unit.unicode();
         if (unit.isHighSurrogate() && i + 1 < text.size())
             c = QChar::surrogateToUcs4(unit, text[++i]);
+        if (!wordSkip_)
+            wordCounter_.append(c);
         if (pendingSpace_) {
             width_ += advance(U' ') * scale;
             ++characters_;
@@ -273,6 +288,7 @@ void PageEstimateMeasurer::feed(const QByteArray &chunk, bool last)
         return;
     flush(PageEstimateBlock::Text);
     item_.characters = characters_;
+    item_.words = wordCounter_.words();
     item_.parsed = !parser_->hasError();
     done_ = true;
     parser_.reset();
@@ -285,7 +301,8 @@ PageEstimateItem measurePageEstimate(const QByteArray &xhtml)
     return measurer.item();
 }
 
-double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
+double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bool previous,
+                                qint64 *wordsBefore, const std::function<bool()> &current)
 {
     // The steps of the path: an element name or "text()", and its index
     // among the siblings of the same kind, counted from one.
@@ -314,9 +331,24 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
     const int elements = steps.size() - (text ? 1 : 0);
     // The characters as the measurer counts them: one space between words.
     qint64 characters = 0, target = -1, fallback = -1;
+    LogicalWordCounter wordCounter;
+    qint64 targetWords = -1, fallbackWords = -1;
+    int wordSkip = 0;
+    bool interrupted = false;
+    unsigned work = 0;
     bool space = false;
     const auto count = [&](const QString &value, int limit) {
         for (int i = 0; i < value.size() && i < limit; ++i) {
+            if (++work % 4096 == 0 && current && !current()) {
+                interrupted = true;
+                return;
+            }
+            if (!wordSkip && !value.at(i).isLowSurrogate()) {
+                const auto c = value.at(i).isHighSurrogate() && i + 1 < value.size()
+                        ? QChar::surrogateToUcs4(value.at(i), value.at(i + 1))
+                        : uint(value.at(i).unicode());
+                wordCounter.append(c);
+            }
             if (value.at(i).isSpace()) {
                 space = characters > 0;
             } else {
@@ -334,6 +366,8 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
     bool body = false;
     QXmlStreamReader reader(xhtml);
     while (!reader.atEnd()) {
+        if (interrupted || (++work % 128 == 0 && current && !current()))
+            return -1;
         const auto token = reader.readNext();
         if (token == QXmlStreamReader::StartElement) {
             const auto name = reader.name().toString().toLower();
@@ -341,6 +375,13 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
                 // The root has no step.
                 continue;
             }
+            if (wordSkip || skipped(name) || name == QLatin1String("svg")
+                || name == QLatin1String("rt") || name == QLatin1String("rp"))
+                ++wordSkip;
+            if (!wordSkip
+                && (blockNames().contains(name) || name == QLatin1String("br")
+                    || name == QLatin1String("hr")))
+                wordCounter.boundary();
             const int index = ++children.last()[name];
             ++depth;
             children.append(QHash<QString, int>());
@@ -350,14 +391,23 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
                 && steps[matched].name == name && steps[matched].index == index) {
                 ++matched;
                 fallback = characters;
-                if (matched == elements && !text)
+                fallbackWords = wordCounter.words();
+                if (matched == elements && !text) {
                     target = characters;
+                    targetWords = wordCounter.words();
+                }
             }
         } else if (token == QXmlStreamReader::EndElement && depth > 0) {
             // A step that the element does not have: the position is at the
             // start of the deepest element found.
-            if (target < 0 && matched == depth && matched < steps.size())
+            if (target < 0 && matched == depth && matched < steps.size()) {
                 target = fallback;
+                targetWords = fallbackWords;
+            }
+            if (!wordSkip && blockNames().contains(reader.name().toString().toLower()))
+                wordCounter.boundary();
+            if (wordSkip)
+                --wordSkip;
             matched = qMin(matched, depth - 1);
             --depth;
             children.removeLast();
@@ -373,16 +423,23 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
                 && steps.last().index == index) {
                 count(value, offset);
                 target = characters;
+                targetWords = wordCounter.words();
                 count(value.mid(qMin(offset, int(value.size()))), INT_MAX);
                 continue;
             }
             count(value, INT_MAX);
         }
     }
-    if (!body || characters <= 0)
+    if (interrupted || (current && !current()) || !body || characters <= 0)
         return -1;
-    if (target < 0)
+    if (target < 0) {
         target = fallback < 0 ? 0 : fallback;
+        targetWords = fallbackWords;
+    }
+    if (wordsBefore)
+        *wordsBefore = qMax<qint64>(0, targetWords);
+    if (previous && target > 0)
+        --target;
     return qBound(0.0, double(target) / characters, 1.0);
 }
 
@@ -555,6 +612,14 @@ int PageMap::nextUnmeasured(int first) const
             return i;
     }
     return -1;
+}
+
+qint64 PageMap::itemWords(int item) const
+{
+    return item >= 0 && item < items_.size() && items_[item].measured
+                    && items_[item].measurement.parsed
+            ? items_[item].measurement.words
+            : -1;
 }
 
 bool PageMap::measured(int item) const

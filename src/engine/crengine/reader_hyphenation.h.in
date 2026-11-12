@@ -1,5 +1,0 @@
-#pragma once
-
-// Every hyphenation pattern file in the pinned engine. The engine maps each
-// language it knows to one of these names.
-constexpr const char *engineHyphenationPatterns[] = {@READER_HYPHENATION_PATTERNS@};

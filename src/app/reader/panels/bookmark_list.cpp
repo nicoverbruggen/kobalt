@@ -1004,8 +1004,8 @@ void BookmarkList::redraw()
         removes.append(remove);
         connect(button, &QPushButton::clicked, this, [this, row] {
             const int index = pageStarts.value(page, 0) + row;
-            if (buttons[row]->isEnabled() && index < items.size() && items[index].page >= 0
-                && selected)
+            if (buttons[row]->isEnabled() && index < items.size()
+                && (items[index].page >= 0 || items[index].pagePending) && selected)
                 selected(items[index].position);
         });
         connect(remove, &QPushButton::clicked, this, [this, row] {
@@ -1053,7 +1053,7 @@ void BookmarkList::redraw()
                 strings::get(annotations ? "annotations.remove" : "bookmarks.actions"));
 
         button->setAccessibleName(chapter);
-        button->setEnabled(item.page >= 0 && detailsReady);
+        button->setEnabled((item.page >= 0 || item.pagePending) && detailsReady);
         removes[row]->setEnabled(detailsReady);
         button->setGeometry(0, y, width(), itemHeight);
         auto *itemRow = static_cast<ui::ListRow *>(button);

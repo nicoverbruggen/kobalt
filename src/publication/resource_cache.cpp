@@ -25,6 +25,14 @@ ResourceCache::ResourceCache(QStringList names, Access access)
 {
 }
 
+std::shared_ptr<ResourceCache> ResourceCache::fresh() const
+{
+    auto result = std::make_shared<ResourceCache>(
+            names_, Access{ loader_, cancelled_, transferStatistics_, imageProbe_ });
+    result->fingerprints_ = fingerprints_;
+    return result;
+}
+
 bool ResourceCache::rebind(const ResourceCache &fresh)
 {
     if (this == &fresh || names_ != fresh.names_ || !fresh.error_.isEmpty()

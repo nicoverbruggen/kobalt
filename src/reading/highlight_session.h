@@ -90,7 +90,7 @@ private:
     std::function<QString()> layout;
     std::unique_ptr<HighlightStore> store_;
     QString layout_, lookup_, error_;
-    QVector<int> pages_, order_;
+    QVector<int> pages_, order_, bookPages_;
     std::shared_ptr<std::atomic_bool> lookupCancelled_;
     quint64 generation_ = 0;
     quint64 layoutRevision_ = 0, lookupRevision_ = 0, lookupRequest_ = 0;

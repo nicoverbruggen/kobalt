@@ -272,9 +272,10 @@ ReadingActivity ReadingBook::readingActivity() const
     return { session_->state().value("position").toString(),
              // Kobalt's page progress, kept below 100 like every native write of
              // an unfinished book, so the last page never reports a finished read.
-             qMin(99.0, double(session_->progressPercent())), session_->page(), session_->pages(),
-             session_->turnDirection(), session_->totalWords(), session_->chapterGraph(),
-             session_->graphSelection(), error.isEmpty() ? nativePosition : QString() };
+             qMin(99.0, double(session_->progressPercent())), session_->bookPage(),
+             session_->bookPages(), session_->turnDirection(), session_->totalWords(),
+             session_->chapterGraph(), session_->graphSelection(),
+             error.isEmpty() ? nativePosition : QString() };
 }
 
 ReadingEstimates ReadingBook::estimates() const
@@ -291,8 +292,10 @@ ReadingEstimates ReadingBook::estimates() const
     const int chapterLeft = session_->chapterPages() > 0
             ? session_->chapterPages() - session_->chapterPage() + 1
             : -1;
-    return { pace_.estimate(chapterLeft, reading),
-             pace_.estimate(session_->pages() - session_->page(), reading),
+    const int bookLeft = session_->bookPages() > 0 && session_->bookPage() >= 0
+            ? session_->bookPages() - session_->bookPage()
+            : -1;
+    return { pace_.estimate(chapterLeft, reading), pace_.estimate(bookLeft, reading),
              pace_.estimate(0, reading) < 0 };
 }
 
@@ -904,12 +907,26 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
     // These describe the displayed frame, not a saved reading position. Drop
     // them from imported records too, before comparing checkpoints or applying
     // the record's byte limit. Diagnostic snapshots above keep the full frame.
-    for (const auto *key :
-         { "chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
-           "text_font_face", "embedded_font_count", "cached_pages", "continues_before",
-           "continues_after", "book_fraction", "rough_page", "rough_pages", "rough_item_page",
-           "rough_item_pages", "rough_pages_estimated", "rough_item_pages_estimated",
-           "chapter_load_ms" })
+    for (const auto *key : { "chapter_title",
+                             "chapter_page",
+                             "chapter_pages",
+                             "page",
+                             "pages",
+                             "next_page",
+                             "text_font_face",
+                             "embedded_font_count",
+                             "cached_pages",
+                             "continues_before",
+                             "continues_after",
+                             "book_fraction",
+                             "slice_start",
+                             "rough_page",
+                             "rough_pages",
+                             "rough_item_page",
+                             "rough_item_pages",
+                             "rough_pages_estimated",
+                             "rough_item_pages_estimated",
+                             "chapter_load_ms" })
         checkpoint.remove(key);
     const auto fits = [&checkpoint] {
         return QJsonDocument(checkpoint).toJson(QJsonDocument::Compact).size()

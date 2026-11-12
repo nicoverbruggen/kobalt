@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QObject>
+#include <QPointer>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -15,6 +16,9 @@ namespace kobalt {
 struct BookmarkLocations
 {
     QVector<int> pages, order;
+    // Whole-book display indexes, separate from the loaded layout pages.
+    QVector<int> bookPages = {};
+    QStringList chapters = {};
 };
 
 struct ReaderMarkupRange
@@ -154,7 +158,8 @@ public:
 
     void openPreview(const ReaderSession &source, QSize size,
                      std::function<void(QString)> finished);
-    void requestAppearance(const appearance::Requested &settings, QSize size = {});
+    void requestAppearance(const appearance::Requested &settings, QSize size = {},
+                           int chapterMode = -1);
     void editAppearance(const appearance::Patch &patch, QSize size = {});
     std::function<void()> updated;
     RenderProgress renderProgress() const;
@@ -212,6 +217,8 @@ public:
     // Renders a bounded thumbnail with saved highlights without moving the reading position. Only
     // the latest request can finish; navigation, reflow and cancellation drop it.
     void previewPage(int page, QSize bounds, std::function<void(QImage)> finished);
+    void previewAdjacentPage(int direction, QSize bounds, QStringList bookmarkPositions,
+                             std::function<void(QImage, bool)> finished);
     void cancelPagePreview();
     // One screen of text in the current layout that starts at the reading position.
     void anchoredPage(bool stayInChapter, std::function<void(QImage)> finished);
@@ -325,6 +332,19 @@ public:
     int page() const { return frame.state.value("page").toInt(); }
 
     int pages() const { return frame.state.value("pages").toInt(); }
+
+    // Display pages cover the whole book. Local pages still drive navigation and geometry.
+    int bookPage() const
+    {
+        return frame.state.contains("book_fraction") ? frame.state.value("rough_page").toInt() - 1
+                                                     : page();
+    }
+
+    int bookPages() const
+    {
+        return frame.state.contains("book_fraction") ? frame.state.value("rough_pages").toInt()
+                                                     : pages();
+    }
 
     // The engine has more of the book after its last page: that page is not
     // the end of the book.
@@ -442,6 +462,10 @@ public:
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);
 
 private:
+    static void refinePageEstimate(std::shared_ptr<Engine> engine,
+                                   const std::function<bool()> &current,
+                                   QPointer<ReaderSession> guard, quint64 job,
+                                   const std::shared_ptr<SourceLease> &lease);
     bool formattingWarning_ = false;
     storage::CustomPins customPins_;
     QJsonObject formattingDetails_;
@@ -470,6 +494,7 @@ private:
     QString identity_;
     PositionCodec positions_;
     QJsonObject desired;
+    int desiredChapterMode = -1;
     QJsonObject temporaryAppearance;
     appearance::SavedInput originalAppearance;
     QSize desiredSize;

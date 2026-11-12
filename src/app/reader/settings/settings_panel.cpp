@@ -1048,6 +1048,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                   strings::get("settings.dictionary_font_size"), [] { });
     systemRows->addWidget(dictionaryFontButton);
     systemRows->addWidget(dictionaryFontSizeButton);
+    section(systemPage, systemRows, "rrSystemEngineSection",
+            strings::get("settings.section_engine"));
     renderingButton = ui::makeCaptionButton(systemPage, systemRows, "rrRendering",
                                             strings::get("settings.rendering"), [] { });
     renderingButton->setDescription(strings::get("settings.rendering_summary"));

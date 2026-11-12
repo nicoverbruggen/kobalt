@@ -4,7 +4,7 @@ This file lists where Kobalt depends on the rendering engine today. Each row sep
 
 ## The seam today
 
-- `EngineDocument` (`src/engine/crengine/engine_document.h`) is the only engine class. Its public interface uses Qt types.
+- `EngineDocument` (`src/engine/blaze/adapter/engine_document.h`) is the only engine class. Its public interface uses Qt types.
 - `ReaderSession` (`src/reading/reader_session.h`) owns the `EngineDocument`. It runs each engine call on one worker thread and publishes a `ReaderFrame`. The interface reads the page, the page total and the chapter page from the frame.
 - `ReadingBook` (`src/reading/reading_book.h`) owns saved data and native progress. It does not call the engine.
 - The Library does not use the engine. It reads the OPF itself (`src/library/book_metadata.h`). This was checked by a search, not by a full read.
@@ -16,15 +16,15 @@ A wrapped or renamed type is still a dependency. These remain.
 | Leak | Where |
 | --- | --- |
 | `engine_document.h` is included directly | `src/reading/reader_session.h:2`, `annotation_draft.h:2`, `style_sample.h:2`, `src/app/reader/panels/search_panel.h:7`, `src/app/reader/views/reading_page.cpp:8` |
-| Shared types are defined in the engine header: `ChapterProgress`, `SearchHit`, `SearchCursor`, `TextRange`, `OpeningStage`, `AnnotationGeometry` | `src/engine/crengine/engine_document.h:50-70`, used in `reader_session.h` and `annotation_draft.h` |
+| Shared types are defined in the engine header: `ChapterProgress`, `SearchHit`, `SearchCursor`, `TextRange`, `OpeningStage`, `AnnotationGeometry` | `src/engine/blaze/adapter/engine_document.h:50-70`, used in `reader_session.h` and `annotation_draft.h` |
 | `reader_links.h` (`PageLink`, `LinkDetails`, `linkAtPoint`) | `src/app/reader/panels/link_panel.h:6`, `src/app/reader/reader.cpp:1744` |
 | `engine_worker.h` and `engine_activity.h` | `src/reading/reader_session.cpp:7,10`, `opening_job.cpp:3`, `style_sample.cpp:2-3`, `platforms/kobo/common/native_lifecycle.cpp`, `reader_coordinator.cpp` |
 | `PositionCodec` functions take `const EngineDocument &` | `src/platform/api/position_codec.h:12-13` |
 | The Kobo codec is a friend of `EngineDocument` and walks `ldomNode` and `ldomXPointer` | `platforms/kobo/common/engine_positions.cpp`, `engine_document.h:346` |
 | `<lvfntman.h>` for `LVFontManager::MaxEmbeddedFontBytes` | `src/publication/publication.cpp:13,308,320` |
-| `<lvtinydom.h>`, `lUInt32` in a header | `src/engine/crengine/document_cache.h:7,18,59` |
+| `<lvtinydom.h>`, `lUInt32` in a header | `src/engine/blaze/adapter/document_cache.h:7,18,59` |
 | Static `EngineDocument::setPageFormat` | `platforms/kobo/nickel-qt6/refresh.cpp:71` |
-| The engine reads the saved book record (`position`, `dom_version`) | `src/engine/crengine/engine_document.cpp:528,667-672` |
+| The engine reads the saved book record (`position`, `dom_version`) | `src/engine/blaze/adapter/engine_document.cpp:528,667-672` |
 | CREngine capability rules outside the engine (`inspectLayout`) | `src/publication/layout_compatibility.h`, `src/reading/opening_job.cpp:288-313` |
 | The engine header includes application headers and calls `strings::get` | `engine_document.h:2-18`, `reader_links.cpp:638,715-719` |
 | CREngine XPointer strings and `dom_version` in saved data | See [Saved data](#saved-data) |
@@ -140,4 +140,4 @@ Bookmarks need the page of every bookmark: there is one bookmark per page, bookm
 
 ## Not read
 
-The audit did not read these files in full: `src/engine/crengine/reader_source.cpp`, `reader_text.cpp` bodies, `column_view.h`, the scrubber and chapter graph widgets, `src/dictionaries`, `src/storage` beyond the stores named above, `src/sync/sync_coordinator.cpp`, the Android and desktop hosts, and most of `platforms/kobo`. More users of the page total can exist in `src/ui` and `src/app/reader/views`.
+The audit did not read these files in full: `src/engine/blaze/adapter/reader_source.cpp`, `reader_text.cpp` bodies, `column_view.h`, the scrubber and chapter graph widgets, `src/dictionaries`, `src/storage` beyond the stores named above, `src/sync/sync_coordinator.cpp`, the Android and desktop hosts, and most of `platforms/kobo`. More users of the page total can exist in `src/ui` and `src/app/reader/views`.

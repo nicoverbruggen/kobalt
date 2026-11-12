@@ -1,6 +1,6 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <lvfntman.h>
 #include <textlang.h>
 #include <hyphman.h>

@@ -937,7 +937,11 @@ void Reader::applySettings()
         for (auto it = defaults.begin(); it != defaults.end(); ++it)
             settings[it.key()] = it.value();
     }
-    session->requestAppearance(requested.edited(appearance::Patch(settings)), bodySize());
+    renderingMode::apply(preferences);
+    const bool fast = renderingMode::effective(renderingMode::fromPreferences(preferences))
+            == renderingMode::Mode::Fast;
+    session->requestAppearance(requested.edited(appearance::Patch(settings)), bodySize(),
+                               fast ? 1 : 0);
     applyingText = session->busy();
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);

@@ -1,7 +1,7 @@
 #include "assets/assets.h"
 #include "assets/font_catalog.h"
 #include "assets/system_fonts.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include "reader_inputs.h"
 #include "font_fixtures.h"
 #include "support/qt_compat.h"

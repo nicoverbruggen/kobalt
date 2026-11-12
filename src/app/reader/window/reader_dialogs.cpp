@@ -516,7 +516,7 @@ void Reader::askRemoveBookmark(const QString &position)
         }
     if (index < 0)
         return;
-    const int number = bookmarks->page(index);
+    const int number = bookmarks->bookPage(index);
     // One line of the page's first words, cut at a word. The row's excerpt
     // leaves out the chapter title, as in the list.
     QString excerpt = list[index].excerpt;
@@ -730,14 +730,16 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const
     const auto contents = session->chapters();
     rows.reserve(list.size());
     for (int i = 0; i < list.size(); ++i) {
-        kobalt::BookmarkRow row{ list[i].position, list[i].chapter,    list[i].excerpt,
-                                 list[i].created,  pages.value(i, -1), false };
-        row.current = row.page >= 0 && row.page == session->page();
+        kobalt::BookmarkRow row{ list[i].position, list[i].chapter,        list[i].excerpt,
+                                 list[i].created,  bookmarks->bookPage(i), false };
+        row.current = pages.value(i, -1) >= 0 && pages.value(i, -1) == session->page();
         // Name the chapter the page is in now; the stored title covers a missing contents list.
         for (const auto &link : contents)
             if (link.page >= 0 && row.page >= 0 && link.page <= row.page)
                 row.chapter = link.title;
         row.excerpt = kobalt::excerptAfterChapter(row.excerpt, row.chapter);
+        row.pagePending = session->state().contains("book_fraction")
+                && session->state().value("rough_pages").toInt() <= 0;
         row.pinName = list[i].name;
         row.pinIcon = list[i].icon;
         rows.append(row);

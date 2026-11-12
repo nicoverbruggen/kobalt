@@ -99,6 +99,12 @@ The native tests run with `KOBALT_STRICT_MAIN_THREAD=1`, set by `platforms/deskt
 
 Diagnostic event writes run on their own thread. `flushDiagnostics()` waits for that worker and calls the main-thread guard; reader callers must be at a lifecycle boundary. Tests that read `events.jsonl` call it first.
 
+## Focused Fast-engine checks
+
+Build `kobalt-chapter-parity-tests` and `kobalt-fast-surfaces-tests` separately with `cmake --build build/desktop-mac --target <target>` from the repository root. Run each executable with `QT_QPA_PLATFORM=minimal:enable_fonts:freetype`. The parity program compares Accurate and Fast using the built-in Type Tester and link fixtures. It checks links, search and cancellation, saved lists, slice lookups, later-slice selection, reflow, reopening and book end. Percentage scrubbing is explicitly skipped in Fast. Focused desktop checks exercise its read-only Navigate indicator, chapter jumps and adjacent page previews. The fast-surfaces program checks estimated page labels and jump landings.
+
+After building `kobalt-desktop-tests`, run `ctest --test-dir build/desktop-mac --output-on-failure -R '^desktop\.(fastSavedLists|fastBookEnd|fastProgressSurfaces|headerFooterChapterMode|settingsRendering)$'`. These checks exercise the reader controls and opt into Fast themselves. `settingsRendering` changes the mode in both directions without a new book-open event and checks position retention. These focused Mac checks do not establish Kobo compatibility, device latency or coverage of other books.
+
 ## Source checks
 
 `platforms/checks/source-checks.cmake` searches the sources for patterns that caused regressions before. Each check compares its matches with an allowlist in `platforms/checks/`. A new match fails, and so does an allowlist entry that no longer matches, so the lists only change on purpose. A change to an allowlist is a decision for the user.

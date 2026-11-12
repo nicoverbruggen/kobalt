@@ -141,7 +141,8 @@ public:
     virtual bool prepareSearch() = 0;
     virtual SearchBatch searchText(const QString &query, SearchCursor cursor, int maximum,
                                    SearchScope scope = SearchScope::Book,
-                                   const QString &origin = {}, bool details = true) = 0;
+                                   const QString &origin = {}, bool details = true,
+                                   std::function<bool()> current = {}) = 0;
     virtual QVector<SearchHit> searchDetails(QVector<SearchHit> hits, SearchScope scope,
                                              const QString &origin) = 0;
     // Source-only current-page intersection. Does not resolve remote geometry.
@@ -156,6 +157,9 @@ public:
     // Bounded saved-range geometry for a preview. Keeps the exact reading bookmark.
     virtual QVector<QVector<QRect>>
     pageRangeRects(int page, const QVector<QPair<QString, QString>> &ranges) = 0;
+    virtual bool setChapterMode(bool fast, const appearance::Patch &settings, QSize size,
+                                OpeningProgress progress = {},
+                                const std::function<bool()> &current = {}) = 0;
     virtual bool applyAppearance(const appearance::Patch &patch, QSize size = {},
                                  OpeningProgress progress = {}) = 0;
     virtual bool style(int pixels, int spacing) = 0;
@@ -168,6 +172,12 @@ public:
     virtual void setDarkMode(bool enabled) = 0;
     virtual void resize(QSize size) = 0;
     virtual QImage image(int page) = 0;
+    // The current page or one normal turn beside it, without moving the
+    // reading document. An empty image means no preview is available.
+    virtual PagePreview previewTurn(int direction,
+                                    const QVector<QPair<QString, QString>> &ranges = {},
+                                    const std::function<bool()> &current = {},
+                                    const QStringList &bookmarkPositions = {}) = 0;
     // One screen that starts at the reading position instead of a page break. With
     // stayInChapter, it starts earlier near a chapter's end, so that a full screen stays in
     // the chapter. Without it, the text continues past the chapter to fill the screen.
@@ -217,9 +227,11 @@ public:
     // book, and the page from the estimate otherwise, the same number that
     // roughPages() gives for the page on screen. Zero where the page is not
     // known yet, such as before the estimate has a total, and -1 where a
-    // position does not resolve. Never lays out text.
+    // position does not resolve. With rangeEndpoints, each odd entry is an
+    // exclusive end and names its preceding character. Never lays out text.
     virtual QVector<int> bookPages(const QStringList &positions,
-                                   const std::function<bool()> &current = {}) const = 0;
+                                   const std::function<bool()> &current = {},
+                                   bool rangeEndpoints = false) const = 0;
     // Goes to about `fraction` of the whole book, from 0 to 1. An engine
     // with the text of only a part of the book lays out the text there
     // first.

@@ -12,6 +12,7 @@ struct HostProgress
 {
     ReadingProgress current;
     ReadingEstimates remaining;
+    ReadingActivity observedActivity;
     bool hasEstimates = false;
     std::function<void()> notifyEstimates;
     bool changed = false, failWrite = false, writeBlocked = false;
@@ -129,7 +130,10 @@ public:
         return NativeActivityResult::Completed;
     }
 
-    void observeReading(const ReadingActivity &) override { }
+    void observeReading(const ReadingActivity &activity) override
+    {
+        progress->observedActivity = activity;
+    }
 
     void minuteTick() override { ++progress->minuteTicks; }
 

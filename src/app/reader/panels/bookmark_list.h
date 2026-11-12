@@ -24,6 +24,7 @@ struct BookmarkRow
     QString color = QStringLiteral("gray");
     int sourceOrder = -1;
     QString pinName = {}, pinIcon = {};
+    bool pagePending = false;
 };
 
 // The Bookmarks list covers the header's action row with its own bar, like

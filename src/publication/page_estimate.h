@@ -5,6 +5,8 @@
 #include <QMap>
 #include <QVector>
 #include <memory>
+#include <functional>
+#include "reading/logical_word_counter.h"
 
 class QXmlStreamReader;
 
@@ -64,6 +66,8 @@ struct PageEstimateItem
     QVector<PageEstimateBlock> blocks;
     // The characters of the text, with one space between words.
     qint32 characters = 0;
+    // Source text words, before CSS visibility is known.
+    qint64 words = 0;
     // False when the XHTML is not well formed. The blocks then cover the
     // text before the error.
     bool parsed = false;
@@ -98,6 +102,8 @@ private:
 
     std::unique_ptr<QXmlStreamReader> parser_;
     PageEstimateItem item_;
+    LogicalWordCounter wordCounter_;
+    int wordSkip_ = 0;
     QVector<float> scales_{ 1 };
     float width_ = 0;
     qint32 characters_ = 0;
@@ -116,7 +122,9 @@ PageEstimateItem measurePageEstimate(const QByteArray &xhtml);
 // from one, then a text node and the characters before the position in it.
 // Where the XHTML does not have a step, the position is at the start of the
 // deepest element found. Negative when the XHTML has no text in <body>.
-double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path);
+double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bool previous = false,
+                                qint64 *wordsBefore = nullptr,
+                                const std::function<bool()> &current = {});
 
 struct PageEstimateLayout
 {
@@ -241,6 +249,7 @@ public:
     // The first item without a measurement, or -1. `first` goes first.
     int nextUnmeasured(int first = -1) const;
     bool measured(int item) const;
+    qint64 itemWords(int item) const;
 
     bool allMeasured() const { return measuredCount_ == items_.size(); }
 

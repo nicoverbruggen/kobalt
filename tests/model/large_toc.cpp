@@ -1,4 +1,4 @@
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include "platform/api/position_codec.h"
 #include "book_fixtures.h"
 #include "check.h"

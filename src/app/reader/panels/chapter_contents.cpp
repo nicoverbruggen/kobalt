@@ -138,6 +138,19 @@ void ChapterContents::toggleGroup(int index)
             disclosures[row]->setFocus(Qt::OtherFocusReason);
 }
 
+void ChapterContents::setPages(const QVector<int> &pages)
+{
+    if (pages.size() != items.size())
+        return;
+    bool changed = false;
+    for (int i = 0; i < items.size(); ++i) {
+        changed = changed || items[i].page != pages[i];
+        items[i].page = pages[i];
+    }
+    if (changed)
+        redraw();
+}
+
 void ChapterContents::showChapters(const QString &title, QVector<Choice> choices,
                                    const QString &current, ChapterGroups groups)
 {

@@ -2295,14 +2295,16 @@ void Reader::syncNavigation()
                 && !kosyncDialog && !finishDialog && !imageTarget.isEmpty();
         pageScrubber->setImageAction(imageSuggestion ? strings::get("image.zoom_suggestion")
                                                      : QString());
-        pageScrubber->setReturnAction(
-                linkReturnAvailable
-                        ? strings::get("reader.return_page").arg(linkHistory.last().page + 1)
-                        : QString(),
-                linkHistory.isEmpty() || linkHistory.last().chapter.isEmpty()
-                        ? QString()
-                        : strings::get("reader.jumped_from_chapter")
-                                  .arg(linkHistory.last().chapter));
+        pageScrubber->setReturnAction(linkReturnAvailable
+                                              ? (linkHistory.last().page >= 0
+                                                         ? strings::get("reader.return_page")
+                                                                   .arg(linkHistory.last().page + 1)
+                                                         : strings::get("reader.return_to_passage"))
+                                              : QString(),
+                                      linkHistory.isEmpty() || linkHistory.last().chapter.isEmpty()
+                                              ? QString()
+                                              : strings::get("reader.jumped_from_chapter")
+                                                        .arg(linkHistory.last().chapter));
         navigation->update(
                 size(),
                 { bottomControls,
@@ -2317,9 +2319,11 @@ void Reader::syncNavigation()
                   !session->busy() && !appearanceEdit.applying(),
                   services.lightAvailable(),
                   active,
-                  linkReturnAvailable
-                          ? strings::get("reader.return_page").arg(linkHistory.last().page + 1)
-                          : QString(),
+                  linkReturnAvailable ? (linkHistory.last().page >= 0
+                                                 ? strings::get("reader.return_page")
+                                                           .arg(linkHistory.last().page + 1)
+                                                 : strings::get("reader.return_to_passage"))
+                                      : QString(),
                   topActions,
                   general,
                   lightPopup,
@@ -2542,7 +2546,11 @@ void Reader::showChapters()
     choices->setGeometry(0, top, width(),
                          (navigation ? navigation->contentBottom(size()) : height()) - top);
     choices->setChapterPosition(
-            strings::get("stats.page_of").arg(session->page() + 1).arg(session->pages()));
+            session->bookPages() > 0
+                    ? strings::get("stats.page_of")
+                              .arg(session->bookPage() + 1)
+                              .arg(session->bookPages())
+                    : strings::get("common.percent").arg(session->progressPercent()));
     const auto groups = preferences.value("chapter_groups").toString();
     choices->showChoices(session->title(), std::move(items), current, ChoiceScreen::Mode::Chapters,
                          groups == "off"           ? ChapterGroups::Off
@@ -2768,6 +2776,7 @@ void Reader::syncBookmarks()
     const bool resolved = bookmarks->sync();
     page->bookmarked = features::enabled(preferences, features::Bookmarks) && resolved
             && bookmarks->marked(session->page());
+    pageScrubber->setCurrentPageBookmarked(page->bookmarked);
     pageScrubber->setBookmarkedPages(resolved && features::enabled(preferences, features::Bookmarks)
                                              ? bookmarks->pages()
                                              : QVector<int>());

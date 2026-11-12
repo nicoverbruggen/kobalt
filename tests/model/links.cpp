@@ -1,9 +1,9 @@
 #include "reader_inputs.h"
-#include "engine/crengine/column_view.h"
+#include "engine/blaze/adapter/column_view.h"
 #include "book_fixtures.h"
 #include <QTemporaryDir>
 #include "support/qt_compat.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <QBuffer>
 #include <QFile>
 #include <QGuiApplication>

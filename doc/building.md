@@ -180,15 +180,15 @@ First-party C and C++ code uses the Qt project style in `.clang-format`. Format 
 
 ## Dependencies and validation
 
-CREngine and its text/image libraries use the versions and patches recorded in this worktree. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. A change to their recipes, patches or source pins selects a new dependency set; application-only changes reuse it.
+Kobalt builds its koblaze engine from the source in this repository. Its text/image libraries use the versions and patches recorded in `dependencies/`. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. A change to a third-party recipe, patch or source pin selects a new dependency set; application and engine source changes reuse that set.
 
 ### Local engine source
 
-For engine development, a desktop build can compile CREngine from a local checkout of the koblaze fork in place of the pinned source and patches. Link the checkout at `vendor/koblaze` in the worktree, which Git ignores, or pass `-DKOBALT_ENGINE_SOURCE=/path/to/checkout` when you configure the `mac` or `linux` preset. The configure output then prints `CREngine: local source` with the path. Remove the link and configure again, or pass `-DKOBALT_ENGINE_SOURCE=`, to go back to the pin.
+Desktop, Kobo and Android builds compile the repository-owned koblaze source at `src/engine/blaze`. No separate checkout, symlink or source override is needed. Configuration prints `CREngine: repository source` and the path. This is also the source used by release evaluation and source archives.
 
-`dependencies/local-engine.cmake` builds the checkout in the worktree's `build/desktop-*/crengine-local/` folder, so an engine edit compiles only the changed engine files. Every other library still comes from the shared dependency cache, and no cache entry changes. The engine options in that file repeat the ones in `dependencies/CMakeLists.txt`; keep them the same. Kobo and Android builds do not support a local engine source: they run in containers and use the pin.
+`dependencies/local-engine.cmake` builds the engine under each platform's output directory in `blaze/`. Engine edits rebuild only the affected engine objects. Its libraries still come from the shared dependency cache. The old pinned CREngine download and build are no longer part of that cache, and archived CREngine patches are not applied to the repository source.
 
-A build from a local engine source is for development. Do not use it for release evaluation or for a validation record of the pinned engine.
+The first configure after this separation creates a new dependency set for each SDK because the recipes changed. Later engine edits do not change the dependency key. The import itself does not invalidate parsed-book caches; parser or layout changes still follow [Storage compatibility](storage.md).
 
 ## Dependency cache
 
@@ -197,12 +197,12 @@ All worktrees of a repository share compiled dependencies. The cache is `build/d
 | Path | Contents |
 | --- | --- |
 | `downloads/<name>-<SHA-256>.tar` | Verified source archives, shared by all platforms. |
-| `<key>/` | One dependency set: patched sources, library build trees, the installed libraries in `install/` and the CREngine archive in `crengine/`. |
+| `<key>/` | One third-party dependency set: patched sources, library build trees and installed libraries in `install/`. |
 | `<key>/complete` | The publication marker. A set without it is unfinished and is never used. |
 | `<key>.lock` | The lock held while the set builds. |
 | `sdk-headers/<sdk>-<key>/` | The Kobo SDK headers of the [syntax check](#kobo-syntax-check). The key is a hash of the pinned image digest and the copy recipe. |
 
-The key is a hash of the compiler, compiler flags, system, Qt SDK, toolchain contents, prepared SDK image, libpng choice, source pins, recipes and patches. It does not contain the checkout path. Worktrees with the same pins and patches share one set. A change to a pin, recipe or patch selects a new key, and other worktrees keep their set. The Mac `mac` and `mac-perf` builds share one set, and so do each Kobo SDK's regular, evaluation and diagnostic builds. Application objects stay in each worktree.
+The key is a hash of the compiler, compiler flags, system, Qt SDK, toolchain contents, prepared SDK image, libpng choice, third-party source pins, recipes and active patches. It does not contain the checkout path or repository engine source. Worktrees with the same pins and patches share one set. A change to a pin, recipe or patch selects a new key, and other worktrees keep their set. The Mac `mac` and `mac-perf` builds share one set, and so do each Kobo SDK's regular, evaluation and diagnostic builds. Application and engine objects stay in each worktree.
 
 When a set is missing, configuration takes its lock, builds it in place and then publishes the `complete` marker by rename. Another configuration that needs the same set waits for the lock and then uses the result. A failed or interrupted build never writes the marker. The next attempt continues it when it comes from the same checkout, and starts again otherwise. A published set is never changed. A cache hit never skips a checksum check: the key contains the pinned checksums, a set is built only from verified archives, a cached download is verified again on every use and bundled archives are checked on every configuration. On the development Mac with two dependency jobs, a second worktree configured in 2 seconds for the Mac and in 1 second for each Kobo SDK. Building a missing set took one to one and a half minutes, depending on download speed.
 

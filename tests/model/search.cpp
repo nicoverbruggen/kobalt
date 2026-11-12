@@ -1,5 +1,5 @@
 #include "reader_inputs.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <QFile>
 #include <QGuiApplication>
 #include <QSet>

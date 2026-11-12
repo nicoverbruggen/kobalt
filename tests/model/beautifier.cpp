@@ -1,4 +1,4 @@
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include "reading/appearance_settings.h"
 #include "reading/reading_density.h"
 #include "publication/local_resources.h"

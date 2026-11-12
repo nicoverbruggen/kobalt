@@ -2,7 +2,21 @@
 #include "check.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
+#include "reading/opening_job.h"
+#include "reading/reader_session.h"
+#include "reading/bookmark_session.h"
+#include "reading/highlight_session.h"
+#include "reading/reading_book.h"
+#include "reading_bridge_fixture.h"
+#include "publication/native_resources.h"
+#include "publication/page_estimate.h"
+#include "publication/resource_server.h"
+#include "plain_archive.h"
+#include <QDir>
+#include <QEventLoop>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QCryptographicHash>
 #include <QFile>
 #include <QGuiApplication>
@@ -55,6 +69,8 @@ struct Reader
     // Lines that explain a detail, printed for a difference.
     QStringList lines;
     QString bookmark, highlight;
+    WordSelection selectedWord;
+    QVector<QRect> selectedRects;
     QVector<SearchHit> hits;
 
     bool open(const QJsonObject &saved)
@@ -154,15 +170,19 @@ Action turn(int delta)
              } };
 }
 
-Action followLink(const QString &label)
+Action followLink(const QString &label, bool unavailable = false)
 {
-    return { QString("followLink(%1)").arg(label), [label](Reader &reader) -> QString {
+    return { QString("followLink(%1)").arg(label), [label, unavailable](Reader &reader) -> QString {
                 auto &model = *reader.model;
                 for (const auto &link : model.pageLinks()) {
                     if (model.linkDetails(link.source).label != label)
                         continue;
                     // A tap asks for the details with a preview, as here.
                     const auto details = model.linkDetails(link.source);
+                    if (unavailable)
+                        return details.kind == LinkKind::Unavailable
+                                ? "unavailable"
+                                : "error: missing target resolved";
                     if (details.kind == LinkKind::Footnote) {
                         const auto note = details.html;
                         return "note: "
@@ -253,6 +273,419 @@ Action openResult(int index)
             } };
 }
 
+// A position in another slice has no page in the current layout. Returning
+// a nearby page would let a bookmark mark unrelated text.
+Action pagesOfOtherSlice()
+{
+    return { "pagesOf(other slice)", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                const bool fast = model.bookFraction() >= 0;
+                if (fast)
+                    model.setChapterSlices(2);
+                const auto chapters = model.chapters();
+                if (chapters.size() <= 4 || !model.goTo(chapters[4].position))
+                    return "error: no chapter for slice lookup";
+                const QString first = model.pageStart(model.page());
+                const QString chapter = model.chapterTitle(first);
+                for (int i = 0; i < 8; ++i)
+                    if (!model.turnInWindow(1))
+                        return "error: no later slice";
+                const QString later = model.pageStart(model.page());
+                if (model.chapterTitle(later) != chapter)
+                    return "error: later position left the chapter";
+                if (!model.goTo(first))
+                    return "error: cannot return to first slice";
+                const auto fromFirst = model.pagesOf({ first, later });
+                const bool laterKnown = fromFirst.value(1, -1) >= 0;
+                if (fromFirst.value(0, -1) < 0 || laterKnown == fast)
+                    return "error: later slice aliases a current page";
+                if (!model.goTo(later))
+                    return "error: cannot return to later slice";
+                const auto fromLater = model.pagesOf({ first, later });
+                const bool firstKnown = fromLater.value(0, -1) >= 0;
+                if (fromLater.value(1, -1) < 0 || firstKnown == fast)
+                    return "error: earlier slice aliases a current page";
+                return "only positions with a layout have pages";
+            } };
+}
+
+// A query skips early chapters, then background preparation replaces its side document.
+Action searchAfterAhead()
+{
+    return { "searchAfterAhead()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                if (model.bookFraction() >= 0) {
+                    model.setChapterSlices(1000);
+                    QString error;
+                    require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+                }
+                SearchBatch batch;
+                QStringList hits;
+                for (int round = 0; round < 1000 && !batch.done; ++round) {
+                    batch = model.searchText("wine", batch.cursor, 1, SearchScope::Book, {}, false);
+                    for (const auto &hit : batch.hits)
+                        hits.append(hit.start);
+                    // The shown item ends before the query's first chapter.
+                    // Its next prepared unit includes that chapter too.
+                    model.prepareAhead();
+                }
+                require(batch.done, "Search did not finish after replacing the side document");
+                reader.lines = hits;
+                return QString("%1 hits: %2")
+                        .arg(hits.size())
+                        .arg(QString::fromLatin1(QCryptographicHash::hash(hits.join('\n').toUtf8(),
+                                                                          QCryptographicHash::Md5)
+                                                         .toHex()
+                                                         .left(8)));
+            } };
+}
+
+// A cancelled query stops before reporting hits, including while opening a side document.
+Action searchCancellation()
+{
+    return { "searchCancellation()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                const auto stopped = model.searchText("the", {}, 1, SearchScope::Book, {}, false,
+                                                      [] { return false; });
+                require(stopped.hits.isEmpty() && !stopped.done,
+                        "A cancelled search reported hits or completion");
+                if (model.bookFraction() >= 0) {
+                    SearchCursor cursor;
+                    cursor.item = 4;
+                    int checks = 0;
+                    const auto interrupted =
+                            model.searchText("the", cursor, 1, SearchScope::Book, {}, false,
+                                             [&checks] { return ++checks < 32; });
+                    require(checks >= 32 && interrupted.hits.isEmpty()
+                                    && interrupted.cursor.item == cursor.item && !interrupted.done,
+                            "Opening a chapter for search ignored cancellation");
+                    SearchBatch retry;
+                    retry.cursor = cursor;
+                    for (int round = 0; round < 1000 && retry.hits.isEmpty() && !retry.done;
+                         ++round)
+                        retry = model.searchText("the", retry.cursor, 1, SearchScope::Book, {},
+                                                 false);
+                    require(!retry.hits.isEmpty(), "Cancelled chapter search cannot resume");
+                }
+                return "cancelled; retry succeeds";
+            } };
+}
+
+// The contents use book pages, including chapters outside the loaded slice.
+Action contentsList()
+{
+    return { "contentsList()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                while (model.refinePageEstimate()) { }
+                ReaderFrame frame;
+                captureChapters(frame, model);
+                QStringList positions;
+                for (const auto &link : frame.chapters)
+                    positions.append(link.position);
+                const auto pages = model.bookPages(positions);
+                QStringList rows;
+                for (int i = 0; i < frame.chapters.size(); ++i) {
+                    const auto &link = frame.chapters[i];
+                    rows.append(link.title
+                                + (link.page >= 0 && link.page + 1 == pages.value(i)
+                                           ? " [book page]"
+                                           : " [missing book page]"));
+                }
+                return rows.join(';');
+            } };
+}
+
+// Highlight endpoints name the first excluded character, including across chapters.
+Action exclusiveEndPages()
+{
+    return { "exclusiveEndPages()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                while (model.refinePageEstimate()) { }
+                const auto chapters = model.chapters();
+                if (chapters.size() <= 8 || !model.goTo(chapters[0].position)
+                    || !model.goTo(chapters[4].position))
+                    return "error: no exclusive-end chapter fixture";
+                const int page = model.page();
+                if (page + 1 >= model.pages())
+                    return "error: no next-page endpoint fixture";
+                const QString start = model.pageStart(page), end = model.pageStart(page + 1);
+                const auto loaded = captureBookmarkLocations(model, { start, end }, true, false);
+                if (loaded.bookPages.size() != 2 || loaded.bookPages[0] != loaded.bookPages[1])
+                    return "error: loaded exclusive end includes the next page";
+                if (!model.goTo(chapters[8].position))
+                    return "error: cannot leave exclusive-end chapter";
+                const auto offscreen = captureBookmarkLocations(
+                        model, { chapters[0].position, chapters[1].position }, true, false);
+                const int next = model.bookPages({ chapters[1].position }).value(0, -1) - 1;
+                if (offscreen.bookPages.size() != 2 || offscreen.bookPages[1] < 0
+                    || offscreen.bookPages[1] >= next)
+                    return QString("error: offscreen exclusive end %1 includes next chapter %2")
+                            .arg(offscreen.bookPages.value(1, -1))
+                            .arg(next);
+                return "exclusive ends stay on the preceding page";
+            } };
+}
+
+// Real session caches retain labels and titles after leaving a saved passage.
+Action sessionLists()
+{
+    return {
+        "sessionLists()",
+        [](Reader &reader) -> QString {
+            const auto wait = [](const char *stage, const std::function<bool()> &ready) {
+                if (ready())
+                    return;
+                QEventLoop loop;
+                QTimer poll, timeout;
+                QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
+                    if (ready())
+                        loop.quit();
+                });
+                QObject::connect(&timeout, &QTimer::timeout, &loop, [stage] {
+                    require(false,
+                            qPrintable(QString("Session list parity timed out: %1").arg(stage)));
+                });
+                poll.start(1);
+                timeout.setSingleShot(true);
+                timeout.start(10000);
+                loop.exec();
+            };
+            const auto previousBackend = qgetenv("KOBALT_ANNOTATIONS_SQLITE");
+            const auto previousPages = qgetenv("KOBALT_CHAPTER_PAGES");
+            qputenv("KOBALT_ANNOTATIONS_SQLITE", "0");
+            qputenv("KOBALT_CHAPTER_PAGES", "2");
+            QString labels;
+            {
+                const QString path =
+                        QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub";
+                native::ResourceServer server;
+                require(server.open(path, [path] { return native::openPlainArchive(path); }),
+                        "Cannot serve the session list fixture");
+                QTemporaryDir scratch(
+                        QDir(QStringLiteral(KOBALT_TEST_FIXTURES))
+                                .absoluteFilePath("../../build/parity-session-XXXXXX"));
+                require(scratch.isValid(), "Cannot create session list profile");
+                auto owned = std::make_unique<ReaderSession>(test::readerFonts(),
+                                                             test::readerPlaceholder());
+                auto &session = *owned;
+                auto lease = std::make_shared<SourceLease>();
+                OpenRequest request{ "file:///parity-session.epub",
+                                     path,
+                                     viewport,
+                                     {},
+                                     {},
+                                     {},
+                                     lease,
+                                     nativeResourceFactory(path, server.port(), lease) };
+                request.appearanceDefaults = settings;
+                bool opened = false;
+                session.open(std::move(request), [&](const OpeningResult &result) {
+                    require(result.ready(), "Session list fixture did not open");
+                    opened = true;
+                });
+                wait("open", [&] { return opened && !session.busy(); });
+                const auto chapters = session.chapters();
+                require(chapters.size() > 8, "Missing session list chapters");
+                const auto go = [&](const QString &position) {
+                    require(session.goTo(position), "Cannot queue session list jump");
+                    wait("jump and neighbours",
+                         [&] { return !session.busy() && !session.preparingNeighbours(); });
+                    require(session.error().isEmpty(), "Session list jump failed");
+                };
+                go(chapters[4].position);
+                qint64 readingClock = 0;
+                const auto progressCalls = std::make_shared<test::HostProgress>();
+                ReadingBook readingBook(std::move(owned), scratch.path() + "/book-state.json",
+                                        storage::Paths{ scratch.path() }, "session-lists",
+                                        session.sourceHash(),
+                                        std::make_unique<test::HostReadingBridge>(progressCalls),
+                                        {}, {}, {}, {}, [&] { return readingClock; });
+                readingBook.discardPendingSaves();
+                readingBook.observeReading();
+                const auto layout = [&] {
+                    return bookmarkLayoutKey(session.pages(), session.state(), viewport);
+                };
+                BookmarkSession bookmarks(session, layout, scratch.path() + "/annotations",
+                                          "session-lists", session.sourceHash(), session.title());
+                HighlightSession highlights(session, layout, scratch.path() + "/annotations",
+                                            "session-lists", session.sourceHash(), session.title());
+                require(bookmarks.sync(), "Empty bookmark list is not ready");
+                const auto addingState = session.state();
+                require(bookmarks.toggle(session.page()) == BookmarkSession::Toggle::Adding,
+                        "Cannot add session bookmark");
+                bool summarySettled = false;
+                session.pageSummary(session.page(),
+                                    [&](QString, QString) { summarySettled = true; });
+                wait("bookmark save", [&] {
+                    if (summarySettled && bookmarks.bookmarks().isEmpty() && !bookmarks.saving()) {
+                        const auto state = session.state();
+                        std::fprintf(
+                                stderr,
+                                "bookmark rejected: fast=%d pages %d->%d rough %d->%d slice same=%d\n",
+                                state.contains("book_fraction"), addingState.value("pages").toInt(),
+                                state.value("pages").toInt(),
+                                addingState.value("rough_pages").toInt(),
+                                state.value("rough_pages").toInt(),
+                                addingState.value("slice_start") == state.value("slice_start"));
+                        require(false, "Session bookmark add was discarded before saving");
+                    }
+                    return bookmarks.bookmarks().size() == 1 && !bookmarks.saving();
+                });
+                wait("initial bookmark labels", [&] {
+                    bookmarks.sync();
+                    return bookmarks.resolved();
+                });
+                const auto bookmark = bookmarks.bookmarks().first();
+                require(!bookmark.chapter.isEmpty(), "Session bookmark lost chapter title");
+                const auto bookmarkSlice = layout();
+                const int bookmarkBookPage = bookmarks.bookPage(0);
+                require(bookmarkBookPage >= 0, "New bookmark has no book page");
+                require(session.turn(1), "Cannot turn within the bookmark slice");
+                wait("same-slice turn",
+                     [&] { return !session.busy() && !session.preparingNeighbours(); });
+                require(layout() == bookmarkSlice, "Bookmark fixture left its initial slice");
+                bookmarks.sync();
+                wait("same-slice bookmark resolution", [&] {
+                    bookmarks.sync();
+                    return bookmarks.resolved();
+                });
+                require(bookmarks.bookPage(0) == bookmarkBookPage,
+                        "New bookmark lost its book page after a same-slice turn");
+                // Reload the chapter so the later slice-cache check starts
+                // with the same fresh slice as the original fixture.
+                go(chapters[8].position);
+                go(chapters[4].position);
+                auto &model = *reader.model;
+                require(model.goTo(model.chapters()[4].position),
+                        "Cannot prepare highlight fixture");
+                const auto hits = model.searchPage("the", model.page()).hits;
+                require(!hits.isEmpty(), "No session highlight fixture");
+                bool saved = false;
+                highlights.save(hits.first().start, hits.first().end, {}, [&](bool ok) {
+                    require(ok, "Cannot save session highlight");
+                    saved = true;
+                });
+                wait("highlight save", [&] { return saved && !highlights.saving(); });
+                Highlight highlight;
+                require(highlights.detail(highlights.highlights().first().id, &highlight),
+                        "Cannot read session highlight");
+                require(highlight.chapter == bookmark.chapter,
+                        "Session highlight has another chapter title");
+                const auto sliceKey = layout();
+                const auto slicePages = session.pages();
+                const auto sliceState = session.state();
+                const bool fastSession = sliceState.contains("book_fraction");
+                ReadingPace positionPace;
+                positionPace.observePosition(session.state().value("position").toString(), false);
+                int paceTurns = 0;
+                for (int step = 0; step < 3
+                     || (fastSession
+                         && session.state().value("slice_start")
+                                 == sliceState.value("slice_start"));
+                     ++step) {
+                    require(step < 20, "Session fixture did not reach another slice");
+                    require(session.turn(1), "Cannot turn into a later session slice");
+                    wait("later-slice turn",
+                         [&] { return !session.busy() && !session.preparingNeighbours(); });
+                    const auto position = session.state().value("position").toString();
+                    positionPace.observePosition(position, true);
+                    positionPace.observePosition(position, true);
+                    ++paceTurns;
+                }
+                require(positionPace.forwardTurns() == paceTurns,
+                        "Source pace lost a slice-boundary turn or counted a repeated frame");
+                require(session.chapterTitle() == bookmark.chapter,
+                        "Later slice lost its chapter title");
+                if (session.state().contains("book_fraction")) {
+                    require(bookmarkLayoutKey(slicePages, session.state(), viewport) != sliceKey,
+                            "Same-size Fast slice retained the old list cache key");
+                }
+                const auto oldKey = layout();
+                const auto progress = session.progressFraction();
+                require(progress > 0 && progress < 1, "Midbook sync fraction is invalid");
+                go(chapters[8].position);
+                require(session.progressFraction() >= progress && session.progressFraction() <= 1,
+                        "Forward chapter jump reset the sync fraction");
+                readingBook.observeReading();
+                require(progressCalls->observedActivity.page == session.bookPage()
+                                && progressCalls->observedActivity.pages == session.bookPages(),
+                        "Reading activity still uses slice-local pages");
+                readingBook.pace().observe(0, false);
+                for (int page = 1; page <= 3; ++page)
+                    readingBook.pace().observe(page, true);
+                readingClock = ReadingPace::minimumMilliseconds;
+                const auto estimates = readingBook.estimates();
+                require(estimates.bookMilliseconds
+                                == readingClock * (session.bookPages() - session.bookPage()) / 3,
+                        "Fallback time left still uses slice-local pages");
+                if (session.state().contains("book_fraction"))
+                    require(layout() != oldKey,
+                            "Fast chapter jump retained the old list cache key");
+                bookmarks.sync();
+                highlights.sync();
+                wait("offscreen lists resolution", [&] {
+                    bookmarks.sync();
+                    highlights.sync();
+                    return bookmarks.resolved() && highlights.resolved();
+                });
+                require(!bookmarks.marked(session.page()),
+                        "Bookmark in another chapter marked the local page");
+                require(bookmarks.bookPage(0) >= 0, "Bookmark list lost its book page");
+                QVector<int> displayedPages;
+                bool pageLabelReady = false;
+                session.bookmarkPages({ bookmark.position }, [&](QVector<int> pages) {
+                    displayedPages = std::move(pages);
+                    pageLabelReady = true;
+                });
+                wait("saved-word label", [&] { return pageLabelReady; });
+                require(displayedPages.value(0, -1) == bookmarks.bookPage(0),
+                        "Saved-word page label differs from the bookmark book page");
+                require(highlights.locations().bookPages.value(0, -1) >= 0,
+                        "Highlight list lost its book page");
+                labels = bookmark.chapter + ";" + highlight.chapter;
+                go(bookmark.position);
+                bookmarks.sync();
+                wait("reopened bookmark resolution", [&] {
+                    bookmarks.sync();
+                    return bookmarks.resolved();
+                });
+                require(bookmarks.marked(session.page()), "Reopened bookmark is not marked");
+                go(highlight.start);
+                require(session.chapterTitle() == highlight.chapter,
+                        "Reopened highlight has another chapter title");
+            }
+            bool drained = false;
+            ReaderSession::drain([&] { drained = true; });
+            wait("engine drain", [&] { return drained; });
+            if (previousBackend.isNull())
+                qunsetenv("KOBALT_ANNOTATIONS_SQLITE");
+            else
+                qputenv("KOBALT_ANNOTATIONS_SQLITE", previousBackend);
+            if (previousPages.isNull())
+                qunsetenv("KOBALT_CHAPTER_PAGES");
+            else
+                qputenv("KOBALT_CHAPTER_PAGES", previousPages);
+            return labels;
+        }
+    };
+}
+
+// A saved position in another chapter must retain a whole-book page label.
+Action savedList(const QString &kind)
+{
+    return { kind + "List()", [kind](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                while (model.refinePageEstimate()) { }
+                const auto position =
+                        kind == QLatin1String("bookmark") ? reader.bookmark : reader.highlight;
+                const auto locations = captureBookmarkLocations(model, { position }, false, false);
+                const int expected = model.bookPages({ position }).value(0, 0);
+                return expected > 0 && locations.bookPages.value(0, -1) + 1 == expected
+                        ? "book page available"
+                        : "missing book page";
+            } };
+}
+
 Action addBookmark()
 {
     return { "addBookmark()", [](Reader &reader) -> QString {
@@ -307,6 +740,459 @@ Action saveAndReopen()
             } };
 }
 
+Action backwardChapterBoundary()
+{
+    return { "backAcrossChapter()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                if (model.bookFraction() >= 0)
+                    model.setChapterSlices(2);
+                const auto chapters = model.chapters();
+                return chapters.size() > 4 && model.goTo(chapters[4].position)
+                                && model.turnInWindow(-1)
+                        ? QString()
+                        : QStringLiteral("error: backward chapter turn failed");
+            } };
+}
+
+Action jumpToBoundaryChapter()
+{
+    return { "jumpToBoundaryChapter(9)", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                if (model.bookFraction() >= 0)
+                    model.setChapterSlices(2);
+                const auto chapters = model.chapters();
+                return chapters.size() > 9 && model.goTo(chapters[9].position)
+                        ? QString()
+                        : QStringLiteral("error: boundary chapter jump failed");
+            } };
+}
+
+Action prepareChapterBoundary(bool cancel = false)
+{
+    return { cancel ? "cancelBoundaryPreparation()" : "prepareBoundary()",
+             [cancel](Reader &reader) -> QString {
+                 auto &model = *reader.model;
+                 const auto position = model.position();
+                 const auto image = model.image(model.page());
+                 int checks = 0;
+                 model.prepareAhead(cancel ? std::function<bool()>([&] { return ++checks < 8; })
+                                           : std::function<bool()>());
+                 if (model.position() != position || model.image(model.page()) != image)
+                     return "error: background boundary preparation changed the reading page";
+                 if (cancel && model.bookFraction() >= 0 && checks < 8)
+                     return "error: boundary cancellation was not exercised";
+                 return {};
+             } };
+}
+
+Action cachedBoundaryTurn(int direction, bool prepare = true, bool cached = true)
+{
+    return { QString("%1BoundaryTurn(%2)")
+                     .arg(prepare          ? "prepared"
+                                  : cached ? "retained"
+                                           : "cold")
+                     .arg(direction),
+             [direction, prepare, cached](Reader &reader) -> QString {
+                 auto &model = *reader.model;
+                 const auto position = model.position();
+                 const auto image = model.image(model.page());
+                 if (prepare)
+                     model.prepareAhead();
+                 if (model.position() != position || model.image(model.page()) != image)
+                     return "error: boundary preparation changed the reading page";
+                 if (!model.turnInWindow(direction))
+                     return "error: prepared boundary turn failed";
+                 if (cached && model.bookFraction() >= 0 && model.chapterLoadMilliseconds() != 0)
+                     return QString("error: prepared boundary reloaded the chapter (%1 ms)")
+                             .arg(model.chapterLoadMilliseconds());
+                 return {};
+             } };
+}
+
+Action groupedChapterBoundaries()
+{
+    return { "groupedChapterBoundaries()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                const bool fast = model.bookFraction() >= 0;
+                if (fast)
+                    model.setChapterSlices(25);
+                const auto chapters = model.chapters();
+                if (chapters.size() <= 2 || !model.goTo(chapters[2].position))
+                    return "error: cannot open grouped chapter";
+                QStringList frames;
+                int crossings = 0;
+                for (int step = 0; step < 40; ++step) {
+                    model.prepareAhead();
+                    const bool crossing =
+                            fast && model.page() + 1 == model.pages() && model.continuesAfter();
+                    for (int direction : { 1, -1, 1 }) {
+                        if (!model.turnInWindow(direction))
+                            return "error: grouped chapter turn stopped";
+                        if (crossing && model.chapterLoadMilliseconds() != 0)
+                            return "error: adjacent grouped chapter was reloaded";
+                        const auto frame = shown(reader, {});
+                        frames.append(frame.location + QLatin1Char(' ') + frame.checksum);
+                    }
+                    crossings += crossing;
+                }
+                if (fast && crossings == 0)
+                    return "error: no grouped chapter boundary exercised";
+                reader.lines = frames;
+                return QString::fromLatin1(
+                        QCryptographicHash::hash(frames.join(QLatin1Char('\n')).toUtf8(),
+                                                 QCryptographicHash::Md5)
+                                .toHex());
+            } };
+}
+
+// Adjacent previews preserve the shown reading position at chapter and slice boundaries.
+Action adjacentPagePreviews()
+{
+    return { "adjacentPagePreviews()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                if (model.bookFraction() >= 0)
+                    model.setChapterSlices(2);
+                const auto chapters = model.chapters();
+                if (chapters.size() <= 5 || !model.goTo(chapters[4].position))
+                    return "error: cannot open preview chapter";
+                if (model.bookFraction() >= 0) {
+                    const auto anchor = model.position();
+                    int checks = 0;
+                    const auto cancelled = model.previewTurn(-1, {}, [&] { return ++checks < 8; });
+                    if (!cancelled.image.isNull() || checks < 8 || model.position() != anchor)
+                        return "error: boundary preview ignored cancellation or moved the reader";
+                }
+                QStringList rows;
+                bool complete = true;
+                const auto record = [&](int step) {
+                    const auto position = model.position();
+                    const int page = model.page(), count = model.pages();
+                    const auto shownImage = model.image(page);
+                    const auto hits = model.searchPage("the", page).hits;
+                    QVector<QPair<QString, QString>> ranges;
+                    if (!hits.isEmpty())
+                        ranges.append(qMakePair(hits.first().start, hits.first().end));
+                    for (int direction : { -1, 0, 1 }) {
+                        const auto preview = model.previewTurn(direction, ranges);
+                        complete =
+                                complete && !preview.image.isNull() && !preview.position.isEmpty();
+                        if (!preview.position.isEmpty()) {
+                            const auto marked =
+                                    model.previewTurn(direction, ranges, {}, { preview.position });
+                            complete = complete && marked.bookmarked;
+                            if (direction) {
+                                const auto unrelated =
+                                        model.previewTurn(direction, ranges, {}, { position });
+                                complete = complete && !unrelated.bookmarked;
+                            }
+                        }
+                        if (model.position() != position || model.page() != page
+                            || model.pages() != count || model.image(page) != shownImage)
+                            complete = false;
+                        if (!direction && !ranges.isEmpty()
+                            && preview.ranges.value(0)
+                                    != model.rangeRects(ranges[0].first, ranges[0].second))
+                            complete = false;
+                        const auto checksum =
+                                QCryptographicHash::hash(
+                                        QByteArray::fromRawData(reinterpret_cast<const char *>(
+                                                                        preview.image.constBits()),
+                                                                int(preview.image.sizeInBytes())),
+                                        QCryptographicHash::Md5)
+                                        .toHex();
+                        rows.append(QString("%1/%2 %3 %4")
+                                            .arg(step)
+                                            .arg(direction)
+                                            .arg(preview.position, QString::fromLatin1(checksum)));
+                    }
+                };
+                record(0);
+                for (int step = 1; step <= 8; ++step) {
+                    if (!model.turnInWindow(1))
+                        return "error: cannot reach another preview slice";
+                    record(step);
+                }
+                if (!model.goTo(chapters[5].position) || !model.turnInWindow(-1))
+                    return "error: cannot reach chapter-end preview";
+                record(9);
+                reader.lines = rows;
+                return complete
+                        ? QString::fromLatin1(
+                                  QCryptographicHash::hash(rows.join(QChar(10)).toUtf8(),
+                                                           QCryptographicHash::Md5)
+                                          .toHex())
+                        : QStringLiteral("error: missing preview or reading document changed");
+            } };
+}
+
+// Exercise selection after several small slices, rather than only at a chapter start.
+Action laterSlice()
+{
+    return { "laterSlice()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                if (model.bookFraction() >= 0)
+                    model.setChapterSlices(2);
+                const auto chapters = model.chapters();
+                if (chapters.size() <= 4 || !model.goTo(chapters[4].position))
+                    return "error: Cannot open the later-slice chapter";
+                for (int i = 0; i < 8; ++i)
+                    if (!model.turnInWindow(1))
+                        return "error: Cannot reach the later slice";
+                return {};
+            } };
+}
+
+QString rectanglesText(const QVector<QRect> &rectangles)
+{
+    QStringList result;
+    for (const auto &rectangle : rectangles)
+        result.append(QString("%1,%2,%3,%4")
+                              .arg(rectangle.x())
+                              .arg(rectangle.y())
+                              .arg(rectangle.width())
+                              .arg(rectangle.height()));
+    return result.join(';');
+}
+
+// A dictionary hold and an annotation both start from the word under a point.
+Action selectWord()
+{
+    return { "wordAt(later slice)", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                WordSelection word;
+                for (int y = 16; y < viewport.height() && word.text.isEmpty(); y += 8)
+                    for (int x = 16; x < viewport.width() && word.text.isEmpty(); x += 8)
+                        word = model.wordAt({ x, y });
+                if (word.text.isEmpty() || word.start.isEmpty() || word.end.isEmpty()
+                    || word.rectangles.isEmpty())
+                    return "error: The later-slice word has no text, position or rectangles";
+                if (model.textRange(word.start, word.end).text != word.text)
+                    return "error: The dictionary word differs from its selected source text";
+                const auto held = model.wordAt(word.rectangles.first().center());
+                if (held.text != word.text || held.start != word.start || held.end != word.end)
+                    return "error: A dictionary hold lost the selected word";
+                reader.selectedWord = word;
+                reader.selectedRects = model.rangeRects(word.start, word.end);
+                if (reader.selectedRects.isEmpty())
+                    return "error: The selected highlight has no geometry";
+                return word.text + ' ' + locationText(model, word.start) + ' '
+                        + locationText(model, word.end) + ' '
+                        + rectanglesText(reader.selectedRects);
+            } };
+}
+
+Action revisitHighlight()
+{
+    return { "highlightAfterReturn()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                const auto &word = reader.selectedWord;
+                const auto chapters = model.chapters();
+                if (chapters.size() <= 8 || !model.goTo(chapters[8].position))
+                    return "error: Cannot leave the highlighted chapter";
+                if (!model.rangeRects(word.start, word.end).isEmpty())
+                    return "error: A highlight in another chapter is drawn on the current page";
+                if (!model.goTo(word.start))
+                    return "error: Cannot return to the saved highlight";
+                const auto rectangles = model.rangeRects(word.start, word.end);
+                if (rectangles != reader.selectedRects || rectangles.isEmpty())
+                    return "error: The highlight geometry changed after leaving its chapter";
+                return word.text + ' ' + rectanglesText(rectangles);
+            } };
+}
+
+Action changeLayout(const QString &name, const QJsonObject &patch)
+{
+    return { name, [patch](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                const auto before = model.image(model.page());
+                if (!model.applyAppearance(appearance::Patch(patch)))
+                    return "error: The layout setting could not be applied";
+                const auto state = model.state();
+                for (auto value = patch.constBegin(); value != patch.constEnd(); ++value)
+                    if (state.value(value.key()) != value.value())
+                        return "error: The layout setting was not retained";
+                if (model.image(model.page()) == before)
+                    return "error: The layout setting did not change the page";
+                return {};
+            } };
+}
+
+// Counts and chapter weights must cover text beyond the loaded Fast window.
+Action wholeBookWords()
+{
+    return { "wholeBookWords()", [](Reader &reader) -> QString {
+                const QVector<QPair<QByteArray, qint64>> fragments{
+                    { "one<img/>two", 1 },
+                    { "one<svg><text>hidden</text></svg>two", 1 },
+                    { "one<br/>two", 2 },
+                    { "one<hr/>two", 2 },
+                    { "one<em>two</em>", 1 },
+                    { "one<rt>hidden</rt>two", 1 },
+                    { "one<script>hidden</script>two", 1 },
+                    { "one <img/> two", 2 }
+                };
+                for (const auto &fragment : fragments) {
+                    const auto xhtml = QByteArray("<html><body><p>") + fragment.first
+                            + "</p><p>next</p></body></html>";
+                    const auto item = measurePageEstimate(xhtml);
+                    qint64 prefix = -1;
+                    pageEstimateTextFraction(xhtml, QStringLiteral("/body/p[2]"), false, &prefix);
+                    if (!item.parsed || item.words != fragment.second + 1
+                        || prefix != fragment.second)
+                        return "error: source item and chapter prefix disagree at "
+                                + fragment.first;
+                }
+                auto &model = *reader.model;
+                while (model.refinePageEstimate()) { }
+                model.wordCounts();
+                const auto graph = model.chapterGraph();
+                if (graph.size() < 9 || model.totalWords() <= 0)
+                    return "error: whole-book word counts unavailable";
+                for (int i = 2; i < graph.size(); ++i)
+                    if (graph[i].words <= 0)
+                        return "error: future chapter has no words";
+                const auto total = model.totalWords();
+                auto contents = model.chapters();
+                contents.first().title = "Retained words chapter";
+                model.setChapters(contents, graph);
+                model.prepareAhead();
+                if (!model.turnInWindow(1) || model.totalWords() != total
+                    || model.chapters().first().title != contents.first().title)
+                    return "error: prepared-unit adoption lost source word metadata";
+                if (!model.goTo(contents[8].position) || model.totalWords() != total
+                    || model.chapters().first().title != contents.first().title)
+                    return "error: chapter jump lost source word metadata";
+                QStringList weights;
+                for (const auto &chapter : graph)
+                    weights.append(QString::number(chapter.words));
+                return QString("whole-book chapter weights retained: %1 words; %2")
+                        .arg(total)
+                        .arg(weights.join(','));
+            } };
+}
+
+// Changing engines keeps the page and source metadata, even after cancellation.
+Action switchModes()
+{
+    return { "switchModes()", [](Reader &reader) -> QString {
+                {
+                    const auto files = test::linkBook();
+                    auto loads = std::make_shared<QMap<QString, int>>();
+                    QMap<QString, qint64> sizes;
+                    for (auto it = files.cbegin(); it != files.cend(); ++it)
+                        sizes[it.key()] = it.value().size();
+                    auto resources = std::make_shared<ResourceCache>(
+                            files.keys(),
+                            [files, loads](const QString &name, const ResourceCache::Sink &sink,
+                                           QString *) {
+                                ++(*loads)[name];
+                                const auto data = files.value(name);
+                                return sink(data.constData(), data.size());
+                            },
+                            std::make_shared<std::atomic_bool>(false));
+                    EngineDocument reload(test::readerFonts());
+                    QString error;
+                    if (!reload.openResources(resources, sizes, viewport, settings, &error))
+                        return "error: Cannot open the reload fixture";
+                    const auto position = reload.position();
+                    const auto image = reload.image(reload.page());
+                    const auto cacheLoads = reload.resourceStats().value("loads");
+                    const bool fast = reload.bookFraction() >= 0;
+                    const auto patch = appearance::Patch(reload.state());
+                    if (reload.setChapterMode(!fast, patch, viewport, {}, [] { return false; })
+                        || reload.position() != position || reload.image(reload.page()) != image
+                        || reload.resourceStats().value("loads") != cacheLoads)
+                        return "error: Cancelled reload changed the displayed source";
+                    const int readsBeforeCancel = loads->value("mimetype");
+                    if (reload.setChapterMode(!fast, patch, viewport, {},
+                                              [loads, readsBeforeCancel] {
+                                                  return loads->value("mimetype")
+                                                          == readsBeforeCancel;
+                                              })
+                        || reload.position() != position || reload.image(reload.page()) != image
+                        || reload.resourceStats().value("loads") != cacheLoads)
+                        return "error: Interrupted resource reload changed the displayed source";
+                    for (bool next : { !fast, fast }) {
+                        const int before = loads->value("mimetype");
+                        if (!reload.setChapterMode(next, patch, viewport))
+                            return "error: Resource reload failed";
+                        if (loads->value("mimetype") <= before || reload.openedFromCache())
+                            return "error: Mode switch reused publication resources";
+                        if (reload.position() != position || reload.image(reload.page()) != image)
+                            return "error: Resource reload changed the displayed passage";
+                    }
+                }
+                auto &model = *reader.model;
+                const bool fast = model.bookFraction() >= 0;
+                const auto position = model.position();
+                const auto before = shown(reader, {});
+                const auto patch = appearance::Patch(model.state());
+                while (model.refinePageEstimate()) { }
+                model.wordCounts();
+                const auto words = model.totalWords();
+                auto contents = model.chapters();
+                auto graph = model.chapterGraph();
+                if (contents.isEmpty() || graph.isEmpty() || words < 0)
+                    return "error: Missing source metadata before switching";
+                const auto publicationTitle = contents.first().title;
+                contents.first().title = "Retained chapter title";
+                graph.first().title = "Native graph sentinel";
+                graph.first().words = 42;
+                for (bool withContents : { true, false }) {
+                    model.setChapters(withContents ? contents : QVector<ChapterLink>(), graph);
+                    if (model.setChapterMode(!fast, patch, viewport, {}, [] { return false; }))
+                        return "error: A cancelled mode change succeeded";
+                    if (model.position() != position || !(shown(reader, {}) == before))
+                        return "error: A cancelled mode change altered the displayed page";
+                    for (bool next : { !fast, fast }) {
+                        if (!model.setChapterMode(next, patch, viewport))
+                            return "error: Mode switch failed";
+                        if ((model.bookFraction() >= 0) != next || model.position() != position)
+                            return "error: Mode switch changed the reading position";
+                        if (!(shown(reader, {}) == before))
+                            return "error: Mode switch changed the displayed page";
+                        if (model.totalWords() != words || model.chapters().isEmpty()
+                            || model.chapters().first().title
+                                    != (withContents ? contents.first().title : publicationTitle)
+                            || model.chapterGraph().size() != graph.size()
+                            || model.chapterGraph().first().title != graph.first().title
+                            || model.chapterGraph().first().words != graph.first().words)
+                            return "error: Mode switch lost source metadata";
+                        if (!reader.selectedWord.start.isEmpty()
+                            && model.rangeRects(reader.selectedWord.start, reader.selectedWord.end)
+                                    != reader.selectedRects)
+                            return "error: Mode switch changed highlight geometry";
+                    }
+                }
+                return {};
+            } };
+}
+
+Action realBookEnd()
+{
+    return { "realBookEnd()", [](Reader &reader) -> QString {
+                auto &model = *reader.model;
+                const auto chapters = model.chapters();
+                if (chapters.isEmpty() || !model.goTo(chapters.last().position))
+                    return "error: Cannot open the last chapter";
+                int turns = 0;
+                while (model.turnInWindow(1))
+                    if (++turns >= 200)
+                        return "error: The last chapter did not reach the book end";
+                while (model.refinePageEstimate()) { }
+                if (model.page() != model.pages() - 1 || model.continuesAfter())
+                    return "error: The engine stopped before the real last page";
+                if (model.turnInWindow(1))
+                    return "error: The book end still accepts a forward page turn";
+                if (model.bookFraction() >= 0) {
+                    const auto pages = model.roughPages();
+                    if (model.bookFraction() != 1 || pages.page != pages.pages)
+                        return "error: The last page does not report complete book progress";
+                }
+                return "last page; no next page; complete book progress";
+            } };
+}
+
 // The scrubber of the reader window asks for a page of the engine's layout.
 Action scrubTo(double fraction)
 {
@@ -349,7 +1235,8 @@ int compare(const Book &book, const QVector<Action> &script)
             std::printf("  %-28s SKIPPED (%s)\n", qPrintable(name), qPrintable(skipped));
             continue;
         }
-        const bool same = accurate[row] == fast[row];
+        const bool same = accurate[row] == fast[row] && !accurate[row].detail.startsWith("error:")
+                && !fast[row].detail.startsWith("error:");
         differences += !same;
         std::printf("  %-28s %s\n", qPrintable(name), same ? "SAME" : "DIFFERENT");
         if (same)
@@ -428,5 +1315,6 @@ int main(int argc, char **argv)
 #else
     std::printf("SKIP: stock CREngine lays out the whole book\n");
 #endif
-    return 0;
+    QTimer::singleShot(0, &app, &QCoreApplication::quit);
+    return app.exec();
 }

@@ -110,6 +110,9 @@ OpeningOutput runOpening(OpeningJob &job);
 
 // Defined in reader_session.cpp, which uses them for every later frame too.
 void captureChapters(ReaderFrame &result, Engine &engine);
+BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &positions,
+                                           bool rangeEndpoints, bool sourceOrder,
+                                           const std::function<bool()> &current = {});
 ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours = true,
                     const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0);
 } // namespace kobalt

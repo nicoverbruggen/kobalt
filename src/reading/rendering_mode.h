@@ -3,7 +3,7 @@
 #include <QString>
 
 // Rendering in Settings: Fast lays out only the chapter on screen, Accurate
-// lays out the whole book. The choice applies when a book opens.
+// lays out the whole book. Settings can also apply the choice to the open book.
 namespace kobalt::renderingMode {
 inline constexpr auto preferenceKey = "rendering_mode";
 

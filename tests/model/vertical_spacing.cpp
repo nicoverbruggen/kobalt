@@ -2,7 +2,7 @@
 #include "reader_inputs.h"
 #include "book_fixtures.h"
 #include "engine_fixtures.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <lvpagesplitter.h>
 #include <QCryptographicHash>
 #include <QFile>

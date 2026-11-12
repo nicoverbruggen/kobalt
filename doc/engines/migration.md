@@ -24,7 +24,7 @@ The location format is fixed only after step 1 passes or its failures are unders
 | A5 | Add the shared location next to each saved XPointer. See [Saved data](#saved-data). | Storage tests, upgrade tests |
 | A6 | Change `PositionCodec` to work on shared locations and the source XHTML. Remove the friend access of the Kobo codec. | Kobo adapter tests with pewter, both SDK checks |
 | A7 | Move the CREngine capability rules of `inspectLayout` into the adapter as capabilities. | Layout tests |
-| A8 | Audit the remaining includes of `engine/crengine` outside the adapter and add a source check for them. | `cmake -P platforms/checks/source-checks.cmake` |
+| A8 | Audit the remaining includes of `engine/blaze/adapter` outside the adapter and add a source check for them. | `cmake -P platforms/checks/source-checks.cmake` |
 
 A source check with a new allowlist is a decision for the user, as the project rules say.
 
@@ -219,6 +219,16 @@ In chapter mode only the slice on the screen has a layout. The rough page number
 The page fields of the header and footer show these numbers. The chapter of the chapter page is the spine item. Until every spine item is measured or has all its pages, the total is only a guess from the bytes. In that time there is no book page number and no total, and each page field shows its percent form. That percent is the bytes of the whole book before the page: the spine items before it, and the characters before the page in its spine item. Once the map is complete, the page fields show page numbers at the next page turn or repaint that happens anyway; there is no extra repaint. A total is estimated until every spine item of the book, or every part of the spine item, had a layout. A spine item that had a layout without pages counts with zero pages.
 
 The measuring runs on the engine worker after the pages beside the current page, in the idle time after a turn. It takes at most 32 parts in one idle time and stops when the user asks for another page. Until a spine item is measured, its pages come from its size in bytes and the pages per byte of the measured spine items.
+
+#### Fast interactions
+
+Fast keeps one spare unit beside the current document. At the first page of a unit, cancellable background work prepares the previous unit through its last page. At the end of a unit it prepares the next one. Crossing a unit boundary retains the departed document in the spare slot, so immediate reverse turns can reuse it. The cache checks layout settings, viewport, stylesheet and slice size before reuse. A tap that arrives before preparation finishes can still pay the cold load cost.
+
+Fast keeps slice-local page indices for painting, selection and bookmark marks. `pagesOf()` returns -1 for a position outside the loaded slice. Display labels use `bookPages()` instead, with an estimated whole-book page or a pending value. Highlight end labels use the preceding visible character because the saved end is exclusive. Saved lists retain their anchors and remain navigable while page labels are pending.
+
+The worker publishes completed measurement batches to the session without repainting the reading page. An open contents list updates its page labels in place. Reading activity and time-left calculations use whole-book progress; Fast pace observations use source positions so repeated frames do not count as turns. The same chunked XHTML measurement counts source words for the whole book. Source word prefixes split the counts at contents entries without laying out other chapters. Fast uses these counts for chapter bars and time estimates after measurement finishes. CSS-hidden source text can make them differ from Accurate’s styled-document counts; Fast does not write them into Accurate’s word-count cache.
+
+Links load their target unit on demand. Missing-target classification checks the target chapter for the requested ID; unmarked legacy notes retain the accepted guessed kind. Search caches source text separately, loads matching units with cancellation, and keeps the unit origin in its cursor across background replacement. A shared content map is not implemented.
 
 #### Measured accuracy
 

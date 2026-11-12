@@ -19,7 +19,7 @@ public:
     void setData(QVector<ChapterLink> chapters, ChapterSelection selection, bool ready,
                  const QString &error);
     void setProgress(const QString &title, int chapterPage, int chapterPages, int nextChapterPages,
-                     int page, int pages);
+                     int page, int pages, double bookFraction = -1);
     // `number` counts from 1 in the contents; 0 when the position is before them.
     void setChapterNumber(int number, int count);
     // `words` is the shared whole-book total, or -1 when counting failed.
@@ -79,6 +79,7 @@ private:
     struct Progress
     {
         int chapterPage = 0, chapterPages = 0, nextChapterPages = 0, page = 0, pages = 0;
+        double bookFraction = -1;
     } progress;
 
     QString error;

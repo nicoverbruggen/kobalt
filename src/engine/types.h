@@ -1,4 +1,5 @@
 #pragma once
+#include <QImage>
 #include <QPoint>
 #include <QRect>
 #include <QString>
@@ -8,6 +9,15 @@
 // Plain values that cross between a rendering engine and the application.
 // They name no engine. A position is a string that only its engine reads.
 namespace kobalt {
+struct PagePreview
+{
+    QImage image;
+    QString position;
+    bool bookmarked = false;
+    // Geometry of the requested ranges in the original page viewport.
+    QVector<QVector<QRect>> ranges;
+};
+
 enum class OpeningStage { Content, Text, Styles, Pages, Ready };
 using OpeningProgress = std::function<void(OpeningStage, int)>;
 
@@ -35,6 +45,9 @@ struct SearchCursor
     // In chapter mode, the spine item that the search is in. The block and
     // offset count in the document that has its text.
     int item = 0;
+    // The first spine item of the document whose blocks the cursor counts.
+    // Background preparation can replace that document with an overlapping unit.
+    int firstItem = -1;
 };
 
 struct SearchBatch

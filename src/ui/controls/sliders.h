@@ -38,6 +38,14 @@ public:
         update();
     }
 
+    // A fixed position marker on the same rail, without pointer or keyboard input.
+    void setReadOnlyIndicator(bool enabled)
+    {
+        cancel();
+        readOnlyIndicator = enabled;
+        update();
+    }
+
     // Stops are evenly spaced and snap pointer gestures. Buttons retain singleStep().
     void setMarkers(const QVector<int> &values, MarkerMode mode = MarkerMode::Positions);
 
@@ -59,6 +67,7 @@ protected:
 private:
     bool tracking = false;
     bool dotMarkers = false;
+    bool readOnlyIndicator = false;
     QLabel *rowValue = nullptr;
     QVector<QWidget *> rowSteps;
     int original = 0;

@@ -630,14 +630,25 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         // Experimental, with the koblaze fork only: load the text of a
         // window of spine items. The others stay empty.
         koblazeSetSpineWindow(firstSpineItem, lastSpineItem);
-#  if defined(KOBALT_CONFIG_DIR) && defined(KOBLAZE_PAIR_KERNING)
-        // Experiment: a file named pair-kerning in the Kobalt folder turns
-        // on the kerning memory of the fork. The file is looked for once.
-        static const bool pairKerning =
-                QFile::exists(QStringLiteral(KOBALT_CONFIG_DIR "/pair-kerning"));
-        if (pairKerning)
-            koblazeSetPairKerning(true);
+        // The fork measures plain text from memories of glyph pairs and of
+        // words. HarfBuzz fills them, and each face checks a sample of its
+        // results against HarfBuzz and stops when one differs. The pages
+        // are the same. KOBALT_FAST_SHAPING=0 turns this off, to compare.
+        {
+            const bool fast = qgetenv("KOBALT_FAST_SHAPING") != "0";
+#  ifdef KOBLAZE_PAIR_KERNING
+            koblazeSetPairKerning(fast);
 #  endif
+#  ifdef KOBLAZE_WORD_WIDTHS
+            koblazeSetWordWidths(fast);
+#  endif
+#  ifdef KOBLAZE_WORD_PAIRS
+            koblazeSetWordPairs(fast);
+#  endif
+#  ifdef KOBLAZE_PLAIN_JOINER
+            koblazeSetPlainJoiner(fast);
+#  endif
+        }
 #endif
         loaded = engine_->LoadDocument(LVCreateMemoryStream(), false, source_->container);
 #if __has_include(<koblaze.h>)
@@ -712,11 +723,22 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
 #ifdef KOBLAZE_CANCEL_CHECK
     koblazeCheckCancel();
 #endif
+#ifdef KOBLAZE_DROP_EMPTY_PAGES
+    // A part of a book would show the empty page that the engine makes
+    // before some chapters only when that chapter is not the first of the
+    // part. Show it never.
+    engine_->getDocument()->setKoblazeDropEmptyPages(firstSpineItem >= 0);
+#endif
     applyStyleSheet();
     applySlice();
     engine_->Render();
     openingTimes_["model_paginate_ms"] = double(phase.restart());
     cutSlice();
+#if __has_include(<koblaze.h>)
+    // The first slice also ends at a page that starts a block.
+    if (!extendSlice())
+        throw KoblazeRenderCancelled();
+#endif
     spineItemCount_ = spineItems().size();
     windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
     windowLast_ = firstSpineItem < 0 ? -1 : qMin(lastSpineItem, spineItemCount_ - 1);

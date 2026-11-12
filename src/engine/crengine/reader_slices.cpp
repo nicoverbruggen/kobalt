@@ -210,9 +210,9 @@ void EngineDocument::relayout()
 int EngineDocument::sliceReach() const
 {
     // A third more than the slice, to find a page that starts a block, and
-    // as much again for each search that found none.
+    // twice as much more for each search that found none.
     const int size = sliceSize();
-    return size + (1 + sliceExtra_) * (size / 3);
+    return size + (size / 3) * (1 << qMin(sliceExtra_, 12));
 }
 
 bool EngineDocument::pageStartsBlock(int page, int *before) const
@@ -225,6 +225,12 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
         block = block->getParentNode();
     if (!block || block->isNodeName("DocFragment"))
         return false;
+#ifdef KOBLAZE_TEXT_LENGTHS
+    // A block without text, such as an image, belongs to the slice that
+    // ends at it. A slice starts with a block that has text.
+    if (engine_->getDocument()->koblazeTextLength(block) <= 0)
+        return false;
+#endif
     // A slice holds whole blocks of the text flow. A table, a float or
     // another such block is laid out as one, so a slice cannot start in it.
     for (auto *parent = block->getParentNode(); parent && !parent->isNodeName("DocFragment");
@@ -267,6 +273,23 @@ void EngineDocument::cutSlice()
     sliceCut_ = false;
 }
 
+bool EngineDocument::extendSlice()
+{
+    // Dense text with long paragraphs can have no page that starts a block.
+    // A slice that ends anywhere else leaves a short page, which the whole
+    // spine item does not have. Lay out more and look again, until such a
+    // page is found or the slice reaches the end of the spine item.
+    while (slices() && !sliceCut_ && sliceExtra_ < 12) {
+        ++sliceExtra_;
+        cache_.clear();
+        relayout();
+        engine_->requestRender();
+        if (!renderLayout())
+            return false;
+    }
+    return true;
+}
+
 bool EngineDocument::layoutSlice(int first, int forcedEnd)
 {
     if (!engine_ || !slices())
@@ -285,16 +308,8 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     engine_->requestRender();
     if (!renderLayout())
         return false;
-    // Dense text with long paragraphs can have no page that starts a block.
-    // Lay out more and look again, a few times.
-    while (!sliceCut_ && sliceExtra_ < 3) {
-        ++sliceExtra_;
-        cache_.clear();
-        relayout();
-        engine_->requestRender();
-        if (!renderLayout())
-            return false;
-    }
+    if (!extendSlice())
+        return false;
     windowLoadMs_ = timer.elapsed();
     return true;
 }

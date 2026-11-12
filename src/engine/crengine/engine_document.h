@@ -430,6 +430,9 @@ private:
     int textBefore(const QString &position) const;
     // Gives the slice to the engine before a layout.
     void applySlice();
+    // Lays out more of the slice until it ends at a page that starts a
+    // block. False when the layout was stopped.
+    bool extendSlice();
     // Lays out the slice that starts at `first` characters.
     bool layoutSlice(int first, int forcedEnd = 0);
     // Lays out the slice that holds `position` when it is another one.

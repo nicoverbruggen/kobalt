@@ -592,6 +592,14 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         // Experimental, with the koblaze fork only: load the text of a
         // window of spine items. The others stay empty.
         koblazeSetSpineWindow(firstSpineItem, lastSpineItem);
+#  if defined(KOBALT_CONFIG_DIR) && defined(KOBLAZE_PAIR_KERNING)
+        // Experiment: a file named pair-kerning in the Kobalt folder turns
+        // on the kerning memory of the fork. The file is looked for once.
+        static const bool pairKerning =
+                QFile::exists(QStringLiteral(KOBALT_CONFIG_DIR "/pair-kerning"));
+        if (pairKerning)
+            koblazeSetPairKerning(true);
+#  endif
 #endif
         loaded = engine_->LoadDocument(LVCreateMemoryStream(), false, source_->container);
 #if __has_include(<koblaze.h>)

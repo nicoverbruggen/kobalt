@@ -661,6 +661,12 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
     for (int index = 0; index < rows.size(); ++index) {
         const auto field = headerfooter::choosableFields[index];
         auto shown = headerfooter::content(field, values, uppercase);
+        // Before the first turn the page turn time shows a typical value.
+        if (field == Field::PageTurnTime && values.pageTurnMilliseconds < 0) {
+            auto sample = values;
+            sample.pageTurnMilliseconds = headerfooter::samplePageTurnMilliseconds;
+            shown = headerfooter::content(field, sample, uppercase);
+        }
         // Each row shows what the slot would: text, a battery, or both.
         if (shown.text.isEmpty() && !shown.batteryIcon)
             shown.text = strings::get("header_footer.unavailable");

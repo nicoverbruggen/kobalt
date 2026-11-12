@@ -86,6 +86,9 @@ void Reader::refresh()
     // new page is painted, in the refresh that paintTurn() requests.
     if (!turnFrame)
         syncKosyncWhileReading();
+    // The new page's header shows the time of the turn that produced it.
+    if (turnFrame && turnStarted.isValid())
+        pageTurnMilliseconds = turnStarted.elapsed();
     // The refresh that paintTurn() requested: the same page, already painted.
     const bool afterTurn = turnPainted && !turnFrame;
     if (!turnFrame)
@@ -141,6 +144,9 @@ void Reader::refresh()
         paintTurn();
         return;
     }
+    // A turn that a panel covers is not painted as a turn.
+    if (turnFrame)
+        turnStarted.invalidate();
     if (afterTurn && controlsHidden()) {
         // A page turn changes only what the hidden menu and panels show.
         // They sync when they open; see syncStaleControls().
@@ -481,7 +487,7 @@ void Reader::paintTurn()
                 { { "render_id", double(session->renderId()) }, { "page", session->page() } },
                 false);
     page->refreshContent(true, true);
-    if (turnStarted.isValid()) {
+    if (turnStarted.isValid() && kobalt::diagnosticsActive())
         kobalt::diagnostic("page-turn-painted",
                            { { "render_id", double(session->renderId()) },
                              { "page", session->page() },
@@ -489,8 +495,7 @@ void Reader::paintTurn()
                              { "render_ms", rendered },
                              { "paint_ms", painting.nsecsElapsed() / 1e6 } },
                            false);
-        turnStarted.invalidate();
-    }
+    turnStarted.invalidate();
     // The screen composes the flushed page from the event loop. Return
     // to it now; the second pass finds the page unchanged and does the rest.
     turnPainted = true;

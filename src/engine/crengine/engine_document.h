@@ -37,6 +37,8 @@ class NickelPositionCodec;
 }
 
 struct ReaderSource;
+struct PageEstimateLayout;
+class PageMap;
 
 // All engine calls stay on one owning thread. Images own their pixels.
 class EngineDocument final : public Engine
@@ -197,6 +199,8 @@ public:
 
     double bookFraction() const override;
     RoughPages roughPages() const override;
+    qint64 chapterLoadMilliseconds() const override;
+    bool refinePageEstimate() override;
 
     bool continuesAfter() const override
     {
@@ -433,6 +437,23 @@ private:
     // Lays out more of the slice until it ends at a page that starts a
     // block. False when the layout was stopped.
     bool extendSlice();
+    // The page for the page estimate, and the map with the spine items and
+    // this page.
+    PageEstimateLayout estimateLayout() const;
+    PageMap &pageMap() const;
+    // Gives the pages of the text that has a layout to the page estimate.
+    // Only after a layout that was not stopped.
+    void observeLayout();
+    // Forgets the pages that the layout gave before a change of settings.
+    void forgetObservedPages();
+    // The values of state() without the page estimate.
+    QJsonObject settingsState() const;
+    // A digest of everything that decides the pages, from settingsState().
+    QString estimateKey(const QJsonObject &settings) const;
+    // The saved page estimate, or empty outside chapter mode.
+    QJsonObject pageEstimateRecord(const QJsonObject &settings) const;
+    // Continues from a saved page estimate when the book opens.
+    void restorePageEstimate(const QJsonValue &saved);
     // Lays out the slice that starts at `first` characters.
     bool layoutSlice(int first, int forcedEnd = 0);
     // Lays out the slice that holds `position` when it is another one.

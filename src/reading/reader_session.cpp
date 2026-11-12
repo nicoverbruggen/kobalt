@@ -105,6 +105,19 @@ void prepareNeighbours(Engine &engine, int direction, const std::function<bool()
     pages();
 }
 
+// Measures spine items for the rough page numbers, one small step at a
+// time, after the pages beside the current one. Stops when `current`
+// reports a newer request. One call does a limited number of steps, so that
+// other queued engine work does not wait long; the next idle time goes on.
+void refinePageEstimate(Engine &engine, const std::function<bool()> &current)
+{
+    for (int step = 0; step < 32 && current(); ++step) {
+        engineActivity().checkpoint();
+        if (!engine.refinePageEstimate())
+            return;
+    }
+}
+
 ReaderMarkupFrame captureFrameMarkup(Engine &engine, const ReaderMarkupRequest &request,
                                      quint64 generation, qint64 imageKey)
 {
@@ -180,7 +193,12 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
         result.state["rough_pages"] = rough.pages;
         result.state["rough_item_page"] = rough.itemPage;
         result.state["rough_item_pages"] = rough.itemPages;
+        result.state["rough_pages_estimated"] = rough.pagesEstimated;
+        result.state["rough_item_pages_estimated"] = rough.itemPagesEstimated;
     }
+    // The header can show it. The engine measured it while it loaded.
+    if (const qint64 loadMs = engine.chapterLoadMilliseconds(); loadMs >= 0)
+        result.state["chapter_load_ms"] = double(loadMs);
     result.state["text_font_face"] = engine.textFontFace();
     result.state["embedded_font_count"] = engine.embeddedFontCount();
     result.title = engine.title();
@@ -531,6 +549,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                 guard->idle();
                         },
                         Qt::QueuedConnection);
+                refinePageEstimate(*opening.engine, current);
             },
             Qt::QueuedConnection);
 }
@@ -2087,8 +2106,10 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 QElapsedTimer timer;
                 if (timing)
                     timer.start();
-                prepareNeighbours(*engine, direction,
-                                  [latest, job] { return latest->load() == job; });
+                const std::function<bool()> current = [latest, job] {
+                    return latest->load() == job;
+                };
+                prepareNeighbours(*engine, direction, current);
                 if (timing)
                     diagnostic("neighbours-end",
                                { { "elapsed_ms", double(timer.elapsed()) },
@@ -2111,6 +2132,7 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                                 guard->idle();
                         },
                         Qt::QueuedConnection);
+                refinePageEstimate(*engine, current);
             },
             Qt::QueuedConnection);
 }

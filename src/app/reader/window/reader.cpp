@@ -2735,12 +2735,9 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
                            false);
     if (!accepted)
         return;
-    if (kobalt::diagnosticsActive()) {
-        if (!turnStarted.isValid())
-            turnStarted.start();
-    } else {
-        turnStarted.invalidate();
-    }
+    // A turn buffered behind a running one keeps the time of the first tap.
+    if (!turnStarted.isValid())
+        turnStarted.start();
     if (!annotationMode && !session->busy() && direction > 0
         && session->nextPage() == session->page() && book->offerFinish()) {
         turnStarted.invalidate();

@@ -1,6 +1,7 @@
 #pragma once
-#include <atomic>
+#include "publication/page_estimate.h"
 #include "publication/resource_cache.h"
+#include <atomic>
 #include <lvstream.h>
 
 namespace kobalt {
@@ -26,8 +27,29 @@ struct ReaderSource
         static std::atomic<quint64> next{ 1 };
         return next.fetch_add(1);
     }
-    // The size in bytes of each spine item, in spine order, for rough page
-    // numbers. Filled when first needed.
+
+    // The size in bytes of each spine item, in spine order. Filled when
+    // first needed. They decide the spine items of a unit and give the
+    // page estimate its sizes.
     QVector<qint64> spineBytes;
+
+    // The estimated pages of the book, for rough page numbers. They are for
+    // the open book only and are not saved. A document prepared ahead
+    // shares them with the document on the screen.
+    struct PageEstimate
+    {
+        PageMap map;
+        // The spine item that is being measured, and its XHTML.
+        std::unique_ptr<PageEstimateMeasurer> measurer;
+        LVStreamRef stream;
+        int measuring = -1;
+        PageAnchor book, item;
+        // The page that was placed last: its spine item, the first
+        // character of its slice, its page in that part and the pages of
+        // the part.
+        int lastItem = -1, lastFirst = -1, lastPage = -1, lastPages = 0;
+        // The estimateKey() of the settings that gave the observed pages.
+        QString key;
+    } pageEstimate;
 };
 } // namespace kobalt

@@ -1129,6 +1129,8 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     }
     if (!styled && !resized)
         return true;
+    // The pages that the old settings gave are not the pages of the new ones.
+    forgetObservedPages();
     // Applying a panel can change typography, hyphenation and the viewport together.
     // Set all three before paginating so the book is laid out only once.
     if (reuseLayout) {
@@ -1142,6 +1144,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     }
     if (!renderLayout())
         return false;
+    observeLayout();
     return goTo(anchor);
 }
 
@@ -1177,6 +1180,7 @@ bool EngineDocument::resumeLayout()
     engine_->requestRender();
     if (!renderLayout())
         return false;
+    observeLayout();
     return goTo(anchor);
 }
 
@@ -1904,6 +1908,11 @@ PageInfo EngineDocument::pageInfo() const
     return info;
 }
 
+qint64 EngineDocument::chapterLoadMilliseconds() const
+{
+    return windowLoadMs_ >= 0 ? windowLoadMs_ * engineSlowdown() : -1;
+}
+
 ChapterProgress EngineDocument::chapterProgress() const
 {
     const auto links = chapters();
@@ -1912,9 +1921,6 @@ ChapterProgress EngineDocument::chapterProgress() const
         auto title = links[selected.current].title.trimmed();
         if (title.isEmpty())
             title = strings::get("reader.untitled_chapter");
-        // Experiment: show how long the chapters on screen took to load.
-        if (windowLoadMs_ >= 0)
-            title += QStringLiteral(" · %1 ms").arg(windowLoadMs_ * engineSlowdown());
         return { title, selected.page, selected.pages };
     }
     if (selected.next >= 0)
@@ -1960,6 +1966,15 @@ int EngineDocument::embeddedFontCount() const
 }
 
 QJsonObject EngineDocument::state() const
+{
+    auto result = settingsState();
+    const auto estimate = pageEstimateRecord(result);
+    if (!estimate.isEmpty())
+        result["page_estimate"] = estimate;
+    return result;
+}
+
+QJsonObject EngineDocument::settingsState() const
 {
     return kobalt::qt::object(
             { { "language", engine_ ? qstring(engine_->getLanguage()) : QString() },

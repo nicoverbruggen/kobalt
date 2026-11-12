@@ -205,14 +205,51 @@ Same conditions as above. "Three spine items" loads the item in the middle of th
 
 ### Page estimate
 
-`measurePageEstimate` reads the XHTML of a spine item once and keeps the width of each block of text in units of the font size. `estimatePages` then counts lines and pages for a page size with arithmetic only. It uses typical character widths, not the reading font.
+In chapter mode only the slice on the screen has a layout. The rough page number, the page total, the saved percent and the value for Nickel come from a page map of the whole book (`src/publication/page_estimate.h`).
 
-On the same books, the estimated start of each spine item was compared with its real start, in percent of the book:
+#### Algorithm
 
-- The largest error was under 1.5 percent for most books and 4.7 percent for the worst (The Divine Comedy). A plain character count had a largest error of 5.2 percent and was worse in most books.
-- The estimated page total was 82 to 87 percent of the real total for prose, and 64 to 76 percent for verse. One factor from the spine items that have a real layout can correct it for prose.
-- The measuring pass took 3 to 293 ms for a book, which is about one sixth of a whole-book open. It reads every spine item, so it belongs in the background. Its result does not depend on the font or the page and can be kept.
-- A new estimate after a font size change took under a quarter of a millisecond.
+1. Measure. `PageEstimateMeasurer` reads the XHTML of each spine item once, in parts of 8 KB. For each block it keeps the width of its text in units of the font size, its kind (prose, verse line, table cell, heading, image or rule), its indent, and the quotations, list items and table rows that start before it. The text after a line break is a verse line. The result does not depend on the font size or the page.
+2. Count. For one page, `pageEstimateFeatures` counts the lines of each kind of block: the width of the text divided by the width of the line, rounded up. It also counts paragraphs, quotations, list items, table rows, images, and the parts that start on a new page. This is arithmetic only.
+3. Weigh. A linear model gives the lines of a part from these counts. Its reference weights were fitted on whole spine items of 22 Standard Ebooks. A heading line counts as about five lines, because headings have large margins. A table row adds about two and a half lines. A part that starts on a new page adds a little less than half a page, which is the empty end of its last page.
+4. Correct. Each slice or spine item that gets a layout gives its real page count. The map fits the weights again with these observations, by weighted least squares that is drawn towards the reference weights. One observation does not change the estimate much. Many observations of one kind of text move the weights to that book. An observed part counts with its real pages. When every spine item has a layout, the map is exact. A slice gives the characters that it really holds, also when its layout was made longer to end on a page that starts a block. A unit of several short spine items gives the pages of each spine item. The spine item that is opened ahead adds its pages to the same map. A stopped layout gives nothing. A change of settings that changes the pages forgets the observations. Dark mode, the text colors and the outline thickness keep them.
+5. Show. The engine places the page on the screen in the map: the estimated pages before its spine item, plus the pages before its slice, plus the page in the slice. A forward turn adds one page, also past a spine item without pages. At the start of a spine item or of a slice the page number can move up to a larger estimate, but never down. A jump shows the estimate. The total is the page number plus the estimated pages that follow.
+
+The page fields of the header and footer show these numbers. The chapter of the chapter page is the spine item. Before the map has a total, each page field shows its percent form. A total is estimated until every spine item of the book, or every part of the spine item, had a layout. A spine item that had a layout without pages counts with zero pages.
+
+The measuring runs on the engine worker after the pages beside the current page, in the idle time after a turn. It takes at most 32 parts in one idle time and stops when the user asks for another page. Until a spine item is measured, its pages come from its size in bytes and the pages per byte of the measured spine items.
+
+#### Measured accuracy
+
+Measured with `kobalt-page-estimate-tests <folder>` on the 22 Standard Ebooks, at 1264 by 1680 pixels, a 44 pixel font, 150 percent line spacing and 80 pixel margins. The real pages come from a whole-book layout. For each spine item after the reading position the start page was compared with its real start. The table gives the mean over the books of the largest error, the largest error of any book, and the error of the total. The model used weights fitted on the other 21 books, so that no book was in its own fit. Only spine items before the reading position had a layout.
+
+| Read | Method | Mean of largest error | Largest error | Mean error of the total | Largest error of the total |
+|---|---|---|---|---|---|
+| Nothing | First estimator | 1.04 % | 4.72 % | 17.7 % | 36.4 % |
+| Nothing | Page map | 0.68 % | 2.29 % | 3.5 % | 15.1 % |
+| 1 % | Bytes of the spine item on the screen | 2.48 % | 11.48 % | 11.2 % | 93.3 % |
+| 1 % | Page map | 0.66 % | 2.29 % | 3.3 % | 15.1 % |
+| 5 % | Bytes | 2.48 % | 11.48 % | 5.6 % | 22.9 % |
+| 5 % | Page map | 0.63 % | 2.29 % | 3.2 % | 15.3 % |
+| 20 % | Bytes | 2.48 % | 11.48 % | 7.1 % | 30.1 % |
+| 20 % | Page map | 0.69 % | 2.29 % | 2.2 % | 15.3 % |
+| 50 % | Bytes | 2.12 % | 9.52 % | 6.1 % | 22.1 % |
+| 50 % | Page map | 0.49 % | 2.29 % | 1.3 % | 15.3 % |
+
+- The largest errors of the page map are in the poems of T. S. Eliot: one spine item holds almost the whole book, so the survey has nothing to correct with. In chapter mode the slices of that spine item correct it. The survey does not model slices.
+- On a six-inch page (1072 by 1448 pixels, a 32 pixel font, 48 pixel margins) with the reference weights, the mean of the largest error was 0.89 % before reading and 0.56 % after half of the book. The weights were fitted at the larger page only.
+- On the checked-in Trevelyan's Type Tester, which is not in the fit, the total before any layout is 111 percent of the real one and the largest start error is 1.8 % of the book. Read forward in slices of 6 pages, the page number adds one for each turn and the last page is the total.
+- Real glyph advances of the reading font were tried in place of the fixed table of character widths, in a prototype. With fitted weights they gained almost nothing (0.68 % against 0.70 % for the mean of the largest error). They also need the font on the worker, so the map uses the table.
+
+#### Cost
+
+On the Mac, measuring a whole book took 3 to 299 ms. One part of 8 KB took at most 0.4 ms, with one outlier of 1.5 ms. An observation, with the new fit and the new map, took at most 0.2 ms. Recorded layout times of a Kobo Clara BW suggest that a Kobo is 25 to 40 times slower than the Mac. That gives, as an estimate only, 10 to 16 ms for one part, and 0.1 to 12 seconds of idle time to measure a book. A tap waits for at most one part.
+
+#### Saved
+
+The measurement is kept for the open book only. Saving it would cost a storage write of up to about a megabyte for a large book, and measuring again after opening is short.
+
+A small record, the book-state field `page_estimate` ([Storage compatibility](../storage.md)), keeps the page numbers stable when the book opens again. It holds the corrected weights, the page numbers at the saved position and the real pages of the spine items that were read as a whole. It is saved with the reading position, so it adds no write. When the book opens again at the same position with the same settings, the page on the screen shows the saved numbers before any measuring, and the corrected weights become the starting weights. With other settings, only the weights carry over. `engine.page-estimate` checks this, and also damaged, out-of-range and oversized records. `session.reading-book` checks the save and the new opening through the book state on both storage backends, and that a checkpoint over its byte limit drops the read spine items first, then the record, before image views.
 
 ### Stages
 

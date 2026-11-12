@@ -747,6 +747,10 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     spineItemCount_ = spineItems().size();
     windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
     windowLast_ = firstSpineItem < 0 ? -1 : qMin(lastSpineItem, spineItemCount_ - 1);
+    // A book that opens for the first time continues its saved page estimate.
+    // Later windows of the same book keep the one they have.
+    if (windowFirst_ >= 0 && source_->pageEstimate.map.items() != spineItemCount_)
+        restorePageEstimate(saved.value("page_estimate"));
     windowLoadMs_ = firstSpineItem < 0 ? -1 : windowTimer.elapsed();
     if (!resourceError().isEmpty()) {
         const auto detail = resourceError();
@@ -783,6 +787,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     // another one.
     if (slices() && !saved.value("position").toString().isEmpty())
         goTo(saved.value("position").toString());
+    observeLayout();
     return true;
 }
 
@@ -802,7 +807,9 @@ bool EngineDocument::showSpineItemOf(const QString &position)
 
 QJsonObject EngineDocument::windowSettings(int first, int last) const
 {
-    auto saved = state();
+    // Without the page estimate: it changes with every page, and the
+    // settings decide whether the document prepared ahead can be shown.
+    auto saved = settingsState();
     saved["koblaze_first_spine_item"] = first;
     saved["koblaze_last_spine_item"] = last;
     if (first >= 0) {

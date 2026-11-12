@@ -198,15 +198,29 @@ public:
 
     // Rough page numbers for an engine with the text of only a part of the
     // book: the page in the book and in the spine item, counted from one,
-    // and the pages of each. They come from the size of each spine item and
-    // from the pages of the text that has a layout. All zero when the page
+    // and the pages of each. They come from an estimate of each spine item,
+    // corrected by the pages of the text that has a layout. While the user
+    // reads forward, the page does not move backward. All zero when the page
     // numbers of the engine cover the whole book.
     struct RoughPages
     {
         int page = 0, pages = 0, itemPage = 0, itemPages = 0;
+        // False when the total is counted: every spine item of the book, or
+        // every part of the spine item, had a layout.
+        bool pagesEstimated = true, itemPagesEstimated = true;
     };
 
     virtual RoughPages roughPages() const = 0;
+
+    // How long the engine took to load and lay out the spine items or the
+    // part of a spine item that it has now. Negative when the engine has the
+    // whole book.
+    virtual qint64 chapterLoadMilliseconds() const { return -1; }
+
+    // Does a small step of the background work that makes the rough page
+    // numbers more precise. Never writes storage. True while work remains.
+    virtual bool refinePageEstimate() { return false; }
+
     // Turns `delta` pages. Past the first or the last page that the engine
     // has, it loads the spine item there and continues. False at an end of
     // the book.

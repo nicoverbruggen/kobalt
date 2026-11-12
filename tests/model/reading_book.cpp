@@ -38,10 +38,12 @@ QJsonObject persistedBook(QJsonObject state)
         state.remove(key);
     for (const auto *key : appearance::marginKeys)
         state.remove(key);
-    for (const auto *key : { "chapter_title", "chapter_page", "chapter_pages", "page", "pages",
-                             "next_page", "text_font_face", "embedded_font_count", "cached_pages",
-                             "continues_before", "continues_after", "book_fraction", "rough_page",
-                             "rough_pages", "rough_item_page", "rough_item_pages" })
+    for (const auto *key :
+         { "chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
+           "text_font_face", "embedded_font_count", "cached_pages", "continues_before",
+           "continues_after", "book_fraction", "rough_page", "rough_pages", "rough_item_page",
+           "rough_item_pages", "rough_pages_estimated", "rough_item_pages_estimated",
+           "chapter_load_ms" })
         state.remove(key);
     return state;
 }
@@ -377,6 +379,141 @@ int main(int argc, char **argv)
                                     <= storage::maxJsonBytes,
                     "Image views did not respect the book byte budget or changed unrelated fields");
         }
+        {
+            // The page estimate is optional and can be rebuilt. Over the byte
+            // limit its read spine items go first, then the record, and only
+            // then image views.
+            const auto views = [](int count) {
+                QVector<QPair<QString, QJsonObject>> result;
+                for (int i = 0; i < count; ++i)
+                    result.append({ QString::number(i, 16).rightJustified(64, 'e'),
+                                    { { "zoom", 2 }, { "x", .25 }, { "y", .75 } } });
+                return result;
+            };
+            QJsonArray weights, run{ 0 };
+            for (int i = 0; i < 10; ++i)
+                weights.append(1.0);
+            for (int i = 0; i < 500; ++i)
+                run.append(100000);
+            const QJsonObject estimate{ { "version", 1 },
+                                        { "weights", weights },
+                                        { "layout", "test" },
+                                        { "spine_items", 600 },
+                                        { "page", 7 },
+                                        { "item_page", 2 },
+                                        { "place", QJsonArray{ 0, 0, 1, 4 } },
+                                        { "read", QJsonArray{ run } } };
+            QJsonObject base;
+            {
+                auto session = open(QSize(758, 900), {}, "estimate-base");
+                const auto hash = session->sourceHash();
+                ReadingBook book(std::move(session), finishPaths.bookState("estimate-base"),
+                                 finishPaths, "estimate-base", hash, nullptr, {}, {});
+                QJsonObject snapshot;
+                require(book.checkpoint(&snapshot), "Cannot save the page-estimate base");
+                base = storage::readBookState(finishPaths, "estimate-base").object;
+            }
+            for (const int count : { 20, 64 }) {
+                const QString identity = QString("estimate-budget-%1").arg(count);
+                auto seed = base;
+                seed["book"] = identity;
+                seed["page_estimate"] = estimate;
+                seed["large_optional"] = QString();
+                const int room = int(storage::maxJsonBytes
+                                     - QJsonDocument(seed).toJson(QJsonDocument::Compact).size());
+                seed["large_optional"] = QString(room - 150, 'x');
+                require(storage::writeBookState(finishPaths, identity, seed),
+                        "Cannot seed the page-estimate byte budget");
+                auto session = open(QSize(758, 900), seed, identity);
+                const auto hash = session->sourceHash();
+                ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths,
+                                 identity, hash, nullptr, {}, {});
+                for (const auto &view : views(count))
+                    book.rememberImageView(view.first, view.second);
+                QJsonObject snapshot;
+                require(book.checkpoint(&snapshot),
+                        "The page estimate prevented a reading-position checkpoint");
+                const auto saved = storage::readBookState(finishPaths, identity).object;
+                const auto record = saved.value("page_estimate").toObject();
+                const int kept = saved.value("image_views").toArray().size();
+                require(QJsonDocument(saved).toJson(QJsonDocument::Compact).size()
+                                        <= storage::maxJsonBytes
+                                && saved.value("large_optional").toString().size() == room - 150,
+                        "The page estimate broke the byte limit or changed unrelated fields");
+                if (count == 20)
+                    require(!record.isEmpty() && !record.contains("read")
+                                    && record.value("page").toInt() == 7 && kept == 20,
+                            "The read spine items must go first, before image views");
+                else
+                    require(record.isEmpty() && kept > 0 && kept < 64,
+                            "The page estimate must go before image views are trimmed");
+            }
+        }
+#if __has_include(<koblaze.h>)
+        {
+            // Chapter mode saves its page estimate with the reading position,
+            // and the book opens again with the same page numbers.
+            qputenv("KOBALT_CHAPTER_MODE", "1");
+            qputenv("KOBALT_CHAPTER_PAGES", "2");
+            const QString identity = "page-estimate";
+            QJsonObject shown;
+            {
+                auto session = open(QSize(758, 900), {}, identity);
+                for (int turn = 0; turn < 3; ++turn) {
+                    require(session->turn(1), "Cannot turn in chapter mode");
+                    waitUntil([&] { return !session->busy(); });
+                }
+                shown = session->state();
+                require(shown.value("rough_page").toInt() > 1
+                                && shown.value("page_estimate").isObject(),
+                        "Chapter mode has no page estimate in its frame");
+                require(shown.value("chapter_load_ms").toDouble(-1) >= 0,
+                        "Chapter mode has no chapter load time in its frame");
+                const auto hash = session->sourceHash();
+                ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths,
+                                 identity, hash, nullptr, {}, {});
+                QJsonObject snapshot;
+                require(book.checkpoint(&snapshot), "Cannot save the chapter-mode position");
+            }
+            const auto saved = storage::readBookState(finishPaths, identity).object;
+            const auto record = saved.value("page_estimate").toObject();
+            require(record.value("page").toInt() == shown.value("rough_page").toInt()
+                            && record.value("item_page").toInt()
+                                    == shown.value("rough_item_page").toInt()
+                            && !saved.contains("rough_page") && !saved.contains("chapter_load_ms"),
+                    "The saved record must hold the shown page, without the frame values");
+            auto session = open(QSize(758, 900), saved, identity);
+            const auto hash = session->sourceHash();
+            ReadingBook reopened(std::move(session), finishPaths.bookState(identity), finishPaths,
+                                 identity, hash, nullptr, {}, {});
+            const auto again = reopened.session()->state();
+            require(again.value("rough_page").toInt() == shown.value("rough_page").toInt()
+                            && again.value("rough_item_page").toInt()
+                                    == shown.value("rough_item_page").toInt(),
+                    "The book must open again with the saved page numbers");
+            // A record whose numbers are ahead of the estimate, as after a
+            // correction while reading, opens with its own numbers.
+            auto ahead = saved;
+            auto aheadRecord = record;
+            aheadRecord["page"] = record.value("page").toInt() + 5;
+            aheadRecord["item_page"] = record.value("item_page").toInt() + 5;
+            ahead["page_estimate"] = aheadRecord;
+            ahead["book"] = "page-estimate-ahead";
+            require(storage::writeBookState(finishPaths, "page-estimate-ahead", ahead),
+                    "Cannot seed a page estimate ahead of the estimate");
+            auto aheadSession =
+                    open(QSize(758, 900),
+                         storage::readBookState(finishPaths, "page-estimate-ahead").object,
+                         "page-estimate-ahead");
+            require(aheadSession->state().value("rough_page").toInt()
+                                    == shown.value("rough_page").toInt() + 5
+                            && aheadSession->state().value("rough_item_page").toInt()
+                                    == shown.value("rough_item_page").toInt() + 5,
+                    "The saved page numbers must come from the record");
+            qunsetenv("KOBALT_CHAPTER_MODE");
+            qunsetenv("KOBALT_CHAPTER_PAGES");
+        }
+#endif
         for (const auto &flag : { QJsonValue(), QJsonValue("invalid"), QJsonValue(true) }) {
             const QString identity = "finish-book";
             QJsonObject original{ { "schema", 1 },

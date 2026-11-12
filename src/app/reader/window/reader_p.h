@@ -873,6 +873,9 @@ private:
     bool pageList(int direction);
     // Runs from a tap or swipe until its page is painted; invalid otherwise.
     QElapsedTimer turnStarted;
+    // How long the last turn took from the accepted tap to its page image,
+    // for the header and footer. Negative before the first turn.
+    qint64 pageTurnMilliseconds = -1;
     // The Settings button ignores the second tap of a double tap on a panel's
     // close cell, which sits where the Settings button is. A tap that waited
     // in the queue while the screen repainted still counts as part of the

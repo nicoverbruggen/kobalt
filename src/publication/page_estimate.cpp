@@ -1,13 +1,17 @@
 #include "page_estimate.h"
+#include <QJsonArray>
 #include <QSet>
 #include <QString>
 #include <QXmlStreamReader>
+#include <climits>
 #include <cmath>
 
 namespace kobalt {
 namespace {
 // The advance of one character in units of the font size. These are typical
-// values for a book face, not measurements of the reading font.
+// values for a book face, not measurements of the reading font. Real glyph
+// advances were measured and were not more precise once the model weights
+// were fitted; see doc/engines/migration.md.
 float advance(char32_t c)
 {
     if (c == U' ')
@@ -65,27 +69,36 @@ float advance(char32_t c)
     return 0.55f;
 }
 
+// The text of a line takes this much more room than the advance table says:
+// book faces are wider than the table, and a line is not filled to its end.
+constexpr double textRoom = 1.15 / 0.97;
+
 bool whitespace(QChar c)
 {
     const auto unit = c.unicode();
     return unit == ' ' || unit == '\t' || unit == '\n' || unit == '\r' || unit == '\f';
 }
 
+bool heading(const QString &name)
+{
+    return name.size() == 2 && name[0] == QLatin1Char('h') && name[1] >= QLatin1Char('1')
+            && name[1] <= QLatin1Char('6');
+}
+
 float headingScale(const QString &name)
 {
-    if (name.size() == 2 && name[0] == QLatin1Char('h')) {
-        switch (name[1].unicode()) {
-        case '1':
-            return 1.6f;
-        case '2':
-            return 1.4f;
-        case '3':
-            return 1.2f;
-        default:
-            return 1;
-        }
+    if (!heading(name))
+        return 1;
+    switch (name[1].unicode()) {
+    case '1':
+        return 1.6f;
+    case '2':
+        return 1.4f;
+    case '3':
+        return 1.2f;
+    default:
+        return 1;
     }
-    return 1;
 }
 
 const QSet<QString> &blockNames()
@@ -105,124 +118,774 @@ bool indents(const QString &name)
             || name == QLatin1String("ol") || name == QLatin1String("dd");
 }
 
+bool cell(const QString &name)
+{
+    return name == QLatin1String("td") || name == QLatin1String("th");
+}
+
+bool listItem(const QString &name)
+{
+    return name == QLatin1String("li") || name == QLatin1String("dt")
+            || name == QLatin1String("dd");
+}
+
 bool skipped(const QString &name)
 {
     return name == QLatin1String("head") || name == QLatin1String("script")
             || name == QLatin1String("style") || name == QLatin1String("title");
 }
+
+quint8 add(quint8 count)
+{
+    return count < 255 ? quint8(count + 1) : count;
+}
+
+// The lines of evidence that the reference weights count as. A weight of
+// lines is drawn towards its reference as if 1000 lines of the open book
+// confirmed it. The weights of block counts and of pages need fewer.
+const double referenceStrength[PageEstimateFeatures::Count] = { 1000, 1000, 1000, 30, 1000,
+                                                                30,   30,   30,   5,  50 };
 } // namespace
+
+PageEstimateMeasurer::PageEstimateMeasurer() : parser_(new QXmlStreamReader) { }
+
+PageEstimateMeasurer::~PageEstimateMeasurer() = default;
+
+void PageEstimateMeasurer::flush(PageEstimateBlock::Kind kind)
+{
+    if (content_ || kind != PageEstimateBlock::Text) {
+        PageEstimateBlock block;
+        block.width = width_;
+        block.scale = scales_.last();
+        block.depth = quint8(qBound(0, depth_, 255));
+        block.end = characters_;
+        block.quotes = quotes_;
+        block.listItems = listItems_;
+        block.rows = rows_;
+        quotes_ = listItems_ = rows_ = 0;
+        block.kind = kind;
+        if (kind == PageEstimateBlock::Text || kind == PageEstimateBlock::Line) {
+            if (cells_ > 0)
+                block.kind = PageEstimateBlock::Cell;
+            else if (headings_ > 0)
+                block.kind = PageEstimateBlock::Heading;
+            else if (broken_ || kind == PageEstimateBlock::Line)
+                block.kind = PageEstimateBlock::Line;
+        }
+        item_.blocks.append(block);
+    }
+    // Text after a line break in the same block is the next line of verse.
+    broken_ = kind == PageEstimateBlock::Line;
+    width_ = 0;
+    content_ = pendingSpace_ = false;
+}
+
+void PageEstimateMeasurer::start(const QString &name)
+{
+    if (skip_ || skipped(name)) {
+        ++skip_;
+        return;
+    }
+    if (name == QLatin1String("br")) {
+        flush(PageEstimateBlock::Line);
+    } else if (name == QLatin1String("hr")) {
+        flush(PageEstimateBlock::Text);
+        flush(PageEstimateBlock::Rule);
+    } else if (name == QLatin1String("img") || name == QLatin1String("svg")
+               || name == QLatin1String("image")) {
+        flush(PageEstimateBlock::Text);
+        flush(PageEstimateBlock::Image);
+        // An image inside an SVG is the same picture.
+        if (name == QLatin1String("svg"))
+            ++skip_;
+    } else if (blockNames().contains(name)) {
+        flush(PageEstimateBlock::Text);
+        scales_.append(scales_.last() * headingScale(name));
+        depth_ += indents(name);
+        cells_ += cell(name);
+        headings_ += heading(name);
+        if (name == QLatin1String("blockquote"))
+            quotes_ = add(quotes_);
+        else if (listItem(name))
+            listItems_ = add(listItems_);
+        else if (name == QLatin1String("tr"))
+            rows_ = add(rows_);
+    }
+}
+
+void PageEstimateMeasurer::end(const QString &name)
+{
+    if (skip_) {
+        --skip_;
+        return;
+    }
+    if (blockNames().contains(name)) {
+        flush(PageEstimateBlock::Text);
+        if (scales_.size() > 1)
+            scales_.removeLast();
+        depth_ -= indents(name);
+        cells_ -= cell(name);
+        headings_ -= heading(name);
+    }
+}
+
+void PageEstimateMeasurer::text(const QString &text)
+{
+    const float scale = scales_.last();
+    for (int i = 0; i < text.size(); ++i) {
+        const QChar unit = text[i];
+        if (whitespace(unit)) {
+            pendingSpace_ = content_;
+            continue;
+        }
+        char32_t c = unit.unicode();
+        if (unit.isHighSurrogate() && i + 1 < text.size())
+            c = QChar::surrogateToUcs4(unit, text[++i]);
+        if (pendingSpace_) {
+            width_ += advance(U' ') * scale;
+            ++characters_;
+        }
+        pendingSpace_ = false;
+        width_ += advance(c) * scale;
+        content_ = true;
+        ++characters_;
+    }
+}
+
+void PageEstimateMeasurer::feed(const QByteArray &chunk, bool last)
+{
+    if (done_)
+        return;
+    parser_->addData(chunk);
+    while (!parser_->atEnd()) {
+        parser_->readNext();
+        if (parser_->isStartElement())
+            start(parser_->name().toString());
+        else if (parser_->isEndElement())
+            end(parser_->name().toString());
+        else if (parser_->isCharacters() && !skip_)
+            text(parser_->text().toString());
+    }
+    const bool waiting = parser_->error() == QXmlStreamReader::PrematureEndOfDocumentError;
+    if (waiting && !last)
+        return;
+    flush(PageEstimateBlock::Text);
+    item_.characters = characters_;
+    item_.parsed = !parser_->hasError();
+    done_ = true;
+    parser_.reset();
+}
 
 PageEstimateItem measurePageEstimate(const QByteArray &xhtml)
 {
-    PageEstimateItem item;
-    QXmlStreamReader parser(xhtml);
-    // The text of the block that is open, as its width so far.
-    float width = 0;
-    bool content = false, pendingSpace = false;
-    QVector<float> scales{ 1 };
-    int depth = 0, skip = 0;
-    // Ends the open text. `kind` says what ended it. Text before a line break
-    // gets no paragraph gap. A line break without text is an empty line.
-    const auto flush = [&](PageEstimateBlock::Kind kind) {
-        if (content || kind != PageEstimateBlock::Text) {
-            PageEstimateBlock block;
-            block.width = width;
-            block.scale = scales.last();
-            block.depth = quint8(qBound(0, depth, 255));
-            block.kind = content && kind != PageEstimateBlock::LineBreak ? PageEstimateBlock::Text
-                                                                         : kind;
-            item.blocks.append(block);
-        }
-        width = 0;
-        content = pendingSpace = false;
-    };
-    while (!parser.atEnd()) {
-        parser.readNext();
-        if (parser.isStartElement()) {
-            const QString name = parser.name().toString();
-            if (skip || skipped(name)) {
-                ++skip;
-                continue;
-            }
-            if (name == QLatin1String("br")) {
-                flush(PageEstimateBlock::LineBreak);
-            } else if (name == QLatin1String("hr")) {
-                flush(PageEstimateBlock::Text);
-                flush(PageEstimateBlock::Rule);
-            } else if (name == QLatin1String("img") || name == QLatin1String("svg")
-                       || name == QLatin1String("image")) {
-                flush(PageEstimateBlock::Text);
-                flush(PageEstimateBlock::Image);
-            } else if (blockNames().contains(name)) {
-                flush(PageEstimateBlock::Text);
-                scales.append(scales.last() * headingScale(name));
-                depth += indents(name);
-            }
-        } else if (parser.isEndElement()) {
-            const QString name = parser.name().toString();
-            if (skip) {
-                --skip;
-                continue;
-            }
-            if (blockNames().contains(name)) {
-                flush(PageEstimateBlock::Text);
-                if (scales.size() > 1)
-                    scales.removeLast();
-                depth -= indents(name);
-            }
-        } else if (parser.isCharacters() && !skip) {
-            const QString text = parser.text().toString();
-            const float scale = scales.last();
-            for (int i = 0; i < text.size(); ++i) {
-                const QChar unit = text[i];
-                if (whitespace(unit)) {
-                    pendingSpace = content;
-                    continue;
-                }
-                char32_t c = unit.unicode();
-                if (unit.isHighSurrogate() && i + 1 < text.size())
-                    c = QChar::surrogateToUcs4(unit, text[++i]);
-                if (pendingSpace)
-                    width += advance(U' ') * scale;
-                pendingSpace = false;
-                width += advance(c) * scale;
-                content = true;
-                ++item.characters;
-            }
-        }
-    }
-    flush(PageEstimateBlock::Text);
-    item.parsed = !parser.hasError();
-    return item;
+    PageEstimateMeasurer measurer;
+    measurer.feed(xhtml, true);
+    return measurer.item();
 }
 
-double estimatePages(const PageEstimateItem &item, const PageEstimateLayout &layout)
+double PageEstimateLayout::linesPerPage() const
 {
-    if (layout.fontSize <= 0 || layout.lineHeight <= 0 || layout.width <= 0 || layout.height <= 0)
-        return 0;
-    double height = 0;
-    for (const auto &block : item.blocks) {
-        const double line = layout.lineHeight * block.scale;
+    return valid() ? qMax(1.0, std::floor(height / lineHeight)) : 1;
+}
+
+bool PageEstimateLayout::operator==(const PageEstimateLayout &other) const
+{
+    return fontSize == other.fontSize && lineHeight == other.lineHeight && width == other.width
+            && height == other.height && indent == other.indent;
+}
+
+PageEstimateFeatures &PageEstimateFeatures::operator+=(const PageEstimateFeatures &other)
+{
+    for (int i = 0; i < Count; ++i)
+        value[i] += other.value[i];
+    return *this;
+}
+
+PageEstimateFeatures pageEstimateFeatures(const PageEstimateItem &item,
+                                          const PageEstimateLayout &layout, int first, int last)
+{
+    PageEstimateFeatures features;
+    if (!layout.valid())
+        return features;
+    using F = PageEstimateFeatures;
+    auto &value = features.value;
+    const double page = layout.linesPerPage();
+    const int end = last < 0 ? item.blocks.size() : qMin(last, int(item.blocks.size()));
+    for (int i = qMax(0, first); i < end; ++i) {
+        const auto &block = item.blocks[i];
+        value[F::Quotes] += block.quotes;
+        value[F::ListItems] += block.listItems;
+        value[F::Rows] += block.rows;
         switch (block.kind) {
         case PageEstimateBlock::Image:
-            // The size of an image is not known without its file. Half a
-            // page is between an ornament and a full plate.
-            height += layout.height / 2;
+            value[F::Images] += page;
             continue;
         case PageEstimateBlock::Rule:
-            height += line;
+            value[F::ProseLines] += 1;
             continue;
-        case PageEstimateBlock::LineBreak:
-        case PageEstimateBlock::Text:
+        default:
             break;
         }
         const double available =
                 qMax(layout.fontSize * 4, layout.width - block.depth * 2 * layout.fontSize);
-        const double text = block.width * layout.fontSize + layout.indent;
-        height += qMax(1.0, std::ceil(text / available)) * line;
-        if (block.kind == PageEstimateBlock::Text)
-            height += layout.paragraphGap;
+        double text = block.width * textRoom * layout.fontSize;
+        if (block.kind != PageEstimateBlock::Line)
+            text += layout.indent;
+        const double lines = qMax(1.0, std::ceil(text / available)) * block.scale;
+        switch (block.kind) {
+        case PageEstimateBlock::Text:
+            value[F::ProseLines] += lines;
+            value[F::Paragraphs] += 1;
+            break;
+        case PageEstimateBlock::Line:
+            value[F::VerseLines] += lines;
+            break;
+        case PageEstimateBlock::Cell:
+            value[F::CellLines] += lines;
+            break;
+        case PageEstimateBlock::Heading:
+            value[F::HeadingLines] += lines;
+            break;
+        default:
+            break;
+        }
     }
-    return qMax(0.05, height / layout.height);
+    return features;
+}
+
+double PageEstimateModel::lines(const PageEstimateFeatures &features) const
+{
+    double sum = 0;
+    for (int i = 0; i < PageEstimateFeatures::Count; ++i)
+        sum += weight[i] * features.value[i];
+    return sum;
+}
+
+PageEstimateModel PageEstimateModel::reference()
+{
+    // Fitted with the survey in tests/model/page_estimate.cpp (--fit) on
+    // 22 Standard Ebooks. In order: lines of prose, verse, table cells and
+    // headings, then for each paragraph, quotation, list item and table row,
+    // and in pages for each image and each start on a new page.
+    PageEstimateModel model;
+    const double weights[PageEstimateFeatures::Count] = { 1.035, 1.061, 0.644, 4.966, -0.227,
+                                                          3.937, 0.821, 2.572, 0.423, 0.425 };
+    for (int i = 0; i < PageEstimateFeatures::Count; ++i)
+        model.weight[i] = weights[i];
+    return model;
+}
+
+const double *PageEstimateModel::strength()
+{
+    return referenceStrength;
+}
+
+void PageEstimateFit::add(const PageEstimateFeatures &features, double lines)
+{
+    const double weight = 1 / qMax(1.0, lines);
+    for (int i = 0; i < PageEstimateFeatures::Count; ++i) {
+        b_[i] += weight * features.value[i] * lines;
+        for (int j = 0; j < PageEstimateFeatures::Count; ++j)
+            a_[i][j] += weight * features.value[i] * features.value[j];
+    }
+    ++count_;
+}
+
+PageEstimateModel PageEstimateFit::solve(const PageEstimateModel &prior,
+                                         const double *strength) const
+{
+    if (!count_)
+        return prior;
+    constexpr int n = PageEstimateFeatures::Count;
+    double m[n][n + 1];
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j)
+            m[i][j] = a_[i][j];
+        m[i][i] += strength[i];
+        m[i][n] = b_[i] + strength[i] * prior.weight[i];
+    }
+    // Gaussian elimination with partial pivoting. The prior keeps the
+    // matrix positive definite.
+    for (int i = 0; i < n; ++i) {
+        int pivot = i;
+        for (int r = i + 1; r < n; ++r) {
+            if (std::fabs(m[r][i]) > std::fabs(m[pivot][i]))
+                pivot = r;
+        }
+        if (pivot != i) {
+            for (int c = 0; c <= n; ++c)
+                std::swap(m[i][c], m[pivot][c]);
+        }
+        if (std::fabs(m[i][i]) < 1e-12)
+            return prior;
+        for (int r = 0; r < n; ++r) {
+            if (r == i)
+                continue;
+            const double factor = m[r][i] / m[i][i];
+            for (int c = i; c <= n; ++c)
+                m[r][c] -= factor * m[i][c];
+        }
+    }
+    PageEstimateModel model;
+    for (int i = 0; i < n; ++i)
+        model.weight[i] = m[i][n] / m[i][i];
+    return model;
+}
+
+void PageMap::reset(const QVector<qint64> &bytes)
+{
+    items_ = QVector<Item>(bytes.size());
+    for (int i = 0; i < bytes.size(); ++i)
+        items_[i].bytes = qMax<qint64>(0, bytes[i]);
+    observed_.clear();
+    measuredCount_ = 0;
+    model_ = prior_;
+    update();
+}
+
+int PageMap::nextUnmeasured(int first) const
+{
+    if (first >= 0 && first < items_.size() && !items_[first].measured)
+        return first;
+    for (int i = 0; i < items_.size(); ++i) {
+        if (!items_[i].measured)
+            return i;
+    }
+    return -1;
+}
+
+bool PageMap::measured(int item) const
+{
+    return item >= 0 && item < items_.size() && items_[item].measured;
+}
+
+void PageMap::setMeasured(int item, const PageEstimateItem &measurement)
+{
+    if (item < 0 || item >= items_.size())
+        return;
+    auto &entry = items_[item];
+    measuredCount_ += !entry.measured;
+    entry.measurement = measurement;
+    entry.measured = true;
+    entry.features = pageEstimateFeatures(measurement, layout_);
+    // Observations of the item before its measurement have no counts yet.
+    const auto key = qint64(item) << 32;
+    for (auto it = observed_.lowerBound(key); it != observed_.end() && it.key() >> 32 == item; ++it)
+        it->ready = false;
+    refit();
+}
+
+bool PageMap::setLayout(const PageEstimateLayout &layout, int sliceCharacters)
+{
+    sliceCharacters = qMax(0, sliceCharacters);
+    if (layout == layout_ && sliceCharacters == sliceCharacters_)
+        return false;
+    layout_ = layout;
+    sliceCharacters_ = sliceCharacters;
+    observed_.clear();
+    for (auto &item : items_) {
+        if (item.measured)
+            item.features = pageEstimateFeatures(item.measurement, layout_);
+    }
+    refit();
+    return true;
+}
+
+void PageMap::setPrior(const PageEstimateModel &prior)
+{
+    prior_ = prior;
+    refit();
+}
+
+void PageMap::observe(int item, int first, int last, int characters, int pages)
+{
+    if (item < 0 || item >= items_.size() || pages < 0)
+        return;
+    if (characters <= 0)
+        first = 0, last = characters = 1;
+    Observed observed;
+    observed.first = qBound(0, first, characters);
+    observed.last = qBound(observed.first, last, characters);
+    observed.characters = characters;
+    observed.pages = pages;
+    // A part without pages, such as an empty spine item, has no last page
+    // whose empty end the weights could learn.
+    observed.fit = pages > 0;
+    // A slice laid out after a change of the slices can overlap older ones.
+    const double from = double(observed.first) / characters;
+    const double to = double(observed.last) / characters;
+    const auto key = qint64(item) << 32;
+    for (auto it = observed_.lowerBound(key); it != observed_.end() && it.key() >> 32 == item;) {
+        const double otherFrom = double(it->first) / it->characters;
+        const double otherTo = double(it->last) / it->characters;
+        if (otherFrom < to && from < otherTo)
+            it = observed_.erase(it);
+        else
+            ++it;
+    }
+    observed_.insert((qint64(item) << 32) | quint32(observed.first), observed);
+    refit();
+}
+
+QMap<int, int> PageMap::completeItems() const
+{
+    QMap<int, int> result;
+    int item = -1, pages = 0;
+    // The part of the item that the parts so far cover without a gap, or
+    // negative after a gap.
+    double covered = 0;
+    const auto finish = [&] {
+        if (item >= 0 && covered >= 1 - 1e-9)
+            result.insert(item, pages);
+    };
+    for (auto it = observed_.cbegin(); it != observed_.cend(); ++it) {
+        const int index = int(it.key() >> 32);
+        if (index != item) {
+            finish();
+            item = index;
+            pages = 0;
+            covered = 0;
+        }
+        if (covered < 0)
+            continue;
+        if (double(it->first) / it->characters > covered + 1e-9) {
+            covered = -1;
+            continue;
+        }
+        covered = qMax(covered, double(it->last) / it->characters);
+        pages += it->pages;
+    }
+    finish();
+    return result;
+}
+
+void PageMap::restore(const QMap<int, int> &pages)
+{
+    for (auto it = pages.cbegin(); it != pages.cend(); ++it) {
+        if (it.key() < 0 || it.key() >= items_.size() || it.value() < 0)
+            continue;
+        Observed observed;
+        observed.last = observed.characters = 1;
+        observed.pages = it.value();
+        observed.fit = false;
+        observed_.insert(qint64(it.key()) << 32, observed);
+    }
+    refit();
+}
+
+int PageMap::blockAt(const Item &item, double fraction) const
+{
+    // The first block that starts at or after the fraction. A block starts
+    // where the block before it ends.
+    const auto &blocks = item.measurement.blocks;
+    if (fraction <= 0)
+        return 0;
+    if (fraction >= 1)
+        return blocks.size();
+    const double target = fraction * item.measurement.characters;
+    int low = 0, high = blocks.size();
+    while (low < high) {
+        const int middle = (low + high) / 2;
+        const double start = middle > 0 ? blocks[middle - 1].end : 0;
+        if (start < target)
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    return low;
+}
+
+int PageMap::startsBefore(const Item &item, double fraction) const
+{
+    if (fraction <= 0)
+        return 0;
+    if (!sliceCharacters_)
+        return 1;
+    // The slices are counted in engine characters. The measured characters
+    // are close to them.
+    const double characters = qMax<qint32>(1, item.measurement.characters);
+    return qMax(1, int(std::ceil(fraction * characters / sliceCharacters_ - 1e-9)));
+}
+
+double PageMap::estimate(int index, double fraction) const
+{
+    const auto &item = items_[index];
+    const double page = layout_.linesPerPage();
+    const double start = model_.weight[PageEstimateFeatures::Starts] * page;
+    const auto key = qint64(index) << 32;
+    auto it = observed_.lowerBound(key);
+    const bool observed = it != observed_.end() && it.key() >> 32 == index;
+    if (!observed && fraction >= 1)
+        return qMax(1.0, (model_.lines(item.features) + startsBefore(item, 1) * start) / page);
+    // The observed parts count with their real pages. The blocks between
+    // them count with the model.
+    double pages = 0, lines = 0, cursor = 0;
+    int parts = 0;
+    // True when a part before `fraction` has no observation.
+    bool gap = false;
+    for (; it != observed_.end() && it.key() >> 32 == index; ++it) {
+        const double first = double(it->first) / it->characters;
+        const double last = double(it->last) / it->characters;
+        if (first >= fraction)
+            break;
+        if (first > cursor) {
+            gap = true;
+            lines += model_.lines(pageEstimateFeatures(
+                    item.measurement, layout_, blockAt(item, cursor), blockAt(item, first)));
+        }
+        if (last <= fraction + 1e-9) {
+            pages += it->pages;
+            ++parts;
+        } else {
+            pages += it->pages * (fraction - first) / qMax(1e-9, last - first);
+        }
+        cursor = qMax(cursor, qMin(last, fraction));
+    }
+    if (fraction > cursor) {
+        gap = true;
+        lines += model_.lines(pageEstimateFeatures(item.measurement, layout_, blockAt(item, cursor),
+                                                   blockAt(item, fraction)));
+    }
+    const int open = qMax(0, startsBefore(item, fraction) - parts);
+    pages += qMax(0.0, lines + open * start) / page;
+    // An item takes at least one page, unless its every part was observed:
+    // an empty spine item has none.
+    return fraction >= 1 && gap ? qMax(1.0, pages) : pages;
+}
+
+void PageMap::refit()
+{
+    if (!layout_.valid()) {
+        model_ = prior_;
+        update();
+        return;
+    }
+    const double page = layout_.linesPerPage();
+    PageEstimateFit fit;
+    for (auto it = observed_.begin(); it != observed_.end(); ++it) {
+        const auto &item = items_[int(it.key() >> 32)];
+        if (!item.measured || !it->fit)
+            continue;
+        if (!it->ready) {
+            const double first = double(it->first) / it->characters;
+            const double last = double(it->last) / it->characters;
+            it->features = pageEstimateFeatures(item.measurement, layout_, blockAt(item, first),
+                                                blockAt(item, last));
+            it->features.value[PageEstimateFeatures::Starts] = page;
+            it->ready = true;
+        }
+        fit.add(it->features, it->pages * page);
+    }
+    // The pull of a weight in pages is the same at every font size.
+    double strength[PageEstimateFeatures::Count];
+    for (int i = 0; i < PageEstimateFeatures::Count; ++i)
+        strength[i] = PageEstimateModel::strength()[i];
+    strength[PageEstimateFeatures::Images] *= page * page;
+    strength[PageEstimateFeatures::Starts] *= page * page;
+    model_ = fit.solve(prior_, strength);
+    update();
+}
+
+void PageMap::update()
+{
+    // The items without a measurement take the pages per byte of the
+    // measured ones, or else of the observed parts.
+    double pages = 0, bytes = 0;
+    for (int i = 0; i < items_.size(); ++i) {
+        if (items_[i].measured && layout_.valid()) {
+            items_[i].pages = estimate(i, 1);
+            pages += items_[i].pages;
+            bytes += items_[i].bytes;
+        }
+    }
+    if (bytes <= 0) {
+        for (auto it = observed_.cbegin(); it != observed_.cend(); ++it) {
+            const double part = double(it->last - it->first) / it->characters;
+            pages += it->pages;
+            bytes += items_[int(it.key() >> 32)].bytes * part;
+        }
+    }
+    pagesPerByte_ = bytes > 0 ? pages / bytes : 0;
+    starts_.resize(items_.size() + 1);
+    starts_[0] = 0;
+    for (int i = 0; i < items_.size(); ++i) {
+        if (!items_[i].measured || !layout_.valid())
+            items_[i].pages = byteEstimate(i, 1);
+        starts_[i + 1] = starts_[i] + items_[i].pages;
+    }
+}
+
+double PageMap::byteEstimate(int index, double fraction) const
+{
+    // The observed parts count with their real pages, also an empty item
+    // with none. The parts between them count with their bytes.
+    const double itemPages = items_[index].bytes * pagesPerByte_;
+    const auto key = qint64(index) << 32;
+    double pages = 0, cursor = 0;
+    // True when a part before `fraction` has no observation.
+    bool gap = false;
+    for (auto it = observed_.lowerBound(key); it != observed_.end() && it.key() >> 32 == index;
+         ++it) {
+        const double first = double(it->first) / it->characters;
+        const double last = double(it->last) / it->characters;
+        if (first >= fraction)
+            break;
+        if (first > cursor + 1e-9) {
+            gap = true;
+            pages += (first - cursor) * itemPages;
+        }
+        if (last <= fraction + 1e-9)
+            pages += it->pages;
+        else
+            pages += it->pages * (fraction - first) / qMax(1e-9, last - first);
+        cursor = qMax(cursor, qMin(last, fraction));
+    }
+    if (fraction > cursor + 1e-9) {
+        gap = true;
+        pages += (fraction - cursor) * itemPages;
+    }
+    // An item takes at least one page, unless its every part was observed.
+    return fraction >= 1 && gap && pagesPerByte_ > 0 ? qMax(1.0, pages) : pages;
+}
+
+double PageMap::itemPages(int item) const
+{
+    return item >= 0 && item < items_.size() ? items_[item].pages : 0;
+}
+
+double PageMap::pagesBefore(int item) const
+{
+    return item >= 0 && item < items_.size() ? starts_[item] : 0;
+}
+
+double PageMap::pagesBefore(int item, int before, int characters) const
+{
+    if (item < 0 || item >= items_.size() || characters <= 0 || before <= 0)
+        return 0;
+    const double fraction = qBound(0.0, double(before) / characters, 1.0);
+    if (!items_[item].measured || !layout_.valid())
+        return byteEstimate(item, fraction);
+    return estimate(item, fraction);
+}
+
+double PageMap::total() const
+{
+    return starts_.isEmpty() ? 0 : starts_.last();
+}
+
+namespace {
+bool integer(const QJsonValue &value, int low, int high, int *result)
+{
+    if (!value.isDouble())
+        return false;
+    const double number = value.toDouble();
+    if (!std::isfinite(number) || number != std::floor(number) || number < low || number > high)
+        return false;
+    *result = int(number);
+    return true;
+}
+} // namespace
+
+QJsonObject PageEstimateRecord::toJson() const
+{
+    QJsonArray weights;
+    for (const double weight : model.weight)
+        weights.append(std::round(weight * 10000) / 10000);
+    // Runs of spine items that follow each other: the first item, then the
+    // pages of each.
+    QJsonArray runs, run;
+    int next = -1;
+    for (auto it = read.cbegin(); it != read.cend(); ++it) {
+        if (it.key() != next) {
+            if (!run.isEmpty())
+                runs.append(run);
+            run = QJsonArray();
+            run.append(it.key());
+        }
+        run.append(it.value());
+        next = it.key() + 1;
+    }
+    if (!run.isEmpty())
+        runs.append(run);
+    QJsonObject object;
+    object["version"] = 1;
+    object["weights"] = weights;
+    object["layout"] = layout;
+    object["spine_items"] = spineItems;
+    if (item >= 0 && shown > 0 && itemShown > 0) {
+        QJsonArray place;
+        place.append(item);
+        place.append(first);
+        place.append(page);
+        place.append(partPages);
+        object["place"] = place;
+        object["page"] = shown;
+        object["item_page"] = itemShown;
+    }
+    if (!runs.isEmpty())
+        object["read"] = runs;
+    return object;
+}
+
+bool PageEstimateRecord::fromJson(const QJsonValue &value, PageEstimateRecord *record)
+{
+    const auto object = value.toObject();
+    int version = 0;
+    if (!integer(object.value("version"), 1, 1, &version))
+        return false;
+    const auto weights = object.value("weights").toArray();
+    if (weights.size() != PageEstimateFeatures::Count)
+        return false;
+    PageEstimateRecord result;
+    for (int i = 0; i < PageEstimateFeatures::Count; ++i) {
+        const double weight = weights[i].toDouble(NAN);
+        if (!weights[i].isDouble() || !std::isfinite(weight) || std::fabs(weight) > 1000)
+            return false;
+        result.model.weight[i] = weight;
+    }
+    result.layout = object.value("layout").toString().left(64);
+    if (!integer(object.value("spine_items"), 0, 1000000, &result.spineItems))
+        result.spineItems = 0;
+    const auto place = object.value("place").toArray();
+    int item = -1, first = 0, page = 0, partPages = 0, shown = 0, itemShown = 0;
+    if (place.size() == 4 && integer(place[0], 0, 1000000, &item)
+        && integer(place[1], 0, INT_MAX, &first) && integer(place[2], 0, 1000000, &page)
+        && integer(place[3], 1, 1000000, &partPages) && page < partPages
+        && integer(object.value("page"), 1, 10000000, &shown)
+        && integer(object.value("item_page"), 1, 10000000, &itemShown)) {
+        result.item = item;
+        result.first = first;
+        result.page = page;
+        result.partPages = partPages;
+        result.shown = shown;
+        result.itemShown = itemShown;
+    }
+    for (const auto &entry : object.value("read").toArray()) {
+        const auto run = entry.toArray();
+        int start = 0;
+        if (run.size() < 2 || !integer(run[0], 0, 1000000, &start))
+            continue;
+        for (int i = 1; i < run.size() && result.read.size() < maxRead; ++i) {
+            int pages = 0;
+            if (!integer(run[i], 0, 1000000, &pages))
+                break;
+            result.read.insert(start + i - 1, pages);
+        }
+    }
+    *record = result;
+    return true;
+}
+
+int PageAnchor::place(int estimate, Step step, bool partStart)
+{
+    estimate = qMax(1, estimate);
+    if (shown_ <= 0 || step == Jump) {
+        shown_ = estimate;
+    } else if (step == Forward) {
+        shown_ = partStart ? qMax(shown_ + 1, estimate) : shown_ + 1;
+    } else if (step == Backward) {
+        shown_ = qMax(1, shown_ - 1);
+    }
+    return shown_;
 }
 } // namespace kobalt

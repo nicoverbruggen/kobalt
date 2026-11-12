@@ -495,6 +495,8 @@
 /* Arguments: %1, %2 */
 "header_footer.pages_left" = "%1 %2";
 "header_footer.percent_left" = "%1% left";
+/* Arguments: %1 */
+"header_footer.milliseconds" = "%1 ms";
 "header_footer.preset.default" = "Kobalt";
 "header_footer.preset.alternative_a" = "Bookish";
 "header_footer.preset.alternative_b" = "Ember";
@@ -534,6 +536,8 @@
 "header_footer.field.chapter_percent" = "Percent of chapter";
 "header_footer.field.book_percent" = "Percent of book";
 "header_footer.field.battery_warning" = "Battery warning";
+"header_footer.field.page_turn_time" = "Page turn time";
+"header_footer.field.chapter_load_time" = "Chapter load time";
 /* Arguments: %1 */
 "header_footer.field_description.battery_warning" = "Shows the battery only below %1%.";
 "header_footer.field_description.time_left" = "Estimated from your reading pace.";

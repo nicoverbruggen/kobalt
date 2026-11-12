@@ -24,25 +24,33 @@ enum class Field {
     BookPercent,
     BatteryWarning,
     BatteryPercentOnly,
+    PageTurnTime,
+    ChapterLoadTime,
 };
 // Every field, for reading saved layouts.
 inline constexpr Field fields[] = {
-    Field::Nothing,          Field::BookTitle,      Field::Author,
-    Field::Chapter,          Field::ChapterPage,    Field::BookPage,
-    Field::ChapterPagesLeft, Field::ChapterAndPage, Field::TitleAndPage,
-    Field::BatteryPercent,   Field::Battery,        Field::Time,
-    Field::ChapterTimeLeft,  Field::BookTimeLeft,   Field::ChapterPercent,
-    Field::BookPercent,      Field::BatteryWarning, Field::BatteryPercentOnly,
+    Field::Nothing,          Field::BookTitle,       Field::Author,
+    Field::Chapter,          Field::ChapterPage,     Field::BookPage,
+    Field::ChapterPagesLeft, Field::ChapterAndPage,  Field::TitleAndPage,
+    Field::BatteryPercent,   Field::Battery,         Field::Time,
+    Field::ChapterTimeLeft,  Field::BookTimeLeft,    Field::ChapterPercent,
+    Field::BookPercent,      Field::BatteryWarning,  Field::BatteryPercentOnly,
+    Field::PageTurnTime,     Field::ChapterLoadTime,
 };
 // The fields a slot offers, grouped: the book, the chapter, the whole book,
-// the device, then the fields that need a description to explain them.
+// the device, the fields that need a description to explain them, then the
+// performance times.
 inline constexpr Field choosableFields[] = {
-    Field::Nothing,         Field::BookTitle,          Field::Author,         Field::Chapter,
-    Field::ChapterPage,     Field::ChapterPagesLeft,   Field::ChapterPercent, Field::ChapterAndPage,
-    Field::BookPage,        Field::BookPercent,        Field::TitleAndPage,   Field::Time,
-    Field::BatteryPercent,  Field::BatteryPercentOnly, Field::Battery,        Field::BatteryWarning,
-    Field::ChapterTimeLeft, Field::BookTimeLeft,
+    Field::Nothing,        Field::BookTitle,          Field::Author,
+    Field::Chapter,        Field::ChapterPage,        Field::ChapterPagesLeft,
+    Field::ChapterPercent, Field::ChapterAndPage,     Field::BookPage,
+    Field::BookPercent,    Field::TitleAndPage,       Field::Time,
+    Field::BatteryPercent, Field::BatteryPercentOnly, Field::Battery,
+    Field::BatteryWarning, Field::ChapterTimeLeft,    Field::BookTimeLeft,
+    Field::PageTurnTime,   Field::ChapterLoadTime,
 };
+// What the field list shows for the page turn time before the first turn.
+inline constexpr qint64 samplePageTurnMilliseconds = 12;
 // Battery warning shows the battery only below this percentage.
 inline constexpr int batteryWarningBelow = 20;
 
@@ -145,6 +153,11 @@ struct Values
     bool learningPace = false;
     bool approximateTime = false;
     bool decimalPercentages = false;
+    // How long the last page turn took, from the accepted tap to the new
+    // page image, and how long the engine took to load the last chapter or
+    // part of a chapter. Negative when not known: before the first turn, and
+    // for the chapter load when the engine has the whole book.
+    qint64 pageTurnMilliseconds = -1, chapterLoadMilliseconds = -1;
 };
 
 // One slot's text, and a battery icon drawn after it when `batteryIcon` is set.

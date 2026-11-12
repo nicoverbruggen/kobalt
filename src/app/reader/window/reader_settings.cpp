@@ -91,9 +91,17 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.chapterPages = session->chapterPages();
     values.page = session->page() + 1;
     values.pages = session->pages();
-    // An engine with the text of only a part of the book has no page
-    // numbers to show. The percent is an estimate.
-    if (session->state().contains("book_fraction")) {
+    // An engine with the text of only a part of the book shows rough page
+    // numbers from its page estimate. The chapter is the spine item. Before
+    // the estimate has a total, each page field shows its percent form.
+    const auto &state = session->state();
+    if (state.contains("book_fraction") && state.value("rough_pages").toInt() > 0
+        && state.value("rough_item_pages").toInt() > 0) {
+        values.page = state.value("rough_page").toInt();
+        values.pages = state.value("rough_pages").toInt();
+        values.chapterPage = state.value("rough_item_page").toInt();
+        values.chapterPages = state.value("rough_item_pages").toInt();
+    } else if (state.contains("book_fraction")) {
         values.page = values.pages = values.chapterPage = values.chapterPages = 0;
         values.percentRead = session->progressPercent();
         const int itemPages = session->state().value("rough_item_pages").toInt();
@@ -111,6 +119,9 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.learningPace = estimates.learningPace;
     values.approximateTime = remainingTime::approximate(preferences);
     values.decimalPercentages = headerfooter::decimalPercentages(preferences);
+    values.pageTurnMilliseconds = pageTurnMilliseconds;
+    if (state.contains("chapter_load_ms"))
+        values.chapterLoadMilliseconds = qint64(state.value("chapter_load_ms").toDouble());
     return values;
 }
 

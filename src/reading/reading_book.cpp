@@ -900,17 +900,30 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
     // These describe the displayed frame, not a saved reading position. Drop
     // them from imported records too, before comparing checkpoints or applying
     // the record's byte limit. Diagnostic snapshots above keep the full frame.
-    for (const auto *key : { "chapter_title", "chapter_page", "chapter_pages", "page", "pages",
-                             "next_page", "text_font_face", "embedded_font_count", "cached_pages",
-                             "continues_before", "continues_after", "book_fraction", "rough_page",
-                             "rough_pages", "rough_item_page", "rough_item_pages" })
+    for (const auto *key :
+         { "chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
+           "text_font_face", "embedded_font_count", "cached_pages", "continues_before",
+           "continues_after", "book_fraction", "rough_page", "rough_pages", "rough_item_page",
+           "rough_item_pages", "rough_pages_estimated", "rough_item_pages_estimated",
+           "chapter_load_ms" })
         checkpoint.remove(key);
+    const auto fits = [&checkpoint] {
+        return QJsonDocument(checkpoint).toJson(QJsonDocument::Compact).size()
+                <= storage::maxJsonBytes;
+    };
+    // The page estimate is optional and can be rebuilt. Its read spine items
+    // go first, then the whole record.
+    if (checkpoint.contains("page_estimate") && !fits()) {
+        auto estimate = checkpoint.value("page_estimate").toObject();
+        estimate.remove("read");
+        checkpoint["page_estimate"] = estimate;
+        if (!fits())
+            checkpoint.remove("page_estimate");
+    }
     // Image views are optional. Trim their oldest entries rather than letting
     // them prevent a reading-position checkpoint from fitting its record limit.
     auto views = checkpoint.value("image_views").toArray();
-    while (!views.isEmpty()
-           && QJsonDocument(checkpoint).toJson(QJsonDocument::Compact).size()
-                   > storage::maxJsonBytes) {
+    while (!views.isEmpty() && !fits()) {
         views.removeAt(0);
         if (views.isEmpty())
             checkpoint.remove("image_views");

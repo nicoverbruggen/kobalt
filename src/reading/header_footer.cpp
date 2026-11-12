@@ -86,6 +86,11 @@ QString pageOf(int page, int pages)
     return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(pages) : QString();
 }
 
+QString milliseconds(qint64 value)
+{
+    return value >= 0 ? strings::get("header_footer.milliseconds").arg(value) : QString();
+}
+
 QString joined(const QString &name, const QString &position)
 {
     if (name.isEmpty() || position.isEmpty())
@@ -215,6 +220,10 @@ QString fieldValue(Field field)
         return QStringLiteral("book_percent");
     case Field::BatteryWarning:
         return QStringLiteral("battery_warning");
+    case Field::PageTurnTime:
+        return QStringLiteral("page_turn_time");
+    case Field::ChapterLoadTime:
+        return QStringLiteral("chapter_load_time");
     }
     return QStringLiteral("nothing");
 }
@@ -438,6 +447,12 @@ Content content(Field field, const Values &values, bool uppercase)
                 ? percent(values.percentRead)
                 : percentDone(values.page, values.pages, values.decimalPercentages);
         break;
+    case Field::PageTurnTime:
+        result.text = milliseconds(values.pageTurnMilliseconds);
+        break;
+    case Field::ChapterLoadTime:
+        result.text = milliseconds(values.chapterLoadMilliseconds);
+        break;
     }
     if (uppercase) {
         result.text = result.text.toUpper();
@@ -491,6 +506,10 @@ QString fieldLabel(Field field)
         return strings::get("header_footer.field.book_percent");
     case Field::BatteryWarning:
         return strings::get("header_footer.field.battery_warning");
+    case Field::PageTurnTime:
+        return strings::get("header_footer.field.page_turn_time");
+    case Field::ChapterLoadTime:
+        return strings::get("header_footer.field.chapter_load_time");
     }
     return {};
 }

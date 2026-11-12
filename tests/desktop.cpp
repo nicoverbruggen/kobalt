@@ -7974,7 +7974,161 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(page->chrome.slotFields[2], Field::BatteryPercentOnly);
     }
 
-    // Checks that the header and footer sheet stays open across screenshot, toolbar, page and tab taps, and closes to Layout.
+    // The six-inch reader in the light theme, at 100% and at 150% interface
+    // text. The "-large" tag makes the Fixture pick 150%.
+    void headerFooterChapterMode_data()
+    {
+        QTest::addColumn<int>("preset");
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("1-light") << 1 << false;
+        QTest::newRow("1-large") << 1 << false;
+    }
+
+    // In chapter mode the page fields show rough page numbers with their
+    // totals, and the time fields show the page turn and the chapter load.
+    // KOBALT_CHAPTER_PAGE_CAPTURES names a folder for the reader at a
+    // chapter start, in its middle and after the next chapter starts.
+    void headerFooterChapterMode()
+    {
+        using namespace headerfooter;
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        QCOMPARE(ui::textScale(), largeTextVariant() ? 1.5 : 1.0);
+        auto layout = presetLayout(Preset::Default);
+        layout.slotFields = { Field::BookTitle, Field::PageTurnTime,    Field::BookPage,
+                              Field::Chapter,   Field::ChapterLoadTime, Field::ChapterPage };
+        // Default sets its center header slot in uppercase, which would read 12 MS.
+        layout.uppercase[1] = false;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[presetKey] = presetValue(Preset::Custom);
+        preferences[customKey] = toJson(layout);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        selectPreview(fixture, preset);
+        setChapterModeOverride(1);
+        const auto restore = qScopeGuard([] { setChapterModeOverride(-1); });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavChapters"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter1"));
+        QVERIFY(fixture.press("rrChapter1"));
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        // A page and its total.
+        const QRegularExpression pageForm("^(\\d+) / (\\d+)$");
+        const QRegularExpression timeForm("^\\d+ ms$");
+        // The chapter title no longer carries the load time.
+        QVERIFY2(!page->slotContents[3].text.contains(QStringLiteral(" · ")),
+                 qPrintable(page->slotContents[3].text));
+        QVERIFY2(timeForm.match(page->slotContents[4].text).hasMatch(),
+                 qPrintable(page->slotContents[4].text));
+
+        struct Shown
+        {
+            int book = 0, books = 0, chapter = 0, chapters = 0;
+        };
+
+        const auto shown = [&] {
+            Shown result;
+            const auto bookPage = pageForm.match(page->slotContents[2].text);
+            const auto chapterPage = pageForm.match(page->slotContents[5].text);
+            if (bookPage.hasMatch() && chapterPage.hasMatch()) {
+                result = { bookPage.captured(1).toInt(), bookPage.captured(2).toInt(),
+                           chapterPage.captured(1).toInt(), chapterPage.captured(2).toInt() };
+            }
+            return result;
+        };
+        const QString folder = qEnvironmentVariable("KOBALT_CHAPTER_PAGE_CAPTURES");
+        const auto save = [&](const QString &name) {
+            if (folder.isEmpty())
+                return true;
+            QCoreApplication::processEvents();
+            auto *surface = fixture.window.readerWindow();
+            QImage pixels(surface->size(), QImage::Format_ARGB32_Premultiplied);
+            pixels.fill(Qt::transparent);
+            surface->render(&pixels);
+            pixels.setDotsPerMeterX(qRound(300 / 0.0254));
+            pixels.setDotsPerMeterY(qRound(300 / 0.0254));
+            return QDir().mkpath(folder)
+                    && pixels.save(folder + '/' + screenshotVariant(preset, dark) + '-' + name
+                                   + ".png");
+        };
+        const auto turn = [&] {
+            const auto before = page->slotContents[2].text;
+            test::skipPageTurnWindow();
+            fixture.window.readerWindow()->pageButton(1);
+            return QTest::qWaitFor(
+                    [&] {
+                        return !fixture.state().value("busy").toBool()
+                                && page->slotContents[2].text != before;
+                    },
+                    5000);
+        };
+        auto current = shown();
+        QVERIFY2(current.books > 0 && current.chapters > 0,
+                 qPrintable(page->slotContents[2].text + " | " + page->slotContents[5].text));
+        QCOMPARE(current.chapter, 1);
+        // On to the first chapter that is long enough for the turns below.
+        for (int step = 0; step < 200 && (current.chapter != 1 || current.chapters < 8); ++step) {
+            QVERIFY(turn());
+            const auto next = shown();
+            QVERIFY(next.book > current.book);
+            current = next;
+        }
+        QCOMPARE(current.chapter, 1);
+        QVERIFY(current.book <= current.books && current.chapter <= current.chapters);
+        QVERIFY(save("chapter-start"));
+        // Forward turns inside the chapter add one page to both numbers.
+        for (int step = 0; step < 5; ++step) {
+            QVERIFY(turn());
+            const auto next = shown();
+            QCOMPARE(next.book, current.book + 1);
+            QCOMPARE(next.chapter, current.chapter + 1);
+            current = next;
+        }
+        // After a turn the header shows how long it took.
+        QVERIFY2(timeForm.match(page->slotContents[1].text).hasMatch(),
+                 qPrintable(page->slotContents[1].text));
+        QVERIFY(!page->slotContents[3].text.contains(QStringLiteral(" ms")));
+        QVERIFY(save("chapter-middle"));
+        // On to the start of the next chapter. The book page never goes back.
+        for (int step = 0; step < 200; ++step) {
+            QVERIFY(turn());
+            const auto next = shown();
+            QVERIFY(next.book > current.book);
+            current = next;
+            if (current.chapter == 1)
+                break;
+        }
+        QCOMPARE(current.chapter, 1);
+        QVERIFY(save("next-chapter"));
+        // The field list offers both times at its end. The list pages by
+        // height, so the two rows can fall on two pages.
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavLayout"));
+        QVERIFY(fixture.press("rrNavLayout"));
+        QVERIFY(fixture.press("rrHeaderFooter"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+        QVERIFY(fixture.press("rrHeaderFooterSlot1"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooterChooser"));
+        for (const auto field : { Field::PageTurnTime, Field::ChapterLoadTime }) {
+            const auto name = "rrHeaderFooterField_" + fieldValue(field);
+            for (int turns = 0; !fixture.visible(qPrintable(name)) && turns < 10; ++turns)
+                QVERIFY(fixture.press("rrHeaderFooterFieldsNext"));
+            auto *row = qobject_cast<QCheckBox *>(fixture.widget(qPrintable(name)));
+            QVERIFY(row && row->isVisible());
+            QCOMPARE(row->text(), fieldLabel(field));
+            QVERIFY(save("field-list-" + fieldValue(field)));
+        }
+        QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
+    }
+
     void headerFooterDismissal_data() { bookmarks_data(); }
 
     void headerFooterDismissal()

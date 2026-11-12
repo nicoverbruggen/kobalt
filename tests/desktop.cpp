@@ -33,6 +33,7 @@
 #include "reading/reading_density.h"
 #include "reading/appearance_settings.h"
 #include "reading/text_presets.h"
+#include "reading/rendering_mode.h"
 #include "app/reader/settings/text_presets_panel.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
@@ -2672,6 +2673,12 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(scene("settings-time-remaining-format"));
         QVERIFY(fixture.press("rrTimeRemainingFormat_detailed"));
         QTRY_VERIFY(!fixture.visible("rrTimeRemainingFormatPopup"));
+        QVERIFY(revealSettingsOption(fixture, "rrRendering"));
+        QVERIFY(fixture.press("rrRendering"));
+        QTRY_VERIFY(fixture.visible("rrRenderingPopup"));
+        QVERIFY(scene("settings-rendering"));
+        QVERIFY(fixture.press("rrRendering_fast"));
+        QTRY_VERIFY(!fixture.visible("rrRenderingPopup"));
         QVERIFY(revealSettingsOption(fixture, "rrSessionTimeout"));
         QVERIFY(fixture.press("rrSessionTimeout"));
         QTRY_VERIFY(fixture.visible("rrSessionTimeoutPopup"));
@@ -8006,8 +8013,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         preferences[customKey] = toJson(layout);
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
         selectPreview(fixture, preset);
-        setChapterModeOverride(1);
-        const auto restore = qScopeGuard([] { setChapterModeOverride(-1); });
+        renderingMode::setOverride(1);
+        const auto restore = qScopeGuard([] { renderingMode::setOverride(-1); });
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
@@ -9689,6 +9696,128 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             fixture.window.readerWindow()->close();
             QTRY_VERIFY(!fixture.window.readerWindow());
         }
+    }
+
+    // The six-inch reader in the light theme, at 100% and at 150% interface
+    // text. The "-large" tag makes the Fixture pick 150%.
+    void settingsRendering_data()
+    {
+        QTest::addColumn<int>("preset");
+        QTest::newRow("1-light") << 1;
+        QTest::newRow("1-large") << 1;
+    }
+
+    // Rendering is Fast without a saved choice. A new choice is saved when
+    // Settings closes and applies to the next opening, which keeps the reading
+    // position in both directions. KOBALT_RENDERING_CAPTURES names a folder
+    // for the System page with the row, and with its choices open.
+    void settingsRendering()
+    {
+        QFETCH(int, preset);
+        // The test runner pins Accurate. Let the preference decide here.
+        const auto pinned = qgetenv("KOBALT_CHAPTER_MODE");
+        qunsetenv("KOBALT_CHAPTER_MODE");
+        const auto restore = qScopeGuard([pinned] {
+            if (pinned.isEmpty())
+                qunsetenv("KOBALT_CHAPTER_MODE");
+            else
+                qputenv("KOBALT_CHAPTER_MODE", pinned);
+        });
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        const auto open = [&](bool fast) {
+            const int count = opened.count();
+            fixture.window.openBook(book);
+            if (!QTest::qWaitFor([&] { return opened.count() == count + 1; }, 30000)
+                || !QTest::qWaitFor([&] { return !fixture.state().value("busy").toBool(); }, 30000))
+                return false;
+            // Only a book that opens in chapter mode reports its chapter load time.
+            return fixture.state().contains("chapter_load_ms") == fast;
+        };
+        // In chapter mode the page index starts again in every chapter, so
+        // wait for the reading position to move.
+        const auto turn = [&] {
+            const auto before = fixture.state().value("position").toString();
+            test::skipPageTurnWindow();
+            fixture.window.readerWindow()->pageButton(1);
+            return QTest::qWaitFor(
+                    [&] {
+                        const auto current = fixture.state();
+                        return !current.value("busy").toBool()
+                                && current.value("position").toString() != before;
+                    },
+                    5000);
+        };
+        const auto close = [&] {
+            fixture.window.readerWindow()->close();
+            return QTest::qWaitFor([&] { return !fixture.window.readerWindow(); }, 30000);
+        };
+        const QString folder = qEnvironmentVariable("KOBALT_RENDERING_CAPTURES");
+        const auto save = [&](const QString &name) {
+            if (folder.isEmpty())
+                return true;
+            QCoreApplication::processEvents();
+            auto *surface = fixture.window.readerWindow();
+            QImage pixels(surface->size(), QImage::Format_ARGB32_Premultiplied);
+            pixels.fill(Qt::transparent);
+            surface->render(&pixels);
+            pixels.setDotsPerMeterX(qRound(300 / 0.0254));
+            pixels.setDotsPerMeterY(qRound(300 / 0.0254));
+            return QDir().mkpath(folder)
+                    && pixels.save(folder + '/' + screenshotVariant(preset, false) + '-' + name
+                                   + ".png");
+        };
+        const auto choose = [&](const char *mode, const QString &before, const QString &after) {
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsSystem"));
+            QVERIFY(revealSettingsOption(fixture, "rrRendering"));
+            auto *row = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrRendering"));
+            QVERIFY(row);
+            QCOMPARE(row->caption(), before.toUpper());
+            // The captures show the default choice.
+            const bool capture = before == strings::get("settings.rendering_fast");
+            QVERIFY(!capture || save("rendering-row"));
+            QVERIFY(fixture.press("rrRendering"));
+            QTRY_VERIFY(fixture.visible("rrRenderingPopup"));
+            QVERIFY(!capture || save("rendering-choices"));
+            QVERIFY(fixture.press(qPrintable(QString("rrRendering_%1").arg(mode))));
+            QTRY_VERIFY(!fixture.visible("rrRenderingPopup"));
+            QCOMPARE(row->caption(), after.toUpper());
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
+                                 .value(renderingMode::preferenceKey),
+                         QJsonValue(mode));
+        };
+        const auto fast = strings::get("settings.rendering_fast"),
+                   accurate = strings::get("settings.rendering_accurate");
+
+        QVERIFY(!storage::readJson(fixture.paths.preferences())
+                         .contains(renderingMode::preferenceKey));
+        QVERIFY(open(true));
+        for (int turns = 0; turns < 3; ++turns)
+            QVERIFY(turn());
+        const auto fastPosition = fixture.state().value("position").toString();
+        QVERIFY(!fastPosition.isEmpty());
+        choose("accurate", fast, accurate);
+        if (QTest::currentTestFailed())
+            return;
+        QCOMPARE(fixture.state().value("position").toString(), fastPosition);
+        QVERIFY(close());
+        QVERIFY(open(false));
+        QCOMPARE(fixture.state().value("position").toString(), fastPosition);
+
+        QVERIFY(turn());
+        const auto accuratePosition = fixture.state().value("position").toString();
+        QVERIFY(accuratePosition != fastPosition);
+        choose("fast", accurate, fast);
+        if (QTest::currentTestFailed())
+            return;
+        QVERIFY(close());
+        QVERIFY(open(true));
+        QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
     }
 
     // Checks that turning automatic opening off in Kobalt asks first and turning it on does not.

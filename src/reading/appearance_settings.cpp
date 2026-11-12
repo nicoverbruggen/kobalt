@@ -4,6 +4,7 @@
 #include "page_navigation.h"
 #include "header_footer.h"
 #include "sleep_screen.h"
+#include "rendering_mode.h"
 #include "session_timeout.h"
 #include "text_presets.h"
 #include <QStringList>
@@ -188,6 +189,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     textpresets::clean(preferences);
     choice("time_remaining_format", { "detailed", "approximate" });
     choice(headerfooter::percentageFormatKey, { "whole", "decimal" });
+    choice(renderingMode::preferenceKey, { "fast", "accurate" });
     if (preferences.contains(sessionTimeout::preferenceKey)
         && !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))
         preferences.remove(sessionTimeout::preferenceKey);

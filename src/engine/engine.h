@@ -271,8 +271,8 @@ public:
 // The engine that reads books: CREngine.
 std::unique_ptr<Engine> createEngine(EngineFontInputs fonts);
 
-// Experiment, for a run that measures both: 1 opens the books that follow in
-// chapter mode and 0 opens them as a whole. -1, the default, leaves the
-// choice to the environment and to the chapter-mode file.
+// 1 opens the books that follow in chapter mode and 0 opens them as a whole.
+// The application sets it through renderingMode in reading/rendering_mode.h.
+// -1, the default, leaves the choice to the environment.
 void setChapterModeOverride(int mode);
 } // namespace kobalt

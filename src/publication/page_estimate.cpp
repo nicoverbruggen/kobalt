@@ -459,6 +459,20 @@ bool PageMap::measured(int item) const
     return item >= 0 && item < items_.size() && items_[item].measured;
 }
 
+bool PageMap::complete() const
+{
+    if (items_.isEmpty())
+        return false;
+    if (allMeasured())
+        return true;
+    const auto counted = completeItems();
+    for (int i = 0; i < items_.size(); ++i) {
+        if (!items_[i].measured && !counted.contains(i))
+            return false;
+    }
+    return true;
+}
+
 void PageMap::setMeasured(int item, const PageEstimateItem &measurement)
 {
     if (item < 0 || item >= items_.size())
@@ -595,32 +609,37 @@ int PageMap::blockAt(const Item &item, double fraction) const
     return low;
 }
 
-int PageMap::startsBefore(const Item &item, double fraction) const
+double PageMap::gapLines(const Item &item, double from, double to) const
 {
-    if (fraction <= 0)
+    if (to <= from + 1e-9)
         return 0;
-    if (!sliceCharacters_)
-        return 1;
-    // The slices are counted in engine characters. The measured characters
-    // are close to them.
-    const double characters = qMax<qint32>(1, item.measurement.characters);
-    return qMax(1, int(std::ceil(fraction * characters / sliceCharacters_ - 1e-9)));
+    // The parts that start in the stretch, each on a new page: the spine
+    // item, or its slices. The stretch starts at the start of the item or
+    // where an observed part ends, which is a slice start too. The slices
+    // are counted in engine characters; the measured ones are close.
+    int starts = from <= 0 ? 1 : 0;
+    if (sliceCharacters_) {
+        const double characters = qMax<qint32>(1, item.measurement.characters);
+        starts = qMax(1, int(std::ceil((to - from) * characters / sliceCharacters_ - 1e-9)));
+    }
+    const double start = model_.weight[PageEstimateFeatures::Starts] * layout_.linesPerPage();
+    // The counts of the whole item are ready.
+    const auto features = from <= 0 && to >= 1
+            ? item.features
+            : pageEstimateFeatures(item.measurement, layout_, blockAt(item, from),
+                                   blockAt(item, to));
+    return model_.lines(features) + starts * start;
 }
 
 double PageMap::estimate(int index, double fraction) const
 {
     const auto &item = items_[index];
-    const double page = layout_.linesPerPage();
-    const double start = model_.weight[PageEstimateFeatures::Starts] * page;
     const auto key = qint64(index) << 32;
     auto it = observed_.lowerBound(key);
-    const bool observed = it != observed_.end() && it.key() >> 32 == index;
-    if (!observed && fraction >= 1)
-        return qMax(1.0, (model_.lines(item.features) + startsBefore(item, 1) * start) / page);
-    // The observed parts count with their real pages. The blocks between
-    // them count with the model.
+    // The observed parts count with their real pages, and only the stretches
+    // between them count with the model. Where the observed parts reach the
+    // result is exact: a stretch without a gap adds nothing.
     double pages = 0, lines = 0, cursor = 0;
-    int parts = 0;
     // True when a part before `fraction` has no observation.
     bool gap = false;
     for (; it != observed_.end() && it.key() >> 32 == index; ++it) {
@@ -628,26 +647,21 @@ double PageMap::estimate(int index, double fraction) const
         const double last = double(it->last) / it->characters;
         if (first >= fraction)
             break;
-        if (first > cursor) {
+        if (first > cursor + 1e-9) {
             gap = true;
-            lines += model_.lines(pageEstimateFeatures(
-                    item.measurement, layout_, blockAt(item, cursor), blockAt(item, first)));
+            lines += gapLines(item, cursor, first);
         }
-        if (last <= fraction + 1e-9) {
+        if (last <= fraction + 1e-9)
             pages += it->pages;
-            ++parts;
-        } else {
+        else
             pages += it->pages * (fraction - first) / qMax(1e-9, last - first);
-        }
         cursor = qMax(cursor, qMin(last, fraction));
     }
-    if (fraction > cursor) {
+    if (fraction > cursor + 1e-9) {
         gap = true;
-        lines += model_.lines(pageEstimateFeatures(item.measurement, layout_, blockAt(item, cursor),
-                                                   blockAt(item, fraction)));
+        lines += gapLines(item, cursor, fraction);
     }
-    const int open = qMax(0, startsBefore(item, fraction) - parts);
-    pages += qMax(0.0, lines + open * start) / page;
+    pages += qMax(0.0, lines) / layout_.linesPerPage();
     // An item takes at least one page, unless its every part was observed:
     // an empty spine item has none.
     return fraction >= 1 && gap ? qMax(1.0, pages) : pages;
@@ -876,13 +890,13 @@ bool PageEstimateRecord::fromJson(const QJsonValue &value, PageEstimateRecord *r
     return true;
 }
 
-int PageAnchor::place(int estimate, Step step, bool partStart)
+int PageAnchor::place(int estimate, Step step, bool itemStart)
 {
     estimate = qMax(1, estimate);
     if (shown_ <= 0 || step == Jump) {
         shown_ = estimate;
     } else if (step == Forward) {
-        shown_ = partStart ? qMax(shown_ + 1, estimate) : shown_ + 1;
+        shown_ = itemStart ? qMax(shown_ + 1, estimate) : shown_ + 1;
     } else if (step == Backward) {
         shown_ = qMax(1, shown_ - 1);
     }

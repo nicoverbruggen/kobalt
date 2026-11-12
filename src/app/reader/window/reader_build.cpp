@@ -7,6 +7,7 @@
 #include "ui/dialogs/modals.h"
 #include "ui/style/theme.h"
 #include "storage/annotation_database.h"
+#include "reading/rendering_mode.h"
 #include "assets/bundled_fonts.h"
 #include "reader_p.h"
 #include "dictionaries/manager.h"
@@ -1572,6 +1573,12 @@ void Reader::buildSettings()
                                                showSettingsFonts();
                                            });
     });
+    connect(settings->renderingButton, &QPushButton::clicked, this, [this, settings] {
+        settings->showRenderingModes(settingsRenderingMode, [this](const QString &mode) {
+            settingsRenderingMode = mode;
+            showSettingsFonts();
+        });
+    });
     connect(settings->headerFooterWeightButton, &QPushButton::clicked, this, [this, settings] {
         auto sampleFont = ui::headerFooterFont(page->headerTextPixels());
         if (!settingsHeaderFooterFontFace.isEmpty())
@@ -1650,6 +1657,7 @@ void Reader::buildSettings()
         settingsHeaderFooterWeight = 2;
         settingsTimeRemainingFormat = "detailed";
         settingsPercentageFormat = "whole";
+        settingsRenderingMode = renderingMode::value(renderingMode::Mode::Fast);
         hideTabLabelsOption->setChecked(false);
         zenModeOption->setChecked(false);
         if (wifiPowerSaverOption)

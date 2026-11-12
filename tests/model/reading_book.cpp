@@ -453,15 +453,20 @@ int main(int argc, char **argv)
         {
             // Chapter mode saves its page estimate with the reading position,
             // and the book opens again with the same page numbers.
+            // Keep the Accurate pin of the test runner for the checks after this one.
+            const auto pinned = qgetenv("KOBALT_CHAPTER_MODE");
             qputenv("KOBALT_CHAPTER_MODE", "1");
             qputenv("KOBALT_CHAPTER_PAGES", "2");
             const QString identity = "page-estimate";
             QJsonObject shown;
             {
+                // The page numbers come once the idle work has measured the
+                // book, at the next turn.
                 auto session = open(QSize(758, 900), {}, identity);
-                for (int turn = 0; turn < 3; ++turn) {
-                    require(session->turn(1), "Cannot turn in chapter mode");
-                    waitUntil([&] { return !session->busy(); });
+                for (int turn = 0; turn < 3 || session->state().value("rough_page").toInt() <= 0;
+                     ++turn) {
+                    require(turn < 20 && session->turn(1), "Cannot turn in chapter mode");
+                    waitUntil([&] { return !session->busy() && !session->preparingNeighbours(); });
                 }
                 shown = session->state();
                 require(shown.value("rough_page").toInt() > 1
@@ -482,14 +487,24 @@ int main(int argc, char **argv)
                                     == shown.value("rough_item_page").toInt()
                             && !saved.contains("rough_page") && !saved.contains("chapter_load_ms"),
                     "The saved record must hold the shown page, without the frame values");
+            // Until the book is measured again the reader shows percentages.
+            // The first turn after that continues from the saved numbers.
+            const auto turnOnce = [&](ReaderSession &session) {
+                require(session.state().value("rough_page").toInt() == 0,
+                        "A page number before the book was measured");
+                waitUntil([&] { return !session.busy() && !session.preparingNeighbours(); });
+                require(session.turn(1), "Cannot turn in chapter mode");
+                waitUntil([&] { return !session.busy(); });
+                return session.state();
+            };
             auto session = open(QSize(758, 900), saved, identity);
             const auto hash = session->sourceHash();
             ReadingBook reopened(std::move(session), finishPaths.bookState(identity), finishPaths,
                                  identity, hash, nullptr, {}, {});
-            const auto again = reopened.session()->state();
-            require(again.value("rough_page").toInt() == shown.value("rough_page").toInt()
+            const auto again = turnOnce(*reopened.session());
+            require(again.value("rough_page").toInt() == shown.value("rough_page").toInt() + 1
                             && again.value("rough_item_page").toInt()
-                                    == shown.value("rough_item_page").toInt(),
+                                    == shown.value("rough_item_page").toInt() + 1,
                     "The book must open again with the saved page numbers");
             // A record whose numbers are ahead of the estimate, as after a
             // correction while reading, opens with its own numbers.
@@ -505,12 +520,15 @@ int main(int argc, char **argv)
                     open(QSize(758, 900),
                          storage::readBookState(finishPaths, "page-estimate-ahead").object,
                          "page-estimate-ahead");
-            require(aheadSession->state().value("rough_page").toInt()
-                                    == shown.value("rough_page").toInt() + 5
-                            && aheadSession->state().value("rough_item_page").toInt()
-                                    == shown.value("rough_item_page").toInt() + 5,
+            const auto aheadState = turnOnce(*aheadSession);
+            require(aheadState.value("rough_page").toInt() == shown.value("rough_page").toInt() + 6
+                            && aheadState.value("rough_item_page").toInt()
+                                    == shown.value("rough_item_page").toInt() + 6,
                     "The saved page numbers must come from the record");
-            qunsetenv("KOBALT_CHAPTER_MODE");
+            if (pinned.isEmpty())
+                qunsetenv("KOBALT_CHAPTER_MODE");
+            else
+                qputenv("KOBALT_CHAPTER_MODE", pinned);
             qunsetenv("KOBALT_CHAPTER_PAGES");
         }
 #endif

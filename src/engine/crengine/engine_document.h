@@ -448,6 +448,16 @@ private:
     // Gives the pages of the text that has a layout to the page estimate.
     // Only after a layout that was not stopped.
     void observeLayout();
+
+    // The part of a spine item that the page on the screen belongs to: its
+    // item, its first and last engine character of `characters`, and the
+    // page in its pages. A part is a slice, or a whole spine item.
+    struct RoughPlace
+    {
+        int item = 0, first = 0, last = 1, characters = 1, page = 0, pages = 1;
+    };
+
+    RoughPlace roughPlace() const;
     // Forgets the pages that the layout gave before a change of settings.
     void forgetObservedPages();
     // The values of state() without the page estimate.

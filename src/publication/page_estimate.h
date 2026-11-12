@@ -233,7 +233,11 @@ public:
     int nextUnmeasured(int first = -1) const;
     bool measured(int item) const;
 
-    bool complete() const { return measuredCount_ == items_.size(); }
+    bool allMeasured() const { return measuredCount_ == items_.size(); }
+
+    // True when every item is measured or has the real pages of all its
+    // parts. Only then is the total more than a guess from the bytes.
+    bool complete() const;
 
     void setMeasured(int item, const PageEstimateItem &measurement);
 
@@ -293,8 +297,10 @@ private:
 
     // The first block that ends after `fraction` of the text of the item.
     int blockAt(const Item &item, double fraction) const;
-    // The parts of an item that start on a new page, before `fraction`.
-    int startsBefore(const Item &item, double fraction) const;
+    // The estimated lines of a stretch of an item without an observation,
+    // from `from` to `to` as fractions of its text, with the parts that
+    // start in it.
+    double gapLines(const Item &item, double from, double to) const;
     double estimate(int index, double fraction) const;
     // The same for an item without a measurement, from its bytes.
     double byteEstimate(int index, double fraction) const;
@@ -313,14 +319,16 @@ private:
 };
 
 // Keeps a shown page number from moving backward while the user reads
-// forward. A forward turn adds one. At the start of a spine item or a slice
-// the number may also move up to a larger estimate. A jump shows the estimate.
+// forward. The number comes from the page map; this only holds it when the
+// map changes. A forward turn adds one, and at the start of a spine item the
+// number may also move up to a larger value from the map. A backward turn
+// takes one away. A jump shows the value from the map, also a smaller one.
 class PageAnchor
 {
 public:
     enum Step { Same, Forward, Backward, Jump };
 
-    int place(int estimate, Step step, bool partStart);
+    int place(int estimate, Step step, bool itemStart);
 
     void reset() { shown_ = 0; }
 

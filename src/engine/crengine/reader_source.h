@@ -44,10 +44,10 @@ struct ReaderSource
         LVStreamRef stream;
         int measuring = -1;
         PageAnchor book, item;
-        // The page that was placed last: its spine item, the first
-        // character of its slice, its page in that part and the pages of
-        // the part.
-        int lastItem = -1, lastFirst = -1, lastPage = -1, lastPages = 0;
+        // The page that was placed last: its spine item, the first and the
+        // last character of its slice, its page in that part and the pages
+        // of the part.
+        int lastItem = -1, lastFirst = -1, lastLast = -1, lastPage = -1, lastPages = 0;
         // The estimateKey() of the settings that gave the observed pages.
         QString key;
     } pageEstimate;

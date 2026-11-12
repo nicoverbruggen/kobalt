@@ -12,6 +12,7 @@
 #include "browser_handoff.h"
 #include "app/reader_window.h"
 #include "reading/reading_book.h"
+#include "reading/rendering_mode.h"
 #include "storage/profile_database.h"
 #include "storage/annotation_database.h"
 #include "storage/reader_storage.h"
@@ -1029,6 +1030,7 @@ void ReaderCoordinator::load()
 #endif
     const auto preferences = kobalt::appearance::readerPreferences(
             kobalt::storage::readPreferences(environment_.paths.preferences()).object, saved);
+    kobalt::renderingMode::apply(preferences);
     run.orientation->configure(preferences);
     saved["dark_mode"] = preferences.value("dark_mode").toBool(false);
     saved["bold_reading"] = preferences.value("bold_reading").toString("off");
@@ -1447,7 +1449,7 @@ void ReaderCoordinator::runScenarios(const QString &path)
     QVector<QJsonObject> results;
     for (int pass = 0; pass < (variants ? 2 : 1); ++pass) {
         if (variants)
-            kobalt::setChapterModeOverride(pass);
+            kobalt::renderingMode::setOverride(pass);
         for (auto result : kobalt::scenario::run(file, host, options)) {
             if (variants) {
                 const QString variant = QString::fromLatin1(pass ? "chapter" : "whole-book");
@@ -1458,7 +1460,7 @@ void ReaderCoordinator::runScenarios(const QString &path)
         }
     }
     if (variants)
-        kobalt::setChapterModeOverride(-1);
+        kobalt::renderingMode::setOverride(-1);
     auto header = kobalt::qt::object({ { "kind", "kobalt-device-run" },
                                        { "target", QString("qt%1").arg(QT_VERSION >> 16) },
                                        { "version", QString::fromLatin1(KOBALT_VERSION) },

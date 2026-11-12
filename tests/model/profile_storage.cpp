@@ -4,6 +4,7 @@
 #include "storage/reading_history.h"
 #include "storage/bookmark_store.h"
 #include "reading/sleep_screen.h"
+#include "reading/rendering_mode.h"
 #ifndef KOBALT_TEST_NO_LIBRARY
 #  include "library/library_index.h"
 #endif
@@ -279,6 +280,30 @@ int main(int argc, char **argv)
     require(!storage::readPreferences(paths.preferences()).object.contains("turn_off_wifi_on_open")
                     && !storage::readJson(paths.preferences()).contains("turn_off_wifi_on_open"),
             "Saved Wi-Fi power saver setting was not removed");
+    // Rendering: a file from an older build has no choice and opens as Fast.
+    // A saved choice survives the round trip with the other preferences.
+    require(storage::writeJson(paths.preferences(),
+                               qt::object({ { "schema", 1 }, { "dark_mode", true } })),
+            "Rendering fixture");
+    const auto older = storage::readPreferences(paths.preferences());
+    require(older.status == ReadStatus::Ok && !older.object.contains(renderingMode::preferenceKey)
+                    && renderingMode::fromPreferences(older.object) == renderingMode::Mode::Fast,
+            "Preferences without Rendering did not use Fast");
+    for (const auto mode : { renderingMode::Mode::Accurate, renderingMode::Mode::Fast }) {
+        auto next = older.object;
+        next[renderingMode::preferenceKey] = renderingMode::value(mode);
+        require(storage::writePreferences(paths.preferences(), next),
+                "Rendering choice was not saved");
+        const auto saved = storage::readPreferences(paths.preferences()).object;
+        require(renderingMode::fromPreferences(saved) == mode && saved.value("dark_mode") == true,
+                "Rendering choice did not round-trip with the other preferences");
+    }
+    require(storage::writeJson(paths.preferences(),
+                               qt::object({ { "schema", 1 }, { "rendering_mode", "chapter" } })),
+            "Invalid rendering fixture");
+    require(!storage::readPreferences(paths.preferences())
+                     .object.contains(renderingMode::preferenceKey),
+            "Invalid Rendering value was kept");
     write(paths.preferences(), "{\"schema\":99,\"new_option\":true}");
     const auto settingsBytes = bytes(paths.preferences());
     require(storage::readPreferences(paths.preferences()).status == ReadStatus::Unsupported

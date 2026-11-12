@@ -10,9 +10,11 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSet>
 #include <cmath>
 #include <cstdio>
 #include <lvdocview.h>
@@ -56,6 +58,11 @@ struct ReaderLocationProbe
     {
         return model.source_->pageEstimate.map;
     }
+
+    // For a change of the map that reading would make later.
+    static PageMap &editMap(EngineDocument &model) { return model.source_->pageEstimate.map; }
+
+    static QVector<qint64> spineBytes(const EngineDocument &model) { return model.spineBytes(); }
 
     static int windowFirst(const EngineDocument &model) { return model.windowFirst_; }
 
@@ -733,21 +740,26 @@ void reopen(const QByteArray &bytes)
     require(!record.value("read").toArray().isEmpty(), "Read spine items are saved");
     const int item = first.spineItemOf(saved.value("position").toString());
 
-    // The same page opens again with the same numbers, before any measuring.
+    // The same page opens again with the same numbers once the book is
+    // measured. Before that the reader shows percentages.
     EngineDocument second(test::readerFonts());
     openChapter(second, bytes, saved, item);
+    require(second.roughPages().page == 0, "No page number before measuring");
+    // A save before the measuring ends keeps the saved number and weights.
+    PageEstimateRecord loaded;
+    require(PageEstimateRecord::fromJson(second.state().value("page_estimate"), &loaded),
+            "The book saves its record again");
+    require(loaded.shown == shown.page, "The saved page number is kept while measuring");
+    for (int i = 0; i < F::Count; ++i)
+        require(std::fabs(loaded.model.weight[i] - record.value("weights").toArray()[i].toDouble())
+                        < 1e-3,
+                "The corrected weights carry over");
+    while (second.refinePageEstimate()) { }
     const auto again = second.roughPages();
     std::printf("reopened: page %d of %d, saved page %d of %d\n", again.page, again.pages,
                 shown.page, shown.pages);
     require(again.page == shown.page && again.itemPage == shown.itemPage,
             "The page number after opening again is the saved one");
-    PageEstimateRecord loaded;
-    require(PageEstimateRecord::fromJson(second.state().value("page_estimate"), &loaded),
-            "The book saves its record again");
-    for (int i = 0; i < F::Count; ++i)
-        require(std::fabs(loaded.model.weight[i] - record.value("weights").toArray()[i].toDouble())
-                        < 1e-3,
-                "The corrected weights carry over");
     require(second.turnInWindow(1) && second.roughPages().page == shown.page + 1,
             "The next turn adds one");
 
@@ -757,6 +769,7 @@ void reopen(const QByteArray &bytes)
     larger["font_pixels"] = page.font + 8;
     EngineDocument third(test::readerFonts());
     openChapter(third, bytes, larger, item);
+    while (third.refinePageEstimate()) { }
     require(third.roughPages().page >= 1, "Another layout still has a page number");
     require(!PageEstimateRecord::fromJson(third.state().value("page_estimate"), &loaded)
                     || loaded.layout != record.value("layout").toString(),
@@ -767,6 +780,7 @@ void reopen(const QByteArray &bytes)
     damaged["page_estimate"] = QString("damaged");
     EngineDocument fourth(test::readerFonts());
     openChapter(fourth, bytes, damaged, item);
+    while (fourth.refinePageEstimate()) { }
     require(fourth.roughPages().page >= 1, "A damaged record leaves the estimate");
 }
 
@@ -861,6 +875,7 @@ void emptyItem()
                 "<itemref idref=\"two.xhtml\"/>");
         EngineDocument first(test::readerFonts());
         openFiles(first, files);
+        while (first.refinePageEstimate()) { }
         first.roughPages();
         auto saved = first.state();
         auto record = saved.value("page_estimate").toObject();
@@ -875,6 +890,9 @@ void emptyItem()
         EngineDocument model(test::readerFonts());
         model.setChapterSlices(6);
         openResources(model, files, saved);
+        // The saved number is held while the book is measured.
+        require(model.roughPages().page == 0, "No page number before measuring");
+        while (model.refinePageEstimate()) { }
         auto rough = model.roughPages();
         require(rough.page == ahead + 1, "The saved page number comes back");
         QVector<int> items{ model.spineItemOf(model.position()) };
@@ -988,6 +1006,7 @@ void observations()
     const auto files = observedBook();
     EngineDocument model(test::readerFonts());
     openFiles(model, files);
+    while (model.refinePageEstimate()) { }
     const int slice = Probe::sliceSize(model);
     QMap<int, int> turned;
     int extended = 0, units = 0, crossings = 0, adopted = 0, stops = 0;
@@ -1070,6 +1089,207 @@ void observations()
             "Measuring made the work ahead open the next unit again");
 }
 
+// A book for the rough page numbers: a cover without text, a long chapter in
+// several slices, a picture without text between chapters, another long
+// chapter and two short ones that make one unit.
+test::BookFiles pagesBook()
+{
+    const QByteArray sentence =
+            "The reader turns the page and the text goes on without a break in it. ";
+    const auto chapter = [](const QByteArray &body) {
+        return "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Part</title></head>"
+               "<body>"
+                + body + "</body></html>";
+    };
+    const auto paragraphs = [&](int count) {
+        QByteArray body = "<h1>Chapter</h1>";
+        for (int p = 0; p < count; ++p)
+            body += "<p>" + sentence.repeated(3) + "</p>";
+        return body;
+    };
+    const QByteArray picture = "<div><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" "
+                               "height=\"400\" viewBox=\"0 0 300 400\"><rect width=\"300\" "
+                               "height=\"400\" fill=\"#888888\"/></svg></div>";
+    test::BookFiles files;
+    files["cover.xhtml"] = chapter(picture);
+    files["long.xhtml"] = chapter(paragraphs(150));
+    files["plate.xhtml"] = chapter(picture);
+    files["middle.xhtml"] = chapter(paragraphs(120));
+    files["short1.xhtml"] = chapter(paragraphs(4));
+    files["short2.xhtml"] = chapter(paragraphs(6));
+    return test::publisherPackage(
+            "en", "Pages", files,
+            "<itemref idref=\"cover.xhtml\"/><itemref idref=\"long.xhtml\"/>"
+            "<itemref idref=\"plate.xhtml\"/><itemref idref=\"middle.xhtml\"/>"
+            "<itemref idref=\"short1.xhtml\"/><itemref idref=\"short2.xhtml\"/>");
+}
+
+// The layout at the open gives its pages, also of a spine item without text
+// such as a cover.
+void openObserved()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    require(Probe::windowFirst(model) == 0 && Probe::spineItemText(model) == 0,
+            "The book must open on a cover without text");
+    require(Probe::map(model).completeItems().value(0, -1) == model.pages(),
+            "The cover at the open counts with its pages");
+}
+
+// Read forward from the start, the page number is the page that was turned,
+// through slices, spine items without text and a unit of spine items. At
+// the end the page and the total are the real total, which is not estimated.
+// Without measuring, no number is shown until every spine item is counted.
+void forwardPages()
+{
+    for (const bool measure : { true, false }) {
+        EngineDocument model(test::readerFonts());
+        openFiles(model, pagesBook());
+        if (measure) {
+            while (model.refinePageEstimate()) { }
+        }
+        int turned = 1, units = 0;
+        auto rough = model.roughPages();
+        QSet<int> items, slices;
+        for (;;) {
+            require(measure ? rough.page == turned : rough.page == 0 || rough.page == turned,
+                    qPrintable(QString("Page %1 shown on turned page %2")
+                                       .arg(rough.page)
+                                       .arg(turned)));
+            require(rough.pages == 0 || rough.pages >= rough.page, "The total is before the page");
+            items.insert(model.spineItemOf(model.position()));
+            if (Probe::sliceFirst(model) > 0)
+                slices.insert(Probe::sliceFirst(model));
+            units += Probe::windowLast(model) > Probe::windowFirst(model);
+            model.prepareAhead();
+            if (!model.turnInWindow(1))
+                break;
+            ++turned;
+            rough = model.roughPages();
+        }
+        std::printf("forward pages (%s): %d pages, last %d of %d, %d slice starts, %d pages in "
+                    "units, %lld spine items\n",
+                    measure ? "measured" : "not measured", turned, rough.page, rough.pages,
+                    int(slices.size()), units, qlonglong(items.size()));
+        require(slices.size() > 2 && units > 0 && items.size() == 6,
+                "The book must have slices, a unit and pages in every spine item");
+        require(rough.page == turned && rough.pages == turned && !rough.pagesEstimated,
+                "The last page is the real total, which is not estimated");
+    }
+}
+
+// An earlier spine item that gets its real pages later does not move the
+// page number while the reader turns forward inside a spine item. The next
+// spine item start moves it up; only a jump moves it down.
+void laterCounted()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    while (model.refinePageEstimate()) { }
+    QString error;
+    // Into the middle chapter without reading the chapters before it.
+    require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+    auto rough = model.roughPages();
+    auto &map = Probe::editMap(model);
+    const auto forward = [&] {
+        require(model.turnInWindow(1), "The fixture is too short to read on");
+        const auto next = model.roughPages();
+        rough = next;
+        return next;
+    };
+    forward();
+    const int estimate = qRound(map.itemPages(1));
+    require(estimate > 12, "The long chapter is too short");
+
+    // More real pages than the estimate: held inside the chapter, then the
+    // next spine item starts at the value of the map.
+    int shown = rough.page;
+    map.observe(1, 0, 1, 1, estimate + 8);
+    require(forward().page == shown + 1, "A larger count moved the page inside a spine item");
+    while (model.spineItemOf(model.position()) == 3)
+        shown = rough.page, forward();
+    const int start = qRound(map.pagesBefore(model.spineItemOf(model.position()))) + 1;
+    require(start > shown + 1 && rough.page == start,
+            "At the next spine item the page number takes the larger count");
+
+    // Fewer real pages: never down on a forward turn, down at a jump.
+    shown = rough.page;
+    map.observe(1, 0, 1, 1, estimate - 8);
+    require(forward().page == shown + 1, "A smaller count moved the page back on a forward turn");
+    require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+    const auto jumped = model.roughPages();
+    std::printf("later count: page %d after a jump, %d before it\n", jumped.page, rough.page);
+    require(jumped.page == qRound(map.pagesBefore(3)) + 1 && jumped.page < shown,
+            "A jump shows the value of the map, also a smaller one");
+    require(jumped.pages >= jumped.page, "The total is never before the page");
+}
+
+// Until every spine item is measured or counted, there is no page number
+// and no total: the reader shows percentages. The percent comes from the
+// bytes of the whole book. The values of the spine item stay.
+void hiddenUntilComplete()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    QString error;
+    require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+    const auto rough = model.roughPages();
+    require(!Probe::map(model).complete(), "The map must not be complete yet");
+    require(rough.page == 0 && rough.pages == 0, "A page number before the map is complete");
+    require(rough.itemPage == 1 && rough.itemPages > 0, "The spine item keeps its pages");
+    const auto bytes = Probe::spineBytes(model);
+    qint64 before = 0, total = 0;
+    for (int i = 0; i < bytes.size(); ++i) {
+        total += bytes[i];
+        before += i < 3 ? bytes[i] : 0;
+    }
+    require(std::fabs(model.bookFraction() - double(before) / total) < 1e-9,
+            "The percent at a spine item start is the bytes before it");
+    int steps = 0;
+    while (model.refinePageEstimate()) {
+        ++steps;
+        const auto now = model.roughPages();
+        require(now.pages == 0 || Probe::map(model).complete(),
+                "A total was shown before the map was complete");
+    }
+    const auto measured = model.roughPages();
+    require(steps > 0 && measured.page > 0 && measured.pages >= measured.page,
+            "The page number comes once every spine item is measured");
+}
+
+// The page map of a spine item read in slices that are longer than the
+// nominal slice size: before a slice start that the observed slices reach,
+// the pages are their real pages, without the empty ends of slices that the
+// observed ones do not have.
+void slicedItem(const PageEstimateLayout &layout)
+{
+    QByteArray body;
+    const QByteArray sentence =
+            "The reader turns the page and the text goes on without a break in it. ";
+    for (int i = 0; i < 400; ++i)
+        body += "<p>" + sentence.repeated(3) + "</p>";
+    const auto item = measurePageEstimate("<html><body>" + body + "</body></html>");
+    const int characters = item.characters, slice = characters / 12;
+    PageMap map;
+    map.reset({ 1000, 200000 });
+    map.setLayout(layout, slice);
+    map.setMeasured(0, measurePageEstimate("<body><p>Cover</p></body>"));
+    map.setMeasured(1, item);
+    map.observe(0, 0, 1, 1, 1);
+    // Slices a third longer than the nominal size, as cutSlice() makes them.
+    int first = 0, pages = 0;
+    for (int part = 0; part < 6; ++part) {
+        const int last = first + slice * 4 / 3;
+        const int partPages = 7 + part % 2;
+        map.observe(1, first, last, characters, partPages);
+        pages += partPages;
+        first = last;
+        require(std::fabs(map.pagesBefore(1, first, characters) - pages) < 1e-9,
+                "Before a slice start the observed slices count with their real pages");
+        require(std::fabs(map.pagesBefore(1) - 1) < 1e-9, "The cover counts with its page");
+    }
+}
+
 void chapterMode(const QByteArray &bytes)
 {
     const Page page;
@@ -1077,35 +1297,247 @@ void chapterMode(const QByteArray &bytes)
         int slicePages = 0;
         const auto pages = readForward(bytes, page, measure, &slicePages);
         require(slicePages <= 12, "A slice has too many pages");
-        for (int i = 1; i < pages.size(); ++i) {
-            require(pages[i].page == pages[i - 1].page + 1
-                            || (pages[i].page > pages[i - 1].page && pages[i].itemPage == 1),
-                    "Reading forward adds one page, or more at a spine item start");
+        const int turned = pages.size();
+        for (int i = 0; i < turned; ++i) {
+            // Every page before the page on the screen was read, so the page
+            // number is the real one. Without measuring the total is a guess
+            // from the bytes until the last spine item is counted, and no page
+            // number is shown before that.
+            if (pages[i].page > 0)
+                require(pages[i].page == i + 1, "The page number is the page that was turned");
+            else
+                require(!measure && pages[i].pages == 0, "A page number has no total");
             require(pages[i].page <= pages[i].pages, "The page is never after the total");
             require(pages[i].itemPage >= 1 && pages[i].itemPage <= pages[i].itemPages,
                     "The page in the spine item is inside it");
         }
-        // With every spine item measured, the page numbers are the turned
-        // pages, and the last total is the last page.
-        const int turned = pages.size();
+        if (measure)
+            require(pages.first().page == 1, "Measured first, the first page has its number");
         std::printf("chapter mode (%s): %d pages turned, last page %d of %d, first total %d\n",
                     measure ? "measured" : "not measured", turned, pages.last().page,
                     pages.last().pages, pages.first().pages);
-        require(pages.last().page == pages.last().pages, "The last page is the total");
-        // Without a measurement the estimate comes from the bytes of each
-        // spine item. A page number that was too high stays ahead.
-        require(pages.last().page >= turned && pages.last().page <= turned + turned / 10,
-                "The last page is too far from the pages turned");
-        if (measure) {
-            require(pages.last().page == turned, "Measured first, every turn adds one page");
+        require(pages.last().page == turned && pages.last().pages == turned
+                        && !pages.last().pagesEstimated,
+                "At the end the page and the total are the pages turned, and not estimated");
+        if (measure)
             require(std::abs(pages.first().pages - turned) <= turned / 5,
                     "The first total is too far from the pages turned");
-        }
         const auto again = readForward(bytes, page, measure, &slicePages);
         require(again.size() == pages.size(), "Reading again turns the same pages");
         for (int i = 0; i < pages.size(); ++i)
             require(again[i].page == pages[i].page && again[i].pages == pages[i].pages,
                     "Reading again gives the same rough pages");
+    }
+}
+
+// Sets how the books that follow open, and gives the choice back to the
+// environment at the end of the scope.
+class ChapterModeScope
+{
+public:
+    explicit ChapterModeScope(bool chapters) { setChapterModeOverride(chapters ? 1 : 0); }
+
+    ~ChapterModeScope() { setChapterModeOverride(-1); }
+
+    ChapterModeScope(const ChapterModeScope &) = delete;
+    ChapterModeScope &operator=(const ChapterModeScope &) = delete;
+};
+
+// The chapter mode survey of one book: what a reader sees in chapter mode,
+// compared with a layout of the whole book on a six-inch page. It is the
+// acceptance check for the rough page numbers; doc/engines/migration.md
+// describes how to run it on a folder of books.
+//
+// The book is read forward page by page from the start, as the reader does,
+// with the work ahead after each turn. In the mode `measured` the background
+// measuring finishes right after the open, in `unmeasured` it never runs.
+// Then the book opens at the page that the whole-book layout has at 5, 20
+// and 50 percent (`jump-measured` and `jump-unmeasured`).
+//
+// Each checkpoint prints one CSV row that starts with "C," and has these
+// fields: book, spine items, real total, mode, checkpoint in percent, pages
+// turned, spine item, shown page, real page, page error in pages and in
+// percent of the book, shown total, total error in percent, shown and real
+// page in the spine item, shown and real pages of the spine item, whether
+// the total and the spine item pages are estimated, forward turns so far
+// that kept or lowered the shown page, page reports so far before the map
+// was complete, the shown book fraction in percent and its error in percent
+// of the book, whether the map is complete, measuring steps, ms to measure,
+// ms to open in chapter mode, ms to open as a whole, ms of reading, counted
+// spine items, the counted spine items whose pages differ from the whole
+// layout, and the first spine items that are not counted, as item:pages.
+// Page values are 0 where none is shown. A row that starts with "D," names
+// a forward turn that did not add to the shown page, and one that starts
+// with "F," a book that cannot be opened.
+void chapterSurvey(const QString &path)
+{
+    Page page;
+    page.font = 32;
+    page.margin = 48;
+    page.viewport = { 1072, 1448 };
+    const QString name = QFileInfo(path).completeBaseName().replace(',', ' ');
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        std::printf("F,%s,read\n", qPrintable(name));
+        return;
+    }
+    const auto bytes = file.readAll();
+    QString error;
+    QElapsedTimer timer;
+
+    // The truth: the total and the first page of each spine item.
+    EngineDocument whole(test::readerFonts());
+    qint64 wholeMs = 0;
+    {
+        const ChapterModeScope scope(false);
+        timer.start();
+        const bool opened = whole.open(bytes, page.viewport, page.settings(), &error);
+        wholeMs = timer.elapsed();
+        if (!opened || whole.pages() <= 0) {
+            std::printf("F,%s,whole open: %s\n", qPrintable(name),
+                        qPrintable(error.simplified().replace(',', ' ')));
+            return;
+        }
+    }
+    const int total = whole.pages();
+    const auto items = Probe::items(whole);
+    QStringList startPositions;
+    for (const auto &href : items) {
+        Location location;
+        location.href = href;
+        startPositions.append(whole.positionOf(location));
+    }
+    const auto startPages = whole.pagesOf(startPositions);
+    // A spine item without a page starts where the next one starts.
+    QVector<int> starts;
+    for (int i = startPages.size() - 1; i >= 0; --i)
+        starts.prepend(startPages[i] >= 0 ? startPages[i] : (starts.isEmpty() ? total : starts[0]));
+    const auto realItemPages = [&](int item) {
+        if (item < 0 || item >= starts.size())
+            return -1;
+        return (item + 1 < starts.size() ? starts[item + 1] : total) - starts[item];
+    };
+
+    struct Counts
+    {
+        int backward = 0, early = 0, steps = 0;
+        qint64 measureMs = -1, openMs = 0, readMs = 0;
+    };
+
+    const auto row = [&](EngineDocument &model, const Engine::RoughPages &rough, const char *mode,
+                         const char *checkpoint, int turned, const Counts &counts) {
+        const auto position = model.position();
+        const int realPage = whole.pagesOf({ position }).value(0, -1) + 1;
+        const int item = model.spineItemOf(position);
+        const int realItemPage =
+                realPage > 0 && item >= 0 && item < starts.size() ? realPage - starts[item] : 0;
+        const auto &map = Probe::map(model);
+        const auto counted = map.completeItems();
+        int differ = 0;
+        for (auto it = counted.cbegin(); it != counted.cend(); ++it)
+            differ += it.value() != realItemPages(it.key());
+        QStringList missing;
+        for (int i = 0; i < items.size() && missing.size() < 8; ++i) {
+            if (!counted.contains(i))
+                missing.append(QString("%1:%2").arg(i).arg(realItemPages(i)));
+        }
+        const bool shown = rough.page > 0 && realPage > 0;
+        const double fraction = 100 * model.bookFraction();
+        std::printf("C,%s,%d,%d,%s,%s,%d,%d,%d,%d,%d,%.3f,%d,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,"
+                    "%.3f,%d,%d,%lld,%lld,%lld,%lld,%d,%d,%s\n",
+                    qPrintable(name), int(items.size()), total, mode, checkpoint, turned, item,
+                    rough.page, realPage, shown ? rough.page - realPage : 0,
+                    shown ? 100.0 * (rough.page - realPage) / total : 0.0, rough.pages,
+                    rough.pages > 0 ? 100.0 * (rough.pages - total) / total : 0.0, rough.itemPage,
+                    realItemPage, rough.itemPages, realItemPages(item), int(rough.pagesEstimated),
+                    int(rough.itemPagesEstimated), counts.backward, counts.early, fraction,
+                    realPage > 0 ? fraction - 100.0 * realPage / total : 0.0, int(map.complete()),
+                    counts.steps, (long long)counts.measureMs, (long long)counts.openMs,
+                    (long long)wholeMs, (long long)counts.readMs, int(counted.size()), differ,
+                    qPrintable(missing.join(';')));
+        std::fflush(stdout);
+    };
+    const auto open = [&](EngineDocument &model, const QJsonObject &settings, Counts *counts) {
+        const ChapterModeScope scope(true);
+        timer.restart();
+        const bool opened = model.open(bytes, page.viewport, settings, &error);
+        counts->openMs = timer.elapsed();
+        if (!opened || model.pages() <= 0) {
+            std::printf("F,%s,chapter open: %s\n", qPrintable(name),
+                        qPrintable(error.simplified().replace(',', ' ')));
+            return false;
+        }
+        return true;
+    };
+    const auto measure = [&](EngineDocument &model, Counts *counts) {
+        timer.restart();
+        while (model.refinePageEstimate())
+            ++counts->steps;
+        counts->measureMs = timer.elapsed();
+    };
+
+    for (const bool measured : { false, true }) {
+        EngineDocument model(test::readerFonts());
+        Counts counts;
+        if (!open(model, page.settings(), &counts))
+            return;
+        if (measured)
+            measure(model, &counts);
+        const char *mode = measured ? "measured" : "unmeasured";
+
+        const struct
+        {
+            double fraction;
+            const char *name;
+        } checkpoints[] = { { 0.05, "5" }, { 0.2, "20" }, { 0.5, "50" } };
+
+        int next = 0, turned = 1;
+        auto rough = model.roughPages();
+        QElapsedTimer read;
+        read.start();
+        row(model, rough, mode, "0", turned, counts);
+        for (;;) {
+            model.prepareAhead();
+            if (!model.turnInWindow(1))
+                break;
+            ++turned;
+            const auto now = model.roughPages();
+            if (now.pages > 0 && !Probe::map(model).complete())
+                ++counts.early;
+            if (now.page > 0 && rough.page > 0 && now.page <= rough.page) {
+                ++counts.backward;
+                std::printf("D,%s,%s,%d,%d,%d\n", qPrintable(name), mode, turned, rough.page,
+                            now.page);
+            }
+            rough = now;
+            if (next < 3 && turned >= checkpoints[next].fraction * total) {
+                counts.readMs = read.elapsed();
+                row(model, rough, mode, checkpoints[next].name, turned, counts);
+                ++next;
+            }
+        }
+        counts.readMs = read.elapsed();
+        row(model, rough, mode, "100", turned, counts);
+    }
+
+    for (const double fraction : { 0.05, 0.2, 0.5 }) {
+        if (!whole.go(qBound(0, int(fraction * total), total - 1)))
+            continue;
+        auto settings = page.settings();
+        settings["position"] = whole.position();
+        const auto checkpoint = QByteArray::number(int(fraction * 100));
+        for (const bool measured : { false, true }) {
+            EngineDocument model(test::readerFonts());
+            Counts counts;
+            if (!open(model, settings, &counts))
+                return;
+            if (measured)
+                measure(model, &counts);
+            const auto rough = model.roughPages();
+            counts.early = rough.pages > 0 && !Probe::map(model).complete();
+            row(model, rough, measured ? "jump-measured" : "jump-unmeasured",
+                checkpoint.constData(), 1, counts);
+        }
     }
 }
 #endif
@@ -1114,6 +1546,12 @@ void chapterMode(const QByteArray &bytes)
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+#if __has_include(<koblaze.h>)
+    if (argc > 2 && QByteArray(argv[1]) == "--chapter") {
+        chapterSurvey(QString::fromLocal8Bit(argv[2]));
+        return 0;
+    }
+#endif
     if (argc > 1) {
         QStringList options;
         for (int i = 2; i < argc; ++i)
@@ -1134,6 +1572,11 @@ int main(int argc, char **argv)
     unmeasured(page.layout());
     record();
 #if __has_include(<koblaze.h>)
+    slicedItem(page.layout());
+    openObserved();
+    forwardPages();
+    laterCounted();
+    hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);
     observations();

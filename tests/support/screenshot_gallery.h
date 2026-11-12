@@ -370,6 +370,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "header-footer-decimal-fields", "Choose a field with decimal progress" },
         { "header-footer-decimal-progress", "Header and footer decimal previews" },
         { "settings-time-remaining-format", "Time remaining format" },
+        { "settings-rendering", "Rendering" },
         { "stats", "Reading statistics" },
         { "stats-lengths", "Unequal chapter lengths" },
         { "stats-book-paged-first", "War and Peace: wide bars, first page" },

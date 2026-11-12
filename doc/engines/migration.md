@@ -213,9 +213,10 @@ In chapter mode only the slice on the screen has a layout. The rough page number
 2. Count. For one page, `pageEstimateFeatures` counts the lines of each kind of block: the width of the text divided by the width of the line, rounded up. It also counts paragraphs, quotations, list items, table rows, images, and the parts that start on a new page. This is arithmetic only.
 3. Weigh. A linear model gives the lines of a part from these counts. Its reference weights were fitted on whole spine items of 22 Standard Ebooks. A heading line counts as about five lines, because headings have large margins. A table row adds about two and a half lines. A part that starts on a new page adds a little less than half a page, which is the empty end of its last page.
 4. Correct. Each slice or spine item that gets a layout gives its real page count. The map fits the weights again with these observations, by weighted least squares that is drawn towards the reference weights. One observation does not change the estimate much. Many observations of one kind of text move the weights to that book. An observed part counts with its real pages. When every spine item has a layout, the map is exact. A slice gives the characters that it really holds, also when its layout was made longer to end on a page that starts a block. A unit of several short spine items gives the pages of each spine item. The spine item that is opened ahead adds its pages to the same map. A stopped layout gives nothing. A change of settings that changes the pages forgets the observations. Dark mode, the text colors and the outline thickness keep them.
-5. Show. The engine places the page on the screen in the map: the estimated pages before its spine item, plus the pages before its slice, plus the page in the slice. A forward turn adds one page, also past a spine item without pages. At the start of a spine item or of a slice the page number can move up to a larger estimate, but never down. A jump shows the estimate. The total is the page number plus the estimated pages that follow.
+5. Show. The page number comes from the map: the pages before its spine item, plus the pages before its slice in the spine item, plus the page in the slice, plus one. Spine items and slices with a layout count with their real pages, the others with the estimate. Only the stretches of a spine item without a layout add the empty ends of their slices. So when everything before the page had a layout, the page number is the real page, and the last page of a book read from the start is the real total. Every layout counts once, also the one at the open and the layout of a spine item without text, such as a cover image.
+6. Hold. The map changes when a spine item before the page gets its real pages later, for example after a jump. The page number takes such a change at the next jump or the next start of a spine item, not while the user turns forward inside a spine item. A forward turn always adds one page, also past a spine item without pages, and at the start of a spine item the number can move up to the map. It moves down only at a jump. A turn that passes text without a layout, such as slices without a page, counts as a start too. The total takes changes at once, but is never smaller than the page number.
 
-The page fields of the header and footer show these numbers. The chapter of the chapter page is the spine item. Before the map has a total, each page field shows its percent form. A total is estimated until every spine item of the book, or every part of the spine item, had a layout. A spine item that had a layout without pages counts with zero pages.
+The page fields of the header and footer show these numbers. The chapter of the chapter page is the spine item. Until every spine item is measured or has all its pages, the total is only a guess from the bytes. In that time there is no book page number and no total, and each page field shows its percent form. That percent is the bytes of the whole book before the page: the spine items before it, and the characters before the page in its spine item. Once the map is complete, the page fields show page numbers at the next page turn or repaint that happens anyway; there is no extra repaint. A total is estimated until every spine item of the book, or every part of the spine item, had a layout. A spine item that had a layout without pages counts with zero pages.
 
 The measuring runs on the engine worker after the pages beside the current page, in the idle time after a turn. It takes at most 32 parts in one idle time and stops when the user asks for another page. Until a spine item is measured, its pages come from its size in bytes and the pages per byte of the measured spine items.
 
@@ -241,6 +242,32 @@ Measured with `kobalt-page-estimate-tests <folder>` on the 22 Standard Ebooks, a
 - On the checked-in Trevelyan's Type Tester, which is not in the fit, the total before any layout is 111 percent of the real one and the largest start error is 1.8 % of the book. Read forward in slices of 6 pages, the page number adds one for each turn and the last page is the total.
 - Real glyph advances of the reading font were tried in place of the fixed table of character widths, in a prototype. With fitted weights they gained almost nothing (0.68 % against 0.70 % for the mean of the largest error). They also need the font on the worker, so the map uses the table.
 
+#### Chapter mode survey
+
+`kobalt-page-estimate-tests --chapter <book.epub>` reads one book page by page in chapter mode and compares what the reader shows with a whole-book layout, on a six-inch page (1072 by 1448 pixels, a 32 pixel font, 48 pixel margins). It reads forward from the start with the measuring done at the open (`measured`) or never (`unmeasured`), and opens the book at 5, 20 and 50 percent. It prints one CSV row for each checkpoint; the comment above `chapterSurvey()` lists the fields. Run it once per book, with `QT_QPA_PLATFORM=offscreen`, and collect the rows.
+
+On 203 books of a private library (2026-11-12), after the fixes above:
+
+- Read forward, the page number never kept or lost its value on a forward turn, in both modes.
+- At the last page, the page, the total and the real total were the same, and the total was not estimated, in every book. Before, the page ended up to 43 pages ahead of the real page (Proust, 4113 against 4070) in 117 books, and 84 books kept an estimated total because a spine item without text was never counted.
+- No total was shown before the map was complete. Before, the total at an unmeasured open was a median 175 percent too high. Measuring a whole book took a median 26 ms and at most 174 ms on the Mac.
+
+Errors in percent of the real total, as median / 90th percentile / worst. The position error is that of the page number, or of the percent where no page number is shown.
+
+| Checkpoint | Total error before | Total error after | Position error before | Position error after |
+|---|---|---|---|---|
+| Unmeasured open | 175 / 251 / 596 | not shown | 0.00 / 0.34 / 2.22 | 0.22 / 0.43 / 2.22 |
+| Measured open | 2.7 / 10.6 / 50.7 | 2.7 / 10.6 / 50.7 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Measured, 5 % | 1.4 / 4.2 / 16.1 | 1.4 / 4.2 / 16.6 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Measured, 20 % | 0.7 / 2.4 / 16.6 | 0.7 / 2.2 / 16.6 | 0.00 / 0.10 / 0.26 | 0 / 0 / 0 |
+| Measured, 50 % | 0.4 / 1.2 / 14.0 | 0.4 / 1.2 / 14.0 | 0.00 / 0.34 / 0.68 | 0 / 0 / 0 |
+| Measured, 100 % | 0.3 / 0.6 / 1.2 | 0 / 0 / 0 | 0.26 / 0.64 / 1.19 | 0 / 0 / 0 |
+| Jump to 20 %, measured | 2.1 / 7.5 / 27.1 | 2.0 / 7.7 / 27.1 | 0.44 / 1.28 / 6.24 | 0.42 / 1.28 / 6.24 |
+| Jump to 50 %, measured | 1.9 / 7.7 / 43.0 | 1.9 / 7.7 / 43.0 | 1.04 / 3.49 / 23.95 | 1.02 / 3.49 / 23.95 |
+| Jump to 50 %, unmeasured | 2.2 / 6.7 / 66.8 | not shown | 1.10 / 3.52 / 24.17 | 0.48 / 2.01 / 6.84 |
+
+A scale of the text weights for each book, from the observed parts with prose, was tried. It lowered the error after a jump (total at 50 %: 3.8 against 7.7 for the 90th percentile) but not at the open, where only a cover or a title page has a layout, and it made the worst total at 5 and 20 % larger. It is not used.
+
 #### Cost
 
 On the Mac, measuring a whole book took 3 to 299 ms. One part of 8 KB took at most 0.4 ms, with one outlier of 1.5 ms. An observation, with the new fit and the new map, took at most 0.2 ms. Recorded layout times of a Kobo Clara BW suggest that a Kobo is 25 to 40 times slower than the Mac. That gives, as an estimate only, 10 to 16 ms for one part, and 0.1 to 12 seconds of idle time to measure a book. A tap waits for at most one part.
@@ -249,7 +276,7 @@ On the Mac, measuring a whole book took 3 to 299 ms. One part of 8 KB took at mo
 
 The measurement is kept for the open book only. Saving it would cost a storage write of up to about a megabyte for a large book, and measuring again after opening is short.
 
-A small record, the book-state field `page_estimate` ([Storage compatibility](../storage.md)), keeps the page numbers stable when the book opens again. It holds the corrected weights, the page numbers at the saved position and the real pages of the spine items that were read as a whole. It is saved with the reading position, so it adds no write. When the book opens again at the same position with the same settings, the page on the screen shows the saved numbers before any measuring, and the corrected weights become the starting weights. With other settings, only the weights carry over. `engine.page-estimate` checks this, and also damaged, out-of-range and oversized records. `session.reading-book` checks the save and the new opening through the book state on both storage backends, and that a checkpoint over its byte limit drops the read spine items first, then the record, before image views.
+A small record, the book-state field `page_estimate` ([Storage compatibility](../storage.md)), keeps the page numbers stable when the book opens again. It holds the corrected weights, the page numbers at the saved position and the real pages of the spine items that were read as a whole. It is saved with the reading position, so it adds no write. When the book opens again at the same position with the same settings, the corrected weights become the starting weights, and the page on the screen keeps the saved number once the measuring is done. A save in that time keeps the saved number; after a turn the number comes from the map. With other settings, only the weights carry over. `engine.page-estimate` checks this, and also damaged, out-of-range and oversized records. `session.reading-book` checks the save and the new opening through the book state on both storage backends, and that a checkpoint over its byte limit drops the read spine items first, then the record, before image views.
 
 ### Stages
 

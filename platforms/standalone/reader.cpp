@@ -1,5 +1,6 @@
 #include "reading/appearance_settings.h"
 #include "reading/reading_density.h"
+#include "reading/rendering_mode.h"
 #include "support/strings.h"
 #include "support/main_thread.h"
 #include "ui/style/private_text.h"
@@ -191,6 +192,7 @@ void ReaderController::begin(const QString &path, QSize pixels)
         saved = {};
     const auto settings = appearance::readerPreferences(
             storage::readPreferences(paths.preferences()).object, saved);
+    renderingMode::apply(settings);
     saved["dark_mode"] = settings.value("dark_mode").toBool(false);
     saved["bold_reading"] = settings.value("bold_reading").toString("off");
     saved["avoid_wasteful_styling"] = settings.value("avoid_wasteful_styling").toBool(true);

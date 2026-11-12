@@ -93,6 +93,8 @@ The reader also names these lifecycle scopes explicitly:
 
 These scopes permit waits only at their lifecycle boundaries. They do not permit storage waits during reading. The opening status scope replaces the old native opening-progress write and its retries while reading.
 
+The native tests, the screenshot gallery and the timings run with `KOBALT_CHAPTER_MODE=0`, also set by `platforms/desktop/run-test.cmake`, so books open as Accurate whatever the Rendering preference says. A test that needs Fast calls `renderingMode::setOverride(1)`, and `KOBALT_CHAPTER_MODE=1` in the environment runs a whole suite as Fast.
+
 The native tests run with `KOBALT_STRICT_MAIN_THREAD=1`, set by `platforms/desktop/run-test.cmake`. A violation aborts the test and names the operation. To list every violation with its call stack, run the tests with `KOBALT_STRICT_MAIN_THREAD=trace`, for example `KOBALT_STRICT_MAIN_THREAD=trace ctest --preset mac -R lifecycle --output-on-failure -V`. Trace mode logs each distinct stack once and lets the test continue. On Kobo, a violation adds one `main-thread-blocked` event per operation to the event log. `model.main-thread` checks the guard itself.
 
 Diagnostic event writes run on their own thread. `flushDiagnostics()` waits for that worker and calls the main-thread guard; reader callers must be at a lifecycle boundary. Tests that read `events.jsonl` call it first.

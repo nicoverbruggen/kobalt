@@ -783,6 +783,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         return fail(OpeningFailureKind::InvalidContent,
                     strings::key("error.the_publication_has_no_pages"));
     }
+    // The first layout gives its pages too, also when the saved position
+    // is in another slice. Each later layout observes itself.
+    observeLayout();
     engine_->getCurPage();
     anchor_ = qstring(engine_->getBookmark().toString());
     const auto bookmark = saved.value("position").toString();
@@ -795,7 +798,6 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     // another one.
     if (slices() && !saved.value("position").toString().isEmpty())
         goTo(saved.value("position").toString());
-    observeLayout();
     return true;
 }
 

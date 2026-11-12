@@ -7,6 +7,7 @@
 #include "reading/session_timeout.h"
 #include "reading/remaining_time.h"
 #include "reading/header_footer.h"
+#include "reading/rendering_mode.h"
 #include "support/qt_compat.h"
 #include "check.h"
 #include <QJsonArray>
@@ -204,6 +205,51 @@ int main()
         require(!preferences.contains(remainingTime::preferenceKey)
                         && !remainingTime::approximate(preferences),
                 "Invalid time format did not fall back to detailed estimates");
+    }
+
+    {
+        // Rendering is Fast without a choice. The test override wins, then
+        // KOBALT_CHAPTER_MODE, then the preference.
+        using renderingMode::Mode;
+        require(renderingMode::fromPreferences({}) == Mode::Fast,
+                "Preferences without Rendering did not use Fast");
+        for (const auto mode : { Mode::Fast, Mode::Accurate }) {
+            const auto preferences = appearance::cleanPreferences(
+                    { { renderingMode::preferenceKey, renderingMode::value(mode) },
+                      { "future_option", 42 } });
+            require(renderingMode::fromPreferences(preferences) == mode
+                            && preferences.value("future_option").toInt() == 42,
+                    "Rendering cleanup lost a saved choice or an unknown field");
+            require(appearance::same({}, preferences), "Rendering invalidated the book layout");
+        }
+        for (const auto &invalid : { QJsonValue("chapter"), QJsonValue(true), QJsonValue(1) }) {
+            const auto preferences =
+                    appearance::cleanPreferences({ { renderingMode::preferenceKey, invalid } });
+            require(!preferences.contains(renderingMode::preferenceKey)
+                            && renderingMode::fromPreferences(preferences) == Mode::Fast,
+                    "Invalid Rendering did not fall back to Fast");
+        }
+        const auto pinned = qgetenv("KOBALT_CHAPTER_MODE");
+        qunsetenv("KOBALT_CHAPTER_MODE");
+        require(renderingMode::effective(Mode::Fast) == Mode::Fast
+                        && renderingMode::effective(Mode::Accurate) == Mode::Accurate,
+                "Without an override the preference must choose the mode");
+        qputenv("KOBALT_CHAPTER_MODE", "1");
+        require(renderingMode::effective(Mode::Accurate) == Mode::Fast,
+                "KOBALT_CHAPTER_MODE=1 must win over Accurate");
+        qputenv("KOBALT_CHAPTER_MODE", "0");
+        require(renderingMode::effective(Mode::Fast) == Mode::Accurate,
+                "KOBALT_CHAPTER_MODE=0 must win over Fast");
+        renderingMode::setOverride(1);
+        require(renderingMode::effective(Mode::Accurate) == Mode::Fast,
+                "The test override must win over the environment");
+        renderingMode::setOverride(-1);
+        require(renderingMode::effective(Mode::Fast) == Mode::Accurate,
+                "Removing the override must return to the environment");
+        if (pinned.isEmpty())
+            qunsetenv("KOBALT_CHAPTER_MODE");
+        else
+            qputenv("KOBALT_CHAPTER_MODE", pinned);
     }
 
     for (int i = 0; i < int(std::size(features::keys)); ++i) {

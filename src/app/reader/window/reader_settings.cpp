@@ -1,5 +1,6 @@
 #include <QKeyEvent>
 #include "reading/remaining_time.h"
+#include "reading/rendering_mode.h"
 #include "reading/sleep_screen.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
@@ -372,6 +373,7 @@ void Reader::openSettings()
     settingsTimeRemainingFormat =
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
+    settingsRenderingMode = renderingMode::value(renderingMode::fromPreferences(preferences));
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     saveWordsOption->setChecked(preferences.value("save_looked_up_words").toBool(true));
     zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
@@ -801,6 +803,7 @@ void Reader::applySettings()
         next[disableReaderStandbyKey] = disableStandbyOption->isChecked();
     next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
     next[headerfooter::percentageFormatKey] = settingsPercentageFormat;
+    next[renderingMode::preferenceKey] = settingsRenderingMode;
     for (const auto *key : appearance::fallbackFontKeys)
         next[key] = settingsFontFaces.value(key).toString();
     next["bold_reading"] =
@@ -1485,6 +1488,8 @@ void Reader::showSettingsFonts()
             SettingsPanel::percentageFormatLabel(settingsPercentageFormat).toUpper());
     panel->timeRemainingFormatButton->setCaption(
             SettingsPanel::timeRemainingFormatLabel(settingsTimeRemainingFormat).toUpper());
+    panel->renderingButton->setCaption(
+            SettingsPanel::renderingModeLabel(settingsRenderingMode).toUpper());
     panel->headerFooterWeightButton->setCaption(
             (settingsHeaderFooterWeight ? strings::get("settings.header_footer_weight_heavier")
                                                   .arg(settingsHeaderFooterWeight)

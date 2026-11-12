@@ -401,7 +401,27 @@ private:
     std::function<bool()> openInterrupt_;
     // Makes `ahead_` the document that is shown. False when it is not the
     // spine item `item` or its settings differ.
-    bool adoptAhead(int item);
+    bool adoptAhead(int first, int last);
+    // A unit of work: the spine items that are loaded together. A long
+    // spine item is a unit by itself and is laid out in slices. Short
+    // ones that follow each other are one unit, up to about the text of
+    // one slice, so that a book of many short chapters does not load a
+    // document for each of them. unitFrom() starts a unit at `item`,
+    // unitUntil() ends one there. Each spine item starts on a new page, so
+    // the units do not change the pages.
+    QPair<int, int> unitFrom(int item) const;
+    QPair<int, int> unitUntil(int item) const;
+    // Where a unit without pages gets a spine item added: after it, or
+    // before it when the reader goes backward.
+    int emptyUnitDirection_ = 1;
+    // Loads the unit after or before the one that is shown.
+    bool showNextUnit();
+    bool showPreviousUnit();
+    // The size in bytes of each spine item, from the directory of the
+    // archive: nothing is read for it.
+    const QVector<qint64> &spineBytes() const;
+    // The bytes of spine items that make one unit.
+    qint64 unitBudget() const;
     // For adoptAhead() only.
     EngineDocument &operator=(EngineDocument &&) = default;
     // The characters of the spine item, as the engine counts them.
@@ -414,6 +434,11 @@ private:
     bool layoutSlice(int first, int forcedEnd = 0);
     // Lays out the slice that holds `position` when it is another one.
     bool showSliceOf(const QString &position);
+    // True when the document was loaded without the fonts that the book
+    // embeds: a reading font replaces them on every element, so they are
+    // never drawn. Only for a part of a book, which loads again quickly
+    // when the reader chooses the publisher's fonts.
+    bool fontsSkipped_ = false;
     // How long the last window took to load and lay out.
     qint64 windowLoadMs_ = -1;
     // Loads the window that holds `position` when it is outside the window.

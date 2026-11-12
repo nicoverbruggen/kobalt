@@ -43,20 +43,62 @@ int EngineDocument::sliceSize() const
     return qMax(2000, int(slicePages_ * page));
 }
 
+const QVector<qint64> &EngineDocument::spineBytes() const
+{
+    auto &bytes = source_->spineBytes;
+    if (bytes.size() != spineItemCount_ || bytes.isEmpty()) {
+        bytes.clear();
+        for (const auto &href : spineItems()) {
+            const lString32 name = Utf8ToUnicode(href.toUtf8().constData());
+            // The directory of the archive has the size. Opening the item
+            // would read and clean all of its text.
+            if (const auto *info = source_->container->GetObjectInfo(name)) {
+                bytes.append(qint64(info->GetSize()));
+                continue;
+            }
+            auto stream = source_->container->OpenStream(name.c_str(), LVOM_READ);
+            bytes.append(stream.isNull() ? 0 : qint64(stream->GetSize()));
+        }
+    }
+    return bytes;
+}
+
+qint64 EngineDocument::unitBudget() const
+{
+    // The text of a slice, with the markup around it.
+    return qint64(sliceSize()) * 2;
+}
+
+QPair<int, int> EngineDocument::unitFrom(int item) const
+{
+    const auto &bytes = spineBytes();
+    const qint64 budget = unitBudget();
+    int last = item;
+    qint64 sum = bytes.value(item);
+    while (sum < budget && last + 1 < bytes.size() && last - item < 15
+           && sum + bytes[last + 1] <= budget) {
+        sum += bytes[++last];
+    }
+    return { item, last };
+}
+
+QPair<int, int> EngineDocument::unitUntil(int item) const
+{
+    const auto &bytes = spineBytes();
+    const qint64 budget = unitBudget();
+    int first = item;
+    qint64 sum = bytes.value(item);
+    while (sum < budget && first > 0 && item - first < 15 && sum + bytes[first - 1] <= budget)
+        sum += bytes[--first];
+    return { first, item };
+}
+
 Engine::RoughPages EngineDocument::roughPages() const
 {
     RoughPages rough;
     if (windowFirst_ < 0 || spineItemCount_ <= 0 || !source_ || pages() <= 0)
         return rough;
-    auto &bytes = source_->spineBytes;
-    if (bytes.size() != spineItemCount_) {
-        bytes.clear();
-        for (const auto &href : spineItems()) {
-            auto stream = source_->container->OpenStream(
-                    Utf8ToUnicode(href.toUtf8().constData()).c_str(), LVOM_READ);
-            bytes.append(stream.isNull() ? 0 : qint64(stream->GetSize()));
-        }
-    }
+    const auto &bytes = spineBytes();
     // The pages of the spine items that have their text.
     double loadedPages = pages(), before = 0;
     if (slices()) {

@@ -607,6 +607,16 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     {
         DocumentCacheScope cache(keyed ? cacheDirectory_ : QString());
 #if __has_include(<koblaze.h>)
+#  ifdef KOBLAZE_SKIP_DOCUMENT_FONTS
+        // With a reading font, no element uses a font of the book. The
+        // engine then lists those fonts and does not read their files.
+        fontsSkipped_ = firstSpineItem >= 0 && !face_.isEmpty();
+        {
+            auto fonts = LVCreatePropsContainer();
+            fonts->setBool(PROP_EMBEDDED_FONTS, !fontsSkipped_);
+            engine_->propsApply(fonts);
+        }
+#  endif
 #  ifdef KOBLAZE_DOCUMENT_FONT_DATA
         // The fork keeps the data of embedded fonts for the next part of
         // the same book. Another book has other fonts under the same names.
@@ -716,6 +726,19 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         engine_.reset();
         return fail(OpeningFailureKind::Io, "opening.resource-read", detail);
     }
+    if (!pages() && firstSpineItem >= 0 && spineItemCount_ > 0
+        && (firstSpineItem > 0 || windowLast_ + 1 < spineItemCount_)) {
+        // A spine item can have no page: an empty file, or content that is
+        // not shown. As a part of the whole book it adds nothing. Loaded
+        // alone it must not end the book: load it with the spine item
+        // beside it, on the side that the reader is going to.
+        auto wider = saved;
+        const bool forward = (emptyUnitDirection_ >= 0 && windowLast_ + 1 < spineItemCount_)
+                || firstSpineItem == 0;
+        wider["koblaze_first_spine_item"] = forward ? firstSpineItem : firstSpineItem - 1;
+        wider["koblaze_last_spine_item"] = forward ? windowLast_ + 1 : windowLast_;
+        return openSource(source_, size, wider, error, {}, result);
+    }
     if (!pages()) {
         engine_.reset();
         return fail(OpeningFailureKind::InvalidContent,
@@ -743,8 +766,10 @@ bool EngineDocument::showSpineItemOf(const QString &position)
     const int item = spineItemIndex(position);
     if (item < 0 || (item >= windowFirst_ && item <= windowLast_))
         return true;
-    if (slicePages_ > 0)
-        return showSpineItems(item, item);
+    if (slicePages_ > 0) {
+        const auto unit = unitFrom(item);
+        return showSpineItems(unit.first, unit.second);
+    }
     return showSpineItems(qMax(0, item - 1), qMin(spineItemCount_ - 1, item + 1));
 }
 
@@ -767,7 +792,7 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
 {
     if (!source_ || !engine_)
         return false;
-    if (first == last && adoptAhead(first))
+    if (adoptAhead(first, last))
         return true;
     ahead_.reset();
     return openSource(source_, size_, windowSettings(first, last), error);
@@ -776,14 +801,16 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
 void EngineDocument::prepareNextItem(const std::function<bool()> &current)
 {
 #if __has_include(<koblaze.h>)
-    if (!slices() || !source_ || !engine_)
+    if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || !engine_)
         return;
     const int next = windowLast_ + 1;
-    // Only in the last slice: a second document takes memory, and the
-    // reader is far from the next spine item before that.
-    if (next >= spineItemCount_ || sliceEnd_ < spineItemText())
+    // In a spine item with slices, only in the last slice: a second
+    // document takes memory, and the reader is far from the next unit
+    // before that.
+    if (next >= spineItemCount_ || (slices() && sliceEnd_ < spineItemText()))
         return;
-    auto settings = windowSettings(next, next);
+    const auto unit = unitFrom(next);
+    auto settings = windowSettings(unit.first, unit.second);
     settings.remove("position");
     if (ahead_ && aheadItem_ == next && aheadSettings_ == settings && aheadSize_ == size_
         && ahead_->userStyleSheet_ == userStyleSheet_)
@@ -826,11 +853,12 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
 #endif
 }
 
-bool EngineDocument::adoptAhead(int item)
+bool EngineDocument::adoptAhead(int first, int last)
 {
-    if (!ahead_ || aheadItem_ != item)
+    if (!ahead_ || aheadItem_ != first)
         return false;
-    auto settings = windowSettings(item, item);
+    // The settings hold the unit: another range does not match.
+    auto settings = windowSettings(first, last);
     settings.remove("position");
     if (settings != aheadSettings_ || size_ != aheadSize_
         || ahead_->userStyleSheet_ != userStyleSheet_)
@@ -845,6 +873,34 @@ bool EngineDocument::adoptAhead(int item)
     EngineDocument old(fonts_);
     old = std::move(*this);
     *this = std::move(*next);
+    return true;
+}
+
+bool EngineDocument::showNextUnit()
+{
+    if (windowLast_ + 1 >= spineItemCount_)
+        return false;
+    const auto unit = unitFrom(windowLast_ + 1);
+    return showSpineItems(unit.first, unit.second);
+}
+
+bool EngineDocument::showPreviousUnit()
+{
+    if (windowFirst_ <= 0)
+        return false;
+    const auto unit = unitUntil(windowFirst_ - 1);
+    emptyUnitDirection_ = -1;
+    const bool shown = showSpineItems(unit.first, unit.second);
+    emptyUnitDirection_ = 1;
+    if (!shown)
+        return false;
+    // A spine item with slices opens with its first slice. Its last page
+    // is in its last slice.
+    if (slices()) {
+        const int text = spineItemText(), size = sliceSize();
+        if (sliceEnd_ < text && !layoutSlice((text - 1) / size * size))
+            return false;
+    }
     return true;
 }
 
@@ -876,12 +932,11 @@ bool EngineDocument::turnInWindow(int delta)
         // as a table, can be longer than a slice. Pass such slices.
         if (delta > 0) {
             for (;;) {
-                if (sliceEnd_ < spineItemText() && visiblePages_ == 0) {
+                if (slices() && sliceEnd_ < spineItemText() && visiblePages_ == 0) {
                     sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
                     if (!layoutSlice(sliceEnd_))
                         return false;
-                } else if (windowLast_ + 1 >= spineItemCount_
-                           || !showSpineItems(windowLast_ + 1, windowLast_ + 1)) {
+                } else if (!showNextUnit()) {
                     return false;
                 }
                 if (pages() > 0)
@@ -889,7 +944,7 @@ bool EngineDocument::turnInWindow(int delta)
             }
         }
         for (;;) {
-            if (sliceFirst_ > 0) {
+            if (slices() && sliceFirst_ > 0) {
                 // A recorded start gives the same pages as before. Without
                 // one, the slice before must stop where this one starts.
                 const auto slice = sliceHistory_.isEmpty()
@@ -897,19 +952,22 @@ bool EngineDocument::turnInWindow(int delta)
                         : sliceHistory_.takeLast();
                 if (!layoutSlice(slice.first, slice.second))
                     return false;
-            } else {
-                if (windowFirst_ <= 0 || !showSpineItems(windowFirst_ - 1, windowFirst_ - 1))
-                    return false;
-                // The spine item opens with its first slice. Its last page
-                // is in its last slice.
-                const int text = spineItemText(), size = sliceSize();
-                if (sliceEnd_ < text && !layoutSlice((text - 1) / size * size))
-                    return false;
+            } else if (!showPreviousUnit()) {
+                return false;
             }
             // The extra pages after the end of the slice repeat the start
             // of the slice that the reader came from.
             if (pages() > 0)
                 return go((visiblePages_ > 0 ? visiblePages_ : pages()) - 1);
+        }
+    }
+    if (slicePages_ > 0) {
+        // A unit of several short spine items. Pass a unit without pages.
+        for (;;) {
+            if (!(delta > 0 ? showNextUnit() : showPreviousUnit()))
+                return false;
+            if (pages() > 0)
+                return go(delta > 0 ? 0 : (visiblePages_ > 0 ? visiblePages_ : pages()) - 1);
         }
     }
     const auto items = spineItems();

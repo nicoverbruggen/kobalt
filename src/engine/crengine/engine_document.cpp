@@ -911,6 +911,16 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     const int weight = settings.value("weight_steps").toInt(weight_);
     const auto bionic = settings.value("bold_reading").toString(bionic_);
     const auto face = settings.value("font_face").toString(face_);
+    // The publisher's fonts were not read while a reading font replaced
+    // them. Load this part of the book again with them.
+    if (fontsSkipped_ && face.isEmpty() && source_ && windowFirst_ >= 0) {
+        auto saved = windowSettings(windowFirst_, windowLast_);
+        saved["font_face"] = QString();
+        ahead_.reset();
+        QString error;
+        if (!openSource(source_, size_, saved, &error))
+            return false;
+    }
     const auto defaultFace = settings.value("default_font_face").toString(defaultFace_);
     auto fallbackFaces = fallbackFaces_;
     for (size_t index = 0; index < fallbackFaces.size(); ++index) {
@@ -1933,7 +1943,9 @@ int EngineDocument::embeddedFontCount() const
     auto &fonts = document->getEmbeddedFontList();
     for (int i = 0; i < fonts.length(); ++i) {
         const auto *font = fonts[i];
-        if (!font->getIsLocal() && registered.contains(Utf8ToUnicode(font->getFace())))
+        // Fonts that were not read are listed, not registered.
+        if (!font->getIsLocal()
+            && (fontsSkipped_ || registered.contains(Utf8ToUnicode(font->getFace()))))
             families.insert(QString::fromUtf8(font->getFace().c_str()));
     }
     return families.size();

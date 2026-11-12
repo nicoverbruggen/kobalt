@@ -25,7 +25,8 @@ QRect ink(const QImage &image, bool red = false)
 
 void open(kobalt::EngineDocument &model, const QByteArray &body, const QByteArray &css = {},
           QJsonObject saved = {}, QSize size = QSize(800, 1000), bool preceding = false,
-          bool following = false)
+          bool following = false, const QByteArray &before = "<p>Previous chapter.</p>",
+          bool beforeLinear = true)
 {
     QMap<QString, QByteArray> data{
         { "mimetype", "application/epub+zip" },
@@ -33,12 +34,14 @@ void open(kobalt::EngineDocument &model, const QByteArray &body, const QByteArra
           "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
         { "book.opf",
           "<package xmlns='http://www.idpf.org/2007/opf' version='2.0'><metadata><title>Page layout</title></metadata><manifest><item id='before' href='before.xhtml' media-type='application/xhtml+xml'/><item id='page' href='page.xhtml' media-type='application/xhtml+xml'/><item id='after' href='after.xhtml' media-type='application/xhtml+xml'/></manifest><spine>"
-                  + QByteArray(preceding ? "<itemref idref='before'/>" : "")
+                  + QByteArray(!preceding     ? ""
+                               : beforeLinear ? "<itemref idref='before'/>"
+                                              : "<itemref idref='before' linear='no'/>")
                   + "<itemref idref='page'/>"
                   + QByteArray(following ? "<itemref idref='after'/>" : "")
                   + "</spine></package>" },
         { "after.xhtml", "<html><body><p>Next chapter.</p></body></html>" },
-        { "before.xhtml", "<html><body><p>Previous chapter.</p></body></html>" },
+        { "before.xhtml", "<html><body>" + before + "</body></html>" },
         { "page.xhtml",
           "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0}" + css
                   + "</style></head><body>" + body + "</body></html>" }
@@ -184,6 +187,17 @@ int main(int argc, char **argv)
         require(ordinaryTable.pages() == 3, "Ordinary table lost its chapter boundaries");
         require(ink(ordinaryTable.image(1)).top() < 100,
                 "Ordinary table became vertically centred");
+        // A spine item that is not part of the linear reading order, such
+        // as a contents page, has pages of its own. When it ended inside a
+        // block that must stay whole, the engine broke the page twice before
+        // the next chapter, with nothing between the breaks: the reader saw
+        // an empty page there.
+        kobalt::EngineDocument keptEnd(kobalt::test::readerFonts());
+        open(keptEnd, "<section><h2>Prologue</h2><p>First paragraph.</p></section>", {}, {},
+             QSize(800, 1000), true, false,
+             "<div style='page-break-inside:avoid'><p>Contents.</p></div>", false);
+        require(keptEnd.pages() == 2, "A kept block at the end of a chapter made an empty page");
+        require(keptEnd.pageStart(0) != keptEnd.pageStart(1), "Two pages start at the same place");
         kobalt::EngineDocument inlineImage(kobalt::test::readerFonts());
         open(inlineImage, "<p>Before</p>" + svg + "<p>After</p>");
         require(inlineImage.pages() == 1, "Inline SVG became page-height");

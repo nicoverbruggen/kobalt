@@ -1,0 +1,19 @@
+--- a/crengine/src/lvtinydom.cpp
++++ b/crengine/src/lvtinydom.cpp
+@@ -5854,6 +5854,16 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
+         gc();
+         CRLog::trace("finalizing... fonts.length=%d", _fonts.length());
+         context.Finalize();
++        // Two forced page breaks with nothing between them, at the start of
++        // some chapters, give a page without height. A reader sees an empty
++        // page before the chapter. Leave such pages out.
++        for ( int i = pages->length() - 1; i >= 0; i-- ) {
++            LVRendPageInfo * page = (*pages)[i];
++            if ( page->height <= 0 && page->footnotes.length() == 0 && pages->length() > 1 )
++                delete pages->remove(i);
++        }
++        for ( int i = 0; i < pages->length(); i++ )
++            (*pages)[i]->index = i;
+         updateRenderContext();
+         _pagesData.reset();
+         pages->serialize( _pagesData );

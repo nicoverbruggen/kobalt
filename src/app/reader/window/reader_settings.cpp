@@ -91,13 +91,15 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.chapterPages = session->chapterPages();
     values.page = session->page() + 1;
     values.pages = session->pages();
-    // An engine with the text of only a part of the book gives rough
-    // numbers for the book and for the part that it has.
-    if (const int pages = session->state().value("rough_pages").toInt(); pages > 0) {
-        values.page = session->state().value("rough_page").toInt();
-        values.pages = pages;
-        values.chapterPage = session->state().value("rough_item_page").toInt();
-        values.chapterPages = session->state().value("rough_item_pages").toInt();
+    // An engine with the text of only a part of the book has no page
+    // numbers to show. The percent is an estimate.
+    if (session->state().contains("book_fraction")) {
+        values.page = values.pages = values.chapterPage = values.chapterPages = 0;
+        values.percentRead = session->progressPercent();
+        const int itemPages = session->state().value("rough_item_pages").toInt();
+        if (itemPages > 0)
+            values.chapterPercentRead = pageProgressPercent(
+                    session->state().value("rough_item_page").toInt() - 1, itemPages);
     }
     const auto battery = services.battery();
     values.battery = battery.percent;

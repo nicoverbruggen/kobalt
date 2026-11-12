@@ -55,7 +55,7 @@ Engine::RoughPages EngineDocument::roughPages() const
     double loadedPages = pages(), before = 0;
     if (slices()) {
         const double text = qMax(1, spineItemText());
-        const double slice = qMax(1.0, qMin(double(sliceSize()), text - sliceFirst_));
+        const double slice = qMax(1.0, double(sliceEnd_ - sliceFirst_));
         loadedPages = qMax(double(pages()), pages() * text / slice);
         before = loadedPages * sliceFirst_ / text;
     }
@@ -124,20 +124,78 @@ void EngineDocument::applySlice()
 #if __has_include(<koblaze.h>)
     if (!engine_)
         return;
-    if (slices())
-        engine_->getDocument()->setKoblazeLayoutSlice(sliceFirst_, sliceFirst_ + sliceSize());
-    else
+    visiblePages_ = 0;
+    if (!slices()) {
         engine_->getDocument()->setKoblazeLayoutSlice(0, 0);
+        return;
+    }
+    engine_->getDocument()->setKoblazeLayoutSlice(
+            sliceFirst_, sliceForcedEnd_ > 0 ? sliceForcedEnd_ : sliceFirst_ + sliceReach());
 #endif
 }
 
-bool EngineDocument::layoutSlice(int first)
+int EngineDocument::sliceReach() const
+{
+    // A third more than the slice, to find a page that starts a block, and
+    // as much again for each search that found none.
+    const int size = sliceSize();
+    return size + (1 + sliceExtra_) * (size / 3);
+}
+
+bool EngineDocument::pageStartsBlock(int page, int *before) const
+{
+    const auto position = pageStart(page);
+    const auto pointer =
+            engine_->getDocument()->createXPointer(Utf8ToUnicode(position.toUtf8().constData()));
+    auto *block = pointer.getNode();
+    while (block && (block->isText() || block->getRendMethod() != erm_final))
+        block = block->getParentNode();
+    if (!block || block->isNodeName("DocFragment"))
+        return false;
+    const int start =
+            textBefore(QString::fromUtf8(UnicodeToUtf8(ldomXPointer(block, 0).toString()).c_str()));
+    if (start < 0 || textBefore(position) != start)
+        return false;
+    *before = start;
+    return true;
+}
+
+void EngineDocument::cutSlice()
+{
+    visiblePages_ = 0;
+    sliceEnd_ = 0;
+    sliceCut_ = true;
+    if (!engine_ || !slices())
+        return;
+    const int text = spineItemText();
+    const int laidOutEnd = sliceForcedEnd_ > 0 ? sliceForcedEnd_ : sliceFirst_ + sliceReach();
+    sliceEnd_ = qMin(laidOutEnd, text);
+    // A forced end and the end of the spine item need no search.
+    if (sliceForcedEnd_ > 0 || text <= laidOutEnd)
+        return;
+    const int laidOut = engine_->getPageCount();
+    // The last page that starts a block, in the later half of the pages.
+    // Without one the slice ends where the layout ends, on a short page.
+    for (int page = laidOut - 1; page >= qMax(1, laidOut / 2); --page) {
+        int before = 0;
+        if (pageStartsBlock(page, &before) && before > sliceFirst_) {
+            visiblePages_ = page;
+            sliceEnd_ = before;
+            return;
+        }
+    }
+    sliceCut_ = false;
+}
+
+bool EngineDocument::layoutSlice(int first, int forcedEnd)
 {
     if (!engine_ || !slices())
         return false;
     QElapsedTimer timer;
     timer.start();
     sliceFirst_ = qMax(0, first);
+    sliceForcedEnd_ = forcedEnd > sliceFirst_ ? forcedEnd : 0;
+    sliceExtra_ = 0;
     searchText_.reset();
     sourceIndex_.reset();
     cache_.clear();
@@ -149,8 +207,36 @@ bool EngineDocument::layoutSlice(int first)
     engine_->requestRender();
     if (!renderLayout())
         return false;
+    // Dense text with long paragraphs can have no page that starts a block.
+    // Lay out more and look again, a few times.
+    while (!sliceCut_ && sliceExtra_ < 3) {
+        ++sliceExtra_;
+        cache_.clear();
+        engine_->getDocument()->forceReinitStyles();
+        engine_->requestRender();
+        if (!renderLayout())
+            return false;
+    }
     windowLoadMs_ = timer.elapsed();
     return true;
+}
+
+bool EngineDocument::enterNextSlice()
+{
+    if (!pastSliceEnd())
+        return false;
+    // The next slice starts with the page at visiblePages_, so the pages
+    // after it keep their order.
+    const int ahead = page() - visiblePages_;
+    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+    if (!layoutSlice(sliceEnd_))
+        return false;
+    return go(qBound(0, ahead, qMax(0, pages() - 1)));
+}
+
+void EngineDocument::prepareAhead()
+{
+    enterNextSlice();
 }
 
 bool EngineDocument::showSliceOf(const QString &position)
@@ -160,25 +246,49 @@ bool EngineDocument::showSliceOf(const QString &position)
     const int before = textBefore(position);
     if (before < 0)
         return true;
-    const int size = sliceSize(), first = before / size * size;
-    if (first != sliceFirst_ && !layoutSlice(first))
-        return false;
-    // A block belongs to the slice in which it starts. A position late in a
-    // block that crosses the end of a slice is in the slice before.
-    // Such a position has no layout here, and the engine gives it the first
-    // page after it.
-    while (sliceFirst_ > 0) {
+    const auto laidOut = [&] {
         auto *document = engine_->getDocument();
         const int page = pagesOf({ position }).value(0, -1);
-        ldomXPointerEx start(document->createXPointer(
-                Utf8ToUnicode(pageStart(qMax(0, page)).toUtf8().constData())));
+        if (pages() <= 0 || page < 0 || page >= pages())
+            return false;
+        ldomXPointerEx start(
+                document->createXPointer(Utf8ToUnicode(pageStart(page).toUtf8().constData())));
         ldomXPointerEx target(
                 document->createXPointer(Utf8ToUnicode(position.toUtf8().constData())));
-        if (pages() > 0 && page >= 0
-            && (start.isNull() || target.isNull() || start.compare(target) <= 0))
-            break;
-        if (!layoutSlice(sliceFirst_ - size))
+        return start.isNull() || target.isNull() || start.compare(target) <= 0;
+    };
+    // The end of the text that has a layout, with the extra pages.
+    const auto reach = [&] {
+        return sliceForcedEnd_ > 0 ? sliceForcedEnd_ : sliceFirst_ + sliceReach();
+    };
+    if (before >= sliceFirst_ && before < sliceEnd_ && laidOut())
+        return true;
+    // On the extra pages after the end of the slice, the position belongs
+    // to the next slice. Show it there, so that its page is a whole page.
+    if (before >= sliceEnd_ && before < reach() && sliceEnd_ < spineItemText()) {
+        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+        if (!layoutSlice(sliceEnd_))
             return false;
+        if (before < sliceEnd_ && laidOut())
+            return true;
+    }
+    // A jump has no recorded slices around it.
+    sliceHistory_.clear();
+    const int size = sliceSize();
+    if (!layoutSlice(before / size * size))
+        return false;
+    for (int attempts = 0; attempts < 8; ++attempts) {
+        if (before >= sliceEnd_ && sliceEnd_ < spineItemText()) {
+            if (!layoutSlice(sliceEnd_))
+                return false;
+        } else if (!laidOut() && sliceFirst_ > 0) {
+            // A block belongs to the slice in which it starts. A position
+            // late in a block that started earlier is in the slice before.
+            if (!layoutSlice(qMax(0, sliceFirst_ - size)))
+                return false;
+        } else {
+            break;
+        }
     }
     return true;
 }

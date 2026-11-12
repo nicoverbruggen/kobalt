@@ -330,6 +330,14 @@ public:
     // The percent of the book that is read. An engine with the text of only
     // a part of the book gives a rough estimate; otherwise it is the page
     // count of pageProgressPercent().
+    // The same as a fraction from 0 to 1, for the progress bar.
+    double progressFraction() const
+    {
+        const auto fraction = frame.state.value("book_fraction");
+        return fraction.isDouble() ? qBound(0.0, fraction.toDouble(), 1.0)
+                                   : pageProgressFraction(page(), pages());
+    }
+
     int progressPercent() const
     {
         const auto fraction = frame.state.value("book_fraction");

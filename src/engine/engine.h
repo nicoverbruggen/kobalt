@@ -211,6 +211,11 @@ public:
     // has, it loads the spine item there and continues. False at an end of
     // the book.
     virtual bool turnInWindow(int delta) = 0;
+    // Called after a page is handed over, while the user reads it. An
+    // engine that lays out a part of the text at a time prepares the next
+    // part here, so that the turn into it does not wait. The page on screen
+    // stays the same page.
+    virtual void prepareAhead() = 0;
     virtual int fontSize() const = 0;
     virtual int spacing() const = 0;
     virtual int margin() const = 0;

@@ -464,7 +464,7 @@ void Reader::paintTurn()
     QElapsedTimer painting;
     if (turnStarted.isValid())
         painting.start();
-    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    page->progressFraction = session->progressFraction();
     page->preparedDamage = session->damage();
     page->preparedFrom = session->damageFrom();
     // The Refresh the screen setting decides which turns flash.
@@ -610,7 +610,7 @@ void Reader::syncReadingState()
 {
     if (session->busy())
         pageScrubber->cancel();
-    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    page->progressFraction = session->progressFraction();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
@@ -632,7 +632,7 @@ void Reader::syncReadingControls()
                                                            : session->chapterTitle();
     chapterButton->setText(chapter);
     chapterButton->setAccessibleName(strings::get("reader.contents_detail").arg(chapter));
-    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    page->progressFraction = session->progressFraction();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();

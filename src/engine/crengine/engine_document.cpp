@@ -1143,6 +1143,7 @@ bool EngineDocument::renderLayout()
 #else
     engine_->Render();
 #endif
+    cutSlice();
     return true;
 }
 

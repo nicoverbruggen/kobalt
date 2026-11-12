@@ -83,6 +83,8 @@ private:
 // request, because that request's page matters more than a page nobody asked for.
 void prepareNeighbours(Engine &engine, int direction, const std::function<bool()> &current)
 {
+    if (!current || current())
+        engine.prepareAhead();
     for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
         if (current && !current())
             return;
@@ -2251,7 +2253,10 @@ void ReaderSession::dispatch(bool pageTurn)
                     else if (delta) {
                         const int to = appearanceChanged ? engine->turnTarget(engine->page(), delta)
                                                          : turned;
-                        if (to == engine->page())
+                        // An engine with the text of only a part of the
+                        // book decides each turn itself: the next page can
+                        // need text that has no layout yet.
+                        if (to == engine->page() || engine->bookFraction() >= 0)
                             engine->turnInWindow(delta);
                         else
                             engine->go(to);

@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     model.setChapterSlices(slicePages);
     QString error;
     require(model.showSpineItems(0, 0, &error), qPrintable(error));
-    require(model.pages() <= 2 * slicePages, "The first slice has too many pages");
+    require(model.pages() <= 3 * slicePages, "The first slice has too many pages");
     require(model.continuesAfter() && !model.continuesBefore(),
             "The book continues after the first slice");
 
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
         forward.append(model.pageStart(model.page()));
         largest = qMax(largest, model.pages());
     }
-    require(largest <= 2 * slicePages, "A slice has too many pages");
+    require(largest <= 3 * slicePages, "A slice has too many pages");
     require(forward.first() == whole.first(), "Reading must start at the start of the book");
     require(forward.size() >= whole.size(), "Slices cannot need fewer pages than the whole book");
     require(forward.size() <= whole.size() + whole.size() / slicePages + 6,
@@ -70,11 +70,56 @@ int main(int argc, char **argv)
     require(model.spineItemOf(model.position()) == 2 && !model.continuesAfter(),
             "Reading forward must end in the last spine item");
 
-    // Read backward to the first page.
+    // The reader prepares the next slice after it shows a page. The pages
+    // must be the same with that step, whenever it runs.
+    require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+    QStringList prepared{ model.pageStart(model.page()) };
+    for (int turn = 0;; ++turn) {
+        if (turn % 3)
+            model.prepareAhead();
+        if (!model.turnInWindow(1))
+            break;
+        prepared.append(model.pageStart(model.page()));
+    }
+    require(prepared == forward, "Preparing the next slice ahead changed the pages");
+
+    // Read backward to the first page. A spine item that is entered from
+    // its end has no recorded slices, so its pages can differ from the
+    // forward ones, but the whole text is passed again.
     QStringList backward{ model.pageStart(model.page()) };
-    while (model.turnInWindow(-1))
+    while (model.turnInWindow(-1)) {
         backward.prepend(model.pageStart(model.page()));
-    require(backward == forward, "Reading backward gave other pages than reading forward");
+        require(model.pages() <= 3 * slicePages, "A slice has too many pages going backward");
+    }
+    require(backward.first() == whole.first(),
+            "Reading backward must end at the start of the book");
+    require(backward.size() >= whole.size()
+                    && backward.size() <= whole.size() + whole.size() / slicePages + 6,
+            "Reading backward passed too few or too many pages");
+
+    // Going back over slices that were just read shows the same pages.
+    require(model.go(0), "Cannot go to the first page");
+    QStringList there{ model.pageStart(model.page()) };
+    for (int turn = 0; turn < 4 * slicePages && model.turnInWindow(1); ++turn)
+        there.append(model.pageStart(model.page()));
+    QStringList back{ model.pageStart(model.page()) };
+    for (int turn = 1; turn < there.size() && model.turnInWindow(-1); ++turn)
+        back.prepend(model.pageStart(model.page()));
+    require(back == there, "Going back over slices that were just read gave other pages");
+
+    // A slice ends where a page starts a block, so the join adds no short
+    // page: the pages of the first spine item are those of the whole book.
+    QStringList first;
+    for (const auto &start : forward)
+        if (model.goTo(start) && model.spineItemOf(model.position()) == 0)
+            first.append(start);
+    QStringList wholeFirst;
+    for (int page = 0; page < whole.size(); ++page)
+        if (wholeItems[page] == 0)
+            wholeFirst.append(whole[page]);
+    std::printf("first spine item: %d pages whole, %d pages in slices\n", int(wholeFirst.size()),
+                int(first.size()));
+    require(first.size() <= wholeFirst.size() + 2, "The joins between slices added short pages");
 
     // Every page start of the whole book is reachable and is on a page of
     // its own slice.
@@ -82,7 +127,7 @@ int main(int argc, char **argv)
         require(model.goTo(whole[page]), "A position in the book is not reachable");
         require(model.spineItemOf(model.position()) == wholeItems[page],
                 "A jump landed in another spine item");
-        require(model.pages() <= 2 * slicePages, "A jump laid out more than a slice");
+        require(model.pages() <= 3 * slicePages, "A jump laid out more than a slice");
         QString compareError;
         require(model.comparePosition(model.pageStart(model.page()), &compareError) <= 0,
                 "The page of a position starts after the position");
@@ -93,7 +138,7 @@ int main(int argc, char **argv)
     require(model.goTo(position), "Cannot go to the middle of the book");
     require(model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", 36 } })),
             "Cannot change the font size in a slice");
-    require(model.position() == position && model.pages() <= 2 * slicePages,
+    require(model.position() == position && model.pages() <= 3 * slicePages,
             "A font change in a slice lost the position or laid out too much");
     std::printf(
             "PASS: slices of %d pages; %d pages whole, %d pages in slices, largest layout %d pages\n",

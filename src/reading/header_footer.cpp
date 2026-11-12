@@ -61,6 +61,12 @@ QString timeLeft(qint64 milliseconds, bool learningPace, bool approximate)
     return learningPace ? strings::get("stats.approximate_time").arg(result) : result;
 }
 
+// A percent that is known, or nothing.
+QString percent(int value)
+{
+    return value >= 0 ? strings::get("common.percent").arg(qBound(0, value, 100)) : QString();
+}
+
 QString percentDone(int page, int pages, bool decimal)
 {
     if (pages <= 0)
@@ -360,13 +366,21 @@ Content content(Field field, const Values &values, bool uppercase)
         result.text = values.chapter;
         break;
     case Field::ChapterPage:
-        result.text = pageFraction(values.chapterPage, values.chapterPages);
+        result.text = values.percentRead >= 0
+                ? percent(values.chapterPercentRead)
+                : pageFraction(values.chapterPage, values.chapterPages);
         break;
     case Field::BookPage:
-        result.text = pageFraction(values.page, values.pages);
+        result.text = values.percentRead >= 0
+                ? strings::get("sleep.percent_read").arg(values.percentRead)
+                : pageFraction(values.page, values.pages);
         break;
     case Field::ChapterPagesLeft:
-        if (values.chapterPages > 0) {
+        if (values.percentRead >= 0) {
+            if (values.chapterPercentRead >= 0)
+                result.text = strings::get("header_footer.percent_left")
+                                      .arg(100 - values.chapterPercentRead);
+        } else if (values.chapterPages > 0) {
             // The current page is still to be read, as in Stats: the last page shows 1.
             const int left = qMax(1, values.chapterPages - values.chapterPage + 1);
             result.text =
@@ -377,11 +391,15 @@ Content content(Field field, const Values &values, bool uppercase)
         break;
     case Field::ChapterAndPage:
         result.chapterTitle = values.chapter;
-        result.chapterPosition = pageOf(values.chapterPage, values.chapterPages);
+        result.chapterPosition = values.percentRead >= 0
+                ? percent(values.chapterPercentRead)
+                : pageOf(values.chapterPage, values.chapterPages);
         result.text = joined(result.chapterTitle, result.chapterPosition);
         break;
     case Field::TitleAndPage:
-        result.text = joined(values.title, pageOf(values.page, values.pages));
+        result.text = joined(values.title,
+                             values.percentRead >= 0 ? percent(values.percentRead)
+                                                     : pageOf(values.page, values.pages));
         break;
     case Field::BatteryPercentOnly:
     case Field::BatteryPercent:
@@ -411,11 +429,14 @@ Content content(Field field, const Values &values, bool uppercase)
                 timeLeft(values.bookMilliseconds, values.learningPace, values.approximateTime);
         break;
     case Field::ChapterPercent:
-        result.text =
-                percentDone(values.chapterPage, values.chapterPages, values.decimalPercentages);
+        result.text = values.percentRead >= 0
+                ? percent(values.chapterPercentRead)
+                : percentDone(values.chapterPage, values.chapterPages, values.decimalPercentages);
         break;
     case Field::BookPercent:
-        result.text = percentDone(values.page, values.pages, values.decimalPercentages);
+        result.text = values.percentRead >= 0
+                ? percent(values.percentRead)
+                : percentDone(values.page, values.pages, values.decimalPercentages);
         break;
     }
     if (uppercase) {

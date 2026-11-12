@@ -494,6 +494,7 @@
 "header_footer.learning_pace" = "Learning reading speed";
 /* Arguments: %1, %2 */
 "header_footer.pages_left" = "%1 %2";
+"header_footer.percent_left" = "%1% left";
 "header_footer.preset.default" = "Kobalt";
 "header_footer.preset.alternative_a" = "Bookish";
 "header_footer.preset.alternative_b" = "Ember";

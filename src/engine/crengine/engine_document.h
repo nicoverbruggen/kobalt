@@ -191,6 +191,7 @@ public:
     // previous spine item with its neighbors and continues there. False at
     // either end of the book. Without a window this is a plain page turn.
     bool turnInWindow(int delta) override;
+    void prepareAhead() override;
 
     bool continuesBefore() const override { return windowFirst_ > 0 || sliceFirst_ > 0; }
 
@@ -200,8 +201,7 @@ public:
     bool continuesAfter() const override
     {
         return windowFirst_ >= 0
-                && (windowLast_ + 1 < spineItemCount_
-                    || (slices() && sliceFirst_ + sliceSize() < spineItemText()));
+                && (windowLast_ + 1 < spineItemCount_ || (slices() && sliceEnd_ < spineItemText()));
     }
 
     // With the koblaze fork only, experimental. A spine item that is shown
@@ -340,6 +340,35 @@ private:
     // The pages of text in one slice, and the characters of the spine item
     // before the slice that has a layout.
     int slicePages_ = 0, sliceFirst_ = 0;
+    // The characters of the spine item before the end of the slice. A slice
+    // ends where a page starts with a new block, so that the next slice
+    // continues on a full page. Extra text is laid out to find that page;
+    // visiblePages_ is the number of pages before it, or 0 for all.
+    int sliceEnd_ = 0, visiblePages_ = 0;
+    // The end of a slice that must stop at the start of the slice after
+    // it, when the reader goes backward without a recorded start.
+    int sliceForcedEnd_ = 0;
+    // How many times more extra text the layout takes, after a search that
+    // found no clean end, and whether the last search found one.
+    int sliceExtra_ = 0;
+    bool sliceCut_ = true;
+    // The characters that are laid out from the start of the slice.
+    int sliceReach() const;
+    // The starts of the slices that the reader passed going forward, so
+    // that going backward shows the same pages.
+    // Each entry is the start of a slice and its forced end, or 0.
+    QVector<QPair<int, int>> sliceHistory_;
+
+    // True on the extra pages after the end of the slice. They are the
+    // first pages of the next slice.
+    bool pastSliceEnd() const { return slices() && visiblePages_ > 0 && page() >= visiblePages_; }
+
+    // Lays out the next slice and stays on the same page of text.
+    bool enterNextSlice();
+    // Finds the end of the slice after a layout.
+    void cutSlice();
+    // True when the page starts with the first text of a block.
+    bool pageStartsBlock(int page, int *before) const;
 
     // True when the one spine item of the window is laid out in slices.
     bool slices() const
@@ -356,7 +385,7 @@ private:
     // Gives the slice to the engine before a layout.
     void applySlice();
     // Lays out the slice that starts at `first` characters.
-    bool layoutSlice(int first);
+    bool layoutSlice(int first, int forcedEnd = 0);
     // Lays out the slice that holds `position` when it is another one.
     bool showSliceOf(const QString &position);
     // How long the last window took to load and lay out.

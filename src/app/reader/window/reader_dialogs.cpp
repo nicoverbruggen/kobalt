@@ -1005,9 +1005,8 @@ bool Reader::saveSleepPreferences(const QJsonObject &next)
 sleep::Snapshot Reader::sleepPreviewSample()
 {
     sleep::Snapshot sample;
-    const int percent = book && session
-            ? (book->finishedHere() ? 100 : pageProgressPercent(session->page(), session->pages()))
-            : 0;
+    const int percent =
+            book && session ? (book->finishedHere() ? 100 : session->progressPercent()) : 0;
     sample.percent = percent;
     sample.progress = strings::get("sleep.percent_read").arg(percent);
     if (book) {

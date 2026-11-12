@@ -351,6 +351,20 @@ bool chapterMode()
 #endif
 }
 
+// A number in the chapter-mode file sets the pages of one slice.
+int chapterModePages()
+{
+#ifdef KOBALT_CONFIG_DIR
+    static const int pages = [] {
+        QFile file(QStringLiteral(KOBALT_CONFIG_DIR "/chapter-mode"));
+        return file.open(QIODevice::ReadOnly) ? file.readAll().trimmed().toInt() : 0;
+    }();
+    return qBound(0, pages, 500);
+#else
+    return 0;
+#endif
+}
+
 // A position names its spine item as DocFragment[n], counted from one.
 int spineItemIndex(const QString &position)
 {
@@ -533,7 +547,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         // KOBALT_CHAPTER_PAGES sets the pages of one layout. The default is
         // 25. Zero loads three spine items as a whole.
         const auto pages = qgetenv("KOBALT_CHAPTER_PAGES");
-        slicePages_ = pages.isEmpty() ? 25 : qMax(0, pages.toInt());
+        slicePages_ = !pages.isEmpty()   ? qMax(0, pages.toInt())
+                : chapterModePages() > 0 ? chapterModePages()
+                                         : 25;
         firstSpineItem = slicePages_ > 0 ? item : qMax(0, item - 1);
         lastSpineItem = slicePages_ > 0 ? item : item + 1;
     }
@@ -544,7 +560,8 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     windowTimer.start();
     windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
     windowLast_ = firstSpineItem < 0 ? -1 : lastSpineItem;
-    sliceFirst_ = 0;
+    sliceFirst_ = sliceEnd_ = visiblePages_ = sliceForcedEnd_ = sliceExtra_ = 0;
+    sliceHistory_.clear();
     const bool keyed =
             !cacheDirectory_.isEmpty() && !cacheFingerprint_.isEmpty() && firstSpineItem < 0;
     if (keyed) {
@@ -647,6 +664,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     applySlice();
     engine_->Render();
     openingTimes_["model_paginate_ms"] = double(phase.restart());
+    cutSlice();
     spineItemCount_ = spineItems().size();
     windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
     windowLast_ = firstSpineItem < 0 ? -1 : qMin(lastSpineItem, spineItemCount_ - 1);
@@ -709,6 +727,18 @@ bool EngineDocument::turnInWindow(int delta)
 {
     if (!engine_ || !delta)
         return false;
+    // On the extra pages after the end of a slice, the next slice is due.
+    // prepareAhead() usually did this already.
+    if (delta > 0 && pastSliceEnd() && !enterNextSlice())
+        return false;
+    // The last page that has a layout stops where the layout stops, so it
+    // is not a whole page while the slice continues. With one extra page
+    // only, the next page is that one: lay out the next slice first.
+    if (delta > 0 && slices() && visiblePages_ > 0 && sliceEnd_ < spineItemText()
+        && page() + 1 == visiblePages_ && visiblePages_ + 1 >= pages()) {
+        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+        return layoutSlice(sliceEnd_) && pages() > 0 && go(0);
+    }
     const int target = turnTarget(page(), delta);
     if (target != page())
         return go(target);
@@ -721,8 +751,9 @@ bool EngineDocument::turnInWindow(int delta)
         // as a table, can be longer than a slice. Pass such slices.
         if (delta > 0) {
             for (;;) {
-                if (sliceFirst_ + sliceSize() < spineItemText()) {
-                    if (!layoutSlice(sliceFirst_ + sliceSize()))
+                if (sliceEnd_ < spineItemText() && visiblePages_ == 0) {
+                    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+                    if (!layoutSlice(sliceEnd_))
                         return false;
                 } else if (windowLast_ + 1 >= spineItemCount_
                            || !showSpineItems(windowLast_ + 1, windowLast_ + 1)) {
@@ -734,7 +765,12 @@ bool EngineDocument::turnInWindow(int delta)
         }
         for (;;) {
             if (sliceFirst_ > 0) {
-                if (!layoutSlice(sliceFirst_ - sliceSize()))
+                // A recorded start gives the same pages as before. Without
+                // one, the slice before must stop where this one starts.
+                const auto slice = sliceHistory_.isEmpty()
+                        ? qMakePair(qMax(0, sliceFirst_ - sliceSize()), sliceFirst_)
+                        : sliceHistory_.takeLast();
+                if (!layoutSlice(slice.first, slice.second))
                     return false;
             } else {
                 if (windowFirst_ <= 0 || !showSpineItems(windowFirst_ - 1, windowFirst_ - 1))
@@ -742,11 +778,13 @@ bool EngineDocument::turnInWindow(int delta)
                 // The spine item opens with its first slice. Its last page
                 // is in its last slice.
                 const int text = spineItemText(), size = sliceSize();
-                if (text > size && !layoutSlice((text - 1) / size * size))
+                if (sliceEnd_ < text && !layoutSlice((text - 1) / size * size))
                     return false;
             }
+            // The extra pages after the end of the slice repeat the start
+            // of the slice that the reader came from.
             if (pages() > 0)
-                return go(pages() - 1);
+                return go((visiblePages_ > 0 ? visiblePages_ : pages()) - 1);
         }
     }
     const auto items = spineItems();

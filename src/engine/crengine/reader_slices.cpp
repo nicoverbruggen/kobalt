@@ -13,6 +13,7 @@
 // EngineDocument::setChapterSlices().
 namespace kobalt {
 namespace {
+#ifndef KOBLAZE_TEXT_LENGTHS
 // The text nodes below `node` in document order, until `target`.
 bool countText(ldomNode *node, ldomNode *target, int &count)
 {
@@ -27,6 +28,7 @@ bool countText(ldomNode *node, ldomNode *target, int &count)
     }
     return false;
 }
+#endif
 } // namespace
 
 int EngineDocument::sliceSize() const
@@ -115,10 +117,23 @@ int EngineDocument::textBefore(const QString &position) const
     if (!body)
         return -1;
     int count = 0;
+#ifdef KOBLAZE_TEXT_LENGTHS
+    // The engine remembers the text of each node. Counting it again for
+    // every position takes longer than the layout of a slice.
+    auto *document = engine_->getDocument();
+    if (target != fragment && target != body) {
+        count = document->koblazeTextBefore(body, target);
+        if (count < 0)
+            return -1;
+    }
+    if (target->isText())
+        count += qBound(0, pointer.getOffset(), document->koblazeTextLength(target));
+#else
     if (target != fragment && target != body && !countText(body, target, count))
         return -1;
     if (target->isText())
         count += qBound(0, pointer.getOffset(), int(target->getText().length()));
+#endif
     return count;
 }
 

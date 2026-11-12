@@ -1,4 +1,5 @@
 #include "column_view.h"
+#include "stop_point.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "engine_document.h"
@@ -15,6 +16,7 @@ void EngineDocument::markKoboLinkDecorations()
     const auto attribute = document->getAttrNameIndex("data-kobalt-kobo-link");
     QVector<ldomNode *> pending{ document->getRootNode() };
     while (!pending.isEmpty()) {
+        stopPoint();
         auto *node = pending.takeLast();
         if (!node || !node->isElement())
             continue;
@@ -492,6 +494,7 @@ void EngineDocument::markPageNotes()
     QVector<ldomNode *> groups;
     QVector<ldomNode *> pending{ document->getRootNode() };
     while (!pending.isEmpty()) {
+        stopPoint();
         engineActivity().checkpoint();
         auto *node = pending.takeLast();
         if (!node || !node->isElement())

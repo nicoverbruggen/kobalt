@@ -1,5 +1,6 @@
 #include "support/qt_compat.h"
 #include "reader_alignment.h"
+#include "stop_point.h"
 #include <lvtinydom.h>
 #include <QRegularExpression>
 #include <QSet>
@@ -63,6 +64,7 @@ void markBodyAlignment(ldomDocument *document)
                                        "blockquote", "div", "section", "article" };
     std::vector<Frame> stack{ { document->getRootNode() } };
     while (!stack.empty()) {
+        stopPoint();
         auto &frame = stack.back();
         auto *node = frame.node;
         if (!frame.child && node->isElement()) {

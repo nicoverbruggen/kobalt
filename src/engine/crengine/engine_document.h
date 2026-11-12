@@ -363,8 +363,12 @@ private:
     // first pages of the next slice.
     bool pastSliceEnd() const { return slices() && visiblePages_ > 0 && page() >= visiblePages_; }
 
-    // Lays out the next slice and stays on the same page of text.
-    bool enterNextSlice();
+    // Lays out the next slice and stays on the same page of text. With
+    // `current`, the layout stops when that says other work waits: the
+    // slice that was shown comes back, with its pages.
+    bool enterNextSlice(const std::function<bool()> &current = {});
+    // Set while a slice is laid out ahead: true stops that layout.
+    std::function<bool()> sliceInterrupt_;
     // Finds the end of the slice after a layout.
     void cutSlice();
     // True when the page starts with the first text of a block.

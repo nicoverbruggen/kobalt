@@ -1,4 +1,5 @@
 #include "engine/engine_worker.h"
+#include "stop_point.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "engine_document.h"
@@ -751,27 +752,6 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
     return openSource(source_, size_, windowSettings(first, last), error);
 }
 
-namespace {
-#ifdef KOBLAZE_CANCEL_CHECK
-// True when work that is done ahead must stop. Called every few nodes.
-bool stopAhead(void *context)
-{
-    engineSlowdownPause();
-    const auto &current = *static_cast<const std::function<bool()> *>(context);
-    return current && !current();
-}
-
-struct CancelCheck
-{
-    explicit CancelCheck(const std::function<bool()> &current)
-    {
-        koblazeSetCancelCheck(&stopAhead, const_cast<void *>(static_cast<const void *>(&current)));
-    }
-    ~CancelCheck() { koblazeSetCancelCheck(nullptr, nullptr); }
-};
-#endif
-} // namespace
-
 void EngineDocument::prepareNextItem(const std::function<bool()> &current)
 {
 #if __has_include(<koblaze.h>)
@@ -801,8 +781,10 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
     // A tap must not wait for this work. The load and the style pass ask
     // the check, the layout asks the interrupt. A stopped document is
     // dropped, and the next call starts again.
-    const CancelCheck check(current);
-    ahead->openInterrupt_ = [&current] { return stopAhead(const_cast<void *>(static_cast<const void *>(&current))); };
+    const StopCheck check(current);
+    ahead->openInterrupt_ = [&current] {
+        return stopRequested(const_cast<void *>(static_cast<const void *>(&current)));
+    };
     try {
         if (!ahead->openSource(source_, size_, settings, &error))
             return;

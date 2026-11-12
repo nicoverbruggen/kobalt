@@ -1,4 +1,5 @@
 #include "reader_beautifier.h"
+#include "stop_point.h"
 #include <lvtinydom.h>
 #include <QRegularExpression>
 #include <QSet>
@@ -85,6 +86,7 @@ void markBeautifierContent(ldomDocument *document)
 
     std::vector<Frame> stack{ { document->getRootNode(), false } };
     while (!stack.empty()) {
+        stopPoint();
         const auto frame = stack.back();
         stack.pop_back();
         auto *node = frame.node;

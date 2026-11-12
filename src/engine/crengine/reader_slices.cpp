@@ -1,4 +1,5 @@
 #include "column_view.h"
+#include "stop_point.h"
 #include "engine_document.h"
 #include "reader_locations.h"
 #include "reader_render_callback.h"
@@ -237,7 +238,7 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     sourceIndex_.reset();
     cache_.clear();
     damage_.clear();
-    OpeningCallback callback(engine_, {});
+    OpeningCallback callback(engine_, {}, sliceInterrupt_);
     relayout();
     engine_->requestRender();
     if (!renderLayout())
@@ -256,13 +257,59 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     return true;
 }
 
-bool EngineDocument::enterNextSlice()
+bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
 {
     if (!pastSliceEnd())
         return false;
     // The next slice starts with the page at visiblePages_, so the pages
     // after it keep their order.
-    const int ahead = page() - visiblePages_;
+    const int shown = page();
+    const int ahead = shown - visiblePages_;
+#if defined(KOBLAZE_SAVED_LAYOUT) && defined(KOBLAZE_CANCEL_CHECK)
+    // The reader still has pages of this slice to turn to. When other work
+    // waits, the layout of the next slice stops and this slice comes back.
+    const int first = sliceFirst_, end = sliceEnd_, visible = visiblePages_,
+              forced = sliceForcedEnd_, extra = sliceExtra_;
+    const bool cut = sliceCut_;
+    const auto history = sliceHistory_;
+    const qint64 loadMs = windowLoadMs_;
+    if (current && engine_->koblazeSaveLayout()) {
+        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+        bool done = false;
+        {
+            const StopCheck check(current);
+            sliceInterrupt_ = [&current] {
+                return stopRequested(const_cast<void *>(static_cast<const void *>(&current)));
+            };
+            done = layoutSlice(sliceEnd_);
+            sliceInterrupt_ = nullptr;
+        }
+        if (done) {
+            engine_->getDocument()->koblazeDropSavedLayout();
+            return go(qBound(0, ahead, qMax(0, pages() - 1)));
+        }
+        sliceFirst_ = first;
+        sliceEnd_ = end;
+        sliceForcedEnd_ = forced;
+        sliceExtra_ = extra;
+        sliceCut_ = cut;
+        sliceHistory_ = history;
+        windowLoadMs_ = loadMs;
+        if (engine_->koblazeRestoreLayout()) {
+            visiblePages_ = visible;
+            layoutInterrupted_ = false;
+            return go(shown) && false;
+        }
+        // The layout could not come back: lay out the slice again. This
+        // does not stop.
+        if (!layoutSlice(first, forced))
+            return false;
+        go(qBound(0, shown, qMax(0, pages() - 1)));
+        return false;
+    }
+#else
+    Q_UNUSED(current);
+#endif
     sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
     if (!layoutSlice(sliceEnd_))
         return false;
@@ -271,10 +318,9 @@ bool EngineDocument::enterNextSlice()
 
 void EngineDocument::prepareAhead(const std::function<bool()> &current)
 {
-    // The reader is past the end of the slice here, so the next turn needs
-    // the next slice in any case: this layout does not stop.
-    enterNextSlice();
-    prepareNextItem(current);
+    enterNextSlice(current);
+    if (!current || current())
+        prepareNextItem(current);
 }
 
 bool EngineDocument::showSliceOf(const QString &position)

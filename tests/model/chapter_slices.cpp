@@ -107,6 +107,15 @@ int main(int argc, char **argv)
         require(model.turnInWindow(-1) && model.spineItemOf(model.position()) == 0,
                 "Cannot go back to the end of the first spine item");
         const auto lastPage = model.pageStart(model.page());
+        // Many stops early in the load: a stop there must not use up one
+        // of the few document slots of the engine each time.
+        for (int early = 0; stops && early < 60; ++early) {
+            int checks = 0;
+            model.prepareAhead([&] { return ++checks <= early % 12; });
+            ++stopped;
+            require(model.pageStart(model.page()) == lastPage,
+                    "Stopped work ahead changed the page on screen");
+        }
         bool finished = false;
         for (int limit = 1; stops && limit < 200000 && !finished; limit += 1 + limit / 3) {
             int checks = 0;
@@ -130,6 +139,32 @@ int main(int argc, char **argv)
     require(fromEndOfFirst(true) == withoutStops, "Stopped work ahead changed the pages after it");
     require(stopped > 5, "The work ahead did not stop");
     std::printf("work ahead: stopped %d times before it finished\n", stopped);
+
+    // The layout of the next slice ahead stops too, and the slice on screen
+    // comes back. Stop it after a different number of checks at every page:
+    // the page on screen stays, and all pages are the same as without stops.
+    require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+    QStringList stopping{ model.pageStart(model.page()) };
+    int sliceStops = 0;
+    for (int turn = 0;; ++turn) {
+        const auto shown = model.pageStart(model.page());
+        const int limit = (turn * 7) % 45;
+        int checks = 0;
+        bool asked = false;
+        model.prepareAhead([&] {
+            asked = asked || ++checks > limit;
+            return !asked;
+        });
+        sliceStops += asked;
+        require(model.pageStart(model.page()) == shown,
+                "Stopped work ahead changed the page on screen");
+        if (!model.turnInWindow(1))
+            break;
+        stopping.append(model.pageStart(model.page()));
+    }
+    require(stopping == forward, "Stopped layouts of the next slice changed the pages");
+    require(sliceStops > 20, "The work ahead was not stopped");
+    std::printf("work ahead: %d stops while reading the book\n", sliceStops);
 
     // A spine item that was opened ahead has the settings of that moment.
     // After a change of settings it must not be shown.

@@ -1,4 +1,5 @@
 #include "reader_page_layout.h"
+#include "stop_point.h"
 #include <lvdocview.h>
 #include <QString>
 #include <vector>
@@ -11,6 +12,7 @@ ldomNode *leadingImage(ldomNode *root)
         return nullptr;
     std::vector<ldomNode *> pending{ root };
     while (!pending.empty()) {
+        stopPoint();
         auto *node = pending.back();
         pending.pop_back();
         if (node->isText()) {
@@ -130,6 +132,7 @@ void markChapterLeadingImages(LVDocView *view)
     const auto fullPageAttribute = document->getAttrNameIndex("data-kobalt-fullpage");
     std::vector<ldomNode *> pending{ document->getRootNode() }, bodies;
     while (!pending.empty()) {
+        stopPoint();
         auto *node = pending.back();
         pending.pop_back();
         if (!node)

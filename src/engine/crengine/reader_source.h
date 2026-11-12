@@ -15,5 +15,8 @@ struct ReaderSource
     std::shared_ptr<ResourceCache> resources;
     QMap<QString, qint64> sizes;
     LVContainerRef container;
+    // The size in bytes of each spine item, in spine order, for rough page
+    // numbers. Filled when first needed.
+    QVector<qint64> spineBytes;
 };
 } // namespace kobalt

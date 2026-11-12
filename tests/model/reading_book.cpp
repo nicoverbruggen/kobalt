@@ -39,7 +39,9 @@ QJsonObject persistedBook(QJsonObject state)
     for (const auto *key : appearance::marginKeys)
         state.remove(key);
     for (const auto *key : { "chapter_title", "chapter_page", "chapter_pages", "page", "pages",
-                             "next_page", "text_font_face", "embedded_font_count", "cached_pages" })
+                             "next_page", "text_font_face", "embedded_font_count", "cached_pages",
+                             "continues_before", "continues_after", "book_fraction", "rough_page",
+                             "rough_pages", "rough_item_page", "rough_item_pages" })
         state.remove(key);
     return state;
 }
@@ -244,8 +246,8 @@ int main(int argc, char **argv)
     {
         Calls calls;
         const PositionCodec positions{
-            [](const EngineDocument &, const QString &location, QString *) { return location; },
-            [](const EngineDocument &model, QString *) { return model.position(); },
+            [](const Engine &, const QString &location, QString *) { return location; },
+            [](const Engine &model, QString *) { return model.position(); },
             [](const QString &location) { return location; }
         };
         auto session = open(QSize(758, 900), {}, "session-event", positions);
@@ -666,8 +668,8 @@ int main(int argc, char **argv)
                 "Legacy checkpoint fields changed during import");
         {
             const PositionCodec positions{
-                [](const EngineDocument &, const QString &location, QString *) { return location; },
-                [](const EngineDocument &model, QString *) { return model.position(); },
+                [](const Engine &, const QString &location, QString *) { return location; },
+                [](const Engine &model, QString *) { return model.position(); },
                 [](const QString &location) { return location; }
             };
             auto session = open(QSize(758, 900), imported.object, identity, positions);
@@ -708,7 +710,8 @@ int main(int argc, char **argv)
                     "Display-only chapter change affected the saved checkpoint");
             for (const auto *key :
                  { "chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
-                   "text_font_face", "embedded_font_count", "cached_pages" })
+                   "text_font_face", "embedded_font_count", "cached_pages", "continues_before",
+                   "continues_after", "book_fraction" })
                 require(!saved.contains(key), "Checkpoint persisted a display-only field");
             require(book.session()->turn(1), "Cannot turn before background checkpoint");
             waitUntil([&] { return !book.session()->busy(); });

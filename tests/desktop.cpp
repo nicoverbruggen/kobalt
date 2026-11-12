@@ -117,8 +117,8 @@
 
 #include "app/reader/panels/word_list.h"
 #include "storage/saved_words.h"
-#include "engine/crengine/engine_activity.h"
-#include "engine/crengine/engine_worker.h"
+#include "engine/engine_activity.h"
+#include "engine/engine_worker.h"
 #include "support/qt_compat.h"
 #include <QScopeGuard>
 #include <QSemaphore>

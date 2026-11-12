@@ -2,7 +2,7 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "engine_document.h"
-#include "engine_activity.h"
+#include "engine/engine_activity.h"
 #include <lvdocview.h>
 #include <QRegularExpression>
 #include <QSet>

@@ -8,7 +8,7 @@
 #include "publication/image_policy.h"
 #include "publication/resource_cache.h"
 #include "reader_render_callback.h"
-#include "engine_activity.h"
+#include "engine/engine_activity.h"
 #include "reader_styles.h"
 #include "reader_hyphenation.h"
 #include "reader_alignment.h"
@@ -28,6 +28,9 @@
 #include <QSet>
 #include <QtMath>
 #include <lvdocview.h>
+#if __has_include(<koblaze.h>)
+#  include <koblaze.h>
+#endif
 #include <lvfntman.h>
 #include <lvrend.h>
 #include <hyphman.h>
@@ -319,6 +322,14 @@ bool validAlignment(const QString &value)
             || value == "right";
 }
 } // namespace
+
+// The publication checks embedded fonts against the limit that CREngine enforces.
+static_assert(maxEmbeddedFontBytes == LVFontManager::MaxEmbeddedFontBytes);
+
+std::unique_ptr<Engine> createEngine(EngineFontInputs fonts)
+{
+    return std::make_unique<EngineDocument>(std::move(fonts));
+}
 
 EngineDocument::EngineDocument(EngineFontInputs fonts) : fonts_(std::move(fonts))
 {
@@ -836,7 +847,7 @@ int EngineDocument::turnTarget(int from, int delta) const
 
 bool EngineDocument::goTo(const QString &position)
 {
-    if (!engine_)
+    if (!engine_ || !showSpineItemOf(position) || !showSliceOf(position))
         return false;
     auto pointer = engine_->getDocument()->createXPointer(cre(position));
     if (pointer.isNull())
@@ -1015,7 +1026,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
             alternateViewport_ = {};
         }
     }
-    OpeningCallback callback(engine_, std::move(progress));
+    OpeningCallback callback(engine_, std::move(progress), interrupt_);
     pixels_ = pixels;
     spacing_ = spacing;
     paragraphSpacing_ = paragraphSpacing;
@@ -1110,7 +1121,42 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
             alternateViewport_ = {};
         }
     }
+    if (!renderLayout())
+        return false;
+    return goTo(anchor);
+}
+
+bool EngineDocument::renderLayout()
+{
+    applySlice();
+#if __has_include(<koblaze.h>)
+    try {
+        engine_->Render();
+    } catch (const KoblazeRenderCancelled &) {
+        // The reading position stays in anchor_ for resumeLayout().
+        layoutInterrupted_ = true;
+        cache_.clear();
+        damage_.clear();
+        return false;
+    }
+    layoutInterrupted_ = false;
+#else
     engine_->Render();
+#endif
+    return true;
+}
+
+bool EngineDocument::resumeLayout()
+{
+    if (!engine_)
+        return false;
+    if (!layoutInterrupted_)
+        return true;
+    const auto anchor = anchor_;
+    OpeningCallback callback(engine_, {}, interrupt_);
+    engine_->requestRender();
+    if (!renderLayout())
+        return false;
     return goTo(anchor);
 }
 
@@ -1816,14 +1862,40 @@ ChapterSelection EngineDocument::chapterAround(const QVector<ChapterLink> &links
     return result;
 }
 
+PageInfo EngineDocument::pageInfo() const
+{
+    PageInfo info;
+    const int total = pages();
+    if (!engine_ || total <= 0)
+        return info;
+    // CREngine lays out the whole book, so every value is exact.
+    const LayoutGeneration generation{ 0, layoutSignature() };
+    info.bookPage = Query<int>::exact(page(), generation);
+    info.bookPages = Query<int>::exact(total, generation);
+    info.bookProgress = Query<double>::exact(double(page()) / total, generation);
+    const auto chapter = chapterProgress();
+    if (chapter.pages > 0) {
+        info.chapterPage = Query<int>::exact(chapter.page - 1, generation);
+        info.chapterPages = Query<int>::exact(chapter.pages, generation);
+    } else {
+        // A book without contents has no chapter to count pages in.
+        info.chapterPage = info.chapterPages = Query<int>::unsupported({});
+    }
+    return info;
+}
+
 ChapterProgress EngineDocument::chapterProgress() const
 {
     const auto links = chapters();
     const auto selected = chapterSelection(links);
     if (selected.current >= 0) {
-        const auto title = links[selected.current].title.trimmed();
-        return { title.isEmpty() ? strings::get("reader.untitled_chapter") : title, selected.page,
-                 selected.pages };
+        auto title = links[selected.current].title.trimmed();
+        if (title.isEmpty())
+            title = strings::get("reader.untitled_chapter");
+        // Experiment: show how long the chapters on screen took to load.
+        if (windowLoadMs_ >= 0)
+            title += QStringLiteral(" · %1 ms").arg(windowLoadMs_);
+        return { title, selected.page, selected.pages };
     }
     if (selected.next >= 0)
         return { strings::get("reader.front_matter"), page() + 1,

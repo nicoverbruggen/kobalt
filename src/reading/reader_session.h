@@ -1,6 +1,7 @@
 #pragma once
-#include "engine/crengine/engine_document.h"
+#include "engine/engine.h"
 #include "open_request.h"
+#include "reading_progress.h"
 #include "highlight_geometry.h"
 #include "storage/custom_pins.h"
 #include <QElapsedTimer>
@@ -322,6 +323,21 @@ public:
 
     int pages() const { return frame.state.value("pages").toInt(); }
 
+    // The engine has more of the book after its last page: that page is not
+    // the end of the book.
+    bool continuesAfter() const { return frame.state.value("continues_after").toBool(); }
+
+    // The percent of the book that is read. An engine with the text of only
+    // a part of the book gives a rough estimate; otherwise it is the page
+    // count of pageProgressPercent().
+    int progressPercent() const
+    {
+        const auto fraction = frame.state.value("book_fraction");
+        if (fraction.isDouble())
+            return qBound(0, int(fraction.toDouble() * 100), 100);
+        return pageProgressPercent(page(), pages());
+    }
+
     // The page a forward turn reaches, or page() on the last page of the text.
     int nextPage() const { return frame.state.value("next_page").toInt(page()); }
 
@@ -418,10 +434,10 @@ private:
     bool formattingWarning_ = false;
     storage::CustomPins customPins_;
     QJsonObject formattingDetails_;
-    ReaderSession(std::shared_ptr<EngineDocument> retainedEngine, QString placeholderFamily);
+    ReaderSession(std::shared_ptr<Engine> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;
     QString placeholderFamily_;
-    std::shared_ptr<EngineDocument> engine_;
+    std::shared_ptr<Engine> engine_;
     ReaderFrame frame;
     void completeFrameMarkup(ReaderFrame result, quint64 job,
                              const std::shared_ptr<SourceLease> &lease,

@@ -518,6 +518,15 @@ private:
     kobalt::ChoiceScreen *choices = nullptr;
     kobalt::ChapterGraph *chapterGraph = nullptr;
     bool seekOpen = false;
+
+    // Navigate needs page numbers for the whole book. An engine that has
+    // the text of only a part of the book does not have them.
+    bool navigateAvailable() const
+    {
+        return features::enabled(preferences, features::Navigate)
+                && !session->state().contains("book_fraction");
+    }
+
     void openSeek();
     kobalt::Acknowledgments *acknowledgments;
     QStackedWidget *panels;

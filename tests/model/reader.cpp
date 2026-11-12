@@ -1080,14 +1080,13 @@ int main(int argc, char **argv)
     checkBionicWidth();
     {
         kobalt::EngineDocument unopened(kobalt::test::readerFonts());
-        const kobalt::PositionCodec synthetic{ [](const kobalt::EngineDocument &, const QString &,
-                                                  QString *) {
-                                                  return QStringLiteral("/body/p[1]");
-                                              },
-                                               [](const kobalt::EngineDocument &, QString *) {
-                                                   return QStringLiteral("external-position");
-                                               },
-                                               [](const QString &location) { return location; } };
+        const kobalt::PositionCodec synthetic{
+            [](const kobalt::Engine &, const QString &, QString *) {
+                return QStringLiteral("/body/p[1]");
+            },
+            [](const kobalt::Engine &, QString *) { return QStringLiteral("external-position"); },
+            [](const QString &location) { return location; }
+        };
         QString error;
         require(unopened.comparePlatformPosition(synthetic, "external-position", &error) == 0
                         && !error.isEmpty(),

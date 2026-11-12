@@ -1,5 +1,5 @@
-#include "engine_worker.h"
-#include "engine_activity.h"
+#include "engine/engine_worker.h"
+#include "engine/engine_activity.h"
 #include <QCoreApplication>
 #include <QThread>
 

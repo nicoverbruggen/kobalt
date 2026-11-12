@@ -4,7 +4,7 @@
 #include "startup_recovery.h"
 #include "screensaver_compatibility.h"
 #include "reader_environment.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "storage/profile_database.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"

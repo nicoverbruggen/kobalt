@@ -1,5 +1,6 @@
 #pragma once
 #include "reading/appearance_settings.h"
+#include "publication/location.h"
 #include "publication/opening_result.h"
 #include "reading/chapter.h"
 #include "assets/font_catalog.h"
@@ -12,8 +13,10 @@
 #include <QSet>
 #include "publication/resource_cache.h"
 #include "platform/api/position_codec.h"
-#include "reader_links.h"
-#include "reader_word_counts.h"
+#include "engine/engine.h"
+#include "engine/links.h"
+#include "engine/types.h"
+#include "engine/word_counts.h"
 #include "reading/reading_density.h"
 #include "reading/appearance_settings.h"
 #include <QString>
@@ -33,112 +36,22 @@ namespace nickel {
 class NickelPositionCodec;
 }
 
-// Bundled defaults for generic families.
-inline constexpr auto publisherSansFontFace = "NV Legible Next";
-// Bundled face for the generic monospace family.
-inline constexpr auto monospaceFontFace = "IBM Plex Mono";
-// Bundled face for MathML and the generic math family.
-inline constexpr auto mathFontFace = "Noto Sans Math";
-// Bundled faces, in order, for characters that the reading font lacks.
-// Text faces precede Math so its letter glyphs cannot interrupt script shaping.
-// Math precedes CJK so shared mathematical symbols keep their math metrics.
-// The CJK face has full coverage and localized glyphs selected by HarfBuzz
-// from the book or element language. Untagged text uses its Japanese forms.
-inline constexpr auto fallbackFontFaces =
-        "Noto Serif|Noto Naskh Arabic|Noto Serif Hebrew|Noto Serif Armenian|Noto Serif Georgian|Noto Serif Devanagari|Noto Serif Bengali|Noto Serif Tamil|Noto Serif Thai|Noto Sans Math|Noto Serif CJK JP";
 struct ReaderSource;
-enum class OpeningStage { Content, Text, Styles, Pages, Ready };
-using OpeningProgress = std::function<void(OpeningStage, int)>;
-
-struct ChapterProgress
-{
-    QString title;
-    int page = 0, pages = 0;
-};
-
-struct SearchHit
-{
-    QString start, end, before, text, after;
-    int page = -1;
-};
-
-enum class SearchScope { Book, Chapter, Before, After };
-
-struct SearchCursor
-{
-    int block = 0, offset = 0;
-};
-
-struct SearchBatch
-{
-    QVector<SearchHit> hits;
-    int nextPage = 0;
-    SearchCursor cursor;
-    bool done = false, limited = false;
-    // A restarted scan replaces results from the previous layout.
-    bool reset = false;
-};
-
-struct TextRange
-{
-    QString start, end, text;
-    QString chosenEnd = {};
-    QString chosenStart = {};
-    bool sentenceStartPolicy = false;
-    bool sentenceEndPolicy = false;
-    // The sentence around the range, when asked for.
-    QString context = {};
-};
-
-struct WordSelection
-{
-    QString text, start, end;
-    QVector<QRect> rectangles;
-};
-
-struct SelectionEndpoint
-{
-    // True terminal edge span in viewport pixels, never a clipped range edge.
-    QPoint first, last;
-    // Axis unit normal pointing away from selected text. Caps point inward.
-    QPoint outward;
-    bool visible = false; // False for endpoints outside the current page/viewport.
-};
-
-struct AnnotationGeometry
-{
-    QVector<QRect> rectangles;
-    SelectionEndpoint start, end;
-    bool vertical = false; // Current page's writing axis, independent of range shape.
-};
-
-struct AnnotationToken : WordSelection
-{
-    // Source boundaries for automatic paired punctuation. No whitespace is included.
-    QString startBeforePunctuation, endAfterPunctuation;
-    bool punctuation = false;
-};
-
-struct AnnotationPageEdges
-{
-    AnnotationToken first, last;
-    SelectionEndpoint start, end;
-    int columns = 1;
-    bool vertical = false;
-    bool continuesBefore = false, continuesAfter = false;
-};
 
 // All engine calls stay on one owning thread. Images own their pixels.
-class EngineDocument
+class EngineDocument final : public Engine
 {
 public:
     explicit EngineDocument(EngineFontInputs fonts);
-    ~EngineDocument();
-    bool initializeFonts();
-    QStringList fontFaces();
-    QVector<ReadingFont> fontCatalog();
+    ~EngineDocument() override;
 
-    const EngineFontInputs &fontInputs() const { return fonts_; }
+    const char *name() const override { return "crengine"; }
+
+    bool initializeFonts() override;
+    QStringList fontFaces() override;
+    QVector<ReadingFont> fontCatalog() override;
+
+    const EngineFontInputs &fontInputs() const override { return fonts_; }
 
     static bool supportedArchive(const QByteArray &bytes, QString *error,
                                  QSet<QString> *skippedFonts = nullptr);
@@ -148,192 +61,247 @@ public:
     // their format. Qt before 5.9 cannot reinterpret an image and keeps RGB32.
     static void setPageFormat(QImage::Format format);
     bool open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,
-              OpeningProgress progress = {});
+              OpeningProgress progress = {}) override;
     bool openResources(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes,
                        QSize size, const QJsonObject &saved, QString *error,
                        OpeningProgress progress = {}, OpeningResult *result = nullptr,
                        std::function<void()> coverReady = {},
-                       std::function<void()> cacheReady = {});
+                       std::function<void()> cacheReady = {}) override;
     bool rebindResources(const std::shared_ptr<ResourceCache> &resources,
-                         const QMap<QString, qint64> &sizes);
+                         const QMap<QString, qint64> &sizes) override;
     // Set before opening. CREngine keeps parsed books and their pages in
     // `directory`, keyed by the publication fingerprint and by `policy`, which
     // changes with the code that builds the parsed book. An empty directory
     // or fingerprint opens without the cache.
     void setDocumentCache(QString directory, QByteArray fingerprint, QByteArray policy,
-                          qint64 bytes);
+                          qint64 bytes) override;
 
     // Set before opening. Previews inherit these bytes from their source document.
-    void setUserStyleSheet(QByteArray css) { userStyleSheet_ = std::move(css); }
+    void setUserStyleSheet(QByteArray css) override { userStyleSheet_ = std::move(css); }
 
-    const QByteArray &userStyleSheet() const { return userStyleSheet_; }
+    const QByteArray &userStyleSheet() const override { return userStyleSheet_; }
 
     // The last opening restored the parsed book from the cache without
     // reading its text from the publication.
-    bool openedFromCache() const { return openedFromCache_; }
+    bool openedFromCache() const override { return openedFromCache_; }
 
     // Writes the parsed book and its pages to the cache, for the next opening.
-    bool saveDocumentCache();
+    bool saveDocumentCache() override;
     // Shared count, on the owning engine thread. Populates the Stats graph
     // from source anchors. Counts visible source text once, including
     // non-linear spine fragments; excludes SVG and ruby annotation text.
     // Cancellation discards the result. Completed counts use document-cache
     // properties, so reflow and cached reopening do not scan text again.
-    DocumentWordCounts wordCounts(std::function<bool()> current = {});
+    DocumentWordCounts wordCounts(std::function<bool()> current = {}) override;
 
-    qint64 totalWords() const { return totalWords_; }
+    qint64 totalWords() const override { return totalWords_; }
 
-    QString resourceError() const;
-    QJsonObject resourceStats() const;
-    bool openPreview(EngineDocument &source, QSize size, QString *error);
-    bool go(int page);
+    QString resourceError() const override;
+    QJsonObject resourceStats() const override;
+    bool openPreview(Engine &source, QSize size, QString *error) override;
+    bool go(int page) override;
     // The page that `delta` page turns from `from` reach. When hiding is enabled,
     // skip other non-linear sections. Returns `from` at either end.
-    int turnTarget(int from, int delta) const;
-    bool goTo(const QString &position);
-    QString platformPosition(const PositionCodec &codec, QString *error) const;
-    bool goToPlatform(const PositionCodec &codec, const QString &location, QString *error);
-    // Where goToPlatformNearest opened: the saved position, the start of its
-    // chapter or the start of the book.
-    enum class PositionTarget { Exact, Chapter, Book, Unavailable };
+    int turnTarget(int from, int delta) const override;
+    bool goTo(const QString &position) override;
+    QString platformPosition(const PositionCodec &codec, QString *error) const override;
+    bool goToPlatform(const PositionCodec &codec, const QString &location, QString *error) override;
     // With a codec, an unknown anchor opens its chapter and an unknown chapter
     // opens the book. Without one, leave the position unchanged and report
     // Unavailable. *error explains why the exact position was not used.
     PositionTarget goToPlatformNearest(const PositionCodec &codec, const QString &location,
-                                       QString *error);
+                                       QString *error) override;
     // Negative is before the current source anchor; positive is beyond it.
-    int comparePosition(const QString &position, QString *error) const;
+    int comparePosition(const QString &position, QString *error) const override;
     int comparePlatformPosition(const PositionCodec &codec, const QString &location,
-                                QString *error) const;
+                                QString *error) const override;
+    // The shared location of an engine position. False when the position is
+    // not in a spine item or is in generated content. *exact is false when
+    // the location is the nearest one that the source has, for example for
+    // a position inside whitespace.
+    bool locationOf(const QString &position, Location *location,
+                    bool *exact = nullptr) const override;
+    // The engine position of a shared location, or empty when unresolved.
+    QString positionOf(const Location &location, Restoration *restoration = nullptr) const override;
     // The page of each position in the current layout, or -1 where a
     // position no longer resolves.
     QVector<int> pagesOf(const QStringList &positions, bool rangeEndpoints = false,
                          QVector<int> *sourceOrder = nullptr,
-                         std::function<bool()> current = {}) const;
+                         std::function<bool()> current = {}) const override;
     // The start position of a page and its first words.
-    QString pageStart(int page) const;
-    QString pageExcerpt(int page) const;
-    WordSelection wordAt(QPoint point);
-    QImage imageAt(QPoint point);
-    AnnotationPageEdges annotationPageEdges();
-    AnnotationToken annotationTokenAt(QPoint point);
-    AnnotationToken annotationDragTokenAt(QPoint point, const QString &boundary, bool start);
+    QString pageStart(int page) const override;
+    QString pageExcerpt(int page) const override;
+    WordSelection wordAt(QPoint point) override;
+    QImage imageAt(QPoint point) override;
+    AnnotationPageEdges annotationPageEdges() override;
+    AnnotationToken annotationTokenAt(QPoint point) override;
+    AnnotationToken annotationDragTokenAt(QPoint point, const QString &boundary,
+                                          bool start) override;
     // Resolves and orders source boundaries without changing pagination or position.
     // `withContext` also reads the surrounding sentence, at most 600 characters.
-    TextRange textRange(const QString &start, const QString &end, bool withContext = false);
+    TextRange textRange(const QString &start, const QString &end,
+                        bool withContext = false) override;
     // Indices of source ranges intersecting [start, end), in input order.
     // Invalid, empty and reversed ranges are ignored. No text or geometry is read.
     QVector<int> intersectingRanges(const QString &start, const QString &end,
-                                    const QVector<QPair<QString, QString>> &ranges) const;
+                                    const QVector<QPair<QString, QString>> &ranges) const override;
     // Crossed boundary edits retain both complete words using wordAt segmentation.
-    TextRange annotationRange(const QString &start, const QString &end);
+    TextRange annotationRange(const QString &start, const QString &end) override;
     // Complete token boundaries preserve explicit punctuation choices when reversed.
     // An equal pair resolves the token at a saved start, or before a saved end.
     TextRange annotationRange(const QString &startTokenStart, const QString &startTokenEnd,
                               const QString &endTokenStart, const QString &endTokenEnd,
                               bool endTokenPolicy = false, bool startTokenPolicy = false,
-                              std::function<bool()> current = {});
-    QVector<PageLink> pageLinks();
-    LinkDetails linkDetails(const QString &source, bool preview = true);
-    SearchBatch searchPage(const QString &query, int page);
+                              std::function<bool()> current = {}) override;
+    QVector<PageLink> pageLinks() override;
+    LinkDetails linkDetails(const QString &source, bool preview = true) override;
+    SearchBatch searchPage(const QString &query, int page) override;
     // Worker-only, incremental preparation. The cache belongs to this layout.
-    bool prepareSearch();
+    bool prepareSearch() override;
     SearchBatch searchText(const QString &query, SearchCursor cursor, int maximum,
                            SearchScope scope = SearchScope::Book, const QString &origin = {},
-                           bool details = true);
+                           bool details = true) override;
     QVector<SearchHit> searchDetails(QVector<SearchHit> hits, SearchScope scope,
-                                     const QString &origin);
+                                     const QString &origin) override;
 
     // Source-only current-page intersection. Does not resolve remote geometry.
     // Returns input indices in order; at most 2000 saved ranges plus one draft.
-    QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) const;
+    QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) const override;
     // Check a changing draft without rebuilding the saved-range index.
-    bool rangeVisible(const QString &start, const QString &end) const;
+    bool rangeVisible(const QString &start, const QString &end) const override;
     // Text selection excludes images. Links also need their image hit regions.
-    AnnotationGeometry annotationGeometry(const QString &start, const QString &end);
-    QVector<QRect> rangeRects(const QString &start, const QString &end, bool includeImages = false);
+    AnnotationGeometry annotationGeometry(const QString &start, const QString &end) override;
+    QVector<QRect> rangeRects(const QString &start, const QString &end,
+                              bool includeImages = false) override;
     // Bounded saved-range geometry for a preview. Keeps the exact reading bookmark.
     QVector<QVector<QRect>> pageRangeRects(int page,
-                                           const QVector<QPair<QString, QString>> &ranges);
+                                           const QVector<QPair<QString, QString>> &ranges) override;
     bool applyAppearance(const appearance::Patch &patch, QSize size = {},
-                         OpeningProgress progress = {});
-    bool style(int pixels, int spacing);
-    bool style(int pixels, int spacing, const QString &face, int margin);
-    bool style(int pixels, int spacing, const QString &face, int margin, const QString &alignment);
-    bool setWeight(int steps);
-    bool setThickness(int steps);
-    bool setHyphenation(const QString &mode);
-    void setDarkMode(bool enabled);
-    void resize(QSize size);
-    QImage image(int page);
+                         OpeningProgress progress = {}) override;
+    // With the koblaze fork only, experimental. Loads the book again with
+    // the text of the spine items from `first` to `last` only, counted from
+    // zero in spine order. A negative `first` loads the whole book. Keeps
+    // the settings. The reading position is kept when it is in the window.
+    bool showSpineItems(int first, int last, QString *error = nullptr);
+    // The paths of the spine items in spine order, and the index of the
+    // spine item of a position, or -1.
+    QStringList spineItems() const;
+    int spineItemOf(const QString &position) const;
+    // Turns `delta` pages. At an edge of the window it loads the next or the
+    // previous spine item with its neighbors and continues there. False at
+    // either end of the book. Without a window this is a plain page turn.
+    bool turnInWindow(int delta) override;
+
+    bool continuesBefore() const override { return windowFirst_ > 0 || sliceFirst_ > 0; }
+
+    double bookFraction() const override;
+    RoughPages roughPages() const override;
+
+    bool continuesAfter() const override
+    {
+        return windowFirst_ >= 0
+                && (windowLast_ + 1 < spineItemCount_
+                    || (slices() && sliceFirst_ + sliceSize() < spineItemText()));
+    }
+
+    // With the koblaze fork only, experimental. A spine item that is shown
+    // alone is laid out in slices of about `pages` pages of text, so that no
+    // layout is longer than that. Each slice starts on a new page. Zero lays
+    // out a spine item as a whole. Takes effect when a spine item is shown.
+    void setChapterSlices(int pages) { slicePages_ = qMax(0, pages); }
+
+    // With the koblaze fork only. `interrupt` is asked after each block of
+    // text while applyAppearance() lays out the book. When it returns true,
+    // the layout stops, applyAppearance() returns false and
+    // layoutInterrupted() is true. The book then has no valid layout until
+    // resumeLayout() succeeds. With stock CREngine the layout always
+    // finishes.
+    void setLayoutInterrupt(std::function<bool()> interrupt) { interrupt_ = std::move(interrupt); }
+
+    bool layoutInterrupted() const { return layoutInterrupted_; }
+
+    // Lays out the book again after an interrupt and returns to the
+    // reading position.
+    bool resumeLayout();
+    bool style(int pixels, int spacing) override;
+    bool style(int pixels, int spacing, const QString &face, int margin) override;
+    bool style(int pixels, int spacing, const QString &face, int margin,
+               const QString &alignment) override;
+    bool setWeight(int steps) override;
+    bool setThickness(int steps) override;
+    bool setHyphenation(const QString &mode) override;
+    void setDarkMode(bool enabled) override;
+    void resize(QSize size) override;
+    QImage image(int page) override;
     // One screen that starts at the reading position instead of a page break. With
     // stayInChapter, it starts earlier near a chapter's end, so that a full screen stays in
     // the chapter. Without it, the text continues past the chapter to fill the screen.
-    QImage imageFromAnchor(bool stayInChapter = true);
-    bool loadNextImage();
+    QImage imageFromAnchor(bool stayInChapter = true) override;
+    bool loadNextImage() override;
     // The idle book keeps its active layout, not images or an alternate layout.
-    void releaseImages();
+    void releaseImages() override;
 
     // Compares the cached images of two pages ahead of a turn between them.
     // Cache key of a page's cached image, or 0. Never draws.
-    qint64 cachedImageKey(int page) const { return cache_.value(page).cacheKey(); }
+    qint64 cachedImageKey(int page) const override { return cache_.value(page).cacheKey(); }
 
-    void prepareDamage(int fromPage, int toPage);
+    void prepareDamage(int fromPage, int toPage) override;
     // The prepared rectangle for these two images, or false if there is none.
-    bool preparedDamage(qint64 fromKey, qint64 toKey, QRect *damage) const;
-    int page() const;
-    int pages() const;
+    bool preparedDamage(qint64 fromKey, qint64 toKey, QRect *damage) const override;
+    int page() const override;
+    int pages() const override;
+    PageInfo pageInfo() const override;
 
-    int fontSize() const { return pixels_; }
+    int fontSize() const override { return pixels_; }
 
-    int spacing() const { return spacing_; }
+    int spacing() const override { return spacing_; }
 
-    int margin() const { return margin_; }
+    int margin() const override { return margin_; }
 
-    FontWeightAxis weightAxis() const;
-    FontOpticalSizeAxis opticalSizeAxis() const;
+    FontWeightAxis weightAxis() const override;
+    FontOpticalSizeAxis opticalSizeAxis() const override;
 
-    double opticalSize() const { return opticalSize_; }
+    double opticalSize() const override { return opticalSize_; }
 
-    bool setOpticalSize(double points);
+    bool setOpticalSize(double points) override;
 
-    int thickness() const { return weight_; }
+    int thickness() const override { return weight_; }
 
-    int weight() const { return weightAxis().available() ? axisWeight_ : weight_; }
+    int weight() const override { return weightAxis().available() ? axisWeight_ : weight_; }
 
-    QString fontFace() const { return face_; }
+    QString fontFace() const override { return face_; }
 
-    int embeddedFontCount() const;
+    int embeddedFontCount() const override;
     // The face CREngine uses for the text at the reading position. With publisher
     // fonts this is the book's own face, which may be embedded in the book.
-    QString textFontFace() const;
+    QString textFontFace() const override;
 
-    QString alignment() const { return alignment_; }
+    QString alignment() const override { return alignment_; }
 
-    QSize viewport() const { return size_; }
+    QSize viewport() const override { return size_; }
 
     // One alternate viewport, released with an idle book or changed typography.
     static constexpr size_t maxAlternateLayoutBytes = 4 * 1024 * 1024;
-    size_t alternateLayoutBytes() const;
+    size_t alternateLayoutBytes() const override;
 
-    int cachedPages() const { return cache_.size(); }
+    int cachedPages() const override { return cache_.size(); }
 
-    QString position() const;
-    QString title() const;
-    QString author() const;
+    QString position() const override;
+    QString title() const override;
+    QString author() const override;
     // Decodes the host cover first, then the publication cover, within the
     // requested size and 4 million pixels. Empty means neither is usable.
     QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
-                      QString *usedPath = nullptr) const;
-    QVector<ChapterLink> chapters() const;
-    void setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph);
-    QVector<ChapterLink> chapterGraph() const;
-    ChapterSelection chapterSelection(const QVector<ChapterLink> &links) const;
-    ChapterProgress chapterProgress() const;
+                      QString *usedPath = nullptr) const override;
+    QVector<ChapterLink> chapters() const override;
+    void setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph) override;
+    QVector<ChapterLink> chapterGraph() const override;
+    ChapterSelection chapterSelection(const QVector<ChapterLink> &links) const override;
+    ChapterProgress chapterProgress() const override;
     // The title of the chapter that contains `position`, chosen like the
     // header's chapter. Empty when the book has no usable contents.
-    QString chapterTitle(const QString &position) const;
-    QJsonObject state() const;
+    QString chapterTitle(const QString &position) const override;
+    QJsonObject state() const override;
 
 private:
     // Sets the current and next entries of `links` around `position`.
@@ -355,6 +323,7 @@ private:
     friend struct ReaderSourceIndexProbe;
     friend struct ReaderFootnoteProbe;
     friend struct ReaderFigureProbe;
+    friend struct ReaderLocationProbe;
     mutable std::shared_ptr<SourceIndex> sourceIndex_;
     std::shared_ptr<SourceIndex> sourceIndex(const QStringList &positions,
                                              const std::function<bool()> &current = {}) const;
@@ -364,6 +333,38 @@ private:
     bool twoColumnsLandscape_ = false;
     QSize size_;
     QString anchor_;
+    std::function<bool()> interrupt_;
+    bool layoutInterrupted_ = false;
+    // The spine items that have their text, or -1 for the whole book.
+    int windowFirst_ = -1, windowLast_ = -1, spineItemCount_ = 0;
+    // The pages of text in one slice, and the characters of the spine item
+    // before the slice that has a layout.
+    int slicePages_ = 0, sliceFirst_ = 0;
+
+    // True when the one spine item of the window is laid out in slices.
+    bool slices() const
+    {
+        return slicePages_ > 0 && windowFirst_ >= 0 && windowFirst_ == windowLast_;
+    }
+
+    // The characters of text in one slice, for the current font and page.
+    int sliceSize() const;
+    // The characters of the spine item, as the engine counts them.
+    int spineItemText() const;
+    // The characters of the spine item before a position, or -1.
+    int textBefore(const QString &position) const;
+    // Gives the slice to the engine before a layout.
+    void applySlice();
+    // Lays out the slice that starts at `first` characters.
+    bool layoutSlice(int first);
+    // Lays out the slice that holds `position` when it is another one.
+    bool showSliceOf(const QString &position);
+    // How long the last window took to load and lay out.
+    qint64 windowLoadMs_ = -1;
+    // Loads the window that holds `position` when it is outside the window.
+    bool showSpineItemOf(const QString &position);
+    // Lays out the book. False when the layout was interrupted.
+    bool renderLayout();
     QString nativeLocation_;
     QString cacheDirectory_;
     QByteArray cacheFingerprint_, cachePolicy_;

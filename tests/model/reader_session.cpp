@@ -68,15 +68,13 @@ int run(int argc, char **argv)
         auto session =
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         auto lease = std::make_shared<SourceLease>();
-        PositionCodec firstPositions{ [](const EngineDocument &model, const QString &, QString *) {
-                                         return model.position();
-                                     },
-                                      [](const EngineDocument &model, QString *) {
-                                          return "first:" + model.position();
-                                      },
-                                      [](const QString &location) { return location; } };
+        PositionCodec firstPositions{
+            [](const Engine &model, const QString &, QString *) { return model.position(); },
+            [](const Engine &model, QString *) { return "first:" + model.position(); },
+            [](const QString &location) { return location; }
+        };
         auto secondPositions = firstPositions;
-        secondPositions.encode = [](const EngineDocument &model, QString *) {
+        secondPositions.encode = [](const Engine &model, QString *) {
             return "second:" + model.position();
         };
 

@@ -1,6 +1,6 @@
 #include "opening_job.h"
 #include "appearance_settings.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "publication/layout_compatibility.h"
 #include "storage/layout_cache.h"
 #include "support/diagnostics.h"
@@ -34,20 +34,19 @@ QByteArray readUserStyleSheet(const QString &path)
 // Nickel's reader opens every saved position, falling back to the chapter or
 // the book start without a message. Log the fallback, with the chapter file
 // inside the book, so a device report can tell which position failed.
-bool openAtPlatform(EngineDocument &engine, const PositionCodec &codec, const QString &location,
+bool openAtPlatform(Engine &engine, const PositionCodec &codec, const QString &location,
                     QString *failure)
 {
     QString error;
     const auto target = engine.goToPlatformNearest(codec, location, &error);
-    if (target == EngineDocument::PositionTarget::Unavailable) {
+    if (target == Engine::PositionTarget::Unavailable) {
         if (failure)
             *failure = error;
         return false;
     }
-    if (target != EngineDocument::PositionTarget::Exact) {
+    if (target != Engine::PositionTarget::Exact) {
         diagnostic("native-position-fallback",
-                   { { "target",
-                       target == EngineDocument::PositionTarget::Chapter ? "chapter" : "book" },
+                   { { "target", target == Engine::PositionTarget::Chapter ? "chapter" : "book" },
                      { "error_code", diagnosticErrorCode(error) },
                      { "chapter",
                        location.left(location.indexOf('#') < 0 ? location.size()

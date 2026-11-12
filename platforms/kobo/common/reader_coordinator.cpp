@@ -18,7 +18,7 @@
 #include "storage/preview_store.h"
 #include "storage/sleep_snapshot.h"
 #include "reading/reader_session.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "native_lifecycle.h"
 #include "native_authorization.h"
 #include "native_publication.h"

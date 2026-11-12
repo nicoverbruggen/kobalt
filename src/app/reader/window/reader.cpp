@@ -1616,7 +1616,7 @@ void Reader::closeSearch()
 
 void Reader::openSeek()
 {
-    if (!features::enabled(preferences, features::Navigate))
+    if (!navigateAvailable())
         return;
     if (session->busy() || appearanceEdit.applying()) {
         return;
@@ -2331,13 +2331,14 @@ void Reader::syncNavigation()
                   seekOpen && !zen,
                   zen ? -1
                           : pageNavigation::menuView(preferences) == pageNavigation::MenuView::Seek
+                                  && navigateAvailable()
                           ? int(Nav::Seek)
                           : pageNavigation::menuView(preferences) == pageNavigation::MenuView::Stats
                           ? int(Nav::Stats)
                           : -1,
                   (isNarrowWidth(width(), ui::density())
                    || preferences.value("hide_tab_labels").toBool(false)),
-                  features::enabled(preferences, features::Navigate),
+                  navigateAvailable(),
                   features::enabled(preferences, features::Stats),
                   zen,
                   features::enabled(preferences, features::Annotations),
@@ -2433,6 +2434,8 @@ void Reader::showControls()
     if (!appearanceEdit.panelDestination() && !zenMode()) {
         switch (pageNavigation::menuView(preferences)) {
         case pageNavigation::MenuView::Seek:
+            if (!navigateAvailable())
+                break;
             seekOpen = true;
             chapterGraph->hide();
             syncNavigation();

@@ -39,6 +39,8 @@ endforeach()
 
 include("${KOBALT_ROOT}/dependencies/cache.cmake")
 kobalt_dependencies()
+include("${KOBALT_ROOT}/dependencies/local-engine.cmake")
+kobalt_local_engine()
 add_subdirectory("${KOBALT_ROOT}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
 
 file(READ "${KOBALT_ASSETS}/manifest.json" assets)
@@ -80,7 +82,8 @@ add_library(kobalt-core OBJECT ${shared} display.cpp ../standalone/native_image.
     "${source}/publication/publication.cpp" "${source}/publication/zip_resource.cpp"
     "${source}/publication/resource_cache.cpp" "${source}/publication/local_resources.cpp"
     "${source}/publication/image_policy.cpp" "${source}/publication/layout_compatibility.cpp"
-    "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp")
+    "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
+    "${source}/publication/page_estimate.cpp")
 target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kobalt-core SYSTEM PUBLIC
     "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"
@@ -97,6 +100,9 @@ else()
     target_compile_definitions(kobalt-core PUBLIC KOBALT_NO_SENSORS)
 endif()
 target_compile_options(kobalt-core PRIVATE -Wall -Wextra)
+if(TARGET kobalt-local-engine)
+    add_dependencies(kobalt-core kobalt-local-engine)
+endif()
 target_link_libraries(kobalt-core PUBLIC Qt6::Widgets Qt6::Network Qt6::Sql
     "${CRENGINE_BUILD}/libcrengine.a"
     "${KOBALT_TEST_DEPENDENCIES}/lib/libharfbuzz.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libxxhash.a"
@@ -695,7 +701,7 @@ if(BUILD_TESTING)
     kobalt_regressions(model font_axes touch_rotation)
     kobalt_regressions(platform reader_orientation font_sources system_fonts nickel_dictionary_selection
         nickel_reading_pace_cache nickel_reading_save nickel_event_save nickel_account nickel_session_calls nickel_session_volume nickel_book_menu nickel_font_scale native_progress native_sync_network native_dialog_overlay native_lifecycle standby_input standby_diagnostics usb_removal page_transition_native page_animation)
-    kobalt_regressions(engine large_toc vertical_spacing source_index columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
+    kobalt_regressions(engine large_toc vertical_spacing source_index location_round_trip engine_contract page_estimate layout_interrupt spine_window chapter_slices columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
         fallback_styles svg_limits image_proportions figure_layout whitespace links search word_selection reader publisher_markup local_reader document_word_count document_cache alternate_layout)
     kobalt_regressions(component ui acknowledgments kosync_ui)
     target_sources(kobalt-page-animation-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/display/page_animation.cpp")
@@ -705,6 +711,10 @@ if(BUILD_TESTING)
     kobalt_regressions(session reading_book bookmark_session highlight_session reader_session)
     kobalt_regressions(resource image_policy resource_provider)
     kobalt_regressions(corpus multilingual)
+    foreach(check location-round-trip page-estimate)
+        target_compile_definitions(kobalt-${check}-tests PRIVATE
+            KOBALT_TEST_FIXTURES="${KOBALT_ROOT}/tests/fixtures")
+    endforeach()
     target_compile_definitions(kobalt-figure-layout-tests PRIVATE
         KOBALT_TEST_FIGURE_BOOK="${KOBALT_ROOT}/tests/fixtures/figure-caption.epub")
     target_compile_definitions(kobalt-publisher-markup-tests PRIVATE

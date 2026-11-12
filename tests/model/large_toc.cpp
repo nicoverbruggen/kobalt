@@ -96,8 +96,8 @@ int main(int argc, char **argv)
         for (const auto &link : native)
             targets.append({ link.title, link.position, link.depth, link.words });
         const PositionCodec identity{
-            [](const EngineDocument &, const QString &position, QString *) { return position; },
-            [](const EngineDocument &document, QString *) { return document.position(); },
+            [](const Engine &, const QString &position, QString *) { return position; },
+            [](const Engine &document, QString *) { return document.position(); },
             [](const QString &position) { return position; }
         };
         const auto resolved = resolveChapterTargets(model, identity, targets, targets);

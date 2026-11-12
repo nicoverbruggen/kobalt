@@ -10,7 +10,7 @@
 #include <QBuffer>
 #include <QUrl>
 #include <QtEndian>
-#include <lvfntman.h>
+#include "engine/font_defaults.h"
 #include <zlib.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -248,6 +248,7 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
         qint64 size;
         bool idpf;
     };
+
     QSet<QString> targets;
     QVector<Font> fonts;
     while (xml.readNextStartElement()) {
@@ -305,7 +306,7 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
                      [](const Font &a, const Font &b) { return a.size < b.size; });
     qint64 remainingFontBytes = Publication::maxBytes;
     for (const auto &font : fonts) {
-        if (font.size > LVFontManager::MaxEmbeddedFontBytes || font.size > remainingFontBytes) {
+        if (font.size > maxEmbeddedFontBytes || font.size > remainingFontBytes) {
             // Omit only a declared font that is outside the reading order and
             // navigation. Never expose unverified obfuscated bytes to CREngine.
             const auto id = declaredFonts.value(font.path);
@@ -317,8 +318,8 @@ bool supportedFontMetadata(QIODevice &source, const QMap<QString, qint64> &sizes
         }
         // MIME labels and extensions vary between publishers. Decode a local
         // copy for the renderer's font parser; leave archive resources unchanged.
-        if (!readableFont(read(font.path, LVFontManager::MaxEmbeddedFontBytes),
-                          font.idpf ? idpfKey : adobeKey, font.idpf ? 1040 : 1024))
+        if (!readableFont(read(font.path, maxEmbeddedFontBytes), font.idpf ? idpfKey : adobeKey,
+                          font.idpf ? 1040 : 1024))
             return false;
         remainingFontBytes -= font.size;
     }

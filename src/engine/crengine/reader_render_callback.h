@@ -1,6 +1,6 @@
 #pragma once
 #include "engine_document.h"
-#include "engine_activity.h"
+#include "engine/engine_activity.h"
 #include "column_view.h"
 
 namespace kobalt {
@@ -9,8 +9,9 @@ namespace kobalt {
 class OpeningCallback : public LVDocViewCallback
 {
 public:
-    OpeningCallback(std::unique_ptr<ColumnView> &engine, OpeningProgress progress)
-        : engine(engine), progress(std::move(progress))
+    OpeningCallback(std::unique_ptr<ColumnView> &engine, OpeningProgress progress,
+                    std::function<bool()> interrupt = {})
+        : engine(engine), progress(std::move(progress)), interrupt(std::move(interrupt))
     {
         engine->setCallback(this);
     }
@@ -31,9 +32,15 @@ public:
 
     void OnFormatProgress(int percent) override { report(OpeningStage::Pages, percent); }
 
+#if __has_include(<koblaze.h>)
+    // Asked after each block of text during layout.
+    bool OnRenderCancelRequested() override { return interrupt && interrupt(); }
+#endif
+
 private:
     std::unique_ptr<ColumnView> &engine;
     OpeningProgress progress;
+    std::function<bool()> interrupt;
 
     void report(OpeningStage stage, int percent)
     {

@@ -4,10 +4,10 @@
 #include "reader_session.h"
 #include "opening_job.h"
 #include "sync/kosync.h"
-#include "engine/crengine/engine_worker.h"
+#include "engine/engine_worker.h"
 #include "render/highlight_paint.h"
 #include "appearance_settings.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "support/diagnostics.h"
 #include <QElapsedTimer>
 #include "publication/publication.h"
@@ -28,7 +28,7 @@ namespace kobalt {
 namespace {
 struct DocumentDeleter
 {
-    void operator()(EngineDocument *value) const
+    void operator()(Engine *value) const
     {
         EngineJob job;
         delete value;
@@ -37,7 +37,7 @@ struct DocumentDeleter
 
 } // namespace
 
-void captureChapters(ReaderFrame &result, EngineDocument &engine)
+void captureChapters(ReaderFrame &result, Engine &engine)
 {
     const auto chapter = engine.chapterProgress();
     result.state["chapter_title"] = chapter.title;
@@ -48,6 +48,14 @@ void captureChapters(ReaderFrame &result, EngineDocument &engine)
     result.totalWords = engine.totalWords();
     result.contentsSelection = engine.chapterSelection(result.chapters);
     result.graphSelection = engine.chapterSelection(result.chapterGraph);
+    // The pages of an engine with the text of only a part of the book are
+    // not pages of the book. The contents then show no page numbers.
+    if (engine.bookFraction() >= 0) {
+        for (auto &link : result.chapters)
+            link.page = -1;
+        for (auto &link : result.chapterGraph)
+            link.page = -1;
+    }
 }
 
 namespace {
@@ -73,7 +81,7 @@ private:
 // the cache. `direction` is the turn that led here; the page further that way
 // is the likelier next one and goes first. Stops when `current` reports a newer
 // request, because that request's page matters more than a page nobody asked for.
-void prepareNeighbours(EngineDocument &engine, int direction, const std::function<bool()> &current)
+void prepareNeighbours(Engine &engine, int direction, const std::function<bool()> &current)
 {
     for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
         if (current && !current())
@@ -87,7 +95,7 @@ void prepareNeighbours(EngineDocument &engine, int direction, const std::functio
     }
 }
 
-ReaderMarkupFrame captureFrameMarkup(EngineDocument &engine, const ReaderMarkupRequest &request,
+ReaderMarkupFrame captureFrameMarkup(Engine &engine, const ReaderMarkupRequest &request,
                                      quint64 generation, qint64 imageKey)
 {
     ReaderMarkupFrame result;
@@ -139,7 +147,7 @@ ReaderMarkupFrame captureFrameMarkup(EngineDocument &engine, const ReaderMarkupR
 
 // `neighbours` is false when the caller hands the frame to the screen first
 // and prepares the neighbour pages afterwards.
-ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool neighbours,
+ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours,
                     const ReaderMarkupRequest &markup, quint64 markupGeneration)
 {
     engineActivity().checkpoint();
@@ -153,6 +161,16 @@ ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool
     result.state["page"] = engine.page();
     result.state["pages"] = engine.pages();
     result.state["next_page"] = engine.turnTarget(engine.page(), 1);
+    result.state["continues_before"] = engine.continuesBefore();
+    result.state["continues_after"] = engine.continuesAfter();
+    if (const double fraction = engine.bookFraction(); fraction >= 0) {
+        result.state["book_fraction"] = fraction;
+        const auto rough = engine.roughPages();
+        result.state["rough_page"] = rough.page;
+        result.state["rough_pages"] = rough.pages;
+        result.state["rough_item_page"] = rough.itemPage;
+        result.state["rough_item_pages"] = rough.itemPages;
+    }
     result.state["text_font_face"] = engine.textFontFace();
     result.state["embedded_font_count"] = engine.embeddedFontCount();
     result.title = engine.title();
@@ -173,26 +191,22 @@ ReaderSession::ReaderSession(EngineFontInputs fonts, QString placeholderFamily)
     : fonts_(std::move(fonts)), placeholderFamily_(std::move(placeholderFamily))
 {
     const auto worker = engineWorkerState();
-    engine_ = std::shared_ptr<EngineDocument>(
-            new EngineDocument(fonts_), [worker](EngineDocument *value) {
-                // Session owners live on the GUI thread; queued jobs own the other
-                // references. After the GUI has joined the worker, it can destroy a
-                // retained document directly without touching either deleted Qt object.
-                // While the worker runs, release stays on that thread. Owning the
-                // queued value also releases it if shutdown discards the pending call.
-                if (worker->stopped.load() || QThread::currentThread() == worker->thread) {
-                    DocumentDeleter{}(value);
-                    return;
-                }
-                auto release =
-                        std::make_shared<std::unique_ptr<EngineDocument, DocumentDeleter>>(value);
-                kobalt::qt::invoke(
-                        worker->object, [release] { release->reset(); }, Qt::QueuedConnection);
-            });
+    engine_ = std::shared_ptr<Engine>(createEngine(fonts_).release(), [worker](Engine *value) {
+        // Session owners live on the GUI thread; queued jobs own the other
+        // references. After the GUI has joined the worker, it can destroy a
+        // retained document directly without touching either deleted Qt object.
+        // While the worker runs, release stays on that thread. Owning the
+        // queued value also releases it if shutdown discards the pending call.
+        if (worker->stopped.load() || QThread::currentThread() == worker->thread) {
+            DocumentDeleter{}(value);
+            return;
+        }
+        auto release = std::make_shared<std::unique_ptr<Engine, DocumentDeleter>>(value);
+        kobalt::qt::invoke(worker->object, [release] { release->reset(); }, Qt::QueuedConnection);
+    });
 }
 
-ReaderSession::ReaderSession(std::shared_ptr<EngineDocument> retainedEngine,
-                             QString placeholderFamily)
+ReaderSession::ReaderSession(std::shared_ptr<Engine> retainedEngine, QString placeholderFamily)
     : fonts_(retainedEngine->fontInputs()),
       placeholderFamily_(std::move(placeholderFamily)),
       engine_(std::move(retainedEngine))
@@ -774,7 +788,11 @@ bool ReaderSession::turn(int direction)
         pendingTurn = direction;
         return true;
     }
-    if ((direction < 0 && page() == 0) || (direction > 0 && nextPage() == page()))
+    // An engine with the text of only some spine items continues past its
+    // first and last page.
+    if ((direction < 0 && page() == 0 && !frame.state.value("continues_before").toBool())
+        || (direction > 0 && nextPage() == page()
+            && !frame.state.value("continues_after").toBool()))
         return false;
     pageDelta = direction;
     pageTarget = -1;
@@ -2230,9 +2248,14 @@ void ReaderSession::dispatch(bool pageTurn)
                         result.error = strings::get("error.could_not_find_that_passage");
                     else if (target >= 0)
                         engine->go(target);
-                    else if (delta)
-                        engine->go(appearanceChanged ? engine->turnTarget(engine->page(), delta)
-                                                     : turned);
+                    else if (delta) {
+                        const int to = appearanceChanged ? engine->turnTarget(engine->page(), delta)
+                                                         : turned;
+                        if (to == engine->page())
+                            engine->turnInWindow(delta);
+                        else
+                            engine->go(to);
+                    }
                 }
                 const auto error = result.error;
                 // The panel needs far longer to draw a page than the engine does. Hand

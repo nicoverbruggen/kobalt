@@ -8,19 +8,23 @@
 #include "reader_beautifier.h"
 #include "reader_page_layout.h"
 #include "document_cache.h"
-#include "engine_activity.h"
+#include "engine/engine_activity.h"
 #include "publication/publication.h"
 #include <lvdocview.h>
 #include <QElapsedTimer>
 #include <QDir>
 #include <QFileInfo>
 #include <textlang.h>
+#include <QFile>
 #include <QRegularExpression>
 #include <QXmlStreamReader>
 #include <QUrl>
 #include <QXmlStreamWriter>
 #include <QtEndian>
 #include <climits>
+#if __has_include(<koblaze.h>)
+#  include <koblaze.h>
+#endif
 
 namespace kobalt {
 namespace {
@@ -331,6 +335,31 @@ private:
 
 } // namespace
 
+namespace {
+// Experiment: chapter mode is on with KOBALT_CHAPTER_MODE=1 in the
+// environment or, on a device, with a file named chapter-mode in the Kobalt
+// folder. The file is looked for once.
+bool chapterMode()
+{
+    if (qgetenv("KOBALT_CHAPTER_MODE").toInt() > 0)
+        return true;
+#ifdef KOBALT_CONFIG_DIR
+    static const bool marker = QFile::exists(QStringLiteral(KOBALT_CONFIG_DIR "/chapter-mode"));
+    return marker;
+#else
+    return false;
+#endif
+}
+
+// A position names its spine item as DocFragment[n], counted from one.
+int spineItemIndex(const QString &position)
+{
+    static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
+    const auto match = fragment.match(position);
+    return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
+}
+} // namespace
+
 bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
                                       QSet<QString> *skippedFonts)
 {
@@ -492,7 +521,32 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     // and suppresses pagination callbacks for the latter. With a fingerprint,
     // the name and checksum also select this book's cache file.
     auto properties = engine_->getDocProps();
-    const bool keyed = !cacheDirectory_.isEmpty() && !cacheFingerprint_.isEmpty();
+    // Runtime only, never saved settings. The document cache holds the whole
+    // book, so a window does not use it.
+    int firstSpineItem = saved.value("koblaze_first_spine_item").toInt(-1);
+    int lastSpineItem = saved.value("koblaze_last_spine_item").toInt(firstSpineItem);
+#if __has_include(<koblaze.h>)
+    // Experiment: KOBALT_CHAPTER_MODE=1 opens every book with the text of
+    // the spine item of the saved position and its two neighbors only.
+    if (chapterMode() && !saved.contains("koblaze_first_spine_item") && !source->parent) {
+        const int item = qMax(0, spineItemIndex(saved.value("position").toString()));
+        // KOBALT_CHAPTER_PAGES sets the pages of one layout. The default is
+        // 25. Zero loads three spine items as a whole.
+        const auto pages = qgetenv("KOBALT_CHAPTER_PAGES");
+        slicePages_ = pages.isEmpty() ? 25 : qMax(0, pages.toInt());
+        firstSpineItem = slicePages_ > 0 ? item : qMax(0, item - 1);
+        lastSpineItem = slicePages_ > 0 ? item : item + 1;
+    }
+#else
+    firstSpineItem = lastSpineItem = -1;
+#endif
+    QElapsedTimer windowTimer;
+    windowTimer.start();
+    windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
+    windowLast_ = firstSpineItem < 0 ? -1 : lastSpineItem;
+    sliceFirst_ = 0;
+    const bool keyed =
+            !cacheDirectory_.isEmpty() && !cacheFingerprint_.isEmpty() && firstSpineItem < 0;
     if (keyed) {
         properties->setString(
                 DOC_PROP_FILE_NAME,
@@ -517,7 +571,15 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     bool loaded;
     {
         DocumentCacheScope cache(keyed ? cacheDirectory_ : QString());
+#if __has_include(<koblaze.h>)
+        // Experimental, with the koblaze fork only: load the text of a
+        // window of spine items. The others stay empty.
+        koblazeSetSpineWindow(firstSpineItem, lastSpineItem);
+#endif
         loaded = engine_->LoadDocument(LVCreateMemoryStream(), false, source_->container);
+#if __has_include(<koblaze.h>)
+        koblazeSetSpineWindow(-1, -1);
+#endif
         // A parsed document is rendered only after Render(); one restored
         // from the cache arrives rendered.
         openedFromCache_ = loaded && cache.enabled() && engine_->getDocument()->isRendered();
@@ -582,8 +644,13 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         engine_->getDocument()->forceReinitStyles();
     }
     applyStyleSheet();
+    applySlice();
     engine_->Render();
     openingTimes_["model_paginate_ms"] = double(phase.restart());
+    spineItemCount_ = spineItems().size();
+    windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
+    windowLast_ = firstSpineItem < 0 ? -1 : qMin(lastSpineItem, spineItemCount_ - 1);
+    windowLoadMs_ = firstSpineItem < 0 ? -1 : windowTimer.elapsed();
     if (!resourceError().isEmpty()) {
         const auto detail = resourceError();
         engine_.reset();
@@ -602,15 +669,114 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         return fail(OpeningFailureKind::InvalidContent,
                     strings::key("error.saved_reading_position_no_longer_exists"));
     }
+    // The first slice has a layout now. The saved position can be in
+    // another one.
+    if (slices() && !saved.value("position").toString().isEmpty())
+        goTo(saved.value("position").toString());
     return true;
 }
 
-bool EngineDocument::openPreview(EngineDocument &source, QSize size, QString *error)
+bool EngineDocument::showSpineItemOf(const QString &position)
+{
+    if (windowFirst_ < 0)
+        return true;
+    const int item = spineItemIndex(position);
+    if (item < 0 || (item >= windowFirst_ && item <= windowLast_))
+        return true;
+    if (slicePages_ > 0)
+        return showSpineItems(item, item);
+    return showSpineItems(qMax(0, item - 1), qMin(spineItemCount_ - 1, item + 1));
+}
+
+bool EngineDocument::showSpineItems(int first, int last, QString *error)
+{
+    if (!source_ || !engine_)
+        return false;
+    auto saved = state();
+    saved["koblaze_first_spine_item"] = first;
+    saved["koblaze_last_spine_item"] = last;
+    if (first >= 0) {
+        // Outside the window a position has no text, so the book opens at
+        // the start of the window.
+        const int item = spineItemIndex(saved.value("position").toString());
+        if (item < first || item > last)
+            saved.remove("position");
+    }
+    return openSource(source_, size_, saved, error);
+}
+
+bool EngineDocument::turnInWindow(int delta)
+{
+    if (!engine_ || !delta)
+        return false;
+    const int target = turnTarget(page(), delta);
+    if (target != page())
+        return go(target);
+    if (windowFirst_ < 0)
+        return false;
+    if (slices()) {
+        // The next or the previous slice of this spine item, then the
+        // spine item beside it.
+        // A slice has no pages when no block starts in it: one block, such
+        // as a table, can be longer than a slice. Pass such slices.
+        if (delta > 0) {
+            for (;;) {
+                if (sliceFirst_ + sliceSize() < spineItemText()) {
+                    if (!layoutSlice(sliceFirst_ + sliceSize()))
+                        return false;
+                } else if (windowLast_ + 1 >= spineItemCount_
+                           || !showSpineItems(windowLast_ + 1, windowLast_ + 1)) {
+                    return false;
+                }
+                if (pages() > 0)
+                    return go(0);
+            }
+        }
+        for (;;) {
+            if (sliceFirst_ > 0) {
+                if (!layoutSlice(sliceFirst_ - sliceSize()))
+                    return false;
+            } else {
+                if (windowFirst_ <= 0 || !showSpineItems(windowFirst_ - 1, windowFirst_ - 1))
+                    return false;
+                // The spine item opens with its first slice. Its last page
+                // is in its last slice.
+                const int text = spineItemText(), size = sliceSize();
+                if (text > size && !layoutSlice((text - 1) / size * size))
+                    return false;
+            }
+            if (pages() > 0)
+                return go(pages() - 1);
+        }
+    }
+    const auto items = spineItems();
+    const int count = items.size();
+    const int item = delta > 0 ? windowLast_ + 1 : windowFirst_ - 1;
+    if (item < 0 || item >= count)
+        return false;
+    if (!showSpineItems(qMax(0, item - 1), qMin(count - 1, item + 1)))
+        return false;
+    Location start;
+    if (delta > 0) {
+        start.href = items[item];
+        return goTo(positionOf(start));
+    }
+    // The last page of the spine item before the one that was first.
+    start.href = items[item + 1];
+    const int next = pagesOf({ positionOf(start) }).value(0, -1);
+    return next > 0 && go(next - 1);
+}
+
+bool EngineDocument::openPreview(Engine &other, QSize size, QString *error)
 {
     auto fail = [error](const QString &message) {
         *error = message;
         return false;
     };
+    // A preview shares the parsed book of its source, so both are CREngine.
+    if (qstrcmp(other.name(), name()) != 0)
+        return fail(strings::get("error.no_section_to_preview"));
+    auto &source = static_cast<EngineDocument &>(other);
     if (!source.engine_)
         return fail(strings::get("error.no_section_to_preview"));
     auto *document = source.engine_->getDocument();

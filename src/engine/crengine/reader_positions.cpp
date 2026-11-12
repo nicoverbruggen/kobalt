@@ -2,7 +2,7 @@
 #include "engine_document.h"
 #include "platform/api/position_codec.h"
 #include "support/strings.h"
-#include "engine_activity.h"
+#include "engine/engine_activity.h"
 #include <lvdocview.h>
 
 namespace kobalt {
@@ -12,8 +12,8 @@ lString32 cre(const QString &s)
     return Utf8ToUnicode(s.toUtf8().constData());
 }
 
-QString decodePosition(const EngineDocument &engine, const PositionCodec &codec,
-                       const QString &location, QString *error)
+QString decodePosition(const Engine &engine, const PositionCodec &codec, const QString &location,
+                       QString *error)
 {
     if (codec)
         return codec.decode(engine, location, error);
@@ -93,7 +93,7 @@ QString EngineDocument::platformPosition(const PositionCodec &codec, QString *er
     return {};
 }
 
-ResolvedChapters resolveChapterTargets(const EngineDocument &engine, const PositionCodec &codec,
+ResolvedChapters resolveChapterTargets(const Engine &engine, const PositionCodec &codec,
                                        const QVector<ChapterTarget> &contents,
                                        const QVector<ChapterTarget> &graph)
 {

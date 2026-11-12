@@ -1,7 +1,7 @@
 #include "column_view.h"
 #include "engine_document.h"
 
-#include "engine_activity.h"
+#include "engine/engine_activity.h"
 #include "reading/logical_word_counter.h"
 #include "support/qt_compat.h"
 

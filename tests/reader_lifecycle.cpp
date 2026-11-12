@@ -44,8 +44,8 @@
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include <QLocale>
-#include "engine/crengine/engine_activity.h"
-#include "engine/crengine/engine_worker.h"
+#include "engine/engine_activity.h"
+#include "engine/engine_worker.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "app/messages/recovery_message.h"
@@ -273,7 +273,7 @@ std::atomic_bool delayUsbEncoding{ false }, releaseUsbEncoding{ false },
 // A delayed encoding holds the engine worker until the test releases it, so
 // the mapping outlasts the reader's deadline without a fixed sleep. The bound
 // keeps a failed test from holding the worker for good.
-QString usbPosition(const EngineDocument &model, QString *error)
+QString usbPosition(const Engine &model, QString *error)
 {
     if (delayUsbEncoding) {
         QElapsedTimer held;

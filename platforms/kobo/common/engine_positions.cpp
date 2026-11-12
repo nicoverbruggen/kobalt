@@ -463,12 +463,19 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
 class NickelPositionCodec
 {
 public:
-    static QString decode(const EngineDocument &engine, const QString &location, QString *error);
-    static QString encode(const EngineDocument &engine, QString *error);
+    static QString decode(const Engine &engine, const QString &location, QString *error);
+    static QString encode(const Engine &engine, QString *error);
 };
 
-QString NickelPositionCodec::decode(const EngineDocument &engine, const QString &location,
-                                    QString *error)
+// Nickel locations are matched against CREngine's DOM. Another engine has no
+// such position until this codec works on shared locations.
+const EngineDocument *crengine(const Engine &engine)
+{
+    return qstrcmp(engine.name(), "crengine") == 0 ? static_cast<const EngineDocument *>(&engine)
+                                                   : nullptr;
+}
+
+QString NickelPositionCodec::decode(const Engine &other, const QString &location, QString *error)
 {
     auto fail = [error](const QString &message) {
         if (error)
@@ -477,6 +484,9 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
     };
     if (error)
         error->clear();
+    if (!crengine(other))
+        return fail(strings::get("error.no_supported_native_reading_position"));
+    const auto &engine = *crengine(other);
     if (!engine.engine_ || location.isEmpty() || location.size() > 8192)
         return fail(strings::get("error.no_supported_native_reading_position"));
     const int hash = location.indexOf('#');
@@ -589,7 +599,7 @@ QString NickelPositionCodec::decode(const EngineDocument &engine, const QString 
     return fail(strings::get("error.native_text_position_was_not_found"));
 }
 
-QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error)
+QString NickelPositionCodec::encode(const Engine &other, QString *error)
 {
     auto fail = [error](const QString &message) {
         if (error)
@@ -598,6 +608,9 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
     };
     if (error)
         error->clear();
+    if (!crengine(other))
+        return fail(strings::get("error.no_reading_position"));
+    const auto &engine = *crengine(other);
     if (!engine.engine_)
         return fail(strings::get("error.no_reading_position"));
     auto *doc = engine.engine_->getDocument();

@@ -252,6 +252,7 @@ void ChapterContents::redraw()
             ? ui::interfaceTextWidth(QString::number(lastPage + 1), ui::captionFont())
             : 0;
     const int digits = qMax(2, int(QString::number(items.size()).size()));
+    const int numberWidth = ui::interfaceTextWidth(QString(digits, QChar('0')), ui::captionFont());
     const bool grouped = collapsible
             && std::any_of(parents.cbegin(), parents.cend(),
                            [](int parent) { return parent >= 0; });
@@ -297,12 +298,22 @@ void ChapterContents::redraw()
         auto *itemRow = static_cast<ui::ListRow *>(button);
         itemRow->setTitle(item.label);
         label->setObjectName(item.name + "Title");
-        itemRow->setLeading(QString("%1").arg(index + 1, digits, 10, QChar('0')),
-                            qBound(0, item.depth - rootDepth, 6) * contents::indent);
-        itemRow->leadingLabel()->setObjectName(item.name + "Number");
-        itemRow->setAccessory(ui::ListRow::Caption{
-                item.page >= 0 ? QString::number(item.page + 1) : QString(), pageWidth });
-        itemRow->trailingLabel()->setObjectName(item.name + "Page");
+        const auto number = QString("%1").arg(index + 1, digits, 10, QChar('0'));
+        const int indent = qBound(0, item.depth - rootDepth, 6) * contents::indent;
+        if (pagesKnown) {
+            itemRow->setLeading(number, indent);
+            itemRow->leadingLabel()->setObjectName(item.name + "Number");
+            itemRow->setAccessory(ui::ListRow::Caption{
+                    item.page >= 0 ? QString::number(item.page + 1) : QString(), pageWidth });
+            itemRow->trailingLabel()->setObjectName(item.name + "Page");
+        } else {
+            // Without page numbers, the chapter number takes their place at
+            // the right edge.
+            itemRow->setLeading(QString(), indent);
+            itemRow->leadingLabel()->setObjectName({});
+            itemRow->setAccessory(ui::ListRow::Caption{ number, numberWidth });
+            itemRow->trailingLabel()->setObjectName(item.name + "Number");
+        }
         button->setAccessibleName(
                 strings::get("common.numbered_title").arg(index + 1).arg(item.label));
     }

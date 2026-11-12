@@ -272,10 +272,9 @@ ReadingActivity ReadingBook::readingActivity() const
     return { session_->state().value("position").toString(),
              // Kobalt's page progress, kept below 100 like every native write of
              // an unfinished book, so the last page never reports a finished read.
-             qMin(99.0, double(pageProgressPercent(session_->page(), session_->pages()))),
-             session_->page(), session_->pages(), session_->turnDirection(), session_->totalWords(),
-             session_->chapterGraph(), session_->graphSelection(),
-             error.isEmpty() ? nativePosition : QString() };
+             qMin(99.0, double(session_->progressPercent())), session_->page(), session_->pages(),
+             session_->turnDirection(), session_->totalWords(), session_->chapterGraph(),
+             session_->graphSelection(), error.isEmpty() ? nativePosition : QString() };
 }
 
 ReadingEstimates ReadingBook::estimates() const
@@ -642,6 +641,9 @@ bool ReadingBook::canFinish() const
     const auto anchor = session_->state().value("position").toString();
     if (anchor.isEmpty() || anchor == acceptedFinishedAnchor)
         return false;
+    // The last page that the engine has is not the last page of the book.
+    if (session_->continuesAfter())
+        return false;
     // Nickel asks on exit at 90%. Include the final page of very short books,
     // and the last page of the text before trailing non-linear sections.
     return session_->page() * 10 >= session_->pages() * 9
@@ -749,7 +751,7 @@ NativeSaveResult ReadingBook::writeNative(const QString &location, const QString
         if (reconciliation.mayWrite(current)) {
             // The same whole percentage as Kobalt's own views. The firmware 4
             // bridge keeps an unfinished book below 100, as Nickel's reader does.
-            const double percent = pageProgressPercent(session_->page(), session_->pages());
+            const double percent = session_->progressPercent();
             const bool preserveFinished = finishedHere();
             diagnostic("native-save-start");
             nativeWriteback = bridge->write(current, timeOnly ? QString() : location, percent,
@@ -873,7 +875,7 @@ QJsonObject ReadingBook::checkpointState() const
     // For the Android and desktop library, which shows progress without
     // opening the book.
     if (session_->pages() > 0)
-        state["percent"] = pageProgressPercent(session_->page(), session_->pages());
+        state["percent"] = session_->progressPercent();
     state["native_writeback"] = QString::fromLatin1(nativeWriteback.diagnosticName());
     state["sync_pending"] = reconciliation.pending();
     state["native_writeback_error"] = nativeWriteback.message();
@@ -899,7 +901,9 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
     // them from imported records too, before comparing checkpoints or applying
     // the record's byte limit. Diagnostic snapshots above keep the full frame.
     for (const auto *key : { "chapter_title", "chapter_page", "chapter_pages", "page", "pages",
-                             "next_page", "text_font_face", "embedded_font_count", "cached_pages" })
+                             "next_page", "text_font_face", "embedded_font_count", "cached_pages",
+                             "continues_before", "continues_after", "book_fraction", "rough_page",
+                             "rough_pages", "rough_item_page", "rough_item_pages" })
         checkpoint.remove(key);
     // Image views are optional. Trim their oldest entries rather than letting
     // them prevent a reading-position checkpoint from fitting its record limit.

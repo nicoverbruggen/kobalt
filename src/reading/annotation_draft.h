@@ -1,5 +1,5 @@
 #pragma once
-#include "engine/crengine/engine_document.h"
+#include "engine/types.h"
 #include <QObject>
 #include <functional>
 

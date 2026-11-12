@@ -1,0 +1,95 @@
+#include "check.h"
+#include "engine_fixtures.h"
+#include "reader_inputs.h"
+#include "engine/engine.h"
+#include <QGuiApplication>
+#include <cstdio>
+
+using namespace kobalt;
+
+namespace {
+void queryStates()
+{
+    const LayoutGeneration first{ 1, 1 }, second{ 1, 2 };
+    const Query<int> unknown;
+    require(unknown.state() == QueryState::PendingLayout && !unknown.ready(),
+            "A new query must be pending, not zero");
+    const auto exact = Query<int>::exact(0, first);
+    require(exact.ready() && exact.exact() && exact.value() == 0,
+            "An exact zero must stay a value");
+    require(exact.currentFor(first) && !exact.currentFor(second),
+            "A value of another layout must not be current");
+    const auto estimated = Query<int>::estimated(120, QueryBasis::Words, first);
+    require(estimated.ready() && !estimated.exact() && estimated.basis() == QueryBasis::Words,
+            "An estimate must carry its basis and must not be exact");
+    const auto pending = Query<int>::pending(first);
+    require(!pending.ready() && pending.state() == QueryState::PendingLayout,
+            "A pending query has no value");
+    const auto unsupported = Query<int>::unsupported("No page total in this engine");
+    require(unsupported.state() == QueryState::Unsupported && !unsupported.ready()
+                    && !unsupported.reason().isEmpty(),
+            "An unsupported query must say why");
+    const auto failed = Query<int>::failed("Layout failed");
+    require(failed.state() == QueryState::Failed && !failed.ready()
+                    && failed.state() != unsupported.state(),
+            "A failed query is not an unsupported one");
+}
+
+void open(Engine &engine, const test::BookFiles &files)
+{
+    QMap<QString, qint64> sizes;
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        sizes[it.key()] = it.value().size();
+    auto source = std::make_shared<ResourceCache>(
+            files.keys(),
+            [files](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                const auto bytes = files.value(name);
+                return sink(bytes.constData(), bytes.size());
+            },
+            std::make_shared<std::atomic_bool>(false));
+    QString error;
+    require(engine.openResources(source, sizes, { 600, 800 },
+                                 { { "font_pixels", 28 }, { "line_spacing_version", 1 } }, &error),
+            qPrintable(error));
+}
+
+// The engine that reads books today lays out the whole book, so it must
+// report every page value as exact and equal to its page numbers.
+void wholeBookPages()
+{
+    const auto engine = createEngine(test::readerFonts());
+    require(!engine->pageInfo().bookPages.ready(), "An engine without a book has no pages");
+    open(*engine, test::engineBook());
+    require(engine->pages() > 3, "The fixture needs several pages");
+    const auto generation = engine->pageInfo().bookPages.generation();
+    for (int page = 0; page < engine->pages(); ++page) {
+        require(engine->go(page), "Cannot go to a page");
+        const auto info = engine->pageInfo();
+        require(info.bookPage.exact() && info.bookPage.value() == page,
+                "The book page must be exact");
+        require(info.bookPages.exact() && info.bookPages.value() == engine->pages(),
+                "The book page total must be exact");
+        require(info.bookProgress.exact() && info.bookProgress.value() >= 0
+                        && info.bookProgress.value() < 1,
+                "Book progress must be a part of the book");
+        const auto chapter = engine->chapterProgress();
+        require(info.chapterPage.exact() && info.chapterPages.exact()
+                        && info.chapterPage.value() == chapter.page - 1
+                        && info.chapterPages.value() == chapter.pages,
+                "Chapter pages must match the chapter progress");
+        require(info.bookPages.currentFor(generation), "Page turns must not change the layout");
+    }
+    require(engine->style(36, 100), "Cannot change the font size");
+    require(!engine->pageInfo().bookPages.currentFor(generation),
+            "A new layout must have a new generation");
+}
+} // namespace
+
+int main(int argc, char **argv)
+{
+    QGuiApplication app(argc, argv);
+    queryStates();
+    wholeBookPages();
+    std::printf("PASS: query states and exact page values of the whole-book engine\n");
+    return 0;
+}

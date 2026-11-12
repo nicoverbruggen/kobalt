@@ -377,6 +377,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     destination.clear();
     pageDelta = 0;
     pageTarget = -1;
+    fractionTarget = -1;
     turning = false;
     pendingTurn = 0;
     QPointer<ReaderSession> guard(this);
@@ -825,6 +826,7 @@ bool ReaderSession::turn(int direction)
         return false;
     pageDelta = direction;
     pageTarget = -1;
+    fractionTarget = -1;
     destination.clear();
     cancelSearch();
     ++revision;
@@ -839,6 +841,19 @@ bool ReaderSession::go(int target)
         return false;
     pageTarget = target;
     pageDelta = 0;
+    fractionTarget = -1;
+    destination.clear();
+    request();
+    return true;
+}
+
+bool ReaderSession::goToFraction(double fraction)
+{
+    if (!(fraction >= 0 && fraction <= 1))
+        return false;
+    fractionTarget = fraction;
+    pageTarget = -1;
+    pageDelta = 0;
     destination.clear();
     request();
     return true;
@@ -851,6 +866,7 @@ bool ReaderSession::goTo(const QString &anchor)
     destination = anchor;
     pageDelta = 0;
     pageTarget = -1;
+    fractionTarget = -1;
     request();
     return true;
 }
@@ -2200,6 +2216,7 @@ void ReaderSession::dispatch(bool pageTurn)
     const auto anchor = std::exchange(destination, {});
     const auto delta = std::exchange(pageDelta, 0);
     const auto target = std::exchange(pageTarget, -1);
+    const double fraction = std::exchange(fractionTarget, -1.0);
     const auto job = revision;
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
@@ -2244,8 +2261,8 @@ void ReaderSession::dispatch(bool pageTurn)
         diagnostic("render-queued", { { "render_id", double(job) }, { "delta", delta } }, false);
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, requested, size, anchor, delta, target, job, lease, progress, positions,
-             markup, markupGeneration] {
+            [guard, engine, requested, size, anchor, delta, target, fraction, job, lease, progress,
+             positions, markup, markupGeneration] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -2255,7 +2272,7 @@ void ReaderSession::dispatch(bool pageTurn)
                     diagnostic("render-start",
                                { { "render_id", double(job) },
                                  { "page_turn", delta != 0 },
-                                 { "jump", !anchor.isEmpty() || target >= 0 } },
+                                 { "jump", !anchor.isEmpty() || target >= 0 || fraction >= 0 } },
                                delta == 0);
                 const auto before = engine->state();
                 const auto oldSize = engine->viewport();
@@ -2281,6 +2298,8 @@ void ReaderSession::dispatch(bool pageTurn)
                         result.error = strings::get("error.could_not_find_that_passage");
                     else if (target >= 0)
                         engine->go(target);
+                    else if (fraction >= 0)
+                        engine->goToFraction(fraction);
                     else if (delta) {
                         const int to = appearanceChanged ? engine->turnTarget(engine->page(), delta)
                                                          : turned;

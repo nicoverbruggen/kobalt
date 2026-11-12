@@ -646,6 +646,10 @@ bool ReadingBook::canFinish() const
         return false;
     // Nickel asks on exit at 90%. Include the final page of very short books,
     // and the last page of the text before trailing non-linear sections.
+    // With only a part of the book laid out, its pages are not those of the
+    // book: the percent of the whole book decides.
+    if (session_->state().contains("book_fraction"))
+        return session_->progressFraction() >= 0.9 || session_->nextPage() == session_->page();
     return session_->page() * 10 >= session_->pages() * 9
             || session_->nextPage() == session_->page();
 }

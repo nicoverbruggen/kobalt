@@ -1,8 +1,10 @@
 #include "page_estimate.h"
 #include <QJsonArray>
+#include <QHash>
 #include <QSet>
 #include <QString>
 #include <QXmlStreamReader>
+#include "support/qt_compat.h"
 #include <climits>
 #include <cmath>
 
@@ -281,6 +283,107 @@ PageEstimateItem measurePageEstimate(const QByteArray &xhtml)
     PageEstimateMeasurer measurer;
     measurer.feed(xhtml, true);
     return measurer.item();
+}
+
+double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path)
+{
+    // The steps of the path: an element name or "text()", and its index
+    // among the siblings of the same kind, counted from one.
+    struct Step
+    {
+        QString name;
+        int index = 1;
+    };
+    QVector<Step> steps;
+    int offset = 0;
+    QString rest = path;
+    const int dot = rest.lastIndexOf('.');
+    if (dot > rest.lastIndexOf('/')) {
+        offset = qMax(0, rest.mid(dot + 1).toInt());
+        rest.truncate(dot);
+    }
+    for (const auto &part : rest.split('/', qt::skipEmptyParts)) {
+        const int open = part.indexOf('[');
+        Step step;
+        step.name = open < 0 ? part : part.left(open);
+        if (open >= 0)
+            step.index = qMax(1, part.mid(open + 1, part.size() - open - 2).toInt());
+        steps.append(step);
+    }
+    const bool text = !steps.isEmpty() && steps.last().name == QLatin1String("text()");
+    const int elements = steps.size() - (text ? 1 : 0);
+    // The characters as the measurer counts them: one space between words.
+    qint64 characters = 0, target = -1, fallback = -1;
+    bool space = false;
+    const auto count = [&](const QString &value, int limit) {
+        for (int i = 0; i < value.size() && i < limit; ++i) {
+            if (value.at(i).isSpace()) {
+                space = characters > 0;
+            } else {
+                characters += space ? 2 : 1;
+                space = false;
+            }
+        }
+    };
+    // For each open element below <html>: the children seen by name, and
+    // the text nodes.
+    QVector<QHash<QString, int>> children{ {} };
+    QVector<int> texts{ 0 };
+    // How many steps the open elements match, and how deep they are.
+    int matched = 0, depth = 0;
+    bool body = false;
+    QXmlStreamReader reader(xhtml);
+    while (!reader.atEnd()) {
+        const auto token = reader.readNext();
+        if (token == QXmlStreamReader::StartElement) {
+            const auto name = reader.name().toString().toLower();
+            if (depth == 0 && name == QLatin1String("html")) {
+                // The root has no step.
+                continue;
+            }
+            const int index = ++children.last()[name];
+            ++depth;
+            children.append(QHash<QString, int>());
+            texts.append(0);
+            body = body || (depth == 1 && name == QLatin1String("body"));
+            if (target < 0 && matched == depth - 1 && matched < elements
+                && steps[matched].name == name && steps[matched].index == index) {
+                ++matched;
+                fallback = characters;
+                if (matched == elements && !text)
+                    target = characters;
+            }
+        } else if (token == QXmlStreamReader::EndElement && depth > 0) {
+            // A step that the element does not have: the position is at the
+            // start of the deepest element found.
+            if (target < 0 && matched == depth && matched < steps.size())
+                target = fallback;
+            matched = qMin(matched, depth - 1);
+            --depth;
+            children.removeLast();
+            texts.removeLast();
+        } else if (token == QXmlStreamReader::Characters && body && depth > 0) {
+            const auto value = reader.text().toString();
+            if (reader.isWhitespace()) {
+                count(value, INT_MAX);
+                continue;
+            }
+            const int index = ++texts.last();
+            if (target < 0 && text && matched == depth && matched == elements
+                && steps.last().index == index) {
+                count(value, offset);
+                target = characters;
+                count(value.mid(qMin(offset, int(value.size()))), INT_MAX);
+                continue;
+            }
+            count(value, INT_MAX);
+        }
+    }
+    if (!body || characters <= 0)
+        return -1;
+    if (target < 0)
+        target = fallback < 0 ? 0 : fallback;
+    return qBound(0.0, double(target) / characters, 1.0);
 }
 
 double PageEstimateLayout::linesPerPage() const

@@ -1,6 +1,7 @@
 #pragma once
 #include "publication/page_estimate.h"
 #include "publication/resource_cache.h"
+#include <QHash>
 #include <atomic>
 #include <lvstream.h>
 
@@ -35,6 +36,9 @@ struct ReaderSource
     // The plain text of each spine item, folded for a quick check whether a
     // search can match there. Filled when first needed.
     QVector<QString> searchTexts;
+    // The part of the text of its spine item before each position that was
+    // looked up in the XHTML. It does not depend on the layout.
+    QHash<QString, double> textFractions;
 
     // The estimated pages of the book, for rough page numbers. They are for
     // the open book only and are not saved. A document prepared ahead
@@ -55,4 +59,8 @@ struct ReaderSource
         QString key;
     } pageEstimate;
 };
+
+// The spine item that a position names as DocFragment[n], counted from zero,
+// or -1.
+int spineItemIndex(const QString &position);
 } // namespace kobalt

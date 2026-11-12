@@ -200,6 +200,9 @@ public:
 
     double bookFraction() const override;
     RoughPages roughPages() const override;
+    QVector<int> bookPages(const QStringList &positions,
+                           const std::function<bool()> &current = {}) const override;
+    bool goToFraction(double fraction) override;
     qint64 chapterLoadMilliseconds() const override;
     bool refinePageEstimate() override;
 
@@ -494,6 +497,15 @@ private:
     bool layoutSlice(int first, int forcedEnd = 0);
     // Lays out the slice that holds `position` when it is another one.
     bool showSliceOf(const QString &position);
+    // Lays out the slice that holds the character `before` of the spine item,
+    // after the slices before it, as reading forward does.
+    bool showSliceAt(int before);
+    // The part of the text of `item` before `position`, from its XHTML.
+    double textFraction(int item, const QString &position) const;
+    double readTextFraction(int item, const QString &position) const;
+    // The page in its chapter and the pages of the chapter from the
+    // estimate of the pages, when only a part of the book has a layout.
+    void estimateChapterPages(const QVector<ChapterLink> &links, ChapterSelection &result) const;
     // True when the document was loaded without the fonts that the book
     // embeds: a reading font replaces them on every element, so they are
     // never drawn. Only for a part of a book, which loads again quickly

@@ -181,6 +181,9 @@ public:
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
+    // Goes to about `fraction` of the whole book, from 0 to 1. With only a
+    // part of the book laid out, the engine lays out the text there first.
+    bool goToFraction(double fraction);
     bool goToNative(const QString &location, std::function<void(QString)> finished);
     bool goToSyncedPosition(const QString &position, std::function<void(QString)> finished);
     // Resolves chapter, page and source order without navigating or rendering another page.
@@ -473,6 +476,8 @@ private:
     QString destination;
     int pageDelta = 0;
     int pageTarget = -1;
+    // A part of the whole book to go to, from 0 to 1, or negative.
+    double fractionTarget = -1;
     bool running = false;
     bool turning = false;
     int pendingTurn = 0;

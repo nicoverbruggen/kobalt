@@ -1803,6 +1803,7 @@ ChapterSelection EngineDocument::chapterSelection(const QVector<ChapterLink> &li
                 result.next < 0 ? pages() - 1 : qMax(first, chapterEndPage(links[result.next]) - 1);
         result.page = qBound(1, page() - first + 1, last - first + 1);
         result.pages = last - first + 1;
+        estimateChapterPages(links, result);
     }
     return result;
 }

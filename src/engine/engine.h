@@ -212,6 +212,19 @@ public:
 
     virtual RoughPages roughPages() const = 0;
 
+    // The page of the book, counted from one, of each position anywhere in
+    // the book: the real page for an engine with a layout of the whole
+    // book, and the page from the estimate otherwise, the same number that
+    // roughPages() gives for the page on screen. Zero where the page is not
+    // known yet, such as before the estimate has a total, and -1 where a
+    // position does not resolve. Never lays out text.
+    virtual QVector<int> bookPages(const QStringList &positions,
+                                   const std::function<bool()> &current = {}) const = 0;
+    // Goes to about `fraction` of the whole book, from 0 to 1. An engine
+    // with the text of only a part of the book lays out the text there
+    // first.
+    virtual bool goToFraction(double fraction) = 0;
+
     // How long the engine took to load and lay out the spine items or the
     // part of a spine item that it has now. Negative when the engine has the
     // whole book.

@@ -373,14 +373,14 @@ int chapterModePages()
 #endif
 }
 
-// A position names its spine item as DocFragment[n], counted from one.
+} // namespace
+
 int spineItemIndex(const QString &position)
 {
     static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
     const auto match = fragment.match(position);
     return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
 }
-} // namespace
 
 bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
                                       QSet<QString> *skippedFonts)

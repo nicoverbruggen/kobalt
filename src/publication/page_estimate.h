@@ -109,6 +109,15 @@ private:
 // Reads one spine item at once.
 PageEstimateItem measurePageEstimate(const QByteArray &xhtml);
 
+// The part of the text of one spine item before a position, from 0 to 1,
+// counted in its XHTML. `path` is the part of an engine position after its
+// spine item, such as "/body[1]/div[2]/p/text()[1].12": the elements from
+// <body>, each with its index among the siblings of the same name, counted
+// from one, then a text node and the characters before the position in it.
+// Where the XHTML does not have a step, the position is at the start of the
+// deepest element found. Negative when the XHTML has no text in <body>.
+double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path);
+
 struct PageEstimateLayout
 {
     // All in pixels: the body font size, the height of one line, the width

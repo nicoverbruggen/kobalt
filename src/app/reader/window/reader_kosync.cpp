@@ -40,8 +40,12 @@ void Reader::buildKosync()
                 Coordinator::Context state;
                 state.document = kosyncDocument();
                 state.local.position = session->state().value("position").toString();
-                state.local.percentage =
-                        session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
+                // With only a part of the book laid out, the page numbers
+                // are those of the part. The percentage is of the whole book.
+                state.local.percentage = session->state().contains("book_fraction")
+                        ? session->progressFraction()
+                        : session->pages() > 1 ? double(session->page()) / (session->pages() - 1)
+                                               : 0;
                 state.metadata = { session->syncFilename(), session->title().trimmed(),
                                    session->author().trimmed() };
                 const bool hidden =

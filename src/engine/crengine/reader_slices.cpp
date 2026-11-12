@@ -8,7 +8,9 @@
 #include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <climits>
+#include <cmath>
 #include <lvdocview.h>
 #if __has_include(<koblaze.h>)
 #  include <koblaze.h>
@@ -790,39 +792,234 @@ bool EngineDocument::showSliceOf(const QString &position)
                 document->createXPointer(Utf8ToUnicode(position.toUtf8().constData())));
         return start.isNull() || target.isNull() || start.compare(target) <= 0;
     };
-    // The end of the text that has a layout, with the extra pages.
-    const auto reach = [&] {
-        return sliceForcedEnd_ > 0 ? sliceForcedEnd_ : sliceFirst_ + sliceReach();
-    };
     if (before >= sliceFirst_ && before < sliceEnd_ && laidOut())
         return true;
+    if (!showSliceAt(before))
+        return false;
+    // A block belongs to the slice in which it starts. A position late in
+    // a block that started earlier is in the slice before.
+    if (!laidOut() && !sliceHistory_.isEmpty()) {
+        const auto previous = sliceHistory_.takeLast();
+        if (!layoutSlice(previous.first, previous.second))
+            return false;
+    }
+    return true;
+}
+
+bool EngineDocument::showSliceAt(int before)
+{
+    // Only slices that start where reading forward from the start of the
+    // spine item starts them give the pages of the whole book. Start from
+    // the nearest such slice before the position: a recorded one, the one
+    // on screen or the first, and lay out the slices after it in order.
     // On the extra pages after the end of the slice, the position belongs
-    // to the next slice. Show it there, so that its page is a whole page.
-    if (before >= sliceEnd_ && before < reach() && sliceEnd_ < spineItemText()) {
+    // to the next slice, so that its page is a whole page.
+    auto starts = sliceHistory_;
+    starts.append({ sliceFirst_, sliceForcedEnd_ });
+    while (!starts.isEmpty() && starts.last().first > before)
+        starts.removeLast();
+    const auto start = starts.isEmpty() ? qMakePair(0, 0) : starts.takeLast();
+    sliceHistory_ = starts;
+    if ((start.first != sliceFirst_ || start.second != sliceForcedEnd_)
+        && !layoutSlice(start.first, start.second))
+        return false;
+    while (before >= sliceEnd_ && sliceEnd_ < spineItemText()) {
         sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
         if (!layoutSlice(sliceEnd_))
             return false;
-        if (before < sliceEnd_ && laidOut())
-            return true;
-    }
-    // A jump has no recorded slices around it.
-    sliceHistory_.clear();
-    const int size = sliceSize();
-    if (!layoutSlice(before / size * size))
-        return false;
-    for (int attempts = 0; attempts < 8; ++attempts) {
-        if (before >= sliceEnd_ && sliceEnd_ < spineItemText()) {
-            if (!layoutSlice(sliceEnd_))
-                return false;
-        } else if (!laidOut() && sliceFirst_ > 0) {
-            // A block belongs to the slice in which it starts. A position
-            // late in a block that started earlier is in the slice before.
-            if (!layoutSlice(qMax(0, sliceFirst_ - size)))
-                return false;
-        } else {
-            break;
-        }
     }
     return true;
+}
+
+double EngineDocument::textFraction(int item, const QString &position) const
+{
+    const auto known = source_->textFractions.constFind(position);
+    if (known != source_->textFractions.cend())
+        return known.value();
+    const double fraction = readTextFraction(item, position);
+    if (source_->textFractions.size() > 4096)
+        source_->textFractions.clear();
+    source_->textFractions.insert(position, fraction);
+    return fraction;
+}
+
+double EngineDocument::readTextFraction(int item, const QString &position) const
+{
+    const auto href = spineItems().value(item);
+    if (href.isEmpty())
+        return -1;
+    auto stream = source_->container->OpenStream(Utf8ToUnicode(href.toUtf8().constData()).c_str(),
+                                                 LVOM_READ);
+    if (stream.isNull())
+        return -1;
+    QByteArray xhtml(int(stream->GetSize()), Qt::Uninitialized);
+    lvsize_t read = 0;
+    if (stream->Read(xhtml.data(), xhtml.size(), &read) != LVERR_OK)
+        return -1;
+    xhtml.resize(int(read));
+    // The position goes on after the DocFragment of its spine item.
+    static const QRegularExpression fragment(QStringLiteral("^/body(?:\\[1\\])?/DocFragment[^/]*"));
+    auto path = position;
+    path.remove(fragment);
+    return pageEstimateTextFraction(xhtml, path);
+}
+
+QVector<int> EngineDocument::bookPages(const QStringList &positions,
+                                       const std::function<bool()> &current) const
+{
+    QVector<int> result(positions.size(), -1);
+    if (!engine_)
+        return result;
+    if (windowFirst_ < 0) {
+        const auto pages = pagesOf(positions, false, nullptr, current);
+        if (pages.size() != positions.size())
+            return {};
+        for (int i = 0; i < pages.size(); ++i)
+            result[i] = pages[i] >= 0 ? pages[i] + 1 : -1;
+        return result;
+    }
+    if (spineItemCount_ <= 0 || !source_ || pages() <= 0)
+        return result;
+    auto &map = pageMap();
+    const bool known = map.complete() && map.total() > 0;
+    const int last = qMax(1, qRound(map.total()));
+    const auto items = spineItems();
+    // The pages of the spine items of the window, for a unit of several.
+    QVector<int> itemStarts;
+    if (!slices()) {
+        QStringList starts;
+        for (int item = windowFirst_; item <= windowLast_ + 1; ++item) {
+            Location start;
+            start.href = items.value(item);
+            starts.append(item <= windowLast_ ? positionOf(start) : QString());
+        }
+        itemStarts = pagesOf(starts);
+        if (itemStarts.size() == starts.size())
+            itemStarts.last() = pages();
+    }
+    for (int i = 0; i < positions.size(); ++i) {
+        if (current && !current())
+            return {};
+        const int item = spineItemIndex(positions[i]);
+        if (item < 0 || item >= spineItemCount_)
+            continue;
+        if (!known) {
+            result[i] = 0;
+            continue;
+        }
+        // Text with a layout counts as roughPages() does: the pages before
+        // its part, then the pages of the layout.
+        double pages = -1;
+        if (item >= windowFirst_ && item <= windowLast_) {
+            const int page = pagesOf({ positions[i] }).value(0, -1);
+            if (slices()) {
+                const int before = textBefore(positions[i]);
+                if (page >= 0 && before >= sliceFirst_ && before < sliceEnd_)
+                    pages = qRound(map.pagesBefore(item)
+                                   + map.pagesBefore(item, sliceFirst_, qMax(1, spineItemText())))
+                            + page;
+            } else if (page >= 0 && itemStarts.size() > item - windowFirst_ + 1) {
+                const int start = qMax(0, itemStarts[item - windowFirst_]);
+                pages = qRound(map.pagesBefore(item)) + qMax(0, page - start);
+            }
+        }
+        // Other text counts from its XHTML.
+        if (pages < 0) {
+            const double fraction = qMax(0.0, textFraction(item, positions[i]));
+            pages = std::floor(map.pagesBefore(item)
+                               + map.pagesBefore(item, qRound(fraction * 1000000), 1000000));
+        }
+        result[i] = qBound(1, int(pages) + 1, last);
+    }
+    return result;
+}
+
+bool EngineDocument::goToFraction(double fraction)
+{
+    fraction = qBound(0.0, fraction, 1.0);
+    if (!engine_)
+        return false;
+    if (windowFirst_ < 0)
+        return pages() > 0 && go(qBound(0, int(fraction * pages()), pages() - 1));
+    if (spineItemCount_ <= 0 || !source_)
+        return false;
+    // The spine item at the fraction, and the part of it, by the estimated
+    // pages, or by the bytes before the book is measured.
+    auto &map = pageMap();
+    const auto &bytes = spineBytes();
+    const bool measured = map.total() > 0;
+    const auto size = [&](int item) {
+        return measured ? map.itemPages(item) : double(bytes.value(item));
+    };
+    double total = 0;
+    for (int item = 0; item < spineItemCount_; ++item)
+        total += size(item);
+    double target = fraction * total;
+    int item = 0;
+    while (item + 1 < spineItemCount_ && target >= size(item)) {
+        target -= size(item);
+        ++item;
+    }
+    double inItem = size(item) > 0 ? qBound(0.0, target / size(item), 1.0) : 0;
+    if (measured) {
+        // The pages of a spine item are not spread evenly over its text.
+        double low = 0, high = 1;
+        for (int step = 0; step < 20; ++step) {
+            const double middle = (low + high) / 2;
+            (map.pagesBefore(item, qRound(middle * 1000000), 1000000) < target ? low : high) =
+                    middle;
+        }
+        inItem = low;
+    }
+    if (item < windowFirst_ || item > windowLast_) {
+        const auto unit = slicePages_ > 0 ? unitFrom(item)
+                                          : qMakePair(qMax(0, item - 1),
+                                                      qMin(spineItemCount_ - 1, item + 1));
+        if (!showSpineItems(unit.first, unit.second))
+            return false;
+    }
+    if (slices()) {
+        const int character = int(inItem * spineItemText());
+        if (!showSliceAt(character))
+            return false;
+        // The last page of the slice that starts at or before the character.
+        const int shown = visiblePages_ > 0 ? visiblePages_ : pages();
+        int page = 0;
+        for (int candidate = 1; candidate < shown; ++candidate) {
+            const int before = textBefore(pageStart(candidate));
+            if (before < 0 || before > character)
+                break;
+            page = candidate;
+        }
+        return go(page);
+    }
+    Location start, next;
+    start.href = spineItems().value(item);
+    next.href = spineItems().value(item + 1);
+    const auto bounds = pagesOf({ positionOf(start), item < windowLast_ ? positionOf(next) : QString() });
+    const int first = qMax(0, bounds.value(0, 0));
+    const int end = bounds.value(1, -1) > first ? bounds[1] : pages();
+    return go(qBound(0, first + int(inItem * (end - first)), qMax(0, pages() - 1)));
+}
+void EngineDocument::estimateChapterPages(const QVector<ChapterLink> &links,
+                                          ChapterSelection &result) const
+{
+    // A chapter can start or end in text that has no layout. Its pages
+    // then come from the estimate, as the page numbers of the book do.
+    // Until the estimate has a total, the pages of the layout stay.
+    if (windowFirst_ < 0 || result.current < 0)
+        return;
+    QStringList positions{ anchor_, links[result.current].position };
+    if (result.next >= 0)
+        positions.append(links[result.next].position);
+    const auto pages = bookPages(positions);
+    if (pages.size() != positions.size() || pages[0] <= 0 || pages[1] <= 0)
+        return;
+    const int first = qMin(pages[0], pages[1]);
+    const int last = result.next < 0
+            ? qMax(first, qRound(pageMap().total()))
+            : qMax(first, (pages[2] > 0 ? pages[2] : pages[0] + 1) - 1);
+    result.pages = last - first + 1;
+    result.page = qBound(1, pages[0] - first + 1, result.pages);
 }
 } // namespace kobalt

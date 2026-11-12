@@ -607,6 +607,16 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     {
         DocumentCacheScope cache(keyed ? cacheDirectory_ : QString());
 #if __has_include(<koblaze.h>)
+#  ifdef KOBLAZE_DOCUMENT_FONT_DATA
+        // The fork keeps the data of embedded fonts for the next part of
+        // the same book. Another book has other fonts under the same names.
+        static quint64 fontSource = 0;
+        const quint64 book = source_->parent ? source_->parent->identity : source_->identity;
+        if (book != fontSource) {
+            koblazeForgetDocumentFontData();
+            fontSource = book;
+        }
+#  endif
         // Experimental, with the koblaze fork only: load the text of a
         // window of spine items. The others stay empty.
         koblazeSetSpineWindow(firstSpineItem, lastSpineItem);

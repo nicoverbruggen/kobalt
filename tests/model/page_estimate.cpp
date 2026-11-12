@@ -81,6 +81,8 @@ struct ReaderLocationProbe
     static bool layoutSlice(EngineDocument &model, int first) { return model.layoutSlice(first); }
 
     static const EngineDocument *ahead(const EngineDocument &model) { return model.ahead_.get(); }
+
+    static const LVDocView *view(const EngineDocument &model) { return model.engine_.get(); }
 };
 } // namespace kobalt
 
@@ -1041,12 +1043,13 @@ void observations()
         if (turn % 2)
             model.prepareAhead();
         const auto *prepared = Probe::ahead(model);
+        const auto *preparedView = prepared ? Probe::view(*prepared) : nullptr;
         const int before = Probe::windowFirst(model);
         if (!model.turnInWindow(1))
             break;
         if (prepared && Probe::windowFirst(model) != before) {
             ++crossings;
-            adopted += !Probe::ahead(model);
+            adopted += Probe::view(model) == preparedView;
         }
         const auto next = model.roughPages();
         require(next.page > rough.page, "The page number went back on a forward turn");

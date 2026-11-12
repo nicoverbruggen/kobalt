@@ -1153,7 +1153,12 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     if (!renderLayout() || !extendSlice())
         return false;
     observeLayout();
-    return goTo(anchor);
+    if (!goTo(anchor))
+        return false;
+    // Reflow can extend a slice to find a safe page boundary. Once the
+    // reading slice is known, discard the look-ahead pages beyond its end.
+    return !slices() || visiblePages_ <= 0
+            || (layoutSlice(sliceFirst_, sliceEnd_) && goTo(anchor));
 }
 
 bool EngineDocument::renderLayout()

@@ -909,8 +909,11 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
 {
     if (!source_ || !engine_)
         return false;
-    if (adoptAhead(first, last))
-        return true;
+    if (adoptAhead(first, last)) {
+        // An explicit chapter jump starts at its first slice, even when
+        // the retained document was left at the end of the chapter.
+        return !slices() || sliceFirst_ == 0 || showSliceAt(0);
+    }
     if (slicePages_ > 0 && windowFirst_ >= 0) {
         if (!openAhead(first, {}, last, error))
             return false;
@@ -1116,7 +1119,9 @@ bool EngineDocument::showPreviousUnit()
         return false;
     const auto unit = neighbouringUnit(-1);
     emptyUnitDirection_ = -1;
-    const bool shown = showSpineItems(unit.first, unit.second);
+    // A backward page turn can use the retained last slice directly.
+    const bool shown = adoptAhead(unit.first, unit.second)
+            || showSpineItems(unit.first, unit.second);
     emptyUnitDirection_ = 1;
     if (!shown)
         return false;

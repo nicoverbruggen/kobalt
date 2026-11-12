@@ -167,6 +167,13 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
         block = block->getParentNode();
     if (!block || block->isNodeName("DocFragment"))
         return false;
+    // A slice holds whole blocks of the text flow. A table, a float or
+    // another such block is laid out as one, so a slice cannot start in it.
+    for (auto *parent = block->getParentNode(); parent && !parent->isNodeName("DocFragment");
+         parent = parent->getParentNode()) {
+        if (parent->getRendMethod() != erm_block)
+            return false;
+    }
     const int start =
             textBefore(QString::fromUtf8(UnicodeToUtf8(ldomXPointer(block, 0).toString()).c_str()));
     if (start < 0 || textBefore(position) != start)
@@ -250,6 +257,7 @@ bool EngineDocument::enterNextSlice()
 void EngineDocument::prepareAhead()
 {
     enterNextSlice();
+    prepareNextItem();
 }
 
 bool EngineDocument::showSliceOf(const QString &position)

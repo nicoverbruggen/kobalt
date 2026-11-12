@@ -28,6 +28,7 @@
 #include <tuple>
 
 class ldomXPointerEx;
+struct ldomNode;
 
 namespace kobalt {
 class ColumnView;
@@ -377,6 +378,9 @@ private:
     void cutSlice();
     // True when the page starts with the first text of a block.
     bool pageStartsBlock(int page, int *before) const;
+    // True when something before `block` shows on the page: the last line
+    // of the text before it, or a block without text.
+    bool earlierContentOnPage(ldomNode *block, int page) const;
 
     // True when the one spine item of the window is laid out in slices.
     bool slices() const

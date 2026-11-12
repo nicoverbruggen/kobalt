@@ -502,8 +502,53 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
             textBefore(QString::fromUtf8(UnicodeToUtf8(ldomXPointer(block, 0).toString()).c_str()));
     if (start < 0 || textBefore(position) != start)
         return false;
+    if (earlierContentOnPage(block, page))
+        return false;
     *before = start;
     return true;
+}
+
+bool EngineDocument::earlierContentOnPage(ldomNode *block, int page) const
+{
+    // Pages of vertical text advance along x.
+    if (engine_->isVerticalText())
+        return false;
+    const auto *list = engine_->getPageList();
+    const int index = page * qMax(1, columns_);
+    if (!list || index < 0 || index >= list->length())
+        return false;
+    const int top = list->get(index)->start;
+    // The page can start a little below the top of the last line before the
+    // block. That line is then on the page, and the page start names the
+    // block.
+    ldomXPointerEx previous(block, 0);
+    if (previous.prevVisibleText()) {
+        previous.setOffset(qMax(0, int(previous.getNode()->getText().length()) - 1));
+        lvRect rect;
+        if (previous.getRect(rect) && rect.bottom > top)
+            return true;
+    }
+#ifdef KOBLAZE_TEXT_LENGTHS
+    // A block without text just before `block`, such as a rule drawn by a
+    // ::before pseudo element, has the same text count. The engine puts it
+    // in the slice before, so the page must not show it.
+    auto *document = engine_->getDocument();
+    for (auto *node = block; node && !node->isNodeName("DocFragment");
+         node = node->getParentNode()) {
+        for (int i = node->getNodeIndex() - 1; i >= 0; --i) {
+            auto *sibling = node->getParentNode()->getChildNode(i);
+            if (document->koblazeTextLength(sibling) > 0)
+                return false;
+            if (!sibling->isElement() || sibling->getRendMethod() == erm_invisible)
+                continue;
+            lvRect rect;
+            sibling->getAbsRect(rect);
+            if (rect.height() > 0 && rect.bottom > top)
+                return true;
+        }
+    }
+#endif
+    return false;
 }
 
 void EngineDocument::cutSlice()

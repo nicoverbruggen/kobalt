@@ -2,12 +2,16 @@
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/crengine/engine_document.h"
+#include <QCryptographicHash>
+#include <QFile>
 #include <QGuiApplication>
 #include <cstdio>
 
 using namespace kobalt;
 
 namespace {
+const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
+
 void open(EngineDocument &model, const test::BookFiles &files)
 {
     QMap<QString, qint64> sizes;
@@ -21,9 +25,73 @@ void open(EngineDocument &model, const test::BookFiles &files)
             },
             std::make_shared<std::atomic_bool>(false));
     QString error;
-    require(model.openResources(source, sizes, { 600, 800 },
-                                { { "font_pixels", 28 }, { "line_spacing_version", 1 } }, &error),
-            qPrintable(error));
+    require(model.openResources(source, sizes, { 600, 800 }, settings, &error), qPrintable(error));
+}
+
+// Each page as its start and a checksum of its image.
+QString pageRecord(EngineDocument &model)
+{
+    const QImage image = model.image(model.page());
+    return model.pageStart(model.page()) + ' '
+            + QString::fromLatin1(
+                    QCryptographicHash::hash(QByteArray::fromRawData(reinterpret_cast<const char *>(
+                                                                             image.constBits()),
+                                                                     int(image.sizeInBytes())),
+                                             QCryptographicHash::Md5)
+                            .toHex());
+}
+
+// Chapter mode must give the pages of the whole book, pixel for pixel.
+void requireWholeBookPages(const test::BookFiles &files, int slicePages, const char *what)
+{
+    EngineDocument model(test::readerFonts());
+    open(model, files);
+    QStringList whole;
+    for (int page = 0; page < model.pages(); ++page) {
+        require(model.go(page), "Cannot go to a page of the whole book");
+        whole.append(pageRecord(model));
+    }
+    // Chapter mode opens at the position of the whole book.
+    require(model.go(0), "Cannot go back to the first page");
+    model.setChapterSlices(slicePages);
+    QString error;
+    require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+    QStringList chapters{ pageRecord(model) };
+    while (model.turnInWindow(1) && chapters.size() <= 2 * whole.size())
+        chapters.append(pageRecord(model));
+    int differs = 0;
+    while (differs < qMin(whole.size(), chapters.size()) && whole[differs] == chapters[differs])
+        ++differs;
+    if (differs < whole.size() || chapters.size() != whole.size())
+        std::printf("%s: page %d of %d differs (%d in chapter mode)\n", what, differs + 1,
+                    int(whole.size()), int(chapters.size()));
+    require(chapters == whole, what);
+}
+
+test::BookFiles styledBook(const QByteArray &css, const QByteArray &body,
+                           test::BookFiles files = {}, const QByteArray &spine = {})
+{
+    auto text = test::publisherHtml(body);
+    text.replace("</head>", "<link rel=\"stylesheet\" href=\"style.css\"/></head>");
+    files["text.xhtml"] = text;
+    files["style.css"] = css;
+    return test::publisherPackage("en", "Slices", files, "<itemref idref=\"text.xhtml\"/>" + spine);
+}
+
+// Sentences of varied length, so that page breaks fall in many places.
+QByteArray prose(int seed, int sentences)
+{
+    static const QByteArray words[] = { "reader",   "chapter", "keeps", "the",  "page",
+                                        "turning",  "quietly", "while", "a",    "lantern",
+                                        "flickers", "beside",  "old",   "town", "walls" };
+    QByteArray text;
+    for (int sentence = 0; sentence < sentences; ++sentence) {
+        const int length = 4 + (seed * 7 + sentence * 5) % 13;
+        for (int word = 0; word < length; ++word)
+            text += words[(seed * 3 + sentence * 11 + word * 7) % 15]
+                    + QByteArray(word + 1 < length ? " " : ". ");
+    }
+    return text;
 }
 } // namespace
 
@@ -250,6 +318,95 @@ int main(int argc, char **argv)
             "Cannot change the font size in a slice");
     require(model.position() == position && model.pages() <= 3 * slicePages,
             "A font change in a slice lost the position or laid out too much");
+
+    // A rule of the book that the reading font does not reach, here one for
+    // ::first-letter, can name a font of the book. Chapter mode does not
+    // read those fonts first, and must still use that one.
+    {
+        QFile font(test::readerAssets().file("fonts/ebook-core/NV_Bitter-Regular.ttf"));
+        require(font.open(QIODevice::ReadOnly), "Cannot read the embedded font fixture");
+        QByteArray body;
+        for (int part = 0; part < 6; ++part)
+            body += "<h2>Part " + QByteArray::number(part + 1) + "</h2><p class=\"first\">"
+                    + prose(part, 6) + "</p><p>" + prose(part + 9, 9) + "</p>";
+        requireWholeBookPages(
+                styledBook("@font-face{font-family:Letter;src:url(letter.ttf)}"
+                           "p.first::first-letter{font-family:Letter;font-size:3em;line-height:0}",
+                           body, { { "letter.ttf", font.readAll() } }),
+                3, "A book font of ::first-letter changed the pages of chapter mode");
+    }
+    // A block without text before the first block of a slice, here a rule
+    // drawn by ::before, belongs to the slice before. A slice must not
+    // start on a page that shows it.
+    {
+        QByteArray body;
+        for (int entry = 0; entry < 40; ++entry) {
+            body += "<blockquote class=\"entry\">";
+            for (int paragraph = 0; paragraph < 1 + entry % 3; ++paragraph)
+                body += "<p>" + prose(entry * 3 + paragraph, 3 + (entry + paragraph) % 5) + "</p>";
+            body += "</blockquote>";
+        }
+        requireWholeBookPages(
+                styledBook("blockquote{margin:0}p{margin:0;text-indent:1em}"
+                           ".entry+.entry::before{border-top:1px solid;content:\"\";display:block;"
+                           "height:0;margin:1.5em auto;width:25%}",
+                           body),
+                2, "A rule before a slice changed the pages of chapter mode");
+    }
+    // A table adds its lines to the pages without the flow: the page break
+    // after it depends on the block before the table. A slice that starts
+    // after a table must get the same break.
+    {
+        QByteArray body;
+        for (int scene = 0; scene < 8; ++scene) {
+            body += "<section><h3>Scene " + QByteArray::number(scene + 1)
+                    + "</h3><p class=\"direction\">" + prose(scene, 2) + "</p><table>";
+            for (int row = 0; row < 6 + scene % 4; ++row)
+                body += "<tr><td>SPEAKER</td><td><p>" + prose(scene * 10 + row, 2 + row % 3)
+                        + "</p></td></tr>";
+            body += "</table></section>";
+        }
+        requireWholeBookPages(
+                styledBook("section{margin-top:2em}h3{margin-top:3em;page-break-after:avoid}"
+                           "p{margin:0}p.direction{margin:1em auto;width:75%}"
+                           "table{border-collapse:collapse;margin:1em auto;width:100%}"
+                           "td{padding:.5em;vertical-align:top}",
+                           body),
+                2, "A slice after a table changed the pages of chapter mode");
+    }
+    // A page can start a little below the top of the last line of the
+    // paragraph before. Its start then names the next paragraph, but the
+    // page shows that line: a slice must not start there.
+    {
+        QByteArray body;
+        for (int paragraph = 0; paragraph < 120; ++paragraph)
+            body += "<p>" + prose(paragraph, 1 + paragraph % 6) + "</p>";
+        requireWholeBookPages(
+                styledBook("p{display:block;text-indent:0.2em;padding:0.1em;margin:0}", body), 2,
+                "A line above the page start changed the pages of chapter mode");
+    }
+    // A last spine item without content adds no page to the whole book. As
+    // the last unit of chapter mode it must not add one, nor show the pages
+    // before it again.
+    requireWholeBookPages(styledBook("p{margin:0}", "<p>" + prose(1, 30) + "</p>",
+                                     { { "empty.xhtml", test::publisherHtml({}) } },
+                                     "<itemref idref=\"empty.xhtml\"/>"),
+                          2, "An empty last spine item changed the pages of chapter mode");
+    // A hidden navigation document with white space around it gives, alone,
+    // a window with one page without height. As the last unit it adds no
+    // page either.
+    {
+        auto files =
+                styledBook("p{margin:0}", "<p>" + prose(2, 30) + "</p>",
+                           { { "nav.xhtml",
+                               test::publisherHtml(
+                                       "\n<nav epub:type=\"toc\" hidden=\"\"><ol>"
+                                       "<li><a href=\"text.xhtml\">Text</a></li></ol></nav>\n") } },
+                           "<itemref idref=\"nav.xhtml\"/>");
+        files["book.opf"].replace("href=\"nav.xhtml\"", "href=\"nav.xhtml\" properties=\"nav\"");
+        requireWholeBookPages(files, 2, "A hidden last spine item added a page in chapter mode");
+    }
+
     std::printf(
             "PASS: slices of %d pages; %d pages whole, %d pages in slices, largest layout %d pages\n",
             slicePages, int(whole.size()), int(forward.size()), largest);

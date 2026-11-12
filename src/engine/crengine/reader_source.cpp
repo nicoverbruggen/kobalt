@@ -757,7 +757,15 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         engine_.reset();
         return fail(OpeningFailureKind::Io, "opening.resource-read", detail);
     }
-    if (!pages() && firstSpineItem >= 0 && spineItemCount_ > 0
+    // A window without content still has one page, without height.
+    bool noPages = !pages();
+    if (!noPages && firstSpineItem >= 0) {
+        const auto *list = engine_->getPageList();
+        noPages = true;
+        for (int i = 0; list && i < list->length() && noPages; ++i)
+            noPages = list->get(i)->height <= 0;
+    }
+    if (noPages && firstSpineItem >= 0 && spineItemCount_ > 0
         && (firstSpineItem > 0 || windowLast_ + 1 < spineItemCount_)) {
         // A spine item can have no page: an empty file, or content that is
         // not shown. As a part of the whole book it adds nothing. Loaded
@@ -859,7 +867,7 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
     ahead->cachePolicy_ = cachePolicy_;
     ahead->cacheBytes_ = cacheBytes_;
     QString error;
-#ifdef KOBLAZE_CANCEL_CHECK
+#  ifdef KOBLAZE_CANCEL_CHECK
     // A tap must not wait for this work. The load and the style pass ask
     // the check, the layout asks the interrupt. A stopped document is
     // dropped, and the next call starts again.
@@ -875,11 +883,11 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
         return;
     }
     ahead->openInterrupt_ = nullptr;
-#else
+#  else
     Q_UNUSED(current);
     if (!ahead->openSource(source_, size_, settings, &error))
         return;
-#endif
+#  endif
     ahead_ = std::move(ahead);
     aheadItem_ = next;
     aheadSettings_ = settings;
@@ -912,10 +920,19 @@ bool EngineDocument::adoptAhead(int first, int last)
 
 bool EngineDocument::showNextUnit()
 {
-    if (windowLast_ + 1 >= spineItemCount_)
+    const int last = windowLast_;
+    if (last + 1 >= spineItemCount_)
         return false;
-    const auto unit = unitFrom(windowLast_ + 1);
-    return showSpineItems(unit.first, unit.second);
+    const auto unit = unitFrom(last + 1);
+    if (!showSpineItems(unit.first, unit.second))
+        return false;
+    // The rest of the book has no pages. The window then holds the spine
+    // item that was shown too: stay on its last page.
+    if (windowFirst_ <= last) {
+        go(pages() - 1);
+        return false;
+    }
+    return true;
 }
 
 bool EngineDocument::showPreviousUnit()

@@ -6,7 +6,8 @@
     "war-and-peace": {"file": "build/screenshot-books/pg2600-epub3.epub", "sha256": "0353122c5a554193a8a777d8156e7a02d9c2014cce90b26891e2057edd30556c"},
     "notes": {"file": "tests/fixtures/perf-notes.epub", "sha256": "0c2c3d7ef3f362a095cb32575da69dca01df459c0a35253cbd4aaeaa630389df"},
     "songbook-1024": {"songs": 1024},
-    "songbook-10000": {"songs": 10000}
+    "songbook-10000": {"songs": 10000},
+    "opened": {"current": true}
   },
   "scenarios": [
     {
@@ -666,6 +667,10 @@
     {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.panel", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"mark": true}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
     {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.page", "steps": [{"mark": true}, {"press": "rrContentsNext"}, {"settle": true}, {"press": "rrContentsPrevious"}, {"settle": true}], "sample": {"timer": true}, "setup": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}], "teardown": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},
     {"kind": "e2e", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.jump", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"mark": true}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}], "sample": {"timer": true}},
-    {"kind": "memory", "unit": "KiB", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}}
+    {"kind": "memory", "unit": "KiB", "paths": ["src/engine/crengine/", "src/app/reader/", "src/reading/"], "book": "songbook-10000", "opt_in": true, "repeat": 3, "id": "toc.10000.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}},
+    {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 3, "id": "reading.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "opened", "fresh": true}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
+    {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 120, "id": "reading.turn.paced", "steps": [{"key": "PageDown"}, {"event": "page-turn-painted"}], "after": [{"settle": true}], "sample": {"event": "page-turn-painted", "field": "elapsed_ms", "stages": true}},
+    {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 120, "id": "reading.turn.fast", "steps": [{"key": "PageDown"}, {"event": "page-turn-painted"}], "sample": {"event": "page-turn-painted", "field": "elapsed_ms", "stages": true}},
+    {"kind": "memory", "unit": "KiB", "paths": ["src/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 1, "id": "reading.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}}
   ]
 }

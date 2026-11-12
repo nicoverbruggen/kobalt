@@ -46,6 +46,7 @@
 #endif
 #include "platforms/kobo/display/screen_density.h"
 #include <NickelHook.h>
+#include <QDir>
 #include <QApplication>
 #include <QFile>
 #include <QPointer>
@@ -1274,6 +1275,12 @@ void ReaderCoordinator::runScenarios(const QString &path)
         if (QFileInfo(it.value().toObject().value("file").toString()).fileName()
             == QFileInfo(run.filePath).fileName())
             options.openBook = it.key();
+    // A book entry marked `current` stands for whichever book is open, so
+    // that a run can measure a book that is not in the package.
+    if (options.openBook.isEmpty())
+        for (auto it = books.begin(); it != books.end(); ++it)
+            if (it.value().toObject().value("current").toBool())
+                options.openBook = it.key();
     // Books open from Nickel's library. The host can open the first book again
     // from a copy of its opening request, but no other book.
     kobalt::scenario::Host host;
@@ -1285,6 +1292,15 @@ void ReaderCoordinator::runScenarios(const QString &path)
         homeSleep->finishSave();
         auto opening = std::make_shared<std::unique_ptr<NativeOpening>>(scenarioOpening->copy());
         return *opening && begin([opening] { return std::move(*opening); });
+    };
+    // The player asks for this while no book is open. The next opening
+    // then parses and lays out the book again.
+    host.forget = [this](const QString &) {
+        // The closed book stays in memory for a quick return. A cold opening
+        // must not reuse it.
+        run.session.reset();
+        QDir(environment_.paths.documentCache()).removeRecursively();
+        QFile::remove(environment_.paths.layoutCache());
     };
     host.reader = [this]() -> QWidget * { return run.reader.data(); };
     host.busy = [this] {
@@ -1424,7 +1440,25 @@ void ReaderCoordinator::runScenarios(const QString &path)
             "scenario-run-start",
             kobalt::qt::object({ { "scenarios", file.value("scenarios").toArray().size() } }),
             false);
-    const auto results = kobalt::scenario::run(file, host, options);
+    // With `chapter_variants`, every scenario runs twice: with the book
+    // opened as a whole, then in chapter mode. The first scenario of a run
+    // must open the book again, so that the choice applies.
+    const bool variants = file.value("chapter_variants").toBool();
+    QVector<QJsonObject> results;
+    for (int pass = 0; pass < (variants ? 2 : 1); ++pass) {
+        if (variants)
+            kobalt::setChapterModeOverride(pass);
+        for (auto result : kobalt::scenario::run(file, host, options)) {
+            if (variants) {
+                const QString variant = QString::fromLatin1(pass ? "chapter" : "whole-book");
+                result["variant"] = variant;
+                result["id"] = result.value("id").toString() + QLatin1Char('.') + variant;
+            }
+            results.append(result);
+        }
+    }
+    if (variants)
+        kobalt::setChapterModeOverride(-1);
     auto header = kobalt::qt::object({ { "kind", "kobalt-device-run" },
                                        { "target", QString("qt%1").arg(QT_VERSION >> 16) },
                                        { "version", QString::fromLatin1(KOBALT_VERSION) },

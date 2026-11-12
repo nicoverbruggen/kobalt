@@ -12,6 +12,7 @@
 #include "document_cache.h"
 #include "engine/engine_activity.h"
 #include "publication/publication.h"
+#include <atomic>
 #include <lvdocview.h>
 #include <QElapsedTimer>
 #include <QDir>
@@ -341,8 +342,13 @@ namespace {
 // Experiment: chapter mode is on with KOBALT_CHAPTER_MODE=1 in the
 // environment or, on a device, with a file named chapter-mode in the Kobalt
 // folder. The file is looked for once.
+std::atomic_int chapterModeOverride{ -1 };
+
 bool chapterMode()
 {
+    const int override = chapterModeOverride.load();
+    if (override >= 0)
+        return override > 0;
     if (qgetenv("KOBALT_CHAPTER_MODE").toInt() > 0)
         return true;
 #ifdef KOBALT_CONFIG_DIR
@@ -434,6 +440,11 @@ bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
     if (skippedFonts)
         *skippedFonts = publication.skippedFonts();
     return true;
+}
+
+void setChapterModeOverride(int mode)
+{
+    chapterModeOverride.store(mode);
 }
 
 bool EngineDocument::open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,

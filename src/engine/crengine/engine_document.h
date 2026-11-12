@@ -378,6 +378,8 @@ private:
 
     // The characters of text in one slice, for the current font and page.
     int sliceSize() const;
+    // Asks for a new layout of the document for another slice.
+    void relayout();
     // The characters of the spine item, as the engine counts them.
     int spineItemText() const;
     // The characters of the spine item before a position, or -1.

@@ -5,6 +5,9 @@
 #include "reader_source.h"
 #include <QElapsedTimer>
 #include <lvdocview.h>
+#if __has_include(<koblaze.h>)
+#  include <koblaze.h>
+#endif
 
 // Layout of one spine item in slices, with the koblaze fork. See
 // EngineDocument::setChapterSlices().
@@ -134,6 +137,18 @@ void EngineDocument::applySlice()
 #endif
 }
 
+void EngineDocument::relayout()
+{
+    // The blocks outside the last slice have no layout method. The engine
+    // gives those methods back and keeps the styles. When it cannot, the
+    // new slice needs the styles again.
+#ifdef KOBLAZE_RELAYOUT
+    if (engine_->getDocument()->koblazeRelayout())
+        return;
+#endif
+    engine_->getDocument()->forceReinitStyles();
+}
+
 int EngineDocument::sliceReach() const
 {
     // A third more than the slice, to find a page that starts a block, and
@@ -201,9 +216,7 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     cache_.clear();
     damage_.clear();
     OpeningCallback callback(engine_, {});
-    // The blocks outside the last slice have no layout method. A new slice
-    // needs the styles again.
-    engine_->getDocument()->forceReinitStyles();
+    relayout();
     engine_->requestRender();
     if (!renderLayout())
         return false;
@@ -212,7 +225,7 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     while (!sliceCut_ && sliceExtra_ < 3) {
         ++sliceExtra_;
         cache_.clear();
-        engine_->getDocument()->forceReinitStyles();
+        relayout();
         engine_->requestRender();
         if (!renderLayout())
             return false;

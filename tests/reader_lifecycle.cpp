@@ -8853,7 +8853,7 @@ private slots:
         QVERIFY(batteryChanged);
         batteryChanged();
         turn();
-        QVERIFY(!host.window()->flushBeforeStandby());
+        QTRY_VERIFY(!host.window()->flushBeforeStandby());
         QTRY_COMPARE(stored(), current());
         QTRY_VERIFY(host.window()->flushBeforeStandby());
         QVERIFY(!storage::profileHasUnsyncedWrites());
@@ -8863,8 +8863,11 @@ private slots:
         storage::closeProfile();
         QVERIFY(QFile::setPermissions(paths.database(), QFileDevice::ReadOwner));
         turn();
+        // The engine can finish before the queued refresh marks the position
+        // for saving. Keep asking until standby queues the save, or its failure
+        // has already completed.
+        QTRY_VERIFY(!host.window()->flushBeforeStandby() || failures == 1);
         if (completeFailureFirst) {
-            host.window()->flushBeforeStandby();
             QTRY_COMPARE(failures, 1);
         }
         // The failed batch can finish before Nickel asks about standby.

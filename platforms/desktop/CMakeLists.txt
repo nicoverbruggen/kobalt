@@ -274,7 +274,8 @@ if(BUILD_TESTING)
         endif()
         set(test_timeout 30)
         if(lane STREQUAL "integration")
-            set(test_timeout 120)
+            # Allow the full viewport/theme matrix, selected at test runtime.
+            set(test_timeout 300)
         endif()
         math(EXPR ctest_timeout "${test_timeout} + 5")
         add_test(NAME desktop.${check} COMMAND "${CMAKE_COMMAND}"

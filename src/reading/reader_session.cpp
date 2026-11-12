@@ -83,18 +83,26 @@ private:
 // request, because that request's page matters more than a page nobody asked for.
 void prepareNeighbours(Engine &engine, int direction, const std::function<bool()> &current)
 {
-    if (!current || current())
-        engine.prepareAhead(current);
-    for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
-        if (current && !current())
-            return;
-        engineActivity().checkpoint();
-        const int target = engine.turnTarget(engine.page(), step);
-        if (target == engine.page())
-            continue;
-        engine.image(target);
-        engine.prepareDamage(engine.page(), target);
-    }
+    const auto pages = [&] {
+        for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
+            if (current && !current())
+                return;
+            engineActivity().checkpoint();
+            const int target = engine.turnTarget(engine.page(), step);
+            if (target == engine.page())
+                continue;
+            engine.image(target);
+            engine.prepareDamage(engine.page(), target);
+        }
+    };
+    // The next tap most likely turns one page: that page comes first. The
+    // work ahead takes longer, and it can replace the layout, which drops
+    // the prepared pages. They are then prepared again.
+    pages();
+    if (current && !current())
+        return;
+    engine.prepareAhead(current);
+    pages();
 }
 
 ReaderMarkupFrame captureFrameMarkup(Engine &engine, const ReaderMarkupRequest &request,
@@ -2232,6 +2240,7 @@ void ReaderSession::dispatch(bool pageTurn)
                 const auto oldPage = engine->page();
                 const auto oldImage = engine->cachedImageKey(oldPage);
                 const int turned = engine->turnTarget(oldPage, delta);
+                bool windowTurned = false;
                 ReaderFrame result;
                 bool appearanceChanged = false;
                 // Turns carry the last requested settings. Only a settings or viewport
@@ -2257,7 +2266,7 @@ void ReaderSession::dispatch(bool pageTurn)
                         // book decides each turn itself: the next page can
                         // need text that has no layout yet.
                         if (to == engine->page() || engine->bookFraction() >= 0)
-                            engine->turnInWindow(delta);
+                            windowTurned = engine->turnInWindow(delta);
                         else
                             engine->go(to);
                     }
@@ -2268,8 +2277,11 @@ void ReaderSession::dispatch(bool pageTurn)
                 result = capture(*engine, positions, false, markup, markupGeneration);
                 if (!error.isEmpty())
                     result.error = error;
+                // A turn into another part of the book is a page turn too.
+                // Its page number starts again, so it does not match `turned`.
                 if (!appearanceChanged && anchor.isEmpty() && result.error.isEmpty()
-                    && qAbs(delta) == 1 && engine->page() == turned && turned != oldPage)
+                    && qAbs(delta) == 1
+                    && ((engine->page() == turned && turned != oldPage) || windowTurned))
                     result.turnDirection = delta;
                 if (result.turnDirection && oldImage
                     && engine->preparedDamage(oldImage, result.image.cacheKey(), &result.damage))

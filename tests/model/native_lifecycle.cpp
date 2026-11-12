@@ -131,7 +131,7 @@ void poweredOff(void *, bool)
 }
 } // namespace
 
-// Checks the Kobo lifecycle adapter with controlled Nickel signals: sleep-view handoff, PIN rotation, USB entry and power-off.
+// Checks the Kobo lifecycle adapter with controlled Nickel signals: standby during an opening, sleep-view handoff, PIN rotation, USB entry and power-off.
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -189,6 +189,14 @@ int main(int argc, char **argv)
             "Standby transitions or paired suspend operation records were lost");
     kobalt::setDiagnosticObserver({});
 
+    // An opening book keeps the device awake between its engine jobs, and
+    // standby is allowed again when the opening ends.
+    bool opening = true;
+    lifecycle.openingWorkPending = [&] { return opening; };
+    require(!kobalt::NativeLifecycle::canSuspend(), "Standby interrupted an opening book");
+    opening = false;
+    require(kobalt::NativeLifecycle::canSuspend(), "A finished opening kept the device awake");
+
     auto *power = N3PowerWorkflowManager::sharedInstance();
     int sleepHandoffs = 0;
     lifecycle.sleepViewReady = [&] { ++sleepHandoffs; };
@@ -198,6 +206,8 @@ int main(int argc, char **argv)
         QCoreApplication::processEvents();
         require(!lifecycle.blocked(), "Wake did not release sleep state");
     };
+    // Explicit sleep does not ask canSuspend. An opening must not hold it.
+    opening = true;
     for (int cycle = 0; cycle < 2; ++cycle) {
         power->asleep = power->visible = true;
         power->pin = false;
@@ -223,6 +233,7 @@ int main(int argc, char **argv)
         wake();
         require(!kobalt::NativeLifecycle::pinScreenActive(), "Unlock retained PIN rotation");
     }
+    opening = false;
     sleepHandoffs = 0;
     // An old NickelHook user can overwrite our showSleepView hook. Both
     // paths must hand off exactly once after the native sleep view is ready.

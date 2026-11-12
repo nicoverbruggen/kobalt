@@ -8,7 +8,7 @@ These checks cover sleep screens and snapshots, sleep and wake, session timeouts
 
 | Test | Checks |
 | --- | --- |
-| `platform.native-lifecycle` | The Kobo lifecycle adapter: the sleep-view handoff and its fallback, PIN rotation, USB entry and power-off |
+| `platform.native-lifecycle` | The Kobo lifecycle adapter: standby refused while a book opens, the sleep-view handoff and its fallback, PIN rotation, USB entry and power-off |
 | `platform.shutdown` | Power-off, battery-low power-off and reboot, and the Nickel Screensaver fixture |
 | `platform.kobo-power-screen` | The native power and sleep views and their database reads |
 | `platform.sleep-persistence` | The sleep-image writer and native-cover references |

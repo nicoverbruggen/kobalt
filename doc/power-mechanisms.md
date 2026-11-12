@@ -189,7 +189,7 @@ While the reader sits idle, Kobalt writes nothing to its database or settings fi
 
 Kobalt can delay a suspend, never prevent it for long:
 
-- `PowerManager::canSuspend` (hooked in `nickel-qt5/hooks.cpp` and `nickel-qt6/hooks.cpp`, decided in `native_lifecycle.cpp`) answers false while a save, a USB transition, the sleep-view check or the last KOSync upload (at most 2 s) is still running. In evaluation packages it also answers false while the scenario player runs, unless the scenario allows standby (`NativeLifecycle::holdAwake`).
+- `PowerManager::canSuspend` (hooked in `nickel-qt5/hooks.cpp` and `nickel-qt6/hooks.cpp`, decided in `native_lifecycle.cpp`) answers false while a save, a USB transition, the sleep-view check or the last KOSync upload (at most 2 s) is still running. It also answers false while a book opens, from the request until the reader is shown. A fallback or error dialog that waits for the user does not keep the device awake. In evaluation packages it also answers false while the scenario player runs, unless the scenario allows standby (`NativeLifecycle::holdAwake`).
 - On firmware 4 only, just before Nickel writes `mem` to `/sys/power/state`, Kobalt checks for touch input that arrived during the preparation or in the last 200 ms (`common/standby_input.cpp`). If there is any, the attempt fails with `EAGAIN` and Nickel tries again later. A touch during an armed attempt takes a one-second kernel wake lock (`kobalt-input`).
 - On firmware 5 and 6 Kobalt only observes the suspend.
 

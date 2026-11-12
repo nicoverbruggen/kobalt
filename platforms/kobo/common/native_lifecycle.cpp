@@ -437,9 +437,11 @@ bool NativeLifecycle::canSuspend()
         return false;
     // Active storage work must finish before standby. Only low battery
     // requests a new reading save here; ordinary activity can stay in memory.
+    // An opening book also keeps the device awake between its engine jobs.
     return !active
             || (!active->sleepViewCheck.isActive() && !active->draining && !active->usbPending
                 && !active->poweringOff && engineActivity().quiescent()
+                && (!active->openingWorkPending || !active->openingWorkPending())
                 && (!active->sleepWorkPending || !active->sleepWorkPending())
                 && (!active->beforeStandby || active->beforeStandby()));
 }

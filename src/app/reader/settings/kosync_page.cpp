@@ -398,7 +398,7 @@ void KosyncPage::edit(int field)
                             : field == 1 ? username_
                             : field == 2 ? password_
                                          : deviceName_);
-    // The server must use HTTPS, so an empty server field starts with its scheme.
+    // Use HTTPS as the default when the server has not been set.
     if (field == 0 && server_.isEmpty())
         editor->setText(QStringLiteral("https://"));
     editor->setAccessibleName(titleText);
@@ -458,7 +458,9 @@ void KosyncPage::edit(int field)
         submitting_ = true;
         auto text = editor->text();
         // The prefilled scheme alone is not a server.
-        if (field == 0 && text.trimmed() == QLatin1String("https://"))
+        if (field == 0
+            && (text.trimmed() == QLatin1String("https://")
+                || text.trimmed() == QLatin1String("http://")))
             text.clear();
         (field == 0           ? server_
                  : field == 1 ? username_

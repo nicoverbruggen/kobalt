@@ -208,8 +208,8 @@ QByteArray filenameDigest(const QString &path)
 QUrl serverUrl(const QString &text)
 {
     QUrl url(text.trimmed(), QUrl::StrictMode);
-    if (!url.isValid() || url.scheme() != "https" || url.host().isEmpty()
-        || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment())
+    if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http")
+        || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment())
         return {};
     auto path = url.path();
     while (path.endsWith('/'))

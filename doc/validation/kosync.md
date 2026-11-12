@@ -33,7 +33,7 @@ The interval clock uses one origin for each book opening. Failed and backward ho
 
 ## Progress API contract
 
-The client uses the KOReader v1 API with HTTPS, `Accept: application/vnd.koreader.v1+json`, `x-auth-user` and `x-auth-key`. The key is the MD5 of the password. A configured path prefix applies to each endpoint. Requests do not follow redirects or disable TLS checks.
+The client uses the KOReader v1 API with HTTP or HTTPS, `Accept: application/vnd.koreader.v1+json`, `x-auth-user` and `x-auth-key`. The key is the MD5 of the password. A configured path prefix applies to each endpoint. Requests do not follow redirects or disable TLS checks. `model.kosync` checks HTTP account persistence, prefixed authentication, progress reads and uploads, plus a real loopback HTTP sign-in and redirect rejection.
 
 | Request | Successful response |
 | --- | --- |

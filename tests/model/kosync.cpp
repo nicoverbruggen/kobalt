@@ -18,6 +18,8 @@
 #include <QSslConfiguration>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QUuid>
 #include <cstring>
 #include <limits>
@@ -617,9 +619,85 @@ int main(int argc, char **argv)
     require(kosync::documentDigest(sampled) == expected,
             "unsampled bytes do not alter KOReader identity");
     for (const auto &url :
-         { "http://example.com", "https://u:p@example.com", "https://example.com?a=b",
-           "https://example.com/#fragment", "https:///missing", "file:///book" })
+         { "http://u:p@example.com", "http://example.com?a=b", "http://example.com/#fragment",
+           "https://u:p@example.com", "https://example.com?a=b", "https://example.com/#fragment",
+           "https:///missing", "file:///book" })
         require(kosync::serverUrl(url).isEmpty(), "reject unsafe server URL");
+    require(kosync::serverUrl(" http://127.0.0.1:8080/kosync/// ").toString()
+                    == "http://127.0.0.1:8080/kosync",
+            "HTTP server keeps its scheme, port and normalized prefix");
+    {
+        Network http;
+        const QByteArray document("900150983cd24fb0d6963f7d28e17f72");
+        kosync::Client plain(directory.path() + "/http.json", nullptr, &http);
+        QString failure;
+        http.response = R"({"authorized":"OK"})";
+        plain.login("http://127.0.0.1:8080/prefix/", "reader", "secret",
+                    [&](QString error) { failure = error; });
+        wait(plain);
+        require(failure.isEmpty() && plain.signedIn()
+                        && http.last.url() == QUrl("http://127.0.0.1:8080/prefix/users/auth"),
+                "HTTP authentication preserves the explicit server URL");
+        kosync::Client restored(directory.path() + "/http.json", nullptr, &http);
+        require(restored.signedIn() && restored.server() == plain.server(),
+                "HTTP account survives reopening");
+        http.response = "{}";
+        restored.pull(document, [&](kosync::Progress, QString error) { failure = error; });
+        wait(restored);
+        require(failure.isEmpty()
+                        && http.last.url()
+                                == QUrl("http://127.0.0.1:8080/prefix/syncs/progress/900150983cd24fb0d6963f7d28e17f72"),
+                "HTTP progress read preserves the path prefix");
+        http.response = R"({"document":"900150983cd24fb0d6963f7d28e17f72"})";
+        restored.push(document, { "local", {}, {}, 0.5 }, {},
+                      [&](QString error) { failure = error; });
+        wait(restored);
+        require(failure.isEmpty()
+                        && http.last.url() == QUrl("http://127.0.0.1:8080/prefix/syncs/progress")
+                        && http.operation == QNetworkAccessManager::PutOperation,
+                "HTTP progress upload uses the same server");
+    }
+    {
+        QTcpServer server;
+        require(server.listen(QHostAddress::LocalHost), "listen for a real HTTP sign-in");
+        QByteArray received;
+        int requests = 0;
+        bool redirect = false;
+        QObject::connect(&server, &QTcpServer::newConnection, &server, [&] {
+            auto *socket = server.nextPendingConnection();
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                received += socket->readAll();
+                if (!received.contains("\r\n\r\n"))
+                    return;
+                ++requests;
+                const QByteArray body = R"({"authorized":"OK"})";
+                socket->write(
+                        redirect
+                                ? QByteArray(
+                                          "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:1/other\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                                : QByteArray(
+                                          "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ")
+                                        + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+                socket->disconnectFromHost();
+            });
+        });
+        kosync::Client plain(directory.path() + "/http-socket.json");
+        QString failure;
+        const auto url = QString("http://127.0.0.1:%1/prefix").arg(server.serverPort());
+        const auto done = [&](QString error) { failure = error; };
+        plain.login(url, "reader", "secret", done);
+        wait(plain);
+        require(failure.isEmpty() && requests == 1
+                        && received.startsWith("GET /prefix/users/auth HTTP/1.1\r\n"),
+                "sign-in succeeds over a real HTTP socket");
+        received.clear();
+        redirect = true;
+        plain.login(url, "reader", "secret", done);
+        wait(plain);
+        require(!failure.isEmpty() && requests == 2,
+                "HTTP redirects remain failures and are not followed");
+    }
     require(kosync::serverUrl(" https://example.com/kosync/// ").toString()
                     == "https://example.com/kosync",
             "custom path prefix is normalized");

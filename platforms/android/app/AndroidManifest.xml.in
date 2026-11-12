@@ -4,7 +4,7 @@
     android:installLocation="auto"
     android:versionCode="-- %%INSERT_VERSION_CODE%% --"
     android:versionName="-- %%INSERT_VERSION_NAME%% --">
-    <!-- The reader transport connects only to its in-process loopback server. -->
+    <!-- KOSync and dictionary downloads use the network. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- %%INSERT_FEATURES -->
     <supports-screens
@@ -19,6 +19,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="-- %%INSERT_APP_NAME%% --"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="false">
         <activity
             android:name="org.kobalt.android.KobaltActivity"

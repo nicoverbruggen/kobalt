@@ -163,7 +163,7 @@
 "kosync.reader_timeout" = "Sync could not finish while the reader was busy. Try again after the current operation finishes. Your reading position was kept.";
 "kosync.connecting" = "Connecting to Wi-Fi…";
 "kosync.invalid_response" = "The server response is not compatible with KOSync. Check the server URL and path prefix. Your reading position was kept.";
-"kosync.invalid_account" = "Enter an HTTPS server URL, username and password. The URL cannot contain credentials, a query or a fragment.";
+"kosync.invalid_account" = "Enter an HTTP or HTTPS server URL, username and password. The URL cannot contain credentials, a query or a fragment.";
 "kosync.native_sync" = "This book uses Kobo’s built-in sync system. KOSync is unavailable for this copy.";
 "kosync.kobo_cloud" = "This book uses Kobo Cloud to sync reading progress. KOSync is unavailable for this copy.";
 "kosync.unavailable" = "Sync is unavailable for this book or account.";

@@ -11075,6 +11075,29 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(gallery()->property("previews_shown").toInt(), wanted);
         QCOMPARE(gallery()->property("preview_renders").toInt(), 0);
         QCOMPARE(gallery()->grab().toImage(), shown);
+        // Galleries use the standard pager route even though they are not one
+        // of the original reader panels. A single page still owns the keys.
+        auto *counter = gallery()->findChild<QLabel *>("rrTextPresetGalleryPage");
+        QVERIFY(counter);
+        const auto firstPage = counter->text();
+        const auto readingPage = fixture.state().value("page");
+        reader->physicalPageButton(Qt::Key_F23, -1);
+        QCOMPARE(counter->text(), firstPage);
+        for (int page = 0; page < 20 && fixture.widget("rrTextPresetGalleryNext")->isEnabled();
+             ++page) {
+            const auto before = counter->text();
+            reader->physicalPageButton(Qt::Key_F24, 1);
+            QVERIFY(counter->text() != before);
+        }
+        QVERIFY(!fixture.widget("rrTextPresetGalleryNext")->isEnabled());
+        const auto lastPage = counter->text();
+        reader->physicalPageButton(Qt::Key_F24, 1);
+        QCOMPARE(counter->text(), lastPage);
+        for (int page = 0; page < 20 && fixture.widget("rrTextPresetGalleryPrevious")->isEnabled();
+             ++page)
+            reader->physicalPageButton(Qt::Key_F23, -1);
+        QCOMPARE(counter->text(), firstPage);
+        QCOMPARE(fixture.state().value("page"), readingPage);
     }
 
     void advancedText_data()

@@ -2590,12 +2590,16 @@ bool Reader::pageList(int direction)
         auto *view = children[index];
         if (!view->isVisible())
             continue;
+        // Discover standard pagers instead of keeping a second inventory of
+        // every paged screen. Galleries and future sheets use the same route.
+        if (ui::turnVisiblePageControl(view, direction))
+            return true;
         const auto *modal = dynamic_cast<ui::ModalOverlay *>(view);
         if ((modal && modal->inputBarrier()) || view == choices || view == bookmarkList
             || view == searchPanel || view == acknowledgments || view == fieldChooser
             || view == headerFooterView || view == dictionaryPanel || view == linkPanel
-            || view == chapterGraph || view == general || view == menu) {
-            ui::turnVisiblePageControl(view, direction);
+            || view == chapterGraph || view == general || view == menu || view == sleepGallery
+            || view == textPresetGallery) {
             return true;
         }
     }

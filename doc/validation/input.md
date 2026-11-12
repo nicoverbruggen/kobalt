@@ -25,3 +25,5 @@ Chapter-group checks cover separate disclosure and title hit areas, disclosure s
 ## Limits
 
 These headless checks do not establish physical Kobo or Android touch behavior, touch-driver behavior or physical key delivery. Native operating-system cursor display and physical touch interaction still need manual checks.
+
+`lifecycle.sleepSettingsShowWhereToAddPngs` checks physical page-button routing through all sleep gallery pages in both directions, consumes turns at each boundary and leaves the reading position unchanged. `desktop.settingsTextPresetGallery` checks the same routing and boundary consumption in the text preset gallery. Both galleries and the paged reader panels use the standard `PagerBar`.

@@ -83,6 +83,46 @@ int main(int argc, char **argv)
     }
     require(prepared == forward, "Preparing the next slice ahead changed the pages");
 
+    // In the last slice of a spine item the reader also opens the next
+    // spine item ahead. The pages must be the same when it does so after
+    // every page.
+    require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+    QStringList ahead{ model.pageStart(model.page()) };
+    for (;;) {
+        model.prepareAhead();
+        if (!model.turnInWindow(1))
+            break;
+        ahead.append(model.pageStart(model.page()));
+    }
+    require(ahead == forward, "Opening the next spine item ahead changed the pages");
+
+    // A spine item that was opened ahead has the settings of that moment.
+    // After a change of settings it must not be shown.
+    const auto afterFontChange = [&](bool prepare) {
+        require(model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", 28 } })),
+                "Cannot set the font size");
+        require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+        while (model.spineItemOf(model.position()) == 0)
+            require(model.turnInWindow(1), "The first spine item has no end");
+        require(model.turnInWindow(-1) && model.spineItemOf(model.position()) == 0,
+                "Cannot go back to the end of the first spine item");
+        if (prepare)
+            model.prepareAhead();
+        require(model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", 36 } })),
+                "Cannot change the font size");
+        QStringList pages;
+        for (int turn = 0; turn < 8 && model.turnInWindow(1); ++turn)
+            pages.append(model.pageStart(model.page()));
+        return pages;
+    };
+    const auto plainPages = afterFontChange(false);
+    require(plainPages.size() == 8 && afterFontChange(true) == plainPages,
+            "A spine item opened ahead was shown with old settings");
+    require(model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", 28 } })),
+            "Cannot set the font size back");
+    require(model.showSpineItems(2, 2, &error), qPrintable(error));
+    while (model.turnInWindow(1)) { }
+
     // Read backward to the first page. A spine item that is entered from
     // its end has no recorded slices, so its pages can differ from the
     // forward ones, but the whole text is passed again.

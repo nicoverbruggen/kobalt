@@ -470,6 +470,9 @@ bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources,
 bool EngineDocument::rebindResources(const std::shared_ptr<ResourceCache> &resources,
                                      const QMap<QString, qint64> &sizes)
 {
+    // A spine item that was opened ahead holds the source too. It reads
+    // through the old access, so it goes.
+    ahead_.reset();
     // Previews retain ReaderSource as their parent. Do not change their access
     // underneath them, even if the main reader itself has already closed.
     if (!source_ || source_.use_count() != 1 || !source_->resources || source_->sizes != sizes
@@ -716,10 +719,8 @@ bool EngineDocument::showSpineItemOf(const QString &position)
     return showSpineItems(qMax(0, item - 1), qMin(spineItemCount_ - 1, item + 1));
 }
 
-bool EngineDocument::showSpineItems(int first, int last, QString *error)
+QJsonObject EngineDocument::windowSettings(int first, int last) const
 {
-    if (!source_ || !engine_)
-        return false;
     auto saved = state();
     saved["koblaze_first_spine_item"] = first;
     saved["koblaze_last_spine_item"] = last;
@@ -730,7 +731,73 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
         if (item < first || item > last)
             saved.remove("position");
     }
-    return openSource(source_, size_, saved, error);
+    return saved;
+}
+
+bool EngineDocument::showSpineItems(int first, int last, QString *error)
+{
+    if (!source_ || !engine_)
+        return false;
+    if (first == last && adoptAhead(first))
+        return true;
+    ahead_.reset();
+    return openSource(source_, size_, windowSettings(first, last), error);
+}
+
+void EngineDocument::prepareNextItem()
+{
+#if __has_include(<koblaze.h>)
+    if (!slices() || !source_ || !engine_)
+        return;
+    const int next = windowLast_ + 1;
+    // Only in the last slice: a second document takes memory, and the
+    // reader is far from the next spine item before that.
+    if (next >= spineItemCount_ || sliceEnd_ < spineItemText())
+        return;
+    auto settings = windowSettings(next, next);
+    settings.remove("position");
+    if (ahead_ && aheadItem_ == next && aheadSettings_ == settings && aheadSize_ == size_
+        && ahead_->userStyleSheet_ == userStyleSheet_)
+        return;
+    ahead_.reset();
+    auto ahead = std::make_unique<EngineDocument>(fonts_);
+    // What the host gave this document and a saved state does not hold.
+    ahead->slicePages_ = slicePages_;
+    ahead->userStyleSheet_ = userStyleSheet_;
+    ahead->cacheDirectory_ = cacheDirectory_;
+    ahead->cacheFingerprint_ = cacheFingerprint_;
+    ahead->cachePolicy_ = cachePolicy_;
+    ahead->cacheBytes_ = cacheBytes_;
+    QString error;
+    if (!ahead->openSource(source_, size_, settings, &error))
+        return;
+    ahead_ = std::move(ahead);
+    aheadItem_ = next;
+    aheadSettings_ = settings;
+    aheadSize_ = size_;
+#endif
+}
+
+bool EngineDocument::adoptAhead(int item)
+{
+    if (!ahead_ || aheadItem_ != item)
+        return false;
+    auto settings = windowSettings(item, item);
+    settings.remove("position");
+    if (settings != aheadSettings_ || size_ != aheadSize_
+        || ahead_->userStyleSheet_ != userStyleSheet_)
+        return false;
+    auto next = std::move(ahead_);
+    next->interrupt_ = interrupt_;
+    next->nativeLocation_ = nativeLocation_;
+    // The reader did not wait for this spine item.
+    next->windowLoadMs_ = 0;
+    // `old` takes the document that was shown and releases it in the order
+    // of the destructor.
+    EngineDocument old(fonts_);
+    old = std::move(*this);
+    *this = std::move(*next);
+    return true;
 }
 
 bool EngineDocument::turnInWindow(int delta)

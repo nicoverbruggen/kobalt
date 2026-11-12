@@ -380,6 +380,24 @@ private:
     int sliceSize() const;
     // Asks for a new layout of the document for another slice.
     void relayout();
+    // The next spine item, opened and laid out while the reader is in the
+    // last slice of this one, so that the turn into it does not wait. It is
+    // a whole second document. `aheadSettings_` and `aheadSize_` are what it
+    // was opened with: after a change of settings it is not used.
+    std::unique_ptr<EngineDocument> ahead_;
+    int aheadItem_ = -1;
+    QJsonObject aheadSettings_;
+    QSize aheadSize_;
+    // The settings that open the window of spine items `first` to `last`.
+    QJsonObject windowSettings(int first, int last) const;
+    // Opens the next spine item in `ahead_` when the reader is in the last
+    // slice.
+    void prepareNextItem();
+    // Makes `ahead_` the document that is shown. False when it is not the
+    // spine item `item` or its settings differ.
+    bool adoptAhead(int item);
+    // For adoptAhead() only.
+    EngineDocument &operator=(EngineDocument &&) = default;
     // The characters of the spine item, as the engine counts them.
     int spineItemText() const;
     // The characters of the spine item before a position, or -1.

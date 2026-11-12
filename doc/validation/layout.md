@@ -8,6 +8,12 @@ These checks cover the CREngine layout groups, publisher markup, the document ca
 
 The restored `reader`, `publisher-markup`, `local-reader` and `document-word-count` checks keep the original assertions. Their focused EPUBs are generated offline in C++ with the original text, span IDs, markup and resource paths. `engine.document-cache` is a separate check, so `engine.reader` stays within the child deadline under parallel execution. `engine.reader` also links the portable Kobo position codec, but it does not load Nickel or inspect firmware symbols. Its variable-font cases need the pinned Amstelvar fixture and fail rather than skip without it.
 
+## Shared locations and the engine interface
+
+`engine.location-round-trip` opens the real EPUB fixtures in `tests/fixtures`. For sampled text nodes of each spine item it converts three CREngine positions to a shared location and back, and requires the same place in the text. It also parses the source XHTML and requires the same element name and the same counted text at each location path. To report on other books, run `kobalt-location-round-trip-tests FOLDER` with `QT_QPA_PLATFORM=minimal`; it prints one line for each EPUB in the folder and requires nothing. See [the location format](../engines/contract.md#location-format).
+
+`engine.engine-contract` checks each state of an engine query and that a value of another layout is not current. Through the engine interface it then requires that the whole-book engine reports exact book and chapter pages on every page, and a new layout generation after a font size change. It has no engine that leaves chapters without layout yet.
+
 ## Check a folder of EPUBs
 
 From `platforms/desktop/`, configure the [Mac preset](../building.md#mac) if needed, then run:

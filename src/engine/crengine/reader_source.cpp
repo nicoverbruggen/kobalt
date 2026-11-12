@@ -724,10 +724,10 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     koblazeCheckCancel();
 #endif
 #ifdef KOBLAZE_DROP_EMPTY_PAGES
-    // A part of a book would show the empty page that the engine makes
-    // before some chapters only when that chapter is not the first of the
-    // part. Show it never.
-    engine_->getDocument()->setKoblazeDropEmptyPages(firstSpineItem >= 0);
+    // Two forced page breaks with nothing between them, at the start of
+    // some chapters, give a page without height: the reader saw an empty
+    // page before the chapter. Leave such pages out.
+    engine_->getDocument()->setKoblazeDropEmptyPages(true);
 #endif
     applyStyleSheet();
     applySlice();

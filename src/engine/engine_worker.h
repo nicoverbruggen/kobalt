@@ -10,6 +10,12 @@ namespace kobalt {
 // documents must not access CREngine's global fonts and caches concurrently.
 QObject *engineWorker();
 
+// For judging speed on a desktop: KOBALT_KOBO_EMULATION=20 in the environment
+// makes every engine job take 20 times as long, which is about the speed of
+// a Kobo. The engine does the work, then the worker waits for the rest of
+// the time. One without the variable.
+int engineSlowdown();
+
 struct EngineWorker
 {
     QThread *thread = nullptr;

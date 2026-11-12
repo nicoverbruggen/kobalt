@@ -4,6 +4,7 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "engine_document.h"
+#include "engine/engine_worker.h"
 #include "reader_source.h"
 #include "publication/image_policy.h"
 #include "publication/resource_cache.h"
@@ -1895,7 +1896,7 @@ ChapterProgress EngineDocument::chapterProgress() const
             title = strings::get("reader.untitled_chapter");
         // Experiment: show how long the chapters on screen took to load.
         if (windowLoadMs_ >= 0)
-            title += QStringLiteral(" · %1 ms").arg(windowLoadMs_);
+            title += QStringLiteral(" · %1 ms").arg(windowLoadMs_ * engineSlowdown());
         return { title, selected.page, selected.pages };
     }
     if (selected.next >= 0)

@@ -1,6 +1,9 @@
 #include "check.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
+#include "support/diagnostics.h"
+#include "engine/blaze/adapter/stop_point.h"
+#include <QTemporaryDir>
 #include <QFile>
 #include <QGuiApplication>
 #include <cmath>
@@ -42,6 +45,66 @@ void openFast(EngineDocument &model, const QByteArray &bytes, int font = 44)
     require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
     while (model.refinePageEstimate()) {
     }
+}
+
+void nestedCancellationRestoresCaller()
+{
+#ifdef KOBLAZE_CANCEL_CHECK
+    bool current = true;
+    const StopCheck outer([&] { return current; });
+    {
+        const StopCheck inner({});
+        current = false;
+        require(inner.requested(), "Nested check lost its caller's cancellation");
+        current = true;
+    }
+    current = false;
+    bool cancelled = false;
+    try {
+        koblazeCheckCancel();
+    } catch (const KoblazeRenderCancelled &) {
+        cancelled = true;
+    }
+    require(cancelled, "Leaving a nested load cleared the caller's cancellation");
+#endif
+}
+
+// Cancel after entering the nested chapter load, not before the preview starts.
+void previewChapterLoadStops(const QByteArray &bytes)
+{
+    EngineDocument model(test::readerFonts());
+    openFast(model, bytes);
+    require(model.showSpineItems(3, 3) && model.go(0), "Cannot prepare backward preview");
+    const auto position = model.position();
+    QTemporaryDir logs;
+    initializeDiagnostics(logs.path());
+    pauseDiagnostics(false);
+    bool loading = false, insideOpen = false, checkedInsideOpen = false;
+    bool interruptedOpen = false, interruptedLoad = false;
+    setDiagnosticObserver([&](const QJsonObject &event) {
+        const auto name = event.value("event").toString();
+        const auto operation = event.value("operation").toString();
+        if (operation == "chapter-load" && name == "operation-start")
+            loading = true;
+        if (name == "operation-end" && event.value("interrupted").toBool()) {
+            interruptedOpen |= operation == "engine-open";
+            interruptedLoad |= operation == "chapter-load";
+        }
+        if (loading && operation == "engine-open")
+            insideOpen = name == "operation-start";
+    });
+    const auto preview = model.previewTurn(-1, {}, [&] {
+        if (insideOpen)
+            checkedInsideOpen = true;
+        return !loading;
+    });
+    setDiagnosticObserver({});
+    pauseDiagnostics(true);
+    require(loading, "Preview did not enter a chapter load");
+    require(checkedInsideOpen, "Nested chapter load ignored preview cancellation");
+    require(interruptedOpen && interruptedLoad, "Cancelled load diagnostics did not report interruption");
+    require(preview.image.isNull(), "Cancelled preview returned an image");
+    require(model.position() == position, "Cancelled preview moved the reader");
 }
 
 // Every page of the whole book, opened from a position in another chapter
@@ -101,6 +164,8 @@ int main(int argc, char **argv)
     openAccurate(accurate, bytes);
     EngineDocument fast(test::readerFonts());
     openFast(fast, bytes);
+    nestedCancellationRestoresCaller();
+    previewChapterLoadStops(bytes);
     jumpsLandOnTheSamePage(accurate, fast);
     bookPagesMatchTheHeader(accurate, fast);
     std::printf("PASS: fast surfaces\n");

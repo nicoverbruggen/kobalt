@@ -2,6 +2,7 @@
 #include "stop_point.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
+#include "support/diagnostics.h"
 #include "engine_document.h"
 #include "reader_source.h"
 #include "kobo_styles.h"
@@ -512,6 +513,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
                                 OpeningResult *result, std::function<void()> coverReady,
                                 QSet<QString> skippedFonts, std::function<void()> cacheReady)
 {
+    DiagnosticOperation opening("engine-open", engineCancellationRequested);
     if (result)
         *result = {};
     const auto fail = [error, result](OpeningFailureKind kind, const char *reason,
@@ -572,6 +574,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
 #else
     firstSpineItem = lastSpineItem = -1;
 #endif
+    EngineSlowdownScope slowdown(firstSpineItem >= 0, [this] { return openInterrupt_ && openInterrupt_(); });
     QElapsedTimer windowTimer;
     windowTimer.start();
     windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
@@ -751,6 +754,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     // Later windows of the same book keep the one they have.
     if (windowFirst_ >= 0 && source_->pageEstimate.map.items() != spineItemCount_)
         restorePageEstimate(saved.value("page_estimate"));
+    engineSlowdownPause();
     windowLoadMs_ = firstSpineItem < 0 ? -1 : windowTimer.elapsed();
     if (!resourceError().isEmpty()) {
         const auto detail = resourceError();
@@ -907,9 +911,13 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
 
 bool EngineDocument::showSpineItems(int first, int last, QString *error)
 {
+    DiagnosticOperation turning("chapter-turn", engineCancellationRequested);
+    EngineSlowdownScope slowdown;
     if (!source_ || !engine_)
         return false;
     if (adoptAhead(first, last)) {
+        if (diagnosticsActive())
+            diagnostic("engine-cache-reuse", { { "first_item", first }, { "last_item", last } }, false);
         // An explicit chapter jump starts at its first slice, even when
         // the retained document was left at the end of the chapter.
         return !slices() || sliceFirst_ == 0 || showSliceAt(0);
@@ -1015,6 +1023,9 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
     if (ahead_ && aheadItem_ == item && aheadSettings_ == settings && aheadSize_ == size_
         && ahead_->userStyleSheet_ == userStyleSheet_ && ahead_->slicePages_ == slicePages_)
         return ahead_.get();
+    DiagnosticOperation load("chapter-load", [&current] {
+        return (current && !current()) || engineCancellationRequested();
+    });
     ahead_.reset();
     auto ahead = std::make_unique<EngineDocument>(fonts_);
     // What the host gave this document and a saved state does not hold.
@@ -1030,9 +1041,7 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
     // the check, the layout asks the interrupt. A stopped document is
     // dropped, and the next call starts again.
     const StopCheck check(current);
-    ahead->openInterrupt_ = [&current] {
-        return stopRequested(const_cast<void *>(static_cast<const void *>(&current)));
-    };
+    ahead->openInterrupt_ = [&check] { return check.requested(); };
     try {
         if (!ahead->openSource(source_, size_, settings, error))
             return nullptr;
@@ -1097,6 +1106,8 @@ bool EngineDocument::adoptAhead(int first, int last)
 
 bool EngineDocument::showNextUnit()
 {
+    DiagnosticOperation turning("chapter-turn", engineCancellationRequested);
+    EngineSlowdownScope slowdown;
     const int last = windowLast_;
     if (last + 1 >= spineItemCount_)
         return false;
@@ -1115,6 +1126,8 @@ bool EngineDocument::showNextUnit()
 
 bool EngineDocument::showPreviousUnit()
 {
+    DiagnosticOperation turning("chapter-turn", engineCancellationRequested);
+    EngineSlowdownScope slowdown;
     if (windowFirst_ <= 0)
         return false;
     const auto unit = neighbouringUnit(-1);

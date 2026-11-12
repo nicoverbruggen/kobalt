@@ -16,6 +16,9 @@
 #include "app/reader/views/kosync_notice.h"
 #include "app/reader/views/sync_choice.h"
 #include "platforms/desktop/window.h"
+#include "platforms/desktop/engine_monitor.h"
+#include "engine/engine_worker.h"
+#include <QTableWidget>
 #include "platforms/desktop/services.h"
 #include "app/reader/views/opening.h"
 #include "support/diagnostics.h"
@@ -6079,6 +6082,244 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QVERIFY(fixture.press("rrStillReading"));
         QTRY_VERIFY(!fixture.visible("rrFinishBook"));
+    }
+
+    void engineMonitor()
+    {
+        desktop::EngineMonitor monitor;
+        monitor.show();
+        const auto sink = monitor.observer();
+        auto send = [&](const char *name, double time, QJsonObject fields = {}) {
+            fields["event"] = QString::fromLatin1(name);
+            fields["monotonic_ms"] = time;
+            sink(fields);
+        };
+        send("render-queued", 1000, { { "render_id", 1 } });
+        send("render-start", 1005, { { "render_id", 1 }, { "page_turn", true } });
+        send("render-end", 1047, { { "render_id", 1 }, { "elapsed_ms", 42 } });
+        send("engine-work-start", 1050, { { "work_id", 2 }, { "work", "Neighbour pages and chapters" } });
+        send("engine-work-end", 1080, { { "work_id", 2 }, { "work", "Neighbour pages and chapters" },
+                { "elapsed_ms", 30 }, { "completed", false }, { "cached_pages", 3 }, { "book_fraction", .4 } });
+        send("page-turn-painted", 1085, { { "render_id", 1 }, { "elapsed_ms", 85 }, { "paint_ms", 4 } });
+        send("monitor-memory", 1085, { { "rss_kib", 65536 }, { "peak_rss_kib", 70000 } });
+        monitor.refresh();
+        auto *table = monitor.findChild<QTableWidget *>("engineMonitorEvents");
+        auto *summary = monitor.findChild<QLabel *>("engineMonitorSummary");
+        auto *resources = monitor.findChild<QLabel *>("engineMonitorResources");
+        QVERIFY(table && summary && resources);
+        QCOMPARE(table->rowCount(), 3);
+        QVERIFY(summary->text().contains("Last 42 ms"));
+        QVERIFY(summary->text().contains("Interrupted 1"));
+        QVERIFY(summary->text().contains("queue wait 5.0 ms"));
+        QVERIFY(summary->text().contains("Input to paint 85 ms"));
+        QVERIFY(resources->text().contains("64.0 MiB"));
+        QVERIFY(resources->text().contains("40.0%"));
+        send("operation-end", 1086, { { "operation_id", 3 }, { "operation", "chapter-load" },
+                { "elapsed_ms", 10 }, { "interrupted", true } });
+        send("operation-end", 1087, { { "operation_id", 4 }, { "operation", "engine-open" },
+                { "elapsed_ms", 10 } });
+        monitor.refresh();
+        QCOMPARE(table->item(0, 4)->text(), QStringLiteral("Ended"));
+        QCOMPARE(table->item(1, 4)->text(), QStringLiteral("Interrupted"));
+        auto *pause = monitor.findChild<QPushButton *>("engineMonitorPause");
+        pause->click();
+        send("image-load-end", 1090, { { "elapsed_ms", 2 } });
+        monitor.refresh();
+        QCOMPARE(table->rowCount(), 5);
+        pause->click();
+        for (int i = 0; i < 1100; ++i)
+            send("image-load-end", 1100 + i, { { "elapsed_ms", 2 } });
+        monitor.refresh();
+        QCOMPARE(table->rowCount(), 150);
+        QVERIFY(monitor.findChild<QLabel *>("engineMonitorStatus")->text().contains("76 events dropped"));
+        monitor.findChild<QPushButton *>("engineMonitorClear")->click();
+        QCOMPARE(table->rowCount(), 0);
+        monitor.hide();
+        send("image-load-end", 3000, { { "elapsed_ms", 2 } });
+        monitor.refresh();
+        QCOMPARE(table->rowCount(), 0);
+        std::function<void(const QJsonObject &)> detached;
+        { desktop::EngineMonitor other; other.show(); detached = other.observer(); }
+        detached({ { "event", "render-start" }, { "render_id", 99 } });
+    }
+
+    void engineMonitorSlowdown()
+    {
+        const auto restore = qScopeGuard([] { setEngineSlowdownEnabled(false); });
+        desktop::EngineMonitor monitor;
+        monitor.show();
+        auto *slow = monitor.findChild<QPushButton *>("engineMonitorSlowdown");
+        QVERIFY(slow && !slow->isChecked());
+        slow->click();
+        QVERIFY(engineSlowdownEnabled());
+        auto *range = monitor.findChild<QComboBox *>("engineMonitorRange");
+        monitor.findChild<QPushButton *>("engineMonitorZoomIn")->click();
+        QCOMPARE(range->currentData().toInt(), 5);
+        monitor.findChild<QPushButton *>("engineMonitorZoomOut")->click();
+        QCOMPARE(range->currentData().toInt(), 10);
+        struct Result { std::atomic_bool done{ false }; qint64 elapsed = 0, work = 0; };
+        const auto run = [&](bool scoped, bool cancel) {
+            auto result = std::make_shared<Result>();
+            kobalt::qt::invoke(engineWorker(), [result, scoped, cancel] {
+                QElapsedTimer timer;
+                timer.start();
+                {
+                    EngineSlowdownScope scope(scoped, [cancel, &timer, result] {
+                        return cancel && timer.nsecsElapsed() > result->work * 3;
+                    });
+                    // A small fixed CPU workload makes the added delay observable.
+                    // A nested chapter scope must not multiply it a second time.
+                    EngineSlowdownScope nested(scoped);
+                    while (timer.nsecsElapsed() < 2000000) {}
+                    result->work = timer.nsecsElapsed();
+                }
+                result->elapsed = timer.nsecsElapsed();
+                result->done = true;
+            }, Qt::QueuedConnection);
+            return result;
+        };
+        const auto scaled = run(true, false);
+        QTRY_VERIFY(scaled->done.load());
+        QVERIFY(scaled->elapsed >= scaled->work * 18);
+        QVERIFY(scaled->elapsed < scaled->work * 80);
+        const auto ordinary = run(false, false);
+        QTRY_VERIFY(ordinary->done.load());
+        QVERIFY(ordinary->elapsed < ordinary->work * 5);
+        const auto cancelled = run(true, true);
+        QTRY_VERIFY(cancelled->done.load());
+        QVERIFY(cancelled->elapsed >= cancelled->work * 3);
+        QVERIFY(cancelled->elapsed < cancelled->work * 10);
+        monitor.hide();
+        QVERIFY(!engineSlowdownEnabled());
+        monitor.show();
+        QVERIFY(!slow->isChecked());
+    }
+
+    void engineMonitorReading()
+    {
+        renderingMode::setOverride(1);
+        const auto restore = qScopeGuard([] { setDiagnosticObserver({}); pauseDiagnostics(true); renderingMode::setOverride(-1); });
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        initializeDiagnostics(logs.path());
+        setDiagnosticSystem(platform::processDiagnosticSystem());
+        desktop::EngineMonitor monitor;
+        monitor.show();
+        setDiagnosticObserver(monitor.observer());
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy requested(&fixture.window, &desktop::Window::engineMonitorRequested);
+        fixture.window.findChild<QAction *>("desktopEngineMonitor")->trigger();
+        QCOMPARE(requested.count(), 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto position = fixture.state().value("position");
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_VERIFY(fixture.state().value("position") != position);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *table = monitor.findChild<QTableWidget *>("engineMonitorEvents");
+        const auto has = [&](const QString &text) {
+            monitor.refresh();
+            for (int row = 0; row < table->rowCount(); ++row)
+                if (table->item(row, 2)->text() == text) return true;
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(has("Page turn"), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(has("Neighbour pages and chapters"), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(has("Page estimates"), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(has("engine-open"), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!monitor.findChild<QLabel *>("engineMonitorResources")->text().contains("Process RSS Unavailable"), 10000);
+        auto injectedDelay = std::make_shared<std::atomic<double>>(0);
+        const auto monitorSink = monitor.observer();
+        setDiagnosticObserver([monitorSink, injectedDelay](const QJsonObject &event) {
+            monitorSink(event);
+            if (event.value("event") == "render-end")
+                injectedDelay->store(event.value("emulated_wait_ms").toDouble());
+        });
+        monitor.findChild<QPushButton *>("engineMonitorSlowdown")->click();
+        const auto beforeSlowedTurn = fixture.state().value("position");
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("position") != beforeSlowedTurn, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QVERIFY(injectedDelay->load() > 0);
+        monitor.refresh();
+        const auto capture = qgetenv("KOBALT_MONITOR_CAPTURE");
+        if (!capture.isEmpty()) {
+            QVERIFY(QDir().mkpath(QString::fromUtf8(capture)));
+            QVERIFY(monitor.grab().save(QString::fromUtf8(capture) + "/engine-monitor.png"));
+            QVERIFY(fixture.window.grab().save(QString::fromUtf8(capture) + "/reader.png"));
+            auto *view = fixture.window.findChild<QMenu *>("desktopViewMenu");
+            QVERIFY(view);
+            view->popup(fixture.window.mapToGlobal(QPoint(20, 40)));
+            QTRY_VERIFY(view->isVisible());
+            QVERIFY(view->grab().save(QString::fromUtf8(capture) + "/engine-monitor-menu.png"));
+            view->hide();
+        }
+        monitor.findChild<QPushButton *>("engineMonitorSlowdown")->click();
+    }
+
+    // New chapter jumps cancel adjacent previews, including the simulated Kobo delay.
+    void fastConsecutiveChapterJumps()
+    {
+        renderingMode::setOverride(1);
+        QTemporaryDir logs;
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        const auto restore = qScopeGuard([] {
+            setDiagnosticObserver({}); pauseDiagnostics(true);
+            setEngineSlowdownEnabled(false); renderingMode::setOverride(-1);
+        });
+        struct Trace {
+            std::atomic_bool preview{ false }, boundary{ false };
+            std::atomic<double> queued{ -1 }, waited{ -1 };
+        };
+        auto trace = std::make_shared<Trace>();
+        setDiagnosticObserver([trace](const QJsonObject &event) {
+            const auto name = event.value("event").toString();
+            if (event.value("work") == "Adjacent page preview") {
+                trace->preview = name == "engine-work-start";
+                if (name == "engine-work-end") trace->boundary = false;
+            }
+            if (trace->preview && name == "operation-start" && event.value("operation") == "chapter-turn")
+                trace->boundary = true;
+            if (name == "render-queued") {
+                trace->queued = event.value("monotonic_ms").toDouble(); trace->waited = -1;
+            }
+            if (name == "render-start" && trace->queued >= 0)
+                trace->waited = event.value("monotonic_ms").toDouble() - trace->queued.load();
+        });
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavSeek"));
+        auto *navigator = dynamic_cast<ui::PageScrubber *>(fixture.widget("rrPageScrubber"));
+        QVERIFY(navigator);
+        QTRY_VERIFY(navigator->previewReady());
+        setEngineSlowdownEnabled(true);
+        for (int jump = 0; jump < 3; ++jump) {
+            trace->boundary = false;
+            navigator->chapterRequested(9);
+            QTRY_VERIFY_WITH_TIMEOUT(trace->boundary.load(), 30000);
+            QVERIFY(!fixture.state().value("busy").toBool());
+            const auto position = fixture.state().value("position");
+            trace->waited = -1;
+            QVERIFY(fixture.press("rrNavigationNext"));
+            QTRY_VERIFY_WITH_TIMEOUT(trace->waited.load() >= 0, 10000);
+            QVERIFY2(trace->waited.load() < 100, "A cancelled adjacent preview delayed the next chapter jump");
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("position") != position, 30000);
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+            QVERIFY(navigator->isVisible());
+            QTRY_VERIFY_WITH_TIMEOUT(navigator->previewReady(), 10000);
+        }
     }
 
     void fastFirstNavigateJump()

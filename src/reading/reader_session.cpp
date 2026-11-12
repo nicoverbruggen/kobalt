@@ -92,12 +92,48 @@ private:
     std::shared_ptr<std::atomic_int> count;
 };
 
+// One span for cancellable idle work, including early returns. Only diagnostic
+// counters are sampled here; no storage or GUI access occurs on the engine worker.
+class BackgroundDiagnostic
+{
+public:
+    BackgroundDiagnostic(const char *work, Engine &engine, const std::function<bool()> &current)
+        : work(work), engine(engine), current(current)
+    {
+        if (!diagnosticsActive())
+            return;
+        static std::atomic<quint64> sequence{ 0 };
+        id = ++sequence;
+        timer.start();
+        diagnostic("engine-work-start", { { "work", QString::fromLatin1(work) },
+                                          { "work_id", double(id) } }, false);
+    }
+    ~BackgroundDiagnostic()
+    {
+        if (!id)
+            return;
+        diagnostic("engine-work-end", { { "work", QString::fromLatin1(work) },
+                { "work_id", double(id) }, { "elapsed_ms", timer.nsecsElapsed() / 1e6 },
+                { "completed", !current || current() }, { "cached_pages", engine.cachedPages() },
+                { "book_fraction", engine.bookFraction() },
+                { "loaded_pages", engine.pages() }, { "resources", engine.resourceStats() } }, false);
+    }
+private:
+    const char *work;
+    Engine &engine;
+    const std::function<bool()> current;
+    quint64 id = 0;
+    QElapsedTimer timer;
+};
+
 // Draws the pages beside the current one, so the next turn finds its image in
 // the cache. `direction` is the turn that led here; the page further that way
 // is the likelier next one and goes first. Stops when `current` reports a newer
 // request, because that request's page matters more than a page nobody asked for.
 void prepareNeighbours(Engine &engine, int direction, const std::function<bool()> &current)
 {
+    BackgroundDiagnostic diagnostic("Neighbour pages and chapters", engine, current);
+    EngineSlowdownScope slowdown(true, [&current] { return current && !current(); });
     const auto pages = [&] {
         for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
             if (current && !current())
@@ -178,6 +214,7 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
 {
     if (engine->bookFraction() < 0)
         return;
+    BackgroundDiagnostic diagnostic("Page estimates", *engine, current);
     bool more = false;
     for (int step = 0; step < 32 && current(); ++step) {
         engineActivity().checkpoint();
@@ -649,6 +686,8 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                 else if (!engine->openPreview(*book, size, &error))
                     result.error = error;
                 else if (latest->load() != job) {
+                    diagnostic("preview-end", { { "elapsed_ms", double(timer.elapsed()) },
+                                                { "completed", false } }, false);
                     return;
                 } else
                     result = capture(*engine, positions, false, markup, markupGeneration);
@@ -1358,10 +1397,14 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
                 if (!current())
                     return;
                 EngineJob activity;
+                BackgroundDiagnostic diagnostic("Adjacent page preview", *engine, current);
+                EngineSlowdownScope slowdown(true, [&current] { return !current(); });
                 QVector<QPair<QString, QString>> ranges;
                 for (const auto &range : markup.saved)
                     ranges.append(qMakePair(range.start, range.end));
                 auto preview = engine->previewTurn(direction, ranges, current, bookmarkPositions);
+                if (!current() || preview.image.isNull())
+                    return;
                 if (!preview.image.isNull() && !markup.saved.isEmpty()) {
                     QPainter painter(&preview.image);
                     QRegion covered;
@@ -1377,6 +1420,7 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
                 }
                 const auto image =
                         preview.image.scaled(bounds, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                slowdown.checkpoint();
                 if (!current())
                     return;
                 kobalt::qt::invoke(
@@ -2413,6 +2457,9 @@ void ReaderSession::dispatch(bool pageTurn)
                                  { "page_turn", delta != 0 },
                                  { "jump", !anchor.isEmpty() || target >= 0 || fraction >= 0 } },
                                delta == 0);
+                EngineSlowdownScope slowdown(true, [latest, job, lease] {
+                    return latest->load() != job || !lease || lease->revoked();
+                });
                 const auto before = engine->state();
                 const auto oldSize = engine->viewport();
                 const auto oldPage = engine->page();
@@ -2477,10 +2524,16 @@ void ReaderSession::dispatch(bool pageTurn)
                 if (result.turnDirection && oldImage
                     && engine->preparedDamage(oldImage, result.image.cacheKey(), &result.damage))
                     result.damageFrom = oldImage;
+                slowdown.checkpoint();
                 if (timing)
                     diagnostic("render-end",
                                { { "render_id", double(job) },
+                                 { "emulated_wait_ms", slowdown.addedMilliseconds() },
                                  { "page", engine->page() },
+                                 { "cached_pages", engine->cachedPages() },
+                                 { "loaded_pages", engine->pages() },
+                                 { "resources", result.resources },
+                                 { "book_fraction", engine->bookFraction() },
                                  { "elapsed_ms", double(timer.elapsed()) },
                                  { "failed", !result.error.isEmpty() } },
                                result.error.isEmpty() ? DiagnosticSeverity::Activity

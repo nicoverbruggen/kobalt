@@ -685,6 +685,7 @@ bool EngineDocument::extendSlice()
 
 bool EngineDocument::layoutSlice(int first, int forcedEnd)
 {
+    EngineSlowdownScope slowdown(true, sliceInterrupt_);
     if (!engine_ || !slices())
         return false;
     QElapsedTimer timer;
@@ -704,6 +705,7 @@ bool EngineDocument::layoutSlice(int first, int forcedEnd)
     if (!extendSlice())
         return false;
     observeLayout();
+    engineSlowdownPause();
     windowLoadMs_ = timer.elapsed();
     return true;
 }

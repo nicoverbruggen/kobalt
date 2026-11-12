@@ -536,6 +536,9 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     showToolbar->setText(tr("Show Toolbar"));
     showToolbar->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+T")));
     view->addAction(showToolbar);
+    auto *monitor = view->addAction(tr("Engine Monitor"), this, &Window::engineMonitorRequested);
+    monitor->setObjectName("desktopEngineMonitor");
+    monitor->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+E")));
     for (const auto key : { Qt::Key_Right, Qt::Key_PageDown, Qt::Key_Left, Qt::Key_PageUp }) {
         auto *shortcut = new QShortcut(QKeySequence(key), this);
         shortcut->setAutoRepeat(false);

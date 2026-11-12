@@ -1,11 +1,28 @@
 #include "engine/engine_worker.h"
 #include "engine/engine_activity.h"
+#include "support/main_thread.h"
+#include "support/diagnostics.h"
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEvent>
 #include <QThread>
 
 namespace kobalt {
+namespace {
+std::atomic_bool runtimeSlowdown{ false };
+thread_local EngineSlowdownScope *slowdownScope = nullptr;
+} // namespace
+
+void setEngineSlowdownEnabled(bool enabled)
+{
+    runtimeSlowdown.store(enabled);
+}
+
+bool engineSlowdownEnabled()
+{
+    return runtimeSlowdown.load();
+}
+
 int engineSlowdown()
 {
     static const int factor = qBound(1, qgetenv("KOBALT_KOBO_EMULATION").toInt(), 100);
@@ -59,8 +76,51 @@ public:
 
 void engineSlowdownPause()
 {
+    if (slowdownScope)
+        slowdownScope->checkpoint();
     if (jobTimer && QThread::currentThread() == engineWorkerState()->thread)
         slowDown(false);
+}
+
+EngineSlowdownScope::EngineSlowdownScope(bool enabled, std::function<bool()> cancelled)
+    : cancelled(std::move(cancelled))
+{
+    // Direct engine tests can render on their main thread. Never delay it.
+    if (!enabled || !engineSlowdownEnabled() || slowdownScope || !qApp
+        || QThread::currentThread() == qApp->thread())
+        return;
+    owner = true;
+    slowdownScope = this;
+    timer.start();
+}
+
+EngineSlowdownScope::~EngineSlowdownScope()
+{
+    if (owner) {
+        checkpoint();
+        slowdownScope = nullptr;
+    }
+}
+
+void EngineSlowdownScope::checkpoint()
+{
+    if (!owner || waiting || !engineSlowdownEnabled())
+        return;
+    // A cancellation callback can itself visit engineSlowdownPause().
+    waiting = true;
+    const qint64 start = timer.nsecsElapsed();
+    const qint64 work = start - accounted;
+    const qint64 until = start + work * 19;
+    while (engineSlowdownEnabled() && !(cancelled && cancelled())) {
+        const qint64 remaining = until - timer.nsecsElapsed();
+        if (remaining <= 0)
+            break;
+        mainthread::blocking("engine-emulation-delay");
+        QThread::usleep(static_cast<unsigned long>(qMin<qint64>(2000, (remaining + 999) / 1000)));
+    }
+    accounted = timer.nsecsElapsed();
+    delayed += accounted - start;
+    waiting = false;
 }
 
 const std::shared_ptr<EngineWorker> &engineWorkerState()

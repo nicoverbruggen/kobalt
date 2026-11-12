@@ -40,6 +40,7 @@ public:
     bool idle() const { return controller.idle(); }
 
 signals:
+    void engineMonitorRequested();
     void bookOpened();
     void bookFailed(QString error);
     void drained();

@@ -648,7 +648,8 @@ void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severi
     errno = savedErrno;
 }
 
-DiagnosticOperation::DiagnosticOperation(const char *name) : operation(name)
+DiagnosticOperation::DiagnosticOperation(const char *name, std::function<bool()> stopped)
+    : operation(name), interrupted(std::move(stopped))
 {
     if (!name || !diagnosticsActive())
         return;
@@ -667,6 +668,7 @@ DiagnosticOperation::~DiagnosticOperation()
     diagnostic("operation-end",
                { { "operation", QString::fromLatin1(operation) },
                  { "operation_id", double(id) },
+                 { "interrupted", interrupted && interrupted() },
                  { "elapsed_ms", elapsed.nsecsElapsed() / 1e6 } },
                false);
 }

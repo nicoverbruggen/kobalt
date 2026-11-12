@@ -24,8 +24,10 @@ inline void stopPoint()
 // nodes, so it is also where a slowed-down engine waits.
 inline bool stopRequested(void *context)
 {
-    engineSlowdownPause();
     const auto &current = *static_cast<const std::function<bool()> *>(context);
+    if (current && !current())
+        return true;
+    engineSlowdownPause();
     return current && !current();
 }
 
@@ -33,14 +35,50 @@ inline bool stopRequested(void *context)
 // stopRequested() and throw KoblazeRenderCancelled when it says so.
 struct StopCheck
 {
-    explicit StopCheck(const std::function<bool()> &current)
+    explicit StopCheck(const std::function<bool()> &current) : previous(active())
     {
-        koblazeSetCancelCheck(&stopRequested,
-                              const_cast<void *>(static_cast<const void *>(&current)));
+        // A nested chapter load must keep the caller's cancellation too.
+        stillCurrent = [this, current] {
+            return (!current || current())
+                    && (!previous || previous->stillCurrent());
+        };
+        active() = this;
+        install(this);
     }
-    ~StopCheck() { koblazeSetCancelCheck(nullptr, nullptr); }
+    ~StopCheck()
+    {
+        active() = previous;
+        install(previous);
+    }
+    static bool cancelled() { return active() && !active()->stillCurrent(); }
+    bool requested() const
+    {
+        return stopRequested(const_cast<std::function<bool()> *>(&stillCurrent));
+    }
     StopCheck(const StopCheck &) = delete;
     StopCheck &operator=(const StopCheck &) = delete;
+
+private:
+    static StopCheck *&active()
+    {
+        static thread_local StopCheck *value = nullptr;
+        return value;
+    }
+    static void install(StopCheck *check)
+    {
+        koblazeSetCancelCheck(check ? &stopRequested : nullptr,
+                             check ? &check->stillCurrent : nullptr);
+    }
+    StopCheck *previous;
+    std::function<bool()> stillCurrent;
 };
 #endif
+inline bool engineCancellationRequested()
+{
+#ifdef KOBLAZE_CANCEL_CHECK
+    return StopCheck::cancelled();
+#else
+    return false;
+#endif
+}
 } // namespace kobalt

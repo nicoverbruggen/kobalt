@@ -182,7 +182,15 @@ First-party C and C++ code uses the Qt project style in `.clang-format`. Format 
 
 CREngine and its text/image libraries use the versions and patches recorded in this worktree. Android also builds OpenSSL and downloads the pinned BOOX compatibility JAR. These application dependencies are separate from Qt SDK production. A change to their recipes, patches or source pins selects a new dependency set; application-only changes reuse it.
 
-### Dependency cache
+### Local engine source
+
+For engine development, a desktop build can compile CREngine from a local checkout of the koblaze fork in place of the pinned source and patches. Link the checkout at `vendor/koblaze` in the worktree, which Git ignores, or pass `-DKOBALT_ENGINE_SOURCE=/path/to/checkout` when you configure the `mac` or `linux` preset. The configure output then prints `CREngine: local source` with the path. Remove the link and configure again, or pass `-DKOBALT_ENGINE_SOURCE=`, to go back to the pin.
+
+`dependencies/local-engine.cmake` builds the checkout in the worktree's `build/desktop-*/crengine-local/` folder, so an engine edit compiles only the changed engine files. Every other library still comes from the shared dependency cache, and no cache entry changes. The engine options in that file repeat the ones in `dependencies/CMakeLists.txt`; keep them the same. Kobo and Android builds do not support a local engine source: they run in containers and use the pin.
+
+A build from a local engine source is for development. Do not use it for release evaluation or for a validation record of the pinned engine.
+
+## Dependency cache
 
 All worktrees of a repository share compiled dependencies. The cache is `build/dependency-cache/` in the main checkout. Configuration finds it through Git's common directory, so every linked worktree uses the same folder. A tree without Git, such as an extracted source bundle, uses its own `build/dependency-cache/`. To use another folder, set `KOBALT_DEPENDENCY_CACHE` to an absolute path, as a CMake variable or in the environment. The environment value applies when a build directory is first configured.
 

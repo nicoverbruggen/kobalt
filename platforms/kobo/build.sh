@@ -66,7 +66,7 @@ if [[ -z "$cpus" ]]; then
     engine_cpus=$("$engine" info --format '{{.NCPU}}' 2> /dev/null || true)
     [[ ! "$engine_cpus" =~ ^[1-9][0-9]*$ || "$engine_cpus" -ge "$cpus" ]] || cpus=$engine_cpus
 fi
-"$engine" run --cpus "$cpus" --cidfile "$run_dir/container.cid" --pull=never --user "$(id -u):$(id -g)" -e HOME=/tmp -e KOBALT_RELEASE_VERSION \
+"$engine" run --cpus "$cpus" --cidfile "$run_dir/container.cid" --pull=never --user "$(id -u):$(id -g)" -e HOME=/tmp -e KOBALT_RELEASE_VERSION -e KOBALT_ENGINE_SOURCE \
     --volume "$root:/work" \
     --volume "$cache:/dependency-cache" \
     --workdir /work/platforms/kobo "$image" bash -euc '

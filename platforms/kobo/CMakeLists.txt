@@ -27,6 +27,8 @@ endif()
 
 include("${KOBALT_ROOT}/dependencies/cache.cmake")
 kobalt_dependencies()
+include("${KOBALT_ROOT}/dependencies/local-engine.cmake")
+kobalt_local_engine()
 add_subdirectory("${KOBALT_ROOT}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
 set(source "${KOBALT_ROOT}/src")
 
@@ -112,6 +114,11 @@ add_custom_command(OUTPUT "${engine}"
     DEPENDS "${CRENGINE_BUILD}/libcrengine.a" VERBATIM)
 add_custom_target(reader-engine DEPENDS "${engine}")
 add_dependencies(kobalt reader-engine)
+if(TARGET kobalt-local-engine)
+    add_dependencies(reader-engine kobalt-local-engine)
+    add_dependencies(kobalt-code kobalt-local-engine)
+    add_dependencies(kobalt kobalt-local-engine)
+endif()
 set(qt_libraries Qt${KOBALT_QT_MAJOR}::Widgets Qt${KOBALT_QT_MAJOR}::GuiPrivate
     Qt${KOBALT_QT_MAJOR}::Network Qt${KOBALT_QT_MAJOR}::Sensors Qt${KOBALT_QT_MAJOR}::Sql Qt${KOBALT_QT_MAJOR}::DBus)
 if(KOBALT_QT_MAJOR EQUAL 5)

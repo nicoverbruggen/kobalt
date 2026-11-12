@@ -2924,6 +2924,8 @@ private slots:
         QFETCH(int, ppi);
         ui::setDensity(ppi);
         ui::Panel owner;
+        // The hint's style sheet follows the reader theme, not the palette.
+        owner.setProperty("reader_dark", dark);
         auto colors = owner.palette();
         const QColor paper = dark ? Qt::black : Qt::white;
         colors.setColor(QPalette::Window, paper);

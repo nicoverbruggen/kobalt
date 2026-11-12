@@ -459,7 +459,7 @@ protected:
         QPainter painter(this);
         const bool active = isChecked() || isDown();
         const auto paper = palette().color(QPalette::Base);
-        const auto ink = palette().color(QPalette::Text);
+        const auto ink = ui::labelInk(this, QPalette::Text);
         painter.fillRect(rect(), active ? ink : paper);
         // In Zen mode the group's heavy rule follows the last tab.
         if (!active && !property("reader_group_end").toBool()) {

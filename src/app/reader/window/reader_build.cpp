@@ -157,7 +157,7 @@ protected:
         QPainter painter(this);
         const bool pressed = isEnabled() && isDown();
         const auto paper = palette().color(QPalette::Window);
-        const auto ink = palette().color(QPalette::WindowText);
+        const auto ink = ui::labelInk(this);
         painter.fillRect(rect(), pressed ? ink : paper);
         // Zen mode shows the arrow alone, centered in its cell.
         const bool arrowOnly = property("reader_arrow_only").toBool();

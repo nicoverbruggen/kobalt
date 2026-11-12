@@ -575,7 +575,7 @@ void CaptionButton::paintEvent(QPaintEvent *)
         paintEdges(painter, rect(), rule, dividerColor(this));
         if (!isEnabled())
             painter.setOpacity(.45);
-        painter.setPen(palette().color(QPalette::WindowText));
+        painter.setPen(labelInk(this));
         QFont label = font();
         painter.setFont(label);
         const bool actionIcon = iconVisible;
@@ -611,7 +611,7 @@ void CaptionButton::paintEvent(QPaintEvent *)
                           Qt::AlignVCenter | Qt::AlignLeft);
         if (chevron) {
             const int size = px(28);
-            controlIcon(ControlIcon::Next, palette().color(QPalette::WindowText))
+            controlIcon(ControlIcon::Next, labelInk(this))
                     .paint(&painter,
                            QRect(width() - chrome::chevronRight - size / 2, (height() - size) / 2,
                                  size, size));
@@ -825,7 +825,7 @@ void CellButton::paintEvent(QPaintEvent *)
     const bool pressed = isEnabled() && isDown();
     const bool active = isEnabled() && (isChecked() || (pressed && !grayPress));
     const auto paper = palette().color(QPalette::Window);
-    const auto ink = palette().color(QPalette::WindowText);
+    const auto ink = labelInk(this);
     if (circular) {
         painter.setRenderHint(QPainter::Antialiasing);
         const qreal inset = int(metrics::control::border) / 2.0;

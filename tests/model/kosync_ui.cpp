@@ -768,9 +768,13 @@ int main(int argc, char **argv)
     require(reachable(lastSync), "last sync can be reached on the signed-in page");
     firstPage();
     auto *status = page->findChild<QLabel *>("rrKosyncStatus");
-    require(status->palette().color(QPalette::WindowText) == ui::noteColor(status)
-                    && lastSync->palette().color(QPalette::WindowText) == ui::noteColor(lastSync),
-            "sync status and last sync use the same ink as list descriptions");
+    // Notes use plain ink in light and the secondary ink in dark.
+    const auto noteInk = [](QWidget *label) {
+        return ui::darkTheme(label) ? ui::noteColor(label) : ui::themeColors(label).ink;
+    };
+    require(status->palette().color(QPalette::WindowText) == noteInk(status)
+                    && lastSync->palette().color(QPalette::WindowText) == noteInk(lastSync),
+            "sync status and last sync use the theme's note ink");
     if (argc > 1)
         require(window.grab().save(QString::fromLocal8Bit(argv[1])),
                 "save account settings capture");

@@ -2088,6 +2088,150 @@ bool previewSettled(Fixture &fixture)
             && !state.value("appearance_preview_pending").toBool();
 }
 
+// A reader view and the reader window as it shows that view.
+struct ThemeView
+{
+    QString name;
+    QImage image;
+};
+
+// Presses a pager's previous button until the pager is on its first page.
+void rewindPager(Fixture &fixture, const char *previous)
+{
+    for (int page = 0;
+         page < 20 && fixture.visible(previous) && fixture.widget(previous)->isEnabled(); ++page)
+        QVERIFY(fixture.press(previous));
+}
+
+// Turns dark mode on or off in Settings, as a person would.
+void toggleTheme(Fixture &fixture)
+{
+    const bool dark = fixture.state().value("dark_mode").toBool();
+    if (!fixture.visible("rrSettings"))
+        QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrSettings"));
+    QVERIFY(fixture.press("rrSettings"));
+    QTRY_VERIFY(fixture.visible("rrSettingsDisplay"));
+    QVERIFY(fixture.press("rrSettingsDisplay"));
+    QVERIFY(revealSettingsOption(fixture, "rrDarkMode"));
+    QVERIFY(fixture.press("rrDarkMode"));
+    QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), !dark);
+    QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+}
+
+// The Text and Layout panels, headers and footers, Chapters, Stats and each
+// page of each Settings section, opened as a person would.
+void grabThemeViews(Fixture &fixture, QVector<ThemeView> *views)
+{
+    auto *reader = fixture.window.readerWindow();
+    const auto grab = [&](const QString &name) {
+        QCoreApplication::processEvents();
+        views->append({ name, reader->grab().toImage() });
+    };
+    if (!fixture.visible("rrNavText"))
+        QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrNavText"));
+    QVERIFY(fixture.press("rrNavText"));
+    QTRY_VERIFY(fixture.visible("rrFont"));
+    QTRY_VERIFY(previewSettled(fixture));
+    grab("text");
+    QVERIFY(fixture.press("rrNavLayout"));
+    QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
+    QTRY_VERIFY(previewSettled(fixture));
+    grab("layout");
+    QVERIFY(fixture.press("rrHeaderFooter"));
+    QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+    rewindPager(fixture, "rrHeaderFooterPrevious");
+    grab("header-footer");
+    QVERIFY(fixture.press("rrHeaderFooterClose"));
+    QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_VERIFY(fixture.visible("rrChapter1"));
+    grab("chapters");
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_VERIFY(!fixture.visible("rrChapter1"));
+    QVERIFY(fixture.press("rrNavStats"));
+    QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+    grab("stats");
+    QVERIFY(fixture.press("rrNavStats"));
+    QTRY_VERIFY(!fixture.visible("rrChapterGraph"));
+    if (!fixture.visible("rrSettings"))
+        QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrSettings"));
+    QVERIFY(fixture.press("rrSettings"));
+    QTRY_VERIFY(fixture.visible("rrSettingsDisplay"));
+    for (const char *tab :
+         { "rrSettingsDisplay", "rrSettingsControls", "rrSettingsDefaults", "rrSettingsStyling",
+           "rrSettingsDictionaries", "rrSettingsSystem", "rrSettingsAbout", "rrSettingsKosync" }) {
+        // Hosts without dictionary management or sync have no such section.
+        if (!fixture.visible(tab))
+            continue;
+        QVERIFY(fixture.press(tab));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        rewindPager(fixture, "rrSettingsOptionsPrevious");
+        for (int page = 0; page < 20; ++page) {
+            grab(QString("%1-%2").arg(QString(tab).mid(10).toLower()).arg(page + 1));
+            if (!fixture.visible("rrSettingsOptionsNext")
+                || !fixture.widget("rrSettingsOptionsNext")->isEnabled())
+                break;
+            QVERIFY(fixture.press("rrSettingsOptionsNext"));
+        }
+    }
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+}
+
+// Names each view whose pixels differ, with the changed area and its most
+// frequent colour changes. Empty when all views match.
+QString themeViewDifferences(const QVector<ThemeView> &expected, const QVector<ThemeView> &actual)
+{
+    if (expected.size() != actual.size())
+        return QString("%1 views, expected %2").arg(actual.size()).arg(expected.size());
+    QStringList result;
+    for (int index = 0; index < expected.size(); ++index) {
+        const auto a = expected[index].image.convertToFormat(QImage::Format_RGB32);
+        const auto b = actual[index].image.convertToFormat(QImage::Format_RGB32);
+        if (expected[index].name != actual[index].name || a.size() != b.size()) {
+            result << actual[index].name + ": different view or size";
+            continue;
+        }
+        QRect area;
+        QHash<QPair<QRgb, QRgb>, int> changes;
+        for (int y = 0; y < a.height(); ++y) {
+            const auto *left = reinterpret_cast<const QRgb *>(a.constScanLine(y));
+            const auto *right = reinterpret_cast<const QRgb *>(b.constScanLine(y));
+            for (int x = 0; x < a.width(); ++x)
+                if (left[x] != right[x]) {
+                    area |= QRect(x, y, 1, 1);
+                    ++changes[{ left[x], right[x] }];
+                }
+        }
+        if (area.isEmpty())
+            continue;
+        QVector<QPair<int, QPair<QRgb, QRgb>>> ranked;
+        for (auto change = changes.cbegin(); change != changes.cend(); ++change)
+            ranked.append({ change.value(), change.key() });
+        std::sort(ranked.begin(), ranked.end(),
+                  [](const auto &x, const auto &y) { return x.first > y.first; });
+        QStringList colours;
+        for (int rank = 0; rank < qMin(3, int(ranked.size())); ++rank)
+            colours << QString("%1->%2 x%3")
+                               .arg(QColor(ranked[rank].second.first).name(),
+                                    QColor(ranked[rank].second.second).name())
+                               .arg(ranked[rank].first);
+        result << QString("%1: %2,%3 %4x%5 %6")
+                          .arg(actual[index].name)
+                          .arg(area.x())
+                          .arg(area.y())
+                          .arg(area.width())
+                          .arg(area.height())
+                          .arg(colours.join(' '));
+    }
+    return result.join('\n');
+}
+
 struct PreviewPaints : QObject
 {
     int count = 0;
@@ -12787,6 +12931,125 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
         QCOMPARE(redPixels(), 0);
+    }
+
+    // After any theme changes, each reader panel and Settings page looks as
+    // it does when it is first built in the current theme. Views are visited
+    // both before and only after the changes, because a view that Qt has not
+    // polished yet takes its style in another order.
+    void themeChanges()
+    {
+        QVector<ThemeView> fresh[2], toggled[2], restored[2], unvisited[2];
+        const auto open = [](Fixture &fixture) {
+            selectPreview(fixture, 1);
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        };
+        for (const bool dark : { false, true }) {
+            {
+                Fixture fixture(dark);
+                QVERIFY(fixture.prepared);
+                open(fixture);
+                for (auto *views : { &fresh[dark], &toggled[dark], &restored[dark] }) {
+                    if (views != &fresh[dark])
+                        toggleTheme(fixture);
+                    if (!QTest::currentTestFailed())
+                        grabThemeViews(fixture, views);
+                    if (QTest::currentTestFailed())
+                        return;
+                }
+            }
+            Fixture fixture(dark);
+            QVERIFY(fixture.prepared);
+            open(fixture);
+            toggleTheme(fixture);
+            if (!QTest::currentTestFailed())
+                toggleTheme(fixture);
+            if (!QTest::currentTestFailed())
+                grabThemeViews(fixture, &unvisited[dark]);
+            if (QTest::currentTestFailed())
+                return;
+        }
+        QStringList failures;
+        for (const bool dark : { false, true }) {
+            const QString theme = dark ? "dark" : "light";
+            const auto check = [&](const QVector<ThemeView> &views, const QString &scenario) {
+                const auto differences = themeViewDifferences(fresh[dark], views);
+                if (!differences.isEmpty())
+                    failures << theme + ' ' + scenario + ":\n" + differences;
+            };
+            check(toggled[!dark], "after one change");
+            check(restored[dark], "after two changes");
+            check(unvisited[dark], "after two changes, visited afterwards");
+        }
+        for (const auto &failure : failures)
+            qWarning().noquote() << failure;
+        QVERIFY2(failures.isEmpty(), "Views differ from freshly built ones");
+    }
+
+    // In a freshly built light reader, the section captions of every Settings
+    // page have the same ink: plain ink, not the secondary grey.
+    void settingsSectionCaptions()
+    {
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *reader = fixture.window.readerWindow();
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrSettingsDisplay"));
+        static const QRegularExpression sectionName("^rr\\w+Section$");
+        const QColor ink = ui::themeColors(false).ink;
+        QStringList seen, wrong;
+        for (const char *tab : { "rrSettingsDisplay", "rrSettingsControls", "rrSettingsDefaults",
+                                 "rrSettingsStyling", "rrSettingsDictionaries", "rrSettingsSystem",
+                                 "rrSettingsAbout", "rrSettingsKosync" }) {
+            if (!fixture.visible(tab))
+                continue;
+            QVERIFY(fixture.press(tab));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            rewindPager(fixture, "rrSettingsOptionsPrevious");
+            for (int page = 0; page < 20; ++page) {
+                QCoreApplication::processEvents();
+                const auto image = reader->grab().toImage().convertToFormat(QImage::Format_RGB32);
+                for (auto *section : reader->findChildren<QWidget *>(sectionName)) {
+                    auto *label = section->findChild<QLabel *>();
+                    // Pages next to the current one are laid out but clipped.
+                    if (!label || label->text().isEmpty() || !label->isVisible()
+                        || label->visibleRegion().boundingRect() != label->rect())
+                        continue;
+                    const QRect area =
+                            QRect(label->mapTo(reader, QPoint()), label->size()) & image.rect();
+                    // The darkest pixel is the ink of the caption's letters.
+                    int darkest = 255;
+                    QRgb darkestColor = qRgb(255, 255, 255);
+                    for (int y = area.top(); y <= area.bottom(); ++y)
+                        for (int x = area.left(); x <= area.right(); ++x)
+                            if (qGray(image.pixel(x, y)) < darkest) {
+                                darkest = qGray(image.pixel(x, y));
+                                darkestColor = image.pixel(x, y);
+                            }
+                    const QString entry =
+                            QString("%1 %2 %3")
+                                    .arg(tab, label->text(), QColor(darkestColor).name());
+                    seen << entry;
+                    if (QColor(darkestColor) != ink)
+                        wrong << entry;
+                }
+                if (!fixture.visible("rrSettingsOptionsNext")
+                    || !fixture.widget("rrSettingsOptionsNext")->isEnabled())
+                    break;
+                QVERIFY(fixture.press("rrSettingsOptionsNext"));
+            }
+        }
+        QVERIFY2(seen.size() > 1, qPrintable(seen.join('\n')));
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join('\n')));
     }
 };
 

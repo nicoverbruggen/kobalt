@@ -518,7 +518,8 @@ int main(int argc, char **argv)
                  { qMakePair("window-text", theme.ink), qMakePair("window", theme.paper),
                    qMakePair("mid", theme.disabledInk), qMakePair("midlight", theme.pressedPaper),
                    qMakePair("light", theme.divider), qMakePair("dark", theme.outline),
-                   qMakePair("placeholder-text", theme.secondaryInk) }) {
+                   // Captions and notes use plain ink in light.
+                   qMakePair("placeholder-text", dark ? theme.secondaryInk : theme.ink) }) {
                 QLabel sample(&host);
                 readerStyle(&sample, QString("color:palette(%1);").arg(entry.first));
                 require(sample.styleSheet().contains("color:" + entry.second.name() + ';'),

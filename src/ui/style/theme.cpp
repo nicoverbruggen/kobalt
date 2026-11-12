@@ -160,6 +160,17 @@ QColor noteColor(const QWidget *widget)
     return themeColors(widget).secondaryInk;
 }
 
+QColor labelInk(const QWidget *widget, QPalette::ColorRole role)
+{
+    // In light a disabled label keeps plain ink under its opacity, because a
+    // lighter grey is dithered on e-ink. Style sheets give disabled buttons
+    // the disabled ink, and whether that reaches the palette depends on when
+    // Qt polishes the widget, so light does not read it. Dark uses the palette.
+    if (widget->isEnabled() || darkTheme(widget))
+        return widget->palette().color(role);
+    return themeColors(false).ink;
+}
+
 void paintHeaderRules(QPainter &painter, const QWidget *view)
 {
     painter.fillRect(0, metrics::chrome::statusHeight - metrics::control::border, view->width(),
@@ -212,7 +223,13 @@ void readerStyle(QWidget *widget, const QString &source)
         style.replace("palette(midlight)", colors.pressedPaper.name());
         style.replace("palette(mid)", colors.disabledInk.name());
         style.replace("palette(light)", colors.divider.name());
-        style.replace("palette(placeholder-text)", colors.secondaryInk.name());
+        // Captions and notes name palette(placeholder-text). In light they use
+        // plain ink, because grey text is dithered on e-ink. Dark uses the
+        // secondary ink. Plain ink is also what the light palette gives, so
+        // labels that paint from their palette look the same whether Qt
+        // applies this sheet before or after the palette.
+        style.replace("palette(placeholder-text)",
+                      (dark ? colors.secondaryInk : colors.ink).name());
         style.replace("palette(dark)", colors.outline.name());
         style.replace("@swipe-caption-ink@", colors.swipeCaptionInk.name());
         sheet = sheets.insert(key, style);

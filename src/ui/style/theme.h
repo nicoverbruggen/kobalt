@@ -29,6 +29,9 @@ bool darkTheme(const QWidget *widget);
 QColor dividerColor(const QWidget *widget);
 QColor sectionColor(const QWidget *widget);
 QColor noteColor(const QWidget *widget);
+// The label ink of a control that paints from its palette role. A disabled
+// control paints its label at 45% opacity over this ink.
+QColor labelInk(const QWidget *widget, QPalette::ColorRole role = QPalette::WindowText);
 // The status rule and the heavy lower rule of a view that uses the header geometry.
 void paintHeaderRules(QPainter &painter, const QWidget *view);
 void readerStyle(QWidget *widget, const QString &source);

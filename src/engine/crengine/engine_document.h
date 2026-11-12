@@ -442,6 +442,9 @@ private:
     // never drawn. Only for a part of a book, which loads again quickly
     // when the reader chooses the publisher's fonts.
     bool fontsSkipped_ = false;
+    // True when the document was loaded without the marks of the
+    // beautifier: no setting used them.
+    bool beautifierSkipped_ = false;
     // How long the last window took to load and lay out.
     qint64 windowLoadMs_ = -1;
     // Loads the window that holds `position` when it is outside the window.

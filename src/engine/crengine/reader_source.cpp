@@ -714,7 +714,12 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
             stylesheet->pop();
         }
         markBodyAlignment(document);
-        markBeautifierContent(document);
+        // Only the beautifier's style rules read its marks. A part of a
+        // book loads again quickly when one of those settings is turned on.
+        beautifierSkipped_ = firstSpineItem >= 0
+                && !(beautifierInitials_ || beautifierSpacing_ || beautifierIndent_);
+        if (!beautifierSkipped_)
+            markBeautifierContent(document);
         markChapterLeadingImages(engine_.get());
         markKoboLinkDecorations();
         // Loading computed styles before the body markers existed, including in previews.

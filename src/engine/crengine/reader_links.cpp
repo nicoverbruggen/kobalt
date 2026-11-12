@@ -650,10 +650,32 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         return result;
     }
     auto *target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
+    auto match = noteReference(node);
+    // In chapter mode the target can be in a spine item that is not loaded.
+    // The engine names a link into spine item n "#_doc_fragment_n_ id".
+    bool elsewhere = false;
+    if (!target && windowFirst_ >= 0) {
+        static const QRegularExpression fragment(QStringLiteral("^#_doc_fragment_(\\d+)_ "));
+        const auto found = fragment.match(text(href));
+        const int item = found.hasMatch() ? found.captured(1).toInt() : -1;
+        if (item < 0 || (item >= windowFirst_ && item <= windowLast_))
+            return result;
+        // The kind of a link on the page: do not load a spine item for it.
+        if (!preview) {
+            result.kind = match == NoteMatch::Explicit ? LinkKind::Footnote : LinkKind::Passage;
+            result.error.clear();
+            return result;
+        }
+        auto *side = openAhead(item);
+        if (!side || !side->engine_)
+            return result;
+        auto *other = side->engine_->getDocument();
+        target = other->getNodeById(other->getAttrValueIndex(href.substr(1).c_str()));
+        elsewhere = true;
+    }
     if (!target)
         return result;
     auto *note = target;
-    auto match = noteReference(node);
     const auto targetStyle = target->getStyle();
     if (match == NoteMatch::Unmarked && !targetStyle.isNull()) {
         if (STYLE_HAS_CR_HINT(targetStyle, FOOTNOTE)) {
@@ -680,7 +702,9 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         }
     }
     ldomXPointer destination(target, 0);
-    if (destination.toPoint().y >= 0) {
+    // A spine item that was opened for the link has a layout of its first
+    // slice only, so the target can be past it.
+    if (elsewhere || destination.toPoint().y >= 0) {
         result.target = text(destination.toString());
         if (preview)
             result.chapter = chapterTitle(result.target);

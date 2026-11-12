@@ -844,8 +844,7 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
 
 void EngineDocument::prepareNextItem(const std::function<bool()> &current)
 {
-#if __has_include(<koblaze.h>)
-    if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || !engine_)
+    if (slicePages_ <= 0 || windowFirst_ < 0)
         return;
     const int next = windowLast_ + 1;
     // In a spine item with slices, only in the last slice: a second
@@ -853,12 +852,21 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
     // before that.
     if (next >= spineItemCount_ || (slices() && sliceEnd_ < spineItemText()))
         return;
-    const auto unit = unitFrom(next);
+    openAhead(next, current);
+}
+
+EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> &current)
+{
+#if __has_include(<koblaze.h>)
+    if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || !engine_ || item < 0
+        || item >= spineItemCount_)
+        return nullptr;
+    const auto unit = unitFrom(item);
     auto settings = windowSettings(unit.first, unit.second);
     settings.remove("position");
-    if (ahead_ && aheadItem_ == next && aheadSettings_ == settings && aheadSize_ == size_
+    if (ahead_ && aheadItem_ == item && aheadSettings_ == settings && aheadSize_ == size_
         && ahead_->userStyleSheet_ == userStyleSheet_)
-        return;
+        return ahead_.get();
     ahead_.reset();
     auto ahead = std::make_unique<EngineDocument>(fonts_);
     // What the host gave this document and a saved state does not hold.
@@ -879,21 +887,26 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
     };
     try {
         if (!ahead->openSource(source_, size_, settings, &error))
-            return;
+            return nullptr;
     } catch (const KoblazeRenderCancelled &) {
         koblazeSetSpineWindow(-1, -1);
-        return;
+        return nullptr;
     }
     ahead->openInterrupt_ = nullptr;
 #  else
     Q_UNUSED(current);
     if (!ahead->openSource(source_, size_, settings, &error))
-        return;
+        return nullptr;
 #  endif
     ahead_ = std::move(ahead);
-    aheadItem_ = next;
+    aheadItem_ = item;
     aheadSettings_ = settings;
     aheadSize_ = size_;
+    return ahead_.get();
+#else
+    Q_UNUSED(item);
+    Q_UNUSED(current);
+    return nullptr;
 #endif
 }
 

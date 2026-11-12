@@ -1,6 +1,7 @@
 #include "column_view.h"
 #include "support/qt_compat.h"
 #include "engine_document.h"
+#include "reader_source.h"
 #include "engine/engine_activity.h"
 #include <lvdocview.h>
 #include <QTextBoundaryFinder>
@@ -9,6 +10,7 @@
 #include <vector>
 #include <algorithm>
 #include <QElapsedTimer>
+#include <QRegularExpression>
 
 namespace kobalt {
 namespace {
@@ -1696,8 +1698,8 @@ bool EngineDocument::ensureSearchScope(SearchScope scope, const QString &origin)
     return true;
 }
 
-QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, SearchScope scope,
-                                                 const QString &origin)
+QVector<SearchHit> EngineDocument::searchDetailsLoaded(QVector<SearchHit> hits, SearchScope scope,
+                                                       const QString &origin)
 {
     if (!engine_ || !ensureSearchScope(scope, origin))
         return {};
@@ -1735,8 +1737,8 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
     return hits;
 }
 
-SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor, int maximum,
-                                       SearchScope scope, const QString &origin, bool details)
+SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor cursor, int maximum,
+                                         SearchScope scope, const QString &origin, bool details)
 {
     SearchBatch result;
     result.cursor = cursor;
@@ -1798,12 +1800,222 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
             continue;
         SearchHit hit{ qstring(start.toString()), qstring(end.toString()), {}, {}, {}, -1 };
         if (details)
-            hit = searchDetails({ hit }, scope, origin).first();
+            hit = searchDetailsLoaded({ hit }, scope, origin).first();
         result.hits.append(std::move(hit));
     }
     result.cursor = cursor;
     // Progress is deliberately coarse; computing page geometry for empty text is expensive.
     result.nextPage = cache.done && cursor.block >= cache.blocks.size() ? pages() : 0;
+    return result;
+}
+
+namespace {
+// Text for the check whether a query can match: case folded, without
+// white space, soft hyphens and format characters, with one kind of
+// apostrophe and hyphen. The engine folds the same way or less.
+QString searchKey(const QString &text)
+{
+    const auto normalized = text.normalized(QString::NormalizationForm_KC).toCaseFolded();
+    QString key;
+    key.reserve(normalized.size());
+    for (const auto ch : normalized) {
+        if (ch.isSpace() || ch.category() == QChar::Other_Format || ch == QChar(0xad))
+            continue;
+        if (ch == QChar(0x2019) || ch == QChar(0x2018) || ch == QChar(0x2bc))
+            key.append(QLatin1Char('\''));
+        else if (ch.category() == QChar::Punctuation_Dash)
+            key.append(QLatin1Char('-'));
+        else
+            key.append(ch);
+    }
+    return key;
+}
+
+// The text of XHTML without its tags, with the common entities decoded.
+QString plainText(const QByteArray &xhtml)
+{
+    const auto source = QString::fromUtf8(xhtml);
+    QString text;
+    text.reserve(source.size());
+    bool tag = false;
+    for (int i = 0; i < source.size(); ++i) {
+        const auto ch = source.at(i);
+        if (tag) {
+            tag = ch != QLatin1Char('>');
+            continue;
+        }
+        if (ch == QLatin1Char('<')) {
+            tag = true;
+            continue;
+        }
+        if (ch == QLatin1Char('&')) {
+            const int end = source.indexOf(QLatin1Char(';'), i);
+            if (end > i && end - i < 12) {
+                const auto name = source.mid(i + 1, end - i - 1);
+                static const QHash<QString, QChar> named{
+                    { QStringLiteral("amp"), QLatin1Char('&') },
+                    { QStringLiteral("lt"), QLatin1Char('<') },
+                    { QStringLiteral("gt"), QLatin1Char('>') },
+                    { QStringLiteral("quot"), QLatin1Char('"') },
+                    { QStringLiteral("apos"), QLatin1Char('\'') },
+                    { QStringLiteral("nbsp"), QChar(0xa0) },
+                    { QStringLiteral("shy"), QChar(0xad) }
+                };
+                bool numeric = false;
+                const uint code = name.startsWith(QLatin1String("#x"))
+                        ? name.mid(2).toUInt(&numeric, 16)
+                        : name.startsWith(QLatin1Char('#')) ? name.mid(1).toUInt(&numeric)
+                                                            : 0;
+                if (numeric && code > 0 && code <= 0x10ffff) {
+                    if (QChar::requiresSurrogates(code)) {
+                        text.append(QChar(QChar::highSurrogate(code)));
+                        text.append(QChar(QChar::lowSurrogate(code)));
+                    } else {
+                        text.append(QChar(ushort(code)));
+                    }
+                    i = end;
+                    continue;
+                }
+                if (named.contains(name)) {
+                    text.append(named.value(name));
+                    i = end;
+                    continue;
+                }
+            }
+        }
+        text.append(ch);
+    }
+    return text;
+}
+
+// The spine item of an engine position, counted from zero, or -1.
+int positionItem(const QString &position)
+{
+    static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
+    const auto match = fragment.match(position);
+    return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
+}
+} // namespace
+
+bool EngineDocument::mayContain(int item, const QString &query) const
+{
+    auto &texts = source_->searchTexts;
+    if (texts.size() != spineItemCount_)
+        texts = QVector<QString>(spineItemCount_);
+    if (item < 0 || item >= texts.size())
+        return false;
+    if (texts[item].isNull()) {
+        const auto href = spineItems().value(item);
+        auto stream = source_->container->OpenStream(
+                Utf8ToUnicode(href.toUtf8().constData()).c_str(), LVOM_READ);
+        QByteArray bytes;
+        if (!stream.isNull() && stream->GetSize() < 64 * 1024 * 1024) {
+            bytes.resize(int(stream->GetSize()));
+            lvsize_t read = 0;
+            if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK)
+                bytes.clear();
+            bytes.resize(int(read));
+        }
+        // An item that cannot be read is searched by the engine.
+        texts[item] = bytes.isEmpty() ? QStringLiteral("") : searchKey(plainText(bytes));
+        if (bytes.isEmpty())
+            return true;
+    }
+    return texts[item].contains(searchKey(query));
+}
+
+EngineDocument *EngineDocument::documentFor(int item)
+{
+    if (item >= windowFirst_ && item <= windowLast_)
+        return this;
+    if (ahead_ && item >= ahead_->windowFirst_ && item <= ahead_->windowLast_) {
+        auto settings = windowSettings(ahead_->windowFirst_, ahead_->windowLast_);
+        settings.remove("position");
+        if (settings == aheadSettings_ && size_ == aheadSize_
+            && ahead_->userStyleSheet_ == userStyleSheet_)
+            return ahead_.get();
+    }
+    return openAhead(item);
+}
+
+// A page of a layout of a part of the book means nothing to the reader.
+// The hit gets the title of its chapter, and an estimated page of the book
+// once the page map has one.
+void EngineDocument::labelChapterHit(SearchHit &hit) const
+{
+    hit.page = estimatedBookPage(hit.start);
+    hit.chapter = chapterTitle(hit.start);
+}
+
+// In chapter mode a search of the book goes through the spine items in
+// book order. The items that are not loaded are opened ahead one at a
+// time, and only when their plain text can contain the query.
+SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor, int maximum,
+                                       SearchScope scope, const QString &origin, bool details)
+{
+    if (windowFirst_ < 0 || slicePages_ <= 0 || scope != SearchScope::Book || !engine_)
+        return searchLoaded(query, cursor, maximum, scope, origin, details);
+    SearchBatch result;
+    QElapsedTimer budget;
+    budget.start();
+    while (cursor.item < spineItemCount_ && result.hits.size() < maximum
+           && (result.hits.isEmpty() || budget.elapsed() < 8)) {
+        const bool loaded = cursor.item >= windowFirst_ && cursor.item <= windowLast_;
+        if (!loaded && cursor.block == 0 && cursor.offset == 0 && !mayContain(cursor.item, query)) {
+            ++cursor.item;
+            continue;
+        }
+        auto *document = documentFor(cursor.item);
+        if (!document) {
+            ++cursor.item;
+            cursor.block = cursor.offset = 0;
+            continue;
+        }
+        // The items of that document from this one on, before the next
+        // that the search reaches in another document.
+        int last = document->windowLast_;
+        if (document != this && cursor.item < windowFirst_)
+            last = qMin(last, windowFirst_ - 1);
+        SearchCursor local{ cursor.block, cursor.offset, 0 };
+        auto batch = document->searchLoaded(query, local, maximum - result.hits.size(), scope,
+                                            origin, details);
+        for (auto &hit : batch.hits) {
+            const int item = positionItem(hit.start);
+            if (item < cursor.item || item > last)
+                continue;
+            // Only the document that has the text knows its chapter.
+            document->labelChapterHit(hit);
+            result.hits.append(std::move(hit));
+        }
+        cursor.block = batch.cursor.block;
+        cursor.offset = batch.cursor.offset;
+        if (batch.done) {
+            cursor.item = last + 1;
+            cursor.block = cursor.offset = 0;
+        } else if (budget.elapsed() >= 8) {
+            break;
+        }
+    }
+    result.cursor = cursor;
+    result.done = cursor.item >= spineItemCount_;
+    result.nextPage = result.done ? pages() : 0;
+    return result;
+}
+
+QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, SearchScope scope,
+                                                 const QString &origin)
+{
+    if (windowFirst_ < 0 || slicePages_ <= 0 || scope != SearchScope::Book || !engine_)
+        return searchDetailsLoaded(std::move(hits), scope, origin);
+    QVector<SearchHit> result;
+    for (const auto &hit : hits) {
+        auto *document = documentFor(positionItem(hit.start));
+        auto found = document ? document->searchDetailsLoaded({ hit }, scope, origin)
+                              : QVector<SearchHit>();
+        for (auto &one : found)
+            document->labelChapterHit(one);
+        result += found;
+    }
     return result;
 }
 

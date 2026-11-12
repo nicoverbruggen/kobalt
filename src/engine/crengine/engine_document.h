@@ -322,6 +322,23 @@ private:
     std::unique_ptr<ColumnView> engine_;
     struct SearchText;
     std::shared_ptr<SearchText> searchText_;
+    // The search in the text that this document has.
+    SearchBatch searchLoaded(const QString &query, SearchCursor cursor, int maximum,
+                             SearchScope scope, const QString &origin, bool details);
+    QVector<SearchHit> searchDetailsLoaded(QVector<SearchHit> hits, SearchScope scope,
+                                           const QString &origin);
+    // In chapter mode: the document that has the text of spine item `item`,
+    // this one, the one opened ahead, or a new one opened ahead. Null when
+    // it cannot open.
+    EngineDocument *documentFor(int item);
+    // False when the plain text of spine item `item` cannot contain `query`.
+    // It can say true where the engine finds nothing.
+    bool mayContain(int item, const QString &query) const;
+    void labelChapterHit(SearchHit &hit) const;
+    // The estimated page of the book that shows `position`, counted from
+    // zero, from the page map. -1 until the map covers every spine item, or
+    // when this document does not have the text of `position`.
+    int estimatedBookPage(const QString &position) const;
     void ensureSearchText();
     bool ensureSearchScope(SearchScope scope, const QString &origin);
     struct SourceIndex;
@@ -405,6 +422,11 @@ private:
     // Opens the next spine item in `ahead_` when the reader is in the last
     // slice.
     void prepareNextItem(const std::function<bool()> &current);
+    // Opens the unit that starts at spine item `item` in `ahead_`, or keeps
+    // it when it is open there. The reader can then show it without a new
+    // load. Also used to read a spine item that is not shown, such as the
+    // target of a link. Null when it cannot open or `current` stops it.
+    EngineDocument *openAhead(int item, const std::function<bool()> &current = {});
     // Set in a document that is opened ahead: true stops its layout.
     std::function<bool()> openInterrupt_;
     // Makes `ahead_` the document that is shown. False when it is not the

@@ -32,6 +32,9 @@ struct ReaderSource
     // first needed. They decide the spine items of a unit and give the
     // page estimate its sizes.
     QVector<qint64> spineBytes;
+    // The plain text of each spine item, folded for a quick check whether a
+    // search can match there. Filled when first needed.
+    QVector<QString> searchTexts;
 
     // The estimated pages of the book, for rough page numbers. They are for
     // the open book only and are not saved. A document prepared ahead

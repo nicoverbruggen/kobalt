@@ -744,6 +744,7 @@
 "search_panel.no_matches_found" = "No matches";
 /* Arguments: %1, %2 */
 "search_panel.page_detail" = "Page %1: %2";
+"search_panel.chapter_detail" = "%1: %2";
 "search_panel.return_to_original_position" = "Return to original position";
 "search_panel.search" = "Search";
 "search_panel.searching" = "Searching…";

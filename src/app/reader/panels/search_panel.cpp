@@ -461,6 +461,13 @@ QFont SearchPanel::excerptFont() const
 
 QString SearchPanel::caption(const SearchHit &hit) const
 {
+    // In chapter mode a hit names its chapter, with an estimated page once
+    // there is one.
+    if (!hit.chapter.isEmpty())
+        return hit.page < 0 ? hit.chapter.simplified()
+                            : strings::get("search_panel.page_chapter")
+                                      .arg(hit.page + 1)
+                                      .arg(hit.chapter.simplified());
     // The chapter that starts last at or before the hit's page contains it.
     QString title;
     int start = -1;
@@ -774,7 +781,10 @@ void SearchPanel::redraw()
         }
         labels[row]->setText(excerpt());
         buttons[row]->setAccessibleName(
-                strings::get("search_panel.page_detail").arg(hit.page + 1).arg(hit.text));
+                hit.page >= 0 || hit.chapter.isEmpty()
+                        ? strings::get("search_panel.page_detail").arg(hit.page + 1).arg(hit.text)
+                        : strings::get("search_panel.chapter_detail")
+                                  .arg(hit.chapter.simplified(), hit.text));
     }
 }
 } // namespace kobalt

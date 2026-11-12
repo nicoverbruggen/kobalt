@@ -20,7 +20,11 @@ struct ChapterProgress
 struct SearchHit
 {
     QString start, end, before, text, after;
+    // The page of the layout, or in chapter mode an estimated page of the
+    // book. Negative when there is none.
     int page = -1;
+    // In chapter mode, the title of the chapter of the hit.
+    QString chapter = {};
 };
 
 enum class SearchScope { Book, Chapter, Before, After };
@@ -28,6 +32,9 @@ enum class SearchScope { Book, Chapter, Before, After };
 struct SearchCursor
 {
     int block = 0, offset = 0;
+    // In chapter mode, the spine item that the search is in. The block and
+    // offset count in the document that has its text.
+    int item = 0;
 };
 
 struct SearchBatch

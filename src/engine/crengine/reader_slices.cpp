@@ -493,6 +493,39 @@ int EngineDocument::textBefore(const QString &position) const
     return count;
 }
 
+int EngineDocument::estimatedBookPage(const QString &position) const
+{
+    if (windowFirst_ < 0 || !source_ || !engine_)
+        return -1;
+    auto &map = pageMap();
+    if (!map.complete())
+        return -1;
+    const auto pointer =
+            engine_->getDocument()->createXPointer(Utf8ToUnicode(position.toUtf8().constData()));
+    auto *fragment = pointer.getNode();
+    while (fragment && !fragment->isNodeName("DocFragment"))
+        fragment = fragment->getParentNode();
+    auto *body = fragment ? enginelocation::body(fragment) : nullptr;
+    const int before = textBefore(position);
+    if (!body || before < 0)
+        return -1;
+    const int item = int(spineItems().indexOf(
+            QString::fromUtf8(UnicodeToUtf8(fragment->getAttributeValue("Source")).c_str())));
+    // The characters of the item end with its last text.
+    auto *last = body;
+    while (last && last->isElement() && last->getChildCount() > 0)
+        last = last->getChildNode(last->getChildCount() - 1);
+    int characters = before;
+    if (last && last->isText()) {
+        ldomXPointer end(last, int(last->getText().length()));
+        characters =
+                qMax(before, textBefore(QString::fromUtf8(UnicodeToUtf8(end.toString()).c_str())));
+    }
+    if (item < 0)
+        return -1;
+    return qMax(0, int(map.pagesBefore(item) + map.pagesBefore(item, before, qMax(1, characters))));
+}
+
 void EngineDocument::applySlice()
 {
 #if __has_include(<koblaze.h>)

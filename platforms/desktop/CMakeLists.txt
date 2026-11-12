@@ -632,7 +632,7 @@ if(BUILD_TESTING)
             target_compile_definitions(kobalt-${name}-tests PRIVATE
                 KOBALT_TEST_ASSET_ROOT="${KOBALT_ASSETS}" KOBALT_FONT_DIRECTORY="${KOBALT_ASSETS}/fonts"
                 KOBALT_INSTALLED_FONTS)
-            if(check MATCHES "^(vertical_spacing|large_toc|links)$")
+            if(check MATCHES "^(vertical_spacing|large_toc|links|chapter_parity)$")
                 target_compile_definitions(kobalt-${name}-tests PRIVATE KOBALT_TEST_ZIP="${KOBALT_TEST_ZIP}")
             endif()
             if(check STREQUAL "custom_pins")
@@ -701,7 +701,7 @@ if(BUILD_TESTING)
     kobalt_regressions(model font_axes touch_rotation)
     kobalt_regressions(platform reader_orientation font_sources system_fonts nickel_dictionary_selection
         nickel_reading_pace_cache nickel_reading_save nickel_event_save nickel_account nickel_session_calls nickel_session_volume nickel_book_menu nickel_font_scale native_progress native_sync_network native_dialog_overlay native_lifecycle standby_input standby_diagnostics usb_removal page_transition_native page_animation)
-    kobalt_regressions(engine large_toc vertical_spacing source_index location_round_trip engine_contract page_estimate layout_interrupt spine_window chapter_slices columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
+    kobalt_regressions(engine large_toc vertical_spacing source_index location_round_trip engine_contract page_estimate layout_interrupt spine_window chapter_slices chapter_parity columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
         fallback_styles svg_limits image_proportions figure_layout whitespace links search word_selection reader publisher_markup local_reader document_word_count document_cache alternate_layout)
     kobalt_regressions(component ui acknowledgments kosync_ui)
     target_sources(kobalt-page-animation-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/display/page_animation.cpp")
@@ -711,10 +711,13 @@ if(BUILD_TESTING)
     kobalt_regressions(session reading_book bookmark_session highlight_session reader_session)
     kobalt_regressions(resource image_policy resource_provider)
     kobalt_regressions(corpus multilingual)
-    foreach(check location-round-trip page-estimate)
+    foreach(check location-round-trip page-estimate chapter-parity)
         target_compile_definitions(kobalt-${check}-tests PRIVATE
             KOBALT_TEST_FIXTURES="${KOBALT_ROOT}/tests/fixtures")
     endforeach()
+    # Chapter mode does not match the whole book yet. The parity table is the
+    # loop for that work: enable the test once it passes.
+    set_tests_properties(engine.chapter-parity PROPERTIES DISABLED TRUE)
     target_compile_definitions(kobalt-figure-layout-tests PRIVATE
         KOBALT_TEST_FIGURE_BOOK="${KOBALT_ROOT}/tests/fixtures/figure-caption.epub")
     target_compile_definitions(kobalt-publisher-markup-tests PRIVATE

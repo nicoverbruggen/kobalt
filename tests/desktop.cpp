@@ -9590,6 +9590,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *notice = fixture.widget("rrBrightnessNotice");
         auto *reader = fixture.window.readerWindow();
         QVERIFY(page && notice && page->brightnessEdge && page->warmthEdge);
+        auto *feedbackTimer = reader->findChild<QTimer *>("rrLightFeedbackTimer");
+        QVERIFY(feedbackTimer && feedbackTimer->isSingleShot());
+        QCOMPARE(feedbackTimer->interval(), 150);
         reader->setProperty("reader_full_flash", false);
         LightFeedbackEvents events(reader, notice);
         QVERIFY(page->lightStarted(warmth));
@@ -9602,11 +9605,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(light->changes, 1);
         QVERIFY((warmth ? light->warmth : light->brightness) > (warmth ? 30 : 40));
         QVERIFY(!notice->isVisible());
-        // A continuous swipe must not repaint the notice at each delivered level.
+        // Check the debounce without sleeping between inputs: a loaded runner
+        // can turn a short wait into a real pause that should show feedback.
+        QCOMPARE(feedbackTimer->isActive(), feedback != 0);
         for (int i = 0; i < 5; ++i) {
-            QTest::qWait(40);
             page->lightChanged(i % 2 ? .1 : .2);
+            QVERIFY(!feedbackTimer->isActive());
             QCoreApplication::sendPostedEvents(reader);
+            QCOMPARE(feedbackTimer->isActive(), feedback != 0);
             QVERIFY(!notice->isVisible());
         }
         if (feedback != 0)

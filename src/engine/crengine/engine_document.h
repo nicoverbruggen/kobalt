@@ -191,7 +191,7 @@ public:
     // previous spine item with its neighbors and continues there. False at
     // either end of the book. Without a window this is a plain page turn.
     bool turnInWindow(int delta) override;
-    void prepareAhead() override;
+    void prepareAhead(const std::function<bool()> &current = {}) override;
 
     bool continuesBefore() const override { return windowFirst_ > 0 || sliceFirst_ > 0; }
 
@@ -392,7 +392,9 @@ private:
     QJsonObject windowSettings(int first, int last) const;
     // Opens the next spine item in `ahead_` when the reader is in the last
     // slice.
-    void prepareNextItem();
+    void prepareNextItem(const std::function<bool()> &current);
+    // Set in a document that is opened ahead: true stops its layout.
+    std::function<bool()> openInterrupt_;
     // Makes `ahead_` the document that is shown. False when it is not the
     // spine item `item` or its settings differ.
     bool adoptAhead(int item);

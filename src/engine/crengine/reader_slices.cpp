@@ -254,10 +254,12 @@ bool EngineDocument::enterNextSlice()
     return go(qBound(0, ahead, qMax(0, pages() - 1)));
 }
 
-void EngineDocument::prepareAhead()
+void EngineDocument::prepareAhead(const std::function<bool()> &current)
 {
+    // The reader is past the end of the slice here, so the next turn needs
+    // the next slice in any case: this layout does not stop.
     enterNextSlice();
-    prepareNextItem();
+    prepareNextItem(current);
 }
 
 bool EngineDocument::showSliceOf(const QString &position)

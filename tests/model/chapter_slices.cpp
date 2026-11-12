@@ -96,6 +96,41 @@ int main(int argc, char **argv)
     }
     require(ahead == forward, "Opening the next spine item ahead changed the pages");
 
+    // The work ahead stops when other work waits. Stop it after every
+    // number of checks: the document on screen must stay intact, and the
+    // pages after it must be the same as without any work ahead.
+    int stopped = 0;
+    const auto fromEndOfFirst = [&](bool stops) {
+        require(model.showSpineItems(0, 0, &error) && model.go(0), qPrintable(error));
+        while (model.spineItemOf(model.position()) == 0)
+            require(model.turnInWindow(1), "The first spine item has no end");
+        require(model.turnInWindow(-1) && model.spineItemOf(model.position()) == 0,
+                "Cannot go back to the end of the first spine item");
+        const auto lastPage = model.pageStart(model.page());
+        bool finished = false;
+        for (int limit = 1; stops && limit < 200000 && !finished; limit += 1 + limit / 3) {
+            int checks = 0;
+            bool asked = false;
+            model.prepareAhead([&] {
+                asked = asked || ++checks > limit;
+                return !asked;
+            });
+            asked ? ++stopped : finished = true;
+            require(model.pageStart(model.page()) == lastPage
+                            && model.spineItemOf(model.position()) == 0,
+                    "Stopped work ahead changed the page on screen");
+        }
+        require(!stops || finished, "The work ahead never finished");
+        QStringList pages{ lastPage };
+        while (model.turnInWindow(1))
+            pages.append(model.pageStart(model.page()));
+        return pages;
+    };
+    const auto withoutStops = fromEndOfFirst(false);
+    require(fromEndOfFirst(true) == withoutStops, "Stopped work ahead changed the pages after it");
+    require(stopped > 5, "The work ahead did not stop");
+    std::printf("work ahead: stopped %d times before it finished\n", stopped);
+
     // A spine item that was opened ahead has the settings of that moment.
     // After a change of settings it must not be shown.
     const auto afterFontChange = [&](bool prepare) {

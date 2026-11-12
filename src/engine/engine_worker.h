@@ -15,6 +15,10 @@ QObject *engineWorker();
 // a Kobo. The engine does the work, then the worker waits for the rest of
 // the time. One without the variable.
 int engineSlowdown();
+// Inside an engine job: waits for the work done since the last call, so that
+// long work is slowed evenly and a stop request is seen as late as on the
+// device, not later. Does nothing outside a job or without a slowdown.
+void engineSlowdownPause();
 
 struct EngineWorker
 {

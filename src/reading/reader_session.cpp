@@ -84,7 +84,7 @@ private:
 void prepareNeighbours(Engine &engine, int direction, const std::function<bool()> &current)
 {
     if (!current || current())
-        engine.prepareAhead();
+        engine.prepareAhead(current);
     for (const int step : { direction < 0 ? -1 : 1, direction < 0 ? 1 : -1 }) {
         if (current && !current())
             return;

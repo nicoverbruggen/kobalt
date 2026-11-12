@@ -1,3 +1,4 @@
+#include "engine/engine_worker.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "engine_document.h"
@@ -587,7 +588,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
                 LVContainerRef(new ContentContainer(source->container, std::move(skippedFonts)));
         source->contentContainer = true;
     }
-    OpeningCallback callback(engine_, std::move(progress));
+    OpeningCallback callback(engine_, std::move(progress), openInterrupt_);
     source_ = std::move(source);
     openingTimes_["model_prepare_ms"] = double(phase.restart());
     bool loaded;
@@ -649,6 +650,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         properties->setString(PROP_TEXTLANG_MAIN_LANG, language);
         engine_->propsApply(properties);
     }
+#ifdef KOBLAZE_CANCEL_CHECK
+    koblazeCheckCancel();
+#endif
     // These optional markers can be added to older parsed caches without
     // changing source text, IDs or saved positions.
     markPageNotes();
@@ -673,6 +677,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         // Loading computed styles before the body markers existed, including in previews.
         engine_->getDocument()->forceReinitStyles();
     }
+#ifdef KOBLAZE_CANCEL_CHECK
+    koblazeCheckCancel();
+#endif
     applyStyleSheet();
     applySlice();
     engine_->Render();
@@ -744,7 +751,28 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
     return openSource(source_, size_, windowSettings(first, last), error);
 }
 
-void EngineDocument::prepareNextItem()
+namespace {
+#ifdef KOBLAZE_CANCEL_CHECK
+// True when work that is done ahead must stop. Called every few nodes.
+bool stopAhead(void *context)
+{
+    engineSlowdownPause();
+    const auto &current = *static_cast<const std::function<bool()> *>(context);
+    return current && !current();
+}
+
+struct CancelCheck
+{
+    explicit CancelCheck(const std::function<bool()> &current)
+    {
+        koblazeSetCancelCheck(&stopAhead, const_cast<void *>(static_cast<const void *>(&current)));
+    }
+    ~CancelCheck() { koblazeSetCancelCheck(nullptr, nullptr); }
+};
+#endif
+} // namespace
+
+void EngineDocument::prepareNextItem(const std::function<bool()> &current)
 {
 #if __has_include(<koblaze.h>)
     if (!slices() || !source_ || !engine_)
@@ -769,8 +797,25 @@ void EngineDocument::prepareNextItem()
     ahead->cachePolicy_ = cachePolicy_;
     ahead->cacheBytes_ = cacheBytes_;
     QString error;
+#ifdef KOBLAZE_CANCEL_CHECK
+    // A tap must not wait for this work. The load and the style pass ask
+    // the check, the layout asks the interrupt. A stopped document is
+    // dropped, and the next call starts again.
+    const CancelCheck check(current);
+    ahead->openInterrupt_ = [&current] { return stopAhead(const_cast<void *>(static_cast<const void *>(&current))); };
+    try {
+        if (!ahead->openSource(source_, size_, settings, &error))
+            return;
+    } catch (const KoblazeRenderCancelled &) {
+        koblazeSetSpineWindow(-1, -1);
+        return;
+    }
+    ahead->openInterrupt_ = nullptr;
+#else
+    Q_UNUSED(current);
     if (!ahead->openSource(source_, size_, settings, &error))
         return;
+#endif
     ahead_ = std::move(ahead);
     aheadItem_ = next;
     aheadSettings_ = settings;

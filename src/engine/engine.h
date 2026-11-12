@@ -215,7 +215,9 @@ public:
     // engine that lays out a part of the text at a time prepares the next
     // part here, so that the turn into it does not wait. The page on screen
     // stays the same page.
-    virtual void prepareAhead() = 0;
+    // `current` is false once other work waits, such as a tap. Work that
+    // the reader does not need yet then stops at once and is dropped.
+    virtual void prepareAhead(const std::function<bool()> &current = {}) = 0;
     virtual int fontSize() const = 0;
     virtual int spacing() const = 0;
     virtual int margin() const = 0;

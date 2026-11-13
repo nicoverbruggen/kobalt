@@ -1940,7 +1940,8 @@ void SettingsPanel::showRenderingModes(const QString &current,
         return;
     auto *choices = openChoiceSheet("rrRendering", strings::get("settings.rendering"),
                                     strings::get("settings.rendering_description"));
-    const QStringList modes{ "hybrid", "fast", "accurate" };
+    // "fast" is not offered for now: Hybrid replaces it.
+    const QStringList modes{ "hybrid", /* "fast", */ "accurate" };
     for (const auto &mode : modes) {
         choices->add(QString("rrRendering_%1").arg(mode), renderingModeLabel(mode),
                      strings::get(mode == "accurate" ? "settings.rendering_accurate_description"

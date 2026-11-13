@@ -2,16 +2,18 @@
 #include <QJsonObject>
 #include <QString>
 
-// Rendering in Settings: Fast lays out only the chapter on screen, Accurate
-// lays out the whole book. Hybrid opens as Fast and counts the real pages of
-// the book in idle time once the user reads. Settings can also apply the
-// choice to the open book.
+// Rendering in Settings: Accurate lays out the whole book before it opens.
+// Hybrid opens with only the chapter on screen laid out, lays out the whole
+// book in idle time and shows it from the next page turn. Fast is Hybrid
+// without the whole book. Settings does not offer it for now; tests and the
+// environment still select it. Settings can also apply the choice to the
+// open book.
 namespace kobalt::renderingMode {
 inline constexpr auto preferenceKey = "rendering_mode";
 
 enum class Mode { Fast, Accurate, Hybrid };
 
-// A missing or invalid value is Hybrid.
+// A missing or invalid value is Hybrid, and so is a saved "fast".
 Mode fromPreferences(const QJsonObject &preferences);
 QString value(Mode mode);
 

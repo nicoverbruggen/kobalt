@@ -2682,7 +2682,7 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(fixture.press("rrRendering"));
         QTRY_VERIFY(fixture.visible("rrRenderingPopup"));
         QVERIFY(scene("settings-rendering"));
-        QVERIFY(fixture.press("rrRendering_fast"));
+        QVERIFY(fixture.press("rrRendering_hybrid"));
         QTRY_VERIFY(!fixture.visible("rrRenderingPopup"));
         QVERIFY(revealSettingsOption(fixture, "rrSessionTimeout"));
         QVERIFY(fixture.press("rrSessionTimeout"));
@@ -10492,7 +10492,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                          QJsonValue(mode));
         };
         const auto hybrid = strings::get("settings.rendering_hybrid"),
-                   fast = strings::get("settings.rendering_fast"),
                    accurate = strings::get("settings.rendering_accurate");
 
         QVERIFY(!storage::readJson(fixture.paths.preferences())
@@ -10516,24 +10515,27 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(turn());
         const auto accuratePosition = fixture.state().value("position").toString();
         QVERIFY(accuratePosition != fastPosition);
-        choose("fast", accurate, fast);
+        // Hybrid keeps the whole book that is laid out: nothing reloads.
+        // The next opening starts with the chapter.
+        choose("hybrid", accurate, hybrid);
         if (QTest::currentTestFailed())
             return;
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
-        QTRY_VERIFY(fixture.state().contains("chapter_load_ms"));
+        QVERIFY(!fixture.state().contains("chapter_load_ms"));
         QCOMPARE(opened.count(), 2);
         QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
         QVERIFY(close());
         QVERIFY(open(true));
         QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
-
-        // Faster and Hybrid read the same way: the book stays as it is.
-        choose("hybrid", fast, hybrid);
-        if (QTest::currentTestFailed())
-            return;
-        QTRY_VERIFY(!fixture.state().value("busy").toBool());
-        QVERIFY(fixture.state().contains("chapter_load_ms"));
-        QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
+        // Faster is not offered for now.
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrRendering"));
+        QVERIFY(fixture.press("rrRendering"));
+        QTRY_VERIFY(fixture.visible("rrRenderingPopup"));
+        QVERIFY(fixture.widget("rrRendering_hybrid") && fixture.widget("rrRendering_accurate"));
+        QVERIFY(!fixture.window.findChild<QWidget *>("rrRendering_fast"));
     }
 
     // Checks that turning automatic opening off in Kobalt asks first and turning it on does not.

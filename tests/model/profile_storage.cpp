@@ -296,7 +296,12 @@ int main(int argc, char **argv)
         require(storage::writePreferences(paths.preferences(), next),
                 "Rendering choice was not saved");
         const auto saved = storage::readPreferences(paths.preferences()).object;
-        require(renderingMode::fromPreferences(saved) == mode && saved.value("dark_mode") == true,
+        // A saved Fast opens as Hybrid: Settings does not offer it for now.
+        const auto opens = mode == renderingMode::Mode::Fast ? renderingMode::Mode::Hybrid : mode;
+        require(renderingMode::fromPreferences(saved) == opens
+                        && saved.value(renderingMode::preferenceKey).toString()
+                                == renderingMode::value(mode)
+                        && saved.value("dark_mode") == true,
                 "Rendering choice did not round-trip with the other preferences");
     }
     require(storage::writeJson(paths.preferences(),

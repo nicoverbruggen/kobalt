@@ -217,7 +217,12 @@ int main()
             const auto preferences = appearance::cleanPreferences(
                     { { renderingMode::preferenceKey, renderingMode::value(mode) },
                       { "future_option", 42 } });
-            require(renderingMode::fromPreferences(preferences) == mode
+            // Settings does not offer Fast for now. Its saved value stays
+            // and opens as Hybrid.
+            const auto opens = mode == Mode::Fast ? Mode::Hybrid : mode;
+            require(renderingMode::fromPreferences(preferences) == opens
+                            && preferences.value(renderingMode::preferenceKey).toString()
+                                    == renderingMode::value(mode)
                             && preferences.value("future_option").toInt() == 42,
                     "Rendering cleanup lost a saved choice or an unknown field");
             require(appearance::same({}, preferences), "Rendering invalidated the book layout");

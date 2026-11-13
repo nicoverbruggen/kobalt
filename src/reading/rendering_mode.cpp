@@ -21,10 +21,11 @@ void select()
 
 Mode fromPreferences(const QJsonObject &preferences)
 {
+    // Settings does not offer Fast for now: Hybrid opens as fast and ends
+    // with exact pages. A saved "fast" stays in the preferences and opens
+    // as Hybrid. Fast itself remains for the override and the environment.
     const auto value = preferences.value(preferenceKey).toString();
-    return value == QLatin1String("accurate") ? Mode::Accurate
-            : value == QLatin1String("fast")  ? Mode::Fast
-                                              : Mode::Hybrid;
+    return value == QLatin1String("accurate") ? Mode::Accurate : Mode::Hybrid;
 }
 
 QString value(Mode mode)

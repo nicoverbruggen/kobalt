@@ -221,6 +221,11 @@ public:
 
     LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
     {
+#ifdef KOBLAZE_PAUSE_POINT
+        // A read from the book can take long on a slow card. The build of
+        // the whole book can give the engine to other work before it.
+        koblazePausePoint();
+#endif
         const auto key = qstring(lString32(name));
         if (mode != LVOM_READ || !resources->contains(key))
             return {};
@@ -265,6 +270,11 @@ public:
 
     LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
     {
+#ifdef KOBLAZE_PAUSE_POINT
+        // A read from the book can take long on a slow card. The build of
+        // the whole book can give the engine to other work before it.
+        koblazePausePoint();
+#endif
         const auto path = qstring(lString32(name));
         if (!skippedFonts_.isEmpty()) {
             const auto normalized = QDir::cleanPath(path);
@@ -325,6 +335,11 @@ public:
 
     LVStreamRef OpenStream(const lChar32 *name, lvopen_mode_t mode) override
     {
+#ifdef KOBLAZE_PAUSE_POINT
+        // A read from the book can take long on a slow card. The build of
+        // the whole book can give the engine to other work before it.
+        koblazePausePoint();
+#endif
         if (mode != LVOM_READ) {
             return {};
         }

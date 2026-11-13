@@ -1039,17 +1039,29 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
     const auto unit = neighbouringUnit(1);
     auto *prepared = openAhead(unit.first, current, unit.second);
 #if defined(KOBLAZE_CANCEL_CHECK)
-    // A kept unit can have been left in a later slice. The turn must not
-    // wait for the layout of its first slice.
-    if (!prepared || !prepared->slices() || prepared->sliceFirst_ == 0)
+    if (!prepared)
         return;
     const StopCheck check(current);
     prepared->sliceInterrupt_ = [&current] { return current && !current(); };
     try {
-        if (!prepared->showSliceAt(0) || (current && !current()))
+        // A kept unit can have been left in a later slice. The turn must
+        // not wait for the layout of its first slice.
+        if (prepared->slices() && prepared->sliceFirst_ != 0
+            && (!prepared->showSliceAt(0) || (current && !current()))) {
             ahead_.reset();
-        else
-            prepared->sliceInterrupt_ = nullptr;
+            return;
+        }
+        prepared->sliceInterrupt_ = nullptr;
+        if (current && !current())
+            return;
+        // The turn into this unit shows its first page and its place in
+        // the contents. Both are made here, in idle time: the image with
+        // the glyphs it needs, and the pages of the contents entries.
+        prepared->go(0);
+        prepared->image(prepared->page());
+        prepared->setChapters(contents_, graph_);
+        prepared->externalChapters_ = externalChapters_;
+        prepared->chapters();
     } catch (const KoblazeRenderCancelled &) {
         koblazeSetSpineWindow(-1, -1);
         ahead_.reset();

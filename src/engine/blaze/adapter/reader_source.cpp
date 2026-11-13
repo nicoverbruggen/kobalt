@@ -920,10 +920,12 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
             prepared = !before.contains(it.key()) || before.value(it.key()) == it.value();
     }
     if (prepared) {
-        auto full = std::move(full_);
         const auto place = position();
-        if (!place.isEmpty())
-            full->goTo(place);
+        // Keep the chapter on screen if the prepared document cannot resolve
+        // its place. A failed switch must never send the reader to page one.
+        if (!place.isEmpty() && !full_->goTo(place))
+            return false;
+        auto full = std::move(full_);
         if (externalChapters_) {
             full->setChapters(contents_, graph_);
             full->externalChapters_ = true;
@@ -1462,7 +1464,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 // A build that stopped half-way leaves no half book in the
                 // cache file: writing it would hold up the work that gave
                 // the build up, and nothing could use it.
-                if (!opened && document->engine_ && document->engine_->getDocument())
+                if (document->engine_ && document->engine_->getDocument())
                     document->engine_->getDocument()->invalidateCacheFile();
                 document.reset();
             }

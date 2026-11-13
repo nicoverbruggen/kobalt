@@ -7,6 +7,7 @@
 #include "engine/blaze/adapter/reader_source.h"
 #include "publication/page_estimate.h"
 #include "support/qt_compat.h"
+#include "support/diagnostics.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
@@ -103,6 +104,18 @@ struct ReaderLocationProbe
     {
         return model.full_ ? model.full_->engine_.get() : nullptr;
     }
+
+    static void omitPreparedChapter(EngineDocument &model)
+    {
+        auto *body = model.full_->engine_->getDocument()->nodeFromXPath(U"/body");
+        require(body, "The prepared document must have a body");
+        while (body->getChildCount())
+            body->removeLastChild();
+    }
+
+    static void dropFullDocument(EngineDocument &model) { model.full_.reset(); }
+
+    static void abandonFullBuild(EngineDocument &model) { model.dropSideDocuments(); }
 
     static bool countEnded(const EngineDocument &model)
     {
@@ -1460,6 +1473,21 @@ void fullDocument()
     require(full && model.prepareFullDocument({}) == Engine::FullDocument::Ready
                     && Probe::fullView(model) == full,
             "A prepared document must stay until it is shown");
+    // Simulate a prepared document without the chapter of the shown place.
+    // Resolving that place must fail without replacing the usable chapter.
+    const auto beforeFailedSwitch = model.position();
+    const auto beforeFailedImage = model.image(model.page());
+    const auto *chapter = Probe::view(model);
+    Probe::omitPreparedChapter(model);
+    require(!model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
+            "A prepared document without the reading place must not be shown");
+    require(Probe::view(model) == chapter && model.position() == beforeFailedSwitch
+                    && model.image(model.page()) == beforeFailedImage,
+            "A failed switch changed the reading page");
+    Probe::dropFullDocument(model);
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "The whole book must build again after a failed switch");
+    full = Probe::fullView(model);
     // The reader went on in the chapter meanwhile.
     require(model.turnInWindow(1), "The fixture is too short to read on");
     const auto shown = model.pageStart(model.page());
@@ -1643,6 +1671,54 @@ void fullDocumentFromCache(const QByteArray &bytes)
             "The cache is not asked again for the same page");
     require(fresh.prepareFullDocument({}) == Engine::FullDocument::Ready,
             "The whole build must still work");
+}
+
+// Abandonment can happen after a cached document opened, at its word count.
+// Its destructor must leave that unfinished cache dirty, not save the reflow.
+void abandonedOpenedDocument(const QByteArray &bytes)
+{
+    QTemporaryDir root;
+    require(root.isValid(), "Cannot create the abandoned-build fixture");
+    const auto directory = root.path() + "/.cache";
+    const QByteArray fingerprint(64, 'f'), policy("abandoned-open-test");
+    const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
+    QString error;
+    {
+        EngineDocument writer(test::readerFonts());
+        writer.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+        require(writer.open(bytes, { 600, 800 }, settings, &error) && writer.saveDocumentCache(),
+                "Cannot seed the abandoned-build cache");
+    }
+    EngineDocument model(test::readerFonts());
+    model.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+    auto changed = settings;
+    changed["font_pixels"] = 32;
+    setChapterModeOverride(1);
+    const bool opened = model.open(bytes, { 600, 800 }, changed, &error);
+    setChapterModeOverride(-1);
+    require(opened, qPrintable(error));
+    initializeDiagnostics(root.path() + "/logs");
+    pauseDiagnostics(false);
+    auto ended = std::make_shared<std::atomic_bool>(false);
+    setDiagnosticObserver([ended](const QJsonObject &event) {
+        if (event.value("event") == "operation-end" && event.value("operation") == "engine-open")
+            ended->store(true);
+    });
+    const auto reset = qScopeGuard([] {
+        setDiagnosticObserver({});
+        pauseDiagnostics(true);
+    });
+    require(model.prepareFullDocument([ended] { return !ended->load(); })
+                            == Engine::FullDocument::Stopped
+                    && ended->load(),
+            "The cached build must park after opening and before counting words");
+    Probe::abandonFullBuild(model);
+    setDiagnosticObserver({});
+    pauseDiagnostics(true);
+    EngineDocument restored(test::readerFonts());
+    restored.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+    require(restored.open(bytes, { 600, 800 }, settings, &error), qPrintable(error));
+    require(!restored.openedFromCache(), "An abandoned opened build saved a reusable cache");
 }
 
 // Dark mode, the outline weight and the text colors move no text to another
@@ -2192,6 +2268,7 @@ int main(int argc, char **argv)
     parkedPublisherFonts();
     fullDocumentPixels();
     fullDocumentFromCache(bytes);
+    abandonedOpenedDocument(bytes);
     // KOBALT_PARKED_BOOK names another EPUB for the same check, for a book
     // that is not a fixture.
     if (const auto other = qEnvironmentVariable("KOBALT_PARKED_BOOK"); !other.isEmpty()) {

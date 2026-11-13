@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "support/host_presentation.h"
 #include "platform/posix/diagnostics.h"
 #include "app/reader/views/annotation_exporter.h"
@@ -6439,7 +6440,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.widget("rrContentsPosition")->property("text").toString(),
                      strings::get("stats.page_of")
                              .arg(fixture.state().value("rough_page").toInt())
-                             .arg(fixture.state().value("rough_pages").toInt()));
+                             .arg(headerfooter::pageTotal(
+                                     fixture.state().value("rough_pages").toInt(),
+                                     fixture.state().value("rough_pages_estimated").toBool())));
+        // The total of a book that is not counted is an estimate, with its mark.
+        QVERIFY(fixture.state().value("rough_pages_estimated").toBool());
+        QVERIFY(fixture.widget("rrContentsPosition")->property("text").toString().contains('~'));
         QVERIFY(fixture.press("rrContentsClose"));
         if (!fixture.visible("rrNavStats"))
             QVERIFY(fixture.press("rrPage"));
@@ -8590,7 +8596,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
         QVERIFY(page);
         // A page and its total.
-        const QRegularExpression pageForm("^(\\d+) / (\\d+)$");
+        // A total that is an estimate has a mark before it.
+        const QRegularExpression pageForm("^(\\d+) / ~?(\\d+)$");
         const QRegularExpression timeForm("^\\d+ ms$");
         // The chapter title no longer carries the load time.
         QVERIFY2(!page->slotContents[3].text.contains(QStringLiteral(" · ")),

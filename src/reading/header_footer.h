@@ -4,6 +4,10 @@
 #include <array>
 
 namespace kobalt::headerfooter {
+// The text of a page total. An estimated one shows with a mark, such as
+// ~300.
+QString pageTotal(int pages, bool estimated);
+
 // What one slot shows. Saved layouts name fields by fieldValue.
 enum class Field {
     Nothing,

@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "ui/controls/text.h"
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
@@ -328,20 +329,23 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
 }
 
 void ChapterGraph::setProgress(const QString &title, int chapterPage, int chapterPages,
-                               int nextChapterPages, int page, int pages, double bookFraction)
+                               int nextChapterPages, int page, int pages, double bookFraction,
+                               bool estimated)
 {
     if (this->title == title && progress.chapterPage == chapterPage
         && progress.chapterPages == chapterPages && progress.nextChapterPages == nextChapterPages
         && progress.page == page && progress.pages == pages && progress.bookFraction == bookFraction
+        && progress.estimated == estimated
         && progressWeight == ui::interfaceWeight())
         return;
     this->title = title;
     progressWeight = ui::interfaceWeight();
-    progress = { chapterPage, chapterPages, nextChapterPages, page, pages, bookFraction };
+    progress = { chapterPage, chapterPages, nextChapterPages, page, pages, bookFraction, estimated };
     chapterTitle->setAccessibleName(strings::get("chapter_graph.current_chapter").arg(title));
     this->chapterPage->setText(chapterPages > 0 ? strings::get("stats.page_of")
                                                           .arg(qBound(1, chapterPage, chapterPages))
-                                                          .arg(chapterPages)
+                                                          .arg(headerfooter::pageTotal(
+                                                                  chapterPages, estimated))
                                                 : QString());
     refreshCells();
     arrange();

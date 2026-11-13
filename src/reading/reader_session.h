@@ -346,6 +346,13 @@ public:
                                                      : pages();
     }
 
+    // True while the pages of the book are an estimate.
+    bool bookPagesEstimated() const
+    {
+        return frame.state.contains("book_fraction")
+                && frame.state.value("rough_pages_estimated").toBool();
+    }
+
     // The engine has more of the book after its last page: that page is not
     // the end of the book.
     bool continuesAfter() const { return frame.state.value("continues_after").toBool(); }

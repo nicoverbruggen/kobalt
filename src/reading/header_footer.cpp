@@ -6,6 +6,11 @@
 #include <QJsonArray>
 
 namespace kobalt::headerfooter {
+QString pageTotal(int pages, bool estimated)
+{
+    return estimated ? strings::get("common.estimated_total").arg(pages) : QString::number(pages);
+}
+
 namespace {
 QString savedSize(int size, bool enabled)
 {
@@ -38,16 +43,9 @@ bool anything(const Layout &layout, int first)
     return false;
 }
 
-// An estimated total shows with a mark, such as ~300.
-QString total(int pages, bool estimated)
-{
-    return estimated ? strings::get("header_footer.estimated_total").arg(pages)
-                     : QString::number(pages);
-}
-
 QString pageFraction(int page, int pages, bool estimated)
 {
-    return pages > 0 ? strings::get("common.page_fraction").arg(page).arg(total(pages, estimated))
+    return pages > 0 ? strings::get("common.page_fraction").arg(page).arg(pageTotal(pages, estimated))
                      : QString();
 }
 
@@ -91,7 +89,7 @@ QString percentDone(int page, int pages, bool decimal)
 // the dot between the two parts.
 QString pageOf(int page, int pages, bool estimated)
 {
-    return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(total(pages, estimated))
+    return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(pageTotal(pages, estimated))
                      : QString();
 }
 

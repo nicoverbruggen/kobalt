@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "render/page_content.h"
 #include "ui/controls/rows.h"
 #include "ui/controls/text.h"
@@ -226,7 +227,8 @@ void Reader::syncFrameState()
                 session->bookPages() > 0
                         ? strings::get("stats.page_of")
                                   .arg(session->bookPage() + 1)
-                                  .arg(session->bookPages())
+                                  .arg(headerfooter::pageTotal(session->bookPages(),
+                                                               session->bookPagesEstimated()))
                         : strings::get("common.percent").arg(session->progressPercent()));
     }
     syncBookmarks();
@@ -834,7 +836,8 @@ void Reader::updateGraph()
     chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(),
                               session->chapterPages(), nextPages, session->bookPage(),
                               session->bookPages(),
-                              session->bookPages() > 0 ? -1 : session->progressFraction());
+                              session->bookPages() > 0 ? -1 : session->progressFraction(),
+                              session->bookPagesEstimated());
 }
 
 void Reader::updateMenuStatus()

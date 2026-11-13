@@ -294,6 +294,7 @@
 "common.page" = "page";
 /* Arguments: %1, %2 */
 "common.page_fraction" = "%1 / %2";
+"common.estimated_total" = "~%1";
 "common.pages" = "pages";
 /* Arguments: %1 */
 "common.percent" = "%1%";
@@ -504,7 +505,6 @@
 "header_footer.preset.custom" = "Custom";
 /* Arguments: %1, %2 */
 "header_footer.page_of" = "%1 of %2";
-"header_footer.estimated_total" = "~%1";
 /* Arguments: %1 */
 "header_footer.preset.modified" = "%1 *";
 /* Arguments: %1 */

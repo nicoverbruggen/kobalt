@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "app/reader/settings/sleep_gallery.h"
 #include "render/page_content.h"
 #include "reading/remaining_time.h"
@@ -2549,7 +2550,8 @@ void Reader::showChapters()
             session->bookPages() > 0
                     ? strings::get("stats.page_of")
                               .arg(session->bookPage() + 1)
-                              .arg(session->bookPages())
+                              .arg(headerfooter::pageTotal(session->bookPages(),
+                                                           session->bookPagesEstimated()))
                     : strings::get("common.percent").arg(session->progressPercent()));
     const auto groups = preferences.value("chapter_groups").toString();
     choices->showChoices(session->title(), std::move(items), current, ChoiceScreen::Mode::Chapters,

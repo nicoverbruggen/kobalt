@@ -305,8 +305,10 @@ void EngineDocument::restorePageEstimate(const QJsonValue &saved)
     estimate.lastPages = record.partPages;
 }
 
-bool EngineDocument::refinePageEstimate()
+bool EngineDocument::refinePageEstimate(const std::function<bool()> &current)
 {
+    if (current && !current())
+        return true;
     if (windowFirst_ < 0 || spineItemCount_ <= 0 || !source_ || !engine_)
         return false;
     auto &map = pageMap();
@@ -316,7 +318,7 @@ bool EngineDocument::refinePageEstimate()
         // observations.
         const int item = map.nextUnmeasured(windowFirst_);
         if (item < 0)
-            return measureChapterPlaces();
+            return measureChapterPlaces(current);
         const auto href = spineItems().value(item);
         estimate.stream = source_->container->OpenStream(
                 Utf8ToUnicode(href.toUtf8().constData()).c_str(), LVOM_READ);
@@ -341,10 +343,10 @@ bool EngineDocument::refinePageEstimate()
         estimate.stream = LVStreamRef();
         estimate.measuring = -1;
     }
-    return !map.allMeasured() || measureChapterPlaces();
+    return !map.allMeasured() || measureChapterPlaces(current);
 }
 
-bool EngineDocument::measureChapterPlaces() const
+bool EngineDocument::measureChapterPlaces(const std::function<bool()> &current) const
 {
     auto &done = source_->pageEstimate.chapterPlaces;
     const auto list = chapters();
@@ -353,15 +355,23 @@ bool EngineDocument::measureChapterPlaces() const
     // One file in one step: a page turn waits for the step that runs.
     int files = 1;
     while (done < total && files > 0) {
+        if (current && !current())
+            return true;
         const auto &position =
                 done < list.size() ? list[done].position : graph[done - list.size()].position;
-        ++done;
         const int item = spineItemIndex(position);
         // The text on the screen has a layout to count from.
         if (item < 0 || item >= spineItemCount_ || (item >= windowFirst_ && item <= windowLast_)
-            || source_->textFractions.contains(position))
+            || source_->textFractions.contains(position)) {
+            ++done;
             continue;
-        textFraction(item, position);
+        }
+        textFraction(item, position, false, current);
+        // Retry this place after an interruption. textFraction keeps no
+        // partial result, and its reads and parser check between chunks.
+        if (current && !current())
+            return true;
+        ++done;
         --files;
     }
     return done < total;

@@ -42,7 +42,7 @@ struct DocumentDeleter
 
 } // namespace
 
-void captureChapters(ReaderFrame &result, Engine &engine)
+void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bool()> &current)
 {
     const auto chapter = engine.chapterProgress();
     result.state["chapter_title"] = chapter.title;
@@ -54,11 +54,11 @@ void captureChapters(ReaderFrame &result, Engine &engine)
     result.contentsSelection = engine.chapterSelection(result.chapters);
     result.graphSelection = engine.chapterSelection(result.chapterGraph);
     if (engine.bookFraction() >= 0) {
-        const auto bookPages = [&engine](QVector<ChapterLink> &links) {
+        const auto bookPages = [&engine, &current](QVector<ChapterLink> &links) {
             QStringList positions;
             for (const auto &link : links)
                 positions.append(link.position);
-            const auto pages = engine.bookPages(positions);
+            const auto pages = engine.bookPages(positions, current);
             for (int i = 0; i < links.size(); ++i)
                 links[i].page = pages.value(i, 0) > 0 ? pages[i] - 1 : -1;
         };
@@ -219,16 +219,44 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
 {
     if (engine->bookFraction() < 0)
         return;
-    BackgroundDiagnostic diagnostic("Page estimates", *engine, current);
+    const std::function<bool()> wanted = [current, requests] {
+        return current() && engineWorkRequests() == requests;
+    };
+    // A new engine request can be a preview of this same book, so it does
+    // not necessarily change the session revision. Resume behind that work.
+    const auto resumeAfterWork = [engine, current, guard, job, lease] {
+        kobalt::qt::invoke(
+                qApp,
+                [engine, current, guard, job, lease] {
+                    if (!guard || !current() || !lease || lease->revoked())
+                        return;
+                    const quint64 queued = engineWorkRequests();
+                    kobalt::qt::invoke(
+                            engineWorkerForIdle(),
+                            [engine, current, guard, job, lease, queued] {
+                                if (!current() || !lease || lease->revoked())
+                                    return;
+                                EngineJob activity;
+                                refinePageEstimate(engine, current, guard, job, lease, queued);
+                            },
+                            Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
+    };
+    BackgroundDiagnostic diagnostic("Page estimates", *engine, wanted);
     bool more = false;
-    for (int step = 0; step < 32 && current(); ++step) {
+    for (int step = 0; step < 32 && wanted(); ++step) {
         engineActivity().checkpoint();
-        more = engine->refinePageEstimate();
+        more = engine->refinePageEstimate(wanted);
         if (!more)
             break;
     }
     if (!current())
         return;
+    if (!wanted()) {
+        resumeAfterWork();
+        return;
+    }
     // Hybrid rendering: the whole book is built beside the chapter. A page
     // turn stops the try, and the next quiet moment starts again. Before
     // the user reads, only a book that is in the parsed-book cache is
@@ -240,38 +268,12 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     // idle moment: it pauses within milliseconds.
     const qint64 quiet = renderingMode::buildQuietMilliseconds() - engineWorkQuietMilliseconds();
     const bool wait = reading && quiet > 0 && !engine->fullDocumentStarted();
-    if (!more && wait) {
-        kobalt::qt::invoke(
-                qApp,
-                [engine, current, guard, job, lease, quiet] {
-                    if (!guard || !current() || !lease || lease->revoked())
-                        return;
-                    kobalt::qt::later(int(quiet) + 1, guard.data(),
-                                      [engine, current, guard, job, lease] {
-                        if (!guard || !current() || !lease || lease->revoked())
-                            return;
-                        const quint64 queued = engineWorkRequests();
-                        kobalt::qt::invoke(
-                                engineWorkerForIdle(),
-                                [engine, current, guard, job, lease, queued] {
-                                    if (!current() || !lease || lease->revoked())
-                                        return;
-                                    EngineJob activity;
-                                    refinePageEstimate(engine, current, guard, job, lease, queued);
-                                },
-                                Qt::QueuedConnection);
-                    });
-                },
-                Qt::QueuedConnection);
-    }
     if (!more && !wait && (reading || renderingMode::countsInBackground())) {
         BackgroundDiagnostic diagnostic("Full document", *engine, current);
         // The build can run for minutes. It parks as soon as anyone queues
         // work for the engine, not only for a page turn, and goes on after
         // that work.
-        const auto full = engine->prepareFullDocument(
-                [&current, requests] { return current() && engineWorkRequests() == requests; },
-                !reading);
+        const auto full = engine->prepareFullDocument(wanted, !reading);
         if (!current())
             return;
         if (full == Engine::FullDocument::Stopped) {
@@ -280,24 +282,7 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
             // step from here could put it in front. The main thread queues
             // it instead: it gets to this only after the code that
             // announced the work has queued it.
-            kobalt::qt::invoke(
-                    qApp,
-                    [engine, current, guard, job, lease] {
-                        if (!guard || !current() || !lease || lease->revoked())
-                            return;
-                        // Asking for the worker below counts as one request.
-                        const quint64 queued = engineWorkRequests() + 1;
-                        kobalt::qt::invoke(
-                                engineWorker(),
-                                [engine, current, guard, job, lease, queued] {
-                                    if (!current() || !lease || lease->revoked())
-                                        return;
-                                    EngineJob activity;
-                                    refinePageEstimate(engine, current, guard, job, lease, queued);
-                                },
-                                Qt::QueuedConnection);
-                    },
-                    Qt::QueuedConnection);
+            resumeAfterWork();
             return;
         }
         if (full == Engine::FullDocument::Ready) {
@@ -314,11 +299,27 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
             return;
         }
     }
-    engine->wordCounts(current);
+    {
+        DiagnosticOperation words("page-estimate-words", [&wanted] { return !wanted(); });
+        engine->wordCounts(wanted);
+    }
     if (!current())
         return;
+    if (!wanted()) {
+        resumeAfterWork();
+        return;
+    }
     ReaderFrame estimate;
-    captureChapters(estimate, *engine);
+    {
+        DiagnosticOperation chapters("page-estimate-chapters", [&wanted] { return !wanted(); });
+        captureChapters(estimate, *engine, wanted);
+    }
+    if (!current())
+        return;
+    if (!wanted()) {
+        resumeAfterWork();
+        return;
+    }
     estimate.state["page_estimate"] = engine->state().value("page_estimate");
     kobalt::qt::invoke(
             qApp,
@@ -337,6 +338,31 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                     guard->updated();
             },
             Qt::QueuedConnection);
+    if (!more && wait) {
+        kobalt::qt::invoke(
+                qApp,
+                [engine, current, guard, job, lease, quiet] {
+                    if (!guard || !current() || !lease || lease->revoked())
+                        return;
+                    kobalt::qt::later(int(quiet) + 1, guard.data(),
+                                      [engine, current, guard, job, lease] {
+                                          if (!guard || !current() || !lease || lease->revoked())
+                                              return;
+                                          const quint64 queued = engineWorkRequests();
+                                          kobalt::qt::invoke(
+                                                  engineWorkerForIdle(),
+                                                  [engine, current, guard, job, lease, queued] {
+                                                      if (!current() || !lease || lease->revoked())
+                                                          return;
+                                                      EngineJob activity;
+                                                      refinePageEstimate(engine, current, guard,
+                                                                         job, lease, queued);
+                                                  },
+                                                  Qt::QueuedConnection);
+                                      });
+                },
+                Qt::QueuedConnection);
+    }
     if (more) {
         const quint64 queued = engineWorkRequests();
         kobalt::qt::invoke(
@@ -586,7 +612,6 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     const auto systemFont = placeholderFamily_;
     const auto latest = newest;
     const auto job = revision;
-    const auto neighbourCount = neighbourJobs;
     const auto notifyReuse = [guard, lease, job, reusing] {
         if (reusing)
             kobalt::qt::invoke(
@@ -650,16 +675,9 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.current = current;
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, opening = std::move(opening), identity, finished, lease, job, current,
-             neighbourCount]() mutable {
+            [guard, opening = std::move(opening), identity, finished, lease, job]() mutable {
                 EngineJob activity;
                 auto output = runOpening(opening);
-                const bool opened = output.outcome.ready();
-                // The session reports the opening done before this job draws the
-                // pages beside the first one. Count that from before the report.
-                std::unique_ptr<NeighbourJob> neighbours;
-                if (opened)
-                    neighbours = std::make_unique<NeighbourJob>(neighbourCount);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, result = std::move(output.frame), outcome = output.outcome,
@@ -717,32 +735,13 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                         finished(outcome);
                                         if (guard) {
                                             guard->startPendingSearch();
-                                            guard->loadImages();
+                                            // Let opening callbacks build the window and queue
+                                            // its presentation work before idle rendering.
+                                            guard->resumeIdleWork(1, job);
                                         }
                                     });
                         },
                         Qt::QueuedConnection);
-                // Show the first page before drawing the pages beside it, as page turns do.
-                if (!opened || !current())
-                    return;
-                prepareNeighbours(*opening.engine, 1, current);
-                // The neighbour pages can find images that the first frame did not count.
-                const auto resources = opening.engine->resourceStats();
-                const auto cachedPages = opening.engine->cachedPages();
-                kobalt::qt::invoke(
-                        qApp,
-                        [guard, resources, cachedPages, job] {
-                            if (!guard || guard->running || guard->revision != job)
-                                return;
-                            guard->frame.resources = resources;
-                            guard->frame.state["cached_pages"] = cachedPages;
-                            guard->loadImages();
-                            if (guard->idle && !guard->running && !guard->loadingImage)
-                                guard->idle();
-                        },
-                        Qt::QueuedConnection);
-                refinePageEstimate(opening.engine, current, guard, job, lease,
-                                   engineWorkRequests());
             },
             Qt::QueuedConnection);
 }
@@ -895,9 +894,9 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
     if (next != desired || resized || chapterMode >= 0)
         fullDocumentPending_ = false;
     const bool modeChanged = chapterMode >= 0 && chapterMode != previousMode;
-    if (chapterMode >= 0)
-        desiredChapterMode = chapterMode;
     if (next != desired || resized || modeChanged) {
+        if (chapterMode >= 0)
+            desiredChapterMode = chapterMode;
         const auto previousBionic = desired.value("bold_reading").toString("off");
         const auto nextBionic = next.value("bold_reading").toString("off");
         const auto reason = nextBionic != previousBionic
@@ -2390,13 +2389,13 @@ void ReaderSession::loadImages()
                         && latest->load() == job;
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, loaded, result = std::move(result), job, lease] {
+                        [guard, loaded, refill, result = std::move(result), job, lease] {
                             if (!guard) {
                                 return;
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
-                                    [guard, loaded, job, lease](ReaderFrame result) {
+                                    [guard, loaded, refill, job, lease](ReaderFrame result) {
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->loadingImage = false;
@@ -2405,29 +2404,15 @@ void ReaderSession::loadImages()
                                             if (guard->updated)
                                                 guard->updated();
                                         }
-                                        if (guard && (loaded || job != guard->revision))
-                                            guard->loadImages();
+                                        if (guard) {
+                                            if (refill && job == guard->revision)
+                                                guard->resumeIdleWork(1, job);
+                                            else if (loaded || job != guard->revision)
+                                                guard->loadImages();
+                                        }
                                     });
                         },
                         Qt::QueuedConnection);
-                if (refill) {
-                    prepareNeighbours(*engine, 1, [latest, job] { return latest->load() == job; });
-                    const auto resources = engine->resourceStats();
-                    const auto cachedPages = engine->cachedPages();
-                    kobalt::qt::invoke(
-                            qApp,
-                            [guard, resources, cachedPages, job, lease] {
-                                if (!guard || guard->lease_ != lease || guard->running
-                                    || guard->revision != job)
-                                    return;
-                                guard->frame.resources = resources;
-                                guard->frame.state["cached_pages"] = cachedPages;
-                                guard->loadImages();
-                                if (guard->idle && !guard->running && !guard->loadingImage)
-                                    guard->idle();
-                            },
-                            Qt::QueuedConnection);
-                }
             },
             Qt::QueuedConnection);
 }
@@ -2560,9 +2545,9 @@ void ReaderSession::dispatch(bool pageTurn)
     const auto requested = desired;
     // The prepared document of the whole book is shown with this render.
     const bool swapToFull = std::exchange(fullDocumentPending_, false);
-    if (swapToFull)
-        desiredChapterMode = 0;
-    const auto chapterMode = desiredChapterMode;
+    // A ready notification is only a try. Keep it local to this job until
+    // adoption succeeds, so a superseded try cannot request a full load.
+    const auto chapterMode = swapToFull ? 0 : desiredChapterMode;
     const auto size = desiredSize;
     const auto anchor = std::exchange(destination, {});
     const int chapter = std::exchange(chapterTarget, -1);
@@ -2736,15 +2721,13 @@ void ReaderSession::dispatch(bool pageTurn)
                 const bool failed = !result.error.isEmpty();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), job, lease, delta, failed,
-                         swapToFull] {
+                        [guard, result = std::move(result), job, lease, delta, failed] {
                             if (!guard) {
                                 return;
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
-                                    [guard, job, lease, delta, failed,
-                                     swapToFull](ReaderFrame result) {
+                                    [guard, job, lease, delta, failed](ReaderFrame result) {
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->running = false;
@@ -2755,6 +2738,9 @@ void ReaderSession::dispatch(bool pageTurn)
                                             return;
                                         }
                                         guard->frame = result;
+                                        // Explicit mode is pending intent, not the mode of
+                                        // completed frames. Later requests use that frame.
+                                        guard->desiredChapterMode = -1;
                                         if (diagnosticsActive())
                                             diagnostic("frame-ready",
                                                        { { "render_id", double(job) },
@@ -2766,13 +2752,7 @@ void ReaderSession::dispatch(bool pageTurn)
                                                 && result.state.value("pages").toInt() > 0;
                                         if (!result.error.isEmpty()) {
                                             guard->desired = result.state;
-                                            guard->desiredChapterMode =
-                                                    result.state.contains("book_fraction") ? 1 : 0;
                                         }
-                                        // The prepared document was gone: the
-                                        // reader stays with the chapter.
-                                        if (swapToFull && result.state.contains("book_fraction"))
-                                            guard->desiredChapterMode = 1;
                                         if (failed)
                                             guard->cancelPendingTurn();
                                         guard->clearRenderProgress();

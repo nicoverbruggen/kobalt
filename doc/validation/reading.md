@@ -1,5 +1,7 @@
 # Startup and reading checks
 
+Opening queues neighbour and estimate work after its completion callback. Preview requests can interrupt estimates without changing the session revision; the estimates resume after the preview. Deferred-image completion also resumes this idle work. The focused checks are `lifecycle.appearancePreviewInterruptsEstimate`, `lifecycle.pageImageDuringHold` and `session.reader-session`, including superseded whole-book-ready notifications.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

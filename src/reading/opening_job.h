@@ -109,7 +109,8 @@ void logOpeningPhases(const OpeningJob &job, const OpeningState &state);
 OpeningOutput runOpening(OpeningJob &job);
 
 // Defined in reader_session.cpp, which uses them for every later frame too.
-void captureChapters(ReaderFrame &result, Engine &engine);
+void captureChapters(ReaderFrame &result, Engine &engine,
+                     const std::function<bool()> &current = {});
 BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &positions,
                                            bool rangeEndpoints, bool sourceOrder,
                                            const std::function<bool()> &current = {});

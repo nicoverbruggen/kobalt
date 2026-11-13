@@ -117,6 +117,16 @@ struct ReaderLocationProbe
 
     static void abandonFullBuild(EngineDocument &model) { model.dropSideDocuments(); }
 
+    static bool measurePlace(EngineDocument &model, const std::function<bool()> &current)
+    {
+        return model.measureChapterPlaces(current);
+    }
+
+    static int measuredPlaces(const EngineDocument &model)
+    {
+        return model.source_->pageEstimate.chapterPlaces;
+    }
+
     static bool countEnded(const EngineDocument &model)
     {
         return !model.counting_ && !model.source_->epubCache;
@@ -1276,6 +1286,28 @@ void fullDocumentKeepsPublisherFonts()
     require(reads->load() == 1, "The whole build read the same publisher font again");
 }
 
+// A page request interrupts chapter-place reads without keeping a partial
+// result or skipping that place when the idle work resumes.
+void interruptedChapterPlace()
+{
+    EngineDocument model(test::readerFonts());
+    openResources(model, pagesBook(), { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    const auto target = model.pageStart(10);
+    require(model.spineItemOf(target) == 1, "The target must be in the long chapter");
+    model.setChapterSlices(6);
+    QString error;
+    require(model.showSpineItems(0, 0, &error), qPrintable(error));
+    model.setChapters({ { "Later", target } }, {});
+    int checks = 0;
+    require(Probe::measurePlace(model, [&] { return ++checks <= 4; }) && checks > 4,
+            "Chapter-place measurement did not stop during its read or parse");
+    require(Probe::measuredPlaces(model) == 0 && Probe::textPlaces(model) == 0,
+            "An interrupted chapter place was kept or skipped");
+    require(!Probe::measurePlace(model, {}) && Probe::measuredPlaces(model) == 1
+                    && Probe::textPlaces(model) == 1,
+            "The interrupted chapter place was not retried");
+}
+
 // The layout at the open gives its pages, also of a spine item without text
 // such as a cover.
 void openObserved()
@@ -2258,6 +2290,7 @@ int main(int argc, char **argv)
 #if __has_include(<koblaze.h>)
     slicedItem(page.layout());
     openObserved();
+    interruptedChapterPlace();
     forwardPages();
     laterCounted();
     countedInBackground();

@@ -6,7 +6,7 @@ These checks cover the CREngine layout groups, publisher markup, the document ca
 
 ## Engine checks
 
-Hybrid regressions keep the chapter usable when a prepared document cannot resolve its reading position. They check publisher-font reuse across the whole-book build, parked-cache ownership and abandonment after a cached document opens. Rendering policy 5 rebuilds pagination that may contain another book's publisher-font metrics. Parsed-book data remains compatible and is retained.
+Hybrid regressions keep the chapter usable when a prepared document cannot resolve its reading position. They check interrupted chapter-place reads, publisher-font reuse across the whole-book build, parked-cache ownership and abandonment after a cached document opens. Rendering policy 5 rebuilds pagination that may contain another book's publisher-font metrics. Parsed-book data remains compatible and is retained.
 
 The restored `reader`, `publisher-markup`, `local-reader` and `document-word-count` checks keep the original assertions. Their focused EPUBs are generated offline in C++ with the original text, span IDs, markup and resource paths. `engine.document-cache` is a separate check, so `engine.reader` stays within the child deadline under parallel execution. `engine.reader` also links the portable Kobo position codec, but it does not load Nickel or inspect firmware symbols. Its variable-font cases need the pinned Amstelvar fixture and fail rather than skip without it.
 

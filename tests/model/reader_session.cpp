@@ -1,5 +1,6 @@
 #include "reader_inputs.h"
 #include "reading/reader_session.h"
+#include "reading/rendering_mode.h"
 #include "sync/kosync.h"
 #include "app/messages/opening_message.h"
 #include "publication/native_resources.h"
@@ -289,6 +290,97 @@ int run(int argc, char **argv)
             ReaderSession::drain([&] { opened.quit(); });
             opened.exec();
             servedPath = path;
+        }
+        // A stale ready notification must not turn into a synchronous whole
+        // book load when its first frame is superseded by another request.
+        for (const bool prepared : { false, true }) {
+            auto fast =
+                    std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+            auto access = std::make_shared<SourceLease>();
+            const int quiet = renderingMode::buildQuietMilliseconds();
+            renderingMode::setBuildQuietMilliseconds(0);
+            renderingMode::setOverride(prepared ? 2 : 1);
+            fast->open({ path,
+                         path,
+                         QSize(758, 900),
+                         {},
+                         {},
+                         {},
+                         access,
+                         nativeResourceFactory(path, server.serverPort(), access),
+                         firstPositions },
+                       [&](OpeningResult result) {
+                           require(result.ready(), qPrintable(openingMessage(result)));
+                           opened.quit();
+                       });
+            opened.exec();
+            require(fast->state().contains("book_fraction"),
+                    "The stale-ready fixture must open as a chapter");
+            QEventLoop rendered;
+            fast->updated = [&] {
+                if (!fast->busy())
+                    rendered.quit();
+            };
+            if (prepared) {
+                // A completed appearance edit must not leave chapter mode as
+                // pending intent when a later full-document frame is superseded.
+                fast->requestAppearance(
+                        fast->requestedAppearance().edited(appearance::Patch(
+                                QJsonObject{ { "font_pixels",
+                                               fast->state().value("font_pixels").toInt() + 2 } })),
+                        {}, ReaderSession::hybridChapterMode);
+                rendered.exec();
+                for (int turn = 0; turn < 4; ++turn) {
+                    require(fast->turn(1), "Cannot read on before the full build");
+                    rendered.exec();
+                }
+                QEventLoop ready;
+                QTimer poll;
+                QObject::connect(&poll, &QTimer::timeout, &ready, [&] {
+                    if (fast->fullDocumentPending_)
+                        ready.quit();
+                });
+                poll.start(10);
+                if (!fast->fullDocumentPending_)
+                    ready.exec();
+                poll.stop();
+                QTemporaryDir logs;
+                initializeDiagnostics(logs.path());
+                pauseDiagnostics(false);
+                auto armed = std::make_shared<std::atomic_bool>(true);
+                auto opens = std::make_shared<std::atomic_int>(0);
+                setDiagnosticObserver([&, armed, opens](const QJsonObject &event) {
+                    if (event.value("event") == "operation-start"
+                        && event.value("operation") == "engine-open")
+                        ++*opens;
+                    if (event.value("event") == "render-end"
+                        && event.value("book_fraction").toDouble() < 0 && armed->exchange(false))
+                        kobalt::qt::invoke(
+                                qApp,
+                                [&] {
+                                    require(fast->go(0), "Cannot supersede the adopted full frame");
+                                },
+                                Qt::QueuedConnection);
+                });
+                require(fast->go(0), "Cannot adopt the prepared full document");
+                rendered.exec();
+                setDiagnosticObserver({});
+                require(!armed->load() && !fast->state().contains("book_fraction")
+                                && opens->load() == 0,
+                        "A superseded full frame reopened a chapter after an appearance edit");
+            } else {
+                fast->showFullDocument();
+                require(fast->go(0) && fast->go(0), "Cannot supersede the stale-ready frame");
+                rendered.exec();
+                require(fast->state().contains("book_fraction"),
+                        "A superseded stale-ready frame loaded the whole book");
+            }
+            fast.reset();
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+            QEventLoop drained;
+            ReaderSession::drain([&] { drained.quit(); });
+            drained.exec();
         }
         lease = std::make_shared<SourceLease>();
         session->open({ path,

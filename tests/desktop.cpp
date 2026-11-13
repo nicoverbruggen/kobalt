@@ -8657,6 +8657,31 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 test::skipPageTurnWindow();
                 fixture.window.readerWindow()->pageButton(1);
                 QTRY_COMPARE_WITH_TIMEOUT(fixture.state().value("page").toInt(), shown + 1, 5000);
+                // Two searches immediately after the switch must use the new
+                // query and navigate to its result. The phrases are in
+                // different chapters of Type Tester.
+                for (const auto *text : { "kerning", "characteristically brief" }) {
+                    if (!fixture.visible("rrSearchOpen"))
+                        QVERIFY(fixture.press("rrPage"));
+                    QTRY_VERIFY(fixture.visible("rrSearchOpen"));
+                    QVERIFY(fixture.press("rrSearchOpen"));
+                    QTRY_VERIFY(fixture.visible("rrSearchQuery"));
+                    auto *query = qobject_cast<QLineEdit *>(fixture.widget("rrSearchQuery"));
+                    QVERIFY(query);
+                    query->setText(QString::fromLatin1(text));
+                    QVERIFY(fixture.press("rrSearchSubmit"));
+                    auto *status = qobject_cast<QLabel *>(fixture.widget("rrSearchStatus"));
+                    QVERIFY(status);
+                    QTRY_VERIFY_WITH_TIMEOUT(
+                            !status->text().contains("Searching", Qt::CaseInsensitive), 30000);
+                    const auto before = fixture.state().value("position").toString();
+                    QVERIFY(fixture.pressSearchResult());
+                    QTRY_VERIFY_WITH_TIMEOUT(
+                            !fixture.state().value("busy").toBool() && !fixture.visible("rrSearch")
+                                    && fixture.state().value("position").toString() != before,
+                            10000);
+                    QVERIFY(!fixture.state().contains("book_fraction"));
+                }
                 // Another text size in the menu goes back to the chapter
                 // instead of laying out the whole book again.
                 const int size = fixture.state().value("font_pixels").toInt();

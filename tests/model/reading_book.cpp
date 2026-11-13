@@ -492,7 +492,12 @@ int main(int argc, char **argv)
             const auto turnOnce = [&](ReaderSession &session) {
                 require(session.state().value("rough_page").toInt() == 0,
                         "A page number before the book was measured");
-                waitUntil([&] { return !session.busy() && !session.preparingNeighbours(); });
+                // Neighbour work ends independently of measurement. Chapter
+                // word counts become available after every item is measured.
+                waitUntil([&] {
+                    return !session.busy() && !session.preparingNeighbours()
+                            && session.totalWords() >= 0;
+                });
                 require(session.turn(1), "Cannot turn in chapter mode");
                 waitUntil([&] { return !session.busy(); });
                 return session.state();

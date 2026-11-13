@@ -253,7 +253,7 @@ public:
 
     // Does a small step of the background work that makes the rough page
     // numbers more precise. Never writes storage. True while work remains.
-    virtual bool refinePageEstimate() { return false; }
+    virtual bool refinePageEstimate(const std::function<bool()> & = {}) { return false; }
 
     // One step of counting the real pages of the book in the background:
     // the layout of a part of a spine item that is not on screen. True

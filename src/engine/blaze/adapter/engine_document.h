@@ -208,7 +208,7 @@ public:
                            bool rangeEndpoints = false) const override;
     bool goToFraction(double fraction) override;
     qint64 chapterLoadMilliseconds() const override;
-    bool refinePageEstimate() override;
+    bool refinePageEstimate(const std::function<bool()> &current = {}) override;
     bool countPages(const std::function<bool()> &current) override;
     FullDocument prepareFullDocument(const std::function<bool()> &current,
                                      bool cachedOnly = false) override;
@@ -597,7 +597,7 @@ private:
     // items. A frame asks for the book page of every chapter once the book
     // is measured, and reads one XHTML file for each. Idle time does that
     // ahead of the frame. True while chapters are left.
-    bool measureChapterPlaces() const;
+    bool measureChapterPlaces(const std::function<bool()> &current) const;
     double textFraction(int item, const QString &position, bool previous = false,
                         const std::function<bool()> &current = {}) const;
     double readTextFraction(int item, const QString &position, bool previous = false,

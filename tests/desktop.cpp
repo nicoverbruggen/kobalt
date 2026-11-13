@@ -2460,6 +2460,12 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QCOMPARE(fixture.visible("rrMenuClock"), devicePreview);
     QCOMPARE(fixture.visible("rrMenuBattery"), devicePreview);
     QVERIFY(scene("menu"));
+    QVERIFY(fixture.press("rrNavSeek"));
+    auto *navigator = dynamic_cast<ui::PageScrubber *>(fixture.widget("rrPageScrubber"));
+    QVERIFY(navigator);
+    QTRY_VERIFY(navigator->previewReady());
+    QVERIFY(scene("navigate"));
+    QVERIFY(fixture.press("rrNavSeek"));
     QVERIFY(fixture.press("rrNavChapters"));
     QTRY_VERIFY(fixture.visible("rrContents"));
     QVERIFY(fixture.widget("rrChapter2"));

@@ -339,6 +339,9 @@ private:
     EngineFontInputs fonts_;
     friend class nickel::NickelPositionCodec;
     std::shared_ptr<ReaderSource> source_;
+    // A replacement reads fresh resources but belongs to the same book.
+    // Consumed by openSource(), before it touches the embedded font cache.
+    quint64 openingFontSource_ = 0;
     QJsonObject openingTimes_;
     std::unique_ptr<ColumnView> engine_;
     struct SearchText;

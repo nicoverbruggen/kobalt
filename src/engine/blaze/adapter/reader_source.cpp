@@ -48,6 +48,18 @@ lString32 cre(const QString &s)
 
 constexpr int maxBook = 64 * 1024 * 1024;
 
+#ifdef KOBLAZE_DOCUMENT_FONT_DATA
+quint64 documentFontSource = 0;
+
+void useDocumentFontSource(quint64 source)
+{
+    if (source != documentFontSource) {
+        koblazeForgetDocumentFontData();
+        documentFontSource = source;
+    }
+}
+#endif
+
 class ResourceStream : public LVNamedStream
 {
 public:
@@ -202,7 +214,7 @@ class ResourceContainer : public LVNamedContainer
 {
 public:
     ResourceContainer(std::shared_ptr<ResourceCache> resources, const QMap<QString, qint64> &sizes)
-        : resources(std::move(resources))
+        : resources(std::move(resources)), sizes(sizes)
     {
         SetName(U"publication.epub");
         for (const auto &name : this->resources->names()) {
@@ -233,12 +245,20 @@ public:
         const auto dimensions = resources->deferredImageSize(key);
         if (dimensions.isValid())
             return LVStreamRef(new ResourceStream(resources, key, -1, dimensions));
-        const auto length = resources->size(key);
+        // Raw font sizes come from the publication. Asking the resource
+        // cache loads the bytes even when the font manager can reuse them.
+        // Other resources can be transformed by their provider, so their
+        // stream size must still come from the returned bytes.
+        const auto suffix = QFileInfo(key).suffix().toLower();
+        const bool rawFont = suffix == "ttf" || suffix == "otf";
+        const auto length =
+                rawFont && sizes.contains(key) ? sizes.value(key) : resources->size(key);
         return length < 0 ? LVStreamRef() : LVStreamRef(new ResourceStream(resources, key, length));
     }
 
 private:
     std::shared_ptr<ResourceCache> resources;
+    QMap<QString, qint64> sizes;
 };
 
 class ContentContainer : public LVContainer
@@ -631,6 +651,8 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         source->contentContainer = true;
     }
     OpeningCallback callback(engine_, std::move(progress), openInterrupt_);
+    if (openingFontSource_)
+        source->fontIdentity = std::exchange(openingFontSource_, 0);
     source_ = std::move(source);
     openingTimes_["model_prepare_ms"] = double(phase.restart());
     bool loaded;
@@ -650,12 +672,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
 #  ifdef KOBLAZE_DOCUMENT_FONT_DATA
         // The fork keeps the data of embedded fonts for the next part of
         // the same book. Another book has other fonts under the same names.
-        static quint64 fontSource = 0;
-        const quint64 book = source_->parent ? source_->parent->identity : source_->identity;
-        if (book != fontSource) {
-            koblazeForgetDocumentFontData();
-            fontSource = book;
-        }
+        const quint64 book =
+                source_->parent ? source_->parent->fontIdentity : source_->fontIdentity;
+        useDocumentFontSource(book);
 #  endif
         // Experimental, with the koblaze fork only: load the text of a
         // window of spine items. The others stay empty.
@@ -917,6 +936,8 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         return true;
     }
     EngineDocument next(fonts_);
+    next.openingFontSource_ =
+            source_->parent ? source_->parent->fontIdentity : source_->fontIdentity;
     next.slicePages_ = fast ? qMax(1,
                                    qgetenv("KOBALT_CHAPTER_PAGES").isEmpty()
                                            ? 25
@@ -1289,6 +1310,9 @@ struct EngineDocument::FullBuild
         // must not write to that cache.
         int levels[64];
         const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
+#  ifdef KOBLAZE_DOCUMENT_FONT_DATA
+        const auto fontSource = documentFontSource;
+#  endif
         StopCheck::suspend();
         // The scopes that this build has open say nothing about the work
         // that has the engine meanwhile.
@@ -1301,6 +1325,11 @@ struct EngineDocument::FullBuild
         changed.wakeAll();
         while (state != State::Running)
             changed.wait(&mutex);
+#  ifdef KOBLAZE_DOCUMENT_FONT_DATA
+        // A different book can use the engine while this one is parked.
+        // Its font files can have the same names and sizes as this book's.
+        useDocumentFontSource(fontSource);
+#  endif
         ldomDocCache::koblazeSuspend(false);
         koblazeSwapCancelScopes(&noCancel, &parserCanStop);
         TextLangMan::koblazeSetQuoteLevels(levels, count);
@@ -1409,6 +1438,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 const std::function<bool()> wanted = [state] { return state->wanted(); };
                 document->openInterrupt_ = [state] { return !state->wanted(); };
                 QString error;
+                document->openingFontSource_ = source->fontIdentity;
                 koblazeSetPausePoint(&FullBuild::pausePoint, state);
                 try {
                     const StopCheck check(wanted);

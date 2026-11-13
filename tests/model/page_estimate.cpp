@@ -1216,6 +1216,53 @@ test::BookFiles pagesBook()
             "<itemref idref=\"short1.xhtml\"/><itemref idref=\"short2.xhtml\"/>");
 }
 
+test::BookFiles publisherFontBook(QByteArray font)
+{
+    auto files = pagesBook();
+    files["publisher.ttf"] = std::move(font);
+    require(!files["publisher.ttf"].isEmpty(), "Missing publisher font fixture");
+    files["book.opf"].replace(
+            "</manifest>",
+            "<item id='publisher-font' href='publisher.ttf' media-type='font/ttf'/></manifest>");
+    for (auto it = files.begin(); it != files.end(); ++it)
+        if (it.key().endsWith(".xhtml"))
+            it.value().replace(
+                    "</head>",
+                    "<style>@font-face {font-family: Publisher; src: url('publisher.ttf');} body {font-family: Publisher;}</style></head>");
+    return files;
+}
+
+// Building the whole book reads fresh chapter resources, but reuses the
+// publisher font bytes already read for the same publication.
+void fullDocumentKeepsPublisherFonts()
+{
+    const auto files =
+            publisherFontBook(test::readerAssets().fontData("InstrumentSerif-Regular.ttf"));
+    QMap<QString, qint64> sizes;
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        sizes[it.key()] = it.value().size();
+    auto reads = std::make_shared<std::atomic_int>(0);
+    auto resources = std::make_shared<ResourceCache>(
+            files.keys(),
+            [files, reads](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                if (name == "publisher.ttf")
+                    ++*reads;
+                const auto bytes = files.value(name);
+                return sink(bytes.constData(), bytes.size());
+            },
+            std::make_shared<std::atomic_bool>(false));
+    EngineDocument model(test::readerFonts());
+    QString error;
+    setChapterModeOverride(1);
+    const bool opened = model.openResources(resources, sizes, { 600, 800 },
+                                            { { "font_face", "" }, { "font_pixels", 28 } }, &error);
+    setChapterModeOverride(-1);
+    require(opened && reads->load() == 1, "The chapter must read its publisher font");
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "The publisher-font book must build beside its chapter");
+    require(reads->load() == 1, "The whole build read the same publisher font again");
+}
+
 // The layout at the open gives its pages, also of a spine item without text
 // such as a cover.
 void openObserved()
@@ -1464,7 +1511,8 @@ void fullDocument()
 // a load that was never stopped: the same pages, with the same pixels.
 void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, int item,
                         const char *name, int checks = 7,
-                        const std::function<void(EngineDocument &)> &openChapter = {})
+                        const std::function<void(EngineDocument &)> &openChapter = {},
+                        const std::function<void()> &between = {})
 {
     const auto record = [](EngineDocument &model, int page) {
         const QImage image = model.image(page);
@@ -1515,6 +1563,8 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
             model.turnInWindow(parks % 2 ? -1 : 1);
         if (parks % 3 == 0)
             model.image(model.page());
+        if (between)
+            between();
     }
     require(model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
             "The prepared document must be shown");
@@ -1526,6 +1576,29 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
                 int(reference.size()), different);
     require(parks > 50, "The fixture must park the build many times");
     require(different == 0, "A parked build changed a page");
+}
+
+// A parked build must not reuse another book's font bytes, even when the
+// publisher gave both fonts the same file name and the same byte length.
+void parkedPublisherFonts()
+{
+    auto first = test::readerAssets().fontData("InstrumentSerif-Regular.ttf");
+    auto second = test::readerAssets().fontData("IBMPlexSans-Regular.ttf");
+    require(!first.isEmpty() && !second.isEmpty(), "Missing publisher font fixtures");
+    const int bytes = qMax(first.size(), second.size());
+    first.append(QByteArray(bytes - first.size(), '\0'));
+    second.append(QByteArray(bytes - second.size(), '\0'));
+    const auto book = publisherFontBook(first), other = publisherFontBook(second);
+    const QJsonObject settings{ { "font_face", "" }, { "font_pixels", 28 } };
+    parkedFullDocument([&](EngineDocument &model) { openResources(model, book, settings); }, 1,
+                       "publisher fonts with another book", 13, {},
+                       [&] {
+                           EngineDocument intruder(test::readerFonts());
+                           setChapterModeOverride(1);
+                           openResources(intruder, other, settings);
+                           setChapterModeOverride(-1);
+                           intruder.image(0);
+                       });
 }
 
 // A book that is in the parsed-book cache gives the whole book without
@@ -2115,6 +2188,8 @@ int main(int argc, char **argv)
     reopenCounted();
     manyItemsCounted();
     fullDocument();
+    fullDocumentKeepsPublisherFonts();
+    parkedPublisherFonts();
     fullDocumentPixels();
     fullDocumentFromCache(bytes);
     // KOBALT_PARKED_BOOK names another EPUB for the same check, for a book

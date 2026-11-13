@@ -30,6 +30,7 @@ struct ReaderSource
     bool contentContainer = false;
     // A number for this source and no other, also after it is destroyed.
     const quint64 identity = nextIdentity();
+    quint64 fontIdentity = identity;
 
     static quint64 nextIdentity()
     {

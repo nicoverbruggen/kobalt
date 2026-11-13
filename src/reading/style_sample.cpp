@@ -458,6 +458,15 @@ QJsonObject styleSampleSettings(QJsonObject state)
     for (const auto *key :
          { "page", "next_page", "cached_pages", "chapter_title", "chapter_page", "chapter_pages" })
         state.remove(key);
+    // A book that shows one chapter at a time has more of these: where the
+    // part is in the book, its estimated pages and how long it took to
+    // load. With them a kept sample would never be found again.
+    for (const auto *key :
+         { "book_fraction", "slice_start", "continues_before", "continues_after",
+           "chapter_load_ms", "page_estimate", "rough_page", "rough_pages", "rough_item_page",
+           "rough_item_pages", "rough_pages_estimated", "rough_item_pages_estimated",
+           "koblaze_first_spine_item", "koblaze_last_spine_item" })
+        state.remove(key);
     // The sample shows one column, even when the book uses two in landscape.
     state["columns"] = 1;
     state["two_columns_landscape"] = false;

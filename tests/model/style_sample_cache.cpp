@@ -82,6 +82,26 @@ int main(int argc, char **argv)
     turned["chapter_pages"] = 4;
     require(styleSampleSettings(turned) == styleSampleSettings(frame),
             "The displayed frame changed the sample settings");
+    // A book that shows one chapter at a time reports where that part is,
+    // its estimated pages and how long it took to load. None of it is an
+    // input: the next opening of the book must find the kept sample.
+    auto chapter = frame;
+    chapter["book_fraction"] = 0.25;
+    chapter["slice_start"] = "/body/DocFragment[3].0";
+    chapter["continues_before"] = true;
+    chapter["continues_after"] = true;
+    chapter["chapter_load_ms"] = 31.5;
+    chapter["page_estimate"] = QJsonObject{ { "version", 1 } };
+    chapter["rough_page"] = 12;
+    chapter["rough_pages"] = 300;
+    chapter["rough_item_page"] = 2;
+    chapter["rough_item_pages"] = 9;
+    chapter["rough_pages_estimated"] = true;
+    chapter["rough_item_pages_estimated"] = true;
+    chapter["koblaze_first_spine_item"] = 3;
+    chapter["koblaze_last_spine_item"] = 3;
+    require(styleSampleSettings(chapter) == styleSampleSettings(frame),
+            "The chapter that is shown changed the sample settings");
     auto otherFonts = fonts;
     otherFonts.fallbackFiles = QStringList{ "b.ttf" };
     require(styleSampleKey(otherFonts, request) != key, "The font inputs are not in the key");

@@ -112,6 +112,53 @@ bool DetectEpubFormat( LVStreamRef stream )
     return true;
 }
 
+// koblaze: see koblaze.h.
+struct KoblazeEpubCache
+{
+    enum { Package, Navigation, Ncx, Count };
+    ldomDocument * documents[Count] = { NULL, NULL, NULL };
+    lString32 names[Count];
+    ~KoblazeEpubCache()
+    {
+        for ( int i = 0; i < Count; i++ )
+            delete documents[i];
+    }
+};
+
+static KoblazeEpubCache * koblaze_epub_cache = NULL;
+
+KoblazeEpubCache * koblazeCreateEpubCache() { return new KoblazeEpubCache; }
+void koblazeDeleteEpubCache(KoblazeEpubCache * cache)
+{
+    if ( koblaze_epub_cache == cache )
+        koblaze_epub_cache = NULL;
+    delete cache;
+}
+void koblazeSetEpubCache(KoblazeEpubCache * cache) { koblaze_epub_cache = cache; }
+
+// Parses the XML file `name` of the EPUB from `stream`, or gives the
+// document that the cache holds for it. `owned` is false for a document of
+// the cache: the caller reads it and must not delete it.
+static ldomDocument * koblazeParseEpubXML( LVStreamRef stream, int slot, const lString32 & name, bool & owned )
+{
+    owned = true;
+    KoblazeEpubCache * cache = koblaze_epub_cache;
+    if ( !cache )
+        return LVParseXMLStream( stream );
+    if ( cache->documents[slot] && cache->names[slot] == name ) {
+        owned = false;
+        return cache->documents[slot];
+    }
+    ldomDocument * doc = LVParseXMLStream( stream );
+    if ( doc ) {
+        delete cache->documents[slot];
+        cache->documents[slot] = doc;
+        cache->names[slot] = name;
+        owned = false;
+    }
+    return doc;
+}
+
 void ReadEpubNcxToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc, ldomDocumentFragmentWriter & appender ) {
     if ( !mapRoot || !baseToc)
         return;
@@ -1168,7 +1215,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
     // Read OPF file
     {
         CRLog::debug("Parsing opf");
-        ldomDocument * doc = LVParseXMLStream( content_stream );
+        bool docOwned = true;
+        ldomDocument * doc = koblazeParseEpubXML( content_stream, KoblazeEpubCache::Package, rootfilePath, docOwned );
         if ( !doc )
             return false;
 
@@ -1249,7 +1297,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 if ( progressCallback ) {
                     progressCallback->OnLoadFileEnd( );
                 }
-                delete doc;
+                if ( docOwned )
+                    delete doc;
                 return true;
             }
             CRLog::debug("Not loaded from cache, parsing epub content");
@@ -1639,7 +1688,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
             }
             CRLog::debug("opf: reading spine done");
         }
-        delete doc;
+        if ( docOwned )
+            delete doc;
         CRLog::debug("opf: closed");
     }
 
@@ -1816,7 +1866,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
             codeBase.append(1, U'/');
         appender.setCodeBase(codeBase);
         if ( !stream.isNull() ) {
-            ldomDocument * navDoc = LVParseXMLStream( stream );
+            bool navDocOwned = true;
+            ldomDocument * navDoc = koblazeParseEpubXML( stream, KoblazeEpubCache::Navigation, navHref, navDocOwned );
             if ( navDoc!=NULL ) {
                 // Find <nav epub:type="toc">
                 lUInt16 nav_id = navDoc->getElementNameIndex(U"nav");
@@ -1887,7 +1938,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                     if ( ol_root )
                         ReadEpubNavPageMap( m_doc, ol_root, m_doc->getPageMap(), appender );
                 }
-                delete navDoc;
+                if ( navDocOwned )
+                    delete navDoc;
             }
         }
     }
@@ -1904,7 +1956,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
             codeBase.append(1, U'/');
         appender.setCodeBase(codeBase);
         if ( !stream.isNull() ) {
-            ldomDocument * ncxdoc = LVParseXMLStream( stream );
+            bool ncxdocOwned = true;
+            ldomDocument * ncxdoc = koblazeParseEpubXML( stream, KoblazeEpubCache::Ncx, ncxHref, ncxdocOwned );
             if ( ncxdoc!=NULL ) {
                 if ( !has_toc ) {
                     ldomNode * navMap = ncxdoc->nodeFromXPath( cs32("ncx/navMap"));
@@ -1917,7 +1970,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                     if ( pageList!=NULL )
                         ReadEpubNcxPageList( m_doc, pageList, m_doc->getPageMap(), appender );
                 }
-                delete ncxdoc;
+                if ( ncxdocOwned )
+                    delete ncxdoc;
             }
         }
     }

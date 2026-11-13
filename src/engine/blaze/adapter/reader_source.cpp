@@ -653,6 +653,20 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
 #  endif
         }
 #endif
+#if __has_include(<koblaze.h>)
+        // The loads of the other units of this book read the same package
+        // and contents files.
+        struct EpubCacheScope
+        {
+            explicit EpubCacheScope(KoblazeEpubCache *cache) { koblazeSetEpubCache(cache); }
+            ~EpubCacheScope() { koblazeSetEpubCache(nullptr); }
+        };
+        const bool cached = packageCache_ && firstSpineItem >= 0 && !source_->parent;
+        if (cached && !source_->epubCache)
+            source_->epubCache = std::shared_ptr<KoblazeEpubCache>(koblazeCreateEpubCache(),
+                                                                   koblazeDeleteEpubCache);
+        const EpubCacheScope epubCache(cached ? source_->epubCache.get() : nullptr);
+#endif
         loaded = engine_->LoadDocument(LVCreateMemoryStream(), false, source_->container);
 #if __has_include(<koblaze.h>)
         koblazeSetSpineWindow(-1, -1);
@@ -1078,10 +1092,11 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
 
 std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &settings,
                                                          const std::function<bool()> &current,
-                                                         QString *error)
+                                                         QString *error, bool packageCache)
 {
 #if __has_include(<koblaze.h>)
     auto side = std::make_unique<EngineDocument>(fonts_);
+    side->packageCache_ = packageCache;
     // What the host gave this document and a saved state does not hold.
     side->slicePages_ = slicePages_;
     side->userStyleSheet_ = userStyleSheet_;
@@ -1111,6 +1126,7 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 #  endif
     return side;
 #else
+    Q_UNUSED(packageCache);
     Q_UNUSED(settings);
     Q_UNUSED(current);
     Q_UNUSED(error);
@@ -1136,9 +1152,9 @@ void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document, const QJ
     static constexpr qint64 keptUnitBytes = 6 * 1024 * 1024;
     // The engine has room for 16 documents at a time
     // (MAX_DOCUMENT_INSTANCE_COUNT). The document on screen, the one
-    // opened ahead, the one of the count, a preview and the short-lived
-    // documents of a load need theirs.
-    static constexpr int keptUnitCount = 6;
+    // opened ahead, the one of the count, a preview, the three of the
+    // package cache and the short-lived documents of a load need theirs.
+    static constexpr int keptUnitCount = 4;
     if (!document || !source_ || document->windowFirst_ < 0)
         return;
     const int first = document->windowFirst_, last = document->windowLast_;
@@ -1194,6 +1210,8 @@ std::unique_ptr<EngineDocument> EngineDocument::takeKept(int first, const QJsonO
 
 void EngineDocument::dropSideDocuments()
 {
+    if (source_ && !source_->parent)
+        source_->epubCache.reset();
     ahead_.reset();
     counting_.reset();
     countingNext_ = -1;
@@ -1224,6 +1242,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     const auto key = estimateKey(settingsState());
     if (key != countingKey_ || size_ != countingSize_) {
         // Another page: the counts so far were for the old one.
+        source_->epubCache.reset();
         counting_.reset();
         countingNext_ = -1;
         kept_.clear();
@@ -1250,6 +1269,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         if (item >= spineItemCount_) {
             // Nothing left to try. Spine items that gave no count stay
             // estimates.
+            source_->epubCache.reset();
             adoptCounted();
             return false;
         }
@@ -1261,7 +1281,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         settings.remove("position");
         // The layout at the open observes the first slice, or each spine
         // item of a unit as a whole.
-        counting_ = openSide(settings, current, nullptr);
+        counting_ = openSide(settings, current, nullptr, true);
         countingItem_ = item;
         countingNext_ = -1;
         countingSettings_ = settings;
@@ -1307,6 +1327,8 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     if (!map.completeItems().contains(countingItem_))
         uncounted_.insert(countingItem_);
     adoptCounted();
+    if (map.counted())
+        source_->epubCache.reset();
     return !map.counted();
 #else
     Q_UNUSED(current);

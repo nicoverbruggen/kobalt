@@ -467,9 +467,13 @@ private:
     // one of the count and the kept ones.
     void dropSideDocuments();
     // Opens another document of the same book with `settings`. Null when it
-    // cannot open or `current` stops it.
+    // cannot open or `current` stops it. `packageCache` reads the package
+    // files of the book from ReaderSource::epubCache.
     std::unique_ptr<EngineDocument> openSide(const QJsonObject &settings,
-                                             const std::function<bool()> &current, QString *error);
+                                             const std::function<bool()> &current, QString *error,
+                                             bool packageCache = false);
+    // Set in a document of the background count; see openSide().
+    bool packageCache_ = false;
     int aheadItem_ = -1;
     QJsonObject aheadSettings_;
     QSize aheadSize_;

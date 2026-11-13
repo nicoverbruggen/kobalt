@@ -412,7 +412,7 @@ Engine::RoughPages EngineDocument::roughPages() const
     rough.itemPage = estimate.item.place(qRound(inItem) + place.page + 1,
                                          newItem ? Step::Jump : step, passed);
     rough.itemPages = qMax(1, qRound(map.itemPages(place.item)));
-    rough.itemPagesEstimated = !map.counted();
+    rough.itemPagesEstimated = !map.counted() && place.item >= map.adopted();
     if (map.keeping()) {
         // The totals are an estimate that stays as it is. A spine item with
         // more pages than its estimate repeats its last number.

@@ -435,6 +435,8 @@ private:
     QSize countingSize_;
     int countingItem_ = -1;
     QSet<int> uncounted_;
+    // Shows the real pages of the counted spine items up to the page.
+    void adoptCounted();
     // Opens another document of the same book with `settings`. Null when it
     // cannot open or `current` stops it.
     std::unique_ptr<EngineDocument> openSide(const QJsonObject &settings,

@@ -1097,6 +1097,17 @@ bool EngineDocument::backgroundCount() const
     return source_ && source_->pageEstimate.count.load();
 }
 
+void EngineDocument::adoptCounted()
+{
+    if (windowFirst_ < 0 || !source_ || !engine_)
+        return;
+    // Once the spine items up to the page are counted, the page number is
+    // the real one. The total stays an estimate until the count ends.
+    const auto place = roughPlace();
+    if (pageMap().adoptCounted(place.item))
+        source_->pageEstimate.lastItem = -1;
+}
+
 bool EngineDocument::countPages(const std::function<bool()> &current)
 {
 #if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
@@ -1116,13 +1127,31 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         countingSize_ = size_;
     }
     if (!counting_) {
+        // The spine items before the page come first, the nearest first:
+        // with them the page number is the real one. Then the spine item of
+        // the page, then the rest of the book.
         const auto counted = map.completeItems();
-        int item = 0;
-        while (item < spineItemCount_ && (counted.contains(item) || uncounted_.contains(item)))
-            ++item;
-        if (item >= spineItemCount_)
+        const auto open = [&](int item) {
+            return !counted.contains(item) && !uncounted_.contains(item);
+        };
+        int item = windowFirst_ - 1;
+        while (item >= 0 && !open(item))
+            --item;
+        if (item < 0) {
+            item = windowFirst_;
+            while (item < spineItemCount_ && !open(item))
+                ++item;
+        }
+        if (item >= spineItemCount_) {
+            // Nothing left to try. Spine items that gave no count stay
+            // estimates.
+            adoptCounted();
             return false;
-        const auto unit = unitFrom(item);
+        }
+        // A unit can start before the item: count from its start.
+        auto unit = unitFrom(item);
+        for (int start = item - 1; start >= 0 && unitFrom(start).second >= item; --start)
+            unit = unitFrom(start);
         auto settings = windowSettings(unit.first, unit.second);
         settings.remove("position");
         // The layout at the open observes the first slice, or each spine
@@ -1160,6 +1189,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     // A spine item that did not get its pages is not tried again.
     if (!map.completeItems().contains(countingItem_))
         uncounted_.insert(countingItem_);
+    adoptCounted();
     return !map.counted();
 #else
     Q_UNUSED(current);
@@ -1195,6 +1225,12 @@ bool EngineDocument::adoptAhead(int first, int last)
     auto old = std::make_unique<EngineDocument>(fonts_);
     *old = std::move(*this);
     *this = std::move(*next);
+    // The count goes on in the document that is shown.
+    counting_ = std::move(old->counting_);
+    countingKey_ = std::move(old->countingKey_);
+    countingSize_ = old->countingSize_;
+    countingItem_ = old->countingItem_;
+    uncounted_ = std::move(old->uncounted_);
     ahead_ = std::move(old);
     aheadItem_ = oldItem;
     aheadSettings_ = std::move(oldSettings);

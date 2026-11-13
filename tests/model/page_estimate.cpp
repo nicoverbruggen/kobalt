@@ -1215,9 +1215,29 @@ void countedInBackground()
     require(Probe::map(model).observations() == observed && model.roughPages().pagesEstimated,
             "A stopped count gave pages");
 
+    // The spine items up to the page come first. With them the page is the
+    // real one, while the total is still the estimate.
     int steps = 0;
-    while (model.countPages({}) && steps < 10000)
+    while (Probe::map(model).adopted() == 0 && model.countPages({}) && steps < 10000)
         ++steps;
+    const auto early = model.roughPages();
+    std::printf("background count: after %d steps page %d of ~%d\n", steps, early.page,
+                early.pages);
+    require(Probe::map(model).adopted() == 4 && Probe::map(model).completeItems().size() == 4,
+            "The spine items up to the page must be counted first");
+    require(early.page == wholePage + 1 && early.pagesEstimated && !early.itemPagesEstimated,
+            "With the spine items up to the page counted, the page is the real one");
+    require(model.turnInWindow(1) && model.roughPages().page == wholePage + 2
+                    && model.turnInWindow(-1) && model.roughPages().page == wholePage + 1,
+            "A turn from the real page adds and takes one");
+    const int earlyTotal = model.roughPages().pages;
+    while (model.countPages({}) && steps < 10000) {
+        ++steps;
+        const auto during = model.roughPages();
+        require(during.pagesEstimated ? during.pages == earlyTotal && during.page == wholePage + 1
+                                      : during.pages == whole,
+                "The numbers moved again before the count ended");
+    }
     const auto counted = model.roughPages();
     std::printf("background count: %d steps, page %d of %d, estimate was %d of %d, whole book "
                 "%d of %d\n",

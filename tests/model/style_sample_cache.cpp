@@ -105,6 +105,16 @@ int main(int argc, char **argv)
     auto otherFonts = fonts;
     otherFonts.fallbackFiles = QStringList{ "b.ttf" };
     require(styleSampleKey(otherFonts, request) != key, "The font inputs are not in the key");
+    // The same font file in another folder is the same input: Kobo's
+    // system fonts are unpacked into a folder with a new name on every start.
+    auto firstStart = fonts, secondStart = fonts;
+    firstStart.sources.systemFiles = QStringList{ "/tmp/run-a/system/Serif.ttf" };
+    secondStart.sources.systemFiles = QStringList{ "/tmp/run-b/system/Serif.ttf" };
+    require(styleSampleKey(firstStart, request) == styleSampleKey(secondStart, request),
+            "The folder of a system font changed the key");
+    secondStart.sources.systemFiles = QStringList{ "/tmp/run-b/system/Sans.ttf" };
+    require(styleSampleKey(firstStart, request) != styleSampleKey(secondStart, request),
+            "Another system font did not change the key");
     // A cancellation flag is not an input.
     auto cancellable = request;
     cancellable.cancelled = std::make_shared<std::atomic_bool>(false);

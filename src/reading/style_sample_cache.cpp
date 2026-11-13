@@ -1,4 +1,5 @@
 #include "style_sample_cache.h"
+#include <QFileInfo>
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QDataStream>
@@ -78,14 +79,29 @@ qint64 convert(StyleSample &sample, Convert change)
 }
 } // namespace
 
+namespace {
+// A font file by its name and size, not by its folder. Kobo's system fonts
+// are unpacked into a temporary folder whose name is new on every start,
+// and a kept sample must be found again after a restart.
+QStringList fontFiles(const QStringList &paths)
+{
+    QStringList files;
+    for (const auto &path : paths) {
+        const QFileInfo file(path);
+        files.append(file.fileName() + '|' + QString::number(file.size()));
+    }
+    return files;
+}
+} // namespace
+
 QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleRequest &request)
 {
     QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
     QDataStream stream(&buffer);
-    // The same bytes on every Qt version are not needed: the key lives only
-    // as long as the reader that made it.
+    // The same bytes on every Qt version are not needed. The key must be
+    // the same on every start, because samples are kept in storage.
     QJsonArray values;
     for (const auto &value : request.values)
         values.append(value);
@@ -96,7 +112,8 @@ QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleReques
            << double(request.cropRatio) << request.readingArea << request.detail
            << request.boldHeading << request.firstPageOnly << fonts.sources.bundled
            << fonts.sources.systemDirectory << fonts.sources.sideloadDirectory
-           << fonts.sources.systemFiles << fonts.fallbackFiles << fonts.hyphenationDirectory;
+           << fontFiles(fonts.sources.systemFiles) << fontFiles(fonts.fallbackFiles)
+           << fonts.hyphenationDirectory;
     buffer.close();
     return QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
 }

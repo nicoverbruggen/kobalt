@@ -447,6 +447,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                          std::function<void()> reusing)
 {
     quietTurns_ = 0;
+    fullDocumentPending_ = false;
     syncDigest_.clear();
     syncFilename_ = QFileInfo(request.syncFilename.isNull() ? request.path : request.syncFilename)
                             .fileName();
@@ -783,9 +784,7 @@ void ReaderSession::editAppearance(const appearance::Patch &patch, QSize size)
 
 void ReaderSession::showFullDocument()
 {
-    // The engine has the whole book ready for this appearance. The switch
-    // loads nothing and keeps the page.
-    requestAppearance(requestedAppearance(), {}, 0);
+    fullDocumentPending_ = true;
 }
 
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
@@ -808,6 +807,9 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
     // appearance keeps what is shown.
     if (chapterMode == hybridChapterMode)
         chapterMode = next != desired || resized ? 1 : -1;
+    // A document that was prepared for the old appearance is of no use.
+    if (next != desired || resized || chapterMode >= 0)
+        fullDocumentPending_ = false;
     const int previousMode = desiredChapterMode >= 0
             ? desiredChapterMode
             : (frame.state.contains("book_fraction") ? 1 : 0);
@@ -2459,6 +2461,10 @@ void ReaderSession::dispatch(bool pageTurn)
     const auto markup = markupRequest_;
     const auto markupGeneration = markupGeneration_;
     const auto requested = desired;
+    // The prepared document of the whole book is shown with this render.
+    const bool swapToFull = std::exchange(fullDocumentPending_, false);
+    if (swapToFull)
+        desiredChapterMode = 0;
     const auto chapterMode = desiredChapterMode;
     const auto size = desiredSize;
     const auto anchor = std::exchange(destination, {});
@@ -2510,8 +2516,8 @@ void ReaderSession::dispatch(bool pageTurn)
         diagnostic("render-queued", { { "render_id", double(job) }, { "delta", delta } }, false);
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, requested, chapterMode, size, anchor, chapter, delta, target, fraction,
-             job, lease, latest, progress, positions, markup, markupGeneration] {
+            [guard, engine, requested, chapterMode, swapToFull, size, anchor, chapter, delta, target,
+             fraction, job, lease, latest, progress, positions, markup, markupGeneration] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -2528,21 +2534,25 @@ void ReaderSession::dispatch(bool pageTurn)
                 });
                 const auto before = engine->state();
                 const auto oldSize = engine->viewport();
-                const auto oldPage = engine->page();
+                auto oldPage = engine->page();
                 const auto oldImage = engine->cachedImageKey(oldPage);
-                const int turned = engine->turnTarget(oldPage, delta);
+                int turned = engine->turnTarget(oldPage, delta);
                 bool windowTurned = false;
                 ReaderFrame result;
                 bool appearanceChanged = false;
                 // Turns carry the last requested settings. Only a settings or viewport
                 // change needs validation and application; rotation can change the latter
                 // without opening the menu.
-                const bool modeChanged =
-                        chapterMode >= 0 && (engine->bookFraction() >= 0) != (chapterMode > 0);
+                // The prepared document can be gone, after a change that
+                // this render does not know. Loading the whole book here
+                // would make the page turn wait: keep the chapter then.
+                const bool swap = swapToFull && engine->fullDocumentReady();
+                const int mode = swapToFull && !swap ? -1 : chapterMode;
+                const bool modeChanged = mode >= 0 && (engine->bookFraction() >= 0) != (mode > 0);
                 const bool unchanged =
                         !modeChanged && appearance::same(before, requested) && oldSize == size;
                 if (!unchanged
-                    && !(modeChanged ? engine->setChapterMode(chapterMode > 0,
+                    && !(modeChanged ? engine->setChapterMode(mode > 0,
                                                               appearance::Patch(requested), size,
                                                               progress,
                                                               [latest, job, lease] {
@@ -2555,8 +2565,15 @@ void ReaderSession::dispatch(bool pageTurn)
                     result.error = strings::get("error.could_not_update_text");
                 else {
                     appearanceChanged = !unchanged
-                            && (modeChanged || !appearance::same(before, engine->state())
+                            && ((modeChanged && !swap)
+                                || !appearance::same(before, engine->state())
                                 || oldSize != engine->viewport());
+                    if (swap && modeChanged) {
+                        // The same page in the document of the whole book:
+                        // a page turn goes on from there as a page turn.
+                        oldPage = engine->page();
+                        turned = engine->turnTarget(oldPage, delta);
+                    }
                     if (!anchor.isEmpty()
                         && !(chapter >= 0 ? engine->goToChapter(chapter, anchor)
                                           : engine->goTo(anchor)))
@@ -2613,13 +2630,15 @@ void ReaderSession::dispatch(bool pageTurn)
                 const bool failed = !result.error.isEmpty();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), job, lease, delta, failed] {
+                        [guard, result = std::move(result), job, lease, delta, failed,
+                         swapToFull] {
                             if (!guard) {
                                 return;
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
-                                    [guard, job, lease, delta, failed](ReaderFrame result) {
+                                    [guard, job, lease, delta, failed,
+                                     swapToFull](ReaderFrame result) {
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->running = false;
@@ -2644,6 +2663,10 @@ void ReaderSession::dispatch(bool pageTurn)
                                             guard->desiredChapterMode =
                                                     result.state.contains("book_fraction") ? 1 : 0;
                                         }
+                                        // The prepared document was gone: the
+                                        // reader stays with the chapter.
+                                        if (swapToFull && result.state.contains("book_fraction"))
+                                            guard->desiredChapterMode = 1;
                                         if (failed)
                                             guard->cancelPendingTurn();
                                         guard->clearRenderProgress();

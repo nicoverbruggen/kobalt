@@ -280,6 +280,8 @@ public:
         Q_UNUSED(cachedOnly);
         return FullDocument::None;
     }
+    // True while a document from prepareFullDocument() waits to be shown.
+    virtual bool fullDocumentReady() const { return false; }
     // The reader turns the count on when the user reads, and off while the
     // user changes settings. The engine worker reads it.
     virtual void setBackgroundCount(bool enabled) { Q_UNUSED(enabled); }

@@ -8551,7 +8551,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     // The six-inch reader in the light theme, at 100% and at 150% interface
     // text. The "-large" tag makes the Fixture pick 150%.
-    // Checks that Hybrid rendering shows the whole book after a few turns and Fast keeps its estimate.
+    // Checks that Hybrid rendering switches to the whole book on a page turn and Fast keeps its estimate.
     void hybridCountsPages()
     {
         using namespace headerfooter;
@@ -8598,19 +8598,32 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                                             .arg(before)));
             }
             if (mode == 2) {
-                const auto position = fixture.state().value("position").toString();
-                // The reader shows the document of the whole book, on the
-                // page it was on. Wait for that state, not for the header:
-                // its text can be empty for a moment during the switch.
-                QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().contains("book_fraction")
-                                                 && !fixture.state().value("busy").toBool(),
-                                         30000);
+                // The whole book is built in the quiet moments. The switch
+                // rides on a page turn: that turn still turns one page, and
+                // from then on the reader shows the document of the whole
+                // book.
+                bool whole = false;
+                for (int turn = 0; turn < 60 && !whole; ++turn) {
+                    QTest::qWait(50);
+                    const auto before = fixture.state().value("position").toString();
+                    test::skipPageTurnWindow();
+                    fixture.window.readerWindow()->pageButton(1);
+                    QTRY_VERIFY_WITH_TIMEOUT(
+                            !fixture.state().value("busy").toBool()
+                                    && fixture.state().value("position").toString() != before,
+                            5000);
+                    whole = !fixture.state().contains("book_fraction");
+                }
+                QVERIFY(whole);
                 QTRY_VERIFY2(!estimated(), qPrintable(page->slotContents[2].text));
                 QVERIFY(!fixture.state().value("rough_pages_estimated").toBool());
                 QVERIFY(!page->slotContents[5].text.contains('~'));
-                QCOMPARE(fixture.state().value("position").toString(), position);
                 QCOMPARE(opened.count(), 1);
-
+                // The next turn is an ordinary turn of the whole book.
+                const int shown = fixture.state().value("page").toInt();
+                test::skipPageTurnWindow();
+                fixture.window.readerWindow()->pageButton(1);
+                QTRY_COMPARE_WITH_TIMEOUT(fixture.state().value("page").toInt(), shown + 1, 5000);
             } else {
                 // Fast never counts: the idle work ends and the mark stays.
                 QTest::qWait(100);

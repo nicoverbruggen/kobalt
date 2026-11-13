@@ -190,8 +190,11 @@ public:
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
-    // Shows the document of the whole book that Hybrid rendering prepared.
+    // Hybrid rendering has the document of the whole book ready. The next
+    // page turn or jump shows it: the switch rides on a render that the
+    // user asked for, so it draws nothing by itself and disturbs no menu.
     void showFullDocument();
+    bool fullDocumentPending_ = false;
     // Goes to the entry `index` of chapters(). See Engine::goToChapter().
     bool goToChapter(int index);
     // Goes to about `fraction` of the whole book, from 0 to 1. With only a

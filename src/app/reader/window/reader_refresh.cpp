@@ -794,7 +794,7 @@ void Reader::updateMenuStatus()
     const auto battery = services.battery();
     menuBattery->setStatus(battery.percent, battery.charging);
     const auto reading = book->sessionReadingMilliseconds();
-    const auto session = reading > 300000
+    const auto session = features::enabled(preferences, features::Stats) && reading > 300000
             ? strings::get("reader.session_minutes").arg(reading / 60000)
             : QString();
     if (menuSession->text() != session)

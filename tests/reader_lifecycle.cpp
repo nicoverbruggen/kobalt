@@ -369,6 +369,7 @@ public:
     std::shared_ptr<test::HostProgress> progress;
     PositionCodec positions;
     ReadingHistory::UtcClock utc;
+    ReadingTimer::Clock readingClock;
     std::function<void(ReaderHostServices &)> configureServices;
 
     void open(const QString &path, QSize size = nativeSize)
@@ -417,7 +418,7 @@ public:
                            auto book = std::make_unique<ReadingBook>(
                                    std::move(opening), statePath, paths, identity, hash,
                                    progress ? test::hostReadingBridge(progress) : nullptr, baseline,
-                                   baseline, QString(), utc);
+                                   baseline, QString(), utc, readingClock);
                            book_ = book.get();
                            auto services = desktop::readerHostServices();
                            services.desktopUi = false;
@@ -6031,6 +6032,134 @@ private slots:
         QTRY_VERIFY(wifi->isVisible());
         wifiChanged({ false, false, -1 });
         QTRY_VERIFY(!wifi->isVisible());
+    }
+
+    // Uses the real reading clock and Settings checklist to hide session text without stopping time collection.
+    void readingTimeStatsVisibility_data()
+    {
+        QTest::addColumn<bool>("hidden");
+        QTest::addColumn<QSize>("size");
+        for (bool hidden : { false, true })
+            for (const QSize size : { QSize(1072, 1448), QSize(720, 1600) })
+                QTest::newRow(qPrintable(
+                        QString("%1-%2").arg(hidden ? "hidden" : "visible").arg(size.width())))
+                        << hidden << size;
+    }
+
+    void readingTimeStatsVisibility()
+    {
+        QFETCH(bool, hidden);
+        QFETCH(QSize, size);
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.preferences(), { { "disable_stats", hidden } }));
+        qint64 now = 0;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.readingClock = [&] { return now; };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), size);
+        QTRY_COMPARE(opened.count(), 1);
+        Canvas canvas(host.window(), size);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QTRY_VERIFY(host.book()->readingActive());
+        now += 12 * 60000;
+        QVERIFY(clickAt(canvas, QPoint(size.width() / 2, size.height() / 2)));
+        auto *message = host.window()->findChild<QLabel *>("rrMenuSession");
+        auto *clock = host.window()->findChild<QLabel *>("rrMenuClock");
+        auto *battery = host.window()->findChild<QWidget *>("rrMenuBattery");
+        auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
+        QVERIFY(message && clock && battery && timer);
+        const auto capture = qEnvironmentVariable("KOBALT_STATS_VISIBILITY_CAPTURE_DIR");
+        if (!capture.isEmpty()) {
+            QVERIFY(QDir().mkpath(capture));
+            QCoreApplication::processEvents();
+            QVERIFY(host.window()->grab().save(
+                    capture
+                    + QString("/%1-menu-stats-%2.png")
+                              .arg(size.width() == 720 ? "phone" : "six-inch")
+                              .arg(hidden ? "hidden" : "visible")));
+        }
+        const auto check = [&] {
+            return message->isVisible() == !hidden
+                    && message->text()
+                    == (hidden ? QString() : strings::get("reader.session_minutes").arg(12))
+                    && clock->isVisible() && battery->isVisible()
+                    && host.book()->sessionReadingMilliseconds() == 12 * 60000;
+        };
+        QVERIFY2(
+                check(),
+                "Session message must follow Stats visibility without changing reading time or status icons");
+        const auto clockBounds = clock->geometry();
+        const auto batteryBounds = battery->geometry();
+        for (int pass = 0; pass < 2; ++pass) {
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsSystem")));
+            auto *features = host.window()->findChild<QPushButton *>("rrDisabledFeatures");
+            QVERIFY(features);
+            for (int page = 0; !features->isVisible() && page < 10; ++page)
+                QVERIFY(click(canvas,
+                              host.window()->findChild<QPushButton *>("rrSettingsOptionsNext")));
+            QVERIFY(click(canvas, features));
+            auto *option = host.window()->findChild<QCheckBox *>("rrDisableFeature_disable_stats");
+            QVERIFY(option);
+            QCOMPARE(option->isChecked(), hidden);
+            QVERIFY(click(canvas, option));
+            QVERIFY(click(canvas,
+                          host.window()->findChild<QPushButton *>("rrDisabledFeaturesDone")));
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrDisabledFeaturesPopup"));
+            auto *back = host.window()->findChild<QPushButton *>("rrSettingsBack");
+            if (back->isVisible())
+                QVERIFY(click(canvas, back));
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
+            QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrGeneralSettings")->isVisible());
+            hidden = !hidden;
+            QTRY_COMPARE(storage::readJson(paths.preferences()).value("disable_stats").toBool(),
+                         hidden);
+            QVERIFY(clickAt(canvas, QPoint(size.width() / 2, size.height() / 2)));
+            QVERIFY2(
+                    check(),
+                    "Session message must follow Stats visibility without changing reading time or status icons");
+            QCOMPARE(clock->geometry(), clockBounds);
+            QCOMPARE(battery->geometry(), batteryBounds);
+            // Timer updates and a later menu presentation must keep the same visibility.
+            QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+            QVERIFY2(
+                    check(),
+                    "Session message must follow Stats visibility without changing reading time or status icons");
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavChapters")));
+            QVERIFY2(
+                    check(),
+                    "Session message must follow Stats visibility without changing reading time or status icons");
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavChapters")));
+            QVERIFY2(
+                    check(),
+                    "Session message must follow Stats visibility without changing reading time or status icons");
+        }
+        // Hiding the feature does not disable the active reading clock.
+        QVERIFY(clickAt(canvas, QPoint(size.width() / 2, size.height() / 2)));
+        QTRY_VERIFY(host.book()->readingActive());
+        now += 60000;
+        QCOMPARE(host.book()->sessionReadingMilliseconds(), qint64(13 * 60000));
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+        host.open(fixture(), size);
+        QTRY_COMPARE(opened.count(), 2);
+        Canvas reopened(host.window(), size);
+        reopened.resize(900, 900);
+        reopened.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&reopened));
+        QTRY_VERIFY(host.book()->readingActive());
+        now += 12 * 60000;
+        QVERIFY(clickAt(reopened, QPoint(size.width() / 2, size.height() / 2)));
+        message = host.window()->findChild<QLabel *>("rrMenuSession");
+        QVERIFY(message);
+        QCOMPARE(message->isVisible(), !hidden);
+        QCOMPARE(message->text(),
+                 hidden ? QString() : strings::get("reader.session_minutes").arg(12));
+        QCOMPARE(host.book()->sessionReadingMilliseconds(), qint64(12 * 60000));
     }
 
     // Checks that reading-time text fits and centers in the status strip for each minute width and radio icon combination.

@@ -36,7 +36,7 @@ System > Feature visibility > Hidden features follows System integration. It sho
 
 Hiding Highlight links removes its reading-menu button and link count. Link taps still follow the Tappable links choice, and long presses still offer Follow link. Unchecking Highlight links restores the button on pages with links.
 
-Bookmarks and annotations stay saved. Existing highlighted text stays visible, but annotation controls are hidden. Bookmark ribbons, pins and corner taps are hidden with bookmarks. Stats visibility does not change reading history or time estimates. KOSync is different: checking it cancels active sync work and stops manual, opening, periodic, sleep, wake and closing syncs. The account is retained. Kobo’s own sync is unaffected.
+Bookmarks and annotations stay saved. Existing highlighted text stays visible, but annotation controls are hidden. Bookmark ribbons, pins and corner taps are hidden with bookmarks. Hiding Stats also hides the elapsed-session message in the reading menu. Stats visibility does not change reading history or time estimates. KOSync is different: checking it cancels active sync work and stops manual, opening, periodic, sleep, wake and closing syncs. The account is retained. Kobo’s own sync is unaffected.
 
 ## Light
 

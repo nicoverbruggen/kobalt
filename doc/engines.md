@@ -64,7 +64,7 @@ Decided by the user:
 - A percent can be an estimate. The same estimate is good enough for the progress display, for the KOSync `percentage` and for Nickel.
 - The estimate must be fast and can be rough. The user proposed a quick layout without kerning and other detail, or an approximation of how Nickel counts pages. The method is not chosen yet.
 - The order of work is the adapter, then koblaze. Crosspoint comes later.
-- Kobalt uses koblaze through a symlink for now. A Git submodule is preferred later.
+- Kobalt builds its imported koblaze fork directly from `src/engine/blaze`. The temporary symlink and external checkout are retired. Engine changes belong in this repository.
 
 Still open:
 

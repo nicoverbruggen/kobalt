@@ -188,7 +188,7 @@ Kobalt builds its koblaze engine from the source in this repository. Its text/im
 
 Desktop, Kobo and Android builds compile the repository-owned koblaze source at `src/engine/blaze`. No separate checkout, symlink or source override is needed. Configuration prints `CREngine: repository source` and the path. This is also the source used by release evaluation and source archives.
 
-`dependencies/local-engine.cmake` builds the engine under each platform's output directory in `blaze/`. Engine edits rebuild only the affected engine objects. Its libraries still come from the shared dependency cache. The old pinned CREngine download and build are no longer part of that cache, and archived CREngine patches are not applied to the repository source.
+`dependencies/local-engine.cmake` builds the engine under each platform's output directory in `blaze/`. Engine edits rebuild only the affected engine objects. Its libraries still come from the shared dependency cache. The old pinned CREngine download and build are no longer part of that cache, and the former CREngine patch series is retained in Git history. Its changes are integrated into the repository source.
 
 The first configure after this separation creates a new dependency set for each SDK because the recipes changed. Later engine edits do not change the dependency key. The import itself does not invalidate parsed-book caches; parser or layout changes still follow [Storage compatibility](storage.md).
 

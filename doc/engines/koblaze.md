@@ -8,7 +8,7 @@ The import holds the library sources and headers, the image scaler, the default 
 
 The engine knows a fixed list of hyphenation pattern names. `src/engine/blaze/data/hyphenation-patterns.txt` holds that list. The pattern files themselves are not part of the engine source: Kobalt ships its own selection from `assets/hyph`.
 
-Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in `src/engine/blaze/COPYING`, the image-scaler license, and the copyright headers. Make engine changes in the imported source. The files in `dependencies/crengine-patches.txt` describe the former patched-source build and are no longer applied.
+Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in `src/engine/blaze/COPYING`, the image-scaler license, and the copyright headers. Make engine changes in the imported source. The former `dependencies/crengine-patches.txt` series and its patch files are retained in Git history. Their changes are integrated into this source; builds do not apply a second engine patch stack.
 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).
 

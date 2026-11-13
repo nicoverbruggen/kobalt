@@ -6,7 +6,7 @@ cd "$root"
 version=$(bash platforms/ci/version.sh)
 mkdir -p build/release build/release-source-cache
 stage=$(mktemp -d "$root/build/release-source.XXXXXX")
-trap 'rm -rf "$stage"' EXIT
+trap 'cmake -DPATHS="$stage" -P "$root/platforms/cleanup.cmake"' EXIT
 bundle="$stage/Kobalt-$version-sources"
 mkdir -p "$bundle/application"
 git archive HEAD | tar -xf - -C "$bundle/application"

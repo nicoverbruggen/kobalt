@@ -1,6 +1,6 @@
 # Shared contract
 
-This file proposes the contract between Kobalt and a rendering engine. It is a proposal. No code exists for it. Names are working names and follow the style of the current source. The contract is derived from the [dependency inventory](inventory.md) and the [compatibility matrix](compatibility.md).
+This file records the original proposed contract between Kobalt and a rendering engine. Names and gaps below describe that proposal, not the current implementation. The implemented interface is [Engine](../../src/engine/engine.h); [Rendering engines](../engines.md#status) records current status. The contract is derived from the [dependency inventory](inventory.md) and the [compatibility matrix](compatibility.md).
 
 ## Ownership
 

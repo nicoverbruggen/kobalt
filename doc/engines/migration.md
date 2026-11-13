@@ -290,7 +290,7 @@ A small record, the book-state field `page_estimate` ([Storage compatibility](..
 
 ### Stages
 
-The fork exists: the branch `kobalt` in the koblaze checkout is upstream CREngine at the pinned revision with each Kobalt patch as one commit. Its tree is the same as the patched tree that Kobalt builds. On the Mac, Kobalt adds one line to CREngine's `CMakeLists.txt` after the patches (a rename of two FreeType functions); that step is not in the fork yet.
+These stages record the original migration plan. Kobalt now builds the imported fork directly from `src/engine/blaze` on every platform. The FreeType symbol rename is an engine CMake option. The external checkout, post-patch edit and temporary symlink are retired. See [source provenance](koblaze.md) and [current status](../engines.md#status).
 
 1. Build Kobalt from the fork in place of the pin and the patches, with the same output. Move the FreeType rename into a CMake option of the fork.
 2. Measure on a Kobo: the split of a cold open and of a font size change into parse, style, layout and page split, and the time between two progress points.

@@ -46,7 +46,7 @@ public:
                              : 0;
         width = columns > 1 ? qMax(1, (available - gutter * (columns - 1)) / columns) : w;
         // CREngine gives these side margins to each paragraph as its usable overflow.
-        // Its render context includes them (crengine-render-overflow.patch), so a
+        // Its render context includes them, so a
         // changed allowance lays the book out again, and a cached or retained layout
         // with the same allowance is reused.
         overflow = hangingPunctuation && columns > 1 ? qMin(sideMargin, gutter / 2) : 0;

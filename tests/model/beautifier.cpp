@@ -1,11 +1,13 @@
 #include "engine/crengine/engine_document.h"
 #include "reading/appearance_settings.h"
+#include "reading/reading_density.h"
 #include "publication/local_resources.h"
 #include "publication/publication.h"
 #include "reader_inputs.h"
 #include "check.h"
 #include <QCryptographicHash>
 #include <QBuffer>
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
@@ -55,6 +57,50 @@ SearchHit find(EngineDocument &model, const QString &query)
     }
     require(false, "Comparison passage was not found");
     return {};
+}
+
+// Pixel borders on horizontal rules stay thin across reading densities.
+void checkHorizontalRuleDensity()
+{
+    const int previousPpi = readingPpi.load();
+    for (const int ppi : { 96, 150, 200, 300, 600 }) {
+        readingPpi = ppi;
+        QMap<QString, qint64> sizes;
+        const auto source = fixture("<hr/>", sizes,
+                "hr{margin-top:.9em;margin-bottom:.9em;margin-left:40%;margin-right:40%;border-top:2px solid}");
+        EngineDocument model(test::readerFonts());
+        QString error;
+        require(model.openResources(source, sizes, { 800, 1000 }, {}, &error), qPrintable(error));
+        const auto image = model.image(0);
+        int grayRows = 0, lighterRows = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            const auto color = image.pixelColor(image.width() / 2, y);
+            grayRows += color == QColor(128, 128, 128);
+            lighterRows += color == QColor(178, 178, 178);
+        }
+        const int dpi = qMax(150, ppi);
+        require(grayRows == qRound(2.0 * dpi / 150) && lighterRows == qRound(dpi / 150.0),
+                qPrintable(QString("Horizontal rule at %1 PPI: got %2+%3 rows")
+                           .arg(ppi).arg(grayRows).arg(lighterRows)));
+    }
+    readingPpi = 300;
+    for (const auto &control : { std::pair<QByteArray, int>{ "<hr style='border:0;border-top:1pt solid black'/>", 4 },
+                                { "<hr style='border:0;border-top:1em solid black'/>", 44 },
+                                { "<div style='height:0;border-top:2px solid black'></div>", 6 },
+                                { "<hr style='border:0;border-top:2px solid black'/>", 4 } }) {
+        QMap<QString, qint64> sizes;
+        const auto source = fixture(control.first, sizes);
+        EngineDocument model(test::readerFonts());
+        QString error;
+        require(model.openResources(source, sizes, { 800, 1000 }, { { "font_pixels", 44 } }, &error),
+                qPrintable(error));
+        const auto image = model.image(0);
+        int blackRows = 0;
+        for (int y = 0; y < image.height(); ++y)
+            blackRows += image.pixelColor(image.width() / 2, y) == QColor(Qt::black);
+        require(blackRows == control.second, "Horizontal-rule scaling changed a control border");
+    }
+    readingPpi = previousPpi;
 }
 
 void compare(const QString &path, const QString &query, const QString &output)
@@ -321,6 +367,7 @@ int main(int argc, char **argv)
                       QString::fromLocal8Bit(argv[4]));
         return 0;
     }
+    checkHorizontalRuleDensity();
     checkTextColors();
     const QByteArray prose =
             " ordinary words continue through the paragraph, with enough text to distinguish prose from a heading or separator. The words keep their original order and their source anchors.";

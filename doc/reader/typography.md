@@ -89,3 +89,5 @@ On Android, choose a font folder in Library > More > Resource folders. The fonts
 A `figure` in normal block flow stays together when its content fits in one page or column. If it does not fit in the remaining space, it moves to the next page or column. Figures that exceed a full page or column can split. Publisher `page-break-inside: auto` can allow a split, and forced page breaks still apply. This rule does not resize images. Floated figures, inline figures and figures inside floats, inline boxes or tables keep their existing layout.
 
 Later prose stays after the figure. It does not move ahead to fill a preceding gap. This rule does not infer figure groups from plain images and nearby paragraphs.
+
+Horizontal rules keep thin pixel borders as screen density increases. At 300 PPI, a 2 px top border draws four screen pixels. The default 1 px bottom border draws two. The default gray color stays unchanged. Borders specified in physical or font-relative units keep their normal scaling.

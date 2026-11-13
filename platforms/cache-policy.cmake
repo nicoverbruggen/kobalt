@@ -5,8 +5,8 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 
 # Increment for layout/metrics changes not covered by CREngine's formatting
 # version. Figure keep-together defaults require repagination, not reparsing.
-# Version 3: pages without height are left out, so some books have fewer pages.
-set(rendering_version 3)
+# Version 4: horizontal-rule border strokes use the thin-stroke density scale.
+set(rendering_version 4)
 file(GLOB cache_patterns CONFIGURE_DEPENDS "${KOBALT_ROOT}/assets/hyph/*.pattern")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})
 set(cache_hashes "${rendering_version};")

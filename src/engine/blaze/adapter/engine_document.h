@@ -442,6 +442,9 @@ private:
     QSet<int> uncounted_;
     // Shows the real pages of the counted spine items up to the page.
     void adoptCounted();
+    // Writes the `page-count-end` diagnostic event, once for a count.
+    void reportCountEnd();
+    bool countReported_ = false;
     QJsonObject countingSettings_;
 
     // Documents of other units that stay in memory after the count or after

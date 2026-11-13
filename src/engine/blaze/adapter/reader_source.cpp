@@ -1218,6 +1218,21 @@ void EngineDocument::dropSideDocuments()
     kept_.clear();
 }
 
+void EngineDocument::reportCountEnd()
+{
+    if (countReported_ || !diagnosticsActive())
+        return;
+    countReported_ = true;
+    const auto &map = pageMap();
+    diagnostic("page-count-end",
+               { { "spine_items", map.items() },
+                 { "counted", int(map.completeItems().size()) },
+                 { "not_counted", int(uncounted_.size()) },
+                 { "exact", map.counted() },
+                 { "pages", qRound(map.total()) } },
+               false);
+}
+
 void EngineDocument::adoptCounted()
 {
     if (windowFirst_ < 0 || !source_ || !engine_)
@@ -1242,6 +1257,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     const auto key = estimateKey(settingsState());
     if (key != countingKey_ || size_ != countingSize_) {
         // Another page: the counts so far were for the old one.
+        countReported_ = false;
         source_->epubCache.reset();
         counting_.reset();
         countingNext_ = -1;
@@ -1271,6 +1287,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
             // estimates.
             source_->epubCache.reset();
             adoptCounted();
+            reportCountEnd();
             return false;
         }
         // A unit can start before the item: count from its start.
@@ -1327,8 +1344,10 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     if (!map.completeItems().contains(countingItem_))
         uncounted_.insert(countingItem_);
     adoptCounted();
-    if (map.counted())
+    if (map.counted()) {
         source_->epubCache.reset();
+        reportCountEnd();
+    }
     return !map.counted();
 #else
     Q_UNUSED(current);
@@ -1370,6 +1389,7 @@ bool EngineDocument::adoptAhead(int first, int last)
     countingSize_ = old->countingSize_;
     countingItem_ = old->countingItem_;
     countingNext_ = old->countingNext_;
+    countReported_ = old->countReported_;
     countingSettings_ = std::move(old->countingSettings_);
     uncounted_ = std::move(old->uncounted_);
     kept_ = std::move(old->kept_);

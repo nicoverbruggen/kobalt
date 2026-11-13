@@ -253,6 +253,18 @@ public:
     // Does a small step of the background work that makes the rough page
     // numbers more precise. Never writes storage. True while work remains.
     virtual bool refinePageEstimate() { return false; }
+    // One step of counting the real pages of the book in the background:
+    // the layout of a part of a spine item that is not on screen. True
+    // while there is more to count. `current` false stops the step.
+    virtual bool countPages(const std::function<bool()> &current)
+    {
+        Q_UNUSED(current);
+        return false;
+    }
+    // The reader turns the count on when the user reads, and off while the
+    // user changes settings. The engine worker reads it.
+    virtual void setBackgroundCount(bool enabled) { Q_UNUSED(enabled); }
+    virtual bool backgroundCount() const { return false; }
 
     // Turns `delta` pages. Past the first or the last page that the engine
     // has, it loads the spine item there and continues. False at an end of

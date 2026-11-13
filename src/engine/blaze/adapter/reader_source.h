@@ -61,6 +61,9 @@ struct ReaderSource
         int lastItem = -1, lastFirst = -1, lastLast = -1, lastPage = -1, lastPages = 0;
         // True when the last placed page came from the kept estimate.
         bool lastKept = false;
+        // Set by the reader, read on the engine worker. See
+        // Engine::setBackgroundCount().
+        std::atomic_bool count{ false };
         // The estimateKey() of the settings that gave the observed pages.
         QString key;
     } pageEstimate;

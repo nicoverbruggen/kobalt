@@ -208,6 +208,9 @@ public:
     bool goToFraction(double fraction) override;
     qint64 chapterLoadMilliseconds() const override;
     bool refinePageEstimate() override;
+    bool countPages(const std::function<bool()> &current) override;
+    void setBackgroundCount(bool enabled) override;
+    bool backgroundCount() const override;
 
     bool continuesAfter() const override
     {
@@ -425,6 +428,18 @@ private:
     // document. `aheadSettings_` and `aheadSize_` are what it
     // was opened with: after a change of settings it is not used.
     std::unique_ptr<EngineDocument> ahead_;
+    // The document whose pages countPages() counts, with the page it was
+    // opened for, and the spine items that gave no count.
+    std::unique_ptr<EngineDocument> counting_;
+    QString countingKey_;
+    QSize countingSize_;
+    int countingItem_ = -1;
+    QSet<int> uncounted_;
+    // Opens another document of the same book with `settings`. Null when it
+    // cannot open or `current` stops it.
+    std::unique_ptr<EngineDocument> openSide(const QJsonObject &settings,
+                                             const std::function<bool()> &current,
+                                             QString *error);
     int aheadItem_ = -1;
     QJsonObject aheadSettings_;
     QSize aheadSize_;

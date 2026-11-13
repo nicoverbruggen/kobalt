@@ -1027,34 +1027,9 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
         return (current && !current()) || engineCancellationRequested();
     });
     ahead_.reset();
-    auto ahead = std::make_unique<EngineDocument>(fonts_);
-    // What the host gave this document and a saved state does not hold.
-    ahead->slicePages_ = slicePages_;
-    ahead->userStyleSheet_ = userStyleSheet_;
-    ahead->cacheDirectory_ = cacheDirectory_;
-    ahead->cacheFingerprint_ = cacheFingerprint_;
-    ahead->cachePolicy_ = cachePolicy_;
-    ahead->cacheBytes_ = cacheBytes_;
-    ahead->emptyUnitDirection_ = emptyUnitDirection_;
-#  ifdef KOBLAZE_CANCEL_CHECK
-    // A tap must not wait for this work. The load and the style pass ask
-    // the check, the layout asks the interrupt. A stopped document is
-    // dropped, and the next call starts again.
-    const StopCheck check(current);
-    ahead->openInterrupt_ = [&check] { return check.requested(); };
-    try {
-        if (!ahead->openSource(source_, size_, settings, error))
-            return nullptr;
-    } catch (const KoblazeRenderCancelled &) {
-        koblazeSetSpineWindow(-1, -1);
+    auto ahead = openSide(settings, current, error);
+    if (!ahead)
         return nullptr;
-    }
-    ahead->openInterrupt_ = nullptr;
-#  else
-    Q_UNUSED(current);
-    if (!ahead->openSource(source_, size_, settings, error))
-        return nullptr;
-#  endif
     ahead_ = std::move(ahead);
     aheadItem_ = item;
     aheadSettings_ = settings;
@@ -1066,6 +1041,129 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
     Q_UNUSED(last);
     Q_UNUSED(error);
     return nullptr;
+#endif
+}
+
+std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &settings,
+                                                         const std::function<bool()> &current,
+                                                         QString *error)
+{
+#if __has_include(<koblaze.h>)
+    auto side = std::make_unique<EngineDocument>(fonts_);
+    // What the host gave this document and a saved state does not hold.
+    side->slicePages_ = slicePages_;
+    side->userStyleSheet_ = userStyleSheet_;
+    side->cacheDirectory_ = cacheDirectory_;
+    side->cacheFingerprint_ = cacheFingerprint_;
+    side->cachePolicy_ = cachePolicy_;
+    side->cacheBytes_ = cacheBytes_;
+    side->emptyUnitDirection_ = emptyUnitDirection_;
+#  ifdef KOBLAZE_CANCEL_CHECK
+    // A tap must not wait for this work. The load and the style pass ask
+    // the check, the layout asks the interrupt. A stopped document is
+    // dropped, and the next call starts again.
+    const StopCheck check(current);
+    side->openInterrupt_ = [&check] { return check.requested(); };
+    try {
+        if (!side->openSource(source_, size_, settings, error))
+            return nullptr;
+    } catch (const KoblazeRenderCancelled &) {
+        koblazeSetSpineWindow(-1, -1);
+        return nullptr;
+    }
+    side->openInterrupt_ = nullptr;
+#  else
+    Q_UNUSED(current);
+    if (!side->openSource(source_, size_, settings, error))
+        return nullptr;
+#  endif
+    return side;
+#else
+    Q_UNUSED(settings);
+    Q_UNUSED(current);
+    Q_UNUSED(error);
+    return nullptr;
+#endif
+}
+
+void EngineDocument::setBackgroundCount(bool enabled)
+{
+    if (source_)
+        source_->pageEstimate.count.store(enabled);
+}
+
+bool EngineDocument::backgroundCount() const
+{
+    return source_ && source_->pageEstimate.count.load();
+}
+
+bool EngineDocument::countPages(const std::function<bool()> &current)
+{
+#if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
+    if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || source_->parent || !engine_)
+        return false;
+    auto &map = pageMap();
+    // The estimate comes first: it gives the numbers that are shown until
+    // the count ends.
+    if (!map.complete() || map.counted())
+        return false;
+    const auto key = estimateKey(settingsState());
+    if (key != countingKey_ || size_ != countingSize_) {
+        // Another page: the counts so far were for the old one.
+        counting_.reset();
+        uncounted_.clear();
+        countingKey_ = key;
+        countingSize_ = size_;
+    }
+    if (!counting_) {
+        const auto counted = map.completeItems();
+        int item = 0;
+        while (item < spineItemCount_ && (counted.contains(item) || uncounted_.contains(item)))
+            ++item;
+        if (item >= spineItemCount_)
+            return false;
+        const auto unit = unitFrom(item);
+        auto settings = windowSettings(unit.first, unit.second);
+        settings.remove("position");
+        // The layout at the open observes the first slice, or each spine
+        // item of a unit as a whole.
+        counting_ = openSide(settings, current, nullptr);
+        countingItem_ = item;
+        if (!counting_ && (!current || current()))
+            uncounted_.insert(item);
+        return true;
+    }
+    auto *side = counting_.get();
+    if (side->slices() && side->sliceEnd_ < side->spineItemText()) {
+        side->sliceInterrupt_ = [&current] { return current && !current(); };
+        bool laidOut = false;
+        try {
+            laidOut = side->layoutSlice(side->sliceEnd_);
+        } catch (const KoblazeRenderCancelled &) {
+            koblazeSetSpineWindow(-1, -1);
+            counting_.reset();
+            return true;
+        }
+        side->sliceInterrupt_ = nullptr;
+        if (current && !current()) {
+            // A stopped layout is not a count. The spine item starts again.
+            counting_.reset();
+            return true;
+        }
+        if (!laidOut) {
+            uncounted_.insert(countingItem_);
+            counting_.reset();
+        }
+        return true;
+    }
+    counting_.reset();
+    // A spine item that did not get its pages is not tried again.
+    if (!map.completeItems().contains(countingItem_))
+        uncounted_.insert(countingItem_);
+    return !map.counted();
+#else
+    Q_UNUSED(current);
+    return false;
 #endif
 }
 

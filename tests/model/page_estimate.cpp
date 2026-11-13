@@ -1187,6 +1187,54 @@ void forwardPages()
     }
 }
 
+// The background count lays out the spine items that are not on screen.
+// When it ends, the page and the total are those of the whole book, without
+// reading the book. A stopped step counts nothing.
+void countedInBackground()
+{
+    EngineDocument model(test::readerFonts());
+    openResources(model, pagesBook(), { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    const int whole = model.pages();
+    int wholePage = -1;
+    for (int page = 0; page < whole && wholePage < 0; ++page) {
+        if (model.spineItemOf(model.pageStart(page)) == 3)
+            wholePage = page;
+    }
+    require(wholePage > 0, "The fixture needs a middle chapter");
+    model.setChapterSlices(6);
+    QString error;
+    require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+    require(!model.countPages({}), "The count waits for the estimate");
+    while (model.refinePageEstimate()) { }
+    const auto estimated = model.roughPages();
+    require(estimated.pages > 0 && estimated.pagesEstimated, "The estimate must give a total");
+
+    const int observed = Probe::map(model).observations();
+    for (int i = 0; i < 20; ++i)
+        require(model.countPages([] { return false; }), "A stopped count has more to do");
+    require(Probe::map(model).observations() == observed && model.roughPages().pagesEstimated,
+            "A stopped count gave pages");
+
+    int steps = 0;
+    while (model.countPages({}) && steps < 10000)
+        ++steps;
+    const auto counted = model.roughPages();
+    std::printf("background count: %d steps, page %d of %d, estimate was %d of %d, whole book "
+                "%d of %d\n",
+                steps, counted.page, counted.pages, estimated.page, estimated.pages, wholePage + 1,
+                whole);
+    require(!counted.pagesEstimated && counted.pages == whole && counted.page == wholePage + 1,
+            "The background count must give the pages of the whole book");
+    require(!model.countPages({}), "A counted book has nothing left to count");
+
+    // Another font size starts the count again.
+    require(model.applyAppearance(appearance::Patch(qt::object({ { "font_pixels", 32 } }))),
+            "Cannot change the font size");
+    while (model.refinePageEstimate()) { }
+    require(model.roughPages().pagesEstimated && model.countPages({}),
+            "Another font size must count again");
+}
+
 // The first complete estimate stays while the reader reads. A spine item
 // that gets its real pages later moves neither the page number nor the
 // total. Only a book with the real pages of every spine item replaces it.
@@ -1592,6 +1640,7 @@ int main(int argc, char **argv)
     openObserved();
     forwardPages();
     laterCounted();
+    countedInBackground();
     hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);

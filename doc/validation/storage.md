@@ -6,7 +6,7 @@ These checks cover the profile database, record writers, saves at close and slee
 
 | Test | Checks |
 | --- | --- |
-| `model.preview-store` | Private preview filenames, exact PNG pixels, invalidation, memory and storage limits, one-time old-cache cleanup, interrupted migration and pending scan recovery, completion persistence, and preservation of unrelated files and symlinks |
+| `model.preview-store` | Private preview filenames, exact PNG pixels, invalidation, memory and storage limits, one-time old-cache cleanup, interrupted migration and pending scan recovery, completion persistence, failed and special marker reads, hidden PNGs, preservation of unrelated files and symlinks, and ancestor replacement at the deletion boundary |
 | `model.profile-storage` | The SQLite profile: import, schema checks, single ownership, recovery, backups and synced commits |
 | `model.record-writer` | Queue order, cancellation and limits of the record writers |
 | `model.save-wait` | Save waits: a report runs the waiting check from the event loop, also from a worker thread; the writer thread reports each write; the fallback timer covers a save that does not report |

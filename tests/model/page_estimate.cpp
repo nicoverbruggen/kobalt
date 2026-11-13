@@ -1311,6 +1311,50 @@ void countedInBackground()
             "Another font size must count again");
 }
 
+// A book with more spine items than the engine has room for documents: the
+// count must still reach the end of the book, with the kept documents out of
+// its way.
+void manyItemsCounted()
+{
+    const QByteArray sentence =
+            "The reader turns the page and the text goes on without a break in it. ";
+    test::BookFiles files;
+    QByteArray spine;
+    for (int item = 0; item < 60; ++item) {
+        QByteArray body = "<h1>Chapter</h1>";
+        // Long enough that no spine item shares a unit with the next.
+        for (int p = 0; p < 40 + item % 7; ++p)
+            body += "<p>" + sentence.repeated(3) + "</p>";
+        const auto name = QString("c%1.xhtml").arg(item, 2, 10, QChar('0'));
+        files[name] = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Part</title>"
+                      "</head><body>"
+                + body + "</body></html>";
+        spine += "<itemref idref=\"" + name.toUtf8() + "\"/>";
+    }
+    files = test::publisherPackage("en", "Many", files, spine);
+    EngineDocument model(test::readerFonts());
+    openResources(model, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    const int whole = model.pages();
+    model.setChapterSlices(6);
+    QString error;
+    require(model.showSpineItems(30, 30, &error) && model.go(0), qPrintable(error));
+    while (model.refinePageEstimate()) { }
+    int steps = 0;
+    while (model.countPages({}) && steps < 100000)
+        ++steps;
+    const auto counted = model.roughPages();
+    std::printf("many spine items: %d steps, %d of %d spine items counted, %d pages, whole book "
+                "%d\n",
+                steps, int(Probe::map(model).completeItems().size()), Probe::map(model).items(),
+                counted.pages, whole);
+    require(Probe::map(model).completeItems().size() == 60 && !counted.pagesEstimated
+                    && counted.pages == whole,
+            "The count must reach every spine item of a book with many");
+    // A jump after the count still opens its chapter.
+    require(model.showSpineItems(55, 55, &error) && model.showSpineItems(2, 2, &error),
+            qPrintable("A jump after the count failed: " + error));
+}
+
 // A book whose pages were all counted opens again with its real page
 // numbers: no estimate, no measuring and no new count. Reading on keeps
 // them.
@@ -1773,6 +1817,7 @@ int main(int argc, char **argv)
     laterCounted();
     countedInBackground();
     reopenCounted();
+    manyItemsCounted();
     hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);

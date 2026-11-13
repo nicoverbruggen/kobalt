@@ -1051,6 +1051,14 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
             return (current && !current()) || engineCancellationRequested();
         });
         ahead = openSide(settings, current, error);
+        if (!ahead && !kept_.empty() && (!current || current())) {
+            // The kept documents must never cost the reader a chapter:
+            // without them the engine has room for this one.
+            kept_.clear();
+            if (error)
+                error->clear();
+            ahead = openSide(settings, current, error);
+        }
     }
     if (!ahead)
         return nullptr;
@@ -1124,9 +1132,13 @@ bool EngineDocument::backgroundCount() const
 void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,
                               QSize size)
 {
-    // About six times this in memory on a 64-bit desktop: enough for every
-    // spine item of a long novel.
+    // About six times this in memory on a 64-bit desktop.
     static constexpr qint64 keptUnitBytes = 6 * 1024 * 1024;
+    // The engine has room for 16 documents at a time
+    // (MAX_DOCUMENT_INSTANCE_COUNT). The document on screen, the one
+    // opened ahead, the one of the count, a preview and the short-lived
+    // documents of a load need theirs.
+    static constexpr int keptUnitCount = 6;
     if (!document || !source_ || document->windowFirst_ < 0)
         return;
     const int first = document->windowFirst_, last = document->windowLast_;
@@ -1154,7 +1166,7 @@ void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document, const QJ
     qint64 total = 0;
     for (const auto &entry : kept_)
         total += entry.bytes;
-    while (total > keptUnitBytes && !kept_.empty()) {
+    while ((total > keptUnitBytes || int(kept_.size()) > keptUnitCount) && !kept_.empty()) {
         auto farthest = kept_.begin();
         for (auto it = kept_.begin(); it != kept_.end(); ++it) {
             if (qAbs(it->first - windowFirst_) > qAbs(farthest->first - windowFirst_))
@@ -1253,8 +1265,13 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         countingItem_ = item;
         countingNext_ = -1;
         countingSettings_ = settings;
-        if (!counting_ && (!current || current()))
-            uncounted_.insert(item);
+        if (!counting_ && (!current || current())) {
+            // Without the kept documents the engine has room for this one.
+            if (!kept_.empty())
+                kept_.clear();
+            else
+                uncounted_.insert(item);
+        }
         return true;
     }
     auto *side = counting_.get();

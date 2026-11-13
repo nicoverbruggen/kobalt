@@ -2305,13 +2305,26 @@ int main(int argc, char **argv)
                     const int controls = ui::px(phone ? 224 : 300);
                     QWidget host;
                     host.resize(ui::px(design.width()), ui::px(design.height()));
-                    ChapterGraph graph(&host);
+                    ChapterGraph graph(&host, phone);
                     graph.resize(host.width(), cm::graphHeight);
                     graph.setAvailableHeight(host.height() - controls);
                     graph.setData(balanced, {}, true, {});
+                    graph.setChapterNumber(4, 385);
+                    graph.setProgress("Chapter I", 1, 24, 24, 1, 240);
                     auto *bars = graph.findChild<QWidget *>("rrChapterBars");
                     host.show();
                     graph.open();
+                    const auto *contents = graph.findChild<QLabel *>("rrGraphChapterNumber");
+                    const auto *page = graph.findChild<QLabel *>("rrGraphChapterPosition");
+                    const auto *separator = graph.findChild<QLabel *>("rrGraphPositionSeparator");
+                    require(contents->isVisible() != phone && separator->isVisible() != phone
+                                    && page->isVisible(),
+                            "Phone Stats keeps a contents count or loses its chapter page");
+                    require(!phone
+                                    || (page->x() == int(ui::metrics::chrome::inset)
+                                        && qt::textWidth(page->fontMetrics(), page->text())
+                                                <= page->width()),
+                            "The phone chapter page is clipped or keeps the hidden count's gap");
                     const int bottom = graph.geometry().bottom();
                     const int balancedHeight = bars->height();
                     graph.setData(uneven, {}, true, {});

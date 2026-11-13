@@ -255,7 +255,8 @@ private:
     }
 };
 
-ChapterGraph::ChapterGraph(QWidget *parent) : Panel(parent, Qt::BottomEdge)
+ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
+    : Panel(parent, Qt::BottomEdge), phoneLayout(phoneLayout)
 {
     setObjectName("rrChapterGraph");
     message = new ui::InterfaceLabel(this);
@@ -266,6 +267,7 @@ ChapterGraph::ChapterGraph(QWidget *parent) : Panel(parent, Qt::BottomEdge)
     chapterCaption = new ui::InterfaceLabel(this);
     chapterCaption->setObjectName("rrGraphChapterNumber");
     ui::captionLabel(chapterCaption);
+    chapterCaption->setVisible(!phoneLayout);
     // The page in the chapter follows the contents position on the caption line.
     positionSeparator = new ui::InterfaceLabel(QStringLiteral("·"), this);
     positionSeparator->setObjectName("rrGraphPositionSeparator");
@@ -663,12 +665,14 @@ void ChapterGraph::arrange()
                       chapters::rowHeight);
     // "Contents · 8 of 23 · Page 1 of 65". The page keeps its full text; a
     // long contents position gives way first.
-    const bool both = !chapterCaption->text().isEmpty() && !chapterPage->text().isEmpty();
+    const bool showChapterCount = !phoneLayout && !chapterCaption->text().isEmpty();
+    const bool both = showChapterCount && !chapterPage->text().isEmpty();
     const int pageWidth =
             qMin(titleWidth, ui::interfaceTextWidth(chapterPage->text(), captionMetrics) + 2);
     const int separatorWidth =
             both ? ui::interfaceTextWidth(QStringLiteral(" · "), captionMetrics) : 0;
-    const int captionWidth = chapterPage->text().isEmpty()
+    const int captionWidth = !showChapterCount ? 0
+            : chapterPage->text().isEmpty()
             ? titleWidth
             : qBound(0, ui::interfaceTextWidth(chapterCaption->text(), captionMetrics) + 2,
                      titleWidth - pageWidth - separatorWidth);

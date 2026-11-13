@@ -961,7 +961,7 @@ void Reader::buildOverlays()
     linkDiscoveryExit->setObjectName("rrLinkDiscoveryExit");
     linkRow->addWidget(linkDiscoveryExit);
     linkDiscovery->hide();
-    chapterGraph = new kobalt::ChapterGraph(this);
+    chapterGraph = new kobalt::ChapterGraph(this, services.phoneLayout);
     chapterGraph->changed = [this] { saveSoon(); };
     chapterGraph->denseChanged = [this](bool dense) { setDenseGraph(dense); };
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));

@@ -15,7 +15,7 @@ class StatsCell;
 class ChapterGraph : public ui::Panel
 {
 public:
-    explicit ChapterGraph(QWidget *parent);
+    explicit ChapterGraph(QWidget *parent, bool phoneLayout = false);
     void setData(QVector<ChapterLink> chapters, ChapterSelection selection, bool ready,
                  const QString &error);
     void setProgress(const QString &title, int chapterPage, int chapterPages, int nextChapterPages,
@@ -71,6 +71,7 @@ private:
     int wordsRowHeight() const;
     int wordsHeight() const;
     int pagerHeight() const;
+    const bool phoneLayout;
     bool ready = false, dense = true, cellWords = false;
     qint64 words = -1, chapterTime = -1, bookTime = -1;
     int minutes = 0, pageTurns = 0, chapterNumber = 0;

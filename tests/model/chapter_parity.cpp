@@ -537,6 +537,14 @@ Action sessionLists()
                 });
                 const auto bookmark = bookmarks.bookmarks().first();
                 require(!bookmark.chapter.isEmpty(), "Session bookmark lost chapter title");
+                wait("book page estimate", [&] {
+                    return !session.state().contains("book_fraction")
+                            || session.state().value("rough_page").toInt() > 0;
+                });
+                wait("bookmark labels after estimate", [&] {
+                    bookmarks.sync();
+                    return bookmarks.resolved();
+                });
                 const auto bookmarkSlice = layout();
                 const int bookmarkBookPage = bookmarks.bookPage(0);
                 require(bookmarkBookPage >= 0, "New bookmark has no book page");

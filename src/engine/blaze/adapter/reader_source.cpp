@@ -1121,8 +1121,8 @@ bool EngineDocument::backgroundCount() const
     return source_ && source_->pageEstimate.count.load();
 }
 
-void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document,
-                              const QJsonObject &settings, QSize size)
+void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,
+                              QSize size)
 {
     // About six times this in memory on a 64-bit desktop: enough for every
     // spine item of a long novel.

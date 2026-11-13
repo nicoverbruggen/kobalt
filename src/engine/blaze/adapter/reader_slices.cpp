@@ -447,8 +447,8 @@ Engine::RoughPages EngineDocument::roughPages() const
             // The page stays in the pages of its spine item, so that it
             // never passes the total.
             const int first = qRound(map.pagesBefore(place.item)) + 1;
-            const int last = qMax(first, qRound(map.pagesBefore(place.item)
-                                                + map.itemPages(place.item)));
+            const int last =
+                    qMax(first, qRound(map.pagesBefore(place.item) + map.itemPages(place.item)));
             rough.page = qBound(first, rough.page, last);
             estimate.book.restore(rough.page);
             rough.pages = qMax(last, qRound(map.total()));
@@ -1028,9 +1028,9 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
             // As in roughPages(): the page stays in the pages of its spine
             // item.
             const int first = qRound(map.pagesBefore(item));
-            pages = qBound(double(first), pages,
-                           double(qMax(first, qRound(map.pagesBefore(item) + map.itemPages(item))
-                                                      - 1)));
+            pages = qBound(
+                    double(first), pages,
+                    double(qMax(first, qRound(map.pagesBefore(item) + map.itemPages(item)) - 1)));
         }
         result[i] = qBound(1, int(pages) + 1, last);
     }

@@ -443,6 +443,7 @@ private:
     // Shows the real pages of the counted spine items up to the page.
     void adoptCounted();
     QJsonObject countingSettings_;
+
     // Documents of other units that stay in memory after the count or after
     // the reader left them, so that a jump there needs no new load. Their
     // spine items hold at most `keptUnitBytes` bytes together. Over that,
@@ -455,6 +456,7 @@ private:
         qint64 bytes = 0;
         std::unique_ptr<EngineDocument> document;
     };
+
     std::vector<KeptUnit> kept_;
     void keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,
                   QSize size);
@@ -467,8 +469,7 @@ private:
     // Opens another document of the same book with `settings`. Null when it
     // cannot open or `current` stops it.
     std::unique_ptr<EngineDocument> openSide(const QJsonObject &settings,
-                                             const std::function<bool()> &current,
-                                             QString *error);
+                                             const std::function<bool()> &current, QString *error);
     int aheadItem_ = -1;
     QJsonObject aheadSettings_;
     QSize aheadSize_;

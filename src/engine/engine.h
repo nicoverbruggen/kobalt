@@ -79,6 +79,7 @@ public:
     // skip other non-linear sections. Returns `from` at either end.
     virtual int turnTarget(int from, int delta) const = 0;
     virtual bool goTo(const QString &position) = 0;
+
     // Goes to the entry `index` of chapters(), which has `position`. An
     // engine that loads the text of a part of the book can know the exact
     // place of the entry only after it loads the text there.
@@ -253,6 +254,7 @@ public:
     // Does a small step of the background work that makes the rough page
     // numbers more precise. Never writes storage. True while work remains.
     virtual bool refinePageEstimate() { return false; }
+
     // One step of counting the real pages of the book in the background:
     // the layout of a part of a spine item that is not on screen. True
     // while there is more to count. `current` false stops the step.
@@ -261,9 +263,11 @@ public:
         Q_UNUSED(current);
         return false;
     }
+
     // The reader turns the count on when the user reads, and off while the
     // user changes settings. The engine worker reads it.
     virtual void setBackgroundCount(bool enabled) { Q_UNUSED(enabled); }
+
     virtual bool backgroundCount() const { return false; }
 
     // Turns `delta` pages. Past the first or the last page that the engine

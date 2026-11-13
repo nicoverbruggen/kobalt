@@ -411,8 +411,8 @@ int main(int argc, char **argv)
     // list, and a jump to it must find the place of the whole book.
     {
         const auto chapter = [](const QByteArray &id, int seed) {
-            return test::publisherHtml("<p>" + prose(seed, 20) + "</p><h1 id=\"" + id + "\">"
-                                       + id + "</h1><p>" + prose(seed + 1, 20) + "</p>");
+            return test::publisherHtml("<p>" + prose(seed, 20) + "</p><h1 id=\"" + id + "\">" + id
+                                       + "</h1><p>" + prose(seed + 1, 20) + "</p>");
         };
         auto files = styledBook(
                 "p{margin:0}", "<p>" + prose(3, 30) + "</p>",
@@ -429,7 +429,8 @@ int main(int argc, char **argv)
         EngineDocument model(test::readerFonts());
         open(model, files);
         const auto whole = model.chapters();
-        require(whole.size() == 3 && whole[2].depth == 1, "The fixture needs a nested contents list");
+        require(whole.size() == 3 && whole[2].depth == 1,
+                "The fixture needs a nested contents list");
         model.setChapterSlices(2);
         QString error;
         require(model.showSpineItems(0, 0, &error), qPrintable(error));

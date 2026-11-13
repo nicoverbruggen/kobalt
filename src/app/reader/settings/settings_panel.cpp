@@ -1928,7 +1928,7 @@ void SettingsPanel::showPercentageFormats(const QString &current,
 
 QString SettingsPanel::renderingModeLabel(const QString &mode)
 {
-    return strings::get(mode == "accurate" ? "settings.rendering_accurate"
+    return strings::get(mode == "accurate"       ? "settings.rendering_accurate"
                                 : mode == "fast" ? "settings.rendering_fast"
                                                  : "settings.rendering_hybrid");
 }

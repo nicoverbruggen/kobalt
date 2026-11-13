@@ -2534,8 +2534,11 @@ void Reader::showChapters()
         // The value is the index of the entry: several entries can share a
         // position until chapter mode loads their text.
         items.append({ chapter.title,
-                       chapter.position.isEmpty() ? QString() : QString::number(index), name, {},
-                       chapter.depth, chapter.page });
+                       chapter.position.isEmpty() ? QString() : QString::number(index),
+                       name,
+                       {},
+                       chapter.depth,
+                       chapter.page });
         if (index == session->contentsSelection().current)
             current = name;
     }

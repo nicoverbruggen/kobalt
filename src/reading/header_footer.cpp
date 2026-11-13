@@ -45,8 +45,9 @@ bool anything(const Layout &layout, int first)
 
 QString pageFraction(int page, int pages, bool estimated)
 {
-    return pages > 0 ? strings::get("common.page_fraction").arg(page).arg(pageTotal(pages, estimated))
-                     : QString();
+    return pages > 0
+            ? strings::get("common.page_fraction").arg(page).arg(pageTotal(pages, estimated))
+            : QString();
 }
 
 // A standalone estimate remains approximate while reading history accumulates.
@@ -89,8 +90,9 @@ QString percentDone(int page, int pages, bool decimal)
 // the dot between the two parts.
 QString pageOf(int page, int pages, bool estimated)
 {
-    return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(pageTotal(pages, estimated))
-                     : QString();
+    return pages > 0
+            ? strings::get("header_footer.page_of").arg(page).arg(pageTotal(pages, estimated))
+            : QString();
 }
 
 QString milliseconds(qint64 value)
@@ -384,7 +386,8 @@ Content content(Field field, const Values &values, bool uppercase)
     case Field::ChapterPage:
         result.text = values.percentRead >= 0
                 ? percent(values.chapterPercentRead)
-                : pageFraction(values.chapterPage, values.chapterPages, values.chapterPagesEstimated);
+                : pageFraction(values.chapterPage, values.chapterPages,
+                               values.chapterPagesEstimated);
         break;
     case Field::BookPage:
         result.text = values.percentRead >= 0
@@ -414,8 +417,9 @@ Content content(Field field, const Values &values, bool uppercase)
         break;
     case Field::TitleAndPage:
         result.text = joined(values.title,
-                             values.percentRead >= 0 ? percent(values.percentRead)
-                                                     : pageOf(values.page, values.pages, values.pagesEstimated));
+                             values.percentRead >= 0
+                                     ? percent(values.percentRead)
+                                     : pageOf(values.page, values.pages, values.pagesEstimated));
         break;
     case Field::BatteryPercentOnly:
     case Field::BatteryPercent:

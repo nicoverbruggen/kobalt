@@ -2495,8 +2495,8 @@ void ReaderSession::dispatch(bool pageTurn)
         diagnostic("render-queued", { { "render_id", double(job) }, { "delta", delta } }, false);
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, requested, chapterMode, size, anchor, chapter, delta, target, fraction, job,
-             lease, latest, progress, positions, markup, markupGeneration] {
+            [guard, engine, requested, chapterMode, size, anchor, chapter, delta, target, fraction,
+             job, lease, latest, progress, positions, markup, markupGeneration] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;

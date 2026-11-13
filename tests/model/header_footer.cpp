@@ -224,9 +224,9 @@ int main()
     estimated.pagesEstimated = estimated.chapterPagesEstimated = true;
     require(content(Field::ChapterPage, estimated, false).text == QStringLiteral("6 / ~20")
                     && content(Field::BookPage, estimated, false).text
-                               == QStringLiteral("%1 / ~193").arg(values.page)
+                            == QStringLiteral("%1 / ~193").arg(values.page)
                     && content(Field::ChapterAndPage, missingChapter, false).text
-                               == QStringLiteral("6 of 20"),
+                            == QStringLiteral("6 of 20"),
             "An estimated total needs its mark");
     estimated.chapter.clear();
     require(content(Field::ChapterAndPage, estimated, false).text == QStringLiteral("6 of ~20"),

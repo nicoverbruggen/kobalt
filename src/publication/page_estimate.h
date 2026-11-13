@@ -232,6 +232,7 @@ struct PageEstimateRecord
     QVector<double> kept;
     // At most this many parts, so that the record stays small.
     static constexpr int maxParts = 2000;
+
     // The parts of the read spine items that were laid out in several
     // slices: the first and last character of each and its real pages.
     // With them a book that was counted opens with its real page numbers.
@@ -239,6 +240,7 @@ struct PageEstimateRecord
     {
         int item = 0, first = 0, last = 0, characters = 0, pages = 0;
     };
+
     QVector<Part> parts;
 
     QJsonObject toJson() const;
@@ -304,11 +306,15 @@ public:
 
     // True when every spine item has the real pages of all its parts.
     bool counted() const { return counted_; }
+
     void keepFirstEstimate(bool keep) { keep_ = keep; }
+
     // True while the numbers are the kept estimate.
     bool keeping() const { return keep_ && kept_ && !counted_; }
+
     // The kept estimate of each item, or empty when there is none yet.
     QVector<double> keptPages() const { return kept_ ? keptPages_ : QVector<double>(); }
+
     // Continues with the kept estimate of an earlier reading, for the same
     // page. Ignores one of another size.
     void restoreKept(const QVector<double> &pages);
@@ -319,6 +325,7 @@ public:
     // move at most twice: here, and when the whole book is counted. True
     // when the numbers changed.
     bool adoptCounted(int through);
+
     // The spine items before this one show their real pages.
     int adopted() const { return keeping() ? adopted_ : 0; }
 

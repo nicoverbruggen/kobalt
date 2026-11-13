@@ -335,18 +335,19 @@ void ChapterGraph::setProgress(const QString &title, int chapterPage, int chapte
     if (this->title == title && progress.chapterPage == chapterPage
         && progress.chapterPages == chapterPages && progress.nextChapterPages == nextChapterPages
         && progress.page == page && progress.pages == pages && progress.bookFraction == bookFraction
-        && progress.estimated == estimated
-        && progressWeight == ui::interfaceWeight())
+        && progress.estimated == estimated && progressWeight == ui::interfaceWeight())
         return;
     this->title = title;
     progressWeight = ui::interfaceWeight();
-    progress = { chapterPage, chapterPages, nextChapterPages, page, pages, bookFraction, estimated };
+    progress = {
+        chapterPage, chapterPages, nextChapterPages, page, pages, bookFraction, estimated
+    };
     chapterTitle->setAccessibleName(strings::get("chapter_graph.current_chapter").arg(title));
-    this->chapterPage->setText(chapterPages > 0 ? strings::get("stats.page_of")
-                                                          .arg(qBound(1, chapterPage, chapterPages))
-                                                          .arg(headerfooter::pageTotal(
-                                                                  chapterPages, estimated))
-                                                : QString());
+    this->chapterPage->setText(
+            chapterPages > 0 ? strings::get("stats.page_of")
+                                       .arg(qBound(1, chapterPage, chapterPages))
+                                       .arg(headerfooter::pageTotal(chapterPages, estimated))
+                             : QString());
     refreshCells();
     arrange();
 }

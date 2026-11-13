@@ -8580,10 +8580,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 const auto before = fixture.state().value("position").toString();
                 test::skipPageTurnWindow();
                 fixture.window.readerWindow()->pageButton(1);
-                QTRY_VERIFY_WITH_TIMEOUT(
-                        !fixture.state().value("busy").toBool()
-                                && fixture.state().value("position").toString() != before,
-                        5000);
+                QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool()
+                                                 && fixture.state().value("position").toString()
+                                                         != before,
+                                         5000);
             }
             if (mode == 2) {
                 QTRY_VERIFY2_WITH_TIMEOUT(!estimated(), qPrintable(page->slotContents[2].text),

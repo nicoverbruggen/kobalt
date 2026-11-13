@@ -12684,6 +12684,21 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
             inheritLength( pstyle->border_width[3], parent_style->border_width[3], parent_font_size );
     }
 
+    // Keep horizontal-rule pixel strokes thin on dense reading screens.
+    // Resolve before caching so layout and paint use the same widths. Leave
+    // physical and font-relative border lengths on their normal scale.
+    if ( enode->getNodeId() == el_hr ) {
+        const int stroke_dpi = gRenderDPI > 150 ? gRenderDPI : 150;
+        for ( int side = 0; side < 4; ++side ) {
+            css_length_t & border = pstyle->border_width[side];
+            if ( border.type == css_val_px ) {
+                const int pixels = (int)(((lInt64)border.value * stroke_dpi + 19200) / 38400);
+                border.value = border.value > 0 && pixels < 1 ? 1 : pixels;
+                border.type = css_val_screen_px;
+            }
+        }
+    }
+
     // border-radius: not inherited by default, but if the CSS value was explicitly
     // "inherit", grab the parent's computed value, like border-width
     // and border-color do just above/below.

@@ -274,9 +274,11 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
         return NativeSaveResult::unavailable(
                 strings::get("error.native_progress_api_is_unavailable"));
     const bool tolino = native.tolino(native.device());
+    // Tolino's bookmark call also changes page metadata and the sync flag.
+    // Keep its existing bookmark intact when the position cannot be mapped.
     if (tolino
-        && (!native.setPages || !activity || activity->pages <= 0 || activity->page < 0
-            || activity->page >= activity->pages))
+        && (position.isEmpty() || !native.setPages || !activity || activity->pages <= 0
+            || activity->page < 0 || activity->page >= activity->pages))
         return NativeSaveResult::rejected(
                 strings::get("error.nickel_rejected_the_exact_reading_position"));
     // Without a mapped position, record activity while preserving the native

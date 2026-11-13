@@ -283,6 +283,29 @@ void writeTimeOnly(NativeProgress &progress)
             "a time-only record asks for no upload");
 }
 
+void refuseUnmappedTolinoPosition(NativeProgress &progress)
+{
+    if (firmware4)
+        return;
+    const auto expected = current(progress);
+    const auto before = pewter::row(book);
+    const auto shown = activity();
+    pewter::options().tolino = true;
+    pewter::clearCalls();
+    NativeSaveResult result;
+    {
+        kobalt::mainthread::AllowBlocking allow("pewter: a lifecycle boundary");
+        result = progress.write(expected, QString(), 20, false, &estimates, &shown);
+    }
+    pewter::options().tolino = false;
+    require(result.status() == NativeSaveResult::Status::Rejected,
+            "an unmapped Tolino position is rejected before native writes");
+    require(!pewter::find("DatabaseAdapter::beginTransaction")
+                    && !pewter::find("VolumeManager::updateBookmark"),
+            "an unmapped Tolino position does not enter a transaction or change its bookmark");
+    requireRefusedWrite(before, "an unmapped Tolino position preserves committed progress");
+}
+
 void refuseFailures(NativeProgress &progress)
 {
     QString error;
@@ -447,6 +470,7 @@ int main(int argc, char **argv)
     writeLastPage(progress);
     writeFinished(progress);
     writeTimeOnly(progress);
+    refuseUnmappedTolinoPosition(progress);
     refuseFailures(progress);
     markRecent(progress);
     std::printf("pewter progress checks passed (Qt %s)\n", qVersion());

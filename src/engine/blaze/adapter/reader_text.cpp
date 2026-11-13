@@ -1,3 +1,4 @@
+#include "stop_point.h"
 #include "column_view.h"
 #include "support/qt_compat.h"
 #include "engine_document.h"
@@ -1990,13 +1991,41 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
                 documentFor(cursor.firstItem >= 0 ? cursor.firstItem : cursor.item, current);
         if (document && cursor.firstItem >= 0 && document->windowFirst_ != cursor.firstItem)
             document = openAhead(cursor.firstItem, current);
+        // A long spine item has a layout for one part at a time, and only
+        // that part has text to search. Another document goes through the
+        // parts: the one on screen keeps its part.
+        if (document == this && slices())
+            document = openAhead(cursor.item, current);
         if (!document) {
             if (current && !current())
                 break;
             ++cursor.item;
             cursor.firstItem = -1;
-            cursor.block = cursor.offset = 0;
+            cursor.block = cursor.offset = cursor.slice = 0;
             continue;
+        }
+        if (document->slices()
+            && (cursor.slice < document->sliceFirst_ || cursor.slice >= document->sliceEnd_)) {
+            bool shown = false;
+#ifdef KOBLAZE_CANCEL_CHECK
+            try {
+                const StopCheck check(current);
+                document->sliceInterrupt_ = [&check] { return check.requested(); };
+                shown = document->showSliceAt(cursor.slice);
+            } catch (const KoblazeRenderCancelled &) {
+                shown = false;
+            }
+            document->sliceInterrupt_ = nullptr;
+#else
+            shown = document->showSliceAt(cursor.slice);
+#endif
+            if (!shown) {
+                // Stopped for other work: the document may hold half a
+                // layout. The next call opens it again.
+                if (document == ahead_.get())
+                    ahead_.reset();
+                break;
+            }
         }
         // The items of that document from this one on, before the next
         // that the search reaches in another document.
@@ -2010,6 +2039,15 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
             const int item = positionItem(hit.start);
             if (item < cursor.item || item > last)
                 continue;
+            // A part also lays out some text of the next part, which that
+            // part finds again.
+            if (document->slices()) {
+                const int before = document->textBefore(hit.start);
+                if (before < document->sliceFirst_
+                    || (before >= document->sliceEnd_
+                        && document->sliceEnd_ < document->spineItemText()))
+                    continue;
+            }
             // Only the document that has the text knows its chapter.
             document->labelChapterHit(hit);
             result.hits.append(std::move(hit));
@@ -2017,10 +2055,16 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         cursor.block = batch.cursor.block;
         cursor.offset = batch.cursor.offset;
         cursor.firstItem = document->windowFirst_;
-        if (batch.done) {
+        if (batch.done && document->slices() && document->sliceEnd_ < document->spineItemText()) {
+            // The next part of the same spine item.
+            cursor.slice = document->sliceEnd_;
+            cursor.block = cursor.offset = 0;
+            if (budget.elapsed() >= 8)
+                break;
+        } else if (batch.done) {
             cursor.item = last + 1;
             cursor.firstItem = -1;
-            cursor.block = cursor.offset = 0;
+            cursor.block = cursor.offset = cursor.slice = 0;
         } else if (budget.elapsed() >= 8) {
             break;
         }

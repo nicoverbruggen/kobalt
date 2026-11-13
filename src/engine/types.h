@@ -48,6 +48,10 @@ struct SearchCursor
     // The first spine item of the document whose blocks the cursor counts.
     // Background preparation can replace that document with an overlapping unit.
     int firstItem = -1;
+    // In chapter mode a long spine item is laid out in parts, and only the
+    // part with a layout has text to search. Where the part that the search
+    // is in starts, as a count of the text before it.
+    int slice = 0;
 };
 
 struct SearchBatch

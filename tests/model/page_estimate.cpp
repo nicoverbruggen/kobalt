@@ -959,6 +959,49 @@ void emptyItem()
     }
 }
 
+// A long spine item has a layout for one part at a time. A search of the
+// book must find the matches in every part, as in the whole book.
+void searchLongItem()
+{
+    const QByteArray sentence =
+            "The reader turns the page and the text goes on without a break in it. ";
+    QByteArray body;
+    for (int i = 0; i < 400; ++i)
+        body += "<p>" + sentence.repeated(3) + (i % 37 == 5 ? "A quagmire here. " : "") + "</p>";
+    test::BookFiles files;
+    files["long.xhtml"] = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Part</title>"
+                          "</head><body>"
+            + body + "</body></html>";
+    files["after.xhtml"] = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>After"
+                           "</title></head><body><p>One more quagmire.</p></body></html>";
+    files = test::publisherPackage(
+            "en", "Long", files, "<itemref idref=\"long.xhtml\"/><itemref idref=\"after.xhtml\"/>");
+    const auto hits = [](EngineDocument &model) {
+        QStringList starts;
+        SearchCursor cursor;
+        for (int round = 0; round < 100000; ++round) {
+            const auto batch = model.searchText("quagmire", cursor, 100);
+            for (const auto &hit : batch.hits)
+                starts.append(hit.start);
+            cursor = batch.cursor;
+            if (batch.done)
+                return starts;
+        }
+        require(false, "The search must end");
+        return starts;
+    };
+    EngineDocument whole(test::readerFonts());
+    openResources(whole, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    const auto expected = hits(whole);
+    require(expected.size() == 12, "The fixture has twelve matches");
+    EngineDocument model(test::readerFonts());
+    openFiles(model, files);
+    const auto shown = model.pageStart(model.page());
+    const auto found = hits(model);
+    require(found == expected, "Chapter mode must find the matches of the whole book");
+    require(model.pageStart(model.page()) == shown, "The search must not move the page on screen");
+}
+
 // In a long spine item, a forward step to the first page of a slice that is
 // not the next one shows the estimate there, not one more than the last
 // page. Steps to the next slice never go down.
@@ -2108,3 +2151,4 @@ int main(int argc, char **argv)
     std::printf("PASS: page estimate measurement, map, saved record and chapter mode pages\n");
     return 0;
 }
+    searchLongItem();

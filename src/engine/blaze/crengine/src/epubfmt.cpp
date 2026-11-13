@@ -1140,6 +1140,21 @@ void koblazeCheckCancel()
         throw KoblazeRenderCancelled();
 }
 
+static KoblazePausePoint koblaze_pause_point = NULL;
+static void * koblaze_pause_context = NULL;
+
+void koblazeSetPausePoint(KoblazePausePoint pause, void * context)
+{
+    koblaze_pause_point = pause;
+    koblaze_pause_context = context;
+}
+
+void koblazePausePoint()
+{
+    if ( koblaze_pause_point )
+        koblaze_pause_point(koblaze_pause_context);
+}
+
 static int koblaze_first_spine_item = -1;
 static int koblaze_last_spine_item = -1;
 

@@ -1404,7 +1404,8 @@ void fullDocument()
 // chapter work on the engine in between, it must still give the document of
 // a load that was never stopped: the same pages, with the same pixels.
 void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, int item,
-                        const char *name, int checks = 7)
+                        const char *name, int checks = 7,
+                        const std::function<void(EngineDocument &)> &openChapter = {})
 {
     const auto record = [](EngineDocument &model, int page) {
         const QImage image = model.image(page);
@@ -1425,10 +1426,15 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
             reference.append(record(whole, page));
     }
     EngineDocument model(test::readerFonts());
-    openWhole(model);
-    model.setChapterSlices(6);
     QString error;
-    require(model.showSpineItems(item, item, &error) && model.go(0), qPrintable(error));
+    if (openChapter) {
+        // A book that opens as a chapter, with its own setup.
+        openChapter(model);
+    } else {
+        openWhole(model);
+        model.setChapterSlices(6);
+        require(model.showSpineItems(item, item, &error) && model.go(0), qPrintable(error));
+    }
     int parks = 0;
     for (;;) {
         // A different number of checks each time, so that the build parks
@@ -1444,7 +1450,8 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
         // Other work has the engine now: page turns, a jump to another
         // chapter and a drawn page.
         if (parks % 5 == 0)
-            require(model.showSpineItems(parks % 3, parks % 3, &error), qPrintable(error));
+            require(model.showSpineItems(item + parks % 3, item + parks % 3, &error),
+                    qPrintable(error));
         else if (!model.turnInWindow(parks % 2 ? 1 : -1))
             model.turnInWindow(parks % 2 ? -1 : 1);
         if (parks % 3 == 0)
@@ -2032,6 +2039,34 @@ int main(int argc, char **argv)
                             qPrintable(error));
                 },
                 1, "KOBALT_PARKED_BOOK", 199);
+        // The same with a cache folder: a large book then moves parts of
+        // itself to its cache file during the build, and the build can
+        // park between two of those parts.
+        QTemporaryDir cacheRoot;
+        require(cacheRoot.isValid(), "Cannot create a document cache directory");
+        const auto directory = cacheRoot.path() + "/.cache";
+        parkedFullDocument(
+                [&](EngineDocument &model) {
+                    QString error;
+                    require(model.open(text, QSize(600, 800),
+                                       { { "font_pixels", 28 }, { "line_spacing_version", 1 } },
+                                       &error),
+                            qPrintable(error));
+                },
+                1, "KOBALT_PARKED_BOOK with a cache folder", 199,
+                [&](EngineDocument &model) {
+                    QString error;
+                    setChapterModeOverride(1);
+                    model.setDocumentCache(directory, QByteArray(64, 'e'), "parked-test",
+                                           text.size());
+                    const bool opened = model.open(
+                            text, QSize(600, 800),
+                            { { "font_pixels", 28 }, { "line_spacing_version", 1 } }, &error);
+                    setChapterModeOverride(-1);
+                    require(opened && model.bookFraction() >= 0, qPrintable(error));
+                });
+        const auto files = QDir(directory).entryList({ "*.cr3" }, QDir::Files);
+        std::printf("cache files after the build: %d\n", int(files.size()));
     }
     parkedFullDocument(
             [](EngineDocument &model) {

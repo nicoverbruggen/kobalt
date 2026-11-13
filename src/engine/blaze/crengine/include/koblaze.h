@@ -91,6 +91,14 @@ typedef bool (*KoblazeCancelCheck)(void * context);
 void koblazeSetCancelCheck(KoblazeCancelCheck check, void * context);
 /// Throws KoblazeRenderCancelled when a check is set and asks to stop.
 void koblazeCheckCancel();
+/// A place where work on a document can wait but must not be stopped, such
+/// as between two blocks that it writes to its cache file. A host that
+/// runs such work beside other work sets a function that waits there. It
+/// must not throw. NULL removes it, which is the default.
+#define KOBLAZE_PAUSE_POINT 1
+typedef void (*KoblazePausePoint)(void * context);
+void koblazeSetPausePoint(KoblazePausePoint pause, void * context);
+void koblazePausePoint();
 /// The parser reads many kinds of files: chapters, the package, hyphenation
 /// dictionaries. A stop is safe only while it reads a chapter. The check
 /// of the parser does nothing unless one of these lives.

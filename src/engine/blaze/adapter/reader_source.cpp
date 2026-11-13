@@ -1240,6 +1240,9 @@ struct EngineDocument::FullBuild
         return state;
     }
 
+    // For the places where the engine can wait but cannot stop.
+    static void pausePoint(void *context) { static_cast<FullBuild *>(context)->wanted(); }
+
     // The stop check of the build, on its thread. It parks the build while
     // other work has the engine, and is false only for a build that was
     // given up.
@@ -1255,6 +1258,7 @@ struct EngineDocument::FullBuild
         int levels[64];
         const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
         StopCheck::suspend();
+        koblazeSetPausePoint(nullptr, nullptr);
         ++parks;
         state = State::Parked;
         changed.wakeAll();
@@ -1262,6 +1266,7 @@ struct EngineDocument::FullBuild
             changed.wait(&mutex);
         TextLangMan::koblazeSetQuoteLevels(levels, count);
         koblazeSetSpineWindow(-1, -1);
+        koblazeSetPausePoint(&FullBuild::pausePoint, this);
         StopCheck::resume();
         return !abandoned;
     }
@@ -1348,6 +1353,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 const std::function<bool()> wanted = [state] { return state->wanted(); };
                 document->openInterrupt_ = [state] { return !state->wanted(); };
                 QString error;
+                koblazeSetPausePoint(&FullBuild::pausePoint, state);
                 try {
                     const StopCheck check(wanted);
                     opened = source->resources
@@ -1362,6 +1368,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 } catch (...) {
                     opened = false;
                 }
+                koblazeSetPausePoint(nullptr, nullptr);
                 document->openInterrupt_ = nullptr;
             }
             const bool usable = opened && !state->abandoned && document->pages() > 0;

@@ -3501,6 +3501,9 @@ void ldomDataStorageManager::compact( lUInt32 reservedSpace, const ldomTextStora
 						// Keep the chunk in memory when the cache file cannot take it.
 						sumsize += p->_bufsize;
 					}
+					// koblaze: each chunk is packed and written. Other
+					// work can have the engine between two of them.
+					koblazePausePoint();
 				}
 			}
         }

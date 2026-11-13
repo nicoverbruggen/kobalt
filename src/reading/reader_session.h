@@ -480,10 +480,13 @@ public:
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);
 
 private:
+    // `requests` is engineWorkRequests() from when this step was queued:
+    // work that was announced after that is in the queue behind this step,
+    // or will be, and goes first.
     static void refinePageEstimate(std::shared_ptr<Engine> engine,
                                    const std::function<bool()> &current,
                                    QPointer<ReaderSession> guard, quint64 job,
-                                   const std::shared_ptr<SourceLease> &lease);
+                                   const std::shared_ptr<SourceLease> &lease, quint64 requests);
     bool formattingWarning_ = false;
     storage::CustomPins customPins_;
     QJsonObject formattingDetails_;

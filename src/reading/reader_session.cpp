@@ -215,7 +215,7 @@ ReaderMarkupFrame captureFrameMarkup(Engine &engine, const ReaderMarkupRequest &
 void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                                        const std::function<bool()> &current,
                                        QPointer<ReaderSession> guard, quint64 job,
-                                       const std::shared_ptr<SourceLease> &lease)
+                                       const std::shared_ptr<SourceLease> &lease, quint64 requests)
 {
     if (engine->bookFraction() < 0)
         return;
@@ -239,7 +239,6 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         // The build can run for minutes. It parks as soon as anyone queues
         // work for the engine, not only for a page turn, and goes on after
         // that work.
-        const quint64 requests = engineWorkRequests();
         const auto full = engine->prepareFullDocument(
                 [&current, requests] { return current() && engineWorkRequests() == requests; },
                 !reading);
@@ -256,13 +255,15 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                     [engine, current, guard, job, lease] {
                         if (!guard || !current() || !lease || lease->revoked())
                             return;
+                        // Asking for the worker below counts as one request.
+                        const quint64 queued = engineWorkRequests() + 1;
                         kobalt::qt::invoke(
                                 engineWorker(),
-                                [engine, current, guard, job, lease] {
+                                [engine, current, guard, job, lease, queued] {
                                     if (!current() || !lease || lease->revoked())
                                         return;
                                     EngineJob activity;
-                                    refinePageEstimate(engine, current, guard, job, lease);
+                                    refinePageEstimate(engine, current, guard, job, lease, queued);
                                 },
                                 Qt::QueuedConnection);
                     },
@@ -305,16 +306,18 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                     guard->updated();
             },
             Qt::QueuedConnection);
-    if (more)
+    if (more) {
+        const quint64 queued = engineWorkRequests();
         kobalt::qt::invoke(
                 engineWorker(),
-                [engine, current, guard, job, lease] {
+                [engine, current, guard, job, lease, queued] {
                     if (!current() || !lease || lease->revoked())
                         return;
                     EngineJob activity;
-                    refinePageEstimate(engine, current, guard, job, lease);
+                    refinePageEstimate(engine, current, guard, job, lease, queued);
                 },
                 Qt::QueuedConnection);
+    }
 }
 
 // `neighbours` is false when the caller hands the frame to the screen first
@@ -694,7 +697,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                 guard->idle();
                         },
                         Qt::QueuedConnection);
-                refinePageEstimate(opening.engine, current, guard, job, lease);
+                refinePageEstimate(opening.engine, current, guard, job, lease,
+                                   engineWorkRequests());
             },
             Qt::QueuedConnection);
 }
@@ -2434,13 +2438,14 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 const std::function<bool()> idle = [current, lease] {
                     return current() && lease && !lease->revoked();
                 };
+                const quint64 queued = engineWorkRequests();
                 kobalt::qt::invoke(
                         engineWorker(),
-                        [engine, idle, guard, job, lease] {
+                        [engine, idle, guard, job, lease, queued] {
                             if (!idle())
                                 return;
                             EngineJob activity;
-                            refinePageEstimate(engine, idle, guard, job, lease);
+                            refinePageEstimate(engine, idle, guard, job, lease, queued);
                         },
                         Qt::QueuedConnection);
             },

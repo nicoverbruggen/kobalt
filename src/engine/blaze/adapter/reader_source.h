@@ -62,6 +62,9 @@ struct ReaderSource
         std::unique_ptr<PageEstimateMeasurer> measurer;
         LVStreamRef stream;
         int measuring = -1;
+        // How many chapter positions have their place in the text measured,
+        // for the book pages of the chapter lists.
+        int chapterPlaces = 0;
         PageAnchor book, item;
         // The page that was placed last: its spine item, the first and the
         // last character of its slice, its page in that part and the pages

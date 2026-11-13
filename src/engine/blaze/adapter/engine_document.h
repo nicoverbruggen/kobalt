@@ -583,6 +583,11 @@ private:
     // after the slices before it, as reading forward does.
     bool showSliceAt(int before);
     // The part of the text of `item` before `position`, from its XHTML.
+    // Measures where the next few chapters start in the text of their spine
+    // items. A frame asks for the book page of every chapter once the book
+    // is measured, and reads one XHTML file for each. Idle time does that
+    // ahead of the frame. True while chapters are left.
+    bool measureChapterPlaces() const;
     double textFraction(int item, const QString &position, bool previous = false,
                         const std::function<bool()> &current = {}) const;
     double readTextFraction(int item, const QString &position, bool previous = false,

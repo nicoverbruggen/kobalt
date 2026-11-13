@@ -27,6 +27,11 @@ namespace kobalt {
 // Reads the spine items of an open book, for the comparison with real pages.
 struct ReaderLocationProbe
 {
+    // How many positions have their place in the text of a spine item.
+    static int textPlaces(const EngineDocument &model)
+    {
+        return int(model.source_->textFractions.size());
+    }
     static QStringList items(const EngineDocument &model)
     {
         QStringList result;
@@ -1243,6 +1248,17 @@ void countedInBackground()
     while (model.refinePageEstimate()) { }
     const auto estimated = model.roughPages();
     require(estimated.pages > 0 && estimated.pagesEstimated, "The estimate must give a total");
+    // The idle steps also measured where the chapters start. The first page
+    // after them asks for the book page of every chapter and must not read
+    // one file for each.
+    const int places = Probe::textPlaces(model);
+    QStringList chapterStarts;
+    for (const auto &chapter : model.chapters())
+        chapterStarts.append(chapter.position);
+    require(chapterStarts.size() > 2 && !model.bookPages(chapterStarts).isEmpty(),
+            "The fixture needs chapters");
+    require(places > 0 && Probe::textPlaces(model) == places,
+            "The book pages of the chapters must be measured in idle time");
 
     const int observed = Probe::map(model).observations();
     for (int i = 0; i < 20; ++i)

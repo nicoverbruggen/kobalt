@@ -307,7 +307,7 @@ bool EngineDocument::refinePageEstimate()
         // observations.
         const int item = map.nextUnmeasured(windowFirst_);
         if (item < 0)
-            return false;
+            return measureChapterPlaces();
         const auto href = spineItems().value(item);
         estimate.stream = source_->container->OpenStream(
                 Utf8ToUnicode(href.toUtf8().constData()).c_str(), LVOM_READ);
@@ -332,7 +332,30 @@ bool EngineDocument::refinePageEstimate()
         estimate.stream = LVStreamRef();
         estimate.measuring = -1;
     }
-    return !map.allMeasured();
+    return !map.allMeasured() || measureChapterPlaces();
+}
+
+bool EngineDocument::measureChapterPlaces() const
+{
+    auto &done = source_->pageEstimate.chapterPlaces;
+    const auto list = chapters();
+    const auto graph = chapterGraph();
+    const int total = list.size() + graph.size();
+    // A few files in one step, so that a page turn does not wait long.
+    int files = 4;
+    while (done < total && files > 0) {
+        const auto &position =
+                done < list.size() ? list[done].position : graph[done - list.size()].position;
+        ++done;
+        const int item = spineItemIndex(position);
+        // The text on the screen has a layout to count from.
+        if (item < 0 || item >= spineItemCount_ || (item >= windowFirst_ && item <= windowLast_)
+            || source_->textFractions.contains(position))
+            continue;
+        textFraction(item, position);
+        --files;
+    }
+    return done < total;
 }
 
 EngineDocument::RoughPlace EngineDocument::roughPlace() const

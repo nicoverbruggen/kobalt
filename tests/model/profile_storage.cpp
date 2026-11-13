@@ -287,9 +287,10 @@ int main(int argc, char **argv)
             "Rendering fixture");
     const auto older = storage::readPreferences(paths.preferences());
     require(older.status == ReadStatus::Ok && !older.object.contains(renderingMode::preferenceKey)
-                    && renderingMode::fromPreferences(older.object) == renderingMode::Mode::Fast,
-            "Preferences without Rendering did not use Fast");
-    for (const auto mode : { renderingMode::Mode::Accurate, renderingMode::Mode::Fast }) {
+                    && renderingMode::fromPreferences(older.object) == renderingMode::Mode::Hybrid,
+            "Preferences without Rendering did not use Hybrid");
+    for (const auto mode : { renderingMode::Mode::Accurate, renderingMode::Mode::Fast,
+                             renderingMode::Mode::Hybrid }) {
         auto next = older.object;
         next[renderingMode::preferenceKey] = renderingMode::value(mode);
         require(storage::writePreferences(paths.preferences(), next),

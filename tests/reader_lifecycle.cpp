@@ -7633,6 +7633,120 @@ private slots:
                  qPrintable("Timer events while idle: " + events.seen.join(", ")));
     }
 
+    // An accepted highlight must finish saving with the sleep pause still requested.
+    void sleepFinishesHighlightSave_data()
+    {
+        QTest::addColumn<int>("stage");
+        QTest::newRow("selection-only") << 0;
+        QTest::newRow("prepare-range") << 1;
+        QTest::newRow("save-text") << 2;
+    }
+
+    void sleepFinishesHighlightSave()
+    {
+        QFETCH(int, stage);
+        const auto paths = testPaths();
+        bool suspended = false;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.suspended = [&] { return suspended; };
+        };
+        CloseHost cleanup{ host };
+        const auto release = std::make_shared<QSemaphore>();
+        const auto entered = std::make_shared<QSemaphore>();
+        const auto resume = qScopeGuard([&] {
+            release->release(2);
+            engineActivity().pause(false);
+        });
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVector<SearchHit> hits;
+        bool done = false;
+        host.session()->search("reader", [&](SearchBatch batch) {
+            hits += batch.hits;
+            done = batch.done;
+        });
+        QTRY_VERIFY(done && !hits.isEmpty());
+        QVector<QRect> rects;
+        done = false;
+        host.session()->rangeRects(hits.first().start, hits.first().end, [&](QVector<QRect> value) {
+            rects = value;
+            done = true;
+        });
+        QTRY_VERIFY(done && !rects.isEmpty());
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        page->annotationRequested();
+        page->held(rects.first().center());
+        QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+        page->tapped(rects.first().center() + QPoint(0, page->topHeight()));
+        QPushButton *save = nullptr;
+        QTRY_VERIFY((save = host.window()->findChild<QPushButton *>("rrAnnotationSave"))
+                    && save->isVisible());
+        QTRY_VERIFY(!host.window()->pendingStorageSave());
+        auto barrier = [=] {
+            qt::invoke(
+                    engineWorker(),
+                    [=] {
+                        entered->release();
+                        release->acquire();
+                    },
+                    Qt::QueuedConnection);
+        };
+        barrier();
+        QTRY_VERIFY(entered->available() == 1);
+        if (stage) {
+            save->click();
+            QVERIFY(host.window()->pendingStorageSave());
+        }
+        if (stage == 2) {
+            // The range reply queues the text query behind this second barrier.
+            barrier();
+            release->release();
+            QTRY_VERIFY(entered->available() == 2);
+        }
+        engineActivity().pause(true);
+        suspended = true;
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        release->release();
+        QTRY_VERIFY(!host.window()->pendingStorageSave());
+        QTRY_VERIFY(engineActivity().quiescent());
+        QVERIFY(!host.window()->pendingNetworkSync());
+        if (stage)
+            QVERIFY(storage::profileHasUnsyncedWrites());
+        QTRY_VERIFY(host.window()->flushBeforeStandby());
+        QVERIFY(!storage::profileHasUnsyncedWrites());
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        HighlightStore store(paths.annotations(), identity, host.session()->sourceHash(), "test",
+                             paths.database());
+        QVERIFY(store.load());
+        QCOMPARE(store.highlights().size(), stage ? 1 : 0);
+        if (stage)
+            QVERIFY(store.highlights().first().text.contains("reader"));
+        // With the save finished, subsequent engine work must remain parked.
+        const auto replied = std::make_shared<bool>(false);
+        host.session()->rangeRects(hits.first().start, hits.first().end,
+                                   [replied](QVector<QRect>) { *replied = true; });
+        QTest::qWait(50);
+        QVERIFY(!*replied);
+        engineActivity().pause(false);
+        suspended = false;
+        host.window()->wakeReader();
+        QTRY_VERIFY(*replied);
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+        QVERIFY(store.load());
+        QCOMPARE(store.highlights().size(), stage ? 1 : 0);
+    }
+
     void readerStandbySetting_data()
     {
         QTest::addColumn<QJsonValue>("saved");

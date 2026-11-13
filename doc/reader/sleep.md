@@ -1,5 +1,7 @@
 # Sleep, USB and power
 
+Saving a highlight immediately before sleep finishes the accepted save before hardware suspend. The engine pauses after the save's text queries finish, and a write that completes after the initial sleep checkpoint requests another checkpoint before suspend. Sleep alone does not save an unconfirmed selection.
+
 Kobalt checks for Nickel's sleep view after the sleep transition and when a native power view opens. This provides a fallback when another add-on replaces Kobalt's sleep-view hook. The fallback waits for Nickel to report a visible sleep view and does not cover a PIN prompt. `sleep-view-handoff` records the hook or fallback path, while `sleep-view-unavailable` records a check that could not hand off. These events and `sleep-start` describe the application transition. They do not prove that the hardware entered suspend.
 
 For Nickel Screensaver 1.3.1, Kobalt checks the power-off callback chain before opening its reader. If Screensaver has replaced Kobalt's hook, Kobalt reconnects its save gate through Screensaver's call-through pointer. Both load orders retain Screensaver's image preparation and wait for Kobalt's required saves before Nickel powers off. This also applies to battery-low software shutdown. An unrecognized callback chain leaves Kobalt unavailable for that startup attempt and records `screensaver-power-hook` with `ready=false`. Kobalt does not rename libraries or reinstall another mod.

@@ -1,4 +1,5 @@
 #include "reading/annotation_draft.h"
+#include "engine/crengine/engine_activity.h"
 #include "storage/highlight_store.h"
 #include "check.h"
 #include <QCoreApplication>
@@ -77,6 +78,30 @@ Highlight highlight()
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    // Rejection, stale replies and destroyed owners must release the save drain.
+    for (int ending = 0; ending < 3; ++ending) {
+        Queries queries;
+        auto draft = std::make_unique<AnnotationDraft>(queries.callbacks(), [] { return true; });
+        draft->edit(highlight());
+        bool completed = false;
+        draft->prepareSave([&](AnnotationDraft::Prepared result, quint64) {
+            require(result
+                            == (ending == 0 ? AnnotationDraft::Prepared::Rejected
+                                            : AnnotationDraft::Prepared::Stale),
+                    "Unexpected rejected save result");
+            completed = true;
+        });
+        engineActivity().pause(true);
+        require(!engineActivity().quiescent(), "Save allowed suspend between engine queries");
+        if (ending == 1)
+            draft->clear();
+        if (ending == 2)
+            draft.reset();
+        queries.ranges.takeFirst()(ending == 0 ? TextRange{} : range());
+        require(completed == (ending != 2), "Destroyed save owner received a reply");
+        require(engineActivity().quiescent(), "Abandoned save kept the engine drain alive");
+        engineActivity().pause(false);
+    }
     {
         Queries queries;
         AnnotationDraft draft(queries.callbacks(), [&] { return queries.interactive; });

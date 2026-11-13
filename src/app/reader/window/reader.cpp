@@ -3198,7 +3198,9 @@ bool Reader::flushBeforeStandby()
             kobalt::qt::later(0, this, [this] { runIdleSave(true); });
         return false;
     }
-    if (lowBattery && kobalt::storage::profileCheckpointDue()) {
+    // An accepted annotation can finish its engine queries and queue its write
+    // after sleepReader's checkpoint. Sync that late write before sleeping too.
+    if ((lowBattery || lifecycleHidden) && kobalt::storage::profileCheckpointDue()) {
         kobalt::storage::requestProfileCheckpoint();
         return false;
     }

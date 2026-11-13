@@ -21,6 +21,8 @@ These checks cover sleep screens and snapshots, sleep and wake, session timeouts
 
 These checks do not exercise physical power loss, firmware behavior, PIN behavior on hardware, sleep-screen refresh quality, actual hook load order, hardware suspend or physical coexistence with Nickel Screensaver. Physical sleep and wake on Kobo and Android need device validation.
 
+The highlight sleep regression holds the engine at save preparation and text collection while the reader sleeps. It requires the accepted highlight to reach storage, the late write to become durable before standby, and subsequent engine work to stay paused until wake. A selection without Save remains unsaved. The engine gate checks overlapping save drains and wake during a drain. Annotation checks cover rejected saves, stale replies, destroyed owners and failed storage writes while sleep is requested.
+
 `model.appearance-settings` checks every gallery choice, legacy backdrop and indicator combinations, changes made by older releases, invalid designs and greeting limits. `lifecycle.sleepGreetingEditor` opens Night with a long press, saves and reopens a greeting, restores the default with an empty field, and cancels an edit through the windowless desktop host. It does not verify the native Kobo keyboard.
 
 `lifecycle.sleepDesignsRepaintOnlyTheirStatus` compares a battery-status repaint with a fresh render for each new design in both themes and orientations. `lifecycle.sleepSettingsShowWhereToAddPngs` checks gallery paging and the unavailable PNG explanation. The `sleepGallery` screenshot case captures `sleep-settings`, `sleep-gallery` and `sleep-greeting` through the production UI, including dark mode and large interface text.

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <thread>
+#include <memory>
 
 using namespace kobalt;
 using namespace std::chrono_literals;
@@ -57,6 +58,41 @@ int main()
     gate.pause(false);
     gate.enter();
     check(!gate.quiescent());
+    gate.leave();
+    check(gate.quiescent());
+
+    // A save spans worker jobs and GUI replies. Overlapping saves keep the
+    // requested pause deferred until their final owner leaves.
+    gate.pause(true);
+    auto first = std::make_unique<EngineDrain>(gate);
+    auto second = std::make_unique<EngineDrain>(gate);
+    check(!gate.quiescent());
+    gate.enter();
+    gate.checkpoint();
+    gate.leave();
+    first.reset();
+    check(!gate.quiescent());
+    second.reset();
+    check(gate.quiescent());
+    stage = 0;
+    std::thread paused([&] {
+        stage = 1;
+        gate.enter();
+        stage = 2;
+        gate.leave();
+    });
+    waitFor([&] { return stage == 1 && gate.quiescent(); });
+    std::this_thread::sleep_for(20ms);
+    check(stage == 1);
+    // Starting a required save also releases a job already parked at sleep.
+    {
+        EngineDrain drain(gate);
+        paused.join();
+        check(stage == 2 && !gate.quiescent());
+        // Wake while draining must not be undone when the drain ends.
+        gate.pause(false);
+    }
+    gate.enter();
     gate.leave();
     check(gate.quiescent());
 }

@@ -1,4 +1,5 @@
 #include "platforms/kobo/common/native_lifecycle.h"
+#include "engine/crengine/engine_activity.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
@@ -10,6 +11,7 @@
 #include <QSqlQuery>
 #include <QVector>
 #include <atomic>
+#include <memory>
 
 // Nickel's exported managers and signals, resolved by the production adapter.
 class N3PowerWorkflowManager : public QObject
@@ -221,7 +223,20 @@ int main(int argc, char **argv)
         QCoreApplication::processEvents();
         require(!lifecycle.blocked(), "Wake did not release sleep state");
     };
-    // Explicit sleep does not ask canSuspend. An opening must not hold it.
+    // The sleep-screen transition precedes the separate hardware suspend gate.
+    {
+        auto save = std::make_unique<kobalt::EngineDrain>();
+        power->asleep = power->visible = true;
+        emit power->aboutToSleep();
+        QCoreApplication::processEvents();
+        require(!kobalt::NativeLifecycle::canSuspend(), "Sleep suspended an accepted save");
+        kobalt::engineActivity().enter();
+        kobalt::engineActivity().leave();
+        save.reset();
+        require(kobalt::NativeLifecycle::canSuspend(), "Finished save held sleep awake");
+        wake();
+    }
+    // An opening must not prevent Nickel from showing its sleep screen.
     opening = true;
     for (int cycle = 0; cycle < 2; ++cycle) {
         power->asleep = power->visible = true;

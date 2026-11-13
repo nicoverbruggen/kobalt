@@ -1,4 +1,5 @@
 #include "highlight_session.h"
+#include "engine/crengine/engine_activity.h"
 #include "support/save_wait.h"
 #include "reader_session.h"
 #include "support/diagnostics.h"
@@ -421,6 +422,11 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
         }
         return;
     }
+    const auto drain = std::make_shared<EngineDrain>();
+    finished = [drain, done = std::move(finished)](bool saved) {
+        if (done)
+            done(saved);
+    };
     QPointer<HighlightSession> guard(this);
     const auto generation = generation_;
     const auto revision = session_.layoutRevision();

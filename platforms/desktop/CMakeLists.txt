@@ -374,7 +374,7 @@ if(BUILD_TESTING)
             overflowClosesCurrentPanel appearanceSettingsRetainsDraft appearanceWriteFailureRetainsDraft
             appearanceSleepRetainsDraft appearanceFailedPreviewDismisses appearanceApplyFailureCanExit
             appearanceCloseDuringPreview appearanceSleepDuringFirstEdit appearanceDragsDuringPreview
-            pageTurnsResumeWhenReaderIsShownAfterSleep clockUpdatesOnlyReadingStrips clockStopsWhileReaderIsHidden closeWithPendingBookmark
+            pageTurnsResumeWhenReaderIsShownAfterSleep sleepFinishesHighlightSave clockUpdatesOnlyReadingStrips clockStopsWhileReaderIsHidden closeWithPendingBookmark
             closeWaitsForLocalSave closeRetriesRequiredNativeSaves quitAfterFailedLocalSaveRetry closeWaitsForNativeTimeBeforePosition sleepWaitsForNativeTimeBeforePosition revokedNativeDrainRetainsLocalSave
             pageTurnTimingIgnoresNoopNavigation pageButtonsAfterTouchUseDeliveryTime pageFrameDuringHold pageImageDuringHold pageGestureBurstIgnoresRapidTurns exitThroughReaderAndReopen closeGuardUsesTapTime staleSearchReplyIgnored searchScopesAndPagination searchSurvivesReflow
             searchHighlightClearsOnReflow

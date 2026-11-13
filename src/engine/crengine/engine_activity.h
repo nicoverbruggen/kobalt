@@ -40,21 +40,35 @@ public:
     bool quiescent()
     {
         std::lock_guard<std::mutex> lock(mutex);
-        return active == parked;
+        return drains == 0 && active == parked;
     }
 
 private:
+    friend class EngineDrain;
     std::mutex mutex;
     pthread_cond_t changed = PTHREAD_COND_INITIALIZER;
     bool paused = false;
-    unsigned active = 0, parked = 0;
+    unsigned active = 0, parked = 0, drains = 0;
+
+    void beginDrain()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        ++drains;
+        pthread_cond_broadcast(&changed);
+    }
+
+    void endDrain()
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        --drains;
+    }
 
     void checkpoint(std::unique_lock<std::mutex> &lock)
     {
-        if (!paused)
+        if (!paused || drains)
             return;
         ++parked;
-        while (paused)
+        while (paused && !drains)
             pthread_cond_wait(&changed, lock.mutex()->native_handle());
         --parked;
     }
@@ -65,6 +79,27 @@ inline EngineActivity &engineActivity()
     static EngineActivity activity;
     return activity;
 }
+
+// Accepted saves can need several queued engine queries before storage writes.
+// Let that chain finish even when sleep requests a pause. The worker is serial,
+// so jobs ahead of the save must run too. Suspend stays blocked until the last
+// owner releases the drain and running engine work reaches a pause checkpoint.
+class EngineDrain
+{
+public:
+    explicit EngineDrain(EngineActivity &activity = engineActivity()) : activity(activity)
+    {
+        activity.beginDrain();
+    }
+
+    ~EngineDrain() { activity.endDrain(); }
+
+    EngineDrain(const EngineDrain &) = delete;
+    EngineDrain &operator=(const EngineDrain &) = delete;
+
+private:
+    EngineActivity &activity;
+};
 
 class EngineJob
 {

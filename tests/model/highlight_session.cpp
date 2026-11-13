@@ -8,6 +8,7 @@
 #include "reader_inputs.h"
 #include "reading/bookmark_session.h"
 #include "reading/highlight_session.h"
+#include "engine/crengine/engine_activity.h"
 #include "reading/reader_session.h"
 #include "support/qt_compat.h"
 
@@ -596,6 +597,7 @@ int main(int argc, char **argv)
         require(session.highlights().first().style == previous.style
                         && samePassage(previous, detail(session, previous.id)),
                 "Failed restyle kept its change in memory");
+        engineActivity().pause(true);
         completed = false;
         session.save(
                 first.start, first.end, previous.id,
@@ -605,6 +607,8 @@ int main(int argc, char **argv)
                 },
                 first.end, true, first.start, true);
         waitUntil([&] { return completed && saveFailures == 3; });
+        waitUntil([&] { return engineActivity().quiescent(); });
+        engineActivity().pause(false);
         require(saved && session.highlights().size() == 1
                         && session.highlights().first().id == previous.id
                         && samePassage(previous, detail(session, previous.id)),

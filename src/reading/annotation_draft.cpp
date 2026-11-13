@@ -1,7 +1,9 @@
 #include "annotation_draft.h"
+#include "engine/crengine/engine_activity.h"
 #include "reader_session.h"
 #include "storage/highlight_store.h"
 #include <QPointer>
+#include <memory>
 #include <utility>
 
 namespace kobalt {
@@ -185,8 +187,9 @@ void AnnotationDraft::prepareSave(std::function<void(Prepared, quint64)> ready)
     invalidate();
     const auto revision = ++saveRevision_;
     const auto endpoints = endpoints_;
+    const auto drain = std::make_shared<EngineDrain>();
     QPointer<AnnotationDraft> guard(this);
-    queries_.range(endpoints, [guard, revision, endpoints, ready](TextRange range) {
+    queries_.range(endpoints, [guard, revision, endpoints, ready, drain](TextRange range) {
         if (!guard)
             return;
         if (guard->saveRevision_ != revision) {

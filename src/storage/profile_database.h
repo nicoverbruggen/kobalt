@@ -33,7 +33,7 @@ ProfileDatabaseState inspectProfileDatabase(const QString &directory, QString *e
 // sleep.
 void checkpointProfile();
 // True when routine commits need durability. A failed checkpoint suppresses
-// further attempts for five minutes. Low-battery standby uses it.
+// further attempts for five minutes. Low-battery standby and late sleep saves use it.
 bool profileCheckpointDue();
 // True while routine commits wait for a sync.
 bool profileHasUnsyncedWrites();

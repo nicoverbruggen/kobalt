@@ -8,6 +8,8 @@
 #include <QLineEdit>
 #include <QWindow>
 #include <QLabel>
+#include <functional>
+#include <utility>
 #include "support/qt_compat.h"
 
 namespace kobalt::nickel {
@@ -16,7 +18,11 @@ namespace kobalt::nickel {
 class NativeDialogOverlay : public QObject
 {
 public:
-    NativeDialogOverlay() { qApp->installEventFilter(this); }
+    explicit NativeDialogOverlay(std::function<void()> released = {})
+        : released_(std::move(released))
+    {
+        qApp->installEventFilter(this);
+    }
 
     ~NativeDialogOverlay() override { restore(); }
 
@@ -130,6 +136,8 @@ private:
         reader_->setProperty("kobalt_native_dialog_count",
                              count > 0 ? QVariant(count) : QVariant());
         reader_.clear();
+        if (count <= 0 && released_)
+            released_();
     }
 
     bool eventFilter(QObject *object, QEvent *event) override
@@ -159,5 +167,6 @@ private:
     QRect geometry_;
     bool moving_ = false;
     bool propagation_ = false;
+    std::function<void()> released_;
 };
 } // namespace kobalt::nickel

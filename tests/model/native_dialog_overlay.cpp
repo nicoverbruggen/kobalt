@@ -31,6 +31,12 @@ static void modalReaderInput(Qt::WindowModality modality)
     reader.setWindowModality(Qt::ApplicationModal);
     reader.show();
     auto presentation = kobalt::nickel::makeWindowPresentation(&reader, false);
+    int resumed = 0;
+    presentation->inputResumed = [&] {
+        require(!kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
+                "input resumed before the last native dialog released the reader");
+        ++resumed;
+    };
     QApplication::processEvents();
     require(QApplication::activeModalWidget() == &reader,
             "the reader must own application-modal input");
@@ -71,6 +77,8 @@ static void modalReaderInput(Qt::WindowModality modality)
         require(!kobalt::nickel::NativeDialogOverlay::activeFor(&reader)
                         && QApplication::activeModalWidget() == &reader,
                 "dismissal must return modal input to the reader");
+        require(QTest::qWaitFor([&] { return resumed == dismissed; }),
+                "closing a native dialog did not resume deferred reader work");
     }
 
     prompt.show();
@@ -80,6 +88,53 @@ static void modalReaderInput(Qt::WindowModality modality)
     require(!prompt.isVisible() && prompt.windowModality() == modality
                     && prompt.parentWidget() == &nickel && prompt.windowFlags() == flags,
             "sleep handoff must restore the prompt's original modality and ownership");
+    require(resumed == dismissed, "hiding the reader resumed deferred work");
+}
+
+static void overlappingDialogs()
+{
+    MainWindowView nickel;
+    nickel.show();
+    QWidget reader;
+    reader.resize(600, 800);
+    reader.show();
+    auto presentation = kobalt::nickel::makeWindowPresentation(&reader, false);
+    int resumed = 0;
+    presentation->inputResumed = [&] { ++resumed; };
+    ConfirmationDialog first(&nickel);
+    first.show();
+    require(QTest::qWaitFor(
+                    [&] { return first.property("kobalt_native_dialog_overlay").toBool(); }),
+            "the first native dialog was not presented");
+    auto *second = new ConfirmationDialog(&nickel);
+    second->show();
+    require(QTest::qWaitFor(
+                    [&] { return second->property("kobalt_native_dialog_overlay").toBool(); }),
+            "the second native dialog was not presented");
+    delete second;
+    QApplication::processEvents();
+    require(resumed == 0 && kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
+            "destroying one of two dialogs resumed the reader");
+    first.hide();
+    require(QTest::qWaitFor([&] { return resumed == 1; }),
+            "closing the last native dialog did not resume the reader");
+
+    auto *destroyed = new ConfirmationDialog(&nickel);
+    destroyed->show();
+    require(QTest::qWaitFor(
+                    [&] { return destroyed->property("kobalt_native_dialog_overlay").toBool(); }),
+            "the native dialog was not presented before destruction");
+    delete destroyed;
+    require(QTest::qWaitFor([&] { return resumed == 2; }),
+            "destroying the last dialog did not resume the reader");
+
+    first.show();
+    require(QTest::qWaitFor(
+                    [&] { return first.property("kobalt_native_dialog_overlay").toBool(); }),
+            "the native dialog was not presented before teardown");
+    presentation.reset();
+    QApplication::processEvents();
+    require(resumed == 2, "destroying the presentation resumed deferred work");
 }
 
 // Checks native-shaped dialogs above an application-modal reader: input through the active modal, dismissal and restore.
@@ -88,6 +143,7 @@ int main(int argc, char **argv)
     QApplication app(argc, argv);
     for (const auto modality : { Qt::NonModal, Qt::WindowModal, Qt::ApplicationModal })
         modalReaderInput(modality);
+    overlappingDialogs();
 }
 
 #include "native_dialog_overlay.moc"

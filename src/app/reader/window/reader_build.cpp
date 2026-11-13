@@ -235,6 +235,10 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
         timer->setParent(this);
     presentation = services.presentation(this);
     Q_ASSERT(presentation);
+    presentation->inputResumed = [this] {
+        if (syncCoordinator)
+            syncCoordinator->resume();
+    };
     dictionary = services.dictionary();
     if (services.downloadableDictionaries)
         dictionary = std::make_unique<kobalt::DictionaryManager>(

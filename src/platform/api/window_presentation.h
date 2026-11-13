@@ -12,6 +12,9 @@ class WindowPresentation
 {
 public:
     virtual ~WindowPresentation() = default;
+    // The host released modal input. Resume work deferred while its dialog was open.
+    std::function<void()> inputResumed;
+
     virtual void pauseBackground(bool waking = false) = 0;
     virtual void resumeBackground() = 0;
     virtual void resumeAndRepaintBackground() = 0;

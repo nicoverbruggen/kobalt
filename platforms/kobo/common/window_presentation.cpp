@@ -265,7 +265,17 @@ private:
             native = native || overlay->contains(dialog->parentWidget());
         if (!native)
             return;
-        auto overlay = std::make_unique<NativeDialogOverlay>();
+        auto overlay = std::make_unique<NativeDialogOverlay>([this] {
+            // Leave the native dialog's hide or destruction stack before
+            // continuing a sync. A new dialog or sleep can still block it.
+            qt::later(0, this, [this] {
+                if (reader && reader->isVisible() && !NativeDialogOverlay::activeFor(reader)
+                    && inputResumed) {
+                    const auto resumed = inputResumed;
+                    resumed();
+                }
+            });
+        });
         overlay->present(dialog, reader->window());
         dialogs.push_back(std::move(overlay));
     }

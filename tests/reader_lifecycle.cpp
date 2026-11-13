@@ -7086,6 +7086,63 @@ private slots:
         QVERIFY(status->height() >= status->heightForWidth(status->width()));
     }
 
+    // A response received under a native dialog resumes when the host releases input.
+    void kosyncDialogResume()
+    {
+        auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "fixture" },
+                                     { "automatic", false } }));
+        auto http = std::make_shared<KosyncHttpState>();
+        http->hold = true;
+        bool suspended = false;
+        WindowPresentation *presentation = nullptr;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+            services.suspended = [&] { return suspended; };
+            services.presentation = [&](QWidget *) {
+                auto result = std::make_unique<test::HostPresentation>();
+                presentation = result.get();
+                return result;
+            };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(presentation && presentation->inputResumed);
+        const auto position = host.session()->state().value("position");
+        host.window()->findChild<QPushButton *>("rrSettings")->click();
+        host.window()->findChild<QPushButton *>("rrSettingsKosync")->click();
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        QTRY_COMPARE(http->held.size(), 1);
+        suspended = true;
+        http->held.takeFirst()->finish();
+        QCOMPARE(http->uploads, 0);
+        auto *deadline = host.window()->findChild<QTimer *>("rrKosyncDeadline");
+        QVERIFY(deadline && deadline->isActive());
+        suspended = false;
+        http->hold = false;
+        presentation->inputResumed();
+        QTRY_COMPARE(http->uploads, 1);
+        auto *status = host.window()->findChild<QLabel *>("rrKosyncStatus");
+        QVERIFY(status);
+        QTRY_COMPARE(status->text(), strings::get("kosync.up_to_date"));
+        QCOMPARE(http->requests, 2);
+        QVERIFY(!deadline->isActive());
+        QCOMPARE(host.session()->state().value("position"), position);
+    }
+
     // Checks Sync now in Settings: no deadline while a connection waits for permission, then the Syncing notice and its Cancel.
     void kosyncManualConnection_data()
     {

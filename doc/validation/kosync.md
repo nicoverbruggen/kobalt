@@ -22,12 +22,15 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | `lifecycle.kosyncMissingProgress` | First uploads after absent progress, with no upload on route, authentication or server errors |
 | `lifecycle.kosyncFailure` | Failed progress reads and uploads retain the specific error, fit its guidance and keep local progress |
 | `lifecycle.kosyncManualToolbar`, `lifecycle.kosyncManualConnection` | Manual sync and its Syncing notice |
+| `lifecycle.kosyncDialogResume` | A successful response waits under a native dialog, then resumes without another fetch when the host releases input |
 | `lifecycle.wifiPowerSaver`, `lifecycle.wifiPowerSaverAtSleep` | When the reader asks the host to turn Wi-Fi off |
 | `lifecycle.wifiStatus` | The Wi-Fi indicator in the status strip |
 
 `session.reader-session`, in [Startup and reading](reading.md), checks the sync digests and position imports of an opened book.
 
 The completed sync notice keeps its dismissal timer when its parent hides and returns. An explicit dismissal still cancels the timer. `component.kosync-ui` checks both cases.
+
+The Kobo presentation reports resumed input after its last native dialog closes or is destroyed. It queues the notification until native restoration finishes and suppresses it if the reader hides, another dialog opens or the presentation is destroyed. `platform.native-dialog-overlay` checks dismissal, overlapping dialogs, destruction and teardown. The reader uses this notification to resume a deferred KOSync response.
 
 The interval clock uses one origin for each book opening. Failed and backward host samples freeze elapsed time until that source recovers. If the source is unavailable at opening, the fallback remains selected for that opening. The host chooses suspend semantics: Kobo includes kernel standby. The moment checks cover failure and recovery without an early periodic sync.
 

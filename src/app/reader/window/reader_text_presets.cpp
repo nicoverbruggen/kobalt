@@ -731,6 +731,24 @@ void Reader::startTextPresetPrerender()
         qt::later(0, this, [this] { resumeTextPresetPrerender(); });
 }
 
+void Reader::prepareTextPresetPresentation(std::function<void()> finished)
+{
+    // A preview that cannot be drawn in this time must not keep the book
+    // closed. What is left is drawn after the first page, as before.
+    static constexpr int limit = 6000;
+    textPresetPresentationReady = std::move(finished);
+    textPresetPrerenderStarted = true;
+    textPresetPrerenderWaiting = false;
+    qt::later(limit, this, [this] { finishTextPresetPresentation(); });
+    prerenderTextPresets();
+}
+
+void Reader::finishTextPresetPresentation()
+{
+    if (auto finished = std::exchange(textPresetPresentationReady, {}))
+        finished();
+}
+
 void Reader::resumeTextPresetPrerender()
 {
     if (!std::exchange(textPresetPrerenderWaiting, false))
@@ -745,8 +763,10 @@ void Reader::prerenderTextPresets()
 {
     // Landscape has no presets bar, so no All.
     if (closing || exitPending || lifecycleHidden || textPresetGallery || !textPresetProbeHost
-        || width() > height())
+        || width() > height()) {
+        finishTextPresetPresentation();
         return;
+    }
     QVector<Preset> presets;
     QString selected;
     bool modified = false;
@@ -765,8 +785,10 @@ void Reader::prerenderTextPresets()
         size = probe.previewSize();
         ids = probe.visibleIds();
     }
-    if (size.isEmpty() || ids.isEmpty())
+    if (size.isEmpty() || ids.isEmpty()) {
+        finishTextPresetPresentation();
         return;
+    }
     if (textPresetPrerenderCancel)
         textPresetPrerenderCancel->store(true);
     textPresetPrerenderCancel = std::make_shared<std::atomic_bool>(false);
@@ -789,12 +811,15 @@ void Reader::prerenderNextTextPreset()
     if (textPresetPrerenderQueue.isEmpty()) {
         // Tests read when the first page is ready.
         setProperty("text_presets_prerendered", true);
+        finishTextPresetPresentation();
         return;
     }
     // One tile at a time, only while nothing else needs the engine, so a page
     // turn waits for one tile at most.
-    if (closing || exitPending || lifecycleHidden || services.suspended())
+    if (closing || exitPending || lifecycleHidden || services.suspended()) {
+        finishTextPresetPresentation();
         return;
+    }
     if (session->busy() || appearanceEdit.applying()
         || appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening
         || stylingSamplesPending > 0) {

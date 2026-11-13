@@ -101,6 +101,11 @@ struct ReaderHostServices
     // Optional host reader-selection preference. Both callbacks are supplied
     // together; a successful write affects future book openings.
     std::function<bool()> automaticBookOpening;
+    // True for a host that shows its own opening view until the reader is
+    // ready. The reader then draws the previews of the text presets that
+    // are not stored yet before it reports ready, so that the first page
+    // turns do not wait for them.
+    bool textPresetsBeforePresentation = false;
     std::function<bool(bool)> setAutomaticBookOpening;
     std::function<QString()> clock;
     // Optional monotonic milliseconds for interval checks; tests replace it.

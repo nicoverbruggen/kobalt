@@ -1131,6 +1131,7 @@ void ReaderCoordinator::showReader()
             run.nativePublication ? run.nativePublication->coverPath() : QString();
     services.startupNotice = std::exchange(pendingNotice, kobalt::ReaderNotice{});
     services.automaticBookOpening = bindings_.automaticBookOpening;
+    services.textPresetsBeforePresentation = true;
     services.setAutomaticBookOpening = bindings_.setAutomaticBookOpening;
     const auto suspended = services.suspended;
     services.suspended = [this, suspended] {

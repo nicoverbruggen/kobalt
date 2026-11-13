@@ -774,6 +774,13 @@ private:
     // and only while the reader is idle. Opening All then shows a complete
     // page in one screen update.
     void startTextPresetPrerender();
+    // Draws the previews of the text presets that are not stored yet, while
+    // the host still shows its opening view, so that the first page turns
+    // do not wait for them. Stored previews need no work, so this takes
+    // time only on the first opening with a new preset, size or theme.
+    void prepareTextPresetPresentation(std::function<void()> finished);
+    void finishTextPresetPresentation();
+    std::function<void()> textPresetPresentationReady;
     void prerenderTextPresets();
     void prerenderNextTextPreset();
     // Continues a prerender that waits for the engine. ReaderSession::idle

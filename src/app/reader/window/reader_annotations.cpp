@@ -976,8 +976,14 @@ void Reader::preparePresentation(std::function<void(bool)> finished)
                 finished(false);
                 return;
             }
-            book->markNativeReading();
-            saveWifiPower([this, finished] { finished(!closing && !lifecycleHidden); });
+            const auto present = [this, finished] {
+                book->markNativeReading();
+                saveWifiPower([this, finished] { finished(!closing && !lifecycleHidden); });
+            };
+            if (services.textPresetsBeforePresentation)
+                prepareTextPresetPresentation(present);
+            else
+                present();
         });
     });
 }

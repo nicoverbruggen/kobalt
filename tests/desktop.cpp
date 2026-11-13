@@ -8580,10 +8580,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 const auto before = fixture.state().value("position").toString();
                 test::skipPageTurnWindow();
                 fixture.window.readerWindow()->pageButton(1);
-                QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool()
-                                                 && fixture.state().value("position").toString()
-                                                         != before,
-                                         5000);
+                const bool turned = QTest::qWaitFor(
+                        [&] {
+                            return !fixture.state().value("busy").toBool()
+                                    && fixture.state().value("position").toString() != before;
+                        },
+                        5000);
+                QVERIFY2(turned,
+                         qPrintable(QString("mode %1 turn %2: busy %3, chapter mode %4, page %5 "
+                                            "of %6, at %7")
+                                            .arg(mode)
+                                            .arg(turn)
+                                            .arg(fixture.state().value("busy").toBool())
+                                            .arg(fixture.state().contains("book_fraction"))
+                                            .arg(fixture.state().value("page").toInt())
+                                            .arg(fixture.state().value("pages").toInt())
+                                            .arg(before)));
             }
             if (mode == 2) {
                 const auto position = fixture.state().value("position").toString();
@@ -8598,6 +8610,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(!page->slotContents[5].text.contains('~'));
                 QCOMPARE(fixture.state().value("position").toString(), position);
                 QCOMPARE(opened.count(), 1);
+
             } else {
                 // Fast never counts: the idle work ends and the mark stays.
                 QTest::qWait(100);

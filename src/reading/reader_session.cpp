@@ -229,11 +229,14 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     }
     if (!current())
         return;
-    if (!more && engine->backgroundCount()) {
-        // Hybrid rendering: the whole book is built beside the chapter. A
-        // page turn stops the try, and the next quiet moment starts again.
+    // Hybrid rendering: the whole book is built beside the chapter. A page
+    // turn stops the try, and the next quiet moment starts again. Before
+    // the user reads, only a book that is in the parsed-book cache is
+    // worth the work: it needs no parsing.
+    const bool reading = engine->backgroundCount();
+    if (!more && (reading || renderingMode::countsInBackground())) {
         BackgroundDiagnostic diagnostic("Full document", *engine, current);
-        const auto full = engine->prepareFullDocument(current);
+        const auto full = engine->prepareFullDocument(current, !reading);
         if (!current())
             return;
         if (full == Engine::FullDocument::Ready) {

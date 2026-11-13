@@ -269,11 +269,15 @@ public:
     // makes it quick when the book was whole before. `current` false stops
     // the try, and a later call starts again. Ready means that
     // setChapterMode(false, ...) with the same appearance shows that
-    // document at once, on the same page.
+    // document at once, on the same page. `cachedOnly` gives up as soon as
+    // the book has to be parsed: the reader asks that right after a book
+    // opens, before the user has settled on an appearance.
     enum class FullDocument { None, Stopped, Ready };
-    virtual FullDocument prepareFullDocument(const std::function<bool()> &current)
+    virtual FullDocument prepareFullDocument(const std::function<bool()> &current,
+                                             bool cachedOnly = false)
     {
         Q_UNUSED(current);
+        Q_UNUSED(cachedOnly);
         return FullDocument::None;
     }
     // The reader turns the count on when the user reads, and off while the

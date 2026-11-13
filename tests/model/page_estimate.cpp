@@ -12,6 +12,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QTemporaryDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSet>
@@ -1376,6 +1377,50 @@ void fullDocument()
             "A document for another font size must not stay");
 }
 
+// A book that is in the parsed-book cache gives the whole book without
+// parsing: the try right after a book opens takes it. A book that is not
+// there waits until the reader asks for the whole build.
+void fullDocumentFromCache(const QByteArray &bytes)
+{
+    const Page page;
+    QTemporaryDir cacheRoot;
+    require(cacheRoot.isValid(), "Cannot create a document cache directory");
+    const auto directory = cacheRoot.path() + "/.cache";
+    const QByteArray fingerprint(64, 'b'), other(64, 'c'), policy("hybrid-test");
+    QString error;
+    {
+        EngineDocument whole(test::readerFonts());
+        whole.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+        require(whole.open(bytes, page.viewport, page.settings(), &error), qPrintable(error));
+        require(!whole.openedFromCache() && whole.saveDocumentCache(),
+                "Cannot save the parsed book");
+    }
+    const auto chapter = [&](EngineDocument &model, const QByteArray &key) {
+        model.setDocumentCache(directory, key, policy, 1024 * 1024);
+        require(model.open(bytes, page.viewport, page.settings(), &error), qPrintable(error));
+        model.setChapterSlices(6);
+        require(model.showSpineItems(1, 1, &error) && model.go(0), qPrintable(error));
+    };
+    EngineDocument cached(test::readerFonts());
+    chapter(cached, fingerprint);
+    require(cached.prepareFullDocument({}, true) == Engine::FullDocument::Ready,
+            "A book in the cache must give the whole book without parsing");
+    // Opened as a chapter from the start, so that nothing is in the cache.
+    EngineDocument fresh(test::readerFonts());
+    setChapterModeOverride(1);
+    fresh.setDocumentCache(directory, other, policy, 1024 * 1024);
+    const bool chapters = fresh.open(bytes, page.viewport, page.settings(), &error);
+    setChapterModeOverride(-1);
+    require(chapters && fresh.bookFraction() >= 0, qPrintable(error));
+    require(fresh.prepareFullDocument({}, true) == Engine::FullDocument::None
+                    && !Probe::fullView(fresh),
+            "A book that is not in the cache must not be parsed before the user reads");
+    require(fresh.prepareFullDocument({}, true) == Engine::FullDocument::None,
+            "The cache is not asked again for the same page");
+    require(fresh.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "The whole build must still work");
+}
+
 // A book with more spine items than the engine has room for documents: the
 // count must still reach the end of the book, with the kept documents out of
 // its way.
@@ -1886,6 +1931,7 @@ int main(int argc, char **argv)
     reopenCounted();
     manyItemsCounted();
     fullDocument();
+    fullDocumentFromCache(bytes);
     hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);

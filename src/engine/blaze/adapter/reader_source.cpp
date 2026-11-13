@@ -1160,7 +1160,8 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 #endif
 }
 
-Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<bool()> &current)
+Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<bool()> &current,
+                                                         bool cachedOnly)
 {
 #if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
     if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || source_->parent || !engine_)
@@ -1170,10 +1171,25 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         full_.reset();
     if (full_)
         return FullDocument::Ready;
-    if (key == fullFailed_)
+    if (key == fullFailed_ || (cachedOnly && key == fullUncached_))
         return FullDocument::None;
     if (current && !current())
         return FullDocument::Stopped;
+    if (cachedOnly) {
+        // CREngine names a cache file after the start of the document
+        // name, which is the fingerprint of the publication, in two halves
+        // of 12 characters. A file that turns out to be stale is parsed
+        // again, as a book without one is once the user reads.
+        const auto files = cacheDirectory_.isEmpty() || cacheFingerprint_.isEmpty()
+                ? QStringList()
+                : QDir(cacheDirectory_)
+                          .entryList({ documentCacheName(cacheFingerprint_).left(12) + "*.cr3" },
+                                     QDir::Files);
+        if (files.isEmpty()) {
+            fullUncached_ = key;
+            return FullDocument::None;
+        }
+    }
     // The whole book needs the room of the documents that only chapter
     // mode uses.
     counting_.reset();
@@ -1501,6 +1517,7 @@ bool EngineDocument::adoptAhead(int first, int last)
     full_ = std::move(old->full_);
     fullKey_ = std::move(old->fullKey_);
     fullFailed_ = std::move(old->fullFailed_);
+    fullUncached_ = std::move(old->fullUncached_);
     fullSize_ = old->fullSize_;
     countingSettings_ = std::move(old->countingSettings_);
     uncounted_ = std::move(old->uncounted_);

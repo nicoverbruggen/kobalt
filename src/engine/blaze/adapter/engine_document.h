@@ -210,7 +210,8 @@ public:
     qint64 chapterLoadMilliseconds() const override;
     bool refinePageEstimate() override;
     bool countPages(const std::function<bool()> &current) override;
-    FullDocument prepareFullDocument(const std::function<bool()> &current) override;
+    FullDocument prepareFullDocument(const std::function<bool()> &current,
+                                     bool cachedOnly = false) override;
     void setBackgroundCount(bool enabled) override;
     bool backgroundCount() const override;
 
@@ -435,6 +436,8 @@ private:
     // whole book did not open, so that it is not tried again.
     std::unique_ptr<EngineDocument> full_;
     QString fullKey_, fullFailed_;
+    // The page for which the parsed-book cache had no usable document.
+    QString fullUncached_;
     QSize fullSize_;
     // The document whose pages countPages() counts, with the page it was
     // opened for, and the spine items that gave no count.

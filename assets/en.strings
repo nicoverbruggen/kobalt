@@ -761,9 +761,9 @@
 "settings.opening_cover" = "Do not show book cover while opening";
 "settings.opening_cover_description" = "Always show the Kobalt logo when opening a book.";
 "settings.rendering" = "Rendering engine";
-"settings.rendering_summary" = "Balanced opens books fast and counts the pages while you read.";
+"settings.rendering_summary" = "Hybrid opens books fast and counts the pages while you read.";
 "settings.rendering_description" = "Changing the engine reloads the whole book at your current reading position when you close Settings.";
-"settings.rendering_hybrid" = "Balanced";
+"settings.rendering_hybrid" = "Hybrid";
 "settings.rendering_fast" = "Faster";
 "settings.rendering_accurate" = "More accurate";
 "settings.rendering_hybrid_description" = "Open like Faster. Once you read, count every page in the background for exact page numbers.";

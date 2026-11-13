@@ -10445,7 +10445,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(open(true));
         QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
 
-        // Faster and Balanced read the same way: the book stays as it is.
+        // Faster and Hybrid read the same way: the book stays as it is.
         choose("hybrid", fast, hybrid);
         if (QTest::currentTestFailed())
             return;

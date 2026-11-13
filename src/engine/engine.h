@@ -264,6 +264,18 @@ public:
         return false;
     }
 
+    // Hybrid rendering: one try to build the document of the whole book in
+    // the background, beside the part that is shown. The parsed-book cache
+    // makes it quick when the book was whole before. `current` false stops
+    // the try, and a later call starts again. Ready means that
+    // setChapterMode(false, ...) with the same appearance shows that
+    // document at once, on the same page.
+    enum class FullDocument { None, Stopped, Ready };
+    virtual FullDocument prepareFullDocument(const std::function<bool()> &current)
+    {
+        Q_UNUSED(current);
+        return FullDocument::None;
+    }
     // The reader turns the count on when the user reads, and off while the
     // user changes settings. The engine worker reads it.
     virtual void setBackgroundCount(bool enabled) { Q_UNUSED(enabled); }

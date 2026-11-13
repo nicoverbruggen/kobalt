@@ -863,6 +863,32 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
     const int item = fast ? qMax(0, spineItemIndex(position())) : -1;
     saved["koblaze_first_spine_item"] = item;
     saved["koblaze_last_spine_item"] = item;
+    // Hybrid rendering prepared the whole book for this appearance: show
+    // that document. Nothing is loaded and nothing moves on the page.
+    bool prepared = false;
+    if (!fast && full_ && fullSize_ == (size.isValid() ? size : size_)
+        && fullKey_ == estimateKey(settingsState())) {
+        const auto before = state();
+        prepared = true;
+        for (auto it = patch.fields().begin(); it != patch.fields().end() && prepared; ++it)
+            prepared = !before.contains(it.key()) || before.value(it.key()) == it.value();
+    }
+    if (prepared) {
+        auto full = std::move(full_);
+        const auto place = position();
+        if (!place.isEmpty())
+            full->goTo(place);
+        if (externalChapters_) {
+            full->setChapters(contents_, graph_);
+            full->externalChapters_ = true;
+        }
+        full->interrupt_ = interrupt_;
+        full->nativeLocation_ = nativeLocation_;
+        EngineDocument old(fonts_);
+        old = std::move(*this);
+        *this = std::move(*full);
+        return true;
+    }
     EngineDocument next(fonts_);
     next.slicePages_ = fast ? qMax(1,
                                    qgetenv("KOBALT_CHAPTER_PAGES").isEmpty()
@@ -1134,6 +1160,78 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 #endif
 }
 
+Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<bool()> &current)
+{
+#if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
+    if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || source_->parent || !engine_)
+        return FullDocument::None;
+    const auto key = estimateKey(settingsState());
+    if (full_ && (key != fullKey_ || size_ != fullSize_))
+        full_.reset();
+    if (full_)
+        return FullDocument::Ready;
+    if (key == fullFailed_)
+        return FullDocument::None;
+    if (current && !current())
+        return FullDocument::Stopped;
+    // The whole book needs the room of the documents that only chapter
+    // mode uses.
+    counting_.reset();
+    countingNext_ = -1;
+    kept_.clear();
+    source_->epubCache.reset();
+    auto saved = state();
+    saved.remove("page_estimate");
+    saved["koblaze_first_spine_item"] = -1;
+    saved["koblaze_last_spine_item"] = -1;
+    auto next = std::make_unique<EngineDocument>(fonts_);
+    next->slicePages_ = 0;
+    next->userStyleSheet_ = userStyleSheet_;
+    next->cacheDirectory_ = cacheDirectory_;
+    next->cacheFingerprint_ = cacheFingerprint_;
+    next->cachePolicy_ = cachePolicy_;
+    next->cacheBytes_ = cacheBytes_;
+    next->openInterrupt_ = [&current] { return current && !current(); };
+    QString error;
+    bool opened = false;
+    {
+        // A tap must not wait for this work: the load, the style pass and
+        // the layout all stop, and the next quiet moment starts again.
+        const StopCheck check(current);
+        try {
+            opened = source_->resources
+                    ? next->openResources(source_->resources->fresh(), source_->sizes, size_,
+                                          saved, &error)
+                    : next->open(source_->bytes, size_, saved, &error);
+        } catch (const KoblazeRenderCancelled &) {
+            koblazeSetSpineWindow(-1, -1);
+            return FullDocument::Stopped;
+        }
+    }
+    if (current && !current())
+        return FullDocument::Stopped;
+    if (!opened || next->pages() <= 0) {
+        fullFailed_ = key;
+        return FullDocument::None;
+    }
+    next->openInterrupt_ = nullptr;
+    next->wordCounts(current);
+    if (current && !current())
+        return FullDocument::Stopped;
+    if (diagnosticsActive())
+        diagnostic("full-document-ready",
+                   { { "pages", next->pages() }, { "from_cache", next->openedFromCache() } },
+                   false);
+    full_ = std::move(next);
+    fullKey_ = key;
+    fullSize_ = size_;
+    return FullDocument::Ready;
+#else
+    Q_UNUSED(current);
+    return FullDocument::None;
+#endif
+}
+
 void EngineDocument::setBackgroundCount(bool enabled)
 {
     if (source_)
@@ -1210,6 +1308,7 @@ std::unique_ptr<EngineDocument> EngineDocument::takeKept(int first, const QJsonO
 
 void EngineDocument::dropSideDocuments()
 {
+    full_.reset();
     if (source_ && !source_->parent)
         source_->epubCache.reset();
     ahead_.reset();
@@ -1399,6 +1498,10 @@ bool EngineDocument::adoptAhead(int first, int last)
     countingItem_ = old->countingItem_;
     countingNext_ = old->countingNext_;
     countReported_ = old->countReported_;
+    full_ = std::move(old->full_);
+    fullKey_ = std::move(old->fullKey_);
+    fullFailed_ = std::move(old->fullFailed_);
+    fullSize_ = old->fullSize_;
     countingSettings_ = std::move(old->countingSettings_);
     uncounted_ = std::move(old->uncounted_);
     kept_ = std::move(old->kept_);

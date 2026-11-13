@@ -230,20 +230,20 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     if (!current())
         return;
     if (!more && engine->backgroundCount()) {
-        // One step, then the worker takes other work. The numbers on the
-        // screen change once, when the count ends.
-        BackgroundDiagnostic diagnostic("Page count", *engine, current);
-        const bool counting = engine->countPages(current);
+        // Hybrid rendering: the whole book is built beside the chapter. A
+        // page turn stops the try, and the next quiet moment starts again.
+        BackgroundDiagnostic diagnostic("Full document", *engine, current);
+        const auto full = engine->prepareFullDocument(current);
         if (!current())
             return;
-        if (counting) {
+        if (full == Engine::FullDocument::Ready) {
             kobalt::qt::invoke(
-                    engineWorker(),
-                    [engine, current, guard, job, lease] {
-                        if (!current() || !lease || lease->revoked())
+                    qApp,
+                    [guard, job, lease] {
+                        if (!guard || guard->running || guard->revision != job
+                            || guard->lease_ != lease || !lease || lease->revoked())
                             return;
-                        EngineJob activity;
-                        refinePageEstimate(engine, current, guard, job, lease);
+                        guard->showFullDocument();
                     },
                     Qt::QueuedConnection);
             return;
@@ -778,6 +778,13 @@ void ReaderSession::editAppearance(const appearance::Patch &patch, QSize size)
     requestAppearance(requestedAppearance().edited(patch), size);
 }
 
+void ReaderSession::showFullDocument()
+{
+    // The engine has the whole book ready for this appearance. The switch
+    // loads nothing and keeps the page.
+    requestAppearance(requestedAppearance(), {}, 0);
+}
+
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
                                       int chapterMode)
 {
@@ -793,6 +800,11 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
     const bool resized = size.isValid() && size != desiredSize;
     if (resized)
         desiredSize = size;
+    // Hybrid rendering: another appearance goes back to the chapter, which
+    // is quick, and the whole book follows in the background. The same
+    // appearance keeps what is shown.
+    if (chapterMode == hybridChapterMode)
+        chapterMode = next != desired || resized ? 1 : -1;
     const int previousMode = desiredChapterMode >= 0
             ? desiredChapterMode
             : (frame.state.contains("book_fraction") ? 1 : 0);

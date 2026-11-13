@@ -91,6 +91,12 @@ struct ReaderLocationProbe
         return model.counting_ ? model.counting_->engine_.get() : nullptr;
     }
 
+    // The document of the whole book that Hybrid rendering prepared.
+    static const LVDocView *fullView(const EngineDocument &model)
+    {
+        return model.full_ ? model.full_->engine_.get() : nullptr;
+    }
+
     static bool countEnded(const EngineDocument &model)
     {
         return !model.counting_ && !model.source_->epubCache;
@@ -1318,6 +1324,58 @@ void countedInBackground()
             "Another font size must count again");
 }
 
+// Hybrid rendering builds the document of the whole book beside the chapter
+// that is shown, and then shows it: the same page, the pages of the whole
+// book, and no new load. A try that is stopped leaves nothing behind.
+void fullDocument()
+{
+    EngineDocument model(test::readerFonts());
+    openResources(model, pagesBook(), { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    QStringList whole;
+    for (int page = 0; page < model.pages(); ++page)
+        whole.append(model.pageStart(page));
+    model.setChapterSlices(6);
+    QString error;
+    require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+    for (int turn = 0; turn < 9; ++turn)
+        require(model.turnInWindow(1), "The fixture is too short to read on");
+    const auto start = model.pageStart(model.page());
+    const int wholePage = whole.indexOf(start);
+    require(wholePage > 0, "The page of chapter mode must be a page of the whole book");
+
+    require(model.prepareFullDocument([] { return false; }) == Engine::FullDocument::Stopped
+                    && !Probe::fullView(model),
+            "A stopped try must leave no document");
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "The whole book must build beside the chapter");
+    const auto *full = Probe::fullView(model);
+    require(full && model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                    && Probe::fullView(model) == full,
+            "A prepared document must stay until it is shown");
+    // The reader went on in the chapter meanwhile.
+    require(model.turnInWindow(1), "The fixture is too short to read on");
+    const auto shown = model.pageStart(model.page());
+    require(model.bookFraction() >= 0, "The chapter is still shown");
+    require(model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
+            "The prepared document must be shown");
+    std::printf("full document: page %d of %d after the switch, whole book page %d of %d\n",
+                model.page() + 1, model.pages(), wholePage + 2, int(whole.size()));
+    require(Probe::view(model) == full, "The switch must show the prepared document, not load one");
+    require(model.bookFraction() < 0 && model.pages() == whole.size()
+                    && model.page() == wholePage + 1 && model.pageStart(model.page()) == shown,
+            "After the switch the reader is on the same page of the whole book");
+
+    // Another font size drops a prepared document.
+    EngineDocument other(test::readerFonts());
+    openFiles(other, pagesBook());
+    require(other.prepareFullDocument({}) == Engine::FullDocument::Ready, "The whole book builds");
+    require(other.applyAppearance(appearance::Patch(qt::object({ { "font_pixels", 32 } }))),
+            "Cannot change the font size");
+    require(other.prepareFullDocument([] { return false; }) == Engine::FullDocument::Stopped
+                    && !Probe::fullView(other),
+            "A document for another font size must not stay");
+}
+
 // A book with more spine items than the engine has room for documents: the
 // count must still reach the end of the book, with the kept documents out of
 // its way.
@@ -1827,6 +1885,7 @@ int main(int argc, char **argv)
     countedInBackground();
     reopenCounted();
     manyItemsCounted();
+    fullDocument();
     hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);

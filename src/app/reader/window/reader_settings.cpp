@@ -940,10 +940,12 @@ void Reader::applySettings()
             settings[it.key()] = it.value();
     }
     renderingMode::apply(preferences);
-    const bool chapters = renderingMode::effective(renderingMode::fromPreferences(preferences))
-            != renderingMode::Mode::Accurate;
+    const auto rendering = renderingMode::effective(renderingMode::fromPreferences(preferences));
     session->requestAppearance(requested.edited(appearance::Patch(settings)), bodySize(),
-                               chapters ? 1 : 0);
+                               rendering == renderingMode::Mode::Accurate ? 0
+                                       : rendering == renderingMode::Mode::Hybrid
+                                       ? ReaderSession::hybridChapterMode
+                                       : 1);
     applyingText = session->busy();
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);

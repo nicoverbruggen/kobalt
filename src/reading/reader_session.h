@@ -158,6 +158,10 @@ public:
 
     void openPreview(const ReaderSession &source, QSize size,
                      std::function<void(QString)> finished);
+    // `chapterMode`: 1 shows the chapter only, 0 the whole book, -1 keeps
+    // what is shown. hybridChapterMode goes to the chapter when the
+    // appearance changes and keeps what is shown otherwise.
+    static constexpr int hybridChapterMode = 2;
     void requestAppearance(const appearance::Requested &settings, QSize size = {},
                            int chapterMode = -1);
     void editAppearance(const appearance::Patch &patch, QSize size = {});
@@ -186,6 +190,8 @@ public:
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
+    // Shows the document of the whole book that Hybrid rendering prepared.
+    void showFullDocument();
     // Goes to the entry `index` of chapters(). See Engine::goToChapter().
     bool goToChapter(int index);
     // Goes to about `fraction` of the whole book, from 0 to 1. With only a

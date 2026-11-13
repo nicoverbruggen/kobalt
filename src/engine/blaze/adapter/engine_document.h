@@ -210,6 +210,7 @@ public:
     qint64 chapterLoadMilliseconds() const override;
     bool refinePageEstimate() override;
     bool countPages(const std::function<bool()> &current) override;
+    FullDocument prepareFullDocument(const std::function<bool()> &current) override;
     void setBackgroundCount(bool enabled) override;
     bool backgroundCount() const override;
 
@@ -429,6 +430,12 @@ private:
     // document. `aheadSettings_` and `aheadSize_` are what it
     // was opened with: after a change of settings it is not used.
     std::unique_ptr<EngineDocument> ahead_;
+    // The document of the whole book that prepareFullDocument() built, with
+    // the page it was built for. `fullFailed_` holds the page for which the
+    // whole book did not open, so that it is not tried again.
+    std::unique_ptr<EngineDocument> full_;
+    QString fullKey_, fullFailed_;
+    QSize fullSize_;
     // The document whose pages countPages() counts, with the page it was
     // opened for, and the spine items that gave no count.
     std::unique_ptr<EngineDocument> counting_;

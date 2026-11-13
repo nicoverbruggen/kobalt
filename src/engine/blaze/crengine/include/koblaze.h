@@ -18,6 +18,8 @@
 void koblazeSetSpineWindow(int first, int last);
 /// True when the spine item is loaded with its text.
 bool koblazeSpineItemLoaded(int index);
+/// True when only a window of spine items is loaded with its text.
+bool koblazeSpineWindowSet();
 
 /// Take the pair kerning of plain left-to-right horizontal text from a
 /// memory of glyph pairs, which HarfBuzz fills, and shape those runs

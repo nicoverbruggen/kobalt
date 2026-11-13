@@ -248,9 +248,19 @@ void ReadEpubNavToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
             title.trimDoubleSpaces(false, false, false);
             if ( !href.empty() ) {
                 href = DecodeHTMLUrlString(href);
+                lString32 file = href;
                 href = appender.convertHref(href);
                 if ( !href.empty() && href[0]=='#' ) {
                     ldomNode * target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
+                    int id = file.pos(U'#');
+                    if ( !target && koblazeSpineWindowSet() && id > 0 ) {
+                        // koblaze: the id is in a spine item without its text.
+                        // Point to the start of that spine item, as the NCX
+                        // reader does for an id that does not exist.
+                        file = appender.convertHref(file.substr(0, id));
+                        if ( !file.empty() && file[0]=='#' )
+                            target = doc->getNodeById(doc->getAttrValueIndex(file.substr(1).c_str()));
+                    }
                     if ( target ) {
                         ldomXPointer ptr(target, 0);
                         tocItem = baseToc->addChild(title, ptr, lString32::empty_str);
@@ -1090,6 +1100,11 @@ void koblazeSetSpineWindow(int first, int last)
 {
     koblaze_first_spine_item = first;
     koblaze_last_spine_item = last;
+}
+
+bool koblazeSpineWindowSet()
+{
+    return koblaze_first_spine_item >= 0;
 }
 
 bool koblazeSpineItemLoaded(int index)

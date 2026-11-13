@@ -406,6 +406,43 @@ int main(int argc, char **argv)
         files["book.opf"].replace("href=\"nav.xhtml\"", "href=\"nav.xhtml\" properties=\"nav\"");
         requireWholeBookPages(files, 2, "A hidden last spine item added a page in chapter mode");
     }
+    // A contents entry can point to an id in a spine item that chapter mode
+    // has not loaded. The entry and the entries below it must stay in the
+    // list, and a jump to it must find the place of the whole book.
+    {
+        const auto chapter = [](const QByteArray &id, int seed) {
+            return test::publisherHtml("<p>" + prose(seed, 20) + "</p><h1 id=\"" + id + "\">"
+                                       + id + "</h1><p>" + prose(seed + 1, 20) + "</p>");
+        };
+        auto files = styledBook(
+                "p{margin:0}", "<p>" + prose(3, 30) + "</p>",
+                { { "two.xhtml", chapter("two", 4) },
+                  { "three.xhtml", chapter("three", 6) },
+                  { "nav.xhtml",
+                    test::publisherHtml("<nav epub:type=\"toc\"><ol>"
+                                        "<li><a href=\"text.xhtml\">Text</a></li>"
+                                        "<li><a href=\"two.xhtml#two\">Two</a><ol>"
+                                        "<li><a href=\"three.xhtml#three\">Three</a></li>"
+                                        "</ol></li></ol></nav>") } },
+                "<itemref idref=\"two.xhtml\"/><itemref idref=\"three.xhtml\"/>");
+        files["book.opf"].replace("href=\"nav.xhtml\"", "href=\"nav.xhtml\" properties=\"nav\"");
+        EngineDocument model(test::readerFonts());
+        open(model, files);
+        const auto whole = model.chapters();
+        require(whole.size() == 3 && whole[2].depth == 1, "The fixture needs a nested contents list");
+        model.setChapterSlices(2);
+        QString error;
+        require(model.showSpineItems(0, 0, &error), qPrintable(error));
+        const auto listed = model.chapters();
+        require(listed.size() == whole.size(), "Chapter mode lost contents entries");
+        for (int i = 0; i < whole.size(); ++i)
+            require(listed[i].title == whole[i].title && listed[i].depth == whole[i].depth
+                            && !listed[i].position.isEmpty(),
+                    "Chapter mode changed a contents entry");
+        require(model.goTo(listed[2].position), "Cannot go to a contents entry of chapter mode");
+        require(model.chapters()[2].position == whole[2].position,
+                "A loaded contents entry must point to its id");
+    }
 
     std::printf(
             "PASS: slices of %d pages; %d pages whole, %d pages in slices, largest layout %d pages\n",

@@ -20,7 +20,7 @@ struct OpeningJob
     ResourceFactory factory;
     PositionCodec positions;
     QString systemFont, layoutCachePath, documentCachePath, userStyleSheetPath, coverPath;
-    QString customPinsPath;
+    QString customPinsPath, dictionariesPath;
     QJsonObject pinnedAppearance, appearanceDefaults;
     bool restartAtStart = false;
     ReaderMarkupRequest markup;

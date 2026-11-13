@@ -22,14 +22,15 @@ private:
 };
 
 // User-supplied StarDict files, separate from downloaded dictionaries.
-// Preparation writes only the host's private working copy, on a worker.
+// Preparation writes derived indexes beside the files, on a worker.
 class FolderDictionaries final : public DictionaryService
 {
 public:
-    static void prepare(const QString &directory);
-    explicit FolderDictionaries(QString directory);
+    static void prepare(const QString &directory, const std::function<bool()> &cancelled = {});
+    explicit FolderDictionaries(QString directory,
+                                std::unique_ptr<DictionaryService> fallback = {});
 
-    QVector<DictionaryChoice> choices() const override { return entries; }
+    QVector<DictionaryChoice> choices() const override;
 
     bool select(const QString &book, const QString &id, QString *error) override;
     DictionaryResult lookup(const QString &book, const QString &word) override;
@@ -39,5 +40,6 @@ private:
     QVector<DictionaryChoice> entries;
     QHash<QString, QString> selected;
     std::unique_ptr<StarDict> active;
+    std::unique_ptr<DictionaryService> fallback;
 };
 } // namespace kobalt

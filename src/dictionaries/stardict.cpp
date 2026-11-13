@@ -1,6 +1,7 @@
 #include "stardict.h"
 #include "support/main_thread.h"
 #include <QFile>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QtEndian>
@@ -418,7 +419,7 @@ DictionaryResult StarDict::lookup(const QString &word)
     return result;
 }
 
-void FolderDictionaries::prepare(const QString &directory)
+void FolderDictionaries::prepare(const QString &directory, const std::function<bool()> &cancelled)
 {
     mainthread::BlockingOperation operation("dictionary-index-write");
     QDirIterator files(directory, { "*.ifo" }, QDir::Files | QDir::NoSymLinks,
@@ -426,22 +427,38 @@ void FolderDictionaries::prepare(const QString &directory)
     int checked = 0;
     while (files.hasNext() && checked++ < 2048) {
         const auto file = files.next();
+        if (cancelled && cancelled())
+            return;
         const auto marker = file + ".kobalt-ready";
-        if (QFile::exists(marker))
-            continue;
         const QFileInfo info(file);
+        const auto prefix = info.path() + '/' + info.completeBaseName();
+        QByteArray fingerprint;
+        for (const auto &suffix : { ".ifo", ".idx", ".dict.dz", ".syn" }) {
+            const QFileInfo source(prefix + suffix);
+            fingerprint += QByteArray::number(source.size()) + ':'
+                    + QByteArray::number(source.lastModified().toMSecsSinceEpoch()) + '\n';
+        }
+        QFile previous(marker);
+        if (previous.open(QIODevice::ReadOnly) && previous.readAll() == fingerprint
+            && QFile::exists(prefix + ".idx.kobalt")
+            && (!QFile::exists(prefix + ".syn") || QFile::exists(prefix + ".syn.kobalt")))
+            continue;
+        previous.close();
+        QFile::remove(marker);
         QString error;
-        if (!StarDict::prepare(info.path(), info.completeBaseName(), &error))
+        if (!StarDict::prepare(info.path(), info.completeBaseName(), &error, cancelled))
             continue;
         QSaveFile ready(marker);
         if (ready.open(QIODevice::WriteOnly)) {
-            ready.write("ready");
+            ready.write(fingerprint);
             ready.commit();
         }
     }
 }
 
-FolderDictionaries::FolderDictionaries(QString directory) : directory(std::move(directory))
+FolderDictionaries::FolderDictionaries(QString directory,
+                                       std::unique_ptr<DictionaryService> fallback)
+    : directory(std::move(directory)), fallback(std::move(fallback))
 {
     QDirIterator files(this->directory, { "*.ifo.kobalt-ready" }, QDir::Files | QDir::NoSymLinks,
                        QDirIterator::Subdirectories);
@@ -470,6 +487,13 @@ FolderDictionaries::FolderDictionaries(QString directory) : directory(std::move(
               });
 }
 
+QVector<DictionaryChoice> FolderDictionaries::choices() const
+{
+    auto available = fallback ? fallback->choices() : QVector<DictionaryChoice>();
+    available += entries;
+    return available;
+}
+
 bool FolderDictionaries::select(const QString &book, const QString &id, QString *error)
 {
     for (const auto &entry : entries) {
@@ -486,6 +510,10 @@ bool FolderDictionaries::select(const QString &book, const QString &id, QString 
         selected.insert(book, id);
         return true;
     }
+    if (fallback && fallback->select(book, id, error)) {
+        selected.insert(book, id);
+        return true;
+    }
     return fail(error, "This dictionary is not available.");
 }
 
@@ -494,7 +522,10 @@ DictionaryResult FolderDictionaries::lookup(const QString &book, const QString &
     DictionaryResult result;
     result.word = word;
     QString error;
-    const auto id = selected.value(book, entries.isEmpty() ? QString() : entries.first().id);
+    const auto available = choices();
+    const auto id = selected.value(book, available.isEmpty() ? QString() : available.first().id);
+    if (fallback && !id.startsWith("folder:"))
+        return fallback->lookup(book, word);
     if (!select(book, id, &error)) {
         result.error = error;
         return result;

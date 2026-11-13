@@ -244,6 +244,15 @@ int run(int argc, char **argv)
                 auto opening =
                         request(warningPath, access,
                                 nativeResourceFactory(warningPath, server.serverPort(), access));
+                opening.dictionariesPath = diagnostics.path() + "/dictionaries";
+                require(QDir().mkpath(opening.dictionariesPath), "Create dictionary folder");
+                const auto metadata = opening.dictionariesPath + "/invalid.ifo";
+                const auto marker = metadata + ".kobalt-ready";
+                for (const auto &file : { metadata, marker }) {
+                    QFile fixture(file);
+                    require(fixture.open(QIODevice::WriteOnly) && fixture.write("invalid") == 7,
+                            "Write invalid dictionary fixture");
+                }
                 if (!reader.sourceHash().isEmpty()) {
                     opening.saved = reader.state();
                     opening.saved["fingerprint"] = QString::fromLatin1(reader.sourceHash());
@@ -258,6 +267,8 @@ int run(int argc, char **argv)
                 opened.exec();
                 require(finished && reader.formattingWarning() && !reader.image().isNull(),
                         "Readable imperfect book lost its warning or frame");
+                require(QFile::exists(metadata) && !QFile::exists(marker),
+                        "Opening did not reject the stale dictionary on the worker");
             };
             openWarning(*warning);
             auto retainedWarning = warning->retained();

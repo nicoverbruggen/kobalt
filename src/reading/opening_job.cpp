@@ -1,4 +1,5 @@
 #include "opening_job.h"
+#include "dictionaries/stardict.h"
 #include "appearance_settings.h"
 #include "engine/crengine/engine_activity.h"
 #include "publication/layout_compatibility.h"
@@ -402,8 +403,13 @@ OpeningOutput runOpening(OpeningJob &job)
     }
     logOpeningPhases(job, state);
     OpeningOutput output;
-    if (outcome.ready() && !job.cancelled())
+    if (outcome.ready() && !job.cancelled()) {
         output.customPins = storage::readCustomPins(job.customPinsPath);
+        if (!job.dictionariesPath.isEmpty())
+            FolderDictionaries::prepare(job.dictionariesPath, [&job] { return job.cancelled(); });
+        if (job.cancelled())
+            outcome = job.interrupted();
+    }
     output.frame = std::move(state.frame);
     output.outcome = outcome;
     output.digest = state.digest;

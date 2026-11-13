@@ -391,6 +391,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.documentCachePath = documentCachePath;
     opening.userStyleSheetPath = userStyleSheetPath;
     opening.customPinsPath = request.customPinsPath;
+    opening.dictionariesPath = request.dictionariesPath;
     opening.coverPath = coverPath;
     opening.pinnedAppearance = pinnedAppearance;
     opening.appearanceDefaults = appearanceDefaults;

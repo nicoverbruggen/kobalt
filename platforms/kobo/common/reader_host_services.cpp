@@ -3,6 +3,7 @@
 #include <QKeyEvent>
 #include "reader_host_services.h"
 #include "native_dictionary.h"
+#include "dictionaries/stardict.h"
 #include "native_keyboard.h"
 #include "native_sync_network.h"
 #include "native_lifecycle.h"
@@ -280,7 +281,10 @@ ReaderHostServices readerHostServices()
     result.animationSupport = pageAnimationSupport;
     result.cancelAnimation = cancelPageAnimation;
     result.light = [](QWidget *anchor) { return std::make_unique<Light>(anchor); };
-    result.dictionary = [] { return std::make_unique<Dictionary>(); };
+    result.dictionary = [] {
+        return std::make_unique<FolderDictionaries>(
+                QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries"), std::make_unique<Dictionary>());
+    };
     result.keyboard = [](QWidget *parent, QLineEdit *editor) {
         return std::make_unique<Keyboard>(parent, editor);
     };

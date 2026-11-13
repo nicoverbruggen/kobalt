@@ -529,6 +529,52 @@ int main(int argc, char **argv)
                                    std::make_unique<FolderDictionaries>(folder));
         require(combined.lookup("another-book", "ice cream").dictionaryId == "folder:phrase",
                 "Folder dictionary not available beside downloads");
+        FolderDictionaries mixed(folder, std::make_unique<NativeChoice>());
+        require(mixed.choices().size() == 2, "Folder and Nickel choices are both available");
+        require(mixed.lookup("native-book", "ice cream").dictionaryId == "native",
+                "Nickel remains the default before a folder dictionary is selected");
+        require(mixed.select("folder-book", "folder:phrase", &error), qPrintable(error));
+        require(mixed.lookup("folder-book", "ice cream").html.toUtf8() == definition,
+                "Folder dictionary works beside Nickel");
+        require(mixed.select("native-book", "native", &error), qPrintable(error));
+        require(mixed.lookup("native-book", "ice cream").html == "Native definition"
+                        && mixed.lookup("folder-book", "ice cream").html.toUtf8() == definition,
+                "Native and folder selections remain independent per book");
+        require(mixed.select("folder-book", "native", &error), qPrintable(error));
+        require(mixed.lookup("folder-book", "ice cream").dictionaryId == "native",
+                "Switching back to Nickel works");
+        require(!mixed.select("folder-book", "folder:../phrase", &error),
+                "Mixed provider rejects arbitrary paths");
+        FolderDictionaries absent(folder + "/missing", std::make_unique<NativeChoice>());
+        require(absent.choices().size() == 1
+                        && absent.lookup("book", "word").dictionaryId == "native",
+                "Missing StarDict folder preserves Nickel lookup");
+        const auto ready = folder + "/phrase.ifo.kobalt-ready";
+        require(QFile::remove(ready), "Remove readiness marker");
+        FolderDictionaries::prepare(folder, [] { return true; });
+        require(!QFile::exists(ready), "Cancelled preparation does not publish dictionaries");
+        FolderDictionaries::prepare(folder);
+        require(QFile::exists(ready), "Preparation publishes the dictionary again");
+        require(QFile::remove(folder + "/phrase.idx.kobalt"), "Remove derived index");
+        FolderDictionaries::prepare(folder);
+        require(QFile::exists(folder + "/phrase.idx.kobalt"), "Missing index is rebuilt");
+        QByteArray replacementIndex("ice creams\0", 11);
+        be32(replacementIndex, 0);
+        be32(replacementIndex, definition.size());
+        save(folder + "/phrase.idx", replacementIndex);
+        save(folder + "/phrase.ifo",
+             "StarDict's dict ifo file\nversion=2.4.2\nwordcount=1\nidxfilesize="
+                     + QByteArray::number(replacementIndex.size()) + "\nsametypesequence=h\n");
+        FolderDictionaries::prepare(folder);
+        FolderDictionaries replaced(folder);
+        require(replaced.lookup("book", "ice cream").html.isEmpty()
+                        && replaced.lookup("book", "ice creams").html.toUtf8() == definition,
+                "Valid replacement rebuilds the index for the new words");
+        save(folder + "/phrase.ifo", "Invalid replacement dictionary");
+        FolderDictionaries::prepare(folder);
+        FolderDictionaries damaged(folder, std::make_unique<NativeChoice>());
+        require(!QFile::exists(ready) && damaged.choices().size() == 1,
+                "Invalid replacement is omitted instead of using a stale index");
         require(QFile::remove(folder + "/phrase.ifo"), "Remove selected dictionary fixture");
         FolderDictionaries removed(folder);
         require(removed.choices().isEmpty(), "Removed dictionary remained selectable");

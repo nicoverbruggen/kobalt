@@ -35,5 +35,7 @@ struct OpenRequest
     QString coverImagePath{};
     // Optional icon directory. Read and rasterized once on the opening worker.
     QString customPinsPath{};
+    // Optional StarDict folder. Prepare its indexes on the opening worker.
+    QString dictionariesPath{};
 };
 } // namespace kobalt

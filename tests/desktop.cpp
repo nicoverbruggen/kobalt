@@ -8551,7 +8551,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     // The six-inch reader in the light theme, at 100% and at 150% interface
     // text. The "-large" tag makes the Fixture pick 150%.
-    // Checks that Hybrid rendering switches to the whole book on a page turn and Fast keeps its estimate.
+    // Checks that Hybrid rendering builds the whole book in a quiet moment and switches on a page turn.
     void hybridCountsPages()
     {
         using namespace headerfooter;
@@ -8566,7 +8566,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             preferences[customKey] = toJson(layout);
             QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
             renderingMode::setOverride(mode);
-            const auto restore = qScopeGuard([] { renderingMode::setOverride(-1); });
+            // A quiet time that the test can wait for.
+            const int quiet = renderingMode::buildQuietMilliseconds();
+            renderingMode::setBuildQuietMilliseconds(400);
+            const auto restore = qScopeGuard([quiet] {
+                renderingMode::setOverride(-1);
+                renderingMode::setBuildQuietMilliseconds(quiet);
+            });
             QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
             fixture.window.openBook(book);
             QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
@@ -8598,20 +8604,47 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                                             .arg(before)));
             }
             if (mode == 2) {
-                // The whole book is built in the quiet moments. The switch
-                // rides on a page turn: that turn still turns one page, and
-                // from then on the reader shows the document of the whole
-                // book.
-                bool whole = false;
-                for (int turn = 0; turn < 60 && !whole; ++turn) {
-                    QTest::qWait(50);
+                // The build starts only after a quiet moment. Quick page
+                // turns do not start it: the reader stays in the chapter.
+                bool ready = false;
+                QTemporaryDir logs;
+                QVERIFY(logs.isValid());
+                initializeDiagnostics(logs.path());
+                pauseDiagnostics(false);
+                setDiagnosticObserver([&](const QJsonObject &event) {
+                    ready = ready || event.value("event") == QLatin1String("full-document-ready");
+                });
+                const auto quietLog = qScopeGuard([] {
+                    setDiagnosticObserver({});
+                    pauseDiagnostics(true);
+                });
+                const auto turnOne = [&] {
                     const auto before = fixture.state().value("position").toString();
                     test::skipPageTurnWindow();
                     fixture.window.readerWindow()->pageButton(1);
-                    QTRY_VERIFY_WITH_TIMEOUT(
-                            !fixture.state().value("busy").toBool()
-                                    && fixture.state().value("position").toString() != before,
+                    return QTest::qWaitFor(
+                            [&] {
+                                return !fixture.state().value("busy").toBool()
+                                        && fixture.state().value("position").toString() != before;
+                            },
                             5000);
+                };
+                for (int turn = 0; turn < 6; ++turn)
+                    QVERIFY(turnOne());
+                QVERIFY(!ready);
+                QVERIFY(fixture.state().contains("book_fraction"));
+                // Left alone, the reader builds the whole book. The switch
+                // rides on the next page turn: that turn still turns one
+                // page, and from then on the reader shows the document of
+                // the whole book.
+                QTRY_VERIFY_WITH_TIMEOUT(ready, 15000);
+                QVERIFY(fixture.state().contains("book_fraction"));
+                // The turn that is already on its way when the document
+                // becomes ready stays in the chapter; the one after it
+                // switches.
+                bool whole = false;
+                for (int turn = 0; turn < 3 && !whole; ++turn) {
+                    QVERIFY(turnOne());
                     whole = !fixture.state().contains("book_fraction");
                 }
                 QVERIFY(whole);

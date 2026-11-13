@@ -213,6 +213,7 @@ public:
     FullDocument prepareFullDocument(const std::function<bool()> &current,
                                      bool cachedOnly = false) override;
     bool fullDocumentReady() const override { return bool(full_); }
+    bool fullDocumentStarted() const override { return building_ || full_; }
     void setBackgroundCount(bool enabled) override;
     bool backgroundCount() const override;
 

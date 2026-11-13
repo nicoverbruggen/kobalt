@@ -24,6 +24,12 @@ Mode effective(Mode preferred);
 // time.
 bool countsInBackground();
 
+// Hybrid starts the build of the whole book only after this long without
+// input, so that its start does not meet a page turn. Tests set a short
+// time.
+int buildQuietMilliseconds();
+void setBuildQuietMilliseconds(int milliseconds);
+
 // Selects the mode of the books that open from now on. Hosts call it with the
 // saved preferences before they open a book.
 void apply(const QJsonObject &preferences);

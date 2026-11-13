@@ -145,16 +145,39 @@ const std::shared_ptr<EngineWorker> &engineWorkerState()
 
 namespace {
 std::atomic<quint64> workRequests{ 0 };
+std::atomic<qint64> lastRequest{ 0 };
+
+qint64 monotonicMilliseconds()
+{
+    static const QElapsedTimer clock = [] {
+        QElapsedTimer timer;
+        timer.start();
+        return timer;
+    }();
+    return clock.elapsed();
 }
+} // namespace
 
 QObject *engineWorker()
 {
     const auto &state = engineWorkerState();
     // The worker queues its own next step through here too. That is not
     // work that waits behind it.
-    if (QThread::currentThread() != state->thread)
+    if (QThread::currentThread() != state->thread) {
         workRequests.fetch_add(1);
+        lastRequest.store(monotonicMilliseconds());
+    }
     return state->object;
+}
+
+QObject *engineWorkerForIdle()
+{
+    return engineWorkerState()->object;
+}
+
+qint64 engineWorkQuietMilliseconds()
+{
+    return monotonicMilliseconds() - lastRequest.load();
 }
 
 quint64 engineWorkRequests()

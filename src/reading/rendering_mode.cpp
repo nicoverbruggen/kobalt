@@ -45,6 +45,20 @@ Mode effective(Mode preferred)
     return preferred;
 }
 
+namespace {
+std::atomic_int buildQuiet_{ 2000 };
+}
+
+int buildQuietMilliseconds()
+{
+    return buildQuiet_.load();
+}
+
+void setBuildQuietMilliseconds(int milliseconds)
+{
+    buildQuiet_.store(qMax(0, milliseconds));
+}
+
 bool countsInBackground()
 {
     return effective(Mode(preferred_.load())) == Mode::Hybrid;

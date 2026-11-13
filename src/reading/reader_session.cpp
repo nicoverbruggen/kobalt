@@ -234,7 +234,37 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     // the user reads, only a book that is in the parsed-book cache is
     // worth the work: it needs no parsing.
     const bool reading = engine->backgroundCount();
-    if (!more && (reading || renderingMode::countsInBackground())) {
+    // The start of a build reads and parses the package of the book before
+    // it reaches its first chapter. It waits for a quiet moment, so that it
+    // does not meet a page turn. A build that has started goes on in every
+    // idle moment: it pauses within milliseconds.
+    const qint64 quiet = renderingMode::buildQuietMilliseconds() - engineWorkQuietMilliseconds();
+    const bool wait = reading && quiet > 0 && !engine->fullDocumentStarted();
+    if (!more && wait) {
+        kobalt::qt::invoke(
+                qApp,
+                [engine, current, guard, job, lease, quiet] {
+                    if (!guard || !current() || !lease || lease->revoked())
+                        return;
+                    kobalt::qt::later(int(quiet) + 1, guard.data(),
+                                      [engine, current, guard, job, lease] {
+                        if (!guard || !current() || !lease || lease->revoked())
+                            return;
+                        const quint64 queued = engineWorkRequests();
+                        kobalt::qt::invoke(
+                                engineWorkerForIdle(),
+                                [engine, current, guard, job, lease, queued] {
+                                    if (!current() || !lease || lease->revoked())
+                                        return;
+                                    EngineJob activity;
+                                    refinePageEstimate(engine, current, guard, job, lease, queued);
+                                },
+                                Qt::QueuedConnection);
+                    });
+                },
+                Qt::QueuedConnection);
+    }
+    if (!more && !wait && (reading || renderingMode::countsInBackground())) {
         BackgroundDiagnostic diagnostic("Full document", *engine, current);
         // The build can run for minutes. It parks as soon as anyone queues
         // work for the engine, not only for a page turn, and goes on after
@@ -273,9 +303,10 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         if (full == Engine::FullDocument::Ready) {
             kobalt::qt::invoke(
                     qApp,
-                    [guard, job, lease] {
-                        if (!guard || guard->running || guard->revision != job
-                            || guard->lease_ != lease || !lease || lease->revoked())
+                    [guard, lease] {
+                        // Also when a page turn came meanwhile: the render
+                        // after it shows the document, if it is still there.
+                        if (!guard || guard->lease_ != lease || !lease || lease->revoked())
                             return;
                         guard->showFullDocument();
                     },

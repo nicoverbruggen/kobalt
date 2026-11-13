@@ -15,6 +15,12 @@ QObject *engineWorker();
 // queue work. Long idle work on the worker reads it: a new value means
 // that work waits behind it, such as a lookup, a sleep cover or a close.
 quint64 engineWorkRequests();
+// The milliseconds since another thread last asked for the worker: how long
+// nobody has wanted anything from the engine.
+qint64 engineWorkQuietMilliseconds();
+// The worker for a step of idle work that continues after a wait. It does
+// not count as a request and does not end the quiet time.
+QObject *engineWorkerForIdle();
 
 // For judging speed on a desktop: KOBALT_KOBO_EMULATION=20 in the environment
 // makes every engine job take 20 times as long, which is about the speed of

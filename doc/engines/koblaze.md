@@ -13,3 +13,5 @@ Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).
 
 The retired chapter page counter and its transient package XML cache are removed. Chapter navigation retains its bounded document cache. Parsing the same package, navigation and NCX input without that XML cache does not change parsed-book content or layout, so this cleanup retains the cache formats and rendering version.
+
+Current-page formatting warnings preserve the requested writing mode separately from rendering fallback. Computed style hashing, equality and serialization include that diagnostic state. Parsed-book format 12 rejects older style records. The rendering version stays unchanged because the fallback geometry and pixels stay the same. The draw buffer records unsupported style only when clipped text or an image is drawn, including generated content and page notes.

@@ -19,7 +19,7 @@ struct OpeningJob
     std::shared_ptr<SourceLease> lease;
     ResourceFactory factory;
     PositionCodec positions;
-    QString systemFont, layoutCachePath, documentCachePath, userStyleSheetPath, coverPath;
+    QString systemFont, documentCachePath, userStyleSheetPath, coverPath;
     QString customPinsPath;
     QJsonObject pinnedAppearance, appearanceDefaults;
     bool restartAtStart = false;
@@ -30,8 +30,6 @@ struct OpeningJob
     // The hash is empty when that opening cannot be reused.
     QByteArray retainedHash;
     QJsonObject retainedSettings;
-    bool retainedWarning = false;
-    QJsonObject retainedDetails;
 
     // Each callback queues its work on the GUI thread and drops it there
     // when the session has moved on. `coverReady` is empty when nobody wants the cover.
@@ -60,8 +58,6 @@ struct OpeningOutput
     OpeningResult outcome;
     QByteArray digest, syncDigest;
     bool savedMatches = false;
-    bool formattingWarning = false;
-    QJsonObject formattingDetails;
 };
 
 // The values that the stages of one opening share. Lives on the engine worker.
@@ -82,10 +78,8 @@ struct OpeningState
     // The first readable text resource. Reading it checks that the host still serves the book.
     QString probe;
     bool coverPublished = false;
-    bool retainedHit = false, cacheHit = false, cacheStored = false;
-    bool formattingWarning = false;
-    QJsonObject formattingDetails;
-    qint64 directoryMs = 0, hashMs = 0, inspectionMs = 0, modelMs = 0;
+    bool retainedHit = false;
+    qint64 directoryMs = 0, hashMs = 0, modelMs = 0;
 };
 
 // The stages, in the order runOpening calls them. Each one leaves a failure in

@@ -202,7 +202,11 @@ public:
         LVColorDrawBuf::SetTextColor(normalizeTextColors ? 0 : color);
     }
 
-    bool hasImages = false, hasText = false;
+    void SetUnsupportedFormatting(bool unsupported) override { unsupportedSource = unsupported; }
+
+    void OnImageDrawn(bool visiblePixels) override { imageHasVisiblePixels = visiblePixels; }
+
+    bool hasImages = false, hasText = false, hasUnsupportedFormatting = false;
     QVector<QRect> imageRegions;
     using LVColorDrawBuf::Draw;
 
@@ -212,8 +216,10 @@ public:
         lvRect clip;
         GetClipRect(&clip);
         if (width > 0 && height > 0 && qint64(x) + width > clip.left && x < clip.right
-            && qint64(y) + height > clip.top && y < clip.bottom)
+            && qint64(y) + height > clip.top && y < clip.bottom) {
             hasText = true;
+            hasUnsupportedFormatting |= unsupportedSource;
+        }
         const auto color = palette ? palette[0] : GetTextColor();
         const auto background = GetBackgroundColor();
         const bool neutral = qRed(color) == qGreen(color) && qRed(color) == qBlue(color);
@@ -240,6 +246,10 @@ public:
                 qMin<qint64>(pageSize.width(), qMin<qint64>(qint64(x) + width, clip.right));
         const qint64 bottom =
                 qMin<qint64>(pageSize.height(), qMin<qint64>(qint64(y) + height, clip.bottom));
+        auto *node = image->GetSourceNode();
+        const auto style = node ? node->getStyle() : css_style_ref_t();
+        const bool unsupportedImage =
+                !style.isNull() && style->writing_mode_warning == css_wmw_unsupported;
         if (!imageRegionsFull && right > left && bottom > top) {
             if (imageRegions.size() < 128)
                 imageRegions.append(
@@ -276,6 +286,7 @@ public:
         if (dark)
             InvertRect(x, y, x + width, y + height);
         LVColorDrawBuf::Draw(image, x, y, width, height, dither);
+        hasUnsupportedFormatting |= unsupportedImage && imageHasVisiblePixels;
         if (dark)
             InvertRect(x, y, x + width, y + height);
     }
@@ -283,6 +294,8 @@ public:
 private:
     QSize pageSize;
     bool imageRegionsFull = false;
+    bool unsupportedSource = false;
+    bool imageHasVisiblePixels = false;
     bool dark;
     bool normalizeTextColors;
     QMap<std::tuple<quintptr, int, int>, bool> *inversion;
@@ -1618,6 +1631,7 @@ QImage EngineDocument::image(int pageNumber)
             engine_->drawColumn(part, pageNumber, i);
             buffer.hasImages |= part.hasImages;
             buffer.hasText |= part.hasText;
+            buffer.hasUnsupportedFormatting |= part.hasUnsupportedFormatting;
             const int x = engine_->columnOffset(i);
             painter.drawImage(x, 0, column);
             for (const auto &region : part.imageRegions)
@@ -1645,6 +1659,7 @@ QImage EngineDocument::image(int pageNumber)
                             : QVector<QRect>{ QRect(QPoint(0, 0), result.size()) })
             : QVector<QRect>{};
     content.textOnly = !buffer.hasImages && !hasColor;
+    content.formattingWarning = buffer.hasUnsupportedFormatting;
     setPageContent(result, content);
     // A turn can skip several physical pages of non-linear text.
     const int current = page();

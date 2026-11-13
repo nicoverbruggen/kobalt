@@ -354,6 +354,14 @@ enum css_writing_mode_t {
     css_wm_vertical_rl,
     css_wm_vertical_lr
 };
+// Diagnostic state follows the matched writing-mode cascade independently of
+// the fallback geometry used to draw unsupported modes.
+enum css_writing_mode_warning_t {
+    css_wmw_inherit,
+    css_wmw_none,
+    css_wmw_unsupported
+};
+
 /// Returns true for any vertical writing mode (vertical-rl or vertical-lr).
 /// Use instead of repeating (wm == css_wm_vertical_rl || wm == css_wm_vertical_lr).
 /// Accepts both css_writing_mode_t and int (some structs store it as int).

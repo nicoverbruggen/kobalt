@@ -1,8 +1,6 @@
 #include "opening_job.h"
 #include "appearance_settings.h"
 #include "engine/engine_activity.h"
-#include "publication/layout_compatibility.h"
-#include "storage/layout_cache.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
@@ -279,38 +277,6 @@ void openCold(OpeningJob &job, OpeningState &state)
     engine->setDocumentCache(cached ? job.documentCachePath : QString(),
                              cached ? state.digest : QByteArray(), KOBALT_LAYOUT_POLICY,
                              state.file.size());
-    const auto inspectionStart = state.timer.elapsed();
-    LayoutCache cache(job.cancelled() ? QString() : job.layoutCachePath, KOBALT_LAYOUT_POLICY);
-    LayoutCompatibility layout;
-    state.cacheHit = !job.cancelled() && outcome.ready() && cache.lookup(state.digest, &layout);
-    // Older warning cache entries have no issue location or excerpt.
-    // Reinspect warnings so diagnostics always contain the cause.
-    state.cacheHit = state.cacheHit && layout.verdict == LayoutCompatibility::Supported;
-    if (!state.cacheHit && !job.cancelled() && outcome.ready()) {
-        layout = inspectLayout(*state.resources, state.publication.sizes());
-        if (!job.cancelled())
-            state.cacheStored = cache.store(state.digest, layout);
-    }
-    state.inspectionMs = state.timer.elapsed() - inspectionStart;
-    state.formattingDetails = kobalt::qt::object({ { "verdict", int(layout.verdict) },
-                                                   { "resources", layout.resources },
-                                                   { "bytes", double(layout.bytes) },
-                                                   { "issue", layout.issue },
-                                                   { "resource", layout.resource },
-                                                   { "line", double(layout.line) },
-                                                   { "column", double(layout.column) },
-                                                   { "excerpt", layout.excerpt } });
-    diagnostic("layout-compatibility", state.formattingDetails);
-    if (job.cancelled())
-        outcome = job.interrupted();
-    else if (outcome.ready() && !state.resources->resumeAfterInspection()) {
-        outcome = OpeningResult::failed(OpeningFailureKind::Io, layout.reasonKey());
-    } else if (outcome.ready()) {
-        // Incomplete inspection does not establish an unsupported
-        // feature. Keep its details in diagnostics without a warning.
-        state.formattingWarning = layout.verdict == LayoutCompatibility::VerticalWriting
-                || layout.verdict == LayoutCompatibility::RightToLeftProgression;
-    }
     const auto modelStart = state.timer.elapsed();
     job.report(OpeningStage::Text, 0);
     if (outcome.ready()
@@ -339,11 +305,8 @@ void logOpeningPhases(const OpeningJob &job, const OpeningState &state)
     diagnostic("opening-phases",
                { { "directory_ms", double(state.directoryMs) },
                  { "hash_ms", double(state.hashMs) },
-                 { "layout_check_ms", double(state.inspectionMs) },
                  { "model_load_ms", double(state.modelMs) },
                  { "retained_book_hit", state.retainedHit },
-                 { "layout_cache_hit", state.cacheHit },
-                 { "layout_cache_stored", state.cacheStored },
                  { "document_cache_hit",
                    !state.retainedHit && outcome.ready() && job.engine->openedFromCache() } });
     diagnostic("open-end",
@@ -391,14 +354,6 @@ OpeningOutput runOpening(OpeningJob &job)
         outcome.rememberContentRejection();
     if (job.cancelled())
         outcome = job.interrupted();
-    if (state.retainedHit) {
-        state.formattingWarning = job.retainedWarning;
-        state.formattingDetails = job.retainedDetails;
-    }
-    if (outcome.ready() && state.formattingWarning) {
-        state.formattingDetails.insert("retained_book_hit", state.retainedHit);
-        diagnostic("opening-formatting-warning", state.formattingDetails);
-    }
     logOpeningPhases(job, state);
     OpeningOutput output;
     if (outcome.ready() && !job.cancelled())
@@ -408,8 +363,6 @@ OpeningOutput runOpening(OpeningJob &job)
     output.digest = state.digest;
     output.syncDigest = state.syncDigest;
     output.savedMatches = state.savedMatches;
-    output.formattingWarning = state.formattingWarning;
-    output.formattingDetails = state.formattingDetails;
     return output;
 }
 } // namespace kobalt

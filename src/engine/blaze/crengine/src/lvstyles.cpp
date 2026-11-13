@@ -129,6 +129,7 @@ lUInt32 calcHash(css_style_rec_t & rec)
     v = v * 31 + (lUInt32)rec.clear;
     v = v * 31 + (lUInt32)rec.direction;
     v = v * 31 + (lUInt32)rec.writing_mode;
+    v = v * 31 + (lUInt32)rec.writing_mode_warning;
     v = v * 31 + (lUInt32)rec.text_orientation;
     v = v * 31 + (lUInt32)rec.text_combine_upright;
     v = v * 31 + (lUInt32)rec.text_emphasis_style;
@@ -232,6 +233,7 @@ bool operator == (const css_style_rec_t & r1, const css_style_rec_t & r2)
            r1.clear == r2.clear&&
            r1.direction == r2.direction&&
            r1.writing_mode == r2.writing_mode&&
+           r1.writing_mode_warning == r2.writing_mode_warning&&
            r1.text_orientation == r2.text_orientation&&
            r1.text_combine_upright == r2.text_combine_upright&&
            r1.text_emphasis_style == r2.text_emphasis_style&&
@@ -447,6 +449,7 @@ bool css_style_rec_t::serialize( SerialBuf & buf )
     ST_PUT_ENUM(clear);
     ST_PUT_ENUM(direction);
     ST_PUT_ENUM(writing_mode);
+    ST_PUT_ENUM(writing_mode_warning);
     ST_PUT_ENUM(text_orientation);
     ST_PUT_ENUM(text_combine_upright);
     ST_PUT_ENUM(text_emphasis_style);
@@ -532,6 +535,7 @@ bool css_style_rec_t::deserialize( SerialBuf & buf )
     ST_GET_ENUM(css_clear_t, clear);
     ST_GET_ENUM(css_direction_t, direction);
     ST_GET_ENUM(css_writing_mode_t, writing_mode);
+    ST_GET_ENUM(css_writing_mode_warning_t, writing_mode_warning);
     ST_GET_ENUM(css_text_orientation_t, text_orientation);
     ST_GET_ENUM(css_text_combine_upright_t, text_combine_upright);
     ST_GET_ENUM(css_text_emphasis_style_t, text_emphasis_style);

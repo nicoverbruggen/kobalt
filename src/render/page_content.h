@@ -17,13 +17,14 @@ struct PageRegions
 struct PageContent
 {
     PageRegions images, colours;
-    bool textOnly = false, imageOnly = false;
+    bool textOnly = false, imageOnly = false, formattingWarning = false;
 };
 
 PageContent pageContent(const QImage &image);
 void setPageContent(QImage &image, const PageContent &content);
 // Cheap predicates for animation and display policy, without parsing regions.
 bool pageTextOnly(const QImage &image);
+bool pageFormattingWarning(const QImage &image);
 bool pageHasColour(const QImage &image);
 
 // Stable identity of an extracted illustration, independent of page layout.

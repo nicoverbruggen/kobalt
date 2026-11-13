@@ -6,6 +6,7 @@
 #include "engine/blaze/adapter/reader_locations.h"
 #include "engine/blaze/adapter/reader_source.h"
 #include "publication/page_estimate.h"
+#include "render/page_content.h"
 #include "support/qt_compat.h"
 #include "support/diagnostics.h"
 #include <QCryptographicHash>
@@ -120,8 +121,6 @@ struct ReaderLocationProbe
     {
         return model.source_->pageEstimate.chapterPlaces;
     }
-
-
 };
 } // namespace kobalt
 
@@ -1215,6 +1214,200 @@ test::BookFiles pagesBook()
             "<itemref idref=\"short1.xhtml\"/><itemref idref=\"short2.xhtml\"/>");
 }
 
+// Only matched, visible unsupported writing modes on this page cause a warning.
+void pageFormattingWarnings()
+{
+    const auto book = [](const QByteArray &css, const QByteArray &body) {
+        test::BookFiles files;
+        files["chapter.xhtml"] =
+                "<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">"
+                "<head><title>Page warnings</title><style>"
+                + css + "</style></head><body>" + body + "</body></html>";
+        return test::publisherPackage("en", "Warnings", files,
+                                      "<itemref idref=\"chapter.xhtml\"/>");
+    };
+
+    struct Case
+    {
+        const char *css;
+        const char *body;
+        bool warning;
+    };
+
+    const Case cases[] = {
+        { "", "<p>Supported text.</p>", false },
+        { ".unused{writing-mode:vertical-lr}", "<p>Supported text.</p>", false },
+        { "p{writing-mode:sideways-rl}", "<p>Unsupported text.</p>", true },
+        { "p{writing-mode:sideways-lr}", "<p>Unsupported text.</p>", true },
+        { "p{writing-mode:tb-rl}", "<p>Unsupported text.</p>", true },
+        { "p{writing-mode:vertical-lr}", "<p>Unsupported text.</p>", true },
+        { "p{writing-mode:vertical-rl}", "<p>Supported text.</p>", false },
+        { "p{writing-mode:vertical-lr}p{writing-mode:horizontal-tb}", "<p>Override.</p>", false },
+        { "body{writing-mode:sideways-rl}p{writing-mode:horizontal-tb}", "<p>Override.</p>",
+          false },
+        { "body{writing-mode:sideways-rl}", "<p>Inherited warning.</p>", true },
+        { "p{writing-mode:sideways-rl!important}p{writing-mode:horizontal-tb}", "<p>Important.</p>",
+          true },
+        { "p{writing-mode:sideways-rl}p{writing-mode:horizontal-tb!important}", "<p>Important.</p>",
+          false },
+        { "p{writing-mode:sideways-rl}p{writing-mode:initial}", "<p>Initial.</p>", false },
+        { "body{writing-mode:sideways-rl}p{writing-mode:inherit}", "<p>Inherited.</p>", true },
+        { "body{writing-mode:sideways-rl}p{writing-mode:unset}", "<p>Inherited.</p>", true },
+        { ".bad{writing-mode:sideways-rl;display:none}",
+          "<p class='bad'>Hidden.</p><p>Visible.</p>", false },
+        { ".bad{writing-mode:sideways-rl;visibility:hidden}",
+          "<p class='bad'>Hidden.</p><p>Visible.</p>", false },
+        { ".bad{writing-mode:sideways-rl;visibility:hidden}.visible{visibility:visible}",
+          "<p class='bad'><span class='visible'>Visible.</span></p>", true },
+        { "p{-ms-writing-mode:tb-rl}", "<p>Legacy.</p>", true },
+        { "p{-moz-writing-mode:vertical-rl}", "<p>Legacy.</p>", true },
+        { "p{-o-writing-mode:vertical-lr}", "<p>Legacy.</p>", true },
+        { "p{-ms-writing-mode:tb-rl;writing-mode:horizontal-tb}", "<p>Override.</p>", false },
+        { "@supports(writing-mode:sideways-rl){p{writing-mode:vertical-lr}}",
+          "<p>Unsupported feature query.</p>", false },
+        { "@supports(-ms-writing-mode:tb-rl){p{writing-mode:vertical-lr}}",
+          "<p>Unsupported feature query.</p>", false },
+        { "p::before{content:'Generated';writing-mode:sideways-rl}", "<p>Supported text.</p>",
+          true },
+    };
+    for (const auto &entry : cases) {
+        EngineDocument model(test::readerFonts());
+        openResources(model, book(entry.css, entry.body),
+                      { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+        require(!model.image(model.page()).isNull(), "The warning fixture must draw");
+        if (pageFormattingWarning(model.image(model.page())) != entry.warning) {
+            std::fprintf(stderr, "Wrong page warning for CSS: %s; body: %s\n", entry.css,
+                         entry.body);
+            require(false, "Page warning did not follow visible computed CSS");
+        }
+    }
+    const auto pages = book("p{page-break-before:always}.bad{writing-mode:sideways-rl}",
+                            "<p>First supported page.</p><p class='bad'>Unsupported page.</p>"
+                            "<p>Last supported page.</p>");
+    for (bool chapter : { false, true }) {
+        EngineDocument model(test::readerFonts());
+        openResources(model, pages, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+        if (chapter) {
+            model.setChapterSlices(6);
+            QString error;
+            require(model.showSpineItems(0, 0, &error), qPrintable(error));
+        }
+        require(model.pages() == 3, "The warning fixture must have three pages");
+        for (int page = 0; page < 3; ++page) {
+            require(model.go(page) && !model.image(page).isNull(), "Cannot draw warning page");
+            require(pageFormattingWarning(model.image(model.page())) == (page == 1),
+                    "Warning must appear and clear inside the same chapter");
+        }
+    }
+    {
+        EngineDocument model(test::readerFonts());
+        openResources(model, pages, { { "font_pixels", 28 }, { "columns", 2 } });
+        require(pageFormattingWarning(model.image(0)),
+                "Both displayed columns contribute warnings");
+        require(model.go(model.pages() - 1) && !pageFormattingWarning(model.image(model.page())),
+                "A supported spread must clear the warning");
+    }
+    {
+        const QByteArray picture =
+                "<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' "
+                "style='writing-mode:sideways-rl'><rect width='200' height='200' fill='red'/></svg>";
+        EngineDocument model(test::readerFonts());
+        openResources(model, book("", picture), {});
+        require(pageFormattingWarning(model.image(0)),
+                "Image-only pages retain visible style warnings");
+    }
+    {
+        const auto notes =
+                book("aside{writing-mode:sideways-rl}",
+                     "<p>Normal text <a href='#note' epub:type='noteref'>1</a>.</p>"
+                     "<p style='page-break-before:always'>A later supported page.</p>"
+                     "<aside id='note' epub:type='footnote'><p>Unsupported note.</p></aside>");
+        EngineDocument model(test::readerFonts());
+        openResources(model, notes, { { "inpage_footnotes", true } });
+        require(pageFormattingWarning(model.image(0)), "Displayed footnotes contribute warnings");
+        require(model.go(1) && !pageFormattingWarning(model.image(1)),
+                "A note outside the displayed page must not contribute a warning");
+    }
+    {
+        const QByteArray paragraph =
+                "<p>Supported text fills a cacheable book without changing its formatting.</p>";
+        const auto cached =
+                book(".bad{writing-mode:sideways-rl}",
+                     "<p class='bad'>Unsupported first paragraph.</p>" + paragraph.repeated(700));
+        QTemporaryDir directory;
+        qint64 bytes = 0;
+        for (const auto &data : cached)
+            bytes += data.size();
+        for (int pass = 0; pass < 2; ++pass) {
+            EngineDocument model(test::readerFonts());
+            model.setDocumentCache(directory.path(), QByteArray(64, 'w'), "page-warning-test",
+                                   bytes);
+            openResources(model, cached, {});
+            require(model.openedFromCache() == (pass == 1),
+                    "Warning fixture must reopen from the parsed cache");
+            require(pageFormattingWarning(model.image(0)),
+                    "Cached styles must retain unsupported intent");
+            require(model.go(1) && !pageFormattingWarning(model.image(1)),
+                    "Cached supported page must not warn");
+            if (pass == 0)
+                require(model.saveDocumentCache(), "Cannot save warning fixture cache");
+        }
+    }
+    // A decoded image can have a box on this page without painting any pixels.
+    for (const auto &fill :
+         { QByteArray("fill='none'"), QByteArray("fill='red' fill-opacity='0'") }) {
+        const auto transparent =
+                book("",
+                     "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' "
+                     "style='writing-mode:sideways-rl'><rect width='100' height='100' "
+                             + fill + "/></svg>");
+        EngineDocument model(test::readerFonts());
+        openResources(model, transparent, {});
+        require(!pageFormattingWarning(model.image(0)), "Empty and transparent SVGs must not warn");
+    }
+    const auto imageBook = [&](const QByteArray &css, const QImage &image) {
+        auto files = book(css, "<p><img src='alpha.png' width='100' height='100'/></p>");
+        QBuffer bytes(&files["alpha.png"]);
+        require(bytes.open(QIODevice::WriteOnly) && image.save(&bytes, "PNG"),
+                "Cannot encode alpha-mask PNG");
+        files["book.opf"].replace(
+                "</manifest>",
+                "<item id='alpha' href='alpha.png' media-type='image/png'/></manifest>");
+        return files;
+    };
+    {
+        QImage clear(100, 100, QImage::Format_ARGB32);
+        clear.fill(Qt::transparent);
+        EngineDocument model(test::readerFonts());
+        openResources(model, imageBook("img{writing-mode:sideways-rl}", clear), {});
+        require(!pageFormattingWarning(model.image(0)), "Transparent PNGs must not warn");
+    }
+    for (bool visibleOpaqueHalf : { false, true }) {
+        QImage mask(100, 100, QImage::Format_ARGB32);
+        mask.fill(Qt::transparent);
+        for (int y = 0; y < 100; ++y)
+            for (int x = visibleOpaqueHalf ? 50 : 0; x < (visibleOpaqueHalf ? 100 : 50); ++x)
+                mask.setPixel(x, y, qRgb(255, 0, 0));
+        EngineDocument model(test::readerFonts());
+        openResources(model, imageBook("p{margin-left:-80px}img{writing-mode:sideways-rl}", mask),
+                      { { "font_pixels", 28 }, { "normalize_text_colors", false } });
+        const auto image = model.image(0);
+        bool ink = false;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x)
+                ink |= qRed(image.pixel(x, y)) != 255 || qGreen(image.pixel(x, y)) != 255
+                        || qBlue(image.pixel(x, y)) != 255;
+        require(ink == visibleOpaqueHalf && pageFormattingWarning(image) == visibleOpaqueHalf,
+                "Only the visible alpha-bearing part of a clipped image may warn");
+    }
+    // Unsupported declarations retain the old horizontal fallback.
+    EngineDocument plain(test::readerFonts()), unsupported(test::readerFonts());
+    openResources(plain, book("", "<p>Same fallback geometry.</p>"), {});
+    openResources(unsupported,
+                  book("p{writing-mode:sideways-rl}", "<p>Same fallback geometry.</p>"), {});
+    require(plain.image(0) == unsupported.image(0), "Warning metadata changed fallback pixels");
+}
+
 test::BookFiles publisherFontBook(QByteArray font)
 {
     auto files = pagesBook();
@@ -2163,6 +2356,7 @@ int main(int argc, char **argv)
     unmeasured(page.layout());
     record();
 #if __has_include(<koblaze.h>)
+    pageFormattingWarnings();
     slicedItem(page.layout());
     openObserved();
     interruptedChapterPlace();

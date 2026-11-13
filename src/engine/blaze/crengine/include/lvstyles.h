@@ -112,9 +112,10 @@ enum css_style_rec_important_bit {
     imp_bit_caption_side,
     imp_bit_ruby_position,
     imp_bit_content,
-    imp_bit_cr_hint
+    imp_bit_cr_hint,
+    imp_bit_writing_mode_warning
 };
-#define NB_IMP_BITS 87 // The number of lines in the enum above: KEEP IT UPDATED.
+#define NB_IMP_BITS 88 // The number of lines in the enum above: KEEP IT UPDATED.
 
 #define NB_IMP_SLOTS    ((NB_IMP_BITS-1)>>5)+1
 // In lvstyles.cpp, we have hardcoded important[0] ... importance[2]
@@ -203,6 +204,7 @@ struct css_style_rec_tag {
     css_clear_t            clear;
     css_direction_t        direction;
     css_writing_mode_t     writing_mode;
+    css_writing_mode_warning_t writing_mode_warning;
     css_text_orientation_t text_orientation;
     css_text_combine_upright_t text_combine_upright;
     css_text_emphasis_style_t  text_emphasis_style;
@@ -271,6 +273,7 @@ struct css_style_rec_tag {
     , clear(css_c_none)
     , direction(css_dir_inherit)
     , writing_mode(css_wm_inherit)
+    , writing_mode_warning(css_wmw_inherit)
     , text_orientation(css_to_mixed)
     , text_combine_upright(css_tcu_none)
     , text_emphasis_style(css_tes_inherit) // inherited per CSS; consumers treat unresolved inherit as none

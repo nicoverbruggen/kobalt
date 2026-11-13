@@ -7122,6 +7122,12 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
                     last_vertical_overline_end = -1;
                     continue;
                 }
+                ldomNode * source_node = (ldomNode *)srcline->object;
+                if ( source_node && source_node->isText() )
+                    source_node = source_node->getParentNode();
+                css_style_ref_t source_style = source_node ? source_node->getStyle() : css_style_ref_t();
+                buf->SetUnsupportedFormatting(!source_style.isNull()
+                        && source_style->writing_mode_warning == css_wmw_unsupported);
                 if (word->flags & LTEXT_WORD_IS_IMAGE)
                 {
                     ldomNode * node = (ldomNode *) srcline->object;

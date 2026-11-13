@@ -60,6 +60,7 @@ struct ReaderFrame
 {
     quint64 renderId = 0;
     int turnDirection = 0;
+    bool formattingWarning = false;
     QImage image;
     ReaderMarkupFrame markup;
     // Changed rectangle against the image with cache key `damageFrom`, if the
@@ -288,7 +289,7 @@ public:
     // delivered only through the typed completion result.
     QString error() const { return frame.error; }
 
-    bool formattingWarning() const { return formattingWarning_; }
+    bool formattingWarning() const { return frame.formattingWarning; }
 
     const storage::CustomPins &customPins() const { return customPins_; }
 
@@ -487,9 +488,7 @@ private:
                                    const std::function<bool()> &current,
                                    QPointer<ReaderSession> guard, quint64 job,
                                    const std::shared_ptr<SourceLease> &lease, quint64 requests);
-    bool formattingWarning_ = false;
     storage::CustomPins customPins_;
-    QJsonObject formattingDetails_;
     ReaderSession(std::shared_ptr<Engine> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;
     QString placeholderFamily_;

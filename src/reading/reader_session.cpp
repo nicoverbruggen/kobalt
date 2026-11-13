@@ -6,13 +6,12 @@
 #include "sync/kosync.h"
 #include "engine/engine_worker.h"
 #include "render/highlight_paint.h"
+#include "render/page_content.h"
 #include "appearance_settings.h"
 #include "engine/engine_activity.h"
 #include "support/diagnostics.h"
 #include <QElapsedTimer>
 #include "publication/publication.h"
-#include "publication/layout_compatibility.h"
-#include "storage/layout_cache.h"
 #include "storage/sleep_snapshot.h"
 #include <QFile>
 #include "reading/rendering_mode.h"
@@ -113,6 +112,7 @@ public:
         diagnostic("engine-work-start", { { "work", QString::fromLatin1(work) },
                                           { "work_id", double(id) } }, false);
     }
+
     ~BackgroundDiagnostic()
     {
         if (!id)
@@ -123,6 +123,7 @@ public:
                 { "book_fraction", engine.bookFraction() },
                 { "loaded_pages", engine.pages() }, { "resources", engine.resourceStats() } }, false);
     }
+
 private:
     const char *work;
     Engine &engine;
@@ -392,6 +393,7 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
     };
     ReaderFrame result;
     result.image = engine.image(engine.page());
+    result.formattingWarning = pageFormattingWarning(result.image);
     took("image_ms");
     result.markup = captureFrameMarkup(engine, markup, markupGeneration, result.image.cacheKey());
     took("markup_ms");
@@ -404,6 +406,9 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
     captureChapters(result, engine);
     took("chapters_ms");
     result.state["page"] = engine.page();
+    if (result.formattingWarning)
+        diagnostic("page-formatting-warning",
+                   { { "page", engine.page() }, { "position", result.state.value("position") } });
     result.state["pages"] = engine.pages();
     result.state["next_page"] = engine.turnTarget(engine.page(), 1);
     result.state["continues_before"] = engine.continuesBefore();
@@ -474,8 +479,6 @@ std::unique_ptr<ReaderSession> ReaderSession::retained()
     frame.resources["ready_images"] = 0;
     auto retained = std::unique_ptr<ReaderSession>(new ReaderSession(engine_, placeholderFamily_));
     retained->frame = frame;
-    retained->formattingWarning_ = formattingWarning_;
-    retained->formattingDetails_ = formattingDetails_;
     retained->documentAuthor = documentAuthor;
     retained->documentCover = documentCover;
     retained->frame.turnDirection = 0;
@@ -579,8 +582,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     originalAppearance = appearance::SavedInput(original);
     const auto pinnedAppearance = temporaryAppearance;
     const auto appearanceDefaults = std::move(request.appearanceDefaults);
-    const auto nativeLocation = std::move(request.platformLocation),
-               layoutCachePath = std::move(request.layoutCachePath);
+    const auto nativeLocation = std::move(request.platformLocation);
     const auto documentCachePath = std::move(request.documentCachePath);
     const auto userStyleSheetPath = std::move(request.userStyleSheetPath);
     const auto coverPath = std::move(request.coverImagePath);
@@ -605,10 +607,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
             openingResult_.ready() && frame.error.isEmpty() && identity_ == identity ? fingerprint
                                                                                      : QByteArray();
     const auto retainedSettings = frame.state;
-    const bool retainedWarning = formattingWarning_;
-    const auto retainedDetails = formattingDetails_;
-    formattingDetails_ = {};
-    formattingWarning_ = false;
+    frame.formattingWarning = false;
     const auto systemFont = placeholderFamily_;
     const auto latest = newest;
     const auto job = revision;
@@ -646,7 +645,6 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.factory = factory;
     opening.positions = positions;
     opening.systemFont = systemFont;
-    opening.layoutCachePath = layoutCachePath;
     opening.documentCachePath = documentCachePath;
     opening.userStyleSheetPath = userStyleSheetPath;
     opening.customPinsPath = request.customPinsPath;
@@ -658,8 +656,6 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.markupGeneration = markupGeneration;
     opening.retainedHash = retainedHash;
     opening.retainedSettings = retainedSettings;
-    opening.retainedWarning = retainedWarning;
-    opening.retainedDetails = retainedDetails;
     opening.progress = report;
     opening.notifyReuse = notifyReuse;
     if (coverReady)
@@ -683,8 +679,6 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                         [guard, result = std::move(output.frame), outcome = output.outcome,
                          digest = output.digest, syncDigest = output.syncDigest, identity,
                          savedMatches = output.savedMatches, finished, lease, job,
-                         formattingWarning = output.formattingWarning,
-                         formattingDetails = output.formattingDetails,
                          customPins = std::move(output.customPins)]() mutable {
                             if (!guard) {
                                 return;
@@ -692,8 +686,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
                                     [guard, outcome, digest, syncDigest, identity, savedMatches,
-                                     finished, lease, job, formattingWarning, formattingDetails,
-                                     customPins](ReaderFrame result) mutable {
+                                     finished, lease, job, customPins](ReaderFrame result) mutable {
                                         if (!guard || guard->revision != job
                                             || guard->lease_ != lease)
                                             return;
@@ -717,11 +710,6 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                                         guard->customPins_ = outcome.ready()
                                                 ? customPins
                                                 : storage::CustomPins();
-                                        guard->formattingWarning_ =
-                                                outcome.ready() && formattingWarning;
-                                        guard->formattingDetails_ = guard->formattingWarning_
-                                                ? formattingDetails
-                                                : QJsonObject();
                                         guard->desired = result.state;
                                         guard->fingerprint = digest;
                                         guard->syncDigest_ =

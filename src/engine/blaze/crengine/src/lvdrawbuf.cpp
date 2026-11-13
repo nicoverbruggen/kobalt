@@ -456,7 +456,9 @@ private:
     bool smoothscale;
     lUInt8 * __restrict decoded;
     bool isNinePatch;
+    bool visiblePixels = false;
 public:
+    bool hasVisiblePixels() const { return visiblePixels; }
     static int * __restrict GenMap( int src_len, int dst_len )
     {
         int * __restrict map = new int[ dst_len ];
@@ -624,6 +626,8 @@ public:
 
                     const lUInt32 cl = data[xmap ? xmap[x] : x];
                     const lUInt8 alpha = (cl >> 24)&0xFF;
+                    if (alpha != 0xFF)
+                        visiblePixels = true;
                     // NOTE: Remember that for some mysterious reason, lvimg feeds us inverted alpha
                     //       (i.e., 0 is opaque, 0xFF is transparent)...
                     if ( alpha == 0xFF ) {
@@ -666,6 +670,8 @@ public:
 
                     const lUInt32 cl = data[xmap ? xmap[x] : x];
                     const lUInt8 alpha = (cl >> 24)&0xFF;
+                    if (alpha != 0xFF)
+                        visiblePixels = true;
                     // NOTE: See final branch of the ladder. Not quite sure why some alpha ranges are treated differently...
                     if ( alpha >= 0xF0 ) {
                         // Transparent, don't plot it...
@@ -701,6 +707,8 @@ public:
                     const int srcx = xmap ? xmap[x] : x;
                     lUInt32 cl = data[srcx];
                     const lUInt8 alpha = (cl >> 24)&0xFF;
+                    if (alpha != 0xFF)
+                        visiblePixels = true;
                     if ( alpha == 0xFF ) {
                         // Transparent, don't plot it...
                         if ( invert ) {
@@ -761,6 +769,8 @@ public:
 
                     lUInt32 cl = data[xmap ? xmap[x] : x];
                     const lUInt8 alpha = (cl >> 24)&0xFF;
+                    if (alpha != 0xFF)
+                        visiblePixels = true;
                     if ( alpha == 0xFF ) {
                         // Transparent, don't plot it...
                         if ( invert ) {
@@ -807,6 +817,8 @@ public:
 
                     lUInt32 cl = data[xmap ? xmap[x] : x];
                     const lUInt8 alpha = (cl >> 24)&0xFF;
+                    if (alpha != 0xFF)
+                        visiblePixels = true;
                     if ( alpha & 0x80 ) {
                         // Transparent, don't plot it...
                         if ( invert ) {
@@ -1639,6 +1651,7 @@ void LVColorDrawBuf::Draw( LVImageSourceRef img, int x, int y, int width, int he
     //fprintf( stderr, "LVColorDrawBuf::Draw( img(%d, %d), %d, %d, %d, %d\n", img->GetWidth(), img->GetHeight(), x, y, width, height );
     LVImageScaledDrawCallback drawcb( this, img, x, y, width, height, dither, _invertImages, _smoothImages );
     img->Decode( &drawcb );
+    OnImageDrawn(drawcb.hasVisiblePixels());
     _drawnImagesCount++;
     _drawnImagesSurface += width*height;
 }

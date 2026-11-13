@@ -42,6 +42,11 @@ class GLDrawBuf; // workaround for no-rtti builds
 class LVDrawBuf : public CacheableObject
 {
 public:
+    // Diagnostic source context only. Hosts may record it when clipped ink is drawn.
+    virtual void SetUnsupportedFormatting(bool unsupported) { (void)unsupported; }
+    // Report alpha-bearing image pixels after scaling and clipping, without a second decode.
+    virtual void OnImageDrawn(bool visiblePixels) { (void)visiblePixels; }
+
 #if 0
     // GL draw buffer support
     /// GL draw buffer compatibility - requires this call before any drawing

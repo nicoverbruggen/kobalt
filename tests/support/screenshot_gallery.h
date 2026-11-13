@@ -264,6 +264,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "maths-equations", "Equations" },
         { "maths-reading", "Calculus Made Easy" },
         { "menu", "Reading menu" },
+        { "formatting-warning-menu", "Current-page formatting warning in the reading menu" },
+        { "formatting-warning", "Current-page formatting warning" },
         { "menu-return-pressed", "Return button pressed" },
         { "zen-menu", "Reading menu in Zen mode" },
         { "zen-stats", "Reading stats in Zen mode" },

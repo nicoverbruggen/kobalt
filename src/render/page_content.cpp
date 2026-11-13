@@ -80,7 +80,7 @@ PageContent pageContent(const QImage &image)
 {
     return { parseRegions(image, "kobalt.image_regions"),
              parseRegions(image, "kobalt.colour_regions"), pageTextOnly(image),
-             image.text("kobalt.image_only") == "true" };
+             image.text("kobalt.image_only") == "true", pageFormattingWarning(image) };
 }
 
 void setPageContent(QImage &image, const PageContent &content)
@@ -91,6 +91,12 @@ void setPageContent(QImage &image, const PageContent &content)
                   content.colours.known ? regionMetadata(content.colours.rectangles) : QString());
     image.setText("kobalt.animation_text_only", content.textOnly ? "true" : "false");
     image.setText("kobalt.image_only", content.imageOnly ? "true" : "false");
+    image.setText("kobalt.formatting_warning", content.formattingWarning ? "true" : "false");
+}
+
+bool pageFormattingWarning(const QImage &image)
+{
+    return image.text("kobalt.formatting_warning") == "true";
 }
 
 bool pageTextOnly(const QImage &image)

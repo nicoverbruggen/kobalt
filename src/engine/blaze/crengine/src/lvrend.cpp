@@ -12283,6 +12283,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
     UPDATE_STYLE_FIELD( border_collapse, css_border_c_inherit );
     // Vertical text: writing-mode and text-orientation are inherited per CSS spec
     UPDATE_STYLE_FIELD( writing_mode, css_wm_inherit );
+    UPDATE_STYLE_FIELD( writing_mode_warning, css_wmw_inherit );
     // Note: text_orientation has initial value css_to_mixed (not css_to_inherit),
     // so this propagation is currently inert, and no rendering code consumes the
     // field yet — it is parsed-but-unused.  Left in place for when 'upright' is

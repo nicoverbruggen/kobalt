@@ -190,7 +190,11 @@ enum css_decl_code {
     cssd_cr_hint,
     cssd_cr_only_if,
     cssd_cr_apply_func,
-    cssd_stop
+    cssd_writing_mode_ms,
+    cssd_writing_mode_moz,
+    cssd_writing_mode_o,
+    cssd_stop,
+    cssd_writing_mode_warning // Internal diagnostic declaration; no author-facing property.
 };
 
 static const char * css_decl_name[] = {
@@ -345,6 +349,9 @@ static const char * css_decl_name[] = {
     "-cr-hint",
     "-cr-only-if",
     "-cr-apply-func",
+    "-ms-writing-mode",
+    "-moz-writing-mode",
+    "-o-writing-mode",
     NULL
 };
 
@@ -3626,6 +3633,11 @@ static const char * css_wm_names[] =
     "horizontal-tb",
     "vertical-rl",
     "vertical-lr",
+    "sideways-rl",
+    "sideways-lr",
+    "tb",
+    "tb-rl",
+    "tb-lr",
     NULL
 };
 
@@ -3960,6 +3972,7 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
         if (prop_code != cssd_unknown) {
             // parsed ok
             int n = -1;
+            int writing_mode_warning = -1;
             switch ( prop_code )
             {
             // non standard property to ignore declaration depending on gDOMVersionRequested
@@ -5578,13 +5591,31 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
             case cssd_writing_mode3: // -epub-writing-mode
                 IF_g_SET_n_AND_break(true, css_wm_inherit, css_wm_horizontal_tb);
                 n = parse_name( decl, css_wm_names, -1 );
-                // vertical-lr is rendered as vertical-rl (unsupported): the fork's
-                // target is Japanese tategumi, and CSSLogical BS/BE indices and the
-                // draw anchor are hard-coded rl.  Alias at parse time so the value is
-                // honest about what gets rendered, rather than silently producing
-                // rl geometry under an lr label.
-                if ( n == css_wm_vertical_lr )
-                    n = css_wm_vertical_rl;
+                if ( n >= 0 ) {
+                    writing_mode_warning = n == css_wm_vertical_lr || n > css_wm_vertical_lr
+                            ? css_wmw_unsupported : css_wmw_none;
+                    if ( n > css_wm_vertical_lr ) {
+                        // These values remain unsupported by rendering and @supports.
+                        prop_code = cssd_writing_mode_warning;
+                        n = _check_if_supported ? -1 : css_wmw_unsupported;
+                        writing_mode_warning = -1;
+                    }
+                    else if ( n == css_wm_vertical_lr )
+                        n = css_wm_vertical_rl;
+                }
+                break;
+            case cssd_writing_mode_ms:
+            case cssd_writing_mode_moz:
+            case cssd_writing_mode_o:
+                // Legacy aliases contribute diagnostics, but do not change the
+                // renderer's existing fallback or become supported CSS features.
+                prop_code = cssd_writing_mode_warning;
+                if ( _check_if_supported )
+                    break;
+                IF_g_SET_n_AND_break(true, css_wmw_inherit, css_wmw_none);
+                n = parse_name( decl, css_wm_names, -1 );
+                if ( n >= 0 )
+                    n = n == css_wm_horizontal_tb ? css_wmw_none : css_wmw_unsupported;
                 break;
             case cssd_text_orientation:
                 IF_g_SET_n_AND_break(true, css_to_inherit, css_to_mixed);
@@ -5710,8 +5741,16 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
             }
             if ( n!= -1) {
                 // add enum property
-                buf<<(lUInt32) (prop_code | importance | parsed_important | parse_important(decl));
+                lUInt32 flags = importance | parsed_important | parse_important(decl);
+                buf<<(lUInt32) (prop_code | flags);
                 buf<<(lUInt32) n;
+                if ( prop_code == cssd_writing_mode || prop_code == cssd_writing_mode2
+                        || prop_code == cssd_writing_mode3 ) {
+                    if ( writing_mode_warning < 0 )
+                        writing_mode_warning = n == css_wm_inherit ? css_wmw_inherit : css_wmw_none;
+                    buf<<(lUInt32) (cssd_writing_mode_warning | flags);
+                    buf<<(lUInt32) writing_mode_warning;
+                }
             }
             if ( !strValue.empty() ) {
                 // add string property
@@ -6668,6 +6707,11 @@ void LVCssDeclaration::apply( css_style_rec_t * style, const ldomNode * node ) c
                 style->Apply( wm_val, &style->writing_mode, imp_bit_writing_mode, is_important );
                 style->flags |= STYLE_REC_FLAG_INHERITABLE_APPLIED;
             }
+            break;
+        case cssd_writing_mode_warning:
+            style->Apply( (css_writing_mode_warning_t) *p++, &style->writing_mode_warning,
+                          imp_bit_writing_mode_warning, is_important );
+            style->flags |= STYLE_REC_FLAG_INHERITABLE_APPLIED;
             break;
         case cssd_text_orientation:
             style->Apply( (css_text_orientation_t) *p++, &style->text_orientation, imp_bit_text_orientation, is_important );

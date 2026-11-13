@@ -77,3 +77,5 @@ Build `kobalt-desktop-tests` and run `ctest --preset mac -R '^desktop.engineMoni
 Set `KOBALT_MONITOR_CAPTURE` to an absolute directory under the worktree's `build/screenshots/` when running `desktop.engineMonitorReading` to retain the desktop monitor and reader captures. This development window uses desktop geometry, separate from the reader's e-reader and phone captures. The checks do not establish timing equivalence with Kobo hardware.
 
 Run `desktop.fastConsecutiveChapterJumps` to check that chapter jumps cancel adjacent-page previews during the simulated slowdown. It uses Type Tester and keeps the Navigate panel open across repeated chapter jumps.
+
+`page-formatting-warning` records the displayed page index and canonical source `position` when its image contains unsupported writing-mode content. It replaces the opening-wide formatting warning and carries no book-text excerpt. The opening phase event no longer reports a layout scan or inspection-cache result.

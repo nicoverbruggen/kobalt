@@ -210,6 +210,7 @@ bool createBook(const QString &directory, const QString &filename = "text.epub")
     const bool illustrated = filename == "later-images.epub";
     const bool nonlinear = filename == "publisher-non-linear.epub";
     const bool vertical = filename == "formatting-unsupported-writing.epub";
+    const bool pageWarning = filename == "formatting-page-warning.epub";
     if (illustrated) {
         QImage image(64, 80, QImage::Format_RGB32);
         image.fill(Qt::red);
@@ -227,6 +228,10 @@ bool createBook(const QString &directory, const QString &filename = "text.epub")
         for (int index = 0; index < 30; ++index) {
             body += "<p>" + paragraph.repeated(3) + "</p>";
         }
+        if (pageWarning)
+            body = "<p>First supported page.</p>"
+                   "<p style='page-break-before:always;writing-mode:sideways-rl;padding-top:25%'>This visible paragraph uses an unsupported writing mode. The warning applies to this page.</p>"
+                   "<p style='page-break-before:always'>Last supported page.</p>";
         const QString style = vertical ? " style=\"writing-mode:vertical-lr\"" : "";
         files[name] =
                 ("<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Chapter</title></head><body"
@@ -2448,6 +2453,49 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
 }
 
 // The same real-widget tour supplies integration checks and screenshot scenes.
+void formattingWarningTour(Fixture &fixture, const QString &name = {})
+{
+    QVERIFY(createBook(fixture.directory.path(), "formatting-page-warning.epub"));
+    const auto previousBook = captureBook;
+    captureBook = { { "title", "Current-page formatting warning fixture" } };
+    const auto restoreBook = qScopeGuard([previousBook] { captureBook = previousBook; });
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(fixture.directory.path() + "/formatting-page-warning.epub");
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 10000);
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrNavChapters"));
+    QVERIFY(!fixture.visible("rrFormattingWarning"));
+    QVERIFY(fixture.press("rrPage"));
+    const auto turn = [&] {
+        const auto before = fixture.state().value("position").toString();
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->pageButton(1);
+        return QTest::qWaitFor(
+                [&] {
+                    return !fixture.state().value("busy").toBool()
+                            && fixture.state().value("position").toString() != before;
+                },
+                10000);
+    };
+    QVERIFY(turn());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrFormattingWarning"));
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-formatting-warning-menu"));
+    QVERIFY(fixture.press("rrFormattingWarning"));
+    QTRY_VERIFY(fixture.visible("rrFormattingWarningDialog"));
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-formatting-warning"));
+    QVERIFY(fixture.press("rrFormattingWarningConfirm"));
+    QTRY_VERIFY(!fixture.visible("rrFormattingWarningDialog"));
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(turn());
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrNavChapters"));
+    QVERIFY(!fixture.visible("rrFormattingWarning"));
+}
+
 void tour(Fixture &fixture, const QString &name, bool screenshots)
 {
     const auto scene = [&](const QString &suffix) {
@@ -5862,6 +5910,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("position").toString(), position);
     }
 
+    void formattingWarning()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        formattingWarningTour(fixture);
+    }
+
     void errors()
     {
         Fixture fixture;
@@ -6282,6 +6337,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             std::atomic_bool preview{ false }, boundary{ false };
             std::atomic<double> queued{ -1 }, waited{ -1 };
         };
+
         auto trace = std::make_shared<Trace>();
         setDiagnosticObserver([trace](const QJsonObject &event) {
             const auto name = event.value("event").toString();
@@ -17168,6 +17224,18 @@ private slots:
             QVERIFY(capture(fixture, name + "-power-off-private-" + sleep::value(design),
                             &preview));
         }
+    }
+
+    void formattingWarning_data() { screenshotVariants(); }
+
+    void formattingWarning()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark, false, false, true, true);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        formattingWarningTour(fixture, screenshotVariant(preset, dark));
     }
 
     void screens_data() { screenshotVariants(); }

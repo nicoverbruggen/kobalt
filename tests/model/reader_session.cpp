@@ -191,7 +191,7 @@ int run(int argc, char **argv)
             // validation flag distinguishes a content rejection from failed I/O.
             reject(request(path, access, broken),
                    rejected ? OpeningFailureKind::InvalidContent : OpeningFailureKind::Io,
-                   "error.publication_layout_inspection_is_incomplete", rejected);
+                   "opening.resource-read", rejected);
         }
         OpeningResult ready;
         ready.rememberContentRejection();
@@ -273,19 +273,16 @@ int run(int argc, char **argv)
             int warnings = 0;
             for (const auto &line : log.readAll().split('\n')) {
                 const auto entry = QJsonDocument::fromJson(line).object();
-                if (entry.value("event").toString()
-                    != QStringLiteral("opening-formatting-warning")) {
+                if (entry.value("event").toString() != QStringLiteral("page-formatting-warning")) {
                     continue;
                 }
-                require(entry.value("resource").toString().endsWith(".xhtml")
-                                && entry.value("issue").toString().contains("writing")
-                                && entry.value("excerpt").toString().contains("vertical-lr"),
-                        "Formatting warning log lost its cause, resource or excerpt");
-                require(entry.value("retained_book_hit").toBool() == (warnings == 1),
-                        "Retained warning log lost its origin");
+                require(entry.value("page").toInt(-1) >= 0
+                                && !entry.value("position").toString().isEmpty(),
+                        "Page warning log lost its displayed position");
                 ++warnings;
             }
-            require(warnings == 2, "Expected initial and retained formatting warning diagnostics");
+            require(warnings >= 2,
+                    "Expected current-page diagnostics on initial and retained opening");
             retainedWarning->cancelSource();
             ReaderSession::drain([&] { opened.quit(); });
             opened.exec();

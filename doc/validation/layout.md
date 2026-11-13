@@ -74,3 +74,5 @@ Build `kobalt-document-cache-tests` against the previous and candidate sources w
 The vertical-writing buffer regression covers a run measured at 57 pixels that draws 58 pixels. Rotating the old allocation read beyond its last row and could paint unrelated glyph fragments, making cached and fresh pages differ. The local buffer patch grows and zero-fills the allocation before compositing and rotation. It adapts the buffer-safety part of the upstream vertical fork's fix without its experimental glyph-origin changes.
 
 The horizontal-rule check in `engine.beautifier` renders the reported top-border CSS at several reading densities. It checks both border heights and the gray colors.
+
+Current-page formatting warnings use parsed-book format 12 for the added style diagnostic field. `engine.page-estimate` checks that unsupported CSS does not change fallback pixels and that cached styles retain the warning. The previous whole-book inspector remains covered as a standalone utility; it no longer determines reader warnings.

@@ -13428,6 +13428,46 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(live, 1);
     }
 
+    // The opening bar reserves its last part for the window and presentation.
+    void openingProgressStages()
+    {
+        QTemporaryDir directory;
+        storage::Paths paths{ directory.path() };
+        standalone::ReaderController controller(
+                paths, fixtureFonts(), fixturePlaceholder(),
+                [] {
+                    auto services = desktop::readerHostServices();
+                    services.textPresetsBeforePresentation = true;
+                    services.suspended = [] { return false; };
+                    return services;
+                },
+                [](Qt::ScreenOrientation) {});
+        const auto drain = qScopeGuard([&] {
+            controller.close();
+            if (!QTest::qWaitFor([&] { return controller.idle(); }, 10000))
+                QTest::qFail("Opening controller did not drain", __FILE__, __LINE__);
+        });
+        QVector<int> progress;
+        bool completedWithPreviews = false;
+        connect(&controller, &standalone::ReaderController::openingProgress, &controller,
+                [&](int percent) {
+                    progress.append(percent);
+                    if (percent == 100)
+                        completedWithPreviews = controller.window()
+                                && controller.window()
+                                           ->property("text_presets_prerendered")
+                                           .toBool();
+                });
+        QSignalSpy opened(&controller, &standalone::ReaderController::opened);
+        controller.open(book, QSize(600, 800));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QVERIFY(completedWithPreviews);
+        QVERIFY(progress.contains(60) && progress.contains(80));
+        QCOMPARE(progress.last(), 100);
+        QCOMPARE(progress.count(100), 1);
+        QVERIFY(std::is_sorted(progress.cbegin(), progress.cend()));
+    }
+
     // Checks that a controller recovers an interrupted earlier session and records each opened book under its source key.
     void standaloneHistorySourceKeys()
     {

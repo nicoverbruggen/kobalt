@@ -600,6 +600,7 @@ void PageMap::reset(const QVector<qint64> &bytes)
     observed_.clear();
     measuredCount_ = 0;
     model_ = prior_;
+    kept_ = false;
     update();
 }
 
@@ -665,6 +666,7 @@ bool PageMap::setLayout(const PageEstimateLayout &layout, int sliceCharacters)
     layout_ = layout;
     sliceCharacters_ = sliceCharacters;
     observed_.clear();
+    kept_ = false;
     for (auto &item : items_) {
         if (item.measured)
             item.features = pageEstimateFeatures(item.measurement, layout_);
@@ -676,6 +678,7 @@ bool PageMap::setLayout(const PageEstimateLayout &layout, int sliceCharacters)
 void PageMap::setPrior(const PageEstimateModel &prior)
 {
     prior_ = prior;
+    kept_ = false;
     refit();
 }
 
@@ -739,6 +742,18 @@ QMap<int, int> PageMap::completeItems() const
     }
     finish();
     return result;
+}
+
+void PageMap::restoreKept(const QVector<double> &pages)
+{
+    if (pages.isEmpty() || pages.size() != items_.size())
+        return;
+    keptPages_ = pages;
+    keptStarts_.resize(pages.size() + 1);
+    keptStarts_[0] = 0;
+    for (int i = 0; i < pages.size(); ++i)
+        keptStarts_[i + 1] = keptStarts_[i] + qMax(0.0, pages[i]);
+    kept_ = true;
 }
 
 void PageMap::restore(const QMap<int, int> &pages)
@@ -895,6 +910,14 @@ void PageMap::update()
             items_[i].pages = byteEstimate(i, 1);
         starts_[i + 1] = starts_[i] + items_[i].pages;
     }
+    counted_ = !items_.isEmpty() && completeItems().size() == items_.size();
+    if (!kept_ && complete() && layout_.valid()) {
+        kept_ = true;
+        keptStarts_ = starts_;
+        keptPages_.resize(items_.size());
+        for (int i = 0; i < items_.size(); ++i)
+            keptPages_[i] = items_[i].pages;
+    }
 }
 
 double PageMap::byteEstimate(int index, double fraction) const
@@ -932,12 +955,16 @@ double PageMap::byteEstimate(int index, double fraction) const
 
 double PageMap::itemPages(int item) const
 {
-    return item >= 0 && item < items_.size() ? items_[item].pages : 0;
+    if (item < 0 || item >= items_.size())
+        return 0;
+    return keeping() ? keptPages_[item] : items_[item].pages;
 }
 
 double PageMap::pagesBefore(int item) const
 {
-    return item >= 0 && item < items_.size() ? starts_[item] : 0;
+    if (item < 0 || item >= items_.size())
+        return 0;
+    return keeping() ? keptStarts_[item] : starts_[item];
 }
 
 double PageMap::pagesBefore(int item, int before, int characters) const
@@ -945,6 +972,8 @@ double PageMap::pagesBefore(int item, int before, int characters) const
     if (item < 0 || item >= items_.size() || characters <= 0 || before <= 0)
         return 0;
     const double fraction = qBound(0.0, double(before) / characters, 1.0);
+    if (keeping())
+        return keptPages_[item] * fraction;
     if (!items_[item].measured || !layout_.valid())
         return byteEstimate(item, fraction);
     return estimate(item, fraction);
@@ -952,6 +981,8 @@ double PageMap::pagesBefore(int item, int before, int characters) const
 
 double PageMap::total() const
 {
+    if (keeping())
+        return keptStarts_.last();
     return starts_.isEmpty() ? 0 : starts_.last();
 }
 
@@ -1006,6 +1037,12 @@ QJsonObject PageEstimateRecord::toJson() const
     }
     if (!runs.isEmpty())
         object["read"] = runs;
+    if (!kept.isEmpty() && kept.size() <= maxRead) {
+        QJsonArray pages;
+        for (const double value : kept)
+            pages.append(std::round(value * 100) / 100);
+        object["kept"] = pages;
+    }
     return object;
 }
 
@@ -1052,6 +1089,17 @@ bool PageEstimateRecord::fromJson(const QJsonValue &value, PageEstimateRecord *r
             if (!integer(run[i], 0, 1000000, &pages))
                 break;
             result.read.insert(start + i - 1, pages);
+        }
+    }
+    const auto kept = object.value("kept").toArray();
+    if (kept.size() <= maxRead) {
+        for (const auto &entry : kept) {
+            const double pages = entry.toDouble(NAN);
+            if (!entry.isDouble() || !std::isfinite(pages) || pages < 0 || pages > 1000000) {
+                result.kept.clear();
+                break;
+            }
+            result.kept.append(pages);
         }
     }
     *record = result;

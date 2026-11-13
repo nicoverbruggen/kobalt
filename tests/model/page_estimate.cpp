@@ -882,10 +882,6 @@ void emptyItem()
         auto saved = first.state();
         auto record = saved.value("page_estimate").toObject();
         require(!record.isEmpty(), "Chapter mode saves a page estimate");
-        // A number shown earlier that is ahead of the estimate.
-        const int ahead = 40;
-        record["page"] = record.value("page").toInt() + ahead;
-        saved["page_estimate"] = record;
         saved["koblaze_first_spine_item"] = 0;
         saved["koblaze_last_spine_item"] = 0;
 
@@ -896,18 +892,22 @@ void emptyItem()
         require(model.roughPages().page == 0, "No page number before measuring");
         while (model.refinePageEstimate()) { }
         auto rough = model.roughPages();
-        require(rough.page == ahead + 1, "The saved page number comes back");
+        require(rough.page == record.value("page").toInt(), "The saved page number comes back");
         QVector<int> items{ model.spineItemOf(model.position()) };
         while (model.turnInWindow(1)) {
             const auto next = model.roughPages();
             items.append(model.spineItemOf(model.position()));
-            require(next.page == rough.page + 1,
+            // The estimate never goes back. The numbers move once, to the
+            // real pages.
+            require(next.page >= rough.page || (rough.pagesEstimated && !next.pagesEstimated),
                     qPrintable(QString("Page %1 followed page %2 in spine item %3")
                                        .arg(next.page)
                                        .arg(rough.page)
                                        .arg(items.last())));
             rough = next;
         }
+        require(rough.page == items.size() && rough.pages == items.size(),
+                "A book read as a whole ends on its real last page");
         std::printf("empty spine item, second chapter of %d paragraphs: %lld pages, last %d\n",
                     second, qlonglong(items.size()), rough.page);
         require(items.first() == 0 && items.last() == 2, "The book was not read to its end");
@@ -966,7 +966,10 @@ void laterSlice()
     rough = far;
     while (model.turnInWindow(1)) {
         const auto next = model.roughPages();
-        require(next.page > rough.page, "The page number went back on a forward turn");
+        // The estimate never goes back. The numbers move once, to the real
+        // pages.
+        require(next.page >= rough.page || (rough.pagesEstimated && !next.pagesEstimated),
+                "The page number went back on a forward turn");
         rough = next;
     }
 }
@@ -1052,7 +1055,10 @@ void observations()
             adopted += Probe::view(model) == preparedView;
         }
         const auto next = model.roughPages();
-        require(next.page > rough.page, "The page number went back on a forward turn");
+        // An estimate can repeat a number at the end of a spine item. The
+        // numbers move once, when the book has its real pages.
+        require(next.page >= rough.page || (rough.pagesEstimated && !next.pagesEstimated),
+                "The page number went back on a forward turn");
         rough = next;
     }
     std::printf("observations: %d pages in extended slices, %d pages in a unit, %d of %d "
@@ -1181,9 +1187,9 @@ void forwardPages()
     }
 }
 
-// An earlier spine item that gets its real pages later does not move the
-// page number while the reader turns forward inside a spine item. The next
-// spine item start moves it up; only a jump moves it down.
+// The first complete estimate stays while the reader reads. A spine item
+// that gets its real pages later moves neither the page number nor the
+// total. Only a book with the real pages of every spine item replaces it.
 void laterCounted()
 {
     EngineDocument model(test::readerFonts());
@@ -1192,39 +1198,42 @@ void laterCounted()
     QString error;
     // Into the middle chapter without reading the chapters before it.
     require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
-    auto rough = model.roughPages();
+    const auto first = model.roughPages();
     auto &map = Probe::editMap(model);
-    const auto forward = [&] {
-        require(model.turnInWindow(1), "The fixture is too short to read on");
-        const auto next = model.roughPages();
-        rough = next;
-        return next;
-    };
-    forward();
+    require(first.pages > 0 && first.pagesEstimated, "The estimate must give a total");
     const int estimate = qRound(map.itemPages(1));
     require(estimate > 12, "The long chapter is too short");
 
-    // More real pages than the estimate: held inside the chapter, then the
-    // next spine item starts at the value of the map.
-    int shown = rough.page;
+    // More real pages for an earlier chapter, then fewer.
+    require(model.turnInWindow(1), "The fixture is too short to read on");
+    auto rough = model.roughPages();
+    require(rough.page == first.page + 1 && rough.pages == first.pages,
+            "A forward turn adds one page and keeps the total");
     map.observe(1, 0, 1, 1, estimate + 8);
-    require(forward().page == shown + 1, "A larger count moved the page inside a spine item");
-    while (model.spineItemOf(model.position()) == 3)
-        shown = rough.page, forward();
-    const int start = qRound(map.pagesBefore(model.spineItemOf(model.position()))) + 1;
-    require(start > shown + 1 && rough.page == start,
-            "At the next spine item the page number takes the larger count");
-
-    // Fewer real pages: never down on a forward turn, down at a jump.
-    shown = rough.page;
+    require(model.roughPages().page == rough.page && model.roughPages().pages == first.pages,
+            "A larger count of an earlier chapter moved the numbers");
     map.observe(1, 0, 1, 1, estimate - 8);
-    require(forward().page == shown + 1, "A smaller count moved the page back on a forward turn");
+    require(model.roughPages().page == rough.page && model.roughPages().pages == first.pages,
+            "A smaller count of an earlier chapter moved the numbers");
+
+    // To the end of the book: the total stays, and the page never goes
+    // back nor passes it.
+    int turns = 0;
+    while (model.turnInWindow(1)) {
+        const auto next = model.roughPages();
+        require(next.pages == first.pages, "The total moved while reading");
+        require(next.page >= rough.page && next.page <= next.pages,
+                "The page went back or passed the total");
+        rough = next;
+        ++turns;
+    }
+    require(turns > 20 && rough.pagesEstimated, "The fixture must end before the book is counted");
     require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
     const auto jumped = model.roughPages();
-    std::printf("later count: page %d after a jump, %d before it\n", jumped.page, rough.page);
-    require(jumped.page == qRound(map.pagesBefore(3)) + 1 && jumped.page < shown,
-            "A jump shows the value of the map, also a smaller one");
-    require(jumped.pages >= jumped.page, "The total is never before the page");
+    std::printf("kept estimate: page %d of %d at the chapter, %d of %d at the end\n", jumped.page,
+                jumped.pages, rough.page, rough.pages);
+    require(jumped.page == first.page && jumped.pages == first.pages,
+            "The same place must show the same numbers again");
 }
 
 // Until every spine item is measured or counted, there is no page number
@@ -1302,12 +1311,16 @@ void chapterMode(const QByteArray &bytes)
         require(slicePages <= 12, "A slice has too many pages");
         const int turned = pages.size();
         for (int i = 0; i < turned; ++i) {
-            // Every page before the page on the screen was read, so the page
-            // number is the real one. Without measuring the total is a guess
-            // from the bytes until the last spine item is counted, and no page
-            // number is shown before that.
-            if (pages[i].page > 0)
-                require(pages[i].page == i + 1, "The page number is the page that was turned");
+            // While the total is an estimate, it stays as it is and the page
+            // never goes back. A counted book shows the real page. Without
+            // measuring there is no number until the last spine item is
+            // counted.
+            if (pages[i].page > 0 && !pages[i].pagesEstimated)
+                require(pages[i].page == i + 1, "A counted book shows the page that was turned");
+            else if (pages[i].page > 0)
+                require(pages[i].pages == pages.first().pages
+                                && (i == 0 || pages[i].page >= pages[i - 1].page),
+                        "The estimate moved while reading");
             else
                 require(!measure && pages[i].pages == 0, "A page number has no total");
             require(pages[i].page <= pages[i].pages, "The page is never after the total");

@@ -117,6 +117,7 @@ PageMap &EngineDocument::pageMap() const
     auto &estimate = source_->pageEstimate;
     if (estimate.map.items() != spineItemCount_) {
         // The same sizes as the units, read once.
+        estimate.map.keepFirstEstimate(true);
         estimate.map.reset(spineBytes());
         estimate.measurer.reset();
         estimate.stream = LVStreamRef();
@@ -236,6 +237,8 @@ QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) cons
     record.shown = estimate.book.shown();
     record.itemShown = rough.itemPage;
     record.read = map.completeItems();
+    if (map.keeping())
+        record.kept = map.keptPages();
     // Keep the spine items nearest to the reading position.
     while (record.read.size() > PageEstimateRecord::maxRead) {
         const int firstItem = record.read.firstKey(), lastItem = record.read.lastKey();
@@ -258,6 +261,7 @@ void EngineDocument::restorePageEstimate(const QJsonValue &saved)
     if (record.spineItems != spineItemCount_ || record.layout != estimateKey(settingsState()))
         return;
     map.restore(record.read);
+    map.restoreKept(record.kept);
     auto &estimate = source_->pageEstimate;
     estimate.key = record.layout;
     if (record.item < 0)
@@ -397,19 +401,41 @@ Engine::RoughPages EngineDocument::roughPages() const
     // of a spine item, after an earlier spine item got its real pages, and
     // after a turn that passed text without a layout, such as slices
     // without a page.
+    if (estimate.lastKept && !map.keeping()) {
+        // The book got its real pages: the numbers start again from them.
+        estimate.item.reset();
+        estimate.book.reset();
+    }
+    estimate.lastKept = map.keeping();
     const bool newItem = place.item != estimate.lastItem;
     const bool passed = !newItem && place.first > estimate.lastLast;
-    const auto counted = map.completeItems();
     rough.itemPage = estimate.item.place(qRound(inItem) + place.page + 1,
                                          newItem ? Step::Jump : step, passed);
-    rough.itemPages = qMax(rough.itemPage, qRound(map.itemPages(place.item)));
-    rough.itemPagesEstimated = !counted.contains(place.item);
+    rough.itemPages = qMax(1, qRound(map.itemPages(place.item)));
+    rough.itemPagesEstimated = !map.counted();
+    if (map.keeping()) {
+        // The totals are an estimate that stays as it is. A spine item with
+        // more pages than its estimate repeats its last number.
+        rough.itemPage = qMin(rough.itemPage, rough.itemPages);
+        estimate.item.restore(rough.itemPage);
+    } else {
+        rough.itemPages = qMax(rough.itemPage, rough.itemPages);
+    }
     if (map.complete()) {
         rough.page = estimate.book.place(qRound(before) + place.page + 1, step, newItem || passed);
-        // The total takes the corrections at once, but is never before the
-        // page.
-        rough.pages = qMax(rough.page, qRound(map.total()));
-        rough.pagesEstimated = counted.size() < map.items();
+        rough.pagesEstimated = !map.counted();
+        if (map.keeping()) {
+            // The page stays in the pages of its spine item, so that it
+            // never passes the total.
+            const int first = qRound(map.pagesBefore(place.item)) + 1;
+            const int last = qMax(first, qRound(map.pagesBefore(place.item)
+                                                + map.itemPages(place.item)));
+            rough.page = qBound(first, rough.page, last);
+            estimate.book.restore(rough.page);
+            rough.pages = qMax(last, qRound(map.total()));
+        } else {
+            rough.pages = qMax(rough.page, qRound(map.total()));
+        }
     } else if (step != Step::Same) {
         // Until every spine item is measured or counted, the total is a
         // guess from the bytes, and the reader shows percentages. The first
@@ -967,13 +993,25 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
             double fraction = qMax(0.0, textFraction(item, position, false, current));
             if (exclusive && fraction == 0 && item > 0) {
                 // The first character of a chapter excludes that whole chapter.
-                pages = std::ceil(map.pagesBefore(item)) - 1;
+                pages = qRound(map.pagesBefore(item)) - 1;
+                exclusive = true;
             } else {
+                exclusive = false;
                 if (exclusive)
                     fraction = qMax(0.0, textFraction(item, position, true, current));
                 pages = std::floor(map.pagesBefore(item)
                                    + map.pagesBefore(item, qRound(fraction * 1000000), 1000000));
             }
+        } else {
+            exclusive = false;
+        }
+        if (map.keeping() && !exclusive) {
+            // As in roughPages(): the page stays in the pages of its spine
+            // item.
+            const int first = qRound(map.pagesBefore(item));
+            pages = qBound(double(first), pages,
+                           double(qMax(first, qRound(map.pagesBefore(item) + map.itemPages(item))
+                                                      - 1)));
         }
         result[i] = qBound(1, int(pages) + 1, last);
     }

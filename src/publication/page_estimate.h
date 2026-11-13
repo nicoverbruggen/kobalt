@@ -227,6 +227,9 @@ struct PageEstimateRecord
     int item = -1, first = 0, page = 0, partPages = 0, shown = 0, itemShown = 0;
     // The real pages of whole spine items, by item.
     QMap<int, int> read;
+    // The kept estimate of each spine item, or empty. See
+    // PageMap::keepFirstEstimate().
+    QVector<double> kept;
 
     QJsonObject toJson() const;
     // False for a missing record or one that is not valid. Invalid parts of
@@ -284,9 +287,24 @@ public:
 
     const PageEstimateModel &model() const { return model_; }
 
+    // True when every spine item has the real pages of all its parts.
+    bool counted() const { return counted_; }
+    void keepFirstEstimate(bool keep) { keep_ = keep; }
+    // True while the numbers are the kept estimate.
+    bool keeping() const { return keep_ && kept_ && !counted_; }
+    // The kept estimate of each item, or empty when there is none yet.
+    QVector<double> keptPages() const { return kept_ ? keptPages_ : QVector<double>(); }
+    // Continues with the kept estimate of an earlier reading, for the same
+    // page. Ignores one of another size.
+    void restoreKept(const QVector<double> &pages);
+
     // The estimated pages of an item, of the items before `item`, and of
     // the part of `item` before its engine character `before`, of
     // `characters` in all. Zero when nothing is known yet.
+    // With keepFirstEstimate(), the first complete estimate is kept as it
+    // is, so that the numbers do not move while the user reads.
+    // Observations replace it only when the whole book is counted. A new
+    // page or a new prior starts again.
     double itemPages(int item) const;
     double pagesBefore(int item) const;
     double pagesBefore(int item, int before, int characters) const;
@@ -334,6 +352,9 @@ private:
     int sliceCharacters_ = 0, measuredCount_ = 0;
     // Pages for one byte of the measured items, for the others.
     double pagesPerByte_ = 0;
+    // The kept estimate: the pages of each item and where each starts.
+    QVector<double> keptPages_, keptStarts_;
+    bool keep_ = false, kept_ = false, counted_ = false;
 };
 
 // Keeps a shown page number from moving backward while the user reads

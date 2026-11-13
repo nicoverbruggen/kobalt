@@ -59,6 +59,8 @@ struct ReaderSource
         // last character of its slice, its page in that part and the pages
         // of the part.
         int lastItem = -1, lastFirst = -1, lastLast = -1, lastPage = -1, lastPages = 0;
+        // True when the last placed page came from the kept estimate.
+        bool lastKept = false;
         // The estimateKey() of the settings that gave the observed pages.
         QString key;
     } pageEstimate;

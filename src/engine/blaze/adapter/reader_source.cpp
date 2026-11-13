@@ -485,8 +485,8 @@ bool EngineDocument::rebindResources(const std::shared_ptr<ResourceCache> &resou
                                      const QMap<QString, qint64> &sizes)
 {
     // A spine item that was opened ahead holds the source too. It reads
-    // through the old access, so it goes.
-    ahead_.reset();
+    // through the old access, so it goes, with every other side document.
+    dropSideDocuments();
     // Previews retain ReaderSource as their parent. Do not change their access
     // underneath them, even if the main reader itself has already closed.
     if (!source_ || source_.use_count() != 1 || !source_->resources || source_->sizes != sizes
@@ -929,7 +929,8 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
         if (!adoptAhead(first, last))
             return false;
         windowLoadMs_ = loadMs;
-        return true;
+        // A document that was kept in memory can be in a later slice.
+        return !slices() || sliceFirst_ == 0 || showSliceAt(0);
     }
     ahead_.reset();
     const auto contents = contents_, graph = graph_;
@@ -970,7 +971,26 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
     if (next >= spineItemCount_ || (slices() && sliceEnd_ < spineItemText()))
         return;
     const auto unit = neighbouringUnit(1);
-    openAhead(unit.first, current, unit.second);
+    auto *prepared = openAhead(unit.first, current, unit.second);
+#if defined(KOBLAZE_CANCEL_CHECK)
+    // A kept unit can have been left in a later slice. The turn must not
+    // wait for the layout of its first slice.
+    if (!prepared || !prepared->slices() || prepared->sliceFirst_ == 0)
+        return;
+    const StopCheck check(current);
+    prepared->sliceInterrupt_ = [&current] { return current && !current(); };
+    try {
+        if (!prepared->showSliceAt(0) || (current && !current()))
+            ahead_.reset();
+        else
+            prepared->sliceInterrupt_ = nullptr;
+    } catch (const KoblazeRenderCancelled &) {
+        koblazeSetSpineWindow(-1, -1);
+        ahead_.reset();
+    }
+#else
+    Q_UNUSED(prepared);
+#endif
 }
 
 void EngineDocument::preparePreviousItem(const std::function<bool()> &current)
@@ -1023,11 +1043,15 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
     if (ahead_ && aheadItem_ == item && aheadSettings_ == settings && aheadSize_ == size_
         && ahead_->userStyleSheet_ == userStyleSheet_ && ahead_->slicePages_ == slicePages_)
         return ahead_.get();
-    DiagnosticOperation load("chapter-load", [&current] {
-        return (current && !current()) || engineCancellationRequested();
-    });
-    ahead_.reset();
-    auto ahead = openSide(settings, current, error);
+    // The document that was here stays in memory while there is room.
+    keepUnit(std::move(ahead_), aheadSettings_, aheadSize_);
+    auto ahead = takeKept(unit.first, settings);
+    if (!ahead) {
+        DiagnosticOperation load("chapter-load", [&current] {
+            return (current && !current()) || engineCancellationRequested();
+        });
+        ahead = openSide(settings, current, error);
+    }
     if (!ahead)
         return nullptr;
     ahead_ = std::move(ahead);
@@ -1097,6 +1121,72 @@ bool EngineDocument::backgroundCount() const
     return source_ && source_->pageEstimate.count.load();
 }
 
+void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document,
+                              const QJsonObject &settings, QSize size)
+{
+    // About six times this in memory on a 64-bit desktop: enough for every
+    // spine item of a long novel.
+    static constexpr qint64 keptUnitBytes = 6 * 1024 * 1024;
+    if (!document || !source_ || document->windowFirst_ < 0)
+        return;
+    const int first = document->windowFirst_, last = document->windowLast_;
+    // Only a document for the page of this one can be shown later.
+    auto current = windowSettings(first, last);
+    current.remove("position");
+    if (settings != current || size != size_ || document->userStyleSheet_ != userStyleSheet_
+        || document->slicePages_ != slicePages_)
+        return;
+    const auto &bytes = spineBytes();
+    KeptUnit unit;
+    unit.first = first;
+    unit.settings = settings;
+    unit.size = size;
+    for (int item = first; item <= last && item < bytes.size(); ++item)
+        unit.bytes += bytes[item];
+    unit.document = std::move(document);
+    for (auto it = kept_.begin(); it != kept_.end();) {
+        if (it->first == first)
+            it = kept_.erase(it);
+        else
+            ++it;
+    }
+    kept_.push_back(std::move(unit));
+    qint64 total = 0;
+    for (const auto &entry : kept_)
+        total += entry.bytes;
+    while (total > keptUnitBytes && !kept_.empty()) {
+        auto farthest = kept_.begin();
+        for (auto it = kept_.begin(); it != kept_.end(); ++it) {
+            if (qAbs(it->first - windowFirst_) > qAbs(farthest->first - windowFirst_))
+                farthest = it;
+        }
+        total -= farthest->bytes;
+        kept_.erase(farthest);
+    }
+}
+
+std::unique_ptr<EngineDocument> EngineDocument::takeKept(int first, const QJsonObject &settings)
+{
+    for (auto it = kept_.begin(); it != kept_.end(); ++it) {
+        if (it->first != first)
+            continue;
+        auto document = std::move(it->document);
+        const bool usable = it->settings == settings && it->size == size_
+                && document->userStyleSheet_ == userStyleSheet_
+                && document->slicePages_ == slicePages_;
+        kept_.erase(it);
+        return usable ? std::move(document) : nullptr;
+    }
+    return nullptr;
+}
+
+void EngineDocument::dropSideDocuments()
+{
+    ahead_.reset();
+    counting_.reset();
+    kept_.clear();
+}
+
 void EngineDocument::adoptCounted()
 {
     if (windowFirst_ < 0 || !source_ || !engine_)
@@ -1122,6 +1212,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     if (key != countingKey_ || size_ != countingSize_) {
         // Another page: the counts so far were for the old one.
         counting_.reset();
+        kept_.clear();
         uncounted_.clear();
         countingKey_ = key;
         countingSize_ = size_;
@@ -1158,6 +1249,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         // item of a unit as a whole.
         counting_ = openSide(settings, current, nullptr);
         countingItem_ = item;
+        countingSettings_ = settings;
         if (!counting_ && (!current || current()))
             uncounted_.insert(item);
         return true;
@@ -1185,7 +1277,8 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         }
         return true;
     }
-    counting_.reset();
+    // The counted document stays in memory while there is room.
+    keepUnit(std::move(counting_), countingSettings_, countingSize_);
     // A spine item that did not get its pages is not tried again.
     if (!map.completeItems().contains(countingItem_))
         uncounted_.insert(countingItem_);
@@ -1230,7 +1323,9 @@ bool EngineDocument::adoptAhead(int first, int last)
     countingKey_ = std::move(old->countingKey_);
     countingSize_ = old->countingSize_;
     countingItem_ = old->countingItem_;
+    countingSettings_ = std::move(old->countingSettings_);
     uncounted_ = std::move(old->uncounted_);
+    kept_ = std::move(old->kept_);
     ahead_ = std::move(old);
     aheadItem_ = oldItem;
     aheadSettings_ = std::move(oldSettings);

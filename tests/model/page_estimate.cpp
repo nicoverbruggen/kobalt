@@ -83,6 +83,16 @@ struct ReaderLocationProbe
     static const EngineDocument *ahead(const EngineDocument &model) { return model.ahead_.get(); }
 
     static const LVDocView *view(const EngineDocument &model) { return model.engine_.get(); }
+
+    // The document that is kept in memory for the unit that starts at `first`.
+    static const LVDocView *keptView(const EngineDocument &model, int first)
+    {
+        for (const auto &unit : model.kept_) {
+            if (unit.first == first)
+                return unit.document->engine_.get();
+        }
+        return nullptr;
+    }
 };
 } // namespace kobalt
 
@@ -1246,6 +1256,21 @@ void countedInBackground()
     require(!counted.pagesEstimated && counted.pages == whole && counted.page == wholePage + 1,
             "The background count must give the pages of the whole book");
     require(!model.countPages({}), "A counted book has nothing left to count");
+
+    // The counted spine items stay in memory: a jump shows the kept
+    // document, on its first page, without a new load.
+    const auto *kept = Probe::keptView(model, 1);
+    require(kept, "The count must keep the long chapter in memory");
+    require(model.showSpineItems(1, 1, &error) && Probe::view(model) == kept,
+            qPrintable("A jump to a counted chapter must show the kept document: " + error));
+    require(model.spineItemOf(model.pageStart(model.page())) == 1 && model.roughPages().page == 2
+                    && Probe::sliceFirst(model) == 0,
+            "The kept document must open on the first page of its chapter");
+    // The chapter that was left is kept too, and comes back the same way.
+    model.prepareAhead();
+    require(model.showSpineItems(3, 3, &error) && model.go(0)
+                    && model.roughPages().page == wholePage + 1,
+            "Going back to the chapter that was left must show its page");
 
     // Another font size starts the count again.
     require(model.applyAppearance(appearance::Patch(qt::object({ { "font_pixels", 32 } }))),

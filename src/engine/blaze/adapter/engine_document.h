@@ -23,6 +23,7 @@
 #include <QStringList>
 #include <QVector>
 #include <memory>
+#include <vector>
 #include <functional>
 #include <utility>
 #include <tuple>
@@ -437,6 +438,28 @@ private:
     QSet<int> uncounted_;
     // Shows the real pages of the counted spine items up to the page.
     void adoptCounted();
+    QJsonObject countingSettings_;
+    // Documents of other units that stay in memory after the count or after
+    // the reader left them, so that a jump there needs no new load. Their
+    // spine items hold at most `keptUnitBytes` bytes together. Over that,
+    // the unit farthest from the page goes.
+    struct KeptUnit
+    {
+        int first = -1;
+        QJsonObject settings;
+        QSize size;
+        qint64 bytes = 0;
+        std::unique_ptr<EngineDocument> document;
+    };
+    std::vector<KeptUnit> kept_;
+    void keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,
+                  QSize size);
+    // The kept document of the unit that starts at `first`, when it was
+    // opened with `settings` for the page of this document.
+    std::unique_ptr<EngineDocument> takeKept(int first, const QJsonObject &settings);
+    // Drops every other document of the book: the one opened ahead, the
+    // one of the count and the kept ones.
+    void dropSideDocuments();
     // Opens another document of the same book with `settings`. Null when it
     // cannot open or `current` stops it.
     std::unique_ptr<EngineDocument> openSide(const QJsonObject &settings,

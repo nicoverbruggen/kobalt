@@ -925,7 +925,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
         saved["beautifier_initials"] = beautifierInitials;
         saved["beautifier_spacing"] = beautifierSpacing;
         saved["beautifier_indent"] = beautifierIndent;
-        ahead_.reset();
+        dropSideDocuments();
         QString error;
         if (!openSource(source_, size_, saved, &error))
             return false;

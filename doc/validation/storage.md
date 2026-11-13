@@ -6,6 +6,7 @@ These checks cover the profile database, record writers, saves at close and slee
 
 | Test | Checks |
 | --- | --- |
+| `model.preview-store` | Private preview filenames, exact PNG pixels, invalidation, memory and storage limits, one-time old-cache cleanup, interrupted migration and pending scan recovery, completion persistence, and preservation of unrelated files and symlinks |
 | `model.profile-storage` | The SQLite profile: import, schema checks, single ownership, recovery, backups and synced commits |
 | `model.record-writer` | Queue order, cancellation and limits of the record writers |
 | `model.save-wait` | Save waits: a report runs the waiting check from the event loop, also from a worker thread; the writer thread reports each write; the fallback timer covers a save that does not report |
@@ -17,6 +18,10 @@ These checks cover the profile database, record writers, saves at close and slee
 | `lifecycle.background*`, `lifecycle.standaloneReadingHistory`, `lifecycle.activityBatchesAndLowBattery` | Reading history and activity saves through background, resume and low battery |
 
 `lifecycle.activityBatchesAndLowBattery` waits for standby to request the activity save after the page turn's queued refresh. It checks standby both before and after a failed background save completes. Standby may resume during retry cooldown only after pending writes end. The check retains the unsaved position until an explicit successful checkpoint.
+
+`platform.native-lifecycle` checks native scan dispatch, rejection of a second pending request and one-shot completion through Nickel’s `doneProcessing` signal.
+
+`model.preview-store` belongs to the `settings` label. Run it separately with `ctest --preset mac -R '^model.preview-store$'`.
 
 `lifecycle.nativeOpeningStatus`, in [Kobo adapters](kobo.md), checks the native status update at opening.
 

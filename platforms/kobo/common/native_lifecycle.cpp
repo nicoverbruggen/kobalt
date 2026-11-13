@@ -7,6 +7,7 @@
 #include "engine/crengine/engine_activity.h"
 #include "storage/profile_database.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include "standby_input.h"
 #include <QPointer>
 #include <QCoreApplication>
@@ -15,6 +16,7 @@
 #include <dlfcn.h>
 #include <memory>
 #include <atomic>
+#include <utility>
 #include <QFile>
 #include "support/strings.h"
 #include <cerrno>
@@ -613,8 +615,27 @@ void NativeLifecycle::disconnected()
     active->wakeRetry.start(0);
 }
 
+bool NativeLifecycle::scanLibrary(std::function<void()> done)
+{
+    const auto instance = symbol<QObject *(*)()>("_ZN19PlugWorkflowManager14sharedInstanceEv");
+    const auto scan = symbol<void (*)(QObject *)>("_ZN19PlugWorkflowManager4syncEv");
+    if (!connected_ || scanDone || !instance || !scan)
+        return false;
+    auto *manager = instance();
+    if (!manager)
+        return false;
+    mainthread::blocking("native-library-scan");
+    scanDone = std::move(done);
+    scan(manager);
+    return true;
+}
+
 void NativeLifecycle::processingDone()
 {
+    auto completed = std::move(scanDone);
+    scanDone = {};
+    if (completed)
+        completed();
     // Ordinary library scans also emit this signal. Only a remount ends USB.
     if (!exported || !remounting)
         return;

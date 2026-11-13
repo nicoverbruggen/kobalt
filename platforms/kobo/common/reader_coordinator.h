@@ -59,6 +59,7 @@ public:
                       QObject *parent);
     ~ReaderCoordinator() override;
     bool available() const;
+    void finishPreviewMigration();
     bool idleForBenchmark() const;
 #if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
     QJsonObject benchmarkState(const QString &identity) const;

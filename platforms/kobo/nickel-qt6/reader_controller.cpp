@@ -8,6 +8,7 @@
 #include "platforms/kobo/common/startup_recovery.h"
 #include "platforms/kobo/common/book_menu.h"
 #include "storage/reader_storage.h"
+#include "storage/preview_store.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "platforms/kobo/common/native_publication.h"
 #include "platforms/kobo/common/native_progress.h"
@@ -457,6 +458,7 @@ public:
         environment().reportSession({ { "status", "ready" } });
         kobalt::diagnostic(
                 "ready", { { "startup_ms", double(elapsed.elapsed()) }, { "opener", fromOpener } });
+        candidate->finishPreviewMigration();
         nh_log("reader: native controller ready");
     }
 
@@ -483,6 +485,10 @@ private:
 
 int initialize()
 {
+    // Remove old files while Nickel is initializing. The coordinator requests
+    // their library reconciliation once native startup has completed.
+    if (!kobalt::storage::migratePreviews(QString::fromLatin1(configDir) + "/cache/previews", true))
+        nh_log("reader: preview cache migration incomplete");
 #ifdef KOBALT_READER_HARDWARE
     kobalt::installCrashReports(QString::fromLatin1(configDir) + "/crash-reporting",
                                 QStringLiteral("/mnt/onboard"));

@@ -2,6 +2,7 @@
 #include "support/main_thread.h"
 #include "annotation_database.h"
 #include "profile_database.h"
+#include "preview_store.h"
 #include "bookmark_store.h"
 #include "reading/appearance_settings.h"
 #include "reading/sleep_screen.h"
@@ -615,6 +616,7 @@ bool prepareProfile(const Paths &paths, ProfileRecovery *recovery)
         *recovery = recovered;
     if (!usable)
         return false;
+    migratePreviews(paths.previews());
     const QDir directory(paths.directory);
     bool ok = true;
     const QRegularExpression bookName("^" + QRegularExpression::escape(paths.bookPrefix)

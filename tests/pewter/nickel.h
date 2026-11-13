@@ -141,3 +141,11 @@ inline VolumeData &contentData(Content *content)
 // and the time, in whole seconds, and marks the reading state for upload.
 void storeBookmark(Volume &volume, const QString &location, const QDateTime &date);
 } // namespace pewter
+
+// Local-library scan used once after removing obsolete preview files.
+class PlugWorkflowManager
+{
+public:
+    static PlugWorkflowManager *sharedInstance();
+    void sync();
+};

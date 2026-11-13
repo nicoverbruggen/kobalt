@@ -10,7 +10,17 @@
 class QObject;
 
 namespace kobalt::storage {
-// Writes a finished preview as a PNG named after `key` in `directory`, then
+// Removes regular .png files from the disposable preview directory without
+// decoding them. Leaves other extensions, subdirectories and symlinks alone.
+// Run before library scanning, or on a worker thread. False means a directory
+// was unsafe or a file could not be removed.
+bool migratePreviews(const QString &directory, bool requireScan = false);
+// A pending scan survives interruption between file removal and Nickel's scan.
+bool previewMigrationNeedsScan(const QString &directory);
+// Called after Nickel reports scan completion. Writes the marker on the worker.
+void completePreviewMigration(const QString &directory);
+
+// Writes a finished preview as a PNG with a private .preview name in `directory`, then
 // removes the files written longest ago until the directory holds at most
 // `limit` bytes. Writes storage: run it on a worker thread.
 bool writePreview(const QString &directory, const QByteArray &key, const QImage &image,

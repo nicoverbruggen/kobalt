@@ -15,6 +15,7 @@
 #include "storage/profile_database.h"
 #include "storage/annotation_database.h"
 #include "storage/reader_storage.h"
+#include "storage/preview_store.h"
 #include "storage/sleep_snapshot.h"
 #include "reading/reader_session.h"
 #include "engine/crengine/engine_activity.h"
@@ -443,6 +444,13 @@ void ReaderCoordinator::finishHomeNavigation()
 bool ReaderCoordinator::idleForBenchmark() const
 {
     return !busy && !run.reader && !run.fallbackAlert && !lifecycle->draining;
+}
+
+void ReaderCoordinator::finishPreviewMigration()
+{
+    const auto directory = environment_.paths.previews();
+    if (storage::previewMigrationNeedsScan(directory))
+        lifecycle->scanLibrary([directory] { storage::completePreviewMigration(directory); });
 }
 
 bool ReaderCoordinator::available() const

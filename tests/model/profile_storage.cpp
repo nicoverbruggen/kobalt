@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QSqlQuery>
 #include <QSqlDatabase>
@@ -167,7 +168,13 @@ int main(int argc, char **argv)
     state["null"] = QJsonValue();
     require(storage::writeJson(paths.bookState(identity), state), "Legacy book fixture");
     const auto original = bytes(paths.bookState(identity));
+    require(QDir().mkpath(paths.previews()), "Legacy preview directory");
+    const auto legacyPreview = paths.previews() + '/' + QString(64, 'a') + ".png";
+    QImage preview(16, 16, QImage::Format_RGB32);
+    preview.fill(Qt::white);
+    require(preview.save(legacyPreview, "PNG"), "Legacy preview fixture");
     require(storage::prepareProfile(paths), "Import complete profile");
+    require(!QFile::exists(legacyPreview), "Profile preparation left a legacy preview");
     require(storage::readBookState(paths, identity).object == state, "Imported state changed");
     const auto backup =
             root.path() + "/migration-backup/" + QFileInfo(paths.bookState(identity)).fileName();

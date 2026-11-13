@@ -12,6 +12,7 @@
 #include <QImageWriter>
 #include <QJsonObject>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QRunnable>
 #include <QSaveFile>
 #include <QThreadPool>
@@ -31,7 +32,27 @@ QString fileName(const QByteArray &key)
     return QString::fromLatin1(QCryptographicHash::hash(QByteArray(formatVersion) + '\0' + key,
                                                         QCryptographicHash::Sha256)
                                        .toHex())
-            + QStringLiteral(".png");
+            + QStringLiteral(".preview");
+}
+
+bool cacheDirectory(const QString &directory)
+{
+    if (directory.isEmpty())
+        return false;
+    auto path = QDir(directory).absolutePath();
+    while (path != QDir::rootPath()) {
+        const QFileInfo info(path);
+        if (info.isSymLink() || (info.exists() && !info.isDir()))
+            return false;
+        path = info.absolutePath();
+    }
+    return true;
+}
+
+bool generatedName(const QString &name, const QString &suffix)
+{
+    return name.endsWith(suffix) && name.size() == 64 + suffix.size()
+            && QRegularExpression(QStringLiteral("^[0-9a-f]{64}$")).match(name.left(64)).hasMatch();
 }
 
 qint64 imageBytes(const QImage &image)
@@ -123,12 +144,74 @@ void runLater(std::function<void()> work)
 }
 } // namespace
 
+namespace {
+QString migrationPath(const QString &directory)
+{
+    return QDir(directory).filePath(QStringLiteral("png-migration"));
+}
+
+QByteArray migrationState(const QString &directory)
+{
+    QFile file(migrationPath(directory));
+    if (QFileInfo(file).isSymLink() || !file.open(QIODevice::ReadOnly))
+        return {};
+    return file.read(16);
+}
+
+bool saveMigrationState(const QString &directory, const QByteArray &state)
+{
+    mainthread::blocking("preview-migration-state");
+    const auto path = migrationPath(directory);
+    if (!cacheDirectory(directory) || QFileInfo(path).isSymLink() || !QDir().mkpath(directory))
+        return false;
+    QSaveFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(state) == state.size() && file.commit();
+}
+} // namespace
+
+bool migratePreviews(const QString &directory, bool requireScan)
+{
+    mainthread::BlockingOperation blockingOperation("preview-migrate");
+    if (!cacheDirectory(directory))
+        return false;
+    const auto state = migrationState(directory);
+    if (state == "complete\n")
+        return true;
+    const auto files = QDir(directory).entryInfoList({ QStringLiteral("*.png") },
+                                                     QDir::Files | QDir::NoSymLinks);
+    // Save the pending scan before deleting anything, so an interrupted
+    // upgrade still reconciles Nickel's library on its next startup.
+    const bool scan =
+            (state == "scan\n" || state == "remove\n") || (requireScan && !files.isEmpty());
+    if (scan && !saveMigrationState(directory, "remove\n"))
+        return false;
+    bool ok = true;
+    for (const auto &info : files)
+        ok = QFile::remove(info.absoluteFilePath()) && ok;
+    return ok
+            && saveMigrationState(directory,
+                                  scan ? QByteArray("scan\n") : QByteArray("complete\n"));
+}
+
+bool previewMigrationNeedsScan(const QString &directory)
+{
+    return cacheDirectory(directory) && migrationState(directory) == "scan\n";
+}
+
+void completePreviewMigration(const QString &directory)
+{
+    runLater([directory] { saveMigrationState(directory, "complete\n"); });
+}
+
 bool writePreview(const QString &directory, const QByteArray &key, const QImage &image,
                   qint64 limit)
 {
     mainthread::BlockingOperation blockingOperation("preview-write");
-    if (image.isNull() || qint64(image.width()) * image.height() > maxPixels
-        || !QDir().mkpath(directory))
+    if (!cacheDirectory(directory) || image.isNull()
+        || qint64(image.width()) * image.height() > maxPixels || !QDir().mkpath(directory))
+        return false;
+    const QFileInfo destination(QDir(directory).filePath(fileName(key)));
+    if (destination.isSymLink() || (destination.exists() && !destination.isFile()))
         return false;
     const auto stored = packed(image);
     QSaveFile file(QDir(directory).filePath(fileName(key)));
@@ -142,8 +225,15 @@ bool writePreview(const QString &directory, const QByteArray &key, const QImage 
         || !writer.write(stored) || file.size() > maxFileBytes || !file.commit())
         return false;
     // The files written longest ago leave first.
-    auto files = QDir(directory).entryInfoList({ QStringLiteral("*.png") }, QDir::Files,
+    auto files = QDir(directory).entryInfoList({ QStringLiteral("*.preview") },
+                                               QDir::Files | QDir::NoSymLinks,
                                                QDir::Time | QDir::Reversed);
+    files.erase(std::remove_if(files.begin(), files.end(),
+                               [](const QFileInfo &info) {
+                                   return !generatedName(info.fileName(),
+                                                         QStringLiteral(".preview"));
+                               }),
+                files.end());
     qint64 total = 0;
     for (const auto &info : files)
         total += info.size();
@@ -161,8 +251,12 @@ bool writePreview(const QString &directory, const QByteArray &key, const QImage 
 
 QImage readPreview(const QString &directory, const QByteArray &key)
 {
+    if (!cacheDirectory(directory))
+        return {};
     QFile file(QDir(directory).filePath(fileName(key)));
-    if (!file.exists() || file.size() > maxFileBytes || !file.open(QIODevice::ReadOnly))
+    const QFileInfo info(file);
+    if (!info.isFile() || info.isSymLink() || file.size() > maxFileBytes
+        || !file.open(QIODevice::ReadOnly))
         return {};
     QImageReader reader(&file, "png");
     const auto size = reader.size();

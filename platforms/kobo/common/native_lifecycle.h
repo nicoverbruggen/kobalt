@@ -40,6 +40,10 @@ public:
 
     bool connected() const { return connected_; }
 
+    // Request Nickel's ordinary local-library scan after native initialization.
+    // The completion is consumed once, when doneProcessing is emitted.
+    bool scanLibrary(std::function<void()> done);
+
     bool blocked() const
     {
         return asleep || usbPending || exported || poweringOff || removalPending;
@@ -91,6 +95,7 @@ private slots:
     void unplugging();
 
 private:
+    std::function<void()> scanDone;
     bool eventFilter(QObject *object, QEvent *event) override;
     void checkSleepView(const char *source);
     void queueSleepViewCheck();

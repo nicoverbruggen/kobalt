@@ -281,3 +281,14 @@ bool PowerSettings::getFullscreenCoverInfoPanel()
 {
     return pewter::options().sleepInfo;
 }
+
+PlugWorkflowManager *PlugWorkflowManager::sharedInstance()
+{
+    static PlugWorkflowManager manager;
+    return &manager;
+}
+
+void PlugWorkflowManager::sync()
+{
+    record("PlugWorkflowManager::sync");
+}

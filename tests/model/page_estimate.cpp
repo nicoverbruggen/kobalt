@@ -91,6 +91,11 @@ struct ReaderLocationProbe
         return model.counting_ ? model.counting_->engine_.get() : nullptr;
     }
 
+    static bool countEnded(const EngineDocument &model)
+    {
+        return !model.counting_ && !model.source_->epubCache;
+    }
+
     static int countingSlice(const EngineDocument &model)
     {
         return model.counting_ ? model.counting_->sliceFirst_ : -1;
@@ -1287,6 +1292,8 @@ void countedInBackground()
     require(!counted.pagesEstimated && counted.pages == whole && counted.page == wholePage + 1,
             "The background count must give the pages of the whole book");
     require(!model.countPages({}), "A counted book has nothing left to count");
+    require(Probe::countEnded(model),
+            "A finished count must let go of its document and of the package cache");
 
     // The counted spine items stay in memory: a jump shows the kept
     // document, on its first page, without a new load.
@@ -1350,6 +1357,8 @@ void manyItemsCounted()
     require(Probe::map(model).completeItems().size() == 60 && !counted.pagesEstimated
                     && counted.pages == whole,
             "The count must reach every spine item of a book with many");
+    require(Probe::countEnded(model),
+            "A finished count must let go of its document and of the package cache");
     // A jump after the count still opens its chapter.
     require(model.showSpineItems(55, 55, &error) && model.showSpineItems(2, 2, &error),
             qPrintable("A jump after the count failed: " + error));

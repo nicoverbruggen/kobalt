@@ -1252,8 +1252,17 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     auto &map = pageMap();
     // The estimate comes first: it gives the numbers that are shown until
     // the count ends.
-    if (!map.complete() || map.counted())
+    if (!map.complete())
         return false;
+    if (map.counted()) {
+        // The last spine item can get its pages from the step that opens
+        // it, or from the page on screen. The count ends here then.
+        keepUnit(std::move(counting_), countingSettings_, countingSize_);
+        countingNext_ = -1;
+        source_->epubCache.reset();
+        reportCountEnd();
+        return false;
+    }
     const auto key = estimateKey(settingsState());
     if (key != countingKey_ || size_ != countingSize_) {
         // Another page: the counts so far were for the old one.

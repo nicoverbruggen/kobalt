@@ -136,6 +136,8 @@ struct Values
 {
     QString title, author, chapter, time;
     int chapterPage = 0, chapterPages = 0, page = 0, pages = 0;
+    // True for a total that is an estimate. It shows with a mark.
+    bool pagesEstimated = false, chapterPagesEstimated = false;
     // The percent of the book that is read, when the book has no page
     // numbers: the engine has the text of only a part of it. Each page
     // field then shows its percent form in the same place: the book page

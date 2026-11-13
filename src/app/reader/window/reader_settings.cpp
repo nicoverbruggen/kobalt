@@ -102,6 +102,8 @@ kobalt::headerfooter::Values Reader::chromeValues()
         values.pages = state.value("rough_pages").toInt();
         values.chapterPage = state.value("rough_item_page").toInt();
         values.chapterPages = state.value("rough_item_pages").toInt();
+        values.pagesEstimated = state.value("rough_pages_estimated").toBool();
+        values.chapterPagesEstimated = state.value("rough_item_pages_estimated").toBool();
     } else if (state.contains("book_fraction")) {
         values.page = values.pages = values.chapterPage = values.chapterPages = 0;
         values.percentRead = session->progressPercent();

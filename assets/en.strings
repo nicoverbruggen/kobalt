@@ -504,6 +504,7 @@
 "header_footer.preset.custom" = "Custom";
 /* Arguments: %1, %2 */
 "header_footer.page_of" = "%1 of %2";
+"header_footer.estimated_total" = "~%1";
 /* Arguments: %1 */
 "header_footer.preset.modified" = "%1 *";
 /* Arguments: %1 */

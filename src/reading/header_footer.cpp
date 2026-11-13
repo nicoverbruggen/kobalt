@@ -38,9 +38,17 @@ bool anything(const Layout &layout, int first)
     return false;
 }
 
-QString pageFraction(int page, int pages)
+// An estimated total shows with a mark, such as ~300.
+QString total(int pages, bool estimated)
 {
-    return pages > 0 ? strings::get("common.page_fraction").arg(page).arg(pages) : QString();
+    return estimated ? strings::get("header_footer.estimated_total").arg(pages)
+                     : QString::number(pages);
+}
+
+QString pageFraction(int page, int pages, bool estimated)
+{
+    return pages > 0 ? strings::get("common.page_fraction").arg(page).arg(total(pages, estimated))
+                     : QString();
 }
 
 // A standalone estimate remains approximate while reading history accumulates.
@@ -81,9 +89,10 @@ QString percentDone(int page, int pages, bool decimal)
 
 // Beside a name the page reads 5 of 33, so the slash does not compete with
 // the dot between the two parts.
-QString pageOf(int page, int pages)
+QString pageOf(int page, int pages, bool estimated)
 {
-    return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(pages) : QString();
+    return pages > 0 ? strings::get("header_footer.page_of").arg(page).arg(total(pages, estimated))
+                     : QString();
 }
 
 QString milliseconds(qint64 value)
@@ -377,12 +386,12 @@ Content content(Field field, const Values &values, bool uppercase)
     case Field::ChapterPage:
         result.text = values.percentRead >= 0
                 ? percent(values.chapterPercentRead)
-                : pageFraction(values.chapterPage, values.chapterPages);
+                : pageFraction(values.chapterPage, values.chapterPages, values.chapterPagesEstimated);
         break;
     case Field::BookPage:
         result.text = values.percentRead >= 0
                 ? strings::get("sleep.percent_read").arg(values.percentRead)
-                : pageFraction(values.page, values.pages);
+                : pageFraction(values.page, values.pages, values.pagesEstimated);
         break;
     case Field::ChapterPagesLeft:
         if (values.percentRead >= 0) {
@@ -402,13 +411,13 @@ Content content(Field field, const Values &values, bool uppercase)
         result.chapterTitle = values.chapter;
         result.chapterPosition = values.percentRead >= 0
                 ? percent(values.chapterPercentRead)
-                : pageOf(values.chapterPage, values.chapterPages);
+                : pageOf(values.chapterPage, values.chapterPages, values.chapterPagesEstimated);
         result.text = joined(result.chapterTitle, result.chapterPosition);
         break;
     case Field::TitleAndPage:
         result.text = joined(values.title,
                              values.percentRead >= 0 ? percent(values.percentRead)
-                                                     : pageOf(values.page, values.pages));
+                                                     : pageOf(values.page, values.pages, values.pagesEstimated));
         break;
     case Field::BatteryPercentOnly:
     case Field::BatteryPercent:

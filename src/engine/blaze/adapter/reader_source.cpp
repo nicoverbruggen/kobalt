@@ -17,6 +17,9 @@
 #include <lvdocview.h>
 #include <QElapsedTimer>
 #include <QDir>
+#include <QWaitCondition>
+#include <QThread>
+#include <QMutex>
 #include <QFileInfo>
 #include <textlang.h>
 #include <QFile>
@@ -1160,6 +1163,111 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 #endif
 }
 
+#if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
+namespace {
+// QThread::create() came with Qt 5.10; Kobo firmware 4 has Qt 5.2.
+class BuildThread : public QThread
+{
+public:
+    explicit BuildThread(std::function<void()> body) : body(std::move(body)) { }
+
+protected:
+    void run() override { body(); }
+
+private:
+    std::function<void()> body;
+};
+} // namespace
+
+struct EngineDocument::FullBuild
+{
+    // Who has the engine: the build while Running, the caller of run()
+    // otherwise. Done is the end of the build, with or without a document.
+    enum class State { Parked, Running, Done };
+
+    QMutex mutex;
+    QWaitCondition changed;
+    State state = State::Parked;
+    bool abandoned = false;
+    // "Still current" of the job that lets the build run. False parks it.
+    std::function<bool()> current;
+    std::unique_ptr<EngineDocument> document;
+    QString key;
+    QSize size;
+    int parks = 0;
+    QThread *thread = nullptr;
+
+    ~FullBuild()
+    {
+        if (!thread)
+            return;
+        {
+            // The build unwinds on its own thread, with the engine.
+            QMutexLocker lock(&mutex);
+            abandoned = true;
+            if (state == State::Parked) {
+                state = State::Running;
+                changed.wakeAll();
+            }
+            while (state != State::Done)
+                changed.wait(&mutex);
+        }
+        thread->wait();
+        delete thread;
+    }
+
+    // Lets the build run until it parks or ends. Called by the thread that
+    // owns the engine otherwise; it does not touch the engine meanwhile.
+    State run(const std::function<bool()> &stillCurrent)
+    {
+        QMutexLocker lock(&mutex);
+        if (state == State::Done)
+            return state;
+        current = stillCurrent;
+        state = State::Running;
+        changed.wakeAll();
+        while (state == State::Running)
+            changed.wait(&mutex);
+        current = nullptr;
+        return state;
+    }
+
+    // The stop check of the build, on its thread. It parks the build while
+    // other work has the engine, and is false only for a build that was
+    // given up.
+    bool wanted()
+    {
+        QMutexLocker lock(&mutex);
+        if (abandoned)
+            return false;
+        if (!current || current())
+            return true;
+        // What the engine keeps for the document in work, outside that
+        // document: the stop check and the quote levels of the languages.
+        int levels[64];
+        const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
+        StopCheck::suspend();
+        ++parks;
+        state = State::Parked;
+        changed.wakeAll();
+        while (state != State::Running)
+            changed.wait(&mutex);
+        TextLangMan::koblazeSetQuoteLevels(levels, count);
+        koblazeSetSpineWindow(-1, -1);
+        StopCheck::resume();
+        return !abandoned;
+    }
+
+    void finish(std::unique_ptr<EngineDocument> result)
+    {
+        QMutexLocker lock(&mutex);
+        document = std::move(result);
+        state = State::Done;
+        changed.wakeAll();
+    }
+};
+#endif
+
 Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<bool()> &current,
                                                          bool cachedOnly)
 {
@@ -1190,53 +1298,86 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
             return FullDocument::None;
         }
     }
-    // The whole book needs the room of the documents that only chapter
-    // mode uses.
-    counting_.reset();
-    countingNext_ = -1;
-    kept_.clear();
-    source_->epubCache.reset();
-    auto saved = state();
-    saved.remove("page_estimate");
-    saved["koblaze_first_spine_item"] = -1;
-    saved["koblaze_last_spine_item"] = -1;
-    auto next = std::make_unique<EngineDocument>(fonts_);
-    next->slicePages_ = 0;
-    next->userStyleSheet_ = userStyleSheet_;
-    next->cacheDirectory_ = cacheDirectory_;
-    next->cacheFingerprint_ = cacheFingerprint_;
-    next->cachePolicy_ = cachePolicy_;
-    next->cacheBytes_ = cacheBytes_;
-    next->openInterrupt_ = [&current] { return current && !current(); };
-    QString error;
-    bool opened = false;
-    {
-        // A tap must not wait for this work: the load, the style pass and
-        // the layout all stop, and the next quiet moment starts again.
-        const StopCheck check(current);
-        try {
-            opened = source_->resources
-                    ? next->openResources(source_->resources->fresh(), source_->sizes, size_,
-                                          saved, &error)
-                    : next->open(source_->bytes, size_, saved, &error);
-        } catch (const KoblazeRenderCancelled &) {
-            koblazeSetSpineWindow(-1, -1);
-            return FullDocument::Stopped;
-        }
+    if (building_ && (building_->key != key || building_->size != size_))
+        building_.reset();
+    if (!building_) {
+        // The whole book needs the room of the documents that only chapter
+        // mode uses.
+        counting_.reset();
+        countingNext_ = -1;
+        kept_.clear();
+        source_->epubCache.reset();
+        auto saved = state();
+        saved.remove("page_estimate");
+        saved["koblaze_first_spine_item"] = -1;
+        saved["koblaze_last_spine_item"] = -1;
+        auto build = std::make_shared<FullBuild>();
+        build->key = key;
+        build->size = size_;
+        // What the build reads is copied here: this document goes on with
+        // other work between the runs of the build.
+        auto next = std::make_shared<std::unique_ptr<EngineDocument>>(
+                std::make_unique<EngineDocument>(fonts_));
+        (*next)->slicePages_ = 0;
+        (*next)->userStyleSheet_ = userStyleSheet_;
+        (*next)->cacheDirectory_ = cacheDirectory_;
+        (*next)->cacheFingerprint_ = cacheFingerprint_;
+        (*next)->cachePolicy_ = cachePolicy_;
+        (*next)->cacheBytes_ = cacheBytes_;
+        const auto source = source_;
+        const auto size = size_;
+        auto *state = build.get();
+        build->thread = new BuildThread([state, next, source, saved, size] {
+            {
+                // The first run of the build starts it.
+                QMutexLocker lock(&state->mutex);
+                while (state->state != FullBuild::State::Running)
+                    state->changed.wait(&state->mutex);
+            }
+            auto document = std::move(*next);
+            bool opened = false;
+            if (!state->abandoned) {
+                const std::function<bool()> wanted = [state] { return state->wanted(); };
+                document->openInterrupt_ = [state] { return !state->wanted(); };
+                QString error;
+                try {
+                    const StopCheck check(wanted);
+                    opened = source->resources
+                            ? document->openResources(source->resources->fresh(), source->sizes,
+                                                      size, saved, &error)
+                            : document->open(source->bytes, size, saved, &error);
+                    if (opened && document->pages() > 0)
+                        document->wordCounts(wanted);
+                } catch (const KoblazeRenderCancelled &) {
+                    koblazeSetSpineWindow(-1, -1);
+                    opened = false;
+                } catch (...) {
+                    opened = false;
+                }
+                document->openInterrupt_ = nullptr;
+            }
+            const bool usable = opened && !state->abandoned && document->pages() > 0;
+            if (!usable)
+                document.reset();
+            state->finish(std::move(document));
+        });
+        build->thread->start();
+        building_ = std::move(build);
     }
-    if (current && !current())
+    if (building_->run(current) != FullBuild::State::Done)
         return FullDocument::Stopped;
-    if (!opened || next->pages() <= 0) {
+    auto next = std::move(building_->document);
+    const int parks = building_->parks;
+    building_.reset();
+    if (!next) {
         fullFailed_ = key;
         return FullDocument::None;
     }
-    next->openInterrupt_ = nullptr;
-    next->wordCounts(current);
-    if (current && !current())
-        return FullDocument::Stopped;
     if (diagnosticsActive())
         diagnostic("full-document-ready",
-                   { { "pages", next->pages() }, { "from_cache", next->openedFromCache() } },
+                   { { "pages", next->pages() },
+                     { "from_cache", next->openedFromCache() },
+                     { "parks", parks } },
                    false);
     full_ = std::move(next);
     fullKey_ = key;
@@ -1324,6 +1465,7 @@ std::unique_ptr<EngineDocument> EngineDocument::takeKept(int first, const QJsonO
 
 void EngineDocument::dropSideDocuments()
 {
+    building_.reset();
     full_.reset();
     if (source_ && !source_->parent)
         source_->epubCache.reset();
@@ -1514,6 +1656,7 @@ bool EngineDocument::adoptAhead(int first, int last)
     countingItem_ = old->countingItem_;
     countingNext_ = old->countingNext_;
     countReported_ = old->countReported_;
+    building_ = std::move(old->building_);
     full_ = std::move(old->full_);
     fullKey_ = std::move(old->fullKey_);
     fullFailed_ = std::move(old->fullFailed_);

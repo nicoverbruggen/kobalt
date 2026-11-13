@@ -51,6 +51,11 @@ struct StopCheck
         install(previous);
     }
     static bool cancelled() { return active() && !active()->stillCurrent(); }
+    // For work that pauses on its own thread while another thread uses the
+    // engine: suspend() takes the check of this thread out of the engine,
+    // resume() puts it back.
+    static void suspend() { install(nullptr); }
+    static void resume() { install(active()); }
     bool requested() const
     {
         return stopRequested(const_cast<std::function<bool()> *>(&stillCurrent));

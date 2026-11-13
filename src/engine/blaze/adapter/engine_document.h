@@ -432,6 +432,13 @@ private:
     // document. `aheadSettings_` and `aheadSize_` are what it
     // was opened with: after a change of settings it is not used.
     std::unique_ptr<EngineDocument> ahead_;
+    // The build of the document of the whole book. It runs on its own
+    // thread, but never while this thread uses the engine: the two hand the
+    // engine to each other. A page turn parks the build at its next stop
+    // check, and the next quiet moment lets it go on from there, so that no
+    // work is lost.
+    struct FullBuild;
+    std::shared_ptr<FullBuild> building_;
     // The document of the whole book that prepareFullDocument() built, with
     // the page it was built for. `fullFailed_` holds the page for which the
     // whole book did not open, so that it is not tried again.

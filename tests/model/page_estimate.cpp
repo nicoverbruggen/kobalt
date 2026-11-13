@@ -7,6 +7,7 @@
 #include "engine/blaze/adapter/reader_source.h"
 #include "publication/page_estimate.h"
 #include "support/qt_compat.h"
+#include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -1375,6 +1376,90 @@ void fullDocument()
     require(other.prepareFullDocument([] { return false; }) == Engine::FullDocument::Stopped
                     && !Probe::fullView(other),
             "A document for another font size must not stay");
+
+    // A build that is parked is given up without a wait when the font size
+    // changes, and when its book closes.
+    int seen = 0;
+    require(other.prepareFullDocument([&] { return ++seen <= 5; })
+                    == Engine::FullDocument::Stopped,
+            "The build must park");
+    require(other.applyAppearance(appearance::Patch(qt::object({ { "font_pixels", 28 } }))),
+            "Cannot change the font size with a parked build");
+    seen = 0;
+    require(other.prepareFullDocument([&] { return ++seen <= 5; })
+                    == Engine::FullDocument::Stopped,
+            "A new build must start for the new font size");
+    require(other.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "The new build must finish");
+    EngineDocument closing(test::readerFonts());
+    openFiles(closing, pagesBook());
+    seen = 0;
+    require(closing.prepareFullDocument([&] { return ++seen <= 5; })
+                    == Engine::FullDocument::Stopped,
+            "The build must park before its book closes");
+}
+
+// The build of the whole book parks at a stop check when other work needs
+// the engine, and goes on from there. Parked after every few checks, with
+// chapter work on the engine in between, it must still give the document of
+// a load that was never stopped: the same pages, with the same pixels.
+void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, int item,
+                        const char *name, int checks = 7)
+{
+    const auto record = [](EngineDocument &model, int page) {
+        const QImage image = model.image(page);
+        return model.pageStart(page) + ' '
+                + QString::fromLatin1(
+                        QCryptographicHash::hash(
+                                QByteArray::fromRawData(
+                                        reinterpret_cast<const char *>(image.constBits()),
+                                        int(image.sizeInBytes())),
+                                QCryptographicHash::Md5)
+                                .toHex());
+    };
+    QStringList reference;
+    {
+        EngineDocument whole(test::readerFonts());
+        openWhole(whole);
+        for (int page = 0; page < whole.pages(); ++page)
+            reference.append(record(whole, page));
+    }
+    EngineDocument model(test::readerFonts());
+    openWhole(model);
+    model.setChapterSlices(6);
+    QString error;
+    require(model.showSpineItems(item, item, &error) && model.go(0), qPrintable(error));
+    int parks = 0;
+    for (;;) {
+        // A different number of checks each time, so that the build parks
+        // in every kind of place.
+        const int budget = 1 + parks % checks;
+        int seen = 0;
+        const auto result = model.prepareFullDocument([&] { return ++seen <= budget; });
+        if (result == Engine::FullDocument::Ready)
+            break;
+        require(result == Engine::FullDocument::Stopped && parks < 2000000,
+                "The build must park and go on until it is ready");
+        ++parks;
+        // Other work has the engine now: page turns, a jump to another
+        // chapter and a drawn page.
+        if (parks % 5 == 0)
+            require(model.showSpineItems(parks % 3, parks % 3, &error), qPrintable(error));
+        else if (!model.turnInWindow(parks % 2 ? 1 : -1))
+            model.turnInWindow(parks % 2 ? -1 : 1);
+        if (parks % 3 == 0)
+            model.image(model.page());
+    }
+    require(model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
+            "The prepared document must be shown");
+    require(model.pages() == reference.size(), "A parked build changed the page count");
+    int different = 0;
+    for (int page = 0; page < model.pages(); ++page)
+        different += record(model, page) != reference[page];
+    std::printf("parked build (%s): %d parks, %d pages, %d differ\n", name, parks,
+                int(reference.size()), different);
+    require(parks > 50, "The fixture must park the build many times");
+    require(different == 0, "A parked build changed a page");
 }
 
 // A book that is in the parsed-book cache gives the whole book without
@@ -1932,6 +2017,35 @@ int main(int argc, char **argv)
     manyItemsCounted();
     fullDocument();
     fullDocumentFromCache(bytes);
+    // KOBALT_PARKED_BOOK names another EPUB for the same check, for a book
+    // that is not a fixture.
+    if (const auto other = qEnvironmentVariable("KOBALT_PARKED_BOOK"); !other.isEmpty()) {
+        QFile book(other);
+        require(book.open(QIODevice::ReadOnly), "Cannot read KOBALT_PARKED_BOOK");
+        const auto text = book.readAll();
+        parkedFullDocument(
+                [&](EngineDocument &model) {
+                    QString error;
+                    require(model.open(text, QSize(600, 800),
+                                       { { "font_pixels", 28 }, { "line_spacing_version", 1 } },
+                                       &error),
+                            qPrintable(error));
+                },
+                1, "KOBALT_PARKED_BOOK", 199);
+    }
+    parkedFullDocument(
+            [](EngineDocument &model) {
+                openResources(model, pagesBook(),
+                              { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+            },
+            3, "pages book");
+    parkedFullDocument(
+            [&](EngineDocument &model) {
+                QString error;
+                require(model.open(bytes, Page().viewport, Page().settings(), &error),
+                        qPrintable(error));
+            },
+            1, "type tester");
     hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);

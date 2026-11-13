@@ -284,6 +284,19 @@ void TextLangMan::resetCounters() {
     }
 }
 
+int TextLangMan::koblazeQuoteLevels( int * levels, int size ) {
+    for ( int i=0; i<_lang_cfg_list.length() && i<size; i++ ) {
+        levels[i] = _lang_cfg_list[i]->_quote_nesting_level;
+    }
+    return _lang_cfg_list.length();
+}
+
+void TextLangMan::koblazeSetQuoteLevels( const int * levels, int count ) {
+    for ( int i=0; i<_lang_cfg_list.length() && i<count; i++ ) {
+        _lang_cfg_list[i]->_quote_nesting_level = levels[i];
+    }
+}
+
 // TextLangCfg object: per language holder of language specificities
 
 // For CSS "content: open-quote / close-quote"

@@ -5,6 +5,7 @@
 #include "reader_render_callback.h"
 #include "reader_source.h"
 #include "publication/page_estimate.h"
+#include <algorithm>
 #include <QCryptographicHash>
 #include <QElapsedTimer>
 #include <QJsonDocument>
@@ -239,6 +240,23 @@ QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) cons
     record.read = map.completeItems();
     if (map.keeping())
         record.kept = map.keptPages();
+    // The parts of the spine items that stay in the record, the nearest to
+    // the reading position first.
+    auto parts = map.completeParts();
+    std::stable_sort(parts.begin(), parts.end(),
+                     [&](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
+                         return qAbs(a.item - estimate.lastItem) < qAbs(b.item - estimate.lastItem);
+                     });
+    for (const auto &part : parts) {
+        if (record.parts.size() >= PageEstimateRecord::maxParts)
+            break;
+        if (record.read.contains(part.item))
+            record.parts.append(part);
+    }
+    std::stable_sort(record.parts.begin(), record.parts.end(),
+                     [](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
+                         return a.item != b.item ? a.item < b.item : a.first < b.first;
+                     });
     // Keep the spine items nearest to the reading position.
     while (record.read.size() > PageEstimateRecord::maxRead) {
         const int firstItem = record.read.firstKey(), lastItem = record.read.lastKey();
@@ -261,6 +279,7 @@ void EngineDocument::restorePageEstimate(const QJsonValue &saved)
     if (record.spineItems != spineItemCount_ || record.layout != estimateKey(settingsState()))
         return;
     map.restore(record.read);
+    map.restoreParts(record.parts);
     map.restoreKept(record.kept);
     auto &estimate = source_->pageEstimate;
     estimate.key = record.layout;

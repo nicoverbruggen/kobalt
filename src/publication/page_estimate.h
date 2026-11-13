@@ -230,6 +230,16 @@ struct PageEstimateRecord
     // The kept estimate of each spine item, or empty. See
     // PageMap::keepFirstEstimate().
     QVector<double> kept;
+    // At most this many parts, so that the record stays small.
+    static constexpr int maxParts = 2000;
+    // The parts of the read spine items that were laid out in several
+    // slices: the first and last character of each and its real pages.
+    // With them a book that was counted opens with its real page numbers.
+    struct Part
+    {
+        int item = 0, first = 0, last = 0, characters = 0, pages = 0;
+    };
+    QVector<Part> parts;
 
     QJsonObject toJson() const;
     // False for a missing record or one that is not valid. Invalid parts of
@@ -282,6 +292,11 @@ public:
     // count as observations but do not change the weights, which already
     // contain them.
     void restore(const QMap<int, int> &pages);
+    // The parts of the spine items of completeItems() that have several.
+    QVector<PageEstimateRecord::Part> completeParts() const;
+    // Gives the parts of spine items from an earlier reading. They replace
+    // what restore() gave for the same spine item.
+    void restoreParts(const QVector<PageEstimateRecord::Part> &parts);
 
     int observations() const { return observed_.size(); }
 

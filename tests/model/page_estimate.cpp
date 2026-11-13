@@ -1280,6 +1280,61 @@ void countedInBackground()
             "Another font size must count again");
 }
 
+// A book whose pages were all counted opens again with its real page
+// numbers: no estimate, no measuring and no new count. Reading on keeps
+// them.
+void reopenCounted()
+{
+    const auto files = pagesBook();
+    EngineDocument first(test::readerFonts());
+    openFiles(first, files);
+    QString error;
+    require(first.showSpineItems(3, 3, &error) && first.go(0), qPrintable(error));
+    // Into a later slice of the long chapter.
+    for (int turn = 0; turn < 10; ++turn)
+        require(first.turnInWindow(1), "The fixture is too short to read on");
+    require(Probe::sliceFirst(first) > 0, "The fixture needs a later slice");
+    while (first.refinePageEstimate()) { }
+    while (first.countPages({})) { }
+    const auto shown = first.roughPages();
+    require(!shown.pagesEstimated, "The book must be counted");
+    auto saved = first.state();
+    PageEstimateRecord record;
+    require(PageEstimateRecord::fromJson(saved.value("page_estimate"), &record)
+                    && !record.parts.isEmpty() && record.kept.isEmpty(),
+            "A counted book saves the parts of its long spine items and no estimate");
+    saved["koblaze_first_spine_item"] = 3;
+    saved["koblaze_last_spine_item"] = 3;
+
+    EngineDocument model(test::readerFonts());
+    model.setChapterSlices(6);
+    openResources(model, files, saved);
+    auto rough = model.roughPages();
+    std::printf("reopened counted: page %d of %d, saved page %d of %d\n", rough.page, rough.pages,
+                shown.page, shown.pages);
+    require(!rough.pagesEstimated && rough.page == shown.page && rough.pages == shown.pages,
+            "A counted book must open with its real page numbers");
+    require(!model.countPages({}), "A counted book has nothing to count after it opens");
+    for (int turn = 0; turn < 12; ++turn) {
+        require(model.turnInWindow(1), "The fixture is too short to read on");
+        const auto next = model.roughPages();
+        require(!next.pagesEstimated && next.page == rough.page + 1 && next.pages == shown.pages,
+                "Reading on in a counted book must keep its real page numbers");
+        rough = next;
+    }
+    // A damaged part drops only the parts of its spine item.
+    auto damaged = saved.value("page_estimate").toObject();
+    auto runs = damaged.value("parts").toArray();
+    auto run = runs[0].toArray();
+    run[2] = -5;
+    runs[0] = run;
+    damaged["parts"] = runs;
+    PageEstimateRecord partial;
+    require(PageEstimateRecord::fromJson(damaged, &partial)
+                    && partial.parts.size() < record.parts.size() && partial.read == record.read,
+            "A damaged part must not drop the rest of the record");
+}
+
 // The first complete estimate stays while the reader reads. A spine item
 // that gets its real pages later moves neither the page number nor the
 // total. Only a book with the real pages of every spine item replaces it.
@@ -1686,6 +1741,7 @@ int main(int argc, char **argv)
     forwardPages();
     laterCounted();
     countedInBackground();
+    reopenCounted();
     hiddenUntilComplete();
     chapterMode(bytes);
     reopen(bytes);

@@ -793,6 +793,46 @@ void PageMap::restore(const QMap<int, int> &pages)
     refit();
 }
 
+QVector<PageEstimateRecord::Part> PageMap::completeParts() const
+{
+    QVector<PageEstimateRecord::Part> result;
+    const auto complete = completeItems();
+    for (auto it = observed_.cbegin(); it != observed_.cend(); ++it) {
+        const int item = int(it.key() >> 32);
+        // A spine item with one part is whole: its pages are enough.
+        if (!complete.contains(item) || (it->first == 0 && it->last == it->characters))
+            continue;
+        result.append({ item, it->first, it->last, it->characters, it->pages });
+    }
+    return result;
+}
+
+void PageMap::restoreParts(const QVector<PageEstimateRecord::Part> &parts)
+{
+    QSet<int> replaced;
+    for (const auto &part : parts) {
+        if (part.item < 0 || part.item >= items_.size() || part.characters <= 0 || part.first < 0
+            || part.last <= part.first || part.last > part.characters || part.pages < 0)
+            continue;
+        const auto key = qint64(part.item) << 32;
+        if (!replaced.contains(part.item)) {
+            replaced.insert(part.item);
+            for (auto it = observed_.lowerBound(key);
+                 it != observed_.end() && it.key() >> 32 == part.item;)
+                it = observed_.erase(it);
+        }
+        Observed observed;
+        observed.first = part.first;
+        observed.last = part.last;
+        observed.characters = part.characters;
+        observed.pages = part.pages;
+        observed.fit = false;
+        observed_.insert(key | quint32(part.first), observed);
+    }
+    if (!replaced.isEmpty())
+        refit();
+}
+
 int PageMap::blockAt(const Item &item, double fraction) const
 {
     // The first block that starts at or after the fraction. A block starts
@@ -1061,6 +1101,28 @@ QJsonObject PageEstimateRecord::toJson() const
     }
     if (!runs.isEmpty())
         object["read"] = runs;
+    if (!parts.isEmpty()) {
+        // One run for each spine item: the item, its characters, then the
+        // first character, the last character and the pages of each part.
+        QJsonArray runs, run;
+        int item = -1;
+        for (const auto &part : parts) {
+            if (part.item != item) {
+                if (!run.isEmpty())
+                    runs.append(run);
+                run = QJsonArray();
+                run.append(part.item);
+                run.append(part.characters);
+                item = part.item;
+            }
+            run.append(part.first);
+            run.append(part.last);
+            run.append(part.pages);
+        }
+        if (!run.isEmpty())
+            runs.append(run);
+        object["parts"] = runs;
+    }
     if (!kept.isEmpty() && kept.size() <= maxRead) {
         QJsonArray pages;
         for (const double value : kept)
@@ -1114,6 +1176,28 @@ bool PageEstimateRecord::fromJson(const QJsonValue &value, PageEstimateRecord *r
                 break;
             result.read.insert(start + i - 1, pages);
         }
+    }
+    for (const auto &entry : object.value("parts").toArray()) {
+        const auto run = entry.toArray();
+        int item = 0, characters = 0;
+        if (run.size() < 5 || run.size() % 3 != 2 || !integer(run[0], 0, 1000000, &item)
+            || !integer(run[1], 1, INT_MAX, &characters))
+            continue;
+        QVector<Part> parts;
+        for (int i = 2; i + 2 < run.size(); i += 3) {
+            Part part;
+            part.item = item;
+            part.characters = characters;
+            if (!integer(run[i], 0, characters, &part.first)
+                || !integer(run[i + 1], part.first + 1, characters, &part.last)
+                || !integer(run[i + 2], 0, 1000000, &part.pages)) {
+                parts.clear();
+                break;
+            }
+            parts.append(part);
+        }
+        if (result.parts.size() + parts.size() <= maxParts)
+            result.parts += parts;
     }
     const auto kept = object.value("kept").toArray();
     if (kept.size() <= maxRead) {

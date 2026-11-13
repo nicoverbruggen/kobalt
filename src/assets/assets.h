@@ -10,11 +10,16 @@ namespace kobalt {
 class AssetBundle
 {
 public:
-    AssetBundle(QString root, QString expectedVersion);
+    enum class Verification { OnDemand, Explicit };
+    AssetBundle(QString root, QString expectedVersion,
+                Verification verification = Verification::OnDemand);
     ~AssetBundle();
     AssetBundle(const AssetBundle &) = delete;
     AssetBundle &operator=(const AssetBundle &) = delete;
     bool available() const;
+    // Explicit bundles remain unavailable until this full check succeeds.
+    // Run at storage lifecycle boundaries, on a worker, never on book opening.
+    bool verify(const std::function<bool()> &current = {});
     bool hasFilesystemRecoveryFiles() const;
     void invalidate();
     QString file(const QString &name) const;
@@ -33,6 +38,7 @@ public:
     const QString &root() const;
 
 private:
+    bool verifyFiles() const;
     struct Data;
     std::unique_ptr<Data> data;
 };

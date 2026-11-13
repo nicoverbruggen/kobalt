@@ -14,6 +14,7 @@
 #include <QMutexLocker>
 #include <QTemporaryDir>
 #include <algorithm>
+#include <atomic>
 
 namespace kobalt {
 namespace {
@@ -92,12 +93,16 @@ struct AssetBundle::Data
     QString root, version;
     QMutex mutex;
     QList<Entry> checked;
+    Verification verification = Verification::OnDemand;
+    std::atomic_bool verified{ false };
 };
 
-AssetBundle::AssetBundle(QString root, QString expectedVersion) : data(new Data)
+AssetBundle::AssetBundle(QString root, QString expectedVersion, Verification verification)
+    : data(new Data)
 {
     data->root = std::move(root);
     data->version = std::move(expectedVersion);
+    data->verification = verification;
 }
 
 AssetBundle::~AssetBundle() = default;
@@ -109,8 +114,10 @@ const QString &AssetBundle::root() const
 
 void AssetBundle::invalidate()
 {
+    data->verified.store(false);
     QMutexLocker lock(&data->mutex);
     data->checked.clear();
+    data->verified.store(false);
 }
 
 QString AssetBundle::file(const QString &name) const
@@ -137,7 +144,24 @@ bool AssetBundle::hasFilesystemRecoveryFiles() const
 
 bool AssetBundle::available() const
 {
+    if (data->verification == Verification::Explicit)
+        return data->verified.load();
     QMutexLocker lock(&data->mutex);
+    return verifyFiles();
+}
+
+bool AssetBundle::verify(const std::function<bool()> &current)
+{
+    QMutexLocker lock(&data->mutex);
+    data->verified.store(false);
+    data->checked.clear();
+    const bool valid = verifyFiles() && (!current || current());
+    data->verified.store(valid);
+    return valid;
+}
+
+bool AssetBundle::verifyFiles() const
+{
     if (data->root.isEmpty())
         return false;
     auto &checked = data->checked;

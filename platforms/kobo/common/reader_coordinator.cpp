@@ -324,10 +324,14 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
                     kobalt::diagnostic("usb-release-start");
                     disposeForTransition([] { });
                 },
-                [this, ready = std::move(ready)] {
-                    environment_.assets.invalidate();
-                    ready();
-                });
+                std::move(ready));
+    };
+    lifecycle->storageReleased = [this] { environment_.invalidateAssets(); };
+    lifecycle->storageRestored = [this] {
+        environment_.verifyAssets(this, "usb", [this](bool valid) {
+            if (valid)
+                kobalt::ui::prepareOpeningFonts(environment_.assets);
+        });
     };
     lifecycle->preparePowerScreen = [this](NativeLifecycle::Shutdown mode) {
         homeSleep->clear();
@@ -374,7 +378,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     // Read and check the interface faces on a worker thread before any tap,
     // so the first opening view does not wait for storage.
     if (available()) {
-        kobalt::ui::prepareOpeningFonts(environment_.assets);
+        if (environment_.assets.available())
+            kobalt::ui::prepareOpeningFonts(environment_.assets);
         openingDark = storage::readPreferences(environment_.paths.preferences())
                               .object.value("dark_mode")
                               .toBool(false);
@@ -469,7 +474,7 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
 {
     QElapsedTimer openingStarted;
     openingStarted.start();
-    if (!available())
+    if (!available() || !environment_.assets.available())
         return false;
     if (lifecycle->blocked() || lifecycle->draining)
         return true;

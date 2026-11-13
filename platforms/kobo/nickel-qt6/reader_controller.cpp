@@ -15,6 +15,7 @@
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/crash_reports.h"
 #include "support/diagnostics.h"
+#include "ui/style/fonts.h"
 #include "platforms/kobo/common/native_startup.h"
 #include "platforms/kobo/common/native_startup_wait.h"
 #include "platforms/kobo/common/reader_environment.h"
@@ -109,6 +110,12 @@ bool enabled()
 #endif
 }
 
+// Asset availability is retained between boot and USB storage boundaries.
+bool readerAvailable()
+{
+    return enabled() && environment().assets.available();
+}
+
 #if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
 int benchmarkReader = -1;
 #endif
@@ -145,7 +152,7 @@ extern "C" __attribute__((visibility("default"))) bool kobalt_prerender_allowed(
 
 void updatePrerendering()
 {
-    const bool next = settingsReady && enabled() && alternativeEnabled();
+    const bool next = settingsReady && readerAvailable() && alternativeEnabled();
     if (next == prerenderSuppressed)
         return;
     prerenderSuppressed = next;
@@ -303,7 +310,14 @@ public:
     void start()
     {
         retry.start();
-        kobalt::qt::later(0, this, [this] { attempt(false); });
+        kobalt::qt::later(0, this, [this] {
+            environment().verifyAssets(this, "boot", [this](bool valid) {
+                if (valid)
+                    kobalt::ui::prepareOpeningFonts(environment().assets);
+                attempt(false);
+            });
+            attempt(false);
+        });
     }
 
     bool open(const void *volume, const void *context)
@@ -419,7 +433,7 @@ public:
             finish();
             return;
         }
-        CoordinatorBindings bindings{ enabled };
+        CoordinatorBindings bindings{ readerAvailable };
         bindings.automaticBookOpening = alternativeEnabled;
         bindings.setAutomaticBookOpening = setAlternativeFromKobalt;
 #if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
@@ -558,7 +572,9 @@ int initialize()
     nativeInitializationFinished = [startup] {
         kobalt::qt::later(0, startup, [startup] { startup->attempt(false); });
     };
-    kobalt::configureBookMenu([] { return enabled() && bool(beginOpening); }, alternativeEnabled);
+    kobalt::configureBookMenu([] { return readerAvailable() && bool(beginOpening); },
+                              alternativeEnabled);
+    environment().assetsChanged = updatePrerendering;
     startup->start();
     kobalt::diagnostic("startup-listening");
     return 0;

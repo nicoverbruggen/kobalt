@@ -526,6 +526,8 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
         // finish after disconnect has cancelled it and reopened the profile.
         sessionStorageAvailable.store(false);
         storage::closeProfile(true);
+        if (guard->storageReleased)
+            guard->storageReleased();
         auto *manager = guard->pendingWorkflow.data();
         guard->pendingWorkflow.clear();
         guard->storageReady = true;
@@ -556,6 +558,8 @@ void NativeLifecycle::beginUsb()
         sessionStorageAvailable.store(false);
         storage::closeProfile(true);
         diagnostic("usb-release-complete");
+        if (guard->storageReleased)
+            guard->storageReleased();
         guard->storageReady = true;
         guard->finishUsb();
     });
@@ -604,7 +608,9 @@ void NativeLifecycle::disconnected()
 {
     if (!active || active->exported || active->poweringOff)
         return; // Wait for remount, or leave storage closed for shutdown.
-    // USB ended before the export; the partition was never released.
+    // USB ended before export. The profile may already have been released
+    // while waiting for the gadget, so restore that lifecycle state too.
+    const bool released = active->storageReady;
     storage::reopenProfile();
     sessionStorageAvailable.store(true);
     ++active->generation;
@@ -612,6 +618,8 @@ void NativeLifecycle::disconnected()
     active->pendingGadget.clear();
     active->storageReady = false;
     active->pendingWorkflow.clear();
+    if (released && active->storageRestored)
+        active->storageRestored();
     active->wakeRetry.start(0);
 }
 
@@ -649,6 +657,8 @@ void NativeLifecycle::processingDone()
     diagnostic("usb-storage-ready");
     if (restartAfterRemoval())
         return;
+    if (storageRestored)
+        storageRestored();
     if (nativeSleeping()) {
         engineActivity().pause(true);
     }

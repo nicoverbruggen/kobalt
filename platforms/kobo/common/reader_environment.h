@@ -5,6 +5,11 @@
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
 #include "support/diagnostics.h"
+#include "engine/engine_worker.h"
+#include "support/qt_compat.h"
+#include <QCoreApplication>
+#include <QPointer>
+#include <atomic>
 
 namespace kobalt::nickel {
 inline constexpr auto configDir = KOBALT_CONFIG_DIR;
@@ -42,8 +47,52 @@ struct ReaderEnvironment
                                 {});
     }
 
-    AssetBundle assets{ QStringLiteral(KOBALT_CONFIG_DIR "/assets"),
-                        QStringLiteral(KOBALT_VERSION) };
+    AssetBundle assets{ QStringLiteral(KOBALT_CONFIG_DIR "/assets"), QStringLiteral(KOBALT_VERSION),
+                        AssetBundle::Verification::Explicit };
+    std::function<void()> assetsChanged;
+
+    // USB calls this only after draining the engine and releasing storage.
+    // A cancelled USB cleanup must not invalidate an otherwise usable bundle.
+    void invalidateAssets()
+    {
+        ++assetGeneration;
+        assets.invalidate();
+        if (assetsChanged)
+            assetsChanged();
+    }
+
+    void verifyAssets(QObject *context, const char *reason, std::function<void(bool)> finished = {})
+    {
+        invalidateAssets();
+        const auto generation = assetGeneration.load();
+        const QPointer<QObject> guard(context);
+        qt::invoke(
+                engineWorker(),
+                [this, guard, generation, reason, finished] {
+                    if (generation != assetGeneration.load())
+                        return;
+                    DiagnosticOperation operation("asset-verification");
+                    const bool valid = assets.verify(
+                            [this, generation] { return generation == assetGeneration.load(); });
+                    qt::invoke(
+                            qApp,
+                            [this, guard, generation, reason, valid, finished] {
+                                if (!guard || generation != assetGeneration.load())
+                                    return;
+                                diagnostic("assets-checked",
+                                           { { "reason", QString::fromLatin1(reason) },
+                                             { "valid", valid } },
+                                           valid ? DiagnosticSeverity::Activity
+                                                 : DiagnosticSeverity::Warning);
+                                if (assetsChanged)
+                                    assetsChanged();
+                                if (finished)
+                                    finished(valid);
+                            },
+                            Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
+    }
     FontCopies fontCopies;
     storage::Paths paths{ QString::fromLatin1(configDir),
 #ifdef KOBALT_READER_HARDWARE
@@ -75,6 +124,7 @@ struct ReaderEnvironment
     }
 
 private:
+    std::atomic<quint64> assetGeneration{ 0 };
     mutable storage::RecordWriter sessionReports;
     QString placeholder;
     QStringList systemFonts;

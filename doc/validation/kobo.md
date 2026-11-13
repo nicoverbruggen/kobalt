@@ -1,5 +1,7 @@
 # Kobo adapter checks
 
+Kobo starts full asset verification from the first queued startup callback, before reader activation. The native coordinator still observes USB when verification fails, so repaired assets can recover after a completed remount. `assets-checked` records the `boot` or `usb` boundary and its result. Per-book availability reads the retained result. Both SDK checks compile this wiring; `model.storage-assets` checks explicit verification and repair, and `platform.native-lifecycle` checks the storage boundary order.
+
 Label `kobo`. Build `mac-tests`, then run `ctest --preset mac -L kobo` from `platforms/desktop/`. `ctest --preset mac -N -L kobo` lists its tests.
 
 These checks cover startup recovery, the native startup wait, Nickel Screensaver discovery, native dialogs above the reader, the Nickel book menu, session and font-scale adapters and Qt5 compatibility helpers. Sleep, USB and shutdown adapters are in [Sleep, USB and power](sleep.md).

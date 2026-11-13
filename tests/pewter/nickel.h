@@ -143,7 +143,7 @@ void storeBookmark(Volume &volume, const QString &location, const QDateTime &dat
 } // namespace pewter
 
 // Local-library scan used once after removing obsolete preview files.
-class PlugWorkflowManager
+class PlugWorkflowManager : public QObject
 {
 public:
     static PlugWorkflowManager *sharedInstance();

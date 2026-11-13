@@ -8,8 +8,10 @@ namespace kobalt {
 class ChapterBars;
 class StatsCell;
 
-// Stats: the current chapter, a chart of every chapter's length and three
-// figures. Page figures do not need word counts; only the chart waits for them.
+// Stats: the current chapter, a chart of every chapter's length with the
+// chapter's and the book's word totals below it, and chapter, book and session
+// figures. Page figures do not need word counts; only the chart and the word
+// totals wait for them.
 class ChapterGraph : public ui::Panel
 {
 public:
@@ -64,10 +66,14 @@ private:
     // The chart can grow on larger screens and shrink on short ones.
     int chartHeight() const;
     bool inlinePager() const;
+    // On a short screen the word totals move from their row into the cells.
+    bool wordsInCells() const;
+    int wordsRowHeight() const;
+    int wordsHeight() const;
     int pagerHeight() const;
-    bool ready = false, dense = true;
+    bool ready = false, dense = true, cellWords = false;
     qint64 words = -1, chapterTime = -1, bookTime = -1;
-    int minutes = 0, pageTurns = 0;
+    int minutes = 0, pageTurns = 0, chapterNumber = 0;
 
     struct Progress
     {
@@ -75,15 +81,18 @@ private:
     } progress;
 
     QString error;
-    QLabel *message, *chapterCaption, *chapterPage, *chapterTitle;
+    QLabel *message, *chapterCaption, *positionSeparator, *chapterPage, *chapterTitle;
     QString title;
     int progressWeight = -1;
     ui::PagerBar *pager;
     ui::CellButton *mode;
     ChapterBars *bars;
+    QLabel *chapterWords, *bookWords;
+    QString chapterWordsText, bookWordsText;
     StatsCell *chapterCell, *bookCell, *sessionCell;
     int capacity() const;
     void refreshCells();
+    void arrangeWords();
     bool paged() const;
     int chartTop() const;
     void arrange();

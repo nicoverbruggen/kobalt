@@ -126,7 +126,7 @@ protected:
 };
 
 // A caption with an optional percentage, a large figure with its unit, and one
-// grey line of detail.
+// grey line of detail. A short screen adds the word total as a second line.
 class StatsCell : public QWidget
 {
 public:
@@ -168,13 +168,15 @@ public:
 
     // A short detail replaces the full one when only the short one fits on a line.
     void set(const QString &value, const QString &unitText, const QString &detailText,
-             const QString &percentText = {}, const QString &shortDetail = {})
+             const QString &percentText = {}, const QString &shortDetail = {},
+             const QString &extraLine = {})
     {
         figure->setText(value);
         percent->setText(percentText);
         unitValue = unitText;
         detailValue = detailText;
         shortValue = shortDetail;
+        extraValue = extraLine;
         arrange();
     }
 
@@ -182,7 +184,7 @@ protected:
     void resizeEvent(QResizeEvent *) override { arrange(); }
 
 private:
-    QString unitValue, detailValue, shortValue;
+    QString unitValue, detailValue, shortValue, extraValue;
 
     void arrange()
     {
@@ -219,7 +221,11 @@ private:
         const bool shorten = !shortValue.isEmpty()
                 && ui::interfaceTextWidth(detailValue, unitMetrics) > inner
                 && ui::interfaceTextWidth(shortValue, unitMetrics) <= inner;
-        detail->setText(twoLines(unitMetrics, shorten ? shortValue : detailValue, inner));
+        const auto text = shorten ? shortValue : detailValue;
+        detail->setText(extraValue.isEmpty()
+                                ? twoLines(unitMetrics, text, inner)
+                                : ui::elideInterfaceText(text, unitMetrics, inner) + '\n'
+                                        + ui::elideInterfaceText(extraValue, unitMetrics, inner));
     }
 
     // A detail that does not fit breaks at the space that gives the most even
@@ -260,10 +266,15 @@ ChapterGraph::ChapterGraph(QWidget *parent) : Panel(parent, Qt::BottomEdge)
     chapterCaption = new ui::InterfaceLabel(this);
     chapterCaption->setObjectName("rrGraphChapterNumber");
     ui::captionLabel(chapterCaption);
+    // The page in the chapter follows the contents position on the caption line.
+    positionSeparator = new ui::InterfaceLabel(QStringLiteral("·"), this);
+    positionSeparator->setObjectName("rrGraphPositionSeparator");
+    ui::captionLabel(positionSeparator);
+    positionSeparator->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     chapterPage = new ui::InterfaceLabel(this);
     chapterPage->setObjectName("rrGraphChapterPosition");
     ui::captionLabel(chapterPage);
-    chapterPage->setAlignment(Qt::AlignRight | Qt::AlignTop);
+    chapterPage->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     chapterCaption->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     chapterTitle = new ui::PrivateTextLabel(this);
     chapterTitle->setObjectName("rrGraphChapterTitle");
@@ -293,6 +304,19 @@ ChapterGraph::ChapterGraph(QWidget *parent) : Panel(parent, Qt::BottomEdge)
         if (changed)
             changed();
     });
+    // The word totals label the chart: the chapter's on the left, the book's on the right.
+    chapterWords = new ui::InterfaceLabel(this);
+    chapterWords->setObjectName("rrGraphChapterWords");
+    bookWords = new ui::InterfaceLabel(this);
+    bookWords->setObjectName("rrGraphBookWords");
+    for (auto *label : { chapterWords, bookWords }) {
+        label->setTextFormat(Qt::PlainText);
+        ui::readerStyle(label,
+                        ui::styles::font(chapters::unitText)
+                                + "background:transparent;color:palette(placeholder-text);");
+    }
+    chapterWords->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    bookWords->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     chapterCell = new StatsCell(this, "rrGraphChapter", strings::get("stats.chapter"));
     chapterCell->detail->setObjectName("rrGraphNextChapter");
     bookCell = new StatsCell(this, "rrGraphBook", strings::get("stats.book"));
@@ -323,9 +347,13 @@ void ChapterGraph::setProgress(const QString &title, int chapterPage, int chapte
 
 void ChapterGraph::setChapterNumber(int number, int count)
 {
-    chapterCaption->setText(number > 0 && count > 0
+    chapterNumber = number > 0 && count > 0 ? number : 0;
+    chapterCaption->setText(chapterNumber
                                     ? strings::get("stats.contents_position").arg(number).arg(count)
                                     : QString());
+    refreshCells();
+    // The page in the chapter follows the caption, so its place depends on the caption.
+    arrange();
 }
 
 void ChapterGraph::setReading(int minutes, qint64 total, qint64 chapterMilliseconds,
@@ -377,27 +405,43 @@ void ChapterGraph::refreshCells()
                                                    : strings::get("common.pages"))
             : p.chapterPages > 0 ? strings::get("stats.last_chapter")
                                  : QString();
+    // The catalog is English, so group digits the English way on every device.
+    const auto wordTotal = [](qint64 count) {
+        return count >= 0
+                ? strings::get("stats.words")
+                          .arg(QLocale(QLocale::English, QLocale::UnitedStates).toString(count))
+                : QString();
+    };
+    // A chapter's total waits for the counts, and a failed count never shows
+    // the page lengths that the chart falls back to.
+    const qint64 chapterTotal = words >= 0 && ready && error.isEmpty() && selection.current >= 0
+                    && selection.current < chapters.size()
+            ? chapters[selection.current].words
+            : -1;
     chapterCell->set(p.chapterPages > 0 ? QString::number(left) : QString(),
                      p.chapterPages > 0 ? pagesLeft(left) : QString(), next,
                      p.chapterPages > 0 ? strings::get("common.percent").arg(chapterValue)
                                         : QString(),
-                     chapterTime >= 0 ? duration(chapterTime, true) : QString());
+                     chapterTime >= 0 ? duration(chapterTime, true) : QString(),
+                     wordsInCells() ? wordTotal(chapterTotal) : QString());
     chapterCell->percent->setAccessibleName(
             strings::get("chapter_graph.chapter_progress").arg(chapterValue));
-    // The catalog is English, so group digits the English way on every device.
-    const QString bookDetail = bookTime >= 0 ? duration(bookTime)
-            : words >= 0
-            ? strings::get("stats.words")
-                      .arg(QLocale(QLocale::English, QLocale::UnitedStates).toString(words))
-            : QString();
-    bookCell->set(QString::number(remaining), pagesLeft(remaining), bookDetail,
+    bookCell->set(QString::number(remaining), pagesLeft(remaining),
+                  bookTime >= 0 ? duration(bookTime) : QString(),
                   strings::get("common.percent").arg(bookValue),
-                  bookTime >= 0 ? duration(bookTime, true) : QString());
+                  bookTime >= 0 ? duration(bookTime, true) : QString(),
+                  wordsInCells() ? wordTotal(words) : QString());
     bookCell->percent->setAccessibleName(
             strings::get("chapter_graph.book_progress").arg(bookValue));
     sessionCell->set(QString::number(qMax(0, minutes)), strings::get("stats.minutes"),
                      strings::get(pageTurns == 1 ? "stats.page_turn" : "stats.page_turns")
                              .arg(qMax(0, pageTurns)));
+    chapterWordsText = chapterTotal < 0 ? QString()
+            : chapterNumber
+            ? strings::get("stats.chapter_words").arg(chapterNumber).arg(wordTotal(chapterTotal))
+            : strings::get("stats.this_chapter_words").arg(wordTotal(chapterTotal));
+    bookWordsText = words >= 0 ? strings::get("stats.book_words").arg(wordTotal(words)) : QString();
+    arrangeWords();
 }
 
 void ChapterGraph::setDense(bool value)
@@ -460,6 +504,8 @@ void ChapterGraph::setData(QVector<ChapterLink> chapters, ChapterSelection selec
     this->selection = selection;
     this->ready = ready;
     this->error = error;
+    // The chapter's word total comes with the counts.
+    refreshCells();
     arrange();
     if (moved)
         anchor = qMax(0, selection.current);
@@ -496,6 +542,29 @@ bool ChapterGraph::inlinePager() const
             < chartTop() + minimumChart + chapters::cellHeight + chrome::actionHeight;
 }
 
+bool ChapterGraph::wordsInCells() const
+{
+    const int minimumChart = chapters::chartHeight - chapters::barsHeight + 2;
+    // A short screen has no height for the word row, which would push the
+    // chapter row under the top toolbar. The totals take the free second
+    // detail line of the chapter and book cells instead.
+    return availableHeight > 0
+            && availableHeight
+            < chartTop() + minimumChart + wordsRowHeight() + chapters::cellHeight + pagerHeight();
+}
+
+int ChapterGraph::wordsRowHeight() const
+{
+    return qMax(int(chapters::wordsHeight),
+                ui::interfaceLineHeight(ui::interfaceFont(chapters::unitText))
+                        + 2 * int(chapters::wordsPadding));
+}
+
+int ChapterGraph::wordsHeight() const
+{
+    return wordsInCells() ? 0 : wordsRowHeight();
+}
+
 int ChapterGraph::pagerHeight() const
 {
     return paged() && !inlinePager() ? int(chrome::actionHeight) : 0;
@@ -506,8 +575,8 @@ int ChapterGraph::chartHeight() const
     const int base = chapters::chartHeight;
     if (availableHeight <= 0)
         return base;
-    const int room = availableHeight - topPadding - chapters::rowHeight - chapters::cellHeight
-            - pagerHeight();
+    const int room = availableHeight - topPadding - chapters::rowHeight - wordsHeight()
+            - chapters::cellHeight - pagerHeight();
     // A larger physical short edge earns some extra bar height. Wide phones
     // and six-inch screens in landscape keep their existing chart size.
     const int shortEdge =
@@ -537,20 +606,44 @@ void ChapterGraph::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     const int border = ui::metrics::control::border;
     painter.fillRect(0, chartTop() - border, width(), border, ui::dividerColor(this));
-    const int cells = chartTop() + chartHeight() + pagerHeight();
+    const int cells = chartTop() + chartHeight() + wordsHeight() + pagerHeight();
     painter.fillRect(0, cells - border, width(), border, ui::dividerColor(this));
     for (int column = 1; column < 3; ++column)
         painter.fillRect(width() * column / 3, cells, border, height() - cells,
                          palette().color(QPalette::Mid));
 }
 
+void ChapterGraph::arrangeWords()
+{
+    const QFont metrics(ui::interfaceFont(chapters::unitText));
+    const int inner = qMax(1, width() - 2 * chrome::inset);
+    const int top = chartTop() + chartHeight();
+    // The book's total keeps its full text up to half the row; the chapter's
+    // takes the rest and shortens first.
+    const int gap = chrome::inset;
+    const int bookWidth =
+            qMin((inner - gap) / 2, ui::interfaceTextWidth(bookWordsText, metrics) + 2);
+    const int chapterWidth = qMax(1, inner - bookWidth - gap);
+    chapterWords->setVisible(!wordsInCells());
+    bookWords->setVisible(!wordsInCells());
+    chapterWords->setGeometry(chrome::inset, top, chapterWidth, wordsRowHeight());
+    bookWords->setGeometry(width() - chrome::inset - bookWidth, top, bookWidth, wordsRowHeight());
+    chapterWords->setText(ui::elideInterfaceText(chapterWordsText, metrics, chapterWidth));
+    bookWords->setText(ui::elideInterfaceText(bookWordsText, metrics, bookWidth));
+}
+
 void ChapterGraph::arrange()
 {
     const int inner = qMax(1, width() - 2 * chrome::inset);
     const int rowInner = qMax(1, inner - int(chrome::cellWidth));
+    // A change of height or paging can move the word totals in or out of the cells.
+    if (wordsInCells() != cellWords) {
+        cellWords = !cellWords;
+        refreshCells();
+    }
     const int chart = chartHeight();
-    const int requiredHeight =
-            topPadding + chapters::rowHeight + chart + chapters::cellHeight + pagerHeight();
+    const int requiredHeight = topPadding + chapters::rowHeight + chart + wordsHeight()
+            + chapters::cellHeight + pagerHeight();
     if (height() != requiredHeight) {
         const int bottom = geometry().bottom();
         resize(width(), requiredHeight);
@@ -563,19 +656,28 @@ void ChapterGraph::arrange()
     const int titleHeight = ui::interfaceLineHeight(titleMetrics);
     const int headingTop = topPadding
             + (chapters::rowHeight - captionHeight - chapters::headingGap - titleHeight) / 2;
-    const int pageWidth =
-            qMin(rowInner / 2, ui::interfaceTextWidth(chapterPage->text(), captionMetrics));
     const int pagerWidth = inlinePager() ? 3 * int(chrome::cellWidth) : 0;
-    const int titleWidth = qMax(1,
-                                rowInner - pageWidth - int(chrome::inset)
-                                        - (pagerWidth ? pagerWidth + int(chrome::inset) : 0));
+    const int titleWidth = qMax(
+            1, rowInner - int(chrome::inset) - (pagerWidth ? pagerWidth + int(chrome::inset) : 0));
     mode->setGeometry(width() - chrome::cellWidth, topPadding, chrome::cellWidth,
                       chapters::rowHeight);
-    chapterCaption->setGeometry(chrome::inset, headingTop, titleWidth, captionHeight);
-    chapterPage->setGeometry(
-            chrome::inset + rowInner - pageWidth,
-            topPadding + (chapters::rowHeight - ui::interfaceLineHeight(captionMetrics)) / 2,
-            pageWidth, ui::interfaceLineHeight(captionMetrics));
+    // "Contents · 8 of 23 · Page 1 of 65". The page keeps its full text; a
+    // long contents position gives way first.
+    const bool both = !chapterCaption->text().isEmpty() && !chapterPage->text().isEmpty();
+    const int pageWidth =
+            qMin(titleWidth, ui::interfaceTextWidth(chapterPage->text(), captionMetrics) + 2);
+    const int separatorWidth =
+            both ? ui::interfaceTextWidth(QStringLiteral(" · "), captionMetrics) : 0;
+    const int captionWidth = chapterPage->text().isEmpty()
+            ? titleWidth
+            : qBound(0, ui::interfaceTextWidth(chapterCaption->text(), captionMetrics) + 2,
+                     titleWidth - pageWidth - separatorWidth);
+    chapterCaption->setGeometry(chrome::inset, headingTop, captionWidth, captionHeight);
+    positionSeparator->setVisible(both);
+    positionSeparator->setGeometry(chrome::inset + captionWidth, headingTop, separatorWidth,
+                                   captionHeight);
+    chapterPage->setGeometry(chrome::inset + captionWidth + separatorWidth, headingTop, pageWidth,
+                             captionHeight);
     chapterTitle->setGeometry(chrome::inset, headingTop + captionHeight + chapters::headingGap,
                               titleWidth, titleHeight);
     chapterTitle->setText(ui::elideInterfaceText(title, chapterTitle->font(), titleWidth));
@@ -590,9 +692,10 @@ void ChapterGraph::arrange()
         pager->setGeometry(chrome::inset + titleWidth + chrome::inset, topPadding, pagerWidth,
                            chapters::rowHeight);
     else
-        pager->setGeometry(0, top + chart - ui::metrics::control::border, width(),
+        pager->setGeometry(0, top + chart + wordsHeight() - ui::metrics::control::border, width(),
                            chrome::actionHeight);
-    const int cells = top + chart + pagerHeight();
+    arrangeWords();
+    const int cells = top + chart + wordsHeight() + pagerHeight();
     for (int column = 0; column < 3; ++column) {
         auto *cell = QVector<StatsCell *>{ chapterCell, bookCell, sessionCell }[column];
         const int left = width() * column / 3 + (column ? ui::metrics::control::border : 0);

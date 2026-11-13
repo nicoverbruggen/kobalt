@@ -1042,6 +1042,12 @@
 "stats.page_turns" = "%1 page turns";
 /* Arguments: %1 */
 "stats.words" = "%1 words";
+/* The current chapter's word total below the Stats chart. %1 is its number in the contents, %2 the total such as "6,500 words". Arguments: %1, %2 */
+"stats.chapter_words" = "Chapter %1 · %2";
+/* The same, for a position before the contents. %1 is the total. Arguments: %1 */
+"stats.this_chapter_words" = "This chapter · %1";
+/* The book's word total below the Stats chart. Arguments: %1 */
+"stats.book_words" = "Book · %1";
 "stats.last_chapter" = "Last chapter";
 "stats.counting" = "Counting words…";
 "reader.dense_graph" = "Compact chapter graphs";

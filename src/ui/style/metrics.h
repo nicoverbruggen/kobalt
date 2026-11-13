@@ -228,7 +228,8 @@ inline constexpr TextPx zenStatsHeight{ 150 }, zenStatText{ 46 }, zenStatUnit{ 2
 } // namespace chrome
 
 namespace chapters {
-// Stats: the chapter row, the chart of every chapter and three figure cells.
+// Stats: the chapter row, the chart of every chapter, a row with the chapter's
+// and the book's word totals, and three figure cells.
 inline constexpr Px rowHeight{ 120 }, headingGap{ 4 }, chartHeight{ 248 };
 inline constexpr Px growthShortEdge{ 1072 }, maximumGrowth{ 150 }, exposedPaper{ 180 };
 inline constexpr Px barsTop{ 30 }, barsHeight{ 150 }, tickGap{ 4 }, tickHeight{ 8 }, tickWidth{ 2 },
@@ -239,7 +240,10 @@ inline constexpr int detailLines = 2;
 inline constexpr Px cellPadding{ 30 }, figureBaseline{ 129 }, detailTop{ 156 }, cellHeight{ 253 };
 inline constexpr Px figureText{ 72 }, unitGap{ 12 };
 inline constexpr TextPx unitText{ chrome::descriptionText };
-inline constexpr Px graphHeight{ rowHeight + chartHeight + cellHeight };
+// The word row labels the chart, so it has no rule above it. Larger interface
+// text makes it taller, keeping the padding below the line.
+inline constexpr Px wordsHeight{ 56 }, wordsPadding{ 12 };
+inline constexpr Px graphHeight{ rowHeight + chartHeight + wordsHeight + cellHeight };
 // Dense charts show every chapter. Past that, and in the sparse chart, a pager
 // bar appears between the chart and the cells.
 inline constexpr int wideChapters = 30, mediumChapters = 60, sparseBars = 20;

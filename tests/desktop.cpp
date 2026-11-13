@@ -15533,11 +15533,13 @@ private slots:
         const auto *mode = graph->findChild<QPushButton *>("rrGraphMode");
         const auto *position = graph->findChild<QLabel *>("rrGraphChapterPosition");
         QVERIFY(mode && position);
-        QVERIFY(qAbs(mode->geometry().center().y() - position->geometry().center().y()) <= 1);
         QVERIFY(!position->geometry().intersects(mode->geometry()));
         const auto *caption = graph->findChild<QLabel *>("rrGraphChapterNumber");
         const auto *title = graph->findChild<QLabel *>("rrGraphChapterTitle");
         QVERIFY(caption && title);
+        // The page in the chapter follows the contents position on its line.
+        QCOMPARE(position->y(), caption->y());
+        QVERIFY(position->x() > caption->geometry().right());
         const auto heading = caption->geometry().united(title->geometry());
         QVERIFY(qAbs(heading.center().y() - mode->geometry().center().y()) <= 1);
         QVERIFY(caption->geometry().bottom() < title->y());

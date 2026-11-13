@@ -8657,6 +8657,21 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 test::skipPageTurnWindow();
                 fixture.window.readerWindow()->pageButton(1);
                 QTRY_COMPARE_WITH_TIMEOUT(fixture.state().value("page").toInt(), shown + 1, 5000);
+                // Another text size in the menu goes back to the chapter
+                // instead of laying out the whole book again.
+                const int size = fixture.state().value("font_pixels").toInt();
+                QVERIFY(fixture.press("rrPage"));
+                QTRY_VERIFY(fixture.visible("rrNavText"));
+                QVERIFY(fixture.press("rrNavText"));
+                QTRY_VERIFY(fixture.visible("rrLarger"));
+                QVERIFY(fixture.press("rrLarger"));
+                QVERIFY(fixture.press("rrPage"));
+                QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool()
+                                                 && fixture.state().value("font_pixels").toInt()
+                                                         > size,
+                                         30000);
+                QVERIFY(fixture.state().contains("book_fraction"));
+                QTRY_VERIFY_WITH_TIMEOUT(estimated(), 10000);
             } else {
                 // Fast never counts: the idle work ends and the mark stays.
                 QTest::qWait(100);

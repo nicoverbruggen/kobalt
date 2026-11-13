@@ -880,17 +880,20 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
     const bool resized = size.isValid() && size != desiredSize;
     if (resized)
         desiredSize = size;
-    // Hybrid rendering: another appearance goes back to the chapter, which
-    // is quick, and the whole book follows in the background. The same
-    // appearance keeps what is shown.
-    if (chapterMode == hybridChapterMode)
+    const int previousMode = desiredChapterMode >= 0
+            ? desiredChapterMode
+            : (frame.state.contains("book_fraction") ? 1 : 0);
+    // Hybrid rendering: another appearance or page size goes back to the
+    // chapter, which is quick, and the whole book follows in the background.
+    // The same appearance keeps what is shown. A caller that names no mode
+    // gets the same while the whole book is shown, so that a change in the
+    // menu or a rotation does not lay out the whole book first.
+    if (chapterMode == hybridChapterMode
+        || (chapterMode < 0 && previousMode == 0 && renderingMode::countsInBackground()))
         chapterMode = next != desired || resized ? 1 : -1;
     // A document that was prepared for the old appearance is of no use.
     if (next != desired || resized || chapterMode >= 0)
         fullDocumentPending_ = false;
-    const int previousMode = desiredChapterMode >= 0
-            ? desiredChapterMode
-            : (frame.state.contains("book_fraction") ? 1 : 0);
     const bool modeChanged = chapterMode >= 0 && chapterMode != previousMode;
     if (chapterMode >= 0)
         desiredChapterMode = chapterMode;

@@ -20103,6 +20103,8 @@ void ldomDocCache::koblazeSuspend( bool suspended )
 
 bool ldomDocCache::init( lString32 cacheDir, lvsize_t maxSize )
 {
+    if ( koblaze_doc_cache_suspended )
+        return false;
     if ( _cacheInstance )
         delete _cacheInstance;
     CRLog::info("Initialize document cache at %s (max size = %d)", UnicodeToUtf8(cacheDir).c_str(), (int)maxSize );
@@ -20117,7 +20119,7 @@ bool ldomDocCache::init( lString32 cacheDir, lvsize_t maxSize )
 
 bool ldomDocCache::close()
 {
-    if ( !_cacheInstance )
+    if ( !_cacheInstance || koblaze_doc_cache_suspended )
         return false;
     delete _cacheInstance;
     _cacheInstance = NULL;
@@ -20142,18 +20144,18 @@ LVStreamRef ldomDocCache::createNew( lString32 filename, lUInt32 crc, lUInt32 do
 
 bool ldomDocCache::renameExisting( lString32 filename, lUInt32 crc, lUInt32 docFlags, lString32 &cachePath )
 {
-    return _cacheInstance && _cacheInstance->renameExisting(filename, crc, docFlags, cachePath);
+    return _cacheInstance && !koblaze_doc_cache_suspended && _cacheInstance->renameExisting(filename, crc, docFlags, cachePath);
 }
 
 bool ldomDocCache::removeObsolete( lString32 filename, lString32 cachePath )
 {
-    return _cacheInstance && _cacheInstance->removeObsolete(filename, cachePath);
+    return _cacheInstance && !koblaze_doc_cache_suspended && _cacheInstance->removeObsolete(filename, cachePath);
 }
 
 /// delete all cache files
 bool ldomDocCache::clear()
 {
-    if ( !_cacheInstance )
+    if ( !_cacheInstance || koblaze_doc_cache_suspended )
         return false;
     return _cacheInstance->clear();
 }

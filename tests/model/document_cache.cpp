@@ -21,6 +21,30 @@ static QByteArray hash(const QImage &image)
             QCryptographicHash::Sha256);
 }
 
+// Work between two build steps must not replace or close the parked cache.
+static void parkedCache()
+{
+    QTemporaryDir root;
+    require(root.isValid(), "Cannot create the parked cache fixture");
+    kobalt::DocumentCacheScope owner(root.path() + "/owner");
+    require(owner.enabled(), "Cannot open the build cache");
+    ldomDocCache::koblazeSuspend(true);
+    {
+        kobalt::DocumentCacheScope other(root.path() + "/other");
+        require(!other.enabled(), "Another document replaced the parked cache");
+        require(!ldomDocCache::close() && !ldomDocCache::clear(),
+                "Another document changed the parked cache");
+    }
+    ldomDocCache::koblazeSuspend(false);
+    require(ldomDocCache::enabled(), "The parked cache was closed");
+    lString32 path;
+    auto stream = ldomDocCache::createNew(U"parked-book", 1, 0, 1024 * 1024, path);
+    require(!stream.isNull()
+                    && QString::fromUtf8(UnicodeToUtf8(path).c_str())
+                               .startsWith(root.path() + "/owner/"),
+            "The resumed build writes to another document's cache");
+}
+
 // Run the writer with the previous engine and the checker with its replacement.
 // The checker requires a real cache hit, then compares it with a fresh parse.
 static void checkCompatibility(const QByteArray &bytes, const QString &root, bool write)
@@ -127,6 +151,7 @@ int main(int argc, char **argv)
         return 0;
     }
     QString error;
+    parkedCache();
     {
         // A book saved to the document cache opens without parsing. It must
         // match a parsed book, including Kobalt's prose markers, and a changed

@@ -143,8 +143,22 @@ const std::shared_ptr<EngineWorker> &engineWorkerState()
     return state;
 }
 
+namespace {
+std::atomic<quint64> workRequests{ 0 };
+}
+
 QObject *engineWorker()
 {
-    return engineWorkerState()->object;
+    const auto &state = engineWorkerState();
+    // The worker queues its own next step through here too. That is not
+    // work that waits behind it.
+    if (QThread::currentThread() != state->thread)
+        workRequests.fetch_add(1);
+    return state->object;
+}
+
+quint64 engineWorkRequests()
+{
+    return workRequests.load();
 }
 } // namespace kobalt

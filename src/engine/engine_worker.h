@@ -11,6 +11,10 @@ namespace kobalt {
 // Shared queue for reader sessions and their coordinate probes. Separate
 // documents must not access CREngine's global fonts and caches concurrently.
 QObject *engineWorker();
+// Counts the times another thread asked for the worker, which it does to
+// queue work. Long idle work on the worker reads it: a new value means
+// that work waits behind it, such as a lookup, a sleep cover or a close.
+quint64 engineWorkRequests();
 
 // For judging speed on a desktop: KOBALT_KOBO_EMULATION=20 in the environment
 // makes every engine job take 20 times as long, which is about the speed of

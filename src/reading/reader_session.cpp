@@ -236,9 +236,27 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     const bool reading = engine->backgroundCount();
     if (!more && (reading || renderingMode::countsInBackground())) {
         BackgroundDiagnostic diagnostic("Full document", *engine, current);
-        const auto full = engine->prepareFullDocument(current, !reading);
+        // The build can run for minutes. It parks as soon as anyone queues
+        // work for the engine, not only for a page turn, and goes on after
+        // that work.
+        const quint64 requests = engineWorkRequests();
+        const auto full = engine->prepareFullDocument(
+                [&current, requests] { return current() && engineWorkRequests() == requests; },
+                !reading);
         if (!current())
             return;
+        if (full == Engine::FullDocument::Stopped) {
+            kobalt::qt::invoke(
+                    engineWorker(),
+                    [engine, current, guard, job, lease] {
+                        if (!current() || !lease || lease->revoked())
+                            return;
+                        EngineJob activity;
+                        refinePageEstimate(engine, current, guard, job, lease);
+                    },
+                    Qt::QueuedConnection);
+            return;
+        }
         if (full == Engine::FullDocument::Ready) {
             kobalt::qt::invoke(
                     qApp,
@@ -2397,7 +2415,22 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                                 guard->idle();
                         },
                         Qt::QueuedConnection);
-                refinePageEstimate(engine, current, guard, job, lease);
+                // The page estimate and the build of the whole book are not
+                // neighbour work: they run after this job has ended, so
+                // that the reader does not count as preparing pages for as
+                // long as they take.
+                const std::function<bool()> idle = [current, lease] {
+                    return current() && lease && !lease->revoked();
+                };
+                kobalt::qt::invoke(
+                        engineWorker(),
+                        [engine, idle, guard, job, lease] {
+                            if (!idle())
+                                return;
+                            EngineJob activity;
+                            refinePageEstimate(engine, idle, guard, job, lease);
+                        },
+                        Qt::QueuedConnection);
             },
             Qt::QueuedConnection);
 }

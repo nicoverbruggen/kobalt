@@ -15,6 +15,7 @@
 #include "storage/layout_cache.h"
 #include "storage/sleep_snapshot.h"
 #include <QFile>
+#include "reading/rendering_mode.h"
 #include <QFileInfo>
 #include <QFontInfo>
 #include <QCryptographicHash>
@@ -26,6 +27,10 @@
 
 namespace kobalt {
 namespace {
+// Hybrid rendering starts its count after this many page turns without a
+// change of the appearance.
+constexpr int backgroundCountTurns = 3;
+
 struct DocumentDeleter
 {
     void operator()(Engine *value) const
@@ -224,6 +229,26 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     }
     if (!current())
         return;
+    if (!more && engine->backgroundCount()) {
+        // One step, then the worker takes other work. The numbers on the
+        // screen change once, when the count ends.
+        BackgroundDiagnostic diagnostic("Page count", *engine, current);
+        const bool counting = engine->countPages(current);
+        if (!current())
+            return;
+        if (counting) {
+            kobalt::qt::invoke(
+                    engineWorker(),
+                    [engine, current, guard, job, lease] {
+                        if (!current() || !lease || lease->revoked())
+                            return;
+                        EngineJob activity;
+                        refinePageEstimate(engine, current, guard, job, lease);
+                    },
+                    Qt::QueuedConnection);
+            return;
+        }
+    }
     engine->wordCounts(current);
     if (!current())
         return;
@@ -418,6 +443,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                          OpeningProgress progress, std::function<void(QImage)> coverReady,
                          std::function<void()> reusing)
 {
+    quietTurns_ = 0;
     syncDigest_.clear();
     syncFilename_ = QFileInfo(request.syncFilename.isNull() ? request.path : request.syncFilename)
                             .fileName();
@@ -755,6 +781,10 @@ void ReaderSession::editAppearance(const appearance::Patch &patch, QSize size)
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
                                       int chapterMode)
 {
+    // While the appearance changes, a count would be thrown away.
+    quietTurns_ = 0;
+    if (engine_)
+        engine_->setBackgroundCount(false);
     auto next = desired;
     if (temporaryTypography())
         appearance::copy(next, temporaryAppearance);
@@ -923,6 +953,11 @@ bool ReaderSession::turn(int direction)
     fractionTarget = -1;
     destination.clear();
     cancelSearch();
+    // A reader who turns pages has settled on the appearance: the count of
+    // the whole book is worth its work from here on.
+    if (engine_)
+        engine_->setBackgroundCount(++quietTurns_ >= backgroundCountTurns
+                                    && renderingMode::countsInBackground());
     ++revision;
     newest->store(revision);
     dispatch(true);

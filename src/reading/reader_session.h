@@ -508,6 +508,9 @@ private:
     appearance::SavedInput originalAppearance;
     QSize desiredSize;
     QString destination;
+    // Page turns since the book opened or the appearance changed. Hybrid
+    // rendering counts the pages of the book after a few of them.
+    int quietTurns_ = 0;
     // The entry of chapters() that `destination` is, or -1.
     int chapterTarget = -1;
     int pageDelta = 0;

@@ -8551,6 +8551,53 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     // The six-inch reader in the light theme, at 100% and at 150% interface
     // text. The "-large" tag makes the Fixture pick 150%.
+    // Checks that Hybrid rendering counts the pages after a few turns and Fast keeps its estimate.
+    void hybridCountsPages()
+    {
+        using namespace headerfooter;
+        for (const int mode : { 2, 1 }) {
+            Fixture fixture(false);
+            QVERIFY(fixture.prepared);
+            auto layout = presetLayout(Preset::Default);
+            layout.slotFields = { Field::BookTitle, Field::Nothing, Field::BookPage,
+                                  Field::Chapter,   Field::Nothing, Field::ChapterPage };
+            auto preferences = storage::readJson(fixture.paths.preferences());
+            preferences[presetKey] = presetValue(Preset::Custom);
+            preferences[customKey] = toJson(layout);
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+            renderingMode::setOverride(mode);
+            const auto restore = qScopeGuard([] { renderingMode::setOverride(-1); });
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+            auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+            QVERIFY(page);
+            const auto estimated = [&] { return page->slotContents[2].text.contains('~'); };
+            // The estimate comes first, also without a page turn.
+            QTRY_VERIFY_WITH_TIMEOUT(estimated(), 10000);
+            for (int turn = 0; turn < 4; ++turn) {
+                const auto before = fixture.state().value("position").toString();
+                test::skipPageTurnWindow();
+                fixture.window.readerWindow()->pageButton(1);
+                QTRY_VERIFY_WITH_TIMEOUT(
+                        !fixture.state().value("busy").toBool()
+                                && fixture.state().value("position").toString() != before,
+                        5000);
+            }
+            if (mode == 2) {
+                QTRY_VERIFY2_WITH_TIMEOUT(!estimated(), qPrintable(page->slotContents[2].text),
+                                          30000);
+                QVERIFY(!fixture.state().value("rough_pages_estimated").toBool());
+                QVERIFY(!page->slotContents[5].text.contains('~'));
+            } else {
+                // Fast never counts: the idle work ends and the mark stays.
+                QTest::qWait(100);
+                QVERIFY2(estimated(), qPrintable(page->slotContents[2].text));
+            }
+        }
+    }
+
     void headerFooterChapterMode_data()
     {
         QTest::addColumn<int>("preset");
@@ -10349,7 +10396,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(row->text(), strings::get("settings.rendering"));
             QCOMPARE(row->caption(), before.toUpper());
             // The captures show the default choice.
-            const bool capture = before == strings::get("settings.rendering_fast");
+            const bool capture = before == strings::get("settings.rendering_hybrid");
             QVERIFY(!capture || save("rendering-row"));
             QVERIFY(fixture.press("rrRendering"));
             QTRY_VERIFY(fixture.visible("rrRenderingPopup"));
@@ -10362,7 +10409,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                                  .value(renderingMode::preferenceKey),
                          QJsonValue(mode));
         };
-        const auto fast = strings::get("settings.rendering_fast"),
+        const auto hybrid = strings::get("settings.rendering_hybrid"),
+                   fast = strings::get("settings.rendering_fast"),
                    accurate = strings::get("settings.rendering_accurate");
 
         QVERIFY(!storage::readJson(fixture.paths.preferences())
@@ -10372,7 +10420,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(turn());
         const auto fastPosition = fixture.state().value("position").toString();
         QVERIFY(!fastPosition.isEmpty());
-        choose("accurate", fast, accurate);
+        choose("accurate", hybrid, accurate);
         if (QTest::currentTestFailed())
             return;
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
@@ -10395,6 +10443,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
         QVERIFY(close());
         QVERIFY(open(true));
+        QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
+
+        // Faster and Balanced read the same way: the book stays as it is.
+        choose("hybrid", fast, hybrid);
+        if (QTest::currentTestFailed())
+            return;
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.state().contains("chapter_load_ms"));
         QCOMPARE(fixture.state().value("position").toString(), accuratePosition);
     }
 

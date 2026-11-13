@@ -1719,7 +1719,7 @@ void Reader::buildSettings()
         settingsHeaderFooterWeight = 2;
         settingsTimeRemainingFormat = "detailed";
         settingsPercentageFormat = "whole";
-        settingsRenderingMode = renderingMode::value(renderingMode::Mode::Fast);
+        settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
         hideTabLabelsOption->setChecked(false);
         zenModeOption->setChecked(false);
         if (wifiPowerSaverOption)

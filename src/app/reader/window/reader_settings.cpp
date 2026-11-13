@@ -940,10 +940,10 @@ void Reader::applySettings()
             settings[it.key()] = it.value();
     }
     renderingMode::apply(preferences);
-    const bool fast = renderingMode::effective(renderingMode::fromPreferences(preferences))
-            == renderingMode::Mode::Fast;
+    const bool chapters = renderingMode::effective(renderingMode::fromPreferences(preferences))
+            != renderingMode::Mode::Accurate;
     session->requestAppearance(requested.edited(appearance::Patch(settings)), bodySize(),
-                               fast ? 1 : 0);
+                               chapters ? 1 : 0);
     applyingText = session->busy();
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);

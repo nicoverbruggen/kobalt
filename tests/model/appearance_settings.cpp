@@ -208,12 +208,12 @@ int main()
     }
 
     {
-        // Rendering is Fast without a choice. The test override wins, then
+        // Rendering is Hybrid without a choice. The test override wins, then
         // KOBALT_CHAPTER_MODE, then the preference.
         using renderingMode::Mode;
-        require(renderingMode::fromPreferences({}) == Mode::Fast,
-                "Preferences without Rendering did not use Fast");
-        for (const auto mode : { Mode::Fast, Mode::Accurate }) {
+        require(renderingMode::fromPreferences({}) == Mode::Hybrid,
+                "Preferences without Rendering did not use Hybrid");
+        for (const auto mode : { Mode::Hybrid, Mode::Fast, Mode::Accurate }) {
             const auto preferences = appearance::cleanPreferences(
                     { { renderingMode::preferenceKey, renderingMode::value(mode) },
                       { "future_option", 42 } });
@@ -226,14 +226,20 @@ int main()
             const auto preferences =
                     appearance::cleanPreferences({ { renderingMode::preferenceKey, invalid } });
             require(!preferences.contains(renderingMode::preferenceKey)
-                            && renderingMode::fromPreferences(preferences) == Mode::Fast,
-                    "Invalid Rendering did not fall back to Fast");
+                            && renderingMode::fromPreferences(preferences) == Mode::Hybrid,
+                    "Invalid Rendering did not fall back to Hybrid");
         }
         const auto pinned = qgetenv("KOBALT_CHAPTER_MODE");
         qunsetenv("KOBALT_CHAPTER_MODE");
         require(renderingMode::effective(Mode::Fast) == Mode::Fast
+                        && renderingMode::effective(Mode::Hybrid) == Mode::Hybrid
                         && renderingMode::effective(Mode::Accurate) == Mode::Accurate,
                 "Without an override the preference must choose the mode");
+        qputenv("KOBALT_CHAPTER_MODE", "2");
+        require(renderingMode::effective(Mode::Accurate) == Mode::Hybrid,
+                "KOBALT_CHAPTER_MODE=2 must be Hybrid");
+        renderingMode::apply({});
+        require(renderingMode::countsInBackground(), "Hybrid must count pages in the background");
         qputenv("KOBALT_CHAPTER_MODE", "1");
         require(renderingMode::effective(Mode::Accurate) == Mode::Fast,
                 "KOBALT_CHAPTER_MODE=1 must win over Accurate");
@@ -241,7 +247,8 @@ int main()
         require(renderingMode::effective(Mode::Fast) == Mode::Accurate,
                 "KOBALT_CHAPTER_MODE=0 must win over Fast");
         renderingMode::setOverride(1);
-        require(renderingMode::effective(Mode::Accurate) == Mode::Fast,
+        require(renderingMode::effective(Mode::Accurate) == Mode::Fast
+                        && !renderingMode::countsInBackground(),
                 "The test override must win over the environment");
         renderingMode::setOverride(-1);
         require(renderingMode::effective(Mode::Fast) == Mode::Accurate,

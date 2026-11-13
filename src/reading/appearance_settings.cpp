@@ -189,7 +189,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     textpresets::clean(preferences);
     choice("time_remaining_format", { "detailed", "approximate" });
     choice(headerfooter::percentageFormatKey, { "whole", "decimal" });
-    choice(renderingMode::preferenceKey, { "fast", "accurate" });
+    choice(renderingMode::preferenceKey, { "hybrid", "fast", "accurate" });
     if (preferences.contains(sessionTimeout::preferenceKey)
         && !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))
         preferences.remove(sessionTimeout::preferenceKey);

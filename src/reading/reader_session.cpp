@@ -1238,7 +1238,9 @@ void ReaderSession::nativePosition(std::function<void(QString, QString)> finishe
                 diagnostic("native-export-start");
                 QString error;
                 const auto location = engine->platformPosition(positions, &error);
-                diagnostic("native-export-end", { { "failed", !error.isEmpty() } });
+                diagnostic("native-export-end",
+                           { { "failed", !error.isEmpty() },
+                             { "error_code", diagnosticErrorCode(error) } });
                 kobalt::qt::invoke(
                         qApp,
                         [guard, location, error, finished, lease] {

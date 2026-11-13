@@ -130,7 +130,8 @@ public:
         if (calls.failWrite) {
             return calls.failure;
         }
-        calls.current.location = location;
+        if (!location.isEmpty())
+            calls.current.location = location;
         ++calls.current.modified;
         calls.current.status = finished ? 2 : 1;
         return NativeSaveResult::verified(calls.current, location.isEmpty());
@@ -1662,14 +1663,36 @@ int main(int argc, char **argv)
             require(book.checkpointState().value("nickel_progress").toObject() == committed.json(),
                     "An unverified write replaced the acknowledged native baseline");
         }
-        calls.failure = NativeSaveResult::unverified("synthetic write failure");
+        calls.failWrite = false;
         const int writes = calls.writes;
-        require(book.writeNative({}, "unmappable store position").status()
-                                == NativeSaveResult::Status::LocalOnly
-                        && calls.writes == writes,
-                "Store book accepted a time-only write");
-        require(book.nativeSaveResult().status() == NativeSaveResult::Status::LocalOnly,
-                "Unsupported store position was reported as a storage failure");
+        const auto bookmark = calls.current.location;
+        const auto modified = calls.current.modified;
+        const auto mappingError = strings::get("error.invalid_source_element_offset");
+        require(book.writeNative({}, mappingError).status()
+                                == NativeSaveResult::Status::ActivityOnly
+                        && calls.writes == writes + 1 && calls.location.isEmpty()
+                        && calls.current.location == bookmark && calls.current.modified > modified,
+                "Unmapped store position did not save activity while preserving the bookmark");
+        const auto failure = book.checkpointState().value("native_writeback_failure").toObject();
+        require(failure.value("mapping_error_code") == "error.invalid_source_element_offset"
+                        && !failure.value("utc").toString().isEmpty()
+                        && !failure.contains("position"),
+                "Mapping failure lost its safe diagnostic code or retained a position");
+        require(book.writeNative("position-after-mapping-failure", {}).saved(),
+                "Mapped save did not recover after an activity-only save");
+        require(book.checkpoint(&snapshot)
+                        && snapshot.value("native_writeback_error").toString().isEmpty()
+                        && snapshot.value("native_writeback_failure").toObject() == failure
+                        && storage::readBookState(paths, "store-id")
+                                        .object.value("native_writeback_failure")
+                                        .toObject()
+                                == failure,
+                "Successful save erased the retained native failure");
+        calls.failWrite = true;
+        calls.failure = NativeSaveResult::unverified("synthetic write failure");
+        require(book.writeNative("position-two", {}).status()
+                        == NativeSaveResult::Status::Unverified,
+                "Cannot prepare a changed checkpoint for the storage failure");
         const auto changeSql = [&](const QString &sql) {
             return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
                 QSqlQuery query(db);
@@ -1759,6 +1782,54 @@ int main(int argc, char **argv)
         book.observeReading();
         require(calls.destroyed == 1 && !book.offerFinish(),
                 "Released book accessed its bridge again");
+    }
+    {
+        const auto retained = storage::readBookState(paths, "store-id")
+                                      .object.value("native_writeback_failure")
+                                      .toObject();
+        require(!retained.isEmpty(), "Native failure was not retained on disk");
+        Calls calls;
+        auto session = open();
+        const auto hash = session->sourceHash();
+        ReadingBook restored(std::move(session), paths.bookState("store-id"), paths, "store-id",
+                             hash, std::make_unique<Bridge>(calls), calls.current, calls.current);
+        require(restored.checkpointState().value("native_writeback_failure").toObject() == retained,
+                "Reopening erased the last native failure");
+        QTemporaryDir logs;
+        require(logs.isValid(), "Cannot create native failure diagnostics");
+        initializeDiagnostics(logs.path());
+        QJsonObject event;
+        setDiagnosticObserver([&](const QJsonObject &entry) {
+            if (entry.value("event") == "native-save")
+                event = entry;
+        });
+        const auto mappingError = strings::get("error.invalid_source_element_offset");
+        require(restored.writeNative({}, mappingError).status()
+                        == NativeSaveResult::Status::ActivityOnly,
+                "Cannot record an activity-only diagnostic");
+        require(event.value("mapping_error_code") == "error.invalid_source_element_offset"
+                        && event.value("error_code").toString().isEmpty()
+                        && event.value("mapping_failed").toBool(),
+                "Activity-only save omitted the mapping error code");
+        calls.failWrite = true;
+        calls.failure = NativeSaveResult::unverified("private/path/to/book.epub");
+        require(restored.writeNative("mapped-position", {}).failed(),
+                "Cannot record a native storage failure");
+        require(event.value("error_code") == "unknown"
+                        && !QJsonDocument(event).toJson().contains("private/path"),
+                "Native failure diagnostics exposed arbitrary error text");
+        calls.failure = NativeSaveResult::rejected();
+        require(restored.writeNative("mapped-position", {}).failed()
+                        && event.value("failed").toBool() && event.value("error_code") == "unknown"
+                        && restored.checkpointState()
+                                   .value("native_writeback_failure")
+                                   .toObject()
+                                   .value("failed")
+                                   .toBool(),
+                "A native failure without a message disappeared from diagnostics");
+        setDiagnosticObserver({});
+        require(flushDiagnostics(), "Cannot flush native failure diagnostics");
+        restored.releaseNative(false);
     }
     bool drained = false;
     ReaderSession::drain([&] { drained = true; });

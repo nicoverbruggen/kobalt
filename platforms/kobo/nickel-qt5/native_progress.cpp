@@ -267,9 +267,8 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
     if (!available() || native.tolino(native.device()))
         return NativeSaveResult::unavailable(strings::get(
                 "error.native_progress_writeback_is_unsupported_on_this_firmware_mode"));
-    // Without a position Nickel can store, as for some plain EPUB files, record only
-    // the time, the reading status and the percentage. Nickel keeps its own
-    // position, and the book still becomes the most recently read one.
+    // Without a mapped position, record activity while preserving the native
+    // bookmark and sync flag. Do not request a bookmark upload.
     const bool timeOnly = position.isEmpty();
     const auto location = timeOnly ? QString() : nickel_qt5::stored(position);
     if (!timeOnly && location.isEmpty())
@@ -415,8 +414,8 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
     const bool matches = actual == wanted
             && (timeOnly || actual.location == nickel_qt5::shared(location))
             && row.value("___PercentRead").toDouble() == after.value("___PercentRead").toDouble()
-            // A time-only record leaves the sync flag alone: Kobo's cloud does not
-            // sync sideloaded EPUB files, and only the bookmark call clears it.
+            // An activity-only record preserves the bookmark and sync flag.
+            // Only a mapped bookmark write clears the flag.
             && (timeOnly || !row.value("ReadStateSynced").toBool())
             && !row.value("FirstTimeReading").toBool()
             && row.value("RestOfBookEstimate").toInt() == after.value("RestOfBookEstimate").toInt()

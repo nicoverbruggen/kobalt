@@ -1,5 +1,6 @@
 #include "platforms/kobo/common/engine_positions.h"
 #include "reader_inputs.h"
+#include "engine_fixtures.h"
 #include "support/qt_compat.h"
 #include "assets/bundled_fonts.h"
 #include "assets/assets.h"
@@ -1014,9 +1015,48 @@ static void checkVerticalJustification()
 }
 
 // Checks the restored reader assertions: rendering, embedded fonts, Bold Reading, variable axes, source positions and previews.
+static void checkChapterArtPositions()
+{
+    auto files = kobalt::test::engineBook(true, 1, 12);
+    files["OEBPS/c1.xhtml"] = kobalt::test::publisherHtml(
+            "<div id='book-columns'><div id='book-inner'><a id='filepos123'></a>"
+            "<p><span class='koboSpan' id='kobo.1.1'><img src='colors.png'/></span></p>"
+            "<p><span class='koboSpan' id='kobo.2.1'>Original chapter text.</span></p>"
+            "</div></div>");
+    QList<QPair<QByteArray, QByteArray>> members;
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        members.append({ it.key().toUtf8(), it.value() });
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
+    QString error;
+    require(model.open(storedEpub(members), QSize(1072, 1448), {}, &error), qPrintable(error));
+    const auto positions = kobalt::nickel::positionCodec();
+    const QString base = "/body[1]/DocFragment[1]/body[1]/div[1]/div[1]/";
+    for (const auto &node : { "a[1]", "p[1]/span[1]", "p[1]/span[1]/img[1]" }) {
+        require(model.goTo(base + node), "Cannot select the chapter-art element");
+        const auto anchor = model.position();
+        require(model.platformPosition(positions, &error) == "OEBPS/c1.xhtml" && error.isEmpty()
+                        && model.position() == anchor,
+                "Chapter artwork did not export the chapter start with its local position intact");
+    }
+    for (const auto &point : { QPair<QString, QString>{ "a[1].0", "filepos123:0" },
+                               { "p[1]/span[1].0", "kobo.1.1:0" },
+                               { "p[2]/span[1]/text()[1].0", "kobo.2.1:0" } }) {
+        require(model.goTo(base + point.first), "Cannot select an explicit chapter-art boundary");
+        const auto anchor = model.position();
+        require(model.platformPosition(positions, &error) == "OEBPS/c1.xhtml#" + point.second
+                        && error.isEmpty() && model.position() == anchor,
+                "Chapter-art fallback replaced an exactly mapped boundary");
+    }
+    require(model.goToPlatform(positions, "OEBPS/c1.xhtml", &error) && error.isEmpty(),
+            "Cannot import the chapter-art fallback");
+    require(model.platformPosition(positions, &error) == "OEBPS/c1.xhtml" && error.isEmpty(),
+            "Chapter-art fallback did not round trip");
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    checkChapterArtPositions();
     checkPageFormat();
     checkDeferredPublisherStyles();
     checkObfuscatedFonts();
@@ -2779,7 +2819,7 @@ int main(int argc, char **argv)
                   { "book.opf",
                     "<package xmlns='http://www.idpf.org/2007/opf' version='2.0'><metadata/><manifest><item id='c' href='c.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/><itemref idref='c'/></spine></package>" },
                   { "c.xhtml",
-                    "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Repeated</title></head><body><p id='dup'>First</p><p id='dup'>Second</p></body></html>" } });
+                    "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Repeated</title></head><body><p id='dup'>First</p><p id='dup'>Second</p><a id='art'/></body></html>" } });
         kobalt::EngineDocument model(kobalt::test::readerFonts());
         require(model.open(repeated, QSize(1072, 1328), {}, &error), qPrintable(error));
         require(model.goTo("/body[1]/DocFragment[2]/body[1]/p[2]/text()[1].1"),
@@ -2791,6 +2831,12 @@ int main(int argc, char **argv)
         require(!model.goToPlatform(positions, "c.xhtml#point(/1/2/2/1:1)", &error)
                         && model.position() == anchor,
                 "Structural import accepted an ambiguous chapter path");
+        require(model.goTo("/body[1]/DocFragment[2]/body[1]/a[1]"),
+                "Cannot select the repeated chapter's empty anchor");
+        const auto artAnchor = model.position();
+        require(model.platformPosition(positions, &error).isEmpty() && !error.isEmpty()
+                        && model.position() == artAnchor,
+                "Element-only fallback exported an ambiguous chapter path");
     }
     const auto styledPage = css.image(0);
     int firstInk = styledPage.width();

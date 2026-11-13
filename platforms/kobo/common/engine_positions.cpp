@@ -680,6 +680,11 @@ QString NickelPositionCodec::encode(const EngineDocument &engine, QString *error
         // falls back to the chapter.
         return structuralPoint();
     }
+    // A node-only XPointer has offset -1, not a child boundary. Keep the
+    // local anchor and give Nickel the checked chapter start, including when
+    // the node is an empty anchor or an image-only span.
+    if (target->isElement() && pointer.getOffset() == -1)
+        return chapterFallback();
     int units = 0;
     if (!unitsBefore(element, target, pointer.getOffset(), units, error))
         return {};

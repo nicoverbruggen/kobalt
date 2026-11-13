@@ -259,8 +259,8 @@ void writeFinished(NativeProgress &progress)
 
 void writeTimeOnly(NativeProgress &progress)
 {
-    // A plain EPUB position that Nickel cannot store: the time, the status
-    // and the percentage only.
+    // An unmappable KEPUB position: update activity without replacing the
+    // bookmark or requesting an upload.
     {
         QSqlQuery query(pewter::database());
         query.exec(QStringLiteral("UPDATE content SET ReadStateSynced = 1 WHERE ContentID = '%1'")
@@ -277,6 +277,8 @@ void writeTimeOnly(NativeProgress &progress)
     require(row.value("DateLastRead").toString() > before.value("DateLastRead").toString(),
             "the book still becomes the most recently read one");
     require(row.value("ReadStateSynced").toBool(), "only the bookmark call clears the sync flag");
+    requireSame(row.value("adobe_location"), before.value("adobe_location"),
+                "activity-only saving preserves the secondary native location");
     require(!pewter::find("BookmarkSyncManager::sendBookmark"),
             "a time-only record asks for no upload");
 }

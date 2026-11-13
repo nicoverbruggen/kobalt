@@ -86,6 +86,7 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     if (this->bridge)
         resetNativeUnread(saved, reconciliation.baseline());
     preservedState = saved;
+    nativeFailure = saved.value("native_writeback_failure").toObject();
     if (saved.value("book").toString() == identity_) {
         for (const auto &value : saved.value("image_views").toArray()) {
             const auto view = value.toObject();
@@ -774,11 +775,20 @@ NativeSaveResult ReadingBook::writeNative(const QString &location, const QString
                 "error.nickel_save_deferred_while_progress_or_device_state_is_unresolved");
         nativeWriteback = NativeSaveResult::deferred(error);
     }
-    diagnostic("native-save",
-               { { "result", nativeWriteback.diagnosticName() },
-                 { "mapping_failed", timeOnly },
-                 { "failed", !error.isEmpty() } },
-               error.isEmpty() ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
+    const bool failed = nativeWriteback.failed() || !error.isEmpty();
+    auto fields = qt::object({ { "result", nativeWriteback.diagnosticName() },
+                               { "mapping_failed", timeOnly },
+                               { "failed", failed },
+                               { "error_code",
+                                 failed && error.isEmpty() ? QStringLiteral("unknown")
+                                                           : diagnosticErrorCode(error) },
+                               { "mapping_error_code", diagnosticErrorCode(mappingError) } });
+    if (failed || timeOnly) {
+        nativeFailure = fields;
+        nativeFailure["utc"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    }
+    diagnostic("native-save", fields,
+               failed ? DiagnosticSeverity::Error : DiagnosticSeverity::Activity);
     return nativeSaveResult();
 }
 
@@ -867,6 +877,8 @@ QJsonObject ReadingBook::checkpointState() const
     state["native_writeback"] = QString::fromLatin1(nativeWriteback.diagnosticName());
     state["sync_pending"] = reconciliation.pending();
     state["native_writeback_error"] = nativeWriteback.message();
+    if (!nativeFailure.isEmpty())
+        state["native_writeback_failure"] = nativeFailure;
     return state;
 }
 

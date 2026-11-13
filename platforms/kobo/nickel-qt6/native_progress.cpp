@@ -279,9 +279,8 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
             || activity->page >= activity->pages))
         return NativeSaveResult::rejected(
                 strings::get("error.nickel_rejected_the_exact_reading_position"));
-    // Without a position Nickel can store, as for some plain EPUB files, record only
-    // the time, the reading status and the percentage. Nickel keeps its own
-    // position, and the book still becomes the most recently read one.
+    // Without a mapped position, record activity while preserving the native
+    // bookmark and sync flag. Do not request a bookmark upload.
     const bool timeOnly = position.isEmpty();
     const auto location = native.location(position, QString());
     if (!timeOnly && (!native.validLocation(&location) || native.teng(&location) != position))
@@ -440,8 +439,8 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
                 && stored.value("___NumPages").toInt() == activity->pages);
     const bool matches = tolinoMatches && actual == wanted
             && stored.value("___PercentRead").toDouble() == after.value("___PercentRead").toDouble()
-            // A time-only record leaves the sync flag alone: Kobo's cloud does not
-            // sync sideloaded EPUB files, and only the bookmark call clears it.
+            // An activity-only record preserves the bookmark and sync flag.
+            // Only a mapped bookmark write clears the flag.
             && (timeOnly || !stored.value("ReadStateSynced").toBool())
             && !stored.value("FirstTimeReading").toBool()
             && stored.value("RestOfBookEstimate").toInt()

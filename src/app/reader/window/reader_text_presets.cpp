@@ -734,8 +734,10 @@ void Reader::startTextPresetPrerender()
 void Reader::prepareTextPresetPresentation(std::function<void()> finished)
 {
     // A preview that cannot be drawn in this time must not keep the book
-    // closed. What is left is drawn after the first page, as before.
-    static constexpr int limit = 6000;
+    // closed. What is left is drawn after the first page, as before. The
+    // previews wait for the pages beside the first one, which a slow
+    // device prepares for several seconds.
+    static constexpr int limit = 15000;
     textPresetPresentationReady = std::move(finished);
     textPresetPrerenderStarted = true;
     textPresetPrerenderWaiting = false;

@@ -246,13 +246,25 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         if (!current())
             return;
         if (full == Engine::FullDocument::Stopped) {
+            // Go on after the work that parked the build. That work is
+            // announced a moment before it is queued, so queueing the next
+            // step from here could put it in front. The main thread queues
+            // it instead: it gets to this only after the code that
+            // announced the work has queued it.
             kobalt::qt::invoke(
-                    engineWorker(),
+                    qApp,
                     [engine, current, guard, job, lease] {
-                        if (!current() || !lease || lease->revoked())
+                        if (!guard || !current() || !lease || lease->revoked())
                             return;
-                        EngineJob activity;
-                        refinePageEstimate(engine, current, guard, job, lease);
+                        kobalt::qt::invoke(
+                                engineWorker(),
+                                [engine, current, guard, job, lease] {
+                                    if (!current() || !lease || lease->revoked())
+                                        return;
+                                    EngineJob activity;
+                                    refinePageEstimate(engine, current, guard, job, lease);
+                                },
+                                Qt::QueuedConnection);
                     },
                     Qt::QueuedConnection);
             return;

@@ -4800,6 +4800,104 @@ private slots:
         checkPageAnimationCompatibility(preset, dark);
     }
 
+    // Checks persisted animation preferences and theme changes through Settings and Light.
+    void pageAnimationDarkMode_data() { bookmarks_data(); }
+
+    void pageAnimationDarkMode()
+    {
+        QFETCH(bool, dark);
+        for (auto support : { PageAnimationSupport::Uncertain, PageAnimationSupport::Supported,
+                              PageAnimationSupport::Unavailable }) {
+            auto light = std::make_shared<GestureLightState>();
+            Fixture fixture(dark, false, false, true, false, false,
+                            [support, light](ReaderHostServices &services) {
+                                services.animationSupport = [support] { return support; };
+                                services.lightAvailable = [] { return true; };
+                                services.light = [light](QWidget *) {
+                                    return std::make_unique<GestureLight>(light);
+                                };
+                            });
+            QVERIFY(fixture.prepared);
+            auto saved = storage::readJson(fixture.paths.preferences());
+            saved["page_animations"] = true;
+            saved["screen_refresh"] = "manual";
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE(opened.count(), 1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            openPrologueBody(fixture);
+            auto *reader = fixture.window.readerWindow();
+
+            struct TurnWatch final : QObject
+            {
+                bool animated = false;
+                // A later refresh clears the one-frame marker. Observe it
+                // when published instead of sampling it after paint.
+                bool frame = false;
+
+                bool eventFilter(QObject *object, QEvent *event) override
+                {
+                    if (event->type() == QEvent::DynamicPropertyChange
+                        && static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()
+                                == "reader_page_turn") {
+                        frame = frame || object->property("reader_page_turn").toBool();
+                    }
+                    if (event->type() == QEvent::DynamicPropertyChange
+                        && static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName()
+                                == "reader_animation_direction"
+                        && object->property("reader_animation_direction").toInt())
+                        animated = true;
+                    return false;
+                }
+            } watch;
+
+            reader->installEventFilter(&watch);
+            const auto turn = [&](bool configured, bool theme) {
+                if (fixture.visible("rrControlsTop"))
+                    QVERIFY(fixture.press("rrPage"));
+                reader->setProperty("reader_animation_direction", 0);
+                reader->setProperty("reader_page_turn", false);
+                watch.animated = watch.frame = false;
+                QVERIFY(fixture.turnPage(1));
+                QTRY_VERIFY(watch.frame);
+                const bool expected = configured && support != PageAnimationSupport::Unavailable
+                        && !(theme && support == PageAnimationSupport::Uncertain);
+                QCOMPARE(watch.animated, expected);
+                QCOMPARE(storage::readJson(fixture.paths.preferences())
+                                 .value("page_animations")
+                                 .toBool(),
+                         configured);
+            };
+            turn(true, dark);
+            toggleTheme(fixture);
+            turn(true, !dark);
+            // The Light shortcut uses a separate save/apply path.
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavLight"));
+            QTRY_VERIFY(fixture.visible("rrLightDarkMode"));
+            QVERIFY(fixture.press("rrLightDarkMode"));
+            QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), dark);
+            QTRY_VERIFY(fixture.widget("rrLightDarkMode")->isEnabled());
+            QVERIFY(fixture.press("rrPage"));
+            turn(true, dark);
+            if (support != PageAnimationSupport::Unavailable) {
+                for (bool configured : { false, true }) {
+                    QVERIFY(fixture.press("rrPage"));
+                    QVERIFY(fixture.press("rrSettings"));
+                    QVERIFY(revealSettingsOption(fixture, "rrPageAnimations"));
+                    auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrPageAnimations"));
+                    QVERIFY(option && option->isChecked() == !configured);
+                    QVERIFY(fixture.press("rrPageAnimations"));
+                    QVERIFY(fixture.press("rrSettingsClose"));
+                    QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+                    turn(configured, dark);
+                }
+            }
+            reader->removeEventFilter(&watch);
+        }
+    }
+
     // Checks that a failed gallery worker stops the run quickly, ends the other workers and leaves no captures.
     void galleryWorkerFailure()
     {

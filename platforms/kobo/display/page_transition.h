@@ -15,7 +15,7 @@ template <class Submit>
 bool submitPageTransition(QBackingStore *store, QWidget *reader, int direction, bool dark,
                           quint64 ordinary, quint64 repair, Submit submit)
 {
-    if (!direction || !pageAnimationsAvailable())
+    if (!direction || !pageAnimationsEnabled(pageAnimationSupport(), dark))
         return false;
     const QRect screen = reader->rect();
     const bool color = pageAnimationPanel() == AnimationPanel::Color;

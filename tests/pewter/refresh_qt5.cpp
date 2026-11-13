@@ -121,8 +121,8 @@ int main(int argc, char **argv)
                 flushes = 0;
                 reader.setProperty("reader_animation_direction", direction);
                 submit();
-                require(flushes == 1 && updates.size() == 10,
-                        "Qt5 text turn did not reach the animation hook");
+                require(flushes == 1 && updates.size() == (dark ? 1u : 10u),
+                        "Qt5 i.MX must sweep only in light mode");
                 QRegion coverage;
                 for (const auto &update : updates) {
                     require(update[4] == (dark ? 10U : 6U) && update[5] == 0,
@@ -130,8 +130,8 @@ int main(int argc, char **argv)
                     coverage +=
                             QRect(int(update[1]), int(update[0]), int(update[2]), int(update[3]));
                 }
-                require(coverage == QRegion(reader.rect()),
-                        "Qt5 sweep did not cover the completed page");
+                require(coverage == QRegion(dark ? damage : reader.rect()),
+                        "Qt5 i.MX turn changed its expected update bounds");
                 require(updates.back()[6] == 42, "Qt5 sweep lost the final update marker");
             }
             for (int excluded : { 0, 1, 2, 3 }) {

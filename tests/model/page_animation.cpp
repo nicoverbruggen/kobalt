@@ -69,18 +69,34 @@ int main(int argc, char **argv)
                         "Backend, build flag or missing hook misclassified");
                 require(pageAnimationsAvailable() == pageAnimationsAvailable(expected),
                         "Runtime and setting eligibility disagree");
-                calls.clear();
-                armPageAnimation(1, QRect(0, 0, 1072, 1448), false);
-                std::array<uint32_t, 18> update{
-                    0,  0, 1072, 1448, backend == "hwtcon" ? 4u : 6u, backend == "hwtcon" ? 1u : 0u,
-                    123
-                };
-                if (hook) {
-                    kobalt_animation_ioctl(
-                            1, backend == "hwtcon" ? PageAnimation::send : PageAnimation::sendImx,
-                            update.data());
-                    require((calls.size() > 1) == pageAnimationsAvailable(expected),
-                            "Unavailable backend submitted a sweep");
+                // Re-arm through both themes in one process to catch stale
+                // light-mode state when dark mode becomes active.
+                for (bool dark : { false, true, false }) {
+                    const bool eligible = expected != PageAnimationSupport::Unavailable
+                            && !(backend == "mxc_epdc_fb" && dark);
+                    require(pageAnimationsEnabled(expected, dark) == eligible,
+                            "Theme eligibility disagrees with the backend");
+                    calls.clear();
+                    armPageAnimation(1, QRect(0, 0, 1072, 1448), dark);
+                    std::array<uint32_t, 18> update{ 0,
+                                                     0,
+                                                     1072,
+                                                     1448,
+                                                     backend == "hwtcon" ? (dark ? 9u : 4u)
+                                                                         : (dark ? 10u : 6u),
+                                                     backend == "hwtcon" ? 1u : 0u,
+                                                     123 };
+                    if (hook) {
+                        kobalt_animation_ioctl(1,
+                                               backend == "hwtcon" ? PageAnimation::send
+                                                                   : PageAnimation::sendImx,
+                                               update.data());
+                        require((calls.size() > 1) == eligible,
+                                "Ineligible backend or theme submitted a sweep");
+                        if (!eligible)
+                            require(calls.size() == 1 && calls[0].data == update,
+                                    "Suppressed animation altered the ordinary update");
+                    }
                 }
                 cancelPageAnimation();
             }
@@ -121,6 +137,13 @@ int main(int argc, char **argv)
                                          original.data())
                                 == 0,
                         "Recognized reading update failed");
+                if (imx && dark) {
+                    require(calls.size() == 1 && calls[0].data == original,
+                            "Direct i.MX dark-mode arm did not pass through unchanged");
+                    require(animation.result() != PageAnimationResult::Swept,
+                            "Direct i.MX dark-mode arm swept");
+                    continue;
+                }
                 require(animation.result() == PageAnimationResult::Swept,
                         "Reading update did not sweep");
                 QRegion coverage;

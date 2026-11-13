@@ -17,7 +17,8 @@ thread_local PageAnimation animation;
 void PageAnimation::arm(int direction, const QRect &update, bool dark, bool vertical, bool mono,
                         bool imx)
 {
-    direction_ = direction;
+    const auto support = imx ? PageAnimationSupport::Uncertain : PageAnimationSupport::Supported;
+    direction_ = pageAnimationsEnabled(support, dark) ? direction : 0;
     update_ = update;
     result_ = PageAnimationResult::None;
     dark_ = dark;

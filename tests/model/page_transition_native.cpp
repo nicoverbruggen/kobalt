@@ -7,6 +7,7 @@
 namespace {
 kobalt::PageAnimationResult result = kobalt::PageAnimationResult::None;
 bool success = true, available = true;
+kobalt::PageAnimationSupport support = kobalt::PageAnimationSupport::Supported;
 int arms = 0, repairs = 0;
 kobalt::AnimationPanel panel = kobalt::AnimationPanel::Color;
 } // namespace
@@ -28,9 +29,9 @@ AnimationPanel pageAnimationPanel()
     return panel;
 }
 
-bool pageAnimationsAvailable()
+PageAnimationSupport pageAnimationSupport()
 {
-    return available;
+    return available ? support : PageAnimationSupport::Unavailable;
 }
 
 void armPageAnimation(int, const QRect &, bool, bool)
@@ -128,6 +129,20 @@ int main(int argc, char **argv)
                             require(*pixels == expected,
                                     "Transition changed retained backing-store pixels");
                         }
+    // A stale turn direction must not enter the transition path in dark mode
+    // on i.MX, including the large-image shortcut before arming a sweep.
+    support = kobalt::PageAnimationSupport::Uncertain;
+    for (bool pictures : { false, true }) {
+        reader.setProperty("reader_mono_repairs",
+                           QVariant::fromValue(pictures ? QRegion(image) : QRegion()));
+        arms = 0;
+        bool submitted = false;
+        require(!kobalt::submitPageTransition(&store, &reader, 1, true, 10, 20,
+                                              [&](const QRegion &, quint64) { submitted = true; })
+                        && !submitted && arms == 0,
+                "Dark i.MX turn entered the animation transition path");
+    }
+    support = kobalt::PageAnimationSupport::Supported;
     available = false;
     bool submitted = false;
     require(!kobalt::submitPageTransition(&store, &reader, 1, false, 10, 20,

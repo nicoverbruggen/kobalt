@@ -8,6 +8,8 @@ Kobalt separates saved reading data from disposable rendering caches. Storage fo
 
 ## Saved reading data
 
+`page_animations` retains the user’s configured preference in both themes. On the older i.MX display backend, dark mode suppresses the animation at runtime without saving a different value. Returning to light mode restores the preference. Settings schema 1 and reading-data and cache formats stay unchanged.
+
 The graph button and Settings share the existing global `dense_stats_chart` Boolean. The graph button writes it through the profile writer and restores the saved mode if the write fails. No saved-data or cache format changes.
 
 `show_opening_cover` is an optional global Boolean. Missing or invalid values use true. False keeps the Kobalt logo while opening or reopening a book, including native-reader handoff. Loading progress and status messages remain visible. The setting does not change sleep screens, book state or rendering caches. Settings schema 1 stays unchanged.

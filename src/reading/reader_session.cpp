@@ -323,16 +323,29 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
 // `neighbours` is false when the caller hands the frame to the screen first
 // and prepares the neighbour pages afterwards.
 ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours,
-                    const ReaderMarkupRequest &markup, quint64 markupGeneration)
+                    const ReaderMarkupRequest &markup, quint64 markupGeneration, QJsonObject *times)
 {
     engineActivity().checkpoint();
+    QElapsedTimer step;
+    step.start();
+    const auto took = [&](const char *name) {
+        if (times)
+            (*times)[QLatin1String(name)] = step.nsecsElapsed() / 1e6;
+        step.start();
+    };
     ReaderFrame result;
     result.image = engine.image(engine.page());
+    took("image_ms");
     result.markup = captureFrameMarkup(engine, markup, markupGeneration, result.image.cacheKey());
+    took("markup_ms");
     result.links = engine.pageLinks();
+    took("links_ms");
     result.state = engine.state();
+    took("state_ms");
     result.nativePosition = engine.platformPosition(positions, &result.nativePositionError);
+    took("position_ms");
     captureChapters(result, engine);
+    took("chapters_ms");
     result.state["page"] = engine.page();
     result.state["pages"] = engine.pages();
     result.state["next_page"] = engine.turnTarget(engine.page(), 1);
@@ -2645,9 +2658,15 @@ void ReaderSession::dispatch(bool pageTurn)
                     }
                 }
                 const auto error = result.error;
+                // What the render spent before the frame: the appearance, the
+                // turn or the jump. The rest is the capture of the frame.
+                const double movedMs = timing ? timer.nsecsElapsed() / 1e6 : 0;
                 // The panel needs far longer to draw a page than the engine does. Hand
                 // the frame over first and prepare the neighbour pages after it.
-                result = capture(*engine, positions, false, markup, markupGeneration);
+                QJsonObject captureTimes;
+                result = capture(*engine, positions, false, markup, markupGeneration,
+                                 timing ? &captureTimes : nullptr);
+                const double capturedMs = timing ? timer.nsecsElapsed() / 1e6 - movedMs : 0;
                 if (!error.isEmpty())
                     result.error = error;
                 // A turn into another part of the book is a page turn too.
@@ -2669,6 +2688,9 @@ void ReaderSession::dispatch(bool pageTurn)
                                  { "loaded_pages", engine->pages() },
                                  { "resources", result.resources },
                                  { "book_fraction", engine->bookFraction() },
+                                 { "move_ms", movedMs },
+                                 { "capture_ms", capturedMs },
+                                 { "capture", captureTimes },
                                  { "elapsed_ms", double(timer.elapsed()) },
                                  { "failed", !result.error.isEmpty() } },
                                result.error.isEmpty() ? DiagnosticSeverity::Activity

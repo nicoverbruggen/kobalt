@@ -113,6 +113,9 @@ void captureChapters(ReaderFrame &result, Engine &engine);
 BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &positions,
                                            bool rangeEndpoints, bool sourceOrder,
                                            const std::function<bool()> &current = {});
+// `times` gets the milliseconds of each step, for the diagnostics of a slow
+// page turn.
 ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours = true,
-                    const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0);
+                    const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0,
+                    QJsonObject *times = nullptr);
 } // namespace kobalt

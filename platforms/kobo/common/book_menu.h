@@ -5,6 +5,8 @@ class QMenu;
 
 namespace kobalt {
 bool previewBook(const void *volume);
+// Metadata only: enough to show feedback, never permission to read a book.
+bool readerBookFormatSupported(const void *volume);
 bool isKoboCloudBook(const void *volume);
 enum class ReaderBookRoute { Unsupported, Direct, Protected, Failed, Remembered };
 ReaderBookRoute readerBookRoute(const void *volume, QString *identity = nullptr,

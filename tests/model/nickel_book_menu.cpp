@@ -195,6 +195,11 @@ int main(int argc, char **argv)
     require(QFile::copy(QString::fromLocal8Bit(argv[1]), path), "copy EPUB fixture");
     identity = "file://" + path;
     fields["MimeType"] = "application/epub+zip";
+    // Feedback needs only in-memory metadata, before any database exists.
+    require(kobalt::readerBookFormatSupported(&fields), "EPUB can show immediate feedback");
+    fields["MimeType"] = "application/pdf";
+    require(!kobalt::readerBookFormatSupported(&fields), "PDF keeps the native opening");
+    fields["MimeType"] = "application/epub+zip";
     auto database = QSqlDatabase::addDatabase("QSQLITE");
     database.setDatabaseName(":memory:");
     require(database.open(), "metadata database");

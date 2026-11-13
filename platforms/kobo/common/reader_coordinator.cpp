@@ -371,8 +371,12 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         timer.start();
     // Read and check the interface faces on a worker thread before any tap,
     // so the first opening view does not wait for storage.
-    if (available())
+    if (available()) {
         kobalt::ui::prepareOpeningFonts(environment_.assets);
+        openingDark = storage::readPreferences(environment_.paths.preferences())
+                              .object.value("dark_mode")
+                              .toBool(false);
+    }
 #ifdef KOBALT_SCENARIO_PLAYER
     // A device set up for scenarios must not sync the benchmark book, also
     // not when a person opens it to start the run.
@@ -461,6 +465,8 @@ bool ReaderCoordinator::available() const
 
 bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
 {
+    QElapsedTimer openingStarted;
+    openingStarted.start();
     if (!available())
         return false;
     if (lifecycle->blocked() || lifecycle->draining)
@@ -473,56 +479,83 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
     auto request = retainOpening();
     if (!request)
         return false;
-    if (kobalt::previewBook(request->volume()))
+    if (!readerBookFormatSupported(request->volume()))
         return false;
-    QString nextIdentity, nextPath;
-    const auto route =
-            kobalt::readerBookCandidateRoute(request->volume(), &nextIdentity, &nextPath);
-    if (route == kobalt::ReaderBookRoute::Unsupported)
-        return false;
-    // Nickel is settled and Kobalt has built nothing for reading yet.
-    kobalt::markMemoryBase();
-    // The loading view draws in the interface faces. Check only those files
-    // now and leave the whole bundle for after its first paint. When they
-    // cannot be read, check everything now so recovery can show its alert.
-    if (!kobalt::ui::initializeOpeningFonts(environment_.assets)) {
-        const bool assetsReady = environment_.assets.available();
-        if (!assetsReady || !kobalt::ui::initializeInterfaceFonts(environment_.assets))
-            return missingAssetsBeforeOpening(assetsReady);
-    }
-    const bool discardRetained = run.session && nextIdentity != run.identity;
-    run.identity = nextIdentity;
-    run.filePath = nextPath;
-    if (!writeJson(activePath, kobalt::qt::object({ { "book", run.identity } }))) {
-        kobalt::diagnostic("session-arm-failed", {}, kobalt::DiagnosticSeverity::Error);
-        return false;
-    }
-    if (!authorization->begin(run.identity)) {
-        release();
-        return false;
-    }
     run.opening = std::move(request);
     busy = true;
     watch();
-    run.openingTimer.start();
-    run.openingTimings = {};
+    run.openingTimer = openingStarted;
+    run.openingTimings = qt::object({ { "handoff_ms", double(openingStarted.elapsed()) } });
     QWidget *background = QApplication::activeWindow();
     for (auto *window : QApplication::topLevelWidgets())
         if (window->isVisible() && window->inherits("MainWindowView")) {
             background = window;
             break;
         }
-    const auto preferences =
-            kobalt::storage::readPreferences(environment_.paths.preferences()).object;
     run.interface = &kobalt::readerInterface();
-    run.interface->setDensity(kobalt::currentScreenDensity());
-    // Nickel's Large Print enlarges Kobalt's interface text the same way.
+    run.loading = run.interface->createOpeningSurface(background, openingDark,
+                                                      readerHostServices().presentation);
+    ignoreNativeFontScale(run.loading->window());
+    connect(run.loading->window(), &QDialog::rejected, this, [this] { cancelOpening(); });
+    const auto epoch = generation;
+    run.loading->afterFirstPaint([this, epoch] {
+        if (epoch != generation || !busy || !run.opening || !run.loading)
+            return;
+        const auto elapsed = run.openingTimer.elapsed();
+        run.openingTimings["first_frame_ms"] = double(elapsed);
+        diagnostic("opening-first-frame", { { "elapsed_ms", double(elapsed) } });
+        prepareOpeningControls();
+    });
+    run.loading->window()->show();
+    run.loading->window()->raise();
+    return true;
+}
+
+void ReaderCoordinator::prepareOpeningControls()
+{
+    QString nextIdentity, nextPath;
+    const auto route = readerBookCandidateRoute(run.opening->volume(), &nextIdentity, &nextPath);
+    run.openingTimings["candidate_ms"] = double(run.openingTimer.elapsed());
+    if (route == ReaderBookRoute::Unsupported) {
+        auto fallback = std::move(run.opening);
+        release();
+        if (fallback && !lifecycle->blocked() && !lifecycle->draining
+            && !NativeLifecycle::suspended())
+            fallback->openStock();
+        return;
+    }
+    const bool discardRetained = run.session && nextIdentity != run.identity;
+    run.identity = nextIdentity;
+    run.filePath = nextPath;
+    // The logo splash has reached Qt's backing store. No font registration,
+    // storage commit or live widget layout can hold up that first feedback.
+    kobalt::markMemoryBase();
+    if (!kobalt::ui::initializeOpeningFonts(environment_.assets)) {
+        const bool assetsReady = environment_.assets.available();
+        if (!assetsReady || !kobalt::ui::initializeInterfaceFonts(environment_.assets)) {
+            missingAssets(assetsReady);
+            return;
+        }
+    }
+    const bool armed = writeJson(activePath, kobalt::qt::object({ { "book", run.identity } }));
+    if (!armed || !authorization->begin(run.identity)) {
+        if (!armed)
+            diagnostic("session-arm-failed", {}, DiagnosticSeverity::Error);
+        auto fallback = std::move(run.opening);
+        release();
+        if (fallback && !lifecycle->blocked() && !lifecycle->draining
+            && !NativeLifecycle::suspended())
+            fallback->openStock();
+        return;
+    }
+    const auto preferences = storage::readPreferences(environment_.paths.preferences()).object;
+    openingDark = preferences.value("dark_mode").toBool(false);
+    run.interface->setDensity(currentScreenDensity());
     run.interface->setLargeText(nativeFontScale());
     {
         NativeFontScaleScope building;
-        run.loading = run.interface->createOpening(background, preferences,
-                                                   readerHostServices().presentation);
-        ignoreNativeFontScale(run.loading->window());
+        ui::setInterfaceWeight(ui::heavierTextSteps);
+        run.loading->prepareControls(preferences);
     }
     if (nativeTileCoverProbeEnabled()) {
         const auto image = nativeTileCoverProbeImage(run.opening->volume());
@@ -534,59 +567,24 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
                                 { "height", image.height() },
                                 { "image_key", QString::number(image.cacheKey()) } }));
     }
-    // The cached image belongs to Nickel and needs no publication service.
-    // Start before eligibility checks so a handoff can keep the same cover.
     run.loading->loadCover(nativeReaderCoverPath(run.opening->volume()));
-    run.openingStage = kobalt::OpeningStage::Content;
+    run.openingStage = OpeningStage::Content;
     run.openingPercent = -1;
     run.progressPainted = -1000;
-    updateOpening(kobalt::OpeningStage::Content, 0);
-    connect(run.loading->window(), &QDialog::rejected, this, [this] { cancelOpening(); });
+    updateOpening(OpeningStage::Content, 0);
     const auto epoch = generation;
     run.loading->afterFirstPaint([this, epoch, route, discardRetained] {
-        if (epoch == generation && busy && run.opening && run.loading) {
-            if (discardRetained) {
-                if (run.sourceLease) {
-                    run.sourceLease->cancel();
-                }
-                run.session.reset();
-                run.sourceLease.reset();
-            }
-            prepareOpening(route);
+        if (epoch != generation || !busy || !run.opening || !run.loading)
+            return;
+        run.openingTimings["loading_frame_ms"] = double(run.openingTimer.elapsed());
+        if (discardRetained) {
+            if (run.sourceLease)
+                run.sourceLease->cancel();
+            run.session.reset();
+            run.sourceLease.reset();
         }
+        prepareOpening(route);
     });
-    run.loading->window()->show();
-    run.loading->window()->raise();
-    return true;
-}
-
-bool ReaderCoordinator::missingAssetsBeforeOpening(bool assetsReady)
-{
-    kobalt::diagnostic(assetsReady ? "interface-fonts-unavailable" : "assets-unavailable");
-    // Keep the native settings and reader choice available. This failure
-    // needs no Kobalt window or asset-backed font, and consumes no book.
-    const bool filesystemRecovery =
-            !assetsReady && environment_.assets.hasFilesystemRecoveryFiles();
-    if (filesystemRecovery)
-        kobalt::diagnostic("asset-filesystem-recovery");
-    run.fallbackAlert =
-            kobalt::showMissingAssetsAlert(QStringLiteral(KOBALT_VERSION), filesystemRecovery);
-    if (!run.fallbackAlert) {
-        kobalt::diagnostic("assets-alert-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
-        return false;
-    }
-    busy = true;
-    watch();
-    const auto epoch = generation;
-    connect(run.fallbackAlert.data(), &QDialog::finished, this, [this, epoch] {
-        if (epoch == generation) {
-            busy = false;
-            run.fallbackAlert.clear();
-            status("ready");
-        }
-    });
-    status("assets-unavailable");
-    return true;
 }
 
 void ReaderCoordinator::missingAssets(bool assetsReady)
@@ -1154,6 +1152,8 @@ void ReaderCoordinator::showReader()
     };
     run.reader->finished = [this](std::unique_ptr<kobalt::ReaderSession> retained) {
         auto closing = run.reader ? run.reader->closingTiming() : kobalt::ActionTiming{};
+        if (run.reader)
+            openingDark = run.reader->property("reader_dark").toBool();
         // closeEvent has accepted this close. Do not let the visibility
         // poll show the reader again before Qt processes deleteLater().
         run.reader.clear();

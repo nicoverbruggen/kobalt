@@ -9,6 +9,9 @@ std::unique_ptr<ReaderOpeningView> createOpening(QWidget *background,
 // The standalone host sizes this loading view and handles system Back itself.
 std::unique_ptr<ReaderOpeningView>
 createEmbeddedOpening(QWidget *parent, PresentationFactory presentation, bool showCover = true);
+// Paint the centered logo without fonts, images or controls until prepareControls().
+std::unique_ptr<ReaderOpeningView> createOpeningSurface(QWidget *parent, bool dark,
+                                                        PresentationFactory presentation);
 
 class SaveErrorView final : public ui::ChoiceModal
 {

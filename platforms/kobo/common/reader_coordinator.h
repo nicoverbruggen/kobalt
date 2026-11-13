@@ -144,8 +144,9 @@ private:
     void checkProgressSoon();
     void watch();
     void prepareOpening(kobalt::ReaderBookRoute candidate);
+    void prepareOpeningControls();
+    bool openingDark = false;
     void missingAssets(bool assetsReady);
-    bool missingAssetsBeforeOpening(bool assetsReady);
     void load();
 
     void showReader();

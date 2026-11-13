@@ -8,6 +8,9 @@
 namespace kobalt::ui {
 void paintBrandIcon(QPainter &painter, const QRectF &bounds, const QColor &ink);
 
+// Center the symbol and outlined wordmark as one group, without loading fonts.
+void paintBrandSplash(QPainter &painter, const QPointF &center, qreal scale, const QColor &ink);
+
 class BrandIcon final : public QWidget
 {
 public:

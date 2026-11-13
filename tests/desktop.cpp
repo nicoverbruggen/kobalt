@@ -14712,6 +14712,12 @@ private slots:
         QVERIFY(baseline->window()->findChild<QLabel *>("rrOpeningBrand")->isVisible());
         QVERIFY(capture(fixture, name + "-loading-no-cover", baseline->window()));
         baseline.reset();
+        auto logo = createOpeningSurface(reader, dark, desktop::readerHostServices().presentation);
+        logo->window()->setGeometry(reader->rect());
+        logo->window()->show();
+        logo->window()->raise();
+        QVERIFY(capture(fixture, name + "-loading-logo-splash", logo->window()));
+        logo.reset();
         auto splash =
                 createEmbeddedOpening(reader, desktop::readerHostServices().presentation, false);
         splash->window()->setGeometry(reader->rect());

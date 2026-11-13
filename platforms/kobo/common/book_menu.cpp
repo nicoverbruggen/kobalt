@@ -128,27 +128,29 @@ void rememberNativeBook(const QString &identity, const QString &path, bool prote
               protectedBook ? ReaderBookRoute::Protected : ReaderBookRoute::Remembered });
 }
 
+bool readerBookFormatSupported(const void *volume)
+{
+    if (!volume || previewBook(volume))
+        return false;
+    static const auto values = symbol<QVariantMap (*)(const void *)>("_ZNK6Volume11getDbValuesEv");
+    if (!values)
+        return false;
+    const auto mime = values(volume).value("MimeType").toString();
+    return (mime == "application/epub+zip" || mime == "application/x-kobo-epub+zip")
+            && !bookIdentity(volume).endsWith(QLatin1String(".txt.epub"), Qt::CaseInsensitive);
+}
+
 static ReaderBookRoute bookRoute(const void *volume, QString *identity, QString *path,
                                  bool inspectPublication)
 {
     using Route = ReaderBookRoute;
-    if (previewBook(volume))
+    if (!readerBookFormatSupported(volume))
         return Route::Unsupported;
     static const auto values = symbol<QVariantMap (*)(const void *)>("_ZNK6Volume11getDbValuesEv");
-    if (!volume || !values)
-        return Route::Unsupported;
     const auto fields = values(volume);
-    const auto mime = fields.value("MimeType").toString();
-    // PDFs and other formats never show a Kobalt screen.
-    if (mime != "application/epub+zip" && mime != "application/x-kobo-epub+zip")
-        return Route::Unsupported;
     const auto id = bookIdentity(volume);
     if (identity)
         *identity = id;
-    // Nickel imports a TXT file by writing its own EPUB beside it, whose
-    // chapter paths CREngine cannot resolve. Nickel's reader opens it.
-    if (id.endsWith(QLatin1String(".txt.epub"), Qt::CaseInsensitive))
-        return Route::Unsupported;
     if (!fields.value("AdobeLocation").toString().isEmpty())
         return Route::Protected;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)

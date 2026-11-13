@@ -4487,6 +4487,56 @@ private slots:
         QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.may_take_a_while")));
     }
 
+    void openingLogoSplash()
+    {
+        for (bool dark : { false, true }) {
+            for (const QSize size : { QSize(1072, 1448), QSize(1448, 1072) }) {
+                QWidget owner;
+                auto opening = createOpeningSurface(&owner, dark, test::makeHostPresentation);
+                auto *view = opening->window();
+                view->resize(size);
+                QVERIFY(view->findChildren<QLabel *>().isEmpty());
+                QVERIFY(view->findChildren<QProgressBar *>().isEmpty());
+                bool first = false, controls = false;
+                opening->afterFirstPaint([&] {
+                    first = true;
+                    const auto pixels = view->grab().toImage();
+                    const auto background = dark ? qRgb(0, 0, 0) : qRgb(255, 255, 255);
+                    QRect ink;
+                    for (int y = 0; y < pixels.height(); ++y)
+                        for (int x = 0; x < pixels.width(); ++x)
+                            if (pixels.pixel(x, y) != background)
+                                ink = ink.united(QRect(x, y, 1, 1));
+                    QVERIFY(!ink.isEmpty());
+                    QVERIFY(qAbs(ink.center().x() - pixels.rect().center().x()) <= 1);
+                    QVERIFY(qAbs(ink.center().y() - pixels.rect().center().y()) <= 1);
+                    QVERIFY(ink.width() < size.width() / 2);
+                    QVERIFY(ink.height() < size.height() / 2);
+                    // The wordmark extends beyond the narrower six-bar symbol.
+                    QVERIFY(ink.width() > 80 * qMin(size.width() / 402.0, size.height() / 543.0));
+                    QVERIFY(view->findChildren<QProgressBar *>().isEmpty());
+                    opening->prepareControls({ { "dark_mode", dark } });
+                    opening->afterFirstPaint([&] { controls = true; });
+                });
+                view->show();
+                QTRY_VERIFY(first);
+                QTRY_VERIFY(controls);
+                auto *bar = view->findChild<QProgressBar *>("rrOpeningProgress");
+                QVERIFY(bar && bar->isVisible());
+                opening->setProgress(20);
+                QCOMPARE(bar->value(), 20);
+            }
+        }
+        QWidget owner;
+        auto splash = createOpeningSurface(&owner, false, test::makeHostPresentation);
+        bool prepared = false;
+        splash->afterFirstPaint([&] { prepared = true; });
+        splash->window()->show();
+        splash->window()->reject();
+        QCoreApplication::processEvents();
+        QVERIFY(!prepared);
+    }
+
     void openingFirstPaintCallback()
     {
         QWidget owner;

@@ -276,6 +276,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "loading-handoff-cover", "Opening in Nickel with the book cover" },
         { "loading-no-cover", "Opening a book without a cover" },
         { "settings-opening-cover-logo", "System: Kobalt logo while opening" },
+        { "loading-logo-splash", "Opening: logo splash" },
         { "loading-splash", "Opening with the Kobalt logo" },
         { "loading-splash-reopening", "Reopening with the Kobalt logo" },
         { "save-failed", "Saving failed" },

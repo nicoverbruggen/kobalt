@@ -11,6 +11,8 @@
 #include <QPainterPath>
 #include <QVariant>
 #include <cmath>
+#include <QtMath>
+#include "brand_wordmark.h"
 
 namespace kobalt::ui {
 void paintBrandIcon(QPainter &painter, const QRectF &bounds, const QColor &ink)
@@ -25,6 +27,31 @@ void paintBrandIcon(QPainter &painter, const QRectF &bounds, const QColor &ink)
                        line == 5 ? metrics::opening::finalBarWidth : metrics::opening::icon.width(),
                        metrics::opening::iconBarHeight),
                 ink);
+    painter.restore();
+}
+
+void paintBrandSplash(QPainter &painter, const QPointF &center, qreal scale, const QColor &ink)
+{
+    static const QPainterPath wordmark = brandWordmark();
+    namespace opening = metrics::opening;
+    const auto text = wordmark.boundingRect();
+    // The asset outlines use a 54 px font with its baseline at y=175.
+    // Match the loading label's rounded font size and centered text bitmap.
+    const qreal fontPixels = qMax(1, qRound(opening::brandText * scale));
+    const qreal textScale = fontPixels / 54;
+    const qreal descent = qCeil((text.bottom() - 175) * textScale);
+    const qreal baseline = opening::brand.center().y() * scale + (fontPixels - descent) / 2;
+    const qreal textTop = baseline + (text.top() - 175) * textScale;
+    const qreal height = textTop + text.height() * textScale - opening::icon.top() * scale;
+    painter.save();
+    painter.translate(center.x(), center.y() - height / 2);
+    const auto icon = opening::icon.size() * scale;
+    paintBrandIcon(painter, QRectF(-icon.width() / 2, 0, icon.width(), icon.height()), ink);
+    painter.translate(-text.center().x() * textScale,
+                      baseline - opening::icon.top() * scale - 175 * textScale);
+    painter.scale(textScale, textScale);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.fillPath(wordmark, ink);
     painter.restore();
 }
 

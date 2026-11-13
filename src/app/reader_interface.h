@@ -23,6 +23,8 @@ public:
     virtual void loadCover(const QString &path) = 0;
     // Run after the first visible frame, before expensive opening work starts.
     virtual void afterFirstPaint(std::function<void()> callback) = 0;
+    // Replace the logo splash with live controls in the same window.
+    virtual void prepareControls(const QJsonObject &preferences) = 0;
     // Replace temporary system faces after the bundled interface fonts load.
     virtual void refreshFonts() = 0;
     // The controller owns authorization and the native continuation.
@@ -36,6 +38,8 @@ struct ReaderInterface
     std::unique_ptr<ReaderOpeningView> (*createOpening)(QWidget *background,
                                                         const QJsonObject &preferences,
                                                         PresentationFactory);
+    std::unique_ptr<ReaderOpeningView> (*createOpeningSurface)(QWidget *, bool,
+                                                               PresentationFactory);
     QSize (*readingViewport)(QSize screen, const QJsonObject &preferences);
     // Sizes the interface for a screen of this many pixels per inch. Call before
     // creating any view.

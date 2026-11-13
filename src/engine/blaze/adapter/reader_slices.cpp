@@ -215,6 +215,15 @@ QString EngineDocument::estimateKey(const QJsonObject &settings) const
                     .left(16));
 }
 
+QString EngineDocument::fullDocumentKey(const QJsonObject &settings) const
+{
+    QJsonObject pixels;
+    for (const auto *name : { "dark_mode", "weight_steps", "normalize_text_colors" })
+        pixels[QLatin1String(name)] = settings.value(QLatin1String(name));
+    return estimateKey(settings) + QLatin1Char('|')
+            + QString::fromUtf8(QJsonDocument(pixels).toJson(QJsonDocument::Compact));
+}
+
 QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) const
 {
     if (windowFirst_ < 0 || spineItemCount_ <= 0 || !source_ || source_->parent || !engine_)
@@ -341,8 +350,8 @@ bool EngineDocument::measureChapterPlaces() const
     const auto list = chapters();
     const auto graph = chapterGraph();
     const int total = list.size() + graph.size();
-    // A few files in one step, so that a page turn does not wait long.
-    int files = 4;
+    // One file in one step: a page turn waits for the step that runs.
+    int files = 1;
     while (done < total && files > 0) {
         const auto &position =
                 done < list.size() ? list[done].position : graph[done - list.size()].position;

@@ -212,8 +212,11 @@ public:
     bool countPages(const std::function<bool()> &current) override;
     FullDocument prepareFullDocument(const std::function<bool()> &current,
                                      bool cachedOnly = false) override;
-    bool fullDocumentReady() const override { return bool(full_); }
-    bool fullDocumentStarted() const override { return building_ || full_; }
+    // Both are for the settings and the page size in force. A document or
+    // a build for other settings is dropped by the next prepareFullDocument()
+    // and counts as nothing here.
+    bool fullDocumentReady() const override;
+    bool fullDocumentStarted() const override;
     void setBackgroundCount(bool enabled) override;
     bool backgroundCount() const override;
 
@@ -571,6 +574,10 @@ private:
     QJsonObject settingsState() const;
     // A digest of everything that decides the pages, from settingsState().
     QString estimateKey(const QJsonObject &settings) const;
+    // The key of a prepared document of the whole book. Unlike estimateKey()
+    // it also holds the settings that change pixels only: a document made
+    // before dark mode changed must not be shown after it.
+    QString fullDocumentKey(const QJsonObject &settings) const;
     // The saved page estimate, or empty outside chapter mode.
     QJsonObject pageEstimateRecord(const QJsonObject &settings) const;
     // Continues from a saved page estimate when the book opens.

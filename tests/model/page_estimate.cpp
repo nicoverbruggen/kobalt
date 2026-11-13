@@ -1572,6 +1572,39 @@ void fullDocumentFromCache(const QByteArray &bytes)
             "The whole build must still work");
 }
 
+// Dark mode, the outline weight and the text colors move no text to another
+// page, so they are not in the key of the page estimate. They change every
+// pixel: a document of the whole book made before such a change must not be
+// shown after it.
+void fullDocumentPixels()
+{
+    for (const auto &change :
+         { QJsonObject{ { "dark_mode", true } }, QJsonObject{ { "weight_steps", 3 } },
+           QJsonObject{ { "normalize_text_colors", true } } }) {
+        EngineDocument model(test::readerFonts());
+        openResources(model, pagesBook(), { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+        model.setChapterSlices(6);
+        QString error;
+        require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+        require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                        && model.fullDocumentReady() && model.fullDocumentStarted(),
+                "The whole book must build beside the chapter");
+        require(model.applyAppearance(appearance::Patch(change), {}),
+                "The chapter must take the change");
+        require(!model.fullDocumentReady() && !model.fullDocumentStarted(),
+                "A document for other pixels is neither ready nor started");
+        require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                        && model.fullDocumentReady(),
+                "The whole book must build again for the change");
+        require(model.setChapterMode(false, appearance::Patch(change), {}, {}, {})
+                        && model.bookFraction() < 0,
+                "The prepared document must be shown");
+        for (auto it = change.begin(); it != change.end(); ++it)
+            require(model.state().value(it.key()) == it.value(),
+                    "The whole book must have the changed setting");
+    }
+}
+
 // A book with more spine items than the engine has room for documents: the
 // count must still reach the end of the book, with the kept documents out of
 // its way.
@@ -2082,6 +2115,7 @@ int main(int argc, char **argv)
     reopenCounted();
     manyItemsCounted();
     fullDocument();
+    fullDocumentPixels();
     fullDocumentFromCache(bytes);
     // KOBALT_PARKED_BOOK names another EPUB for the same check, for a book
     // that is not a fixture.
@@ -2146,9 +2180,9 @@ int main(int argc, char **argv)
     observations();
     emptyItem();
     laterSlice();
+    searchLongItem();
     keptObservations();
 #endif
     std::printf("PASS: page estimate measurement, map, saved record and chapter mode pages\n");
     return 0;
 }
-    searchLongItem();

@@ -20092,6 +20092,14 @@ public:
 };
 
 static ldomDocCacheImpl * _cacheInstance = NULL;
+// koblaze: set while a document that uses the cache is parked and other
+// documents have the engine. Those must not reach the cache of the parked one.
+static bool koblaze_doc_cache_suspended = false;
+
+void ldomDocCache::koblazeSuspend( bool suspended )
+{
+    koblaze_doc_cache_suspended = suspended;
+}
 
 bool ldomDocCache::init( lString32 cacheDir, lvsize_t maxSize )
 {
@@ -20119,7 +20127,7 @@ bool ldomDocCache::close()
 /// open existing cache file stream
 LVStreamRef ldomDocCache::openExisting( lString32 filename, lUInt32 crc, lUInt32 docFlags, lString32 &cachePath )
 {
-    if ( !_cacheInstance )
+    if ( !_cacheInstance || koblaze_doc_cache_suspended )
         return LVStreamRef();
     return _cacheInstance->openExisting( filename, crc, docFlags, cachePath );
 }
@@ -20127,7 +20135,7 @@ LVStreamRef ldomDocCache::openExisting( lString32 filename, lUInt32 crc, lUInt32
 /// create new cache file
 LVStreamRef ldomDocCache::createNew( lString32 filename, lUInt32 crc, lUInt32 docFlags, lUInt32 fileSize, lString32 &cachePath )
 {
-    if ( !_cacheInstance )
+    if ( !_cacheInstance || koblaze_doc_cache_suspended )
         return LVStreamRef();
     return _cacheInstance->createNew( filename, crc, docFlags, fileSize, cachePath );
 }
@@ -20153,7 +20161,7 @@ bool ldomDocCache::clear()
 /// returns true if cache is enabled (successfully initialized)
 bool ldomDocCache::enabled()
 {
-    return _cacheInstance!=NULL;
+    return _cacheInstance!=NULL && !koblaze_doc_cache_suspended;
 }
 
 //void calcStyleHash( ldomNode * node, lUInt32 & value )

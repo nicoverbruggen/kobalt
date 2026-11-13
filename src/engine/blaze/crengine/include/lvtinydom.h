@@ -3525,6 +3525,8 @@ public:
     static bool clear();
     /// returns true if cache is enabled (successfully initialized)
     static bool enabled();
+    /// koblaze: hides the cache from other documents while its document is parked
+    static void koblazeSuspend( bool suspended );
 };
 
 

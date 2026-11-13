@@ -1,3 +1,4 @@
+#include "support/main_thread.h"
 #include "engine/engine_worker.h"
 #include "stop_point.h"
 #include "support/qt_compat.h"
@@ -893,7 +894,7 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
     // that document. Nothing is loaded and nothing moves on the page.
     bool prepared = false;
     if (!fast && full_ && fullSize_ == (size.isValid() ? size : size_)
-        && fullKey_ == estimateKey(settingsState())) {
+        && fullKey_ == fullDocumentKey(settingsState())) {
         const auto before = state();
         prepared = true;
         for (auto it = patch.fields().begin(); it != patch.fields().end() && prepared; ++it)
@@ -1236,6 +1237,7 @@ struct EngineDocument::FullBuild
     {
         if (!thread)
             return;
+        mainthread::blocking("whole-book-build-end");
         {
             // The build unwinds on its own thread, with the engine.
             QMutexLocker lock(&mutex);
@@ -1255,6 +1257,7 @@ struct EngineDocument::FullBuild
     // owns the engine otherwise; it does not touch the engine meanwhile.
     State run(const std::function<bool()> &stillCurrent)
     {
+        mainthread::blocking("whole-book-build");
         QMutexLocker lock(&mutex);
         if (state == State::Done)
             return state;
@@ -1281,16 +1284,25 @@ struct EngineDocument::FullBuild
         if (!current || current())
             return true;
         // What the engine keeps for the document in work, outside that
-        // document: the stop check and the quote levels of the languages.
+        // document: the stop check, the quote levels of the languages and
+        // the cache of parsed books. A chapter that has the engine meanwhile
+        // must not write to that cache.
         int levels[64];
         const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
         StopCheck::suspend();
+        // The scopes that this build has open say nothing about the work
+        // that has the engine meanwhile.
+        int noCancel = 0, parserCanStop = 0;
+        koblazeSwapCancelScopes(&noCancel, &parserCanStop);
         koblazeSetPausePoint(nullptr, nullptr);
+        ldomDocCache::koblazeSuspend(true);
         ++parks;
         state = State::Parked;
         changed.wakeAll();
         while (state != State::Running)
             changed.wait(&mutex);
+        ldomDocCache::koblazeSuspend(false);
+        koblazeSwapCancelScopes(&noCancel, &parserCanStop);
         TextLangMan::koblazeSetQuoteLevels(levels, count);
         koblazeSetSpineWindow(-1, -1);
         koblazeSetPausePoint(&FullBuild::pausePoint, this);
@@ -1308,13 +1320,30 @@ struct EngineDocument::FullBuild
 };
 #endif
 
+bool EngineDocument::fullDocumentReady() const
+{
+    return full_ && fullSize_ == size_ && fullKey_ == fullDocumentKey(settingsState());
+}
+
+bool EngineDocument::fullDocumentStarted() const
+{
+    if (fullDocumentReady())
+        return true;
+#if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
+    return building_ && building_->size == size_
+            && building_->key == fullDocumentKey(settingsState());
+#else
+    return false;
+#endif
+}
+
 Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<bool()> &current,
                                                          bool cachedOnly)
 {
 #if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
     if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || source_->parent || !engine_)
         return FullDocument::None;
-    const auto key = estimateKey(settingsState());
+    const auto key = fullDocumentKey(settingsState());
     if (full_ && (key != fullKey_ || size_ != fullSize_))
         full_.reset();
     if (full_)
@@ -1399,8 +1428,14 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 document->openInterrupt_ = nullptr;
             }
             const bool usable = opened && !state->abandoned && document->pages() > 0;
-            if (!usable)
+            if (!usable) {
+                // A build that stopped half-way leaves no half book in the
+                // cache file: writing it would hold up the work that gave
+                // the build up, and nothing could use it.
+                if (!opened && document->engine_ && document->engine_->getDocument())
+                    document->engine_->getDocument()->invalidateCacheFile();
                 document.reset();
+            }
             state->finish(std::move(document));
         });
         build->thread->start();

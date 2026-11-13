@@ -89,6 +89,12 @@ class KoblazeRenderCancelled {};
 #define KOBLAZE_CANCEL_CHECK 1
 typedef bool (*KoblazeCancelCheck)(void * context);
 void koblazeSetCancelCheck(KoblazeCancelCheck check, void * context);
+
+// The engine counts the open KoblazeNoCancel and KoblazeParserCanStop scopes
+// for the one document in work. Work that pauses on its own thread while
+// another thread uses the engine swaps its counts out and zeros in, and
+// swaps them back when it goes on.
+void koblazeSwapCancelScopes(int * noCancel, int * parserCanStop);
 /// Throws KoblazeRenderCancelled when a check is set and asks to stop.
 void koblazeCheckCancel();
 /// A place where work on a document can wait but must not be stopped, such

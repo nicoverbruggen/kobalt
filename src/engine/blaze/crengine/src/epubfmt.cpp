@@ -1124,6 +1124,16 @@ void koblazeCheckCancelInParser()
 KoblazeNoCancel::KoblazeNoCancel() { koblaze_no_cancel++; }
 KoblazeNoCancel::~KoblazeNoCancel() { koblaze_no_cancel--; }
 
+void koblazeSwapCancelScopes(int * noCancel, int * parserCanStop)
+{
+    int value = koblaze_no_cancel;
+    koblaze_no_cancel = *noCancel;
+    *noCancel = value;
+    value = koblaze_parser_can_stop;
+    koblaze_parser_can_stop = *parserCanStop;
+    *parserCanStop = value;
+}
+
 void koblazeSetCancelCheck(KoblazeCancelCheck check, void * context)
 {
     koblaze_cancel_check = check;

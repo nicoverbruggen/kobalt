@@ -68,6 +68,13 @@ QString timeLeft(qint64 milliseconds, bool learningPace, bool approximate)
     return learningPace ? strings::get("stats.approximate_time").arg(result) : result;
 }
 
+// What a page field shows while chapter mode has no page numbers yet. An
+// estimate replaces it, and the count of the whole book replaces that.
+QString calculating()
+{
+    return strings::get("header_footer.calculating");
+}
+
 // A percent that is known, or nothing.
 QString percent(int value)
 {
@@ -385,20 +392,18 @@ Content content(Field field, const Values &values, bool uppercase)
         break;
     case Field::ChapterPage:
         result.text = values.percentRead >= 0
-                ? percent(values.chapterPercentRead)
+                ? calculating()
                 : pageFraction(values.chapterPage, values.chapterPages,
                                values.chapterPagesEstimated);
         break;
     case Field::BookPage:
         result.text = values.percentRead >= 0
-                ? strings::get("sleep.percent_read").arg(values.percentRead)
+                ? calculating()
                 : pageFraction(values.page, values.pages, values.pagesEstimated);
         break;
     case Field::ChapterPagesLeft:
         if (values.percentRead >= 0) {
-            if (values.chapterPercentRead >= 0)
-                result.text = strings::get("header_footer.percent_left")
-                                      .arg(100 - values.chapterPercentRead);
+            result.text = calculating();
         } else if (values.chapterPages > 0) {
             // The current page is still to be read, as in Stats: the last page shows 1.
             const int left = qMax(1, values.chapterPages - values.chapterPage + 1);
@@ -411,14 +416,14 @@ Content content(Field field, const Values &values, bool uppercase)
     case Field::ChapterAndPage:
         result.chapterTitle = values.chapter;
         result.chapterPosition = values.percentRead >= 0
-                ? percent(values.chapterPercentRead)
+                ? calculating()
                 : pageOf(values.chapterPage, values.chapterPages, values.chapterPagesEstimated);
         result.text = joined(result.chapterTitle, result.chapterPosition);
         break;
     case Field::TitleAndPage:
         result.text = joined(values.title,
                              values.percentRead >= 0
-                                     ? percent(values.percentRead)
+                                     ? calculating()
                                      : pageOf(values.page, values.pages, values.pagesEstimated));
         break;
     case Field::BatteryPercentOnly:

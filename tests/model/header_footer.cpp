@@ -229,6 +229,20 @@ int main()
                             == QStringLiteral("6 of 20"),
             "An estimated total needs its mark");
     estimated.chapter.clear();
+    // Before the estimate there are no page numbers. The page fields say so
+    // and show no percentage in their place; the percentage fields keep theirs.
+    auto noPages = values;
+    noPages.page = noPages.pages = noPages.chapterPage = noPages.chapterPages = 0;
+    noPages.percentRead = 42;
+    noPages.chapterPercentRead = 30;
+    const auto calculating = strings::get("header_footer.calculating");
+    for (const auto field : { Field::ChapterPage, Field::BookPage, Field::ChapterPagesLeft })
+        require(content(field, noPages, false).text == calculating,
+                "A page field without page numbers must show that they are being calculated");
+    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42%")
+                    && content(Field::ChapterPercent, noPages, false).text
+                            == QStringLiteral("30%"),
+            "The percentage fields keep their percentage");
     require(content(Field::ChapterAndPage, estimated, false).text == QStringLiteral("6 of ~20"),
             "An estimated total beside a name needs its mark");
     auto missingTotal = values;

@@ -494,8 +494,8 @@
 "header_footer.time_left" = "%1 left";
 "header_footer.learning_pace" = "Learning reading speed";
 /* Arguments: %1, %2 */
+"header_footer.calculating" = "Calculating…";
 "header_footer.pages_left" = "%1 %2";
-"header_footer.percent_left" = "%1% left";
 /* Arguments: %1 */
 "header_footer.milliseconds" = "%1 ms";
 "header_footer.preset.default" = "Kobalt";

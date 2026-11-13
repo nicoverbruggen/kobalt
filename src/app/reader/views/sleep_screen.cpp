@@ -16,7 +16,9 @@
 namespace kobalt::reader {
 void portraitSleepSnapshot(sleep::Snapshot &snapshot)
 {
-    snapshot.orientation = Qt::PortraitOrientation;
+    // Portrait reading keeps its top edge. Landscape still uses upright portrait.
+    if (snapshot.orientation != Qt::InvertedPortraitOrientation)
+        snapshot.orientation = Qt::PortraitOrientation;
     if (snapshot.image.width() <= snapshot.image.height())
         return;
     const QSize size(snapshot.image.height(), snapshot.image.width());

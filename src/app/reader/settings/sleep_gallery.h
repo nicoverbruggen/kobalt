@@ -11,7 +11,9 @@ class QLabel;
 
 namespace kobalt::ui {
 class CellButton;
+class CheckCellButton;
 class PagerBar;
+class ButtonFeedback;
 } // namespace kobalt::ui
 
 namespace kobalt::reader {
@@ -31,7 +33,8 @@ public:
 
     // `sample` carries the text and theme the previews draw; its image is unused.
     SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Design current,
-                 const sleep::Snapshot &sample, QSize screen, sleep::NativePreview native = {});
+                 const sleep::Snapshot &sample, QSize screen, sleep::NativePreview native = {},
+                 bool followReading = true);
     ~SleepGallery() override;
 
     // Images that arrive later redraw the previews that use them.
@@ -46,6 +49,7 @@ public:
     // A tap on an unavailable entry, so the reader can say why.
     std::function<void(sleep::Design)> unavailable;
     std::function<void()> closed;
+    std::function<bool(bool)> followOrientationChanged;
     // A long press on an entry with options. Only Night has one: its greeting.
     std::function<void(sleep::Design)> customize;
 
@@ -65,7 +69,9 @@ private:
     sleep::Snapshot sample_;
     sleep::NativePreview native_;
     QImage cover_, pageImage_, overlay_;
-    QSize screen_;
+    QSize screen_, readingScreen_;
+    ui::CheckCellButton *followOrientation_;
+    ui::ButtonFeedback *orientationNotice_;
     QHash<int, QImage> previews_;
     QLabel *title_;
     ui::CellButton *close_;

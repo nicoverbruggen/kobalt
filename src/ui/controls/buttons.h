@@ -379,6 +379,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *) override;
+    void paintCell(bool fillWhenChecked, int glyphOffset = 0);
 
 private:
     ControlIcon glyph;
@@ -389,6 +390,16 @@ private:
     bool circular = false;
     bool grayPress = false;
     int trailingInset = metrics::chrome::inset;
+};
+
+// A header icon with a separate checkbox at the lower right.
+class CheckCellButton final : public CellButton
+{
+public:
+    CheckCellButton(ControlIcon icon, QWidget *parent);
+
+protected:
+    void paintEvent(QPaintEvent *) override;
 };
 
 QPushButton *makeButton(QWidget *parent, QBoxLayout *layout, const char *name, const QString &text,

@@ -1033,8 +1033,14 @@ void Reader::openSleepScreen()
     sleepGallery = new SleepGallery(this, entries, sleep::design(preferences), sleepPreviewSample(),
                                     page ? page->size() : size(),
                                     services.nativeSleepPreview ? services.nativeSleepPreview()
-                                                                : sleep::NativePreview{});
+                                                                : sleep::NativePreview{},
+                                    sleep::followsReading(preferences));
     sleepGallery->setGeometry(general ? general->geometry() : rect());
+    sleepGallery->followOrientationChanged = [this](bool checked) {
+        auto next = preferences;
+        next[sleep::followOrientationKey] = checked;
+        return saveSleepPreferences(next);
+    };
     sleepGallery->chosen = [this](sleep::Design design) {
         auto next = preferences;
         sleep::setDesign(next, design);

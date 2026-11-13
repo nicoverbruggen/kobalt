@@ -145,6 +145,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
                              "edge_light_gestures",
                              "show_light_gesture_feedback",
                              "show_opening_cover",
+                             sleep::followOrientationKey,
                              "dense_stats_chart",
                              "hanging_punctuation",
                              "hide_nonlinear_fragments",

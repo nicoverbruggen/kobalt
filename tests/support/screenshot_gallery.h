@@ -360,6 +360,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "settings-automatic-opening-confirmation", "Turn off automatic opening confirmation" },
         { "session-timeout", "New session after sleep" },
         { "sleep-gallery", "Sleep screen gallery" },
+        { "sleep-gallery-portrait", "Portrait sleep screens" },
+        { "sleep-gallery-rotation", "Sleep rotation enabled" },
         { "sleep-settings", "Sleep screen settings" },
         { "sleep-greeting", "Night greeting" },
         { "settings-time-remaining-format", "Time remaining format" },

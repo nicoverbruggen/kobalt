@@ -16,6 +16,8 @@
 #include <QPainter>
 #include <QTest>
 #include <QScreen>
+#include <QScopeGuard>
+#include <qpa/qwindowsysteminterface.h>
 
 // These substitute the native battery service and window types only. The
 // overlay, composition and power-screen owner are the production Kobo code.
@@ -127,6 +129,87 @@ class PowerScreenTests : public QObject
 {
     Q_OBJECT
 private slots:
+
+    // Compare actual native-frame pixels before and after Nickel changes orientation.
+    void sleepImageHandoffKeepsPortraitDirection_data()
+    {
+        QTest::addColumn<int>("reading");
+        QTest::addColumn<int>("native");
+        QTest::addColumn<bool>("followReading");
+        for (auto reading : { Qt::PortraitOrientation, Qt::InvertedPortraitOrientation,
+                              Qt::LandscapeOrientation, Qt::InvertedLandscapeOrientation }) {
+            for (auto native : { Qt::PortraitOrientation, Qt::InvertedPortraitOrientation,
+                                 Qt::LandscapeOrientation, Qt::InvertedLandscapeOrientation }) {
+                for (bool followReading : { false, true })
+                    QTest::newRow(qPrintable(QString("%1-to-%2-follow-%3")
+                                                     .arg(int(reading))
+                                                     .arg(int(native))
+                                                     .arg(followReading)))
+                            << int(reading) << int(native) << followReading;
+            }
+        }
+    }
+
+    void sleepImageHandoffKeepsPortraitDirection()
+    {
+        QFETCH(int, reading);
+        QFETCH(int, native);
+        QFETCH(bool, followReading);
+        auto *screen = QGuiApplication::primaryScreen();
+        const auto original = screen->orientation();
+        const auto turn = [screen](Qt::ScreenOrientation orientation) {
+            QWindowSystemInterface::handleScreenOrientationChange(screen, orientation);
+            QWindowSystemInterface::flushWindowSystemEvents();
+        };
+        const auto restore = qScopeGuard([&] { turn(original); });
+        turn(Qt::ScreenOrientation(reading));
+        QCOMPARE(screen->orientation(), Qt::ScreenOrientation(reading));
+
+        kobalt::sleep::Snapshot shot;
+        shot.orientation = screen->orientation();
+        shot.mode = kobalt::sleep::Mode::Cover;
+        const bool landscape =
+                reading == Qt::LandscapeOrientation || reading == Qt::InvertedLandscapeOrientation;
+        shot.image = QImage(landscape ? QSize(120, 80) : QSize(80, 120), QImage::Format_RGB32);
+        shot.image.fill(Qt::white);
+        {
+            QPainter painter(&shot.image);
+            painter.fillRect(0, 0, 20, 30, Qt::red);
+            painter.fillRect(40, 50, 30, 20, Qt::blue);
+        }
+        const auto expectedBackdrop = landscape && !followReading
+                ? kobalt::sleep::coverBackground(shot.image, QSize(80, 120))
+                : shot.image;
+        if (!followReading)
+            kobalt::reader::portraitSleepSnapshot(shot);
+
+        MainWindowView window;
+        AbstractPowerView power(&window);
+        window.show();
+        power.show();
+        auto presentation = kobalt::nickel::makeWindowPresentation(nullptr, true);
+        // SleepFrame must keep the capture's direction even if Nickel restores
+        // a different orientation after the reader hides.
+        for (int shown : { reading, native }) {
+            turn(Qt::ScreenOrientation(shown));
+            const bool sideways =
+                    shown == Qt::LandscapeOrientation || shown == Qt::InvertedLandscapeOrientation;
+            window.resize(sideways ? QSize(120, 80) : QSize(80, 120));
+            power.setGeometry(window.rect());
+            if (shown == reading)
+                QVERIFY(presentation->presentSleepScreen(shot.image, shot.orientation));
+            auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+            QVERIFY(frame);
+            const auto expectedOrientation = followReading       ? Qt::ScreenOrientation(reading)
+                    : reading == Qt::InvertedPortraitOrientation ? Qt::InvertedPortraitOrientation
+                                                                 : Qt::PortraitOrientation;
+            QTransform transform;
+            transform.rotate(
+                    screen->angleBetween(expectedOrientation, Qt::ScreenOrientation(shown)));
+            QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                     expectedBackdrop.transformed(transform));
+        }
+    }
 
     void privateLastBookIgnoresCachedImagesAndGlobalDesign_data()
     {

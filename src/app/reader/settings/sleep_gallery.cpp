@@ -5,6 +5,7 @@
 #include "support/strings.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/paging.h"
+#include "ui/dialogs/modals.h"
 #include "ui/controls/text.h"
 #include "ui/style/fonts.h"
 #include "ui/style/metrics.h"
@@ -198,13 +199,17 @@ private:
 };
 
 SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Design current,
-                           const sleep::Snapshot &sample, QSize screen, sleep::NativePreview native)
+                           const sleep::Snapshot &sample, QSize screen, sleep::NativePreview native,
+                           bool followReading)
     : ui::Panel(parent),
       entries_(std::move(entries)),
       current_(current),
       sample_(sample),
       native_(native),
-      screen_(qMin(screen.width(), screen.height()), qMax(screen.width(), screen.height()))
+      screen_(followReading ? screen
+                            : QSize(qMin(screen.width(), screen.height()),
+                                    qMax(screen.width(), screen.height()))),
+      readingScreen_(screen)
 {
     setObjectName("rrSleepGallery");
     auto *rows = new QVBoxLayout(this);
@@ -224,6 +229,30 @@ SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Desig
     title_->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title_, ui::styles::brand(chrome::titleText) + "background:transparent;");
     headingRows->addWidget(title_, 1);
+    followOrientation_ = new ui::CheckCellButton(ui::ControlIcon::DeviceRotate, heading);
+    followOrientation_->setChecked(followReading);
+    followOrientation_->setObjectName("rrSleepFollowOrientation");
+    followOrientation_->setAccessibleName(strings::get("sleep.follow_orientation"));
+    followOrientation_->setRule(Qt::LeftEdge);
+    followOrientation_->setFixedWidth(chrome::cellWidth);
+    headingRows->addWidget(followOrientation_);
+    orientationNotice_ = new ui::ButtonFeedback(this);
+    orientationNotice_->setObjectName("rrSleepOrientationNotice");
+    connect(followOrientation_, &QPushButton::clicked, this, [this](bool checked) {
+        if (followOrientationChanged && !followOrientationChanged(checked)) {
+            followOrientation_->setChecked(!checked);
+            return;
+        }
+        screen_ = checked ? readingScreen_
+                          : QSize(qMin(readingScreen_.width(), readingScreen_.height()),
+                                  qMax(readingScreen_.width(), readingScreen_.height()));
+        previews_.clear();
+        grid_->update();
+        orientationNotice_->showFor(
+                followOrientation_,
+                strings::get(checked ? "sleep.rotation_enabled" : "sleep.rotation_disabled"),
+                { ui::ButtonFeedback::AnchorSide::Below, {}, {} });
+    });
     close_ = new ui::CellButton(ui::ControlIcon::Close, heading);
     close_->setObjectName("rrSleepGalleryClose");
     close_->setAccessibleName(strings::get("settings.close"));

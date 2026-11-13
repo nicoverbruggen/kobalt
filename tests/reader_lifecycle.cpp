@@ -45,6 +45,7 @@
 #include "support/main_thread.h"
 #include <QLocale>
 #include "engine/crengine/engine_activity.h"
+#include "engine/crengine/engine_worker.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "app/messages/recovery_message.h"
@@ -84,12 +85,14 @@
 #include <QProcessEnvironment>
 #include <QPushButton>
 #include <QScreen>
+#include <qpa/qwindowsysteminterface.h>
 #ifndef KOBALT_NO_SENSORS
 #  include <QSensorBackend>
 #  include <QSensorManager>
 #endif
 #include <QSignalSpy>
 #include <QScopeGuard>
+#include <QSemaphore>
 #include <QSlider>
 #include <QStyle>
 #include <QTemporaryDir>
@@ -3754,6 +3757,80 @@ private slots:
     }
 
 #ifndef KOBALT_NO_SENSORS
+    // A return turn received during reflow must reach the reader and release input.
+    void rotationRoundTripKeepsReadingResponsive_data()
+    {
+        QTest::addColumn<bool>("columns");
+        QTest::newRow("one-column") << false;
+        QTest::newRow("two-columns") << true;
+    }
+
+    void rotationRoundTripKeepsReadingResponsive()
+    {
+        QFETCH(bool, columns);
+        const auto paths = testPaths();
+        QVERIFY(storage::writePreferences(
+                paths.preferences(),
+                { { "auto_rotate", true }, { "two_columns_landscape", columns } }));
+        test::Factory factory;
+        test::SensorRegistration registration("kobalt-round-trip", &factory);
+        QOrientationSensor sensor;
+        sensor.setIdentifier("kobalt-round-trip");
+        QVERIFY(sensor.start());
+        factory.backend->sample(QOrientationReading::TopUp);
+        QPointer<ReaderWindow> window;
+        auto shown = Qt::PortraitOrientation;
+        ReaderOrientation rotation(&sensor, [&](Qt::ScreenOrientation value) {
+            shown = value;
+            const bool landscape =
+                    value == Qt::LandscapeOrientation || value == Qt::InvertedLandscapeOrientation;
+            if (window)
+                window->resize(landscape ? nativeSize.transposed() : nativeSize);
+        });
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.rotation = &rotation;
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        window = host.window();
+        window->show();
+        QTRY_VERIFY(window->readyForPresentation());
+        const auto position = host.session()->state().value("position");
+        auto *page = static_cast<ReadingPage *>(window->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        for (auto outward : { QOrientationReading::LeftUp, QOrientationReading::RightUp }) {
+            const auto release = std::make_shared<QSemaphore>();
+            qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
+            bool held = true;
+            const auto unblock = qScopeGuard([&] {
+                if (held)
+                    release->release();
+            });
+            factory.backend->sample(outward);
+            QTRY_COMPARE(shown,
+                         outward == QOrientationReading::LeftUp ? Qt::LandscapeOrientation
+                                                                : Qt::InvertedLandscapeOrientation);
+            QTRY_VERIFY(host.session()->busy());
+            factory.backend->sample(QOrientationReading::TopUp);
+            auto *debounce = rotation.findChild<QTimer *>("rrOrientationDebounce");
+            QVERIFY(debounce);
+            QTRY_VERIFY(!debounce->isActive());
+            QVERIFY(shown != Qt::PortraitOrientation);
+            held = false;
+            release->release();
+            QTRY_COMPARE(shown, Qt::PortraitOrientation);
+            QTRY_VERIFY(window->readyForPresentation());
+            QVERIFY(!page->viewportTransition());
+            QCOMPARE(host.session()->state().value("position"), position);
+        }
+        const auto currentPage = host.session()->page();
+        test::skipPageTurnWindow();
+        window->pageButton(1);
+        QTRY_VERIFY(host.session()->page() > currentPage);
+        QTRY_VERIFY(window->readyForPresentation());
+    }
+
     // Settings holds rotation, then applies the last permitted sample without another movement.
     void settingsOrientationHandoff_data()
     {
@@ -4572,7 +4649,8 @@ private slots:
         host.window()->show();
         QTRY_VERIFY(host.window()->readyForPresentation());
         host.book()->setHideBookOnSleepScreen(true);
-        const auto backdrop = sleep::privateSnapshot(nativeSize, preferences);
+        const auto backdrop = sleep::privateSnapshot(dark ? nativeSize : nativeSize.transposed(),
+                                                     preferences, {}, true);
         const auto awake = host.window()->powerScreenSnapshot();
         QCOMPARE(awake.image, backdrop.image);
         QCOMPARE(awake.mode, sleep::Mode::Plain);
@@ -5063,10 +5141,43 @@ private slots:
                  "A title containing %3 must not disappear as a template placeholder");
     }
 
-    void sleepFromLandscapeKeepsTheReadingPage()
+    // The reader hands off its portrait direction without changing its reading layout.
+    void sleepHandoffKeepsPortraitDirection_data()
     {
+        QTest::addColumn<int>("readingOrientation");
+        QTest::addColumn<bool>("privateBook");
+        QTest::addColumn<bool>("followReading");
+        for (auto orientation : { Qt::PortraitOrientation, Qt::InvertedPortraitOrientation,
+                                  Qt::LandscapeOrientation, Qt::InvertedLandscapeOrientation }) {
+            for (bool privateBook : { false, true }) {
+                for (bool followReading : { false, true }) {
+                    QTest::newRow(qPrintable(QString("%1-private-%2-follow-%3")
+                                                     .arg(int(orientation))
+                                                     .arg(privateBook)
+                                                     .arg(followReading)))
+                            << int(orientation) << privateBook << followReading;
+                }
+            }
+        }
+    }
+
+    void sleepHandoffKeepsPortraitDirection()
+    {
+        QFETCH(int, readingOrientation);
+        QFETCH(bool, privateBook);
+        QFETCH(bool, followReading);
+        auto *screen = QGuiApplication::primaryScreen();
+        const auto original = screen->orientation();
+        const auto turn = [screen](Qt::ScreenOrientation value) {
+            QWindowSystemInterface::handleScreenOrientationChange(screen, value);
+            QWindowSystemInterface::flushWindowSystemEvents();
+        };
+        const auto restore = qScopeGuard([&] { turn(original); });
+        turn(Qt::ScreenOrientation(readingOrientation));
         const auto paths = testPaths();
-        QVERIFY(storage::writePreferences(paths.preferences(), { { sleep::designKey, "letter" } }));
+        QVERIFY(storage::writePreferences(paths.preferences(),
+                                          { { sleep::designKey, "letter" },
+                                            { sleep::followOrientationKey, followReading } }));
         auto state = std::make_shared<test::SleepPresentationState>();
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [state](ReaderHostServices &services) {
@@ -5076,19 +5187,30 @@ private slots:
         };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
-        host.open(fixture(), QSize(1448, 1072));
+        const bool landscape = readingOrientation == Qt::LandscapeOrientation
+                || readingOrientation == Qt::InvertedLandscapeOrientation;
+        host.open(fixture(), landscape ? QSize(1448, 1072) : QSize(1072, 1448));
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         host.window()->show();
         QTRY_VERIFY(host.window()->readyForPresentation());
         auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);
         const auto readingSize = page->size();
-        QVERIFY(readingSize.width() > readingSize.height());
+        QCOMPARE(readingSize.width() > readingSize.height(), landscape);
         const auto readingPage = host.session()->page();
+        host.book()->setHideBookOnSleepScreen(privateBook);
         host.window()->sleepReader();
         host.window()->sleepViewReady();
-        QCOMPARE(state->orientation, Qt::PortraitOrientation);
-        QCOMPARE(state->image.size(), QSize(readingSize.height(), readingSize.width()));
+        const auto expectedOrientation = followReading ? Qt::ScreenOrientation(readingOrientation)
+                : readingOrientation == Qt::InvertedPortraitOrientation
+                ? Qt::InvertedPortraitOrientation
+                : Qt::PortraitOrientation;
+        QCOMPARE(state->orientation, expectedOrientation);
+        QCOMPARE(state->image.size(),
+                 landscape && !followReading ? readingSize.transposed() : readingSize);
+        turn(Qt::PortraitOrientation);
+        QCOMPARE(host.window()->powerScreenSnapshot().orientation, expectedOrientation);
+        turn(Qt::ScreenOrientation(readingOrientation));
         host.window()->wakeReader();
         QTRY_VERIFY(host.window()->readyForPresentation());
         QCOMPARE(page->size(), readingSize);
@@ -5421,7 +5543,8 @@ private slots:
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto state = std::make_shared<test::SleepPresentationState>();
-        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        const auto paths = testPaths();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&](ReaderHostServices &services) {
             services.sleepOverlayDirectories = { directory.path() };
             services.presentation = [state](QWidget *) {
@@ -5455,6 +5578,23 @@ private slots:
         QTRY_VERIFY(gallery && gallery->isVisible());
         auto *grid = gallery->findChild<QWidget *>("rrSleepGalleryGrid");
         QVERIFY(grid && grid->isVisible());
+        auto *follow = gallery->findChild<QPushButton *>("rrSleepFollowOrientation");
+        QVERIFY(follow);
+        QVERIFY(click(canvas, follow));
+        QTRY_COMPARE(storage::readPreferences(paths.preferences())
+                             .object.value(sleep::followOrientationKey),
+                     QJsonValue(false));
+        auto *notice = gallery->findChild<QWidget *>("rrSleepOrientationNotice");
+        QVERIFY(notice && notice->isVisible());
+        auto *noticeText = notice->findChild<QLabel *>("rrButtonFeedbackText");
+        QVERIFY(noticeText);
+        QCOMPARE(noticeText->text(), strings::get("sleep.rotation_disabled"));
+        QVERIFY(click(canvas, follow));
+        QTRY_COMPARE(storage::readPreferences(paths.preferences())
+                             .object.value(sleep::followOrientationKey),
+                     QJsonValue(true));
+        QCOMPARE(noticeText->text(), strings::get("sleep.rotation_enabled"));
+
         auto *counter = gallery->findChild<QLabel *>("rrSleepGalleryPage");
         QVERIFY(counter);
         const auto firstPage = counter->text();

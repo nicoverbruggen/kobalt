@@ -123,6 +123,10 @@
       "sha256": "875a31fd2dc493c6ba9aa5187a91e0364de6704876704e1bf81ef4b7e785ad79"
     },
     {
+      "file": "device-rotate.svg",
+      "sha256": "5f106d3bc0521fbb1dbfeb266382a7553174b88c1443d7d933d4332845210b33"
+    },
+    {
       "file": "diamond.svg",
       "sha256": "7f9ebf5bb51a955c248da77b9b8a50226a7ecd81706b59e78233d7ad2a9d9d45"
     },

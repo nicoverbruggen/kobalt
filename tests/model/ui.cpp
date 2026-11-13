@@ -1205,8 +1205,8 @@ int main(int argc, char **argv)
         QVector<int> icons;
         for (int id = int(ControlIcon::Search); id <= int(ControlIcon::More); ++id)
             icons.append(id);
-        for (const auto icon :
-             { ControlIcon::SearchChapter, ControlIcon::SearchBefore, ControlIcon::SearchAfter })
+        for (const auto icon : { ControlIcon::SearchChapter, ControlIcon::SearchBefore,
+                                 ControlIcon::SearchAfter, ControlIcon::DeviceRotate })
             icons.append(int(icon));
         for (const int id : icons) {
             const auto black = controlIcon(ControlIcon(id))
@@ -1233,6 +1233,33 @@ int main(int argc, char **argv)
                 }
             require(ink > 20, "Bundled icon is empty");
         }
+    }
+    {
+        using namespace kobalt::ui;
+        const int savedDensity = density();
+        for (int ppi : { 167, 212, 300 }) {
+            setDensity(ppi);
+            CheckCellButton button(ControlIcon::DeviceRotate, nullptr);
+            button.resize(button.sizeHint());
+            button.show();
+            QApplication::processEvents();
+            const auto unchecked = button.grab().toImage();
+            int toggles = 0;
+            QObject::connect(&button, &QPushButton::toggled, &button, [&] { ++toggles; });
+            button.click();
+            require(button.isCheckable() && button.isChecked() && toggles == 1,
+                    "Checkbox header button must toggle once per click");
+            const auto checked = button.grab().toImage();
+            require(checked != unchecked, "Checkbox header button did not show its checked state");
+            const QRect top(0, 0, unchecked.width(), unchecked.height() / 2);
+            require(checked.copy(top) == unchecked.copy(top),
+                    "Checking a header button moved or inverted its icon");
+            button.setEnabled(false);
+            button.click();
+            require(button.isChecked() && toggles == 1,
+                    "Disabled checkbox header button changed its saved choice");
+        }
+        setDensity(savedDensity);
     }
     {
         using namespace kobalt::ui;

@@ -1477,7 +1477,7 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
         preferences[sleep::greetingKey] = snapshot.details.greeting;
         if (snapshot.design == Design::Page || snapshot.design == Design::Overlay)
             preferences[sleep::tileKey] = sleep::value(snapshot.tile);
-        auto shot = sleep::privateSnapshot(size, preferences, snapshot);
+        auto shot = sleep::privateSnapshot(size, preferences, snapshot, true);
         if (snapshot.design == Design::Overlay && !overlay.isNull())
             sleep::drawOverlay(shot.image, overlay);
         painter.drawImage(target, sleepDesignImage(shot.image, shot, -1, SleepStatus::Sleeping));

@@ -808,10 +808,16 @@ int CellButton::widthForLabel(int maximumWidth) const
 
 void CellButton::paintEvent(QPaintEvent *)
 {
+    paintCell(true);
+}
+
+void CellButton::paintCell(bool fillWhenChecked, int glyphOffset)
+{
     QPainter painter(this);
-    const auto paintGlyph = [this, &painter](const QRect &bounds, const QColor &color) {
+    const auto paintGlyph = [this, &painter, glyphOffset](const QRect &bounds,
+                                                          const QColor &color) {
         if (glyphMask.isNull()) {
-            controlIcon(glyph, color).paint(&painter, bounds);
+            controlIcon(glyph, color).paint(&painter, bounds.translated(glyphOffset, 0));
             return;
         }
         auto tinted = glyphMask.copy();
@@ -820,10 +826,11 @@ void CellButton::paintEvent(QPaintEvent *)
         tint.fillRect(tinted.rect(), color);
         tint.end();
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.drawImage(bounds, tinted);
+        painter.drawImage(bounds.translated(glyphOffset, 0), tinted);
     };
     const bool pressed = isEnabled() && isDown();
-    const bool active = isEnabled() && (isChecked() || (pressed && !grayPress));
+    const bool active =
+            isEnabled() && ((fillWhenChecked && isChecked()) || (pressed && !grayPress));
     const auto paper = palette().color(QPalette::Window);
     const auto ink = labelInk(this);
     if (circular) {
@@ -880,6 +887,42 @@ void CellButton::paintEvent(QPaintEvent *)
     }
     const int x = metrics::chrome::inset + labelWidth + metrics::chrome::selectorGap;
     paintGlyph(QRect(x, (height() - iconPixels) / 2, iconPixels, iconPixels), color);
+}
+
+CheckCellButton::CheckCellButton(ControlIcon icon, QWidget *parent) : CellButton(icon, parent)
+{
+    setCheckable(true);
+    setGrayPress(true);
+}
+
+void CheckCellButton::paintEvent(QPaintEvent *)
+{
+    paintCell(false, -px(6));
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    if (!isEnabled())
+        painter.setOpacity(.45);
+    const auto colors = themeColors(this);
+    const QColor paper =
+            isEnabled() && isDown() ? colors.pressedPaper : palette().color(QPalette::Window);
+    const auto ink = labelInk(this);
+    const int size = px(28);
+    const int inset = px(12);
+    const QRect badge(width() - inset - size, height() - inset - size, size, size);
+    // Clear the icon beneath the badge.
+    painter.fillRect(badge.adjusted(-px(4), -px(4), px(4), px(4)), paper);
+    const qreal stroke = px(3);
+    painter.setPen(QPen(ink, stroke, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
+    painter.setBrush(isChecked() ? ink : paper);
+    painter.drawRect(QRectF(badge).adjusted(stroke / 2, stroke / 2, -stroke / 2, -stroke / 2));
+    if (isChecked()) {
+        painter.setPen(QPen(paper, px(5), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        const auto point = [&badge](qreal x, qreal y) {
+            return QPointF(badge.left() + x * badge.width(), badge.top() + y * badge.height());
+        };
+        painter.drawPolyline(QPolygonF({ point(.22, .52), point(.43, .73), point(.79, .30) }));
+    }
 }
 
 } // namespace kobalt::ui

@@ -98,6 +98,18 @@ int main()
                         && sleep::tile(clean) == sleep::Tile::None,
                 "Invalid sleep design lost the legacy selection");
     }
+    require(sleep::followsReading({}), "Sleep screens must follow reading orientation by default");
+    for (bool follow : { false, true }) {
+        const auto clean =
+                appearance::cleanPreferences({ { sleep::followOrientationKey, follow } });
+        require(sleep::followsReading(clean) == follow, "Sleep orientation choice was lost");
+    }
+    for (const QJsonValue &invalid : { QJsonValue("false"), QJsonValue(0), QJsonValue() }) {
+        const auto clean =
+                appearance::cleanPreferences({ { sleep::followOrientationKey, invalid } });
+        require(!clean.contains(sleep::followOrientationKey) && sleep::followsReading(clean),
+                "Invalid sleep orientation must use the default");
+    }
     for (const int length : { 0, sleep::greetingLength, sleep::greetingLength + 1 }) {
         const auto clean = appearance::cleanPreferences(
                 { { sleep::greetingKey, QString(length, QLatin1Char('a')) } });

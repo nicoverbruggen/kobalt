@@ -12,7 +12,8 @@ class QPainter;
 namespace kobalt::reader {
 enum class SleepStatus { Sleeping, Charging, Charged, PoweredOff };
 QString sleepStatusText(SleepStatus status);
-// Fit saved landscape backdrops into portrait without changing the reading page.
+// Keep inverted portrait; fit landscape backdrops into upright portrait without
+// changing the reading page.
 void portraitSleepSnapshot(sleep::Snapshot &snapshot);
 // Detailed rounds up to minutes, using hours and minutes above 120 minutes.
 // Approximate rounds up to quarter-hours below an hour, then whole hours.

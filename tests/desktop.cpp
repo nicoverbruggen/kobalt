@@ -6540,7 +6540,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrDictionary"));
         const auto looked = qobject_cast<QLabel *>(fixture.widget("rrDictionaryWord"))->text();
         auto *save = qobject_cast<QPushButton *>(fixture.widget("rrDictionarySave"));
-        QVERIFY(save);
+        QVERIFY(save && save->isCheckable());
+        if (!disabled)
+            QTRY_COMPARE(save->isChecked(), !switchDictionary);
         if (switchDictionary) {
             QVERIFY(fixture.press("rrDictionarySelect"));
             QTRY_VERIFY(fixture.visible("rrDictionaryChoice1"));
@@ -6632,6 +6634,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(save->isVisible());
         QVERIFY(fixture.press("rrDictionarySave"));
         QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.save_to_words"));
+        QVERIFY(!save->isChecked());
         QTRY_VERIFY(fixture.visible("rrWordNotice"));
         QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrButtonFeedbackText"))->text(),
                  QString("Removed from My Words"));
@@ -6645,6 +6648,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(pointer->geometry().bottom() > anchor.top());
         QVERIFY(fixture.press("rrDictionarySave"));
         QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.remove_from_words"));
+        QVERIFY(save->isChecked());
         QTRY_COMPARE(qobject_cast<QLabel *>(fixture.widget("rrButtonFeedbackText"))->text(),
                      QString("Added to My Words!"));
         QTRY_VERIFY(!fixture.visible("rrWordNotice"));
@@ -6668,8 +6672,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      QString("Kaladin"));
         QTRY_VERIFY(save->isVisible());
         QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.save_to_words"));
+        QVERIFY(!save->isChecked());
         QVERIFY(fixture.press("rrDictionarySave"));
         QTRY_COMPARE(save->accessibleName(), strings::get("dictionary_panel.remove_from_words"));
+        QVERIFY(save->isChecked());
         QVERIFY(fixture.press("rrDictionaryClose"));
         QTRY_VERIFY(!fixture.visible("rrDictionary"));
         QVERIFY(fixture.press("rrPage"));
@@ -15899,6 +15905,15 @@ private slots:
         QVERIFY(fixture.press("rrSleepScreen"));
         QTRY_VERIFY(fixture.visible("rrSleepGallery"));
         capturePages(fixture, name + "-sleep-gallery", "rrSleepGallery");
+        while (fixture.widget("rrSleepGalleryPrevious")->isEnabled())
+            QVERIFY(fixture.press("rrSleepGalleryPrevious"));
+        QVERIFY(fixture.press("rrSleepFollowOrientation"));
+        QVERIFY(capture(fixture, name + "-sleep-gallery-portrait"));
+        QVERIFY(fixture.press("rrSleepFollowOrientation"));
+        QVERIFY(capture(fixture, name + "-sleep-gallery-rotation"));
+        auto *notice = fixture.widget("rrSleepOrientationNotice");
+        QVERIFY(notice);
+        notice->hide();
         // Capture the hidden greeting editor on Night, on page three.
         while (fixture.widget("rrSleepGalleryPrevious")->isEnabled())
             QVERIFY(fixture.press("rrSleepGalleryPrevious"));
@@ -15923,8 +15938,7 @@ private slots:
         QCOMPARE(shot.mode, sleep::Mode::Plain);
         // A native power view fills the screen, including a phone's safe area.
         const auto screen = screenshotSize(preset);
-        shot.image = shot.image.scaled(QSize(qMin(screen.width(), screen.height()),
-                                             qMax(screen.width(), screen.height())));
+        shot.image = shot.image.scaled(screen);
         QLabel preview;
         preview.resize(shot.image.size());
         preview.show();
@@ -15938,7 +15952,7 @@ private slots:
         for (const auto design : sleep::designs) {
             QJsonObject preferences;
             sleep::setDesign(preferences, design);
-            auto privateShot = sleep::privateSnapshot(shot.image.size(), preferences, shot);
+            auto privateShot = sleep::privateSnapshot(shot.image.size(), preferences, shot, true);
             preview.setPixmap(QPixmap::fromImage(reader::sleepDesignImage(
                     privateShot.image, privateShot, 67, reader::SleepStatus::Sleeping)));
             QVERIFY(capture(fixture, name + "-sleep-private-" + sleep::value(design), &preview));

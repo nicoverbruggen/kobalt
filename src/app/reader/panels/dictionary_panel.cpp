@@ -133,13 +133,15 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
         if (searchRequested && !word.isEmpty())
             searchRequested(word);
     });
-    save = new ui::CellButton(ui::ControlIcon::WordsAdd, this);
+    save = new ui::CheckCellButton(ui::ControlIcon::Dictionary, this);
     save->setObjectName("rrDictionarySave");
     save->setRule(Qt::LeftEdge);
     save->hide();
-    connect(save, &QPushButton::clicked, this, [this] {
+    connect(save, &QPushButton::clicked, this, [this](bool checked) {
         if (saveToggled)
-            saveToggled(!saved);
+            saveToggled(checked);
+        else
+            save->setChecked(saved);
     });
     actions = new ui::CellButton(ui::ControlIcon::More, this);
     actions->setObjectName("rrDictionaryActions");
@@ -418,7 +420,7 @@ void DictionaryPanel::setSaved(bool value, bool available)
 {
     saved = value;
     saveAvailable = available;
-    save->setGlyph(saved ? ui::ControlIcon::WordsSaved : ui::ControlIcon::WordsAdd);
+    save->setChecked(saved);
     save->setAccessibleName(strings::get(saved ? "dictionary_panel.remove_from_words"
                                                : "dictionary_panel.save_to_words"));
     arrange();

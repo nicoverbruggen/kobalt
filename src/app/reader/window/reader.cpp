@@ -401,7 +401,8 @@ sleep::Snapshot Reader::powerScreenSnapshot()
                 shot.image = page->snapshot(true);
                 shot.coverArea = {};
                 shot.dimPage = true;
-                portraitSleepSnapshot(shot);
+                if (!sleep::followsReading(preferences))
+                    portraitSleepSnapshot(shot);
             }
             if (!shot.image.isNull())
                 return shot;
@@ -450,7 +451,15 @@ void Reader::loadTodayReading()
 
 sleep::Snapshot Reader::privateSleepSnapshot()
 {
-    auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample());
+    auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample(),
+                                           sleep::followsReading(preferences));
+    // Nickel can change orientation after handoff. A later power screen keeps
+    // the direction captured when the reader went to sleep.
+    snapshot.orientation = lifecycleHidden && !sleepImage.isNull()
+            ? sleepOrientation
+            : kobalt::shownOrientation(QGuiApplication::primaryScreen());
+    if (!sleep::followsReading(preferences))
+        portraitSleepSnapshot(snapshot);
     // Transparent artwork keeps its style, but never reveals the reading page.
     if (sleep::design(preferences) == sleep::Design::Overlay && !sleepOverlay.isNull())
         sleep::drawOverlay(snapshot.image, sleepOverlay);
@@ -478,7 +487,9 @@ sleep::Snapshot Reader::captureSleepScreen()
         return {};
     const bool plain = mode == sleep::Mode::Plain;
     const bool useCover = mode == sleep::Mode::Cover && !sleepCover.isNull();
-    const QSize sleepSize(qMin(page->width(), page->height()), qMax(page->width(), page->height()));
+    const QSize sleepSize = sleep::followsReading(preferences)
+            ? page->size()
+            : QSize(qMin(page->width(), page->height()), qMax(page->width(), page->height()));
     QImage frame;
     if (plain) {
         // Designs without a cover draw the whole screen themselves.
@@ -520,7 +531,8 @@ sleep::Snapshot Reader::captureSleepScreen()
         snapshot.coverBytes = sleepCoverSource.size();
         snapshot.coverModified = sleepCoverSource.lastModified().toMSecsSinceEpoch();
     }
-    portraitSleepSnapshot(snapshot);
+    if (!sleep::followsReading(preferences))
+        portraitSleepSnapshot(snapshot);
     return snapshot;
 }
 

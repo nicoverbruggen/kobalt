@@ -1618,3 +1618,7 @@
 /* These pages contain search results, not EPUB pages. */
 "search_panel.result_pages" = "Page %1 of %2";
 "search_panel.result_pages_so_far" = "Page %1 of at least %2";
+
+"sleep.follow_orientation" = "Follow reading orientation";
+"sleep.rotation_enabled" = "Your sleep screen will now also use landscape.";
+"sleep.rotation_disabled" = "Your sleep screen will only use portrait.";

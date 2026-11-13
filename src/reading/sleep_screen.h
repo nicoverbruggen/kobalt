@@ -78,14 +78,15 @@ struct Snapshot
 };
 
 // Safe fallback when the book or its chosen design is unavailable.
-inline Snapshot privateSnapshot(QSize size, bool dark = false)
+inline Snapshot privateSnapshot(QSize size, bool dark = false, bool followReading = false)
 {
     if (size.isEmpty() || qint64(size.width()) * size.height() > 4 * 1024 * 1024)
         size = QSize(800, 1200);
     Snapshot snapshot;
-    snapshot.image =
-            QImage(QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height())),
-                   QImage::Format_RGB32);
+    snapshot.image = QImage(followReading ? size
+                                          : QSize(qMin(size.width(), size.height()),
+                                                  qMax(size.width(), size.height())),
+                            QImage::Format_RGB32);
     snapshot.image.fill(dark ? Qt::black : Qt::white);
     snapshot.orientation = Qt::PortraitOrientation;
     snapshot.dark = dark;
@@ -198,6 +199,13 @@ inline constexpr Design designs[] = { Design::Stock,     Design::Page,  Design::
                                       Design::Framed,    Design::Lines, Design::Letter,
                                       Design::Overlay };
 inline constexpr auto designKey = "sleep_design";
+inline constexpr auto followOrientationKey = "sleep_follow_orientation";
+
+inline bool followsReading(const QJsonObject &preferences)
+{
+    return preferences.value(followOrientationKey).toBool(true);
+}
+
 // The Night screen's own greeting. Long-pressing Night in the gallery sets it.
 inline constexpr auto greetingKey = "sleep_greeting";
 inline constexpr int greetingLength = 40;
@@ -385,9 +393,11 @@ inline Tile tile(const QJsonObject &preferences)
 
 // Keep the design and anonymous reading statistics, discarding all book pixels
 // and identifying metadata. Stock needs a Kobalt fallback to cover Nickel's image.
-inline Snapshot privateSnapshot(QSize size, const QJsonObject &preferences, Snapshot source = {})
+inline Snapshot privateSnapshot(QSize size, const QJsonObject &preferences, Snapshot source = {},
+                                bool followReading = false)
 {
-    auto snapshot = privateSnapshot(size, preferences.value("dark_mode").toBool(source.dark));
+    auto snapshot = privateSnapshot(size, preferences.value("dark_mode").toBool(source.dark),
+                                    followReading);
     snapshot.design = design(preferences);
     snapshot.tile = tile(preferences);
     if (snapshot.design == Design::Stock) {

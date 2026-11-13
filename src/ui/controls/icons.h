@@ -143,6 +143,7 @@ enum class ControlIcon {
     SearchAfter,
     WordsAdd,
     WordsSaved,
+    DeviceRotate,
     ZoomIn,
     ZoomOut
 };

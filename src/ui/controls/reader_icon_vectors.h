@@ -1,6 +1,43 @@
 // Filled outlines from the checked Phosphor SVGs.
 // Each shape is a filled outline on a 256 unit canvas.
 static bool phosphorGeometry(const QString &name, QPainterPath &path) {
+    if (name == QStringLiteral("device-rotate")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(205.66, 221.66);
+        path.lineTo(181.66, 245.66);
+        path.arcTo(QRectF(167.99555124, 231.99555124, 16.00889753, 16.00889753), -45, -180);
+        path.lineTo(180.69, 224);
+        path.lineTo(80, 224);
+        path.arcTo(QRectF(56, 176, 48, 48), -90, -90);
+        path.lineTo(56, 104);
+        path.arcTo(QRectF(56, 96, 16, 16), -180, -180);
+        path.lineTo(72, 200);
+        path.arcTo(QRectF(72, 192, 16, 16), -180, 90);
+        path.lineTo(180.69, 208);
+        path.lineTo(170.34, 197.66);
+        path.arcTo(QRectF(167.99555124, 183.99555124, 16.00889753, 16.00889753), -135, -180);
+        path.lineTo(205.66, 210.34);
+        path.arcTo(QRectF(192.00629325, 208, 16, 16), 45.03187078, -90.06374157);
+        path.closeSubpath();
+        path.moveTo(80, 72);
+        path.arcTo(QRectF(72.00629573, 56.00000248, 16, 16), -90.04508986, 135.07698575);
+        path.lineTo(75.31, 48);
+        path.lineTo(176, 48);
+        path.arcTo(QRectF(168, 48, 16, 16), 90, -90);
+        path.lineTo(184, 152);
+        path.arcTo(QRectF(184, 144, 16, 16), -180, 180);
+        path.lineTo(200, 56);
+        path.arcTo(QRectF(152, 32, 48, 48), 0, 90);
+        path.lineTo(75.31, 32);
+        path.lineTo(85.66, 21.66);
+        path.arcTo(QRectF(71.99555124, 7.99555124, 16.00889753, 16.00889753), -45, 180);
+        path.lineTo(50.34, 34.34);
+        path.arcTo(QRectF(47.99370675, 32, 16, 16), 134.96812922, 90.06374157);
+        path.lineTo(74.34, 69.66);
+        path.arcTo(QRectF(71.99370922, 56.00000247, 16, 16), -134.96815428, 45.01320864);
+        path.closeSubpath();
+        return true;
+    }
     if (name == QStringLiteral("file-zip")) {
         path.setFillRule(Qt::WindingFill);
         path.moveTo(184, 144);

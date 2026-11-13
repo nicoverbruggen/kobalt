@@ -210,6 +210,10 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         path.cubicTo(159.1, 160.03, 161.58, 167.41, 166.53, 172.24);
         path.cubicTo(171.49, 177.08, 177.89, 179.5, 185.75, 179.5);
         path.closeSubpath();
+    } else if (icon == ControlIcon::DeviceRotate) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("device-rotate"), path);
     } else if (icon == ControlIcon::WordsAdd || icon == ControlIcon::WordsSaved) {
         result.canvas = 256;
         result.filled = true;
@@ -764,8 +768,8 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::Sync && icon != ControlIcon::Sort
             && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
-            && icon != ControlIcon::WordsSaved && icon != ControlIcon::ZoomIn
-            && icon != ControlIcon::ZoomOut
+            && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
+            && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)

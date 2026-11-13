@@ -11,3 +11,5 @@ The engine knows a fixed list of hyphenation pattern names. `src/engine/blaze/da
 Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in `src/engine/blaze/COPYING`, the image-scaler license, and the copyright headers. Make engine changes in the imported source. The files in `dependencies/crengine-patches.txt` describe the former patched-source build and are no longer applied.
 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).
+
+The retired chapter page counter and its transient package XML cache are removed. Chapter navigation retains its bounded document cache. Parsing the same package, navigation and NCX input without that XML cache does not change parsed-book content or layout, so this cleanup retains the cache formats and rendering version.

@@ -473,7 +473,7 @@ Engine::RoughPages EngineDocument::roughPages() const
     rough.itemPage = estimate.item.place(qRound(inItem) + place.page + 1,
                                          newItem ? Step::Jump : step, passed);
     rough.itemPages = qMax(1, qRound(map.itemPages(place.item)));
-    rough.itemPagesEstimated = !map.counted() && place.item >= map.adopted();
+    rough.itemPagesEstimated = !map.counted();
     if (map.keeping()) {
         // The totals are an estimate that stays as it is. A spine item with
         // more pages than its estimate repeats its last number.
@@ -1146,6 +1146,7 @@ bool EngineDocument::goToFraction(double fraction)
     const int end = bounds.value(1, -1) > first ? bounds[1] : pages();
     return go(qBound(0, first + int(inItem * (end - first)), qMax(0, pages() - 1)));
 }
+
 void EngineDocument::estimateChapterPages(const QVector<ChapterLink> &links,
                                           ChapterSelection &result) const
 {

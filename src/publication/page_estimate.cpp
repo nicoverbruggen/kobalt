@@ -311,6 +311,7 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
         QString name;
         int index = 1;
     };
+
     QVector<Step> steps;
     int offset = 0;
     QString rest = path;
@@ -601,7 +602,6 @@ void PageMap::reset(const QVector<qint64> &bytes)
     measuredCount_ = 0;
     model_ = prior_;
     kept_ = false;
-    adopted_ = 0;
     update();
 }
 
@@ -668,7 +668,6 @@ bool PageMap::setLayout(const PageEstimateLayout &layout, int sliceCharacters)
     sliceCharacters_ = sliceCharacters;
     observed_.clear();
     kept_ = false;
-    adopted_ = 0;
     for (auto &item : items_) {
         if (item.measured)
             item.features = pageEstimateFeatures(item.measurement, layout_);
@@ -681,7 +680,6 @@ void PageMap::setPrior(const PageEstimateModel &prior)
 {
     prior_ = prior;
     kept_ = false;
-    adopted_ = 0;
     refit();
 }
 
@@ -747,30 +745,10 @@ QMap<int, int> PageMap::completeItems() const
     return result;
 }
 
-bool PageMap::adoptCounted(int through)
-{
-    if (!keeping() || adopted_ > 0 || through < 0 || through >= items_.size())
-        return false;
-    const auto counted = completeItems();
-    for (int i = 0; i <= through; ++i) {
-        if (!counted.contains(i))
-            return false;
-    }
-    for (int i = 0; i <= through; ++i) {
-        keptPages_[i] = counted.value(i);
-        keptStarts_[i + 1] = keptStarts_[i] + keptPages_[i];
-    }
-    for (int i = through + 1; i < items_.size(); ++i)
-        keptStarts_[i + 1] = keptStarts_[i] + keptPages_[i];
-    adopted_ = through + 1;
-    return true;
-}
-
 void PageMap::restoreKept(const QVector<double> &pages)
 {
     if (pages.isEmpty() || pages.size() != items_.size())
         return;
-    adopted_ = 0;
     keptPages_ = pages;
     keptStarts_.resize(pages.size() + 1);
     keptStarts_[0] = 0;
@@ -1035,8 +1013,7 @@ double PageMap::pagesBefore(int item, int before, int characters) const
     if (item < 0 || item >= items_.size() || characters <= 0 || before <= 0)
         return 0;
     const double fraction = qBound(0.0, double(before) / characters, 1.0);
-    // An adopted spine item has the real pages of its parts.
-    if (keeping() && item >= adopted_)
+    if (keeping())
         return keptPages_[item] * fraction;
     if (!items_[item].measured || !layout_.valid())
         return byteEstimate(item, fraction);

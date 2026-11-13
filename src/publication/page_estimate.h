@@ -318,17 +318,6 @@ public:
     // Continues with the kept estimate of an earlier reading, for the same
     // page. Ignores one of another size.
     void restoreKept(const QVector<double> &pages);
-    // Puts the real pages of the spine items up to `through` in the kept
-    // estimate, when each of them has the real pages of all its parts. The
-    // page numbers there are then the real ones, while the total is still an
-    // estimate. This happens once for a kept estimate, so that the numbers
-    // move at most twice: here, and when the whole book is counted. True
-    // when the numbers changed.
-    bool adoptCounted(int through);
-
-    // The spine items before this one show their real pages.
-    int adopted() const { return keeping() ? adopted_ : 0; }
-
     // The estimated pages of an item, of the items before `item`, and of
     // the part of `item` before its engine character `before`, of
     // `characters` in all. Zero when nothing is known yet.
@@ -386,7 +375,6 @@ private:
     // The kept estimate: the pages of each item and where each starts.
     QVector<double> keptPages_, keptStarts_;
     bool keep_ = false, kept_ = false, counted_ = false;
-    int adopted_ = 0;
 };
 
 // Keeps a shown page number from moving backward while the user reads

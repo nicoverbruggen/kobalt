@@ -209,7 +209,6 @@ public:
     bool goToFraction(double fraction) override;
     qint64 chapterLoadMilliseconds() const override;
     bool refinePageEstimate(const std::function<bool()> &current = {}) override;
-    bool countPages(const std::function<bool()> &current) override;
     FullDocument prepareFullDocument(const std::function<bool()> &current,
                                      bool cachedOnly = false) override;
     // Both are for the settings and the page size in force. A document or
@@ -454,25 +453,8 @@ private:
     // The page for which the parsed-book cache had no usable document.
     QString fullUncached_;
     QSize fullSize_;
-    // The document whose pages countPages() counts, with the page it was
-    // opened for, and the spine items that gave no count.
-    std::unique_ptr<EngineDocument> counting_;
-    QString countingKey_;
-    QSize countingSize_;
-    int countingItem_ = -1;
-    // The first character of a slice of `counting_` whose layout was
-    // stopped, or -1. The next step lays out that slice again; the slices
-    // before it keep their count.
-    int countingNext_ = -1;
-    QSet<int> uncounted_;
-    // Shows the real pages of the counted spine items up to the page.
-    void adoptCounted();
-    // Writes the `page-count-end` diagnostic event, once for a count.
-    void reportCountEnd();
-    bool countReported_ = false;
-    QJsonObject countingSettings_;
 
-    // Documents of other units that stay in memory after the count or after
+    // Documents of other units that stay in memory after
     // the reader left them, so that a jump there needs no new load. Their
     // spine items hold at most `keptUnitBytes` bytes together. Over that,
     // the unit farthest from the page goes.
@@ -491,17 +473,13 @@ private:
     // The kept document of the unit that starts at `first`, when it was
     // opened with `settings` for the page of this document.
     std::unique_ptr<EngineDocument> takeKept(int first, const QJsonObject &settings);
-    // Drops every other document of the book: the one opened ahead, the
-    // one of the count and the kept ones.
+    // Drops every other document of the book, including the one opened
+    // ahead and the kept ones.
     void dropSideDocuments();
     // Opens another document of the same book with `settings`. Null when it
-    // cannot open or `current` stops it. `packageCache` reads the package
-    // files of the book from ReaderSource::epubCache.
+    // cannot open or `current` stops it.
     std::unique_ptr<EngineDocument> openSide(const QJsonObject &settings,
-                                             const std::function<bool()> &current, QString *error,
-                                             bool packageCache = false);
-    // Set in a document of the background count; see openSide().
-    bool packageCache_ = false;
+                                             const std::function<bool()> &current, QString *error);
     int aheadItem_ = -1;
     QJsonObject aheadSettings_;
     QSize aheadSize_;

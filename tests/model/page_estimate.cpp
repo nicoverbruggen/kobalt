@@ -33,6 +33,7 @@ struct ReaderLocationProbe
     {
         return int(model.source_->textFractions.size());
     }
+
     static QStringList items(const EngineDocument &model)
     {
         QStringList result;
@@ -92,13 +93,6 @@ struct ReaderLocationProbe
 
     static const LVDocView *view(const EngineDocument &model) { return model.engine_.get(); }
 
-    // The document whose pages the background count lays out, and the first
-    // character of its slice.
-    static const LVDocView *countingView(const EngineDocument &model)
-    {
-        return model.counting_ ? model.counting_->engine_.get() : nullptr;
-    }
-
     // The document of the whole book that Hybrid rendering prepared.
     static const LVDocView *fullView(const EngineDocument &model)
     {
@@ -127,25 +121,7 @@ struct ReaderLocationProbe
         return model.source_->pageEstimate.chapterPlaces;
     }
 
-    static bool countEnded(const EngineDocument &model)
-    {
-        return !model.counting_ && !model.source_->epubCache;
-    }
 
-    static int countingSlice(const EngineDocument &model)
-    {
-        return model.counting_ ? model.counting_->sliceFirst_ : -1;
-    }
-
-    // The document that is kept in memory for the unit that starts at `first`.
-    static const LVDocView *keptView(const EngineDocument &model, int first)
-    {
-        for (const auto &unit : model.kept_) {
-            if (unit.first == first)
-                return unit.document->engine_.get();
-        }
-        return nullptr;
-    }
 };
 } // namespace kobalt
 
@@ -1362,24 +1338,14 @@ void forwardPages()
     }
 }
 
-// The background count lays out the spine items that are not on screen.
-// When it ends, the page and the total are those of the whole book, without
-// reading the book. A stopped step counts nothing.
-void countedInBackground()
+// Idle estimate work also measures chapter positions.
+void chaptersMeasuredInIdle()
 {
     EngineDocument model(test::readerFonts());
     openResources(model, pagesBook(), { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
-    const int whole = model.pages();
-    int wholePage = -1;
-    for (int page = 0; page < whole && wholePage < 0; ++page) {
-        if (model.spineItemOf(model.pageStart(page)) == 3)
-            wholePage = page;
-    }
-    require(wholePage > 0, "The fixture needs a middle chapter");
     model.setChapterSlices(6);
     QString error;
     require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
-    require(!model.countPages({}), "The count waits for the estimate");
     while (model.refinePageEstimate()) { }
     const auto estimated = model.roughPages();
     require(estimated.pages > 0 && estimated.pagesEstimated, "The estimate must give a total");
@@ -1394,87 +1360,6 @@ void countedInBackground()
             "The fixture needs chapters");
     require(places > 0 && Probe::textPlaces(model) == places,
             "The book pages of the chapters must be measured in idle time");
-
-    const int observed = Probe::map(model).observations();
-    for (int i = 0; i < 20; ++i)
-        require(model.countPages([] { return false; }), "A stopped count has more to do");
-    require(Probe::map(model).observations() == observed && model.roughPages().pagesEstimated,
-            "A stopped count gave pages");
-
-    // A step that stops in a later slice of a long chapter loses only that
-    // slice. The chapter stays, with the slices that were counted, and the
-    // next step lays out the stopped slice again.
-    int steps = 0;
-    while (Probe::countingSlice(model) <= 0 && model.countPages({}) && steps < 10000)
-        ++steps;
-    const auto *counting = Probe::countingView(model);
-    const int slice = Probe::countingSlice(model);
-    const int before = Probe::map(model).observations();
-    require(counting && slice > 0, "The fixture needs a chapter that is counted in slices");
-    for (int i = 0; i < 5; ++i)
-        require(model.countPages([] { return false; }), "A stopped count has more to do");
-    require(Probe::countingView(model) == counting && Probe::map(model).observations() == before,
-            "A stopped slice must keep its chapter and count nothing");
-    require(model.countPages({}) && Probe::countingView(model) == counting
-                    && Probe::map(model).observations() == before + 1
-                    && Probe::countingSlice(model) > slice,
-            "The next step must count the slice that was stopped");
-    ++steps;
-
-    // The spine items up to the page come first. With them the page is the
-    // real one, while the total is still the estimate.
-    while (Probe::map(model).adopted() == 0 && model.countPages({}) && steps < 10000)
-        ++steps;
-    const auto early = model.roughPages();
-    std::printf("background count: after %d steps page %d of ~%d\n", steps, early.page,
-                early.pages);
-    require(Probe::map(model).adopted() == 4 && Probe::map(model).completeItems().size() == 4,
-            "The spine items up to the page must be counted first");
-    require(early.page == wholePage + 1 && early.pagesEstimated && !early.itemPagesEstimated,
-            "With the spine items up to the page counted, the page is the real one");
-    require(model.turnInWindow(1) && model.roughPages().page == wholePage + 2
-                    && model.turnInWindow(-1) && model.roughPages().page == wholePage + 1,
-            "A turn from the real page adds and takes one");
-    const int earlyTotal = model.roughPages().pages;
-    while (model.countPages({}) && steps < 10000) {
-        ++steps;
-        const auto during = model.roughPages();
-        require(during.pagesEstimated ? during.pages == earlyTotal && during.page == wholePage + 1
-                                      : during.pages == whole,
-                "The numbers moved again before the count ended");
-    }
-    const auto counted = model.roughPages();
-    std::printf("background count: %d steps, page %d of %d, estimate was %d of %d, whole book "
-                "%d of %d\n",
-                steps, counted.page, counted.pages, estimated.page, estimated.pages, wholePage + 1,
-                whole);
-    require(!counted.pagesEstimated && counted.pages == whole && counted.page == wholePage + 1,
-            "The background count must give the pages of the whole book");
-    require(!model.countPages({}), "A counted book has nothing left to count");
-    require(Probe::countEnded(model),
-            "A finished count must let go of its document and of the package cache");
-
-    // The counted spine items stay in memory: a jump shows the kept
-    // document, on its first page, without a new load.
-    const auto *kept = Probe::keptView(model, 1);
-    require(kept, "The count must keep the long chapter in memory");
-    require(model.showSpineItems(1, 1, &error) && Probe::view(model) == kept,
-            qPrintable("A jump to a counted chapter must show the kept document: " + error));
-    require(model.spineItemOf(model.pageStart(model.page())) == 1 && model.roughPages().page == 2
-                    && Probe::sliceFirst(model) == 0,
-            "The kept document must open on the first page of its chapter");
-    // The chapter that was left is kept too, and comes back the same way.
-    model.prepareAhead();
-    require(model.showSpineItems(3, 3, &error) && model.go(0)
-                    && model.roughPages().page == wholePage + 1,
-            "Going back to the chapter that was left must show its page");
-
-    // Another font size starts the count again.
-    require(model.applyAppearance(appearance::Patch(qt::object({ { "font_pixels", 32 } }))),
-            "Cannot change the font size");
-    while (model.refinePageEstimate()) { }
-    require(model.roughPages().pagesEstimated && model.countPages({}),
-            "Another font size must count again");
 }
 
 // Hybrid rendering builds the document of the whole book beside the chapter
@@ -1786,10 +1671,8 @@ void fullDocumentPixels()
     }
 }
 
-// A book with more spine items than the engine has room for documents: the
-// count must still reach the end of the book, with the kept documents out of
-// its way.
-void manyItemsCounted()
+// Repeated chapter jumps must not exhaust the engine document slots.
+void manyItemJumps()
 {
     const QByteArray sentence =
             "The reader turns the page and the text goes on without a break in it. ";
@@ -1809,32 +1692,21 @@ void manyItemsCounted()
     files = test::publisherPackage("en", "Many", files, spine);
     EngineDocument model(test::readerFonts());
     openResources(model, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
-    const int whole = model.pages();
     model.setChapterSlices(6);
     QString error;
     require(model.showSpineItems(30, 30, &error) && model.go(0), qPrintable(error));
     while (model.refinePageEstimate()) { }
-    int steps = 0;
-    while (model.countPages({}) && steps < 100000)
-        ++steps;
-    const auto counted = model.roughPages();
-    std::printf("many spine items: %d steps, %d of %d spine items counted, %d pages, whole book "
-                "%d\n",
-                steps, int(Probe::map(model).completeItems().size()), Probe::map(model).items(),
-                counted.pages, whole);
-    require(Probe::map(model).completeItems().size() == 60 && !counted.pagesEstimated
-                    && counted.pages == whole,
-            "The count must reach every spine item of a book with many");
-    require(Probe::countEnded(model),
-            "A finished count must let go of its document and of the package cache");
-    // A jump after the count still opens its chapter.
-    require(model.showSpineItems(55, 55, &error) && model.showSpineItems(2, 2, &error),
-            qPrintable("A jump after the count failed: " + error));
+    for (int jump = 0; jump < 120; ++jump) {
+        const int item = (jump * 17) % 60;
+        require(model.showSpineItems(item, item, &error) && model.go(0),
+                qPrintable("A chapter jump failed: " + error));
+        require(!model.image(model.page()).isNull(), "The chapter must draw after a jump");
+    }
+    std::printf("many spine items: repeated jumps passed without exhausting document slots\n");
 }
 
-// A book whose pages were all counted opens again with its real page
-// numbers: no estimate, no measuring and no new count. Reading on keeps
-// them.
+// Reading every part of a book saves exact observations. Reopening at a
+// middle position keeps those page numbers while reading on.
 void reopenCounted()
 {
     const auto files = pagesBook();
@@ -1847,7 +1719,11 @@ void reopenCounted()
         require(first.turnInWindow(1), "The fixture is too short to read on");
     require(Probe::sliceFirst(first) > 0, "The fixture needs a later slice");
     while (first.refinePageEstimate()) { }
-    while (first.countPages({})) { }
+    const auto middle = first.pageStart(first.page());
+    require(first.showSpineItems(0, 0, &error) && first.go(0), qPrintable(error));
+    int turns = 0;
+    while (first.turnInWindow(1) && ++turns < 10000) { }
+    require(turns < 10000 && first.goTo(middle), "Reading must finish and return to the middle");
     const auto shown = first.roughPages();
     require(!shown.pagesEstimated, "The book must be counted");
     auto saved = first.state();
@@ -1866,7 +1742,6 @@ void reopenCounted()
                 shown.page, shown.pages);
     require(!rough.pagesEstimated && rough.page == shown.page && rough.pages == shown.pages,
             "A counted book must open with its real page numbers");
-    require(!model.countPages({}), "A counted book has nothing to count after it opens");
     for (int turn = 0; turn < 12; ++turn) {
         require(model.turnInWindow(1), "The fixture is too short to read on");
         const auto next = model.roughPages();
@@ -2293,9 +2168,9 @@ int main(int argc, char **argv)
     interruptedChapterPlace();
     forwardPages();
     laterCounted();
-    countedInBackground();
+    chaptersMeasuredInIdle();
     reopenCounted();
-    manyItemsCounted();
+    manyItemJumps();
     fullDocument();
     fullDocumentKeepsPublisherFonts();
     parkedPublisherFonts();

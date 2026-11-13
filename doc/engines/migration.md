@@ -222,7 +222,7 @@ The measuring runs on the engine worker after the pages beside the current page,
 
 #### Fast interactions
 
-Fast keeps one spare unit beside the current document. At the first page of a unit, cancellable background work prepares the previous unit through its last page. At the end of a unit it prepares the next one. Crossing a unit boundary retains the departed document in the spare slot, so immediate reverse turns can reuse it. The cache checks layout settings, viewport, stylesheet and slice size before reuse. A tap that arrives before preparation finishes can still pay the cold load cost.
+Chapter mode keeps one immediate spare unit beside the current document and a bounded cache of previously visited units. At the first page of a unit, cancellable background work prepares the previous unit through its last page. At the end of a unit it prepares the next one. Crossing a unit boundary retains the departed document in the spare slot, so immediate reverse turns can reuse it. The cache checks layout settings, viewport, stylesheet and slice size before reuse. A tap that arrives before preparation finishes can still pay the cold load cost.
 
 Fast keeps slice-local page indices for painting, selection and bookmark marks. `pagesOf()` returns -1 for a position outside the loaded slice. Display labels use `bookPages()` instead, with an estimated whole-book page or a pending value. Highlight end labels use the preceding visible character because the saved end is exclusive. Saved lists retain their anchors and remain navigable while page labels are pending.
 

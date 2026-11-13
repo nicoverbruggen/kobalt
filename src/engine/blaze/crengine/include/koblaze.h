@@ -21,18 +21,6 @@ bool koblazeSpineItemLoaded(int index);
 /// True when only a window of spine items is loaded with its text.
 bool koblazeSpineWindowSet();
 
-/// The parsed package, navigation and NCX documents of one EPUB. A host
-/// that loads the same book several times, such as one spine item at a
-/// time, keeps one for the book: the later loads then do not parse these
-/// files again. Each cached document counts as one of the documents that
-/// the engine can hold at a time. A cache is for one EPUB and one thread.
-struct KoblazeEpubCache;
-KoblazeEpubCache * koblazeCreateEpubCache();
-void koblazeDeleteEpubCache(KoblazeEpubCache * cache);
-/// The cache that EPUB loads use from now on, or NULL for none, which is
-/// the default.
-void koblazeSetEpubCache(KoblazeEpubCache * cache);
-
 /// Take the pair kerning of plain left-to-right horizontal text from a
 /// memory of glyph pairs, which HarfBuzz fills, and shape those runs
 /// without the kern feature. A face checks the result against HarfBuzz

@@ -88,6 +88,7 @@ public:
         Q_UNUSED(index);
         return goTo(position);
     }
+
     virtual QString platformPosition(const PositionCodec &codec, QString *error) const = 0;
     virtual bool goToPlatform(const PositionCodec &codec, const QString &location,
                               QString *error) = 0;
@@ -255,15 +256,6 @@ public:
     // numbers more precise. Never writes storage. True while work remains.
     virtual bool refinePageEstimate(const std::function<bool()> & = {}) { return false; }
 
-    // One step of counting the real pages of the book in the background:
-    // the layout of a part of a spine item that is not on screen. True
-    // while there is more to count. `current` false stops the step.
-    virtual bool countPages(const std::function<bool()> &current)
-    {
-        Q_UNUSED(current);
-        return false;
-    }
-
     // Hybrid rendering: one try to build the document of the whole book in
     // the background, beside the part that is shown. The parsed-book cache
     // makes it quick when the book was whole before. `current` false stops
@@ -273,6 +265,7 @@ public:
     // the book has to be parsed: the reader asks that right after a book
     // opens, before the user has settled on an appearance.
     enum class FullDocument { None, Stopped, Ready };
+
     virtual FullDocument prepareFullDocument(const std::function<bool()> &current,
                                              bool cachedOnly = false)
     {
@@ -280,10 +273,13 @@ public:
         Q_UNUSED(cachedOnly);
         return FullDocument::None;
     }
+
     // True while a document from prepareFullDocument() waits to be shown.
     virtual bool fullDocumentReady() const { return false; }
+
     // True once the build of that document has started.
     virtual bool fullDocumentStarted() const { return false; }
+
     // The reader turns the count on when the user reads, and off while the
     // user changes settings. The engine worker reads it.
     virtual void setBackgroundCount(bool enabled) { Q_UNUSED(enabled); }

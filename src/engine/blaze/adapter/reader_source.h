@@ -5,9 +5,6 @@
 #include <atomic>
 #include <lvstream.h>
 
-// The fork's cache of the parsed package files of an EPUB; see koblaze.h.
-struct KoblazeEpubCache;
-
 namespace kobalt {
 // Private backing storage shared only by engine documents and their previews.
 struct ReaderSource
@@ -15,11 +12,6 @@ struct ReaderSource
     // A preview retains the publication storage even if its source document closes.
     // Containers must die before the buffers backing their streams.
     std::shared_ptr<ReaderSource> parent;
-    // The background count loads the book once for every unit. This keeps
-    // the parsed package and contents files of the book between those
-    // loads. It holds up to three of the engine's 16 documents, so it lives
-    // only while the count runs.
-    std::shared_ptr<KoblazeEpubCache> epubCache;
     // The full publication count also governs a preview of a font-free chapter.
     int embeddedFonts = -1;
     QByteArray bytes;

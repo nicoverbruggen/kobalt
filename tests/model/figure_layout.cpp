@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QFileInfo>
 #include <cstdio>
 
 using namespace kobalt;
@@ -260,6 +261,186 @@ void check(const Fixture &fixture, int columns, bool dark, const QByteArray &png
         require(model.image(page) == rendered[page], "Reflow did not restore figure layout");
 }
 
+// Exercise the saved-id capacity and the rectangle fallback with ordinary floats.
+void floatFootprints()
+{
+    for (const auto *side : { "left", "right" })
+        for (int count : { 0, 1, 5, 6 }) {
+            QByteArray body;
+            for (int i = 0; i < count; ++i)
+                body += "<div class='float'></div>";
+            body += "<p>";
+            for (int i = 0; i < 24; ++i)
+                body += "Boundary ";
+            body += "</p>";
+            QMap<QString, QByteArray> data{
+                { "mimetype", "application/epub+zip" },
+                { "META-INF/container.xml",
+                  "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
+                { "book.opf",
+                  "<package xmlns='http://www.idpf.org/2007/opf' version='3.0'><metadata/><manifest><item id='c' href='c.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/></spine></package>" },
+                { "c.xhtml",
+                  "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>p{margin:0;text-indent:0}.float{float:"
+                          + QByteArray(side)
+                          + ";width:60px;height:160px;background:red}</style></head><body>" + body
+                          + "</body></html>" }
+            };
+            QMap<QString, qint64> lengths;
+            for (auto it = data.cbegin(); it != data.cend(); ++it)
+                lengths[it.key()] = it.value().size();
+            auto resources = std::make_shared<ResourceCache>(
+                    data.keys(),
+                    [data](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                        const auto bytes = data.value(name);
+                        return sink(bytes.constData(), bytes.size());
+                    },
+                    std::make_shared<std::atomic_bool>(false));
+            QTemporaryDir cache;
+            require(cache.isValid(), "Create float footprint cache");
+            EngineDocument model(test::readerFonts());
+            model.setDocumentCache(cache.path(), "float-footprints", "float-layout", 1024 * 1024);
+            const QJsonObject settings{ { "font_pixels", 24 },
+                                        { "margin_pixels", 0 },
+                                        { "top_margin_pixels", 0 },
+                                        { "bottom_margin_pixels", 0 } };
+            QString error;
+            require(model.openResources(resources, lengths, { 600, 800 }, settings, &error),
+                    qPrintable(error));
+            require(model.pages() == 1, "Float footprint fixture unexpectedly paginated");
+            const auto image = model.image(0);
+            const auto hits = model.searchText("Boundary", {}, 100).hits;
+            require(hits.size() == 24, "Float footprint lost or duplicated text");
+            const bool right = QByteArray(side) == "right";
+            const QRect occupied(right ? 600 - count * 60 : 0, 0, count * 60, 160);
+            for (const auto &hit : hits)
+                for (const auto &rect : model.rangeRects(hit.start, hit.end))
+                    require(!rect.intersects(occupied),
+                            "Saved float footprint lost during painting");
+            require(model.saveDocumentCache(), "Save float footprint cache");
+            EngineDocument reopened(test::readerFonts());
+            reopened.setDocumentCache(cache.path(), "float-footprints", "float-layout",
+                                      1024 * 1024);
+            require(reopened.openResources(resources, lengths, { 600, 800 }, settings, &error)
+                            && reopened.openedFromCache() && reopened.image(0) == image,
+                    "Saved float footprint changed on cache reopening");
+        }
+}
+
+// MobileRead post 4622373: keep the author's float, inline-block and viewport limits.
+void reporterFigure(int columns, bool dark, const QByteArray &css = {}, bool fullWidth = true,
+                    const QString &capture = {})
+{
+    QFile file(QFileInfo(QStringLiteral(KOBALT_TEST_FIGURE_BOOK))
+                       .dir()
+                       .filePath("reporter-figure-float.epub"));
+    require(file.open(QIODevice::ReadOnly), "Read reporter figure fixture");
+    const auto bytes = file.readAll();
+    require(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()
+                    == "79faf982bf7cd77721b978da1701b70329ed6bfe624771cf8ef0738540e2f36e",
+            "Reporter figure fixture changed");
+    const double scale = readingPpi.load() / 96.0;
+    const QSize viewport(qRound(600 * columns * scale), qRound(800 * scale));
+    const QJsonObject settings{ { "font_pixels", qRound(22 * scale) },
+                                { "margin_pixels", qRound(40 * scale) },
+                                { "top_margin_pixels", qRound(40 * scale) },
+                                { "bottom_margin_pixels", qRound(40 * scale) },
+                                { "columns", columns },
+                                { "column_spacing", 0 },
+                                { "dark_mode", dark },
+                                { "line_spacing", 150 },
+                                { "line_spacing_version", 1 } };
+    QTemporaryDir cache;
+    require(cache.isValid(), "Create reporter figure cache");
+    EngineDocument model(test::readerFonts());
+    model.setUserStyleSheet(css);
+    model.setDocumentCache(cache.path(), "reporter-figure", "float-layout", 1024 * 1024);
+    QString error;
+    require(model.open(bytes, viewport, settings, &error), qPrintable(error));
+    const auto caption = model.searchText("Mr. Pickwick Addresses the Club", {}, 1).hits;
+    const auto following = model.searchText("Mr. Pickwick observed", {}, 1).hits;
+    const auto prose = model.searchText("The members gathered around the table", {}, 100).hits;
+    require(caption.size() == 1 && following.size() == 1 && prose.size() == 8,
+            "Reporter figure lost caption or following prose");
+    QVector<QImage> rendered;
+    int imagePage = -1;
+    bool wrappedProse = false;
+    QRect imageRect;
+    for (int page = 0; page < model.pages(); ++page) {
+        require(model.go(page), "Go to reporter figure page");
+        const auto image = model.image(page);
+        const auto regions = imageRegions(image);
+        if (!regions.isEmpty()) {
+            require(imagePage < 0 && regions.size() == 1, "Reporter image split or duplicated");
+            imagePage = page;
+            imageRect = regions.first();
+            require(qAbs(imageRect.height() - imageRect.width() * 1.5) <= 2,
+                    "Reporter image lost its aspect ratio");
+            require(caption.first().page == page, "Reporter caption detached from fitting image");
+            for (const auto &hit : prose) {
+                if (hit.page != page)
+                    continue;
+                for (const auto &rect : model.rangeRects(hit.start, hit.end)) {
+                    require(!rect.intersects(imageRect),
+                            "Reporter float paints over following prose");
+                    const bool sameColumn = columns == 1
+                            || (rect.center().x() >= viewport.width() / 2)
+                                    == (imageRect.center().x() >= viewport.width() / 2);
+                    if (sameColumn && rect.top() < imageRect.bottom()
+                        && rect.bottom() > imageRect.top())
+                        wrappedProse = true;
+                }
+            }
+            const auto captionRects = model.rangeRects(caption.first().start, caption.first().end);
+            require(!captionRects.isEmpty(), "Reporter caption selection lost");
+            for (const auto &rect : captionRects)
+                require(!rect.intersects(imageRect), "Reporter caption overlaps its image");
+            if (fullWidth && following.first().page == page) {
+                const auto rects = model.rangeRects(following.first().start, following.first().end);
+                require(!rects.isEmpty(), "Reporter prose selection lost");
+                const auto cap = captionRects.last();
+                const auto text = rects.first();
+                const int capColumn = columns == 2 && cap.center().x() >= viewport.width() / 2;
+                const int textColumn = columns == 2 && text.center().x() >= viewport.width() / 2;
+                require(textColumn > capColumn
+                                || (textColumn == capColumn && text.top() >= cap.bottom()),
+                        "Following prose moved ahead of full-width figure");
+            }
+        }
+        rendered.append(image);
+        if (!capture.isEmpty()) {
+            require(QDir().mkpath(capture), "Create reporter captures");
+            require(image.save(capture + "/page-" + QString::number(page + 1) + ".png"),
+                    "Save reporter capture");
+        }
+    }
+    require(imagePage >= 0, "Reporter image missing");
+    require(fullWidth || wrappedProse, "Narrow reporter float no longer wraps prose");
+    require(model.saveDocumentCache(), "Save reporter cache");
+    EngineDocument reopened(test::readerFonts());
+    reopened.setUserStyleSheet(css);
+    reopened.setDocumentCache(cache.path(), "reporter-figure", "float-layout", 1024 * 1024);
+    require(reopened.open(bytes, viewport, settings, &error) && reopened.openedFromCache(),
+            "Reporter cache miss");
+    for (int page = 0; page < model.pages(); ++page)
+        require(reopened.image(page) == rendered[page], "Cached reporter page differs");
+    require(model.applyAppearance(appearance::Patch(QJsonObject{}),
+                                  QSize(viewport.width(), qRound(1000 * scale)))
+                    && model.goTo(caption.first().start),
+            "Reporter reflow lost caption anchor");
+    require(model.applyAppearance(appearance::Patch(QJsonObject{}), viewport),
+            "Restore reporter viewport");
+    for (int page = 0; page < model.pages(); ++page)
+        require(model.image(page) == rendered[page], "Reporter reflow changed restored pages");
+}
+
+void reporterFigures(int columns, bool dark)
+{
+    reporterFigure(columns, dark);
+    reporterFigure(columns, dark, "figure{float:right !important}");
+    reporterFigure(columns, dark, "figure{width:50% !important}", false);
+    reporterFigure(columns, dark, "p:first-child{height:350px}");
+}
+
 // Uses the accepted review book in the regular suite; a directory also keeps captures.
 void reviewDocument(const QString &directory = {}, const QString &existingBook = {},
                     bool split = false)
@@ -316,12 +497,28 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     readingPpi.store(96);
+    if (argc >= 3 && QByteArray(argv[1]) == "--reporter-document") {
+        reporterFigure(1, false, {}, true, QString::fromLocal8Bit(argv[2]));
+        return 0;
+    }
+    if (argc >= 2 && QByteArray(argv[1]) == "--reporter-only") {
+        floatFootprints();
+        for (int ppi : { 96, 300 }) {
+            readingPpi.store(ppi);
+            for (int columns : { 1, 2 })
+                for (bool dark : { false, true }) {
+                    reporterFigures(columns, dark);
+                }
+        }
+        return 0;
+    }
     if (argc >= 3 && QByteArray(argv[1]) == "--review-document") {
         reviewDocument(QString::fromLocal8Bit(argv[2]),
                        argc >= 4 ? QString::fromLocal8Bit(argv[3]) : QString(),
                        qEnvironmentVariableIsSet("KOBALT_TEST_FIGURE_EXPECT_SPLIT"));
         return 0;
     }
+    floatFootprints();
     reviewDocument();
     QImage art(200, 200, QImage::Format_RGB32);
     art.fill(Qt::red);
@@ -349,6 +546,9 @@ int main(int argc, char **argv)
     };
     for (int ppi : { 96, 300 }) {
         readingPpi.store(ppi);
+        for (int columns : { 1, 2 })
+            for (bool dark : { false, true })
+                reporterFigures(columns, dark);
         for (const auto &fixture : fixtures)
             for (int columns : { 1, 2 })
                 for (bool dark : { false, true }) {

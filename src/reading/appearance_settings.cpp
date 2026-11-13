@@ -187,6 +187,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         preferences.remove(sleep::greetingKey);
     textpresets::clean(preferences);
     choice("time_remaining_format", { "detailed", "approximate" });
+    choice(headerfooter::percentageFormatKey, { "whole", "decimal" });
     if (preferences.contains(sessionTimeout::preferenceKey)
         && !sessionTimeout::valid(preferences.value(sessionTimeout::preferenceKey)))
         preferences.remove(sessionTimeout::preferenceKey);

@@ -1559,6 +1559,12 @@ void Reader::buildSettings()
             [this] { openSettingsFont("ui_mono_font_face"); });
     connect(settings->headerFooterFontButton, &QPushButton::clicked, this,
             [this] { openSettingsFont("header_footer_font_face"); });
+    connect(settings->percentageFormatButton, &QPushButton::clicked, this, [this, settings] {
+        settings->showPercentageFormats(settingsPercentageFormat, [this](const QString &format) {
+            settingsPercentageFormat = format;
+            showSettingsFonts();
+        });
+    });
     connect(settings->timeRemainingFormatButton, &QPushButton::clicked, this, [this, settings] {
         settings->showTimeRemainingFormats(settingsTimeRemainingFormat,
                                            [this](const QString &format) {
@@ -1643,6 +1649,7 @@ void Reader::buildSettings()
         settingsDictionaryFontSize = 100;
         settingsHeaderFooterWeight = 2;
         settingsTimeRemainingFormat = "detailed";
+        settingsPercentageFormat = "whole";
         hideTabLabelsOption->setChecked(false);
         zenModeOption->setChecked(false);
         if (wifiPowerSaverOption)

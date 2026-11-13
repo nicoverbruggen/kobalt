@@ -2844,6 +2844,107 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
 } // namespace
 
 namespace {
+void checkPercentageFormat(int preset, bool dark, bool screenshots)
+{
+    Fixture fixture(dark);
+    QVERIFY(fixture.prepared);
+    auto layout = headerfooter::presetLayout(headerfooter::Preset::Default);
+    layout.slotFields[2] = headerfooter::Field::BookPercent;
+    layout.slotFields[0] = headerfooter::Field::ChapterPercent;
+    auto saved = storage::readJson(fixture.paths.preferences());
+    saved[headerfooter::presetKey] = "custom";
+    saved[headerfooter::customKey] = headerfooter::toJson(layout);
+    QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+    selectPreview(fixture, preset);
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE(opened.count(), 1);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    openPrologueBody(fixture);
+    auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+    QVERIFY(page);
+    const auto before = fixture.state();
+    const auto progress = page->progressFraction;
+    const auto name = screenshotVariant(preset, dark);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsSystem"));
+    QVERIFY(revealSettingsOption(fixture, "rrPercentageFormat"));
+    auto *button = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrPercentageFormat"));
+    auto *time = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrTimeRemainingFormat"));
+    QVERIFY(button && time);
+    QCOMPARE(button->font(), time->font());
+    QCOMPARE(button->height(), time->height());
+    QCOMPARE(button->caption(), strings::get("settings.percentage_whole").toUpper());
+    if (screenshots)
+        QVERIFY(capture(fixture, name + "-settings-progress-percentages"));
+    QVERIFY(fixture.press("rrPercentageFormat"));
+    QTRY_VERIFY(fixture.visible("rrPercentageFormatPopup"));
+    if (screenshots)
+        QVERIFY(capture(fixture, name + "-settings-percentage-format"));
+    QVERIFY(fixture.press("rrPercentageFormat_decimal"));
+    QTRY_VERIFY(!fixture.visible("rrPercentageFormatPopup"));
+    QCOMPARE(button->caption(), strings::get("settings.percentage_decimal").toUpper());
+    QVERIFY(!storage::readJson(fixture.paths.preferences())
+                     .contains(headerfooter::percentageFormatKey));
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    QTRY_COMPARE(
+            storage::readJson(fixture.paths.preferences()).value(headerfooter::percentageFormatKey),
+            QJsonValue("decimal"));
+    QVERIFY(page->slotContents[5].text.contains('.'));
+    QCOMPARE(page->slotContents[2].text, page->slotContents[5].text);
+    QVERIFY(page->slotContents[0].text.contains('.'));
+    QCOMPARE(page->progressFraction, progress);
+    QCOMPARE(fixture.state().value("page"), before.value("page"));
+    QCOMPARE(fixture.state().value("pages"), before.value("pages"));
+    QCOMPARE(fixture.state().value("position"), before.value("position"));
+    if (screenshots)
+        QVERIFY(capture(fixture, name + "-reading-decimal-progress"));
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavLayout"));
+    QVERIFY(fixture.press("rrHeaderFooter"));
+    QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+    auto *sample = fixture.widget("rrHeaderFooterSlot5");
+    QVERIFY(sample);
+    QVERIFY(sample->accessibleName().contains(page->slotContents[5].text));
+    if (screenshots) {
+        capturePages(fixture, name + "-header-footer-decimal-progress", "rrHeaderFooter");
+        while (fixture.visible("rrHeaderFooterPrevious")
+               && fixture.widget("rrHeaderFooterPrevious")->isEnabled())
+            QVERIFY(fixture.press("rrHeaderFooterPrevious"));
+        QVERIFY(fixture.press("rrHeaderFooterSlot5"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooterChooser"));
+        QVERIFY(capture(fixture, name + "-header-footer-decimal-fields"));
+        QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
+    }
+    QVERIFY(fixture.press("rrHeaderFooterClose"));
+    fixture.window.readerWindow()->close();
+    QTRY_VERIFY(!fixture.window.readerWindow());
+    fixture.window.openBook(book);
+    QTRY_COMPARE(opened.count(), 2);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+    QVERIFY(page->slotContents[5].text.contains('.'));
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsSystem"));
+    QVERIFY(revealSettingsOption(fixture, "rrPercentageFormat"));
+    button = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrPercentageFormat"));
+    QVERIFY(button);
+    QCOMPARE(button->caption(), strings::get("settings.percentage_decimal").toUpper());
+    QVERIFY(fixture.press("rrPercentageFormat"));
+    QTRY_VERIFY(fixture.visible("rrPercentageFormatPopup"));
+    QVERIFY(fixture.press("rrPercentageFormat_whole"));
+    QVERIFY(fixture.press("rrSettingsClose"));
+    QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+    QTRY_COMPARE(
+            storage::readJson(fixture.paths.preferences()).value(headerfooter::percentageFormatKey),
+            QJsonValue("whole"));
+    QVERIFY(!page->slotContents[5].text.contains('.'));
+}
+
 void checkHeaderFooterSizes(int preset, bool dark)
 {
     using namespace headerfooter;
@@ -7775,6 +7876,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks both strip-size sliders through the canvas: steps, Off, preset changes, the sheet layout and persistence after reopening.
+    void percentageFormat_data() { screenshotVariants(); }
+
+    void percentageFormat()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkPercentageFormat(preset, dark, false);
+    }
+
     void headerFooterSizes_data() { screenshotVariants(); }
 
     void headerFooterSizes()
@@ -9202,7 +9312,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrDisableReaderStandby"));
         QCOMPARE(bool(option), supported);
         if (!supported) {
-            QVERIFY(!fixture.widget("rrSystemAdvancedSection"));
+            QVERIFY(fixture.widget("rrSystemSleepSection"));
+            QVERIFY(!fixture.widget("rrStandbyConfirmation"));
             return;
         }
         QVERIFY(revealSettingsOption(fixture, "rrDisableReaderStandby"));
@@ -13740,6 +13851,15 @@ private slots:
         QFETCH(int, preset);
         QFETCH(bool, dark);
         checkPinnedBookmarks(preset, dark);
+    }
+
+    void percentageFormat_data() { screenshotVariants(); }
+
+    void percentageFormat()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkPercentageFormat(preset, dark, true);
     }
 
     void headerFooterSizes_data() { screenshotVariants(); }

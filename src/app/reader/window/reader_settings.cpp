@@ -100,6 +100,7 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.bookMilliseconds = estimates.bookMilliseconds;
     values.learningPace = estimates.learningPace;
     values.approximateTime = remainingTime::approximate(preferences);
+    values.decimalPercentages = headerfooter::decimalPercentages(preferences);
     return values;
 }
 
@@ -349,6 +350,7 @@ void Reader::openSettings()
     settingsHeaderFooterWeight = ui::headerFooterAddedWeight();
     settingsTimeRemainingFormat =
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
+    settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     saveWordsOption->setChecked(preferences.value("save_looked_up_words").toBool(true));
     zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
@@ -777,6 +779,7 @@ void Reader::applySettings()
     if (disableStandbyOption)
         next[disableReaderStandbyKey] = disableStandbyOption->isChecked();
     next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
+    next[headerfooter::percentageFormatKey] = settingsPercentageFormat;
     for (const auto *key : appearance::fallbackFontKeys)
         next[key] = settingsFontFaces.value(key).toString();
     next["bold_reading"] =
@@ -1457,6 +1460,8 @@ void Reader::applyInterfaceFonts()
 void Reader::showSettingsFonts()
 {
     auto *panel = static_cast<SettingsPanel *>(general);
+    panel->percentageFormatButton->setCaption(
+            SettingsPanel::percentageFormatLabel(settingsPercentageFormat).toUpper());
     panel->timeRemainingFormatButton->setCaption(
             SettingsPanel::timeRemainingFormatLabel(settingsTimeRemainingFormat).toUpper());
     panel->headerFooterWeightButton->setCaption(

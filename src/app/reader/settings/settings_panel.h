@@ -90,6 +90,8 @@ public:
     void showTimeRemainingFormats(const QString &current,
                                   std::function<void(const QString &)> chosen);
     static QString timeRemainingFormatLabel(const QString &format);
+    void showPercentageFormats(const QString &current, std::function<void(const QString &)> chosen);
+    static QString percentageFormatLabel(const QString &format);
     void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
     static QString columnSpacingLabel(int percent);
     enum class AdvancedText {
@@ -139,7 +141,6 @@ public:
     void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
     ui::DescribedOption *hideTabLabelsOption = nullptr, *saveWordsOption = nullptr;
-    QWidget *powerSection = nullptr;
     ui::DescribedOption *wifiPowerSaverOption = nullptr;
     ui::DescribedOption *disableStandbyOption = nullptr;
     ui::DescribedOption *hideBookOnSleepOption = nullptr;
@@ -173,7 +174,8 @@ public:
                       *monoFontButton = nullptr;
     ui::CaptionButton *dictionaryFontButton = nullptr, *dictionaryFontSizeButton = nullptr;
     ui::DescribedOption *landscapeColumnsOption = nullptr;
-    ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr;
+    ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr,
+                      *percentageFormatButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr;
     ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr,
                       *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;

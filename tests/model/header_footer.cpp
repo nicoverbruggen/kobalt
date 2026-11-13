@@ -286,6 +286,48 @@ int main()
                         == strings::get("common.percent").arg(100),
                 "The last page is not 100%");
     }
+    {
+        auto decimal = values;
+        decimal.decimalPercentages = true;
+        decimal.pages = 1000;
+        decimal.chapterPages = 1000;
+        for (const int page : { 0, 1, 80, 81, 999, 1000, 1001 }) {
+            decimal.page = decimal.chapterPage = page;
+            const int tenths = qBound(1, page, 1000);
+            const auto expected = QString("%1.%2%").arg(tenths / 10).arg(tenths % 10);
+            require(content(Field::BookPercent, decimal, false).text == expected
+                            && content(Field::ChapterPercent, decimal, true).text == expected,
+                    "Decimal progress lost a small session or a page boundary");
+        }
+        for (const int pages : { 1, 3, 83, 1000000, 2147483647 }) {
+            decimal.pages = pages;
+            decimal.page = pages;
+            require(content(Field::BookPercent, decimal, false).text == "100.0%",
+                    "Decimal progress lost the last page");
+            if (pages > 1) {
+                --decimal.page;
+                require(content(Field::BookPercent, decimal, false).text != "100.0%",
+                        "Decimal progress rounded up before the last page");
+            }
+        }
+        decimal.pages = 83;
+        decimal.page = 1;
+        require(content(Field::BookPercent, decimal, false).text == "1.2%",
+                "Decimal progress changed the current-page accounting");
+        decimal.page = 82;
+        require(content(Field::BookPercent, decimal, false).text == "98.7%",
+                "Decimal progress did not round down");
+        decimal = values;
+        decimal.decimalPercentages = true;
+        for (const auto field : fields)
+            if (field != Field::BookPercent && field != Field::ChapterPercent)
+                require(content(field, decimal, false) == content(field, values, false),
+                        "Progress precision changed a battery, time or combined page field");
+        decimal.pages = decimal.chapterPages = 0;
+        require(content(Field::BookPercent, decimal, false).empty()
+                        && content(Field::ChapterPercent, decimal, false).empty(),
+                "Unknown lengths showed decimal progress");
+    }
     // Battery warning shows the battery only below its threshold.
     require(content(Field::BatteryWarning, values, false).empty(), "Battery warning showed at 80%");
     {

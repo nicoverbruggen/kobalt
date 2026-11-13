@@ -825,7 +825,9 @@
 "settings.widows_orphans_avoid" = "Avoid both";
 "settings.widows_orphans_allow" = "Allow both";
 "settings.section_reading_menu" = "Reading menu";
-"settings.section_reader" = "Reader";
+"settings.section_feature_visibility" = "Feature visibility";
+"settings.section_system_integration" = "System integration";
+"settings.section_nitpicks" = "Nitpicks";
 "settings.section_sleep" = "Sleep and wake";
 "settings.section_power" = "Power management";
 "settings.wifi_power_saver" = "Smart Wi-Fi power saving";
@@ -1225,7 +1227,7 @@
 "settings.menu_view_stats_description" = "Shows chapter and book statistics above the tab bar, as you would normally find using the Stats tab.";
 
 "settings.section_default_global_font" = "Default global font";
-"settings.section_user_interface" = "User Interface";
+"settings.section_user_interface" = "User interface";
 "settings.section_dictionary_ui" = "Dictionary";
 "settings.section_advanced" = "Advanced";
 "settings.disable_reader_standby" = "Disable standby";
@@ -1436,6 +1438,12 @@
 "settings.normalization_text_colors" = "Normalize text colors";
 "settings.normalization_text_colors_description" = "Use black text, or white in dark mode. Remove publisher background colors.";
 
+"settings.percentage_format" = "Progress percentages";
+"settings.percentage_format_description" = "Choose how book and chapter progress appears in the header and footer.";
+"settings.percentage_whole" = "Whole percentages";
+"settings.percentage_decimal" = "One decimal place";
+"settings.percentage_whole_description" = "For example, 8%";
+"settings.percentage_decimal_description" = "For example, 8.1%";
 "settings.time_remaining_format" = "Time remaining format";
 "settings.time_remaining_format_description" = "Applies to reading-time estimates in the header, footer and sleep screen.";
 "settings.time_remaining_detailed" = "Detailed";

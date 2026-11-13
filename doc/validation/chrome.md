@@ -8,4 +8,6 @@ Set `KOBALT_READING_TIME_CAPTURE_DIR` to an absolute directory to capture the st
 
 `lifecycle.clockRestsWithoutConsumers` checks that the minute clock rests while no strip field, menu or host needs it, and that the menu starts it. With `lifecycle.clockAsksPaceForTimeLeft` it also checks that the reading pace is asked only for a visible consumer. `lifecycle.minuteClock` and `lifecycle.idleTimers` check timers on the main thread only. Worker-thread timers and Kobo-only timers are out of scope. `platform.nickel-reading-pace-cache` checks the pace cache, but the reader coordinator's 65-second fallback timer has no automated check.
 
+`desktop.percentageFormat` checks the Settings choice, draft and save behavior, reopening Settings, header/footer previews and unchanged page counts and progress. The model checks cover invalid saved values, whole-percent defaults, fractional progress, rounding, unknown lengths, large books and the last page. The gallery includes the Settings row, choice dialog, reading page and header/footer preview.
+
 These headless checks do not establish physical-device refresh or behavior.

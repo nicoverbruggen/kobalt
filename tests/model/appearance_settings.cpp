@@ -6,6 +6,7 @@
 #include "reading/sleep_screen.h"
 #include "reading/session_timeout.h"
 #include "reading/remaining_time.h"
+#include "reading/header_footer.h"
 #include "support/qt_compat.h"
 #include "check.h"
 #include <QJsonArray>
@@ -159,6 +160,32 @@ int main()
         require(!appearance::cleanPreferences({ { "chapter_groups", invalid } })
                          .contains("chapter_groups"),
                 "Invalid chapter group choice did not fall back to Current section");
+    require(!headerfooter::decimalPercentages({}),
+            "Older preferences did not retain whole percentages");
+    for (const auto *format : { "whole", "decimal" }) {
+        const auto preferences = appearance::cleanPreferences(
+                { { headerfooter::percentageFormatKey, format }, { "future_option", 42 } });
+        require(preferences.value(headerfooter::percentageFormatKey).toString() == format
+                        && preferences.value("future_option").toInt() == 42,
+                "Percentage format cleanup lost saved preferences");
+        require(headerfooter::decimalPercentages(preferences) == (QString(format) == "decimal"),
+                "Percentage format loaded incorrectly");
+        require(appearance::same({}, preferences), "Percentage format invalidated book layout");
+    }
+    for (const auto &invalid :
+         { QJsonValue("unknown"), QJsonValue(true), QJsonValue(1), QJsonValue(),
+           QJsonValue(QJsonObject()), QJsonValue(QJsonArray()) }) {
+        require(!headerfooter::decimalPercentages(
+                        { { headerfooter::percentageFormatKey, invalid } }),
+                "Invalid percentage format did not use whole percentages");
+        const auto preferences = appearance::cleanPreferences(
+                { { headerfooter::percentageFormatKey, invalid }, { "future_option", 42 } });
+        require(!preferences.contains(headerfooter::percentageFormatKey)
+                        && !headerfooter::decimalPercentages(preferences)
+                        && preferences.value("future_option").toInt() == 42,
+                "Percentage format cleanup lost the default or an unknown field");
+    }
+
     require(!remainingTime::approximate({}), "Older preferences did not retain detailed estimates");
     for (const auto *format : { "detailed", "approximate" }) {
         const auto preferences = appearance::cleanPreferences(

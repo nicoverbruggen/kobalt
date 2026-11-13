@@ -602,7 +602,7 @@ private:
     QString settingsDefaultFontFace;
     QString settingsUiFontFace, settingsUiMonoFontFace, settingsHeaderFooterFontFace;
     QString settingsDictionaryFontFace;
-    QString settingsTimeRemainingFormat;
+    QString settingsTimeRemainingFormat, settingsPercentageFormat;
     int settingsDictionaryFontSize = 100;
     int settingsHeaderFooterWeight = 2;
     void applyInterfaceFonts();

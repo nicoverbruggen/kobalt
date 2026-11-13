@@ -61,11 +61,16 @@ QString timeLeft(qint64 milliseconds, bool learningPace, bool approximate)
     return learningPace ? strings::get("stats.approximate_time").arg(result) : result;
 }
 
-QString percentDone(int page, int pages)
+QString percentDone(int page, int pages, bool decimal)
 {
-    return pages > 0
-            ? strings::get("common.percent").arg(pageProgressPercent(qMax(1, page) - 1, pages))
-            : QString();
+    if (pages <= 0)
+        return {};
+    if (!decimal)
+        return strings::get("common.percent").arg(pageProgressPercent(qMax(1, page) - 1, pages));
+    // Keep the existing page count and round down at the selected precision.
+    // Integer arithmetic avoids rounding a penultimate page up to 100.0%.
+    const qint64 tenths = 1000 * qint64(qBound(1, page, pages)) / pages;
+    return strings::get("common.percent").arg(QString("%1.%2").arg(tenths / 10).arg(tenths % 10));
 }
 
 // Beside a name the page reads 5 of 33, so the slash does not compete with
@@ -406,10 +411,11 @@ Content content(Field field, const Values &values, bool uppercase)
                 timeLeft(values.bookMilliseconds, values.learningPace, values.approximateTime);
         break;
     case Field::ChapterPercent:
-        result.text = percentDone(values.chapterPage, values.chapterPages);
+        result.text =
+                percentDone(values.chapterPage, values.chapterPages, values.decimalPercentages);
         break;
     case Field::BookPercent:
-        result.text = percentDone(values.page, values.pages);
+        result.text = percentDone(values.page, values.pages, values.decimalPercentages);
         break;
     }
     if (uppercase) {

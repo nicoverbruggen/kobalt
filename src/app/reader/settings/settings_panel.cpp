@@ -900,8 +900,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *systemRows = new QVBoxLayout(systemPage);
     systemRows->setContentsMargins(0, 0, 0, 0);
     systemRows->setSpacing(0);
-    section(systemPage, systemRows, "rrSystemReaderSection",
-            strings::get("settings.section_reader"));
+    section(systemPage, systemRows, "rrSystemIntegrationSection",
+            strings::get("settings.section_system_integration"));
     automaticOpeningOption = check(
             systemPage, "rrAutomaticBookOpening", strings::get("settings.automatic_book_opening"),
             inputs.automaticBookOpeningSupported
@@ -911,7 +911,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     systemRows->addWidget(automaticOpeningOption);
     if (inputs.automaticBookOpeningSupported) {
         // Turning automatic opening off sends every later book to Kobo's
-        // reader. It sits where Zen mode sits on Display, so ask first.
+        // reader, so ask first.
         automaticOpeningDialog = new ui::ChoiceModal(
                 parent,
                 { strings::get("settings.automatic_book_opening_off_description"),
@@ -944,10 +944,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         });
         automaticOpeningDialog->dismissed = [this] { dismissAutomaticOpeningConfirmation(); };
     }
-    timeRemainingFormatButton =
-            ui::makeCaptionButton(systemPage, nullptr, "rrTimeRemainingFormat",
-                                  strings::get("settings.time_remaining_format"), [] { });
-    systemRows->addWidget(timeRemainingFormatButton);
+    section(systemPage, systemRows, "rrSystemVisibilitySection",
+            strings::get("settings.section_feature_visibility"));
+    disabledFeaturesButton = ui::makeCaptionButton(systemPage, systemRows, "rrDisabledFeatures",
+                                                   strings::get("settings.hidden_features"),
+                                                   [this] { showDisabledFeatures(); });
     section(systemPage, systemRows, "rrSystemSleepSection", strings::get("settings.section_sleep"));
     hideBookOnSleepOption = check(systemPage, "rrHideBookOnSleepScreen",
                                   strings::get("settings.hide_book_on_sleep_screen"),
@@ -963,52 +964,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     sessionTimeoutButton = ui::makeCaptionButton(systemPage, nullptr, "rrSessionTimeout",
                                                  strings::get("settings.session_timeout"), [] { });
     systemRows->addWidget(sessionTimeoutButton);
-    if (inputs.wifiPowerSaverSupported) {
-        powerSection = section(systemPage, systemRows, "rrSystemPowerSection",
-                               strings::get("settings.section_power"));
-        wifiPowerSaverOption =
-                check(systemPage, "rrWifiPowerSaver", strings::get("settings.wifi_power_saver"),
-                      strings::get("settings.wifi_power_saver_description"));
-        systemRows->addWidget(wifiPowerSaverOption);
-    }
-    section(systemPage, systemRows, "rrSystemInterfaceSection",
-            strings::get("settings.section_user_interface"));
-    disabledFeaturesButton = ui::makeCaptionButton(systemPage, systemRows, "rrDisabledFeatures",
-                                                   strings::get("settings.hidden_features"),
-                                                   [this] { showDisabledFeatures(); });
-    uiFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiFont",
-                                         strings::get("settings.ui_font"), [] { });
-    uiMonoFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiMonoFont",
-                                             strings::get("settings.ui_mono_font"), [] { });
-    headerFooterFontButton =
-            ui::makeCaptionButton(systemPage, nullptr, "rrHeaderFooterFont",
-                                  strings::get("settings.header_footer_font"), [] { });
-    systemRows->addWidget(uiFontButton);
-    systemRows->addWidget(uiMonoFontButton);
-    systemRows->addWidget(headerFooterFontButton);
-    headerFooterWeightButton =
-            ui::makeCaptionButton(systemPage, nullptr, "rrHeaderFooterWeight",
-                                  strings::get("settings.header_footer_weight"), [] { });
-    systemRows->addWidget(headerFooterWeightButton);
-    hideTabLabelsOption =
-            check(systemPage, "rrHideTabLabels", strings::get("settings.hide_tab_labels"),
-                  strings::get("settings.hide_tab_labels_description"));
-    systemRows->addWidget(hideTabLabelsOption);
-    section(systemPage, systemRows, "rrSystemDictionarySection",
-            strings::get("settings.section_dictionary_ui"));
-    dictionaryFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrDictionaryFont",
-                                                 strings::get("settings.dictionary_font"), [] { });
-    dictionaryFontSizeButton =
-            ui::makeCaptionButton(systemPage, nullptr, "rrDictionaryFontSize",
-                                  strings::get("settings.dictionary_font_size"), [] { });
-    systemRows->addWidget(dictionaryFontButton);
-    systemRows->addWidget(dictionaryFontSizeButton);
-    saveWordsOption = check(systemPage, "rrSaveWords", strings::get("settings.save_words"),
-                            strings::get("settings.save_words_description"));
-    systemRows->addWidget(saveWordsOption);
     if (inputs.readerStandbySupported) {
-        section(systemPage, systemRows, "rrSystemAdvancedSection",
-                strings::get("settings.section_advanced"));
         disableStandbyOption = check(systemPage, "rrDisableReaderStandby",
                                      strings::get("settings.disable_reader_standby"),
                                      strings::get("settings.disable_reader_standby_description"));
@@ -1040,12 +996,58 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         });
         standbyDialog->dismissed = [this] { dismissStandbyConfirmation(); };
     }
-    section(systemPage, systemRows, "rrSystemOpeningSection",
-            strings::get("settings.section_opening"));
+    if (inputs.wifiPowerSaverSupported) {
+        wifiPowerSaverOption =
+                check(systemPage, "rrWifiPowerSaver", strings::get("settings.wifi_power_saver"),
+                      strings::get("settings.wifi_power_saver_description"));
+        systemRows->addWidget(wifiPowerSaverOption);
+    }
+    section(systemPage, systemRows, "rrSystemNitpicksSection",
+            strings::get("settings.section_nitpicks"));
+    timeRemainingFormatButton =
+            ui::makeCaptionButton(systemPage, nullptr, "rrTimeRemainingFormat",
+                                  strings::get("settings.time_remaining_format"), [] { });
+    systemRows->addWidget(timeRemainingFormatButton);
+    percentageFormatButton =
+            ui::makeCaptionButton(systemPage, nullptr, "rrPercentageFormat",
+                                  strings::get("settings.percentage_format"), [] { });
+    systemRows->addWidget(percentageFormatButton);
     openingCoverOption =
             check(systemPage, "rrHideOpeningCover", strings::get("settings.opening_cover"),
                   strings::get("settings.opening_cover_description"));
     systemRows->addWidget(openingCoverOption);
+    section(systemPage, systemRows, "rrSystemInterfaceSection",
+            strings::get("settings.section_user_interface"));
+    hideTabLabelsOption =
+            check(systemPage, "rrHideTabLabels", strings::get("settings.hide_tab_labels"),
+                  strings::get("settings.hide_tab_labels_description"));
+    systemRows->addWidget(hideTabLabelsOption);
+    uiFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiFont",
+                                         strings::get("settings.ui_font"), [] { });
+    uiMonoFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiMonoFont",
+                                             strings::get("settings.ui_mono_font"), [] { });
+    headerFooterFontButton =
+            ui::makeCaptionButton(systemPage, nullptr, "rrHeaderFooterFont",
+                                  strings::get("settings.header_footer_font"), [] { });
+    systemRows->addWidget(uiFontButton);
+    systemRows->addWidget(uiMonoFontButton);
+    systemRows->addWidget(headerFooterFontButton);
+    headerFooterWeightButton =
+            ui::makeCaptionButton(systemPage, nullptr, "rrHeaderFooterWeight",
+                                  strings::get("settings.header_footer_weight"), [] { });
+    systemRows->addWidget(headerFooterWeightButton);
+    section(systemPage, systemRows, "rrSystemDictionarySection",
+            strings::get("settings.section_dictionary_ui"));
+    saveWordsOption = check(systemPage, "rrSaveWords", strings::get("settings.save_words"),
+                            strings::get("settings.save_words_description"));
+    systemRows->addWidget(saveWordsOption);
+    dictionaryFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrDictionaryFont",
+                                                 strings::get("settings.dictionary_font"), [] { });
+    dictionaryFontSizeButton =
+            ui::makeCaptionButton(systemPage, nullptr, "rrDictionaryFontSize",
+                                  strings::get("settings.dictionary_font_size"), [] { });
+    systemRows->addWidget(dictionaryFontButton);
+    systemRows->addWidget(dictionaryFontSizeButton);
     systemRows->addStretch(1);
     aboutPage = new AboutPage(settingsPages);
     settingsPages->addWidget(aboutPage);
@@ -1211,6 +1213,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           dictionaryFontButton,
                           dictionaryFontSizeButton,
                           timeRemainingFormatButton,
+                          percentageFormatButton,
                           defaultFontButton,
                           serifFontButton,
                           sansFontButton,
@@ -1871,6 +1874,38 @@ void SettingsPanel::showTimeRemainingFormats(const QString &current,
         choices->add(QString("rrTimeRemainingFormat_%1").arg(format),
                      timeRemainingFormatLabel(format),
                      strings::get(QString("settings.time_remaining_%1_description")
+                                          .arg(format)
+                                          .toLatin1()
+                                          .constData()));
+        if (format == current)
+            choices->setCurrent(choices->options().size() - 1);
+    }
+    choices->chosen = [this, chosen, formats](int index) {
+        dismissSheet();
+        chosen(formats[index]);
+    };
+    ui::fitChoiceSheet(sheet, choices);
+    presentSheet();
+}
+
+QString SettingsPanel::percentageFormatLabel(const QString &format)
+{
+    return strings::get(format == "decimal" ? "settings.percentage_decimal"
+                                            : "settings.percentage_whole");
+}
+
+void SettingsPanel::showPercentageFormats(const QString &current,
+                                          std::function<void(const QString &)> chosen)
+{
+    if (sheet)
+        return;
+    auto *choices =
+            openChoiceSheet("rrPercentageFormat", strings::get("settings.percentage_format"),
+                            strings::get("settings.percentage_format_description"));
+    const QStringList formats{ "whole", "decimal" };
+    for (const auto &format : formats) {
+        choices->add(QString("rrPercentageFormat_%1").arg(format), percentageFormatLabel(format),
+                     strings::get(QString("settings.percentage_%1_description")
                                           .arg(format)
                                           .toLatin1()
                                           .constData()));
@@ -2570,10 +2605,8 @@ void SettingsPanel::showDisabledFeatures()
 
 void SettingsPanel::showPowerManagement(bool visible)
 {
-    if (!powerSection)
-        return;
-    powerSection->setVisible(visible);
-    wifiPowerSaverOption->setVisible(visible);
+    if (wifiPowerSaverOption)
+        wifiPowerSaverOption->setVisible(visible);
 }
 
 void SettingsPanel::fitRail(int availableHeight)

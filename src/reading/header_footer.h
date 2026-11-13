@@ -84,6 +84,14 @@ struct Layout
 inline constexpr auto presetKey = "header_footer";
 inline constexpr auto customKey = "header_footer_custom";
 inline constexpr auto textKey = "header_footer_text";
+inline constexpr auto percentageFormatKey = "header_footer_percentage_format";
+
+// Missing and invalid values keep the existing whole-percent display.
+inline bool decimalPercentages(const QJsonObject &preferences)
+{
+    return preferences.value(percentageFormatKey).toString() == "decimal";
+}
+
 QJsonObject textSettings(const Layout &layout);
 
 Layout presetLayout(Preset preset);
@@ -128,6 +136,7 @@ struct Values
     qint64 chapterMilliseconds = -1, bookMilliseconds = -1;
     bool learningPace = false;
     bool approximateTime = false;
+    bool decimalPercentages = false;
 };
 
 // One slot's text, and a battery icon drawn after it when `batteryIcon` is set.

@@ -1,5 +1,6 @@
 #include "display_format.h"
 #include "platforms/kobo/display/image_format.h"
+#include "platforms/kobo/display/opaque_copy.h"
 #include "platforms/kobo/display/framebuffer_driver.h"
 #include "support/diagnostics.h"
 #include <QApplication>
@@ -19,6 +20,9 @@ namespace {
 using SizeConstructor = void (*)(QImage *, const QSize &, QImage::Format);
 using Resize = void (*)(QBackingStore *, const QSize &);
 using BeginPaint = void (*)(QBackingStore *, const QRegion &);
+using DrawImage = void (*)(QPainter *, const QRectF &, const QImage &, const QRectF &,
+                           Qt::ImageConversionFlags);
+DrawImage nextDrawImage = nullptr;
 SizeConstructor nextSize = nullptr;
 Resize nextResize = nullptr;
 BeginPaint nextBeginPaint = nullptr;
@@ -27,6 +31,18 @@ bool installed = false;
 bool reported = false;
 unsigned allocations = 0;
 thread_local bool readerAllocation = false;
+
+void drawImage(QPainter *painter, const QRectF &target, const QImage &image, const QRectF &source,
+               Qt::ImageConversionFlags flags)
+{
+    // Only the backend import is hooked. Enable copies while Kobalt owns the
+    // modal screen; separate modal dialogs and normal Nickel sessions pass through.
+    if (qApp && QThread::currentThread() == qApp->thread() && reader && reader->isVisible()
+        && QApplication::activeModalWidget() == reader
+        && copyOpaqueDisplayImage(*painter, target, image, source, flags))
+        return;
+    nextDrawImage(painter, target, image, source, flags);
+}
 
 bool ownsStore(QBackingStore *store)
 {
@@ -78,7 +94,24 @@ void installDisplayFormatHook()
     if (!screen || !screen->handle())
         return;
     const auto format = screen->handle()->format();
-    if (!needsPremultipliedDisplay(format) || !mtkFramebuffer(framebufferDriver())) {
+    if ((!needsPremultipliedDisplay(format) && format != QImage::Format_RGB32)
+        || !mtkFramebuffer(framebufferDriver())) {
+        diagnostic("display-format-hook",
+                   { { "status", "not-needed-or-unsupported" }, { "format", int(format) } });
+        return;
+    }
+    void *backend = dlopen("/usr/local/Kobo/platforms/libkobo.so", RTLD_LAZY | RTLD_NOLOAD);
+    if (backend && !qEnvironmentVariableIsSet("KOBALT_DISABLE_OPAQUE_DISPLAY_COPY")) {
+        nextDrawImage = reinterpret_cast<DrawImage>(nh_dlhook(
+                backend,
+                "_ZN8QPainter9drawImageERK6QRectFRK6QImageS2_6QFlagsIN2Qt19ImageConversionFlagEE",
+                reinterpret_cast<void *>(drawImage)));
+    }
+    diagnostic("display-opaque-copy-hook",
+               { { "status", nextDrawImage ? "installed" : "disabled-or-unavailable" } });
+    if (backend)
+        dlclose(backend);
+    if (!needsPremultipliedDisplay(format)) {
         diagnostic("display-format-hook",
                    { { "status", "not-needed-or-unsupported" }, { "format", int(format) } });
         return;
@@ -91,7 +124,7 @@ void installDisplayFormatHook()
         diagnostic("display-format-hook", { { "status", "paint-check-failed" } });
         return;
     }
-    void *backend = dlopen("/usr/local/Kobo/platforms/libkobo.so", RTLD_LAZY | RTLD_NOLOAD);
+    backend = dlopen("/usr/local/Kobo/platforms/libkobo.so", RTLD_LAZY | RTLD_NOLOAD);
     void *widgets = dlopen("libQt6Widgets.so.6", RTLD_LAZY | RTLD_NOLOAD);
     if (backend && widgets) {
         // Only fresh allocations during this reader's native resize/paint calls

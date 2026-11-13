@@ -6,6 +6,7 @@
 #include "platform/api/kobo_refresh.h"
 #include "support/qt_font.h"
 #include "support/strings.h"
+#include "support/diagnostics.h"
 #include "storage/annotation_export.h"
 
 #include <QHBoxLayout>
@@ -966,6 +967,9 @@ void Reader::syncMarkupRequest()
 
 void Reader::preparePresentation(std::function<void(bool)> finished)
 {
+    DiagnosticOperation setup("reader-presentation-setup");
+    auto waiting = std::make_shared<DiagnosticOperation>("reader-presentation-wait");
+    finished = [waiting, finished = std::move(finished)](bool ready) { finished(ready); };
     prepareKosyncPresentation([this, finished = std::move(finished)](bool ready) mutable {
         if (!ready) {
             finished(false);
@@ -990,6 +994,7 @@ void Reader::preparePresentation(std::function<void(bool)> finished)
 
 void Reader::prepareAnnotationPresentation(std::function<void(bool)> finished)
 {
+    DiagnosticOperation setup("reader-annotation-presentation");
     syncMarkupRequest();
     if (annotationRequest.saved.isEmpty()) {
         finished(true);

@@ -7,6 +7,7 @@
 #include "reading/text_presets.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
+#include "support/diagnostics.h"
 #include "ui/controls/text.h"
 #include "ui/style/styles.h"
 #include "ui/dialogs/action_menu.h"
@@ -733,6 +734,7 @@ void Reader::startTextPresetPrerender()
 
 void Reader::prepareTextPresetPresentation(std::function<void()> finished)
 {
+    DiagnosticOperation setup("reader-text-preset-presentation");
     // A preview that cannot be drawn in this time must not keep the book
     // closed. What is left is drawn after the first page, as before. The
     // previews wait for the pages beside the first one, which a slow
@@ -763,6 +765,7 @@ void Reader::resumeTextPresetPrerender()
 
 void Reader::prerenderTextPresets()
 {
+    DiagnosticOperation setup("reader-text-preset-prerender");
     // Landscape has no presets bar, so no All.
     if (closing || exitPending || lifecycleHidden || textPresetGallery || !textPresetProbeHost
         || width() > height()) {
@@ -779,6 +782,7 @@ void Reader::prerenderTextPresets()
     {
         // A child added to or removed from the reader repaints the page,
         // so the probe lives in a hidden holder made with the window.
+        DiagnosticOperation setup("reader-text-preset-probe");
         TextPresetGallery probe(textPresetProbeHost);
         probe.setGeometry(textPresetGalleryBounds());
         // The presets decide whether the pager shows, so lay out after them.

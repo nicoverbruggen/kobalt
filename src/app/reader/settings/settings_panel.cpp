@@ -2481,7 +2481,8 @@ void SettingsPanel::showDictionaries(bool visible)
 
 void SettingsPanel::updateFeatureOptions()
 {
-    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync", "words" };
+    const char *names[] = { "navigate", "stats", "annotations",    "bookmarks",
+                            "kosync",   "words", "highlight_links" };
     static_assert(sizeof(names) == sizeof(features::keys), "A feature without a name");
     QStringList hidden;
     for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i)
@@ -2519,7 +2520,14 @@ void SettingsPanel::showDisabledFeatures()
     card->heading(strings::get("settings.disable_features"),
                   strings::get("settings.disable_features_description"));
     auto draft = std::make_shared<QJsonObject>(featurePreferences);
-    const char *names[] = { "navigate", "stats", "annotations", "bookmarks", "kosync", "words" };
+    const char *names[] = { "navigate", "stats", "annotations",    "bookmarks",
+                            "kosync",   "words", "highlight_links" };
+    const ui::ControlIcon icons[] = { ui::ControlIcon::Compass,  ui::ControlIcon::Graph,
+                                      ui::ControlIcon::Annotate, ui::ControlIcon::Bookmark,
+                                      ui::ControlIcon::Sync,     ui::ControlIcon::Note,
+                                      ui::ControlIcon::Link };
+    static_assert(sizeof(icons) / sizeof(*icons) == sizeof(names) / sizeof(*names),
+                  "A feature without an icon");
     QVector<ui::DescribedOption *> options;
     for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i) {
         const auto *key = features::keys[i];
@@ -2528,6 +2536,10 @@ void SettingsPanel::showDisabledFeatures()
                                        strings::get(prefix.toUtf8().constData()),
                                        strings::get((prefix + "_description").toUtf8().constData()),
                                        i == 0);
+        auto presentation = option->presentation();
+        presentation.leadingIndicator = false;
+        option->setPresentation(presentation);
+        option->setLeadingIcon(icons[i]);
         option->setChecked(draft->value(key).toBool(false));
         rows->addWidget(option);
         options.append(option);

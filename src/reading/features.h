@@ -2,11 +2,12 @@
 #include <QJsonObject>
 
 namespace kobalt::features {
-inline constexpr const char *keys[] = { "disable_navigate",    "disable_stats",
-                                        "disable_annotations", "disable_bookmarks",
-                                        "disable_kosync",      "disable_words" };
+inline constexpr const char *keys[] = { "disable_navigate",       "disable_stats",
+                                        "disable_annotations",    "disable_bookmarks",
+                                        "disable_kosync",         "disable_words",
+                                        "disable_highlight_links" };
 
-enum Feature { Navigate, Stats, Annotations, Bookmarks, Kosync, Words };
+enum Feature { Navigate, Stats, Annotations, Bookmarks, Kosync, Words, HighlightLinks };
 
 inline bool enabled(const QJsonObject &preferences, Feature feature)
 {

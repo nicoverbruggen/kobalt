@@ -8514,13 +8514,29 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks the direct link-tap choices: footnote and website routing, target sizes, page-tap priority and link reveal.
-    void tappableLinks_data() { bookmarks_data(); }
+    void tappableLinks_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("hideHighlightLinks");
+        for (bool dark : { false, true })
+            for (bool hidden : { false, true })
+                QTest::newRow(qPrintable(
+                        QString("%1-%2").arg(dark ? "dark" : "light", hidden ? "hidden" : "shown")))
+                        << dark << hidden;
+    }
 
+    // Checks direct taps and long presses in every link mode, with link discovery shown or hidden.
     void tappableLinks()
     {
         QFETCH(bool, dark);
+        QFETCH(bool, hideHighlightLinks);
         Fixture fixture(dark);
         QVERIFY(fixture.prepared);
+        if (hideHighlightLinks) {
+            auto preferences = storage::readJson(fixture.paths.preferences());
+            preferences["disable_highlight_links"] = true;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        }
         QVERIFY(writeBook(fixture.directory.path(), "direct.epub", test::linkBook()));
         const auto path = fixture.directory.path() + "/direct.epub";
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -8544,6 +8560,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(fixture.press("rrPage"));
             QTRY_VERIFY(fixture.visible("rrSettings"));
             QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(!fixture.visible("rrScrubberLinks"));
+            QVERIFY(!fixture.visible("rrLinkDiscovery"));
             QVERIFY(fixture.press("rrSettingsControls"));
             auto *linkRow = fixture.widget("rrTappableLinks");
             QVERIFY(linkRow);
@@ -8618,14 +8636,23 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             const auto note = fixture.linkPoint(path, "short note");
             QVERIFY(fixture.selectWord(page, note));
             QTRY_VERIFY(fixture.visible("rrSelectionLink"));
-            QVERIFY(fixture.press("rrAnnotationCancel"));
-            // Manual reveal still includes ordinary links with the persistent option off or footnotes-only.
+            QVERIFY(fixture.press("rrSelectionLink"));
+            QTRY_VERIFY(fixture.visible("rrLinkPanel"));
+            QVERIFY(fixture.press("rrLinkClose"));
+            QTRY_VERIFY(!fixture.visible("rrLinkPanel"));
+            // Hiding discovery is independent of direct taps and long presses.
             QVERIFY(fixture.press("rrPage"));
-            QTRY_VERIFY(fixture.visible("rrScrubberLinks"));
-            QVERIFY(fixture.press("rrScrubberLinks"));
-            QVERIFY(fixture.click(page, fixture.linkPoint(path, "website")));
-            QTRY_VERIFY(fixture.visible("rrBrowserConfirmation"));
-            QVERIFY(fixture.press("rrLinkNo"));
+            QTRY_VERIFY(fixture.visible("rrControlsTop"));
+            QCOMPARE(fixture.visible("rrScrubberLinks"), !hideHighlightLinks);
+            if (hideHighlightLinks) {
+                QVERIFY(!fixture.visible("rrLinkDiscovery"));
+                QVERIFY(fixture.press("rrPage"));
+            } else {
+                QVERIFY(fixture.press("rrScrubberLinks"));
+                QVERIFY(fixture.click(page, fixture.linkPoint(path, "website")));
+                QTRY_VERIFY(fixture.visible("rrBrowserConfirmation"));
+                QVERIFY(fixture.press("rrLinkNo"));
+            }
             QCOMPARE(fixture.state().value("position"), origin);
         }
         // Direct links also win over normal tap zones, but annotation mode keeps its input.
@@ -9879,16 +9906,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     {
         Fixture fixture;
         QVERIFY(fixture.prepared);
+        QVERIFY(writeBook(fixture.directory.path(), "links.epub", test::linkBook()));
+        const auto path = fixture.directory.path() + "/links.epub";
         auto saved = storage::readJson(fixture.paths.preferences());
         saved["default_menu_view"] = "stats";
         saved["dense_stats_chart"] = true;
         saved["navigation_bar_buttons"] = "pages";
         QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
-        const char *keys[] = { "disable_navigate",  "disable_stats",  "disable_annotations",
-                               "disable_bookmarks", "disable_kosync", "disable_words" };
+        const char *keys[] = { "disable_navigate",       "disable_stats",  "disable_annotations",
+                               "disable_bookmarks",      "disable_kosync", "disable_words",
+                               "disable_highlight_links" };
         for (int pass = 0; pass < 2; ++pass) {
             QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
-            fixture.window.openBook(book);
+            fixture.window.openBook(path);
             QTRY_COMPARE(opened.count(), 1);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             QVERIFY(fixture.press("rrPage"));
@@ -9897,18 +9927,20 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(!fixture.visible("rrNavStats"));
                 QVERIFY(!fixture.visible("rrAnnotate"));
                 QVERIFY(!fixture.visible("rrBookmarks"));
+                QVERIFY(!fixture.visible("rrScrubberLinks"));
             }
             QVERIFY(fixture.press("rrSettings"));
             QVERIFY(fixture.press("rrSettingsSystem"));
             QVERIFY(revealSettingsOption(fixture, "rrDisabledFeatures"));
             auto *featuresButton =
                     static_cast<ui::CaptionButton *>(fixture.widget("rrDisabledFeatures"));
-            const QString allHidden = "Navigation, Stats, Annotations, Bookmarks, KOSync, My Words";
+            const QString allHidden =
+                    "Navigation, Stats, Annotations, Bookmarks, KOSync, My Words, Highlight links";
             QCOMPARE(featuresButton->caption(), pass ? allHidden : QString("None"));
             QVERIFY(fixture.press("rrDisabledFeatures"));
             QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
             if (!pass) {
-                QVERIFY(fixture.press("rrDisableFeature_disable_stats"));
+                QVERIFY(fixture.press("rrDisableFeature_disable_highlight_links"));
                 QVERIFY(fixture.press("rrDisabledFeaturesCancel"));
                 QTRY_VERIFY(!fixture.widget("rrDisabledFeaturesPopup"));
                 QCOMPARE(featuresButton->caption(), QString("None"));
@@ -9938,6 +9970,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(fixture.visible("rrNavStats"), pass == 1);
             QCOMPARE(fixture.visible("rrAnnotate"), pass == 1);
             QCOMPARE(fixture.visible("rrBookmarks"), pass == 1);
+            QCOMPARE(fixture.visible("rrScrubberLinks"), pass == 1);
             const auto preferences = storage::readJson(fixture.paths.preferences());
             QCOMPARE(preferences.value("default_menu_view").toString(), QString("none"));
             QVERIFY(!preferences.value("dense_stats_chart").toBool());

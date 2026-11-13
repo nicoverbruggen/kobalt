@@ -1595,6 +1595,8 @@
 "dictionary_panel.actions" = "Lookup actions";
 "features.words" = "My Words";
 "features.words_description" = "Hides the Words tab, the dictionary's save button and My Words in the Library. Lookups are no longer saved; saved words are kept.";
+"features.highlight_links" = "Highlight links";
+"features.highlight_links_description" = "Hides the Highlight links button and link count in the reading menu. Link taps and long presses still work.";
 "words.no_entry" = "No dictionary entry · Added by you";
 "words.no_entry_detail" = "The dictionary had no entry for this word. You added it to My Words yourself.";
 

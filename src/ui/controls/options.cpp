@@ -295,10 +295,14 @@ void DescribedOption::paintEvent(QPaintEvent *)
     if (leadingIcon >= 0) {
         // The same place as a list action row's icon, balancing its bearings.
         const int size = metrics::chrome::cellIcon;
-        controlIcon(ControlIcon(leadingIcon), ink)
-                .paint(&painter,
-                       QRect(textLeft - iconSpace() - px(7), (height() - size) / 2 + px(1), size,
-                             size));
+        const QRect bounds(textLeft - iconSpace() - px(7), (height() - size) / 2 + px(1), size,
+                           size);
+        const auto icon = controlIcon(ControlIcon(leadingIcon), ink);
+        // Annotate uses the same custom painter as the navigation tabs.
+        if (icon.isNull())
+            paintOpeningIcon(painter, ControlIcon(leadingIcon), bounds, ink);
+        else
+            icon.paint(&painter, bounds);
     }
     painter.setPen(ink);
     QFont labelFont = font();

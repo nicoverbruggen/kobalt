@@ -2105,9 +2105,10 @@ void Reader::syncLinkDiscovery()
 {
     if (!linkDiscovery)
         return;
-    const bool blocked = annotationMode || session->busy() || lifecycleHidden || closing
-            || services.suspended() || sheetOpen() || readingToolOpen() || positionPromptOpen()
-            || menu->isVisible() || bookmarkList->isVisible();
+    const bool blocked = !features::enabled(preferences, features::HighlightLinks) || annotationMode
+            || session->busy() || lifecycleHidden || closing || services.suspended() || sheetOpen()
+            || readingToolOpen() || positionPromptOpen() || menu->isVisible()
+            || bookmarkList->isVisible();
     if (blocked
         || (revealingLinks && revealedPosition != session->state().value("position").toString()))
         hideRevealedLinks();

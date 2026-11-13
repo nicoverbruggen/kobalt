@@ -28,7 +28,9 @@ Confirmation and notice dialogs use the same patterned backdrop as settings choi
 
 ## Hide unneeded features
 
-System > User Interface > Hidden features shows the hidden feature names, or None. It opens the Hide unneeded features checklist for Navigation, Stats, annotations, bookmarks and KOSync. Done accepts the checklist; Cancel or tapping outside discards its changes. Accepted items are hidden when Settings closes. The remaining toolbar actions and tabs fill the available space. Navigate and Stats choices also disappear from the default menu view selector. An incompatible default menu view resets to None; related feature options return to their defaults. Unchecking an item restores its UI.
+System > User Interface > Hidden features shows the hidden feature names, or None. It opens the Hide unneeded features checklist for Navigation, Stats, annotations, bookmarks, KOSync, My Words and Highlight links. Each row shows the feature icon on the left and its checkbox on the right. Tapping anywhere on the row toggles the checkbox. Done accepts the checklist; Cancel or tapping outside discards its changes. Accepted items are hidden when Settings closes. The remaining toolbar actions and tabs fill the available space. Navigate and Stats choices also disappear from the default menu view selector. An incompatible default menu view resets to None; related feature options return to their defaults. Unchecking an item restores its UI.
+
+Hiding Highlight links removes its reading-menu button and link count. Link taps still follow the Tappable links choice, and long presses still offer Follow link. Unchecking Highlight links restores the button on pages with links.
 
 Bookmarks and annotations stay saved. Existing highlighted text stays visible, but annotation controls are hidden. Bookmark ribbons, pins and corner taps are hidden with bookmarks. Stats visibility does not change reading history or time estimates. KOSync is different: checking it cancels active sync work and stops manual, opening, periodic, sleep, wake and closing syncs. The account is retained. Kobo’s own sync is unaffected.
 

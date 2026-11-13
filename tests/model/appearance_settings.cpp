@@ -181,6 +181,8 @@ int main()
                                            { "disable_annotations", true },
                                            { "disable_bookmarks", true },
                                            { "disable_words", true },
+                                           { "disable_highlight_links", true },
+                                           { "tappable_links", "all" },
                                            { "save_looked_up_words", false },
                                            { "default_menu_view", "stats" },
                                            { "dense_stats_chart", true },
@@ -194,6 +196,8 @@ int main()
                     && !hiddenFeatures.contains("minimal_annotation_mode")
                     && !hiddenFeatures.contains("marks_sort")
                     && !hiddenFeatures.contains("save_looked_up_words")
+                    && !features::enabled(hiddenFeatures, features::HighlightLinks)
+                    && hiddenFeatures.value("tappable_links") == "all"
                     && hiddenFeatures.value("future_option").toInt() == 42,
             "Hidden features retained incompatible options or lost unrelated preferences");
     // My Words shares the bookmarks' sort order, so it keeps the order alone.

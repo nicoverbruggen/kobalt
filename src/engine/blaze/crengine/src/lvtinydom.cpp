@@ -334,6 +334,16 @@ void enableCacheFileContentsValidation(bool enable) {
 static int _nextDocumentIndex = 0;
 ldomDocument * ldomNode::_documentInstances[MAX_DOCUMENT_INSTANCE_COUNT] = {NULL,};
 
+int ldomNode::koblazeFreeDocumentSlots()
+{
+    int count = 0;
+    for ( int i=0; i<MAX_DOCUMENT_INSTANCE_COUNT; i++ ) {
+        if ( _documentInstances[i]==NULL )
+            count++;
+    }
+    return count;
+}
+
 /// adds document to list, returns ID of allocated document, -1 if no space in instance array
 int ldomNode::registerDocument( ldomDocument * doc )
 {

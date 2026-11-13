@@ -528,6 +528,14 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
             *error = detail.isEmpty() ? strings::get(reason) : detail;
         return false;
     };
+#if __has_include(<koblaze.h>)
+    // The engine has room for 16 documents. A load makes its own and, one
+    // at a time, short-lived ones for the package files. A document made
+    // without room would share the nodes of another one.
+    if (ldomDocument::koblazeFreeDocumentSlots() < 3)
+        return fail(OpeningFailureKind::Io,
+                    strings::key("error.the_reading_engine_could_not_open_this_epub"));
+#endif
     openingTimes_ = {};
     QElapsedTimer phase;
     phase.start();

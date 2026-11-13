@@ -933,6 +933,7 @@ private:
 
     /// adds document to list, returns ID of allocated document, -1 if no space in instance array
     static int registerDocument( ldomDocument * doc );
+    static int koblazeFreeDocumentSlots();
     /// removes document from list
     static void unregisterDocument( ldomDocument * doc );
 
@@ -3145,6 +3146,11 @@ public:
         return rerendering_delayed;
     }
     bool partialRender( ldomNode * node );
+    /// koblaze: how many more documents can exist. The engine gives a new
+    /// document no place when there is no room, and that document then
+    /// shares the nodes of another one. A host that keeps several
+    /// documents asks first.
+    static int koblazeFreeDocumentSlots() { return ldomNode::koblazeFreeDocumentSlots(); }
 #endif
     /// create xpointer from pointer string
     ldomXPointer createXPointer( const lString32 & xPointerStr );

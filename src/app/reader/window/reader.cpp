@@ -2531,12 +2531,16 @@ void Reader::showChapters()
     for (const auto &chapter : session->chapters()) {
         const int index = items.size();
         const auto name = QString("rrChapter%1").arg(index);
-        items.append({ chapter.title, chapter.position, name, {}, chapter.depth, chapter.page });
+        // The value is the index of the entry: several entries can share a
+        // position until chapter mode loads their text.
+        items.append({ chapter.title,
+                       chapter.position.isEmpty() ? QString() : QString::number(index), name, {},
+                       chapter.depth, chapter.page });
         if (index == session->contentsSelection().current)
             current = name;
     }
-    choices->selected = [this](const QString &position) {
-        if (session->goTo(position))
+    choices->selected = [this](const QString &index) {
+        if (session->goToChapter(index.toInt()))
             dismissControls();
     };
     choosingTypography = false;

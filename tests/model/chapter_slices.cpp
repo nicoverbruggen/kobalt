@@ -439,9 +439,22 @@ int main(int argc, char **argv)
             require(listed[i].title == whole[i].title && listed[i].depth == whole[i].depth
                             && !listed[i].position.isEmpty(),
                     "Chapter mode changed a contents entry");
-        require(model.goTo(listed[2].position), "Cannot go to a contents entry of chapter mode");
+        // The id is in the middle of its spine item: the jump must land on
+        // the page of the id, as in the whole book, not on the first page.
+        require(listed[2].position != whole[2].position,
+                "The fixture needs an entry without its text");
+        require(model.goToChapter(2, listed[2].position),
+                "Cannot go to a contents entry of chapter mode");
         require(model.chapters()[2].position == whole[2].position,
                 "A loaded contents entry must point to its id");
+        const auto landed = model.pageStart(model.page());
+        EngineDocument reference(test::readerFonts());
+        open(reference, files);
+        require(reference.goTo(whole[2].position)
+                        && reference.pageStart(reference.page()) == landed,
+                "A contents entry of chapter mode must open the page of its id");
+        require(model.goTo(listed[2].position) && model.pageStart(model.page()) != landed,
+                "The fixture needs an id after the first page of its spine item");
     }
 
     std::printf(

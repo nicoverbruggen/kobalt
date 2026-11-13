@@ -1662,6 +1662,20 @@ QVector<ChapterLink> EngineDocument::chapters() const
     return chapterIndex(contentsIndex_, contents_, contents_.isEmpty()).links;
 }
 
+bool EngineDocument::goToChapter(int index, const QString &position)
+{
+    if (!goTo(position))
+        return false;
+    // In chapter mode an entry with an id in a spine item without its text
+    // points to the start of that spine item. With the text loaded, the
+    // entry has the place of its id.
+    const auto list = chapters();
+    if (index < 0 || index >= list.size() || list[index].position.isEmpty()
+        || list[index].position == position)
+        return true;
+    return goTo(list[index].position);
+}
+
 quint64 EngineDocument::layoutSignature() const
 {
     if (!engine_)

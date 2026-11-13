@@ -931,7 +931,7 @@ void Reader::buildBottomControls()
                                 session->chapterTitle().toUpper() };
         session->cancelPagePreview();
         pageScrubber->beginNavigation();
-        if (session->goTo(chapters[chapter].position))
+        if (session->goToChapter(chapter))
             pendingPassage = origin;
         else
             pageScrubber->showCurrentPage();

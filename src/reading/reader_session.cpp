@@ -958,6 +958,21 @@ bool ReaderSession::goTo(const QString &anchor)
     if (anchor.isEmpty())
         return false;
     destination = anchor;
+    chapterTarget = -1;
+    pageDelta = 0;
+    pageTarget = -1;
+    fractionTarget = -1;
+    request();
+    return true;
+}
+
+bool ReaderSession::goToChapter(int index)
+{
+    const auto list = chapters();
+    if (index < 0 || index >= list.size() || list[index].position.isEmpty())
+        return false;
+    destination = list[index].position;
+    chapterTarget = index;
     pageDelta = 0;
     pageTarget = -1;
     fractionTarget = -1;
@@ -2397,6 +2412,7 @@ void ReaderSession::dispatch(bool pageTurn)
     const auto chapterMode = desiredChapterMode;
     const auto size = desiredSize;
     const auto anchor = std::exchange(destination, {});
+    const int chapter = std::exchange(chapterTarget, -1);
     const auto delta = std::exchange(pageDelta, 0);
     const auto target = std::exchange(pageTarget, -1);
     const double fraction = std::exchange(fractionTarget, -1.0);
@@ -2444,7 +2460,7 @@ void ReaderSession::dispatch(bool pageTurn)
         diagnostic("render-queued", { { "render_id", double(job) }, { "delta", delta } }, false);
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, requested, chapterMode, size, anchor, delta, target, fraction, job,
+            [guard, engine, requested, chapterMode, size, anchor, chapter, delta, target, fraction, job,
              lease, latest, progress, positions, markup, markupGeneration] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
@@ -2491,7 +2507,9 @@ void ReaderSession::dispatch(bool pageTurn)
                     appearanceChanged = !unchanged
                             && (modeChanged || !appearance::same(before, engine->state())
                                 || oldSize != engine->viewport());
-                    if (!anchor.isEmpty() && !engine->goTo(anchor))
+                    if (!anchor.isEmpty()
+                        && !(chapter >= 0 ? engine->goToChapter(chapter, anchor)
+                                          : engine->goTo(anchor)))
                         result.error = strings::get("error.could_not_find_that_passage");
                     else if (target >= 0)
                         engine->go(target);

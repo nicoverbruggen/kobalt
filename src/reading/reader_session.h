@@ -186,6 +186,8 @@ public:
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
+    // Goes to the entry `index` of chapters(). See Engine::goToChapter().
+    bool goToChapter(int index);
     // Goes to about `fraction` of the whole book, from 0 to 1. With only a
     // part of the book laid out, the engine lays out the text there first.
     bool goToFraction(double fraction);
@@ -506,6 +508,8 @@ private:
     appearance::SavedInput originalAppearance;
     QSize desiredSize;
     QString destination;
+    // The entry of chapters() that `destination` is, or -1.
+    int chapterTarget = -1;
     int pageDelta = 0;
     int pageTarget = -1;
     // A part of the whole book to go to, from 0 to 1, or negative.

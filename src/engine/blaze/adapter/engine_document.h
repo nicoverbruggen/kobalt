@@ -308,6 +308,7 @@ public:
     QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
                       QString *usedPath = nullptr) const override;
     QVector<ChapterLink> chapters() const override;
+    bool goToChapter(int index, const QString &position) override;
     void setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph) override;
     QVector<ChapterLink> chapterGraph() const override;
     ChapterSelection chapterSelection(const QVector<ChapterLink> &links) const override;

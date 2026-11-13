@@ -84,6 +84,18 @@ struct ReaderLocationProbe
 
     static const LVDocView *view(const EngineDocument &model) { return model.engine_.get(); }
 
+    // The document whose pages the background count lays out, and the first
+    // character of its slice.
+    static const LVDocView *countingView(const EngineDocument &model)
+    {
+        return model.counting_ ? model.counting_->engine_.get() : nullptr;
+    }
+
+    static int countingSlice(const EngineDocument &model)
+    {
+        return model.counting_ ? model.counting_->sliceFirst_ : -1;
+    }
+
     // The document that is kept in memory for the unit that starts at `first`.
     static const LVDocView *keptView(const EngineDocument &model, int first)
     {
@@ -1225,9 +1237,28 @@ void countedInBackground()
     require(Probe::map(model).observations() == observed && model.roughPages().pagesEstimated,
             "A stopped count gave pages");
 
+    // A step that stops in a later slice of a long chapter loses only that
+    // slice. The chapter stays, with the slices that were counted, and the
+    // next step lays out the stopped slice again.
+    int steps = 0;
+    while (Probe::countingSlice(model) <= 0 && model.countPages({}) && steps < 10000)
+        ++steps;
+    const auto *counting = Probe::countingView(model);
+    const int slice = Probe::countingSlice(model);
+    const int before = Probe::map(model).observations();
+    require(counting && slice > 0, "The fixture needs a chapter that is counted in slices");
+    for (int i = 0; i < 5; ++i)
+        require(model.countPages([] { return false; }), "A stopped count has more to do");
+    require(Probe::countingView(model) == counting && Probe::map(model).observations() == before,
+            "A stopped slice must keep its chapter and count nothing");
+    require(model.countPages({}) && Probe::countingView(model) == counting
+                    && Probe::map(model).observations() == before + 1
+                    && Probe::countingSlice(model) > slice,
+            "The next step must count the slice that was stopped");
+    ++steps;
+
     // The spine items up to the page come first. With them the page is the
     // real one, while the total is still the estimate.
-    int steps = 0;
     while (Probe::map(model).adopted() == 0 && model.countPages({}) && steps < 10000)
         ++steps;
     const auto early = model.roughPages();

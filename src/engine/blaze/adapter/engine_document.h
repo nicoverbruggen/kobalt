@@ -435,6 +435,10 @@ private:
     QString countingKey_;
     QSize countingSize_;
     int countingItem_ = -1;
+    // The first character of a slice of `counting_` whose layout was
+    // stopped, or -1. The next step lays out that slice again; the slices
+    // before it keep their count.
+    int countingNext_ = -1;
     QSet<int> uncounted_;
     // Shows the real pages of the counted spine items up to the page.
     void adoptCounted();

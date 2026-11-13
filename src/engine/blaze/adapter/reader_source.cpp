@@ -1184,6 +1184,7 @@ void EngineDocument::dropSideDocuments()
 {
     ahead_.reset();
     counting_.reset();
+    countingNext_ = -1;
     kept_.clear();
 }
 
@@ -1212,6 +1213,7 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
     if (key != countingKey_ || size_ != countingSize_) {
         // Another page: the counts so far were for the old one.
         counting_.reset();
+        countingNext_ = -1;
         kept_.clear();
         uncounted_.clear();
         countingKey_ = key;
@@ -1249,32 +1251,37 @@ bool EngineDocument::countPages(const std::function<bool()> &current)
         // item of a unit as a whole.
         counting_ = openSide(settings, current, nullptr);
         countingItem_ = item;
+        countingNext_ = -1;
         countingSettings_ = settings;
         if (!counting_ && (!current || current()))
             uncounted_.insert(item);
         return true;
     }
     auto *side = counting_.get();
-    if (side->slices() && side->sliceEnd_ < side->spineItemText()) {
+    if (countingNext_ >= 0 || (side->slices() && side->sliceEnd_ < side->spineItemText())) {
+        const int next = countingNext_ >= 0 ? countingNext_ : side->sliceEnd_;
         side->sliceInterrupt_ = [&current] { return current && !current(); };
         bool laidOut = false;
         try {
-            laidOut = side->layoutSlice(side->sliceEnd_);
+            laidOut = side->layoutSlice(next);
         } catch (const KoblazeRenderCancelled &) {
             koblazeSetSpineWindow(-1, -1);
-            counting_.reset();
-            return true;
+            laidOut = false;
         }
         side->sliceInterrupt_ = nullptr;
-        if (current && !current()) {
-            // A stopped layout is not a count. The spine item starts again.
-            counting_.reset();
+        if (laidOut) {
+            countingNext_ = -1;
             return true;
         }
-        if (!laidOut) {
-            uncounted_.insert(countingItem_);
-            counting_.reset();
+        if (side->layoutInterrupted() || (current && !current())) {
+            // A stopped layout is not a count. Only this slice is laid out
+            // again: the slices before it keep theirs.
+            countingNext_ = next;
+            return true;
         }
+        uncounted_.insert(countingItem_);
+        counting_.reset();
+        countingNext_ = -1;
         return true;
     }
     // The counted document stays in memory while there is room.
@@ -1323,6 +1330,7 @@ bool EngineDocument::adoptAhead(int first, int last)
     countingKey_ = std::move(old->countingKey_);
     countingSize_ = old->countingSize_;
     countingItem_ = old->countingItem_;
+    countingNext_ = old->countingNext_;
     countingSettings_ = std::move(old->countingSettings_);
     uncounted_ = std::move(old->uncounted_);
     kept_ = std::move(old->kept_);

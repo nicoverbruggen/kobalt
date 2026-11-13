@@ -1,5 +1,7 @@
 #include "private_functions.h"
 #include "hooks.h"
+#include "platforms/kobo/nickel-fixes/wifi-idle/wifi_idle.h"
+#include "platforms/kobo/nickel-fixes/wifi-idle/wifi_idle_log.h"
 #include "platforms/kobo/common/native_event_history.h"
 #include "platforms/kobo/common/native_tile_cover.h"
 #include "touch_rotation.h"
@@ -34,6 +36,20 @@ bool firmwareSupported()
 
 using namespace kobalt::nickel_qt5;
 static nh_hook readerHooks[] = {
+#ifdef KOBALT_WIFI_IDLE_DIAGNOSTICS
+    { .sym = "_ZN15WirelessManager3offEv",
+      .sym_new = "kobalt_wifi_idle_off",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nickel::nativeWifiIdleOff),
+      .desc = "Observe physical Wi-Fi shutdown in diagnostic comparisons",
+      .optional = true },
+#endif
+    { .sym = "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv",
+      .sym_new = "kobalt_wireless_idle_predicate",
+      .lib = "libnickel.so.1.0.0",
+      .out = nh_symoutptr(kobalt::nickel::nativeWirelessIdlePredicate),
+      .desc = "Correct the Bluetooth-off Wi-Fi idle delay on verified Qt5 firmware",
+      .optional = true },
     { .sym = "_ZN5Event12setExtraDataE4QMapI7QString8QVariantE",
       .sym_new = "kobalt_event_set_extra_data",
       .lib = "libnickel.so.1.0.0",

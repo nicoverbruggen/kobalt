@@ -28,6 +28,12 @@ file(GLOB kobo_adapter_sources ${kobo_glob_options}
     "${kobo_directory}/common/*.cpp" "${kobo_directory}/common/*.h"
     "${kobo_directory}/nickel-qt${KOBALT_QT_MAJOR}/*.cpp" "${kobo_directory}/nickel-qt${KOBALT_QT_MAJOR}/*.h"
     "${kobo_directory}/display/*.cpp")
+if(KOBALT_QT_MAJOR EQUAL 5)
+    file(GLOB kobo_wifi_idle_sources ${kobo_glob_options}
+        "${kobo_directory}/nickel-fixes/wifi-idle/*.cpp"
+        "${kobo_directory}/nickel-fixes/wifi-idle/*.h")
+    list(APPEND kobo_adapter_sources ${kobo_wifi_idle_sources})
+endif()
 set(kobo_c_sources "${kobo_directory}/common/install.c" "${kobo_directory}/common/startup_recovery.c")
 # NickelHook's loader, linked into the mod library only.
 set(kobo_hooks "${kobo_directory}/toolchains/nickelhook-qt6")
@@ -75,7 +81,11 @@ set(kobo_event_history_test_sources "${kobo_pewter}/event_history.cpp")
 set(kobo_custom_pins_test_sources "${KOBALT_ROOT}/tests/model/custom_pins.cpp")
 set(kobo_custom_pins_test_definitions
     KOBALT_TEST_CUSTOM_PIN_SVG=\"${KOBALT_ROOT}/tests/fixtures/custom-pins/cat.svg\")
-set(kobo_test_sources ${kobo_progress_test_sources} ${kobo_keyboard_test_sources}
+set(kobo_wifi_idle_test_sources "")
+if(KOBALT_QT_MAJOR EQUAL 5)
+    set(kobo_wifi_idle_test_sources "${kobo_pewter}/wifi_idle.cpp")
+endif()
+set(kobo_test_sources ${kobo_wifi_idle_test_sources} ${kobo_progress_test_sources} ${kobo_keyboard_test_sources}
     ${kobo_native_ui_test_sources} ${kobo_tile_cover_test_sources} ${kobo_event_history_test_sources}
     ${kobo_custom_pins_test_sources})
 # The Qt5 refresh test fakes the display driver call itself. It compiles its

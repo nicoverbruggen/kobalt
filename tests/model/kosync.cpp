@@ -395,7 +395,11 @@ void failureChecks(const QString &path)
     auto done = [&](QString value) { error = value; };
     client.login("https://fixture.invalid/private-prefix", "PRIVATE-SENTINEL", "PRIVATE-SENTINEL",
                  done);
+    require(kosync::networkInUse(0),
+            "an active KOSync request holds the native Wi-Fi idle correction");
     wait(client);
+    require(!kosync::networkInUse(0) && kosync::networkInUse(120000),
+            "a completed KOSync request starts a fresh native Wi-Fi idle window");
     require(error.isEmpty(), "diagnostic fixture signs in");
     const QByteArray document(32, 'b');
     const kosync::Progress progress{ "PRIVATE-SENTINEL", "PRIVATE-SENTINEL", "PRIVATE-SENTINEL",

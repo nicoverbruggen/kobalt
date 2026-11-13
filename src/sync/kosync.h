@@ -23,6 +23,9 @@ bool validLogin(const QString &server, const QString &username, const QString &p
 // reaches the network. The saved setting and manual syncs are unchanged.
 void pauseAutomatic(bool paused);
 bool automaticPaused();
+// GUI thread only. Includes DNS, retries, transfers and recent completions.
+// Native idle handling must not remove a connection that KOSync is using.
+bool networkInUse(int idleMilliseconds);
 // For the scenario player: clients created afterwards use this account
 // instead of the saved one and never write it. An empty object restores the
 // saved account. Call on the GUI thread.

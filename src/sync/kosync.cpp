@@ -16,6 +16,7 @@
 #include "support/diagnostics.h"
 #include <QSaveFile>
 #include <QTimer>
+#include <QSet>
 #include <QUuid>
 #include <atomic>
 #include <cmath>
@@ -24,6 +25,30 @@
 namespace kobalt::kosync {
 namespace {
 std::atomic_bool paused{ false };
+
+struct NetworkUse
+{
+    QSet<const Client *> clients;
+    QElapsedTimer activity;
+
+    NetworkUse() { activity.invalidate(); }
+};
+
+NetworkUse &networkUse()
+{
+    static NetworkUse use;
+    return use;
+}
+} // namespace
+
+bool networkInUse(int idleMilliseconds)
+{
+    const auto &use = networkUse();
+    for (const auto *client : use.clients) {
+        if (client->busy())
+            return true;
+    }
+    return use.activity.isValid() && use.activity.elapsed() < idleMilliseconds;
 }
 
 void pauseAutomatic(bool value)
@@ -270,6 +295,7 @@ Client::Client(QString accountPath, QObject *parent, QNetworkAccessManager *netw
       network_(network ? network : &ownedNetwork_),
       lookup_(lookup)
 {
+    networkUse().clients.insert(this);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     if (!lookup_ && !network)
         lookup_ = &ownedLookup_;
@@ -342,10 +368,13 @@ void Client::observeNetworkState()
 Client::~Client()
 {
     cancel();
+    networkUse().clients.remove(this);
 }
 
 void Client::cancel()
 {
+    if (busy())
+        networkUse().activity.start();
     if (lookup_)
         lookup_->cancel();
     retryTimer_.stop();
@@ -591,6 +620,7 @@ void Client::request(const QByteArray &method, const QString &path, const QUrl &
         done(0, {}, message("kosync.busy"));
         return;
     }
+    networkUse().activity.start();
     requestElapsed_.start();
     requestAttempt(method, path, server, username, key, body, std::move(done),
                    retryTransient ? 0 : 3);
@@ -741,6 +771,7 @@ void Client::sendRequest(const QByteArray &method, const QString &path, const QU
                 timeout->stop();
                 drain();
                 reply_ = nullptr;
+                networkUse().activity.start();
                 reply->deleteLater();
                 const int status =
                         reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

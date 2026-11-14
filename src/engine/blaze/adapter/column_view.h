@@ -1,6 +1,7 @@
 #pragma once
 #include <lvdocview.h>
 #include <QtGlobal>
+#include <memory>
 
 namespace kobalt {
 // Keep CREngine's pagination at one column. Public page numbers refer to whole
@@ -9,6 +10,21 @@ class ColumnView final : public LVDocView
 {
 public:
     ColumnView() : LVDocView(32, true) { }
+
+    struct CallbackTarget
+    {
+        ColumnView *view;
+    };
+
+    ~ColumnView() override
+    {
+        callbackTarget_->view = nullptr;
+        setCallback(nullptr);
+    }
+
+    // Callback guards follow the view when its owner moves, and can detach
+    // safely when a failed opening destroys the view before the guard exits.
+    const std::shared_ptr<CallbackTarget> &callbackTarget() const { return callbackTarget_; }
 
     void setColumns(int count) { columns = count; }
 
@@ -205,6 +221,8 @@ private:
     int columns = 1, width = 1, gutter = 0, spacing = 0, overflow = 0;
     bool hangingPunctuation = false;
     int viewportWidth = 1, viewportHeight = 1, sideMargin = 0;
+    const std::shared_ptr<CallbackTarget> callbackTarget_ =
+            std::make_shared<CallbackTarget>(CallbackTarget{ this });
     lvRect margins;
 
     struct Position

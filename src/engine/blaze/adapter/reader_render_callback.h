@@ -4,23 +4,28 @@
 #include "column_view.h"
 
 namespace kobalt {
-// The engine retains a raw callback pointer. Detach it on every exit, including
-// failures that destroy the engine before this guard leaves scope.
+// The engine retains a raw callback pointer. Restore the previous callback
+// on the same view, even when a chapter change moves its unique owner.
 class OpeningCallback : public LVDocViewCallback
 {
 public:
     OpeningCallback(std::unique_ptr<ColumnView> &engine, OpeningProgress progress,
                     std::function<bool()> interrupt = {})
-        : engine(engine), progress(std::move(progress)), interrupt(std::move(interrupt))
+        : target(engine->callbackTarget()),
+          progress(std::move(progress)),
+          interrupt(std::move(interrupt))
     {
-        engine->setCallback(this);
+        previous = engine->setCallback(this);
     }
 
     ~OpeningCallback() override
     {
-        if (engine)
-            engine->setCallback(nullptr);
+        if (auto *view = target->view; view && view->getCallback() == this)
+            view->setCallback(previous);
     }
+
+    OpeningCallback(const OpeningCallback &) = delete;
+    OpeningCallback &operator=(const OpeningCallback &) = delete;
 
     void OnLoadFileProgress(int percent) override { report(OpeningStage::Text, percent); }
 
@@ -38,7 +43,8 @@ public:
 #endif
 
 private:
-    std::unique_ptr<ColumnView> &engine;
+    std::shared_ptr<ColumnView::CallbackTarget> target;
+    LVDocViewCallback *previous = nullptr;
     OpeningProgress progress;
     std::function<bool()> interrupt;
 

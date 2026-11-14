@@ -2,6 +2,7 @@
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/engine.h"
+#include "engine/blaze/adapter/reader_render_callback.h"
 #include <QGuiApplication>
 #include <cstdio>
 
@@ -53,6 +54,41 @@ void open(Engine &engine, const test::BookFiles &files)
             qPrintable(error));
 }
 
+// Chapter changes can retain a view after its opening callback leaves scope.
+// The callback belongs to that view, even after its unique owner moves.
+void callbacksFollowViews()
+{
+    const auto book = createEngine(test::readerFonts());
+    open(*book, test::engineBook());
+    auto view = std::make_unique<ColumnView>();
+    std::unique_ptr<ColumnView> retained;
+    {
+        OpeningCallback callback(view, {});
+        retained = std::move(view);
+    }
+    require(!retained->getCallback(), "A retained view kept a dead opening callback");
+
+    view = std::make_unique<ColumnView>();
+    // Reusing the old owner must not let the first guard clear a callback
+    // installed on a different view.
+    std::unique_ptr<OpeningCallback> replacement;
+    {
+        OpeningCallback callback(view, {});
+        retained = std::move(view);
+        view = std::make_unique<ColumnView>();
+        replacement = std::make_unique<OpeningCallback>(view, OpeningProgress{});
+    }
+    require(!retained->getCallback() && view->getCallback() == replacement.get(),
+            "A moved callback guard detached from the wrong view");
+    replacement.reset();
+
+    // A failed opening can destroy the view before its callback guard exits.
+    {
+        OpeningCallback callback(view, {});
+        view.reset();
+    }
+}
+
 // The engine that reads books today lays out the whole book, so it must
 // report every page value as exact and equal to its page numbers.
 void wholeBookPages()
@@ -90,6 +126,7 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
     queryStates();
     wholeBookPages();
+    callbacksFollowViews();
     std::printf("PASS: query states and exact page values of the whole-book engine\n");
     return 0;
 }

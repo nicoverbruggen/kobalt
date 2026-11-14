@@ -4,6 +4,7 @@
 #include "engine/blaze/adapter/column_view.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include "engine/blaze/adapter/reader_locations.h"
+#include "engine/blaze/adapter/reader_render_callback.h"
 #include "engine/blaze/adapter/reader_source.h"
 #include "publication/page_estimate.h"
 #include "render/page_content.h"
@@ -29,6 +30,20 @@ namespace kobalt {
 // Reads the spine items of an open book, for the comparison with real pages.
 struct ReaderLocationProbe
 {
+    static bool callbacksDetached(const EngineDocument &model)
+    {
+        if (model.engine_ && model.engine_->getCallback())
+            return false;
+        if (model.ahead_ && !callbacksDetached(*model.ahead_))
+            return false;
+        if (model.full_ && !callbacksDetached(*model.full_))
+            return false;
+        for (const auto &kept : model.kept_)
+            if (!callbacksDetached(*kept.document))
+                return false;
+        return true;
+    }
+
     // How many positions have their place in the text of a spine item.
     static int textPlaces(const EngineDocument &model)
     {
@@ -1230,6 +1245,53 @@ test::BookFiles pagesBook()
             "<itemref idref=\"cover.xhtml\"/><itemref idref=\"long.xhtml\"/>"
             "<itemref idref=\"plate.xhtml\"/><itemref idref=\"middle.xhtml\"/>"
             "<itemref idref=\"short1.xhtml\"/><itemref idref=\"short2.xhtml\"/>");
+}
+
+// Resolving a saved place can replace the initial chapter while its opening
+// callback is still active. Retained chapters must not keep that stack pointer.
+void savedPlaceOutsideOpeningWindow()
+{
+    const auto files = pagesBook();
+    const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
+    EngineDocument whole(test::readerFonts());
+    openResources(whole, files, settings);
+    const auto chapter = whole.chapters().last();
+    require(whole.goTo(chapter.position), "Cannot select a later chapter");
+    const auto place = whole.position();
+    auto saved = settings;
+    saved["position"] = place;
+    saved["koblaze_first_spine_item"] = 0;
+    saved["koblaze_last_spine_item"] = 0;
+    EngineDocument model(test::readerFonts());
+    model.setChapterSlices(1);
+    openResources(model, files, saved);
+    require(model.position() == place, "Opening must resolve a place outside its initial window");
+    require(ReaderLocationProbe::callbacksDetached(model),
+            "Opening left a dead callback on a retained chapter");
+    // A further jump moves the initial view from the ahead slot into the
+    // retained cache. Building the whole book clears that cache.
+    require(model.goTo(whole.chapters().at(2).position), "Cannot jump to another chapter");
+    const auto shown = model.position();
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "Cannot build the whole book after retaining a chapter");
+    require(ReaderLocationProbe::callbacksDetached(model),
+            "Background pagination retained an opening callback");
+    require(model.setChapterMode(false, appearance::Patch(settings), { 600, 800 }),
+            "Cannot replace retained chapters with the whole book");
+    require(model.position() == shown, "The whole-book handoff changed the reading position");
+    // Hybrid appearance edits return to chapter mode before changing text.
+    // Repeat the edit and whole-book handoff away from the cover.
+    for (const int pixels : { 36, 20, 28 }) {
+        const appearance::Patch next(qt::object({ { "font_pixels", pixels } }));
+        require(model.setChapterMode(true, next, { 600, 800 }),
+                "Cannot change text size in chapter mode");
+        require(model.position() == shown, "A Hybrid font change returned to another position");
+        require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+                "Cannot rebuild the whole book after a font change");
+        require(model.setChapterMode(false, next, { 600, 800 }) && model.position() == shown,
+                "The handoff after a font change moved the reading position");
+        require(Probe::callbacksDetached(model), "A font change retained a callback");
+    }
 }
 
 // Only matched, visible unsupported writing modes on this page cause a warning.
@@ -2440,6 +2502,7 @@ int main(int argc, char **argv)
         survey(QString::fromLocal8Bit(argv[1]), options);
         return 0;
     }
+    savedPlaceOutsideOpeningWindow();
     blocks();
     QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");
     require(file.open(QIODevice::ReadOnly), "Cannot read the book fixture");

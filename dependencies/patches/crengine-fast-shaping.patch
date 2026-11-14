@@ -1,0 +1,1014 @@
+--- a/crengine/src/lvfntman.cpp
++++ b/crengine/src/lvfntman.cpp
+@@ -12,6 +12,7 @@
+ 
+ */
+ 
++#include "../include/kobaltshaping.h"
+ #include "crsetup.h"
+ 
+ #include <stdlib.h>
+@@ -74,6 +75,11 @@
+ #include <hb.h>
+ #include <hb-ft.h>
+ #include <hb-ot.h>
++#include <string>
++#include <unordered_map>
++#include <vector>
++#include <cstdlib>
++#include <cstdio>
+ #include "lvhashtable.h"
+ #endif
+ 
+@@ -1109,6 +1115,58 @@
+         LVFontGlyphUnsignedMetricCache::put(ch, (lUInt16)( m + CACHED_SIGNED_METRIC_SHIFT) );
+     }
+ };
++
++// kobalt: see kobaltshaping.h.
++static int kobalt_pair_kerning = -1;
++
++void kobaltSetPairKerning(bool enabled)
++{
++    kobalt_pair_kerning = enabled ? 1 : 0;
++}
++
++bool kobaltPairKerning()
++{
++    // Until a host chooses, KOBALT_PAIR_KERNING=1 in the environment turns it on.
++    if ( kobalt_pair_kerning < 0 ) {
++        const char * value = getenv("KOBALT_PAIR_KERNING");
++        kobalt_pair_kerning = value && value[0] == '1' ? 1 : 0;
++    }
++    return kobalt_pair_kerning == 1;
++}
++
++static int kobalt_word_widths = -1;
++
++void kobaltSetWordWidths(bool enabled)
++{
++    kobalt_word_widths = enabled ? 1 : 0;
++}
++
++bool kobaltWordWidths()
++{
++    // Until a host chooses, KOBALT_WORD_WIDTHS=1 in the environment turns it on.
++    if ( kobalt_word_widths < 0 ) {
++        const char * value = getenv("KOBALT_WORD_WIDTHS");
++        kobalt_word_widths = value && value[0] == '1' ? 1 : 0;
++    }
++    return kobalt_word_widths == 1;
++}
++
++static int kobalt_word_pairs = -1;
++
++void kobaltSetWordPairs(bool enabled)
++{
++    kobalt_word_pairs = enabled ? 1 : 0;
++}
++
++bool kobaltWordPairs()
++{
++    // Until a host chooses, KOBALT_WORD_PAIRS=1 in the environment turns it on.
++    if ( kobalt_word_pairs < 0 ) {
++        const char * value = getenv("KOBALT_WORD_PAIRS");
++        kobalt_word_pairs = value && value[0] == '1' ? 1 : 0;
++    }
++    return kobalt_word_pairs == 1;
++}
+ 
+ class LVFreeTypeFace;
+ 
+@@ -1726,6 +1784,69 @@
+     hb_font_t* _hb_font;
+     hb_buffer_t* _hb_buffer;
+     LVArray<hb_feature_t> _hb_features;
++    // kobalt: pair kerning from memory. See kobaltKernRun().
++    struct KobaltKern {
++        hb_position_t advance; // added to the advance of the first glyph
++        bool usable;           // false: this pair needs the whole run shaped
++    };
++    LVArray<hb_feature_t> _kobalt_features_nokern;
++    hb_buffer_t * _kobalt_buffer = NULL;
++    std::unordered_map<unsigned long long, KobaltKern> _kobalt_kern;
++    std::vector<hb_codepoint_t> _kobalt_text;
++    std::vector<std::pair<hb_script_t, hb_language_t> > _kobalt_kern_systems;
++    // The face stops using the memory when a check against HarfBuzz fails.
++    bool _kobalt_kern_failed = false;
++    unsigned int _kobalt_kern_runs = 0;
++    // kobalt: word widths from memory. See kobaltMeasureWords().
++    // A word is a record of ints in _kobalt_words; _kobalt_word_table
++    // holds the offset of each record plus one, by the hash of its text.
++    enum {
++        KW_HASH, KW_LEN, KW_USABLE,
++        KW_FIRST_GLYPH, KW_FIRST_END,   // the first glyph and the end of its cluster
++        KW_LAST_GLYPH, KW_LAST_CLUSTER, // the last glyph and the character that holds its advance
++        KW_LAST_ADVANCE,
++        KW_KERN_AFTER,  // added to the advance of the last glyph before a space
++        KW_KERN_BEFORE, // added to the advance of a space before this word
++        KW_TEXT         // then for each character: text, 26.6 advance, pixel advance, bits
++    };
++    enum { KW_BIT_GLYPH = 1, KW_BIT_ADVANCE = 2 };
++    enum { KW_UNKNOWN = INT_MIN, KW_UNUSABLE = INT_MIN + 1 };
++    enum { KW_MAX_LEN = 48, KW_MAX_WORDS = 50000 };
++    std::vector<int> _kobalt_words;
++    std::vector<unsigned int> _kobalt_word_table;
++    unsigned int _kobalt_word_count = 0;
++    // The kerning of each glyph before and after a space, by glyph.
++    std::vector<int> _kobalt_space_kern[2];
++    // kobalt: words built from pairs. See kobaltBuildWord(). The glyph
++    // and advance of each character alone, and what each pair of
++    // characters adds to the advance of its first glyph.
++    enum { KW_CHARS = 0x250 + 0x203B - 0x2010 };
++    std::vector<int> _kobalt_char_glyph;
++    std::vector<int> _kobalt_char_advance;
++    std::unordered_map<unsigned int, int> _kobalt_pair_kern;
++    bool _kobalt_build_failed = false;
++    unsigned int _kobalt_built_words = 0;
++    std::vector<int> _kobalt_built_check;
++    // The memory of each other language of this face. A font can have
++    // other glyphs and kerning for another language.
++    struct KobaltWordMemory {
++        hb_language_t language;
++        std::vector<int> words;
++        std::vector<unsigned int> table;
++        unsigned int count;
++        std::vector<int> space_kern[2];
++        std::vector<int> char_glyph;
++        std::vector<int> char_advance;
++        std::unordered_map<unsigned int, int> pair_kern;
++    };
++    enum { KW_MAX_LANGUAGES = 8 };
++    std::vector<KobaltWordMemory> _kobalt_word_memories;
++    hb_language_t _kobalt_word_language = HB_LANGUAGE_INVALID;
++    bool _kobalt_words_failed = false;
++    unsigned int _kobalt_word_runs = 0;
++    // The result that the next comparison with HarfBuzz expects.
++    std::vector<lUInt16> _kobalt_check_widths;
++    std::vector<lUInt8> _kobalt_check_flags;
+     // Fork (vertical-rl): tracks the is_vertical state _hb_features was built
+     // for, so the hot paths (measureText/DrawTextString) only rebuild the
+     // feature list when the vertical state actually changes. -1 = never built.
+@@ -1987,9 +2108,673 @@
+         #if USE_HARFBUZZ==1
+         if (_hb_buffer)
+             hb_buffer_destroy(_hb_buffer);
++        if (_kobalt_buffer)
++            hb_buffer_destroy(_kobalt_buffer);
+         #endif
+         Clear();
++    }
++
++    #if USE_HARFBUZZ==1
++    void kobaltClearKerning() {
++        _kobalt_kern.clear();
++        _kobalt_kern_systems.clear();
++        _kobalt_features_nokern.clear();
++        _kobalt_kern_failed = false;
++        _kobalt_kern_runs = 0;
++    }
++
++    // Shapes the codepoints of _kobalt_text from `from` for `count` into
++    // `buffer`, with the given features.
++    void kobaltShape( hb_buffer_t * buffer, unsigned int from, unsigned int count, hb_script_t script,
++                       hb_language_t language, int flags, const LVArray<hb_feature_t> & features ) {
++        hb_buffer_clear_contents(buffer);
++        for ( unsigned int k = 0; k < count; k++ )
++            hb_buffer_add(buffer, _kobalt_text[from + k], k);
++        hb_buffer_set_content_type(buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
++        hb_buffer_set_direction(buffer, HB_DIRECTION_LTR);
++        hb_buffer_set_script(buffer, script);
++        hb_buffer_set_language(buffer, language);
++        hb_buffer_set_flags(buffer, (hb_buffer_flags_t)flags); // NOLINT(clang-analyzer-optin.core.EnumCastOutOfRange)
++        hb_shape(_hb_font, buffer, features.ptr(), (unsigned int)features.length());
++    }
++
++    // kobalt: what the kern feature adds to the advance of `left` before
++    // `right`, asked of HarfBuzz once for each pair of glyphs. The two
++    // characters are shaped alone, with and without kerning. The pair is
++    // not usable when that gives other glyphs than the run has, or when
++    // kerning moves anything but the advance of the first glyph: the run
++    // is then shaped as a whole.
++    KobaltKern kobaltKernPair( unsigned int left_first, unsigned int left_count, unsigned int right_first,
++                                 unsigned int right_count, hb_codepoint_t left, hb_codepoint_t right,
++                                 hb_script_t script, hb_language_t language ) {
++        KobaltKern result = { 0, false };
++        hb_position_t without[2] = { 0, 0 };
++        for ( int pass = 0; pass < 2; pass++ ) {
++            // The characters of the two glyphs alone, without what is between them.
++            hb_buffer_clear_contents(_kobalt_buffer);
++            for ( unsigned int k = 0; k < left_count; k++ )
++                hb_buffer_add(_kobalt_buffer, _kobalt_text[left_first + k], 0);
++            for ( unsigned int k = 0; k < right_count; k++ )
++                hb_buffer_add(_kobalt_buffer, _kobalt_text[right_first + k], 1);
++            hb_buffer_set_content_type(_kobalt_buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
++            hb_buffer_set_direction(_kobalt_buffer, HB_DIRECTION_LTR);
++            hb_buffer_set_script(_kobalt_buffer, script);
++            hb_buffer_set_language(_kobalt_buffer, language);
++            const LVArray<hb_feature_t> & features = pass == 0 ? _kobalt_features_nokern : _hb_features;
++            hb_shape(_hb_font, _kobalt_buffer, features.ptr(), (unsigned int)features.length());
++            unsigned int glyphs = 0;
++            hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_kobalt_buffer, &glyphs);
++            hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++            if ( glyphs != 2 || info[0].codepoint != left || info[1].codepoint != right
++                    || pos[0].y_advance || pos[1].y_advance || pos[0].x_offset || pos[0].y_offset
++                    || pos[1].x_offset || pos[1].y_offset )
++                return result;
++            if ( pass == 0 ) {
++                without[0] = pos[0].x_advance;
++                without[1] = pos[1].x_advance;
++            }
++            else {
++                if ( pos[1].x_advance != without[1] )
++                    return result;
++                result.advance = pos[0].x_advance - without[0];
++            }
++        }
++        result.usable = true;
++        return result;
++    }
++
++    // The characters that HarfBuzz passes over when it matches a pair.
++    static bool kobaltIgnorable( hb_codepoint_t c ) {
++        return c == 0x00AD || c == 0x034F || c == 0x061C || (c >= 0x200B && c <= 0x200F)
++                || (c >= 0x202A && c <= 0x202E) || (c >= 0x2060 && c <= 0x206F) || c == 0xFEFF
++                || (c >= 0xFE00 && c <= 0xFE0F) || (c >= 0x180B && c <= 0x180E);
++    }
++
++    // kobalt: _hb_buffer holds a left-to-right horizontal run that was
++    // shaped without the kern feature, and _kobalt_text holds its
++    // characters. Add the kerning of each pair of neighbors from memory.
++    // A book has a few thousand different pairs, so nearly every pair is
++    // found there, and the kerning lookups of the font are not walked for
++    // every glyph. Returns false when the run is not plain enough for this:
++    // a cluster of several glyphs, a glyph that is moved, or a pair that is
++    // not usable. The caller then shapes the run as a whole.
++    bool kobaltKernRun( hb_script_t script, hb_language_t language ) {
++        unsigned int glyphs = 0;
++        hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_hb_buffer, &glyphs);
++        hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_hb_buffer, NULL);
++        const unsigned int len = (unsigned int)_kobalt_text.size();
++        for ( unsigned int g = 0; g < glyphs; g++ ) {
++            // One glyph for each cluster, in the order of the text.
++            if ( info[g].cluster >= len || (g > 0 && info[g].cluster <= info[g - 1].cluster) || (g == 0 && info[g].cluster != 0) )
++                return false;
++            if ( info[g].codepoint == 0 || pos[g].y_advance || pos[g].x_offset || pos[g].y_offset )
++                return false;
++        }
++        // Each script and language of the face has its own pairs.
++        unsigned int system = 0;
++        for ( ; system < _kobalt_kern_systems.size(); system++ ) {
++            if ( _kobalt_kern_systems[system].first == script && _kobalt_kern_systems[system].second == language )
++                break;
++        }
++        if ( system == _kobalt_kern_systems.size() ) {
++            if ( system >= 255 )
++                return false;
++            _kobalt_kern_systems.push_back(std::make_pair(script, language));
++        }
++        int left = -1;
++        for ( unsigned int g = 0; g < glyphs; g++ ) {
++            const unsigned int first = info[g].cluster, end = g + 1 < glyphs ? info[g + 1].cluster : len;
++            // A cluster of only passed-over characters does not take part.
++            bool ignorable = true;
++            for ( unsigned int c = first; c < end && ignorable; c++ )
++                ignorable = kobaltIgnorable(_kobalt_text[c]);
++            if ( ignorable )
++                continue;
++            if ( left >= 0 ) {
++                const unsigned long long key = ((unsigned long long)(info[left].codepoint & 0xFFFFFFF) << 36)
++                        | ((unsigned long long)(info[g].codepoint & 0xFFFFFFF) << 8) | system;
++                std::unordered_map<unsigned long long, KobaltKern>::const_iterator found = _kobalt_kern.find(key);
++                KobaltKern kern;
++                if ( found != _kobalt_kern.end() ) {
++                    kern = found->second;
++                }
++                else {
++                    const unsigned int left_first = info[left].cluster;
++                    const unsigned int left_end = (unsigned int)left + 1 < glyphs ? info[left + 1].cluster : len;
++                    kern = kobaltKernPair(left_first, left_end - left_first, first, end - first,
++                                           info[left].codepoint, info[g].codepoint, script, language);
++                    if ( _kobalt_kern.size() > 60000 )
++                        _kobalt_kern.clear();
++                    _kobalt_kern[key] = kern;
++                }
++                if ( !kern.usable )
++                    return false;
++                pos[left].x_advance += kern.advance;
++            }
++            left = (int)g;
++        }
++        return true;
++    }
++
++    // kobalt: shapes the run in _hb_buffer. With pair kerning from memory
++    // it shapes without the kern feature and adds the kerning; it checks the
++    // result against HarfBuzz for the first runs of a face and for one run
++    // in fifty after that, and stops for the face when they differ.
++    void kobaltShapeRun( bool usable ) {
++        if ( !usable || _kobalt_kern_failed || !kobaltPairKerning() ) {
++            hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
++            return;
++        }
++        unsigned int len = 0;
++        hb_glyph_info_t * added = hb_buffer_get_glyph_infos(_hb_buffer, &len);
++        const hb_script_t script = hb_buffer_get_script(_hb_buffer);
++        const hb_language_t language = hb_buffer_get_language(_hb_buffer);
++        const int flags = (int)hb_buffer_get_flags(_hb_buffer);
++        _kobalt_text.resize(len);
++        for ( unsigned int k = 0; k < len; k++ )
++            _kobalt_text[k] = added[k].codepoint;
++        if ( !_kobalt_buffer )
++            _kobalt_buffer = hb_buffer_create();
++        if ( _kobalt_features_nokern.length() == 0 ) {
++            for ( int f = 0; f < _hb_features.length(); f++ )
++                _kobalt_features_nokern.add(_hb_features[f]);
++            hb_feature_t off;
++            if ( hb_feature_from_string("-kern", -1, &off) )
++                _kobalt_features_nokern.add(off);
++        }
++        hb_shape(_hb_font, _hb_buffer, _kobalt_features_nokern.ptr(), (unsigned int)_kobalt_features_nokern.length());
++        const bool kerned = len >= 2 ? kobaltKernRun(script, language) : true;
++        const bool check = kerned && ( _kobalt_kern_runs < 200 || _kobalt_kern_runs % 50 == 0 );
++        _kobalt_kern_runs++;
++        if ( kerned && !check )
++            return;
++        if ( kerned ) {
++            // The same run as a whole, for comparison.
++            kobaltShape(_kobalt_buffer, 0, len, script, language, flags, _hb_features);
++            unsigned int glyphs = 0, expected = 0;
++            hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_hb_buffer, &glyphs);
++            hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_hb_buffer, NULL);
++            hb_glyph_info_t * whole_info = hb_buffer_get_glyph_infos(_kobalt_buffer, &expected);
++            hb_glyph_position_t * whole_pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++            bool same = glyphs == expected;
++            for ( unsigned int g = 0; same && g < glyphs; g++ )
++                same = info[g].codepoint == whole_info[g].codepoint && info[g].cluster == whole_info[g].cluster
++                        && pos[g].x_advance == whole_pos[g].x_advance && pos[g].x_offset == whole_pos[g].x_offset
++                        && pos[g].y_offset == whole_pos[g].y_offset && pos[g].y_advance == whole_pos[g].y_advance;
++            if ( same )
++                return;
++            _kobalt_kern_failed = true;
++            CRLog::warn("kobalt: kerning from memory differs from HarfBuzz for %s, run %u: off for this face",
++                        _faceName.c_str(), _kobalt_kern_runs);
++        }
++        // Shape the run as a whole.
++        kobaltShape(_hb_buffer, 0, len, script, language, flags, _hb_features);
++    }
++
++    // Exchanges the memory in use with the one in `memory`.
++    void kobaltSwapWords( KobaltWordMemory & memory ) {
++        std::swap(memory.language, _kobalt_word_language);
++        memory.words.swap(_kobalt_words);
++        memory.table.swap(_kobalt_word_table);
++        std::swap(memory.count, _kobalt_word_count);
++        memory.space_kern[0].swap(_kobalt_space_kern[0]);
++        memory.space_kern[1].swap(_kobalt_space_kern[1]);
++        memory.char_glyph.swap(_kobalt_char_glyph);
++        memory.char_advance.swap(_kobalt_char_advance);
++        memory.pair_kern.swap(_kobalt_pair_kern);
++    }
++
++    // Makes the memory of `language` the one in use.
++    void kobaltUseWords( hb_language_t language ) {
++        if ( language == _kobalt_word_language )
++            return;
++        size_t found = 0;
++        while ( found < _kobalt_word_memories.size() && _kobalt_word_memories[found].language != language )
++            found++;
++        if ( found == _kobalt_word_memories.size() ) {
++            // A new language takes the place of the oldest one when there are many.
++            if ( found >= KW_MAX_LANGUAGES )
++                _kobalt_word_memories.erase(_kobalt_word_memories.begin());
++            KobaltWordMemory empty;
++            empty.language = language;
++            empty.count = 0;
++            _kobalt_word_memories.push_back(empty);
++            found = _kobalt_word_memories.size() - 1;
++        }
++        kobaltSwapWords(_kobalt_word_memories[found]);
++    }
++
++    void kobaltClearWords() {
++        _kobalt_word_memories.clear();
++        _kobalt_word_language = HB_LANGUAGE_INVALID;
++        kobaltForgetWords();
++        _kobalt_words_failed = false;
++        _kobalt_word_runs = 0;
++        _kobalt_build_failed = false;
++        _kobalt_built_words = 0;
++    }
++
++    // Empties the memory in use.
++    void kobaltForgetWords() {
++        _kobalt_words.clear();
++        _kobalt_word_table.clear();
++        _kobalt_word_count = 0;
++        _kobalt_space_kern[0].clear();
++        _kobalt_space_kern[1].clear();
++        _kobalt_char_glyph.clear();
++        _kobalt_char_advance.clear();
++        _kobalt_pair_kern.clear();
++    }
++
++    // What a character can be in a word that is measured from memory:
++    // 0 nothing, 1 inside a word only, 2 also first or last, 3 a Latin
++    // letter. Marks and characters that HarfBuzz passes over can join the
++    // glyph of a neighbor, so they are not allowed at the edge of a word.
++    static int kobaltWordChar( lChar32 c ) {
++        if ( c < 0x250 ) {
++            if ( c < 0x21 || (c >= 0x7F && c < 0xA0) )
++                return 0;
++            if ( c == 0xAD )
++                return 1;
++            if ( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') )
++                return 3;
++            if ( c < 0xC0 )
++                return c == 0xAA || c == 0xBA ? 3 : 2;
++            return c == 0xD7 || c == 0xF7 ? 2 : 3;
++        }
++        if ( c >= 0x2010 && c <= 0x2027 )
++            return 2;
++        if ( c >= 0x2030 && c <= 0x203A )
++            return 2;
++        if ( c >= 0x1E00 && c <= 0x1EFF )
++            return 3;
++        if ( c < 0x370 ) // phonetic letters, modifier letters and marks
++            return 1;
++        if ( c >= 0x2000 && c <= 0x206F ) // spaces and joiners, but no direction marks
++            return c == 0x200E || c == 0x200F || (c >= 0x2028 && c <= 0x202E) || c >= 0x2066 ? 0 : 1;
++        if ( (c >= 0x20A0 && c <= 0x20CF) || (c >= 0x2100 && c <= 0x214F) || (c >= 0xFB00 && c <= 0xFB06) || c == 0xFEFF )
++            return 1;
++        return 0;
++    }
++
++    // Shapes `count` characters as Latin text into _kobalt_buffer.
++    void kobaltShapeWord( const lChar32 * text, int count, const lChar32 * more = NULL, int more_count = 0 ) {
++        hb_buffer_clear_contents(_kobalt_buffer);
++        for ( int k = 0; k < count; k++ )
++            hb_buffer_add(_kobalt_buffer, (hb_codepoint_t)text[k], k);
++        for ( int k = 0; k < more_count; k++ )
++            hb_buffer_add(_kobalt_buffer, (hb_codepoint_t)more[k], count + k);
++        hb_buffer_set_content_type(_kobalt_buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
++        hb_buffer_set_direction(_kobalt_buffer, HB_DIRECTION_LTR);
++        hb_buffer_set_script(_kobalt_buffer, HB_SCRIPT_LATIN);
++        hb_buffer_set_language(_kobalt_buffer, _kobalt_word_language);
++        hb_shape(_hb_font, _kobalt_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
++    }
++
++    // kobalt: the record of a word, shaped at its first use. Returns its
++    // offset in _kobalt_words, which stays valid until the memory is
++    // cleared; pointers into _kobalt_words do not.
++    unsigned int kobaltWord( const lChar32 * text, int len, unsigned int hash ) {
++        if ( _kobalt_word_table.empty() )
++            _kobalt_word_table.assign(4096, 0);
++        unsigned int mask = (unsigned int)_kobalt_word_table.size() - 1;
++        unsigned int slot = hash & mask;
++        for ( ; _kobalt_word_table[slot]; slot = (slot + 1) & mask ) {
++            const int * word = &_kobalt_words[_kobalt_word_table[slot] - 1];
++            if ( word[KW_HASH] != (int)hash || word[KW_LEN] != len )
++                continue;
++            int k = 0;
++            while ( k < len && word[KW_TEXT + 4 * k] == (int)text[k] )
++                k++;
++            if ( k == len )
++                return _kobalt_word_table[slot] - 1;
++        }
++        // A new word.
++        const unsigned int offset = (unsigned int)_kobalt_words.size();
++        _kobalt_words.resize(offset + KW_TEXT + 4 * len, 0);
++        _kobalt_word_table[slot] = offset + 1;
++        _kobalt_word_count++;
++        if ( _kobalt_word_count * 2 > _kobalt_word_table.size() ) {
++            std::vector<unsigned int> table(_kobalt_word_table.size() * 2, 0);
++            mask = (unsigned int)table.size() - 1;
++            for ( size_t old = 0; old < _kobalt_word_table.size(); old++ ) {
++                if ( !_kobalt_word_table[old] )
++                    continue;
++                unsigned int to = (unsigned int)_kobalt_words[_kobalt_word_table[old] - 1 + KW_HASH] & mask;
++                while ( table[to] )
++                    to = (to + 1) & mask;
++                table[to] = _kobalt_word_table[old];
++            }
++            _kobalt_word_table.swap(table);
++        }
++        int * word = &_kobalt_words[offset];
++        word[KW_HASH] = (int)hash;
++        word[KW_LEN] = len;
++        word[KW_KERN_AFTER] = KW_UNKNOWN;
++        word[KW_KERN_BEFORE] = KW_UNKNOWN;
++        for ( int k = 0; k < len; k++ )
++            word[KW_TEXT + 4 * k] = (int)text[k];
++        if ( _kobalt_build_failed || !kobaltWordPairs() || !kobaltBuildWord(text, len, word) ) {
++            kobaltFillWord(text, len, word);
++            return offset;
++        }
++        // Compare the first words that are built, and one in sixteen after that.
++        _kobalt_built_words++;
++        if ( _kobalt_built_words > 500 && _kobalt_built_words % 16 != 0 )
++            return offset;
++        const int size = KW_TEXT + 4 * len;
++        _kobalt_built_check.assign(word, word + size);
++        for ( int k = KW_USABLE; k < size; k++ ) {
++            if ( k < KW_TEXT ? (k != KW_KERN_AFTER && k != KW_KERN_BEFORE) : ((k - KW_TEXT) & 3) != 0 )
++                word[k] = 0;
++        }
++        kobaltFillWord(text, len, word);
++        for ( int k = 0; k < size; k++ ) {
++            if ( word[k] != _kobalt_built_check[k] ) {
++                _kobalt_build_failed = true;
++                CRLog::warn("kobalt: a word built from pairs differs from HarfBuzz for %s, word %u: off for this face",
++                            _faceName.c_str(), _kobalt_built_words);
++                break;
++            }
++        }
++        return offset;
++    }
++
++    // kobalt: fills the record of a word from its characters and pairs
++    // of characters, with no shaping of the word. HarfBuzz is asked once
++    // for each character alone and once for each pair. Returns false when
++    // the word holds a character or a pair that is not plain: more or
++    // fewer glyphs than characters, other glyphs in the pair than alone,
++    // or a glyph that moves. HarfBuzz then shapes the word.
++    bool kobaltBuildWord( const lChar32 * text, int len, int * word ) {
++        if ( _kobalt_char_glyph.empty() ) {
++            _kobalt_char_glyph.assign(KW_CHARS, KW_UNKNOWN);
++            _kobalt_char_advance.assign(KW_CHARS, 0);
++        }
++        int index = 0, glyph = 0, advance = 0;
++        for ( int t = len - 1; t >= 0; t-- ) {
++            // Only characters that can be at the edge of a word: no marks,
++            // and nothing that HarfBuzz passes over.
++            const lChar32 c = text[t];
++            if ( kobaltWordChar(c) < 2 )
++                return false;
++            const int next_index = index, next_glyph = glyph, next_advance = advance;
++            index = c < 0x250 ? (int)c : (int)c - 0x2010 + 0x250;
++            if ( _kobalt_char_glyph[index] == KW_UNKNOWN ) {
++                kobaltShapeWord(&c, 1);
++                unsigned int glyphs = 0;
++                const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_kobalt_buffer, &glyphs);
++                const hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++                const bool plain = glyphs == 1 && info[0].codepoint != 0 && !pos[0].y_advance && !pos[0].x_offset && !pos[0].y_offset;
++                _kobalt_char_glyph[index] = plain ? (int)info[0].codepoint : KW_UNUSABLE;
++                _kobalt_char_advance[index] = plain ? pos[0].x_advance : 0;
++            }
++            glyph = _kobalt_char_glyph[index];
++            advance = _kobalt_char_advance[index];
++            if ( glyph == KW_UNUSABLE )
++                return false;
++            int raw = advance;
++            if ( t + 1 < len ) {
++                const unsigned int key = (unsigned int)index * KW_CHARS + (unsigned int)next_index;
++                std::unordered_map<unsigned int, int>::const_iterator found = _kobalt_pair_kern.find(key);
++                int kern;
++                if ( found != _kobalt_pair_kern.end() ) {
++                    kern = found->second;
++                }
++                else {
++                    kobaltShapeWord(text + t, 2);
++                    unsigned int glyphs = 0;
++                    const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_kobalt_buffer, &glyphs);
++                    const hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++                    const bool plain = glyphs == 2 && (int)info[0].codepoint == glyph && (int)info[1].codepoint == next_glyph
++                            && info[0].cluster == 0 && info[1].cluster == 1 && pos[1].x_advance == next_advance
++                            && !pos[0].y_advance && !pos[1].y_advance && !pos[0].x_offset && !pos[0].y_offset
++                            && !pos[1].x_offset && !pos[1].y_offset;
++                    kern = plain ? pos[0].x_advance - advance : KW_UNUSABLE;
++                    _kobalt_pair_kern[key] = kern;
++                }
++                if ( kern == KW_UNUSABLE )
++                    return false;
++                raw += kern;
++            }
++            word[KW_TEXT + 4 * t + 1] = raw ? raw + _synth_weight_strength : 0;
++            word[KW_TEXT + 4 * t + 2] = raw ? FONT_METRIC_TO_PX(raw + _synth_weight_strength) : 0;
++            word[KW_TEXT + 4 * t + 3] = raw ? KW_BIT_GLYPH | KW_BIT_ADVANCE : KW_BIT_GLYPH;
++            if ( t == len - 1 ) {
++                word[KW_LAST_GLYPH] = glyph;
++                word[KW_LAST_CLUSTER] = t;
++                word[KW_LAST_ADVANCE] = advance;
++            }
++        }
++        word[KW_FIRST_GLYPH] = glyph;
++        word[KW_FIRST_END] = 1;
++        word[KW_USABLE] = 1;
++        return true;
++    }
++
++    // kobalt: fills the record of a word from the glyphs that HarfBuzz
++    // gives for it. The record stays unusable when the word is not plain
++    // enough to measure from memory.
++    void kobaltFillWord( const lChar32 * text, int len, int * word ) {
++        kobaltShapeWord(text, len);
++        unsigned int glyphs = 0;
++        const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_kobalt_buffer, &glyphs);
++        const hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++        // Every glyph is in this font, and the clusters follow the text.
++        if ( glyphs == 0 || info[0].cluster != 0 )
++            return;
++        for ( unsigned int g = 0; g < glyphs; g++ ) {
++            if ( info[g].codepoint == 0 || (int)info[g].cluster >= len || (g > 0 && info[g].cluster < info[g - 1].cluster) )
++                return;
++        }
++        // The same sums as measureText() makes for each character.
++        unsigned int g = 0;
++        for ( int t = 0; t < len; t++ ) {
++            int advance_64 = 0, advance = 0, bits = 0;
++            for ( ; g < glyphs && (int)info[g].cluster <= t; g++ ) {
++                bits |= KW_BIT_GLYPH;
++                if ( pos[g].x_advance ) {
++                    advance_64 += pos[g].x_advance + _synth_weight_strength;
++                    advance += FONT_METRIC_TO_PX(pos[g].x_advance + _synth_weight_strength);
++                    bits |= KW_BIT_ADVANCE;
++                }
++            }
++            word[KW_TEXT + 4 * t + 1] = advance_64;
++            word[KW_TEXT + 4 * t + 2] = advance;
++            word[KW_TEXT + 4 * t + 3] = bits;
++        }
++        word[KW_FIRST_GLYPH] = (int)info[0].codepoint;
++        word[KW_FIRST_END] = len;
++        for ( unsigned int n = 1; n < glyphs; n++ ) {
++            if ( info[n].cluster != 0 ) {
++                word[KW_FIRST_END] = (int)info[n].cluster;
++                break;
++            }
++        }
++        word[KW_LAST_GLYPH] = (int)info[glyphs - 1].codepoint;
++        word[KW_LAST_CLUSTER] = (int)info[glyphs - 1].cluster;
++        word[KW_LAST_ADVANCE] = pos[glyphs - 1].x_advance;
++        word[KW_USABLE] = 1;
++    }
++
++    // kobalt: what HarfBuzz adds to the advance of the glyph `left` when
++    // the glyph `right` follows it. One of the two is the space, and the
++    // answer is kept for the other glyph, so HarfBuzz is asked once for
++    // each glyph and side. Each side is the text of one cluster.
++    // KW_UNUSABLE when the pair gives other glyphs than each side alone,
++    // or when anything else moves.
++    int kobaltWordKern( const lChar32 * left_text, int left_len, int left, const lChar32 * right_text,
++                         int right_len, int right, bool space_is_left ) {
++        std::vector<int> & known = _kobalt_space_kern[space_is_left ? 1 : 0];
++        const size_t glyph = (size_t)(space_is_left ? right : left);
++        if ( glyph >= known.size() )
++            known.resize(glyph + 256, KW_UNKNOWN);
++        if ( known[glyph] == KW_UNKNOWN )
++            known[glyph] = kobaltShapePair(left_text, left_len, left, right_text, right_len, right);
++        return known[glyph];
++    }
++
++    int kobaltShapePair( const lChar32 * left_text, int left_len, int left, const lChar32 * right_text,
++                          int right_len, int right ) {
++        hb_position_t alone[2];
++        for ( int side = 0; side < 2; side++ ) {
++            kobaltShapeWord(side ? right_text : left_text, side ? right_len : left_len);
++            unsigned int glyphs = 0;
++            const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_kobalt_buffer, &glyphs);
++            const hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++            if ( glyphs != 1 || (int)info[0].codepoint != (side ? right : left) )
++                return KW_UNUSABLE;
++            alone[side] = pos[0].x_advance;
++        }
++        kobaltShapeWord(left_text, left_len, right_text, right_len);
++        unsigned int glyphs = 0;
++        const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_kobalt_buffer, &glyphs);
++        const hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_kobalt_buffer, NULL);
++        if ( glyphs != 2 || (int)info[0].codepoint != left || (int)info[1].codepoint != right
++                || info[0].cluster != 0 || (int)info[1].cluster != left_len || pos[1].x_advance != alone[1]
++                || pos[0].y_advance || pos[1].y_advance || pos[0].x_offset || pos[0].y_offset
++                || pos[1].x_offset || pos[1].y_offset )
++            return KW_UNUSABLE;
++        return pos[0].x_advance - alone[0];
++    }
++
++    // kobalt: measures a run of plain left-to-right Latin text from the
++    // memory of its words, as measureText() does with HarfBuzz. The run is
++    // split at each space; a space is a word of its own. The glyphs of a
++    // word do not depend on its neighbors, except that the font can kern
++    // the space with the glyph next to it, which is added here. Returns
++    // false when the run does not qualify; measureText() then shapes it.
++    bool kobaltMeasureWords( const lChar32 * text, int len, lUInt16 * widths, lUInt8 * flags, int max_width,
++                              TextLangCfg * lang_cfg, int letter_spacing, lUInt32 hints, lUInt16 & last_fit ) {
++        if ( _kobalt_words_failed || !kobaltWordWidths() )
++            return false;
++        if ( hints & (LFNT_HINT_IS_VERTICAL | LFNT_HINT_DIRECTION_IS_RTL | LFNT_HINT_DIRECTION_IS_TTB | LFNT_HINT_IS_FALLBACK_FONT) )
++            return false;
++        // Without a fallback font, measureText() replaces missing characters first.
++        if ( getFallbackFont(false).isNull() )
++            return false;
++        if ( _hb_features_is_vertical != 0 )
++            setupHBFeatures(false);
++        const hb_language_t language = lang_cfg ? lang_cfg->getHBLanguage() : hb_language_get_default();
++        kobaltUseWords(language);
++        if ( _kobalt_word_count > KW_MAX_WORDS )
++            kobaltForgetWords();
++        if ( !_kobalt_buffer )
++            _kobalt_buffer = hb_buffer_create();
++        static const lChar32 space = ' ';
++        const bool fractional = getFractionalGlyphPositioningGranularity() > 1;
++        bool has_latin = false;
++        int cur_width = 0, cur_width_64 = 0;
++        last_fit = 0;
++        // Finds the word that starts at `from`: its end and its record.
++        // Returns false when the run does not qualify.
++        auto find = [&]( int from, int & end, unsigned int & offset ) -> bool {
++            unsigned int hash = 2166136261u;
++            if ( text[from] == space ) {
++                end = from + 1;
++                hash = (hash ^ (unsigned int)space) * 16777619u;
++            }
++            else {
++                int kind = kobaltWordChar(text[from]);
++                if ( kind < 2 )
++                    return false;
++                for ( end = from; end < len && text[end] != space; end++ ) {
++                    kind = kobaltWordChar(text[end]);
++                    if ( kind == 0 )
++                        return false;
++                    has_latin = has_latin || kind == 3;
++                    hash = (hash ^ (unsigned int)text[end]) * 16777619u;
++                }
++                if ( kind < 2 || end - from > KW_MAX_LEN )
++                    return false;
++            }
++            offset = kobaltWord(text + from, end - from, hash);
++            return _kobalt_words[offset + KW_USABLE] != 0;
++        };
++        int start = 0, end = 0, next_end = 0;
++        unsigned int offset = 0, next_offset = 0;
++        if ( !find(0, end, offset) )
++            return false;
++        for ( ;; ) {
++            const bool more = end < len;
++            if ( more && !find(end, next_end, next_offset) )
++                return false;
++            // The kerning between this word and the next one.
++            int kern = 0;
++            if ( more ) {
++                const int * word = &_kobalt_words[offset];
++                const int * next = &_kobalt_words[next_offset];
++                if ( text[end] == space ) {
++                    if ( word[KW_KERN_AFTER] == KW_UNKNOWN ) {
++                        const int kerned = kobaltWordKern(text + start + word[KW_LAST_CLUSTER], end - start - word[KW_LAST_CLUSTER],
++                                                           word[KW_LAST_GLYPH], &space, 1, next[KW_FIRST_GLYPH], false);
++                        _kobalt_words[offset + KW_KERN_AFTER] = kerned;
++                    }
++                    kern = _kobalt_words[offset + KW_KERN_AFTER];
++                }
++                else {
++                    if ( next[KW_KERN_BEFORE] == KW_UNKNOWN ) {
++                        const int kerned = kobaltWordKern(&space, 1, word[KW_LAST_GLYPH], text + end, next[KW_FIRST_END],
++                                                           next[KW_FIRST_GLYPH], true);
++                        _kobalt_words[next_offset + KW_KERN_BEFORE] = kerned;
++                    }
++                    kern = _kobalt_words[next_offset + KW_KERN_BEFORE];
++                }
++                if ( kern == KW_UNUSABLE )
++                    return false;
++            }
++            const int * word = &_kobalt_words[offset];
++            if ( kern && ( !word[KW_LAST_ADVANCE] || !(word[KW_LAST_ADVANCE] + kern) ) )
++                return false;
++            const int * record = word + KW_TEXT;
++            for ( int t = start; t < end; t++, record += 4 ) {
++                int advance_64 = record[1], advance = record[2];
++                if ( kern && t - start == word[KW_LAST_CLUSTER] ) {
++                    advance_64 += kern;
++                    advance += FONT_METRIC_TO_PX(word[KW_LAST_ADVANCE] + _synth_weight_strength + kern)
++                               - FONT_METRIC_TO_PX(word[KW_LAST_ADVANCE] + _synth_weight_strength);
++                }
++                bool has_advance;
++                if ( fractional ) {
++                    cur_width_64 += advance_64;
++                    cur_width = FONT_METRIC_TO_PX(cur_width_64);
++                    has_advance = (record[3] & KW_BIT_ADVANCE) != 0;
++                }
++                else {
++                    cur_width += advance;
++                    has_advance = advance != 0;
++                }
++                if ( !(record[3] & KW_BIT_GLYPH) ) {
++                    flags[t] = LCHAR_IS_CLUSTER_TAIL;
++                }
++                else {
++                    flags[t] = GET_CHAR_FLAGS(text[t]);
++                    if ( !has_advance ) {
++                        flags[t] |= LCHAR_IS_CLUSTER_TAIL;
++                    }
++                    else if ( fractional ) {
++                        cur_width_64 += letter_spacing * 64;
++                        cur_width = FONT_METRIC_TO_PX(cur_width_64);
++                    }
++                    else {
++                        cur_width += letter_spacing;
++                    }
++                }
++                widths[t] = (lUInt16)cur_width;
++                if ( cur_width > max_width )
++                    return has_latin; // measureText() stops here too
++                last_fit = (lUInt16)(t + 1);
++            }
++            if ( !more )
++                break;
++            start = end;
++            end = next_end;
++            offset = next_offset;
++        }
++        // HarfBuzz shapes a run without a letter with other rules.
++        return has_latin;
+     }
++    #endif
+ 
+     void clearCache() {
+         _glyph_cache.clear();
+@@ -2001,6 +2786,8 @@
+         #if USE_HARFBUZZ==1
+         _glyph_cache2.clear();
+         _width_cache2.clear();
++        kobaltClearKerning();
++        kobaltClearWords();
+         #endif
+     }
+ 
+@@ -2085,6 +2872,8 @@
+     void setupHBFeatures(bool is_vertical = false) {
+         _hb_features_is_vertical = is_vertical ? 1 : 0;
+         _hb_features.clear();
++        _kobalt_features_nokern.clear(); // made again from _hb_features when needed
++        kobaltClearWords(); // shaped with the old features
+         if ( _kerningMode == KERNING_MODE_HARFBUZZ ) {
+             // We reserve 2 for those we're adding now, +3 for vertical features
+             // (+vert, +vrt2, +vkrn) added when is_vertical is set, plus headroom
+@@ -2202,6 +2991,8 @@
+         _hash = 0; // Force lvstyles.cpp calcHash(font_ref_t) to recompute the hash
+         #if USE_HARFBUZZ==1
+         _hb_features_is_vertical = -1; // _features changed: force _hb_features rebuild on next use
++        kobaltClearKerning();
++        kobaltClearWords();
+         #endif
+     }
+     virtual int getFeatures() const {
+@@ -3120,7 +3911,26 @@
+         // measure character widths
+ 
+     #if USE_HARFBUZZ==1
+-        if (_kerningMode == KERNING_MODE_HARFBUZZ) {
++        // kobalt: plain Latin runs are measured from the memory of their
++        // words. A sample of them is also shaped, for comparison.
++        bool kobalt_measured = false;
++        bool kobalt_check = false;
++        if ( _kerningMode == KERNING_MODE_HARFBUZZ
++                && kobaltMeasureWords(text, len, widths, flags, max_width, lang_cfg, letter_spacing, hints, lastFitChar) ) {
++            kobalt_measured = true;
++            if ( _kobalt_word_runs < 200 || _kobalt_word_runs % 50 == 0 ) {
++                _kobalt_check_widths.assign(widths, widths + lastFitChar);
++                _kobalt_check_flags.assign(flags, flags + lastFitChar);
++                kobalt_measured = false;
++                kobalt_check = true;
++            }
++            _kobalt_word_runs++;
++        }
++        lastFitChar = kobalt_measured ? lastFitChar : 0;
++        if ( kobalt_measured ) {
++            i = lastFitChar;
++        }
++        else if (_kerningMode == KERNING_MODE_HARFBUZZ) {
+ 
+             /** from harfbuzz/src/hb-buffer.h
+              * hb_glyph_info_t:
+@@ -3249,8 +4059,9 @@
+             if ( _hb_features_is_vertical != (is_vertical_hb ? 1 : 0) )
+                 setupHBFeatures(is_vertical_hb);
+ 
+-            // Shape
+-            hb_shape(_hb_font, _hb_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
++            // Shape. kobalt: plain left-to-right horizontal runs can take
++            // their pair kerning from memory.
++            kobaltShapeRun( !is_vertical_hb && hb_buffer_get_direction(_hb_buffer) == HB_DIRECTION_LTR );
+ 
+             // Harfbuzz has guessed and set a direction even if we did not provide one.
+             #ifdef DEBUG_MEASURE_TEXT
+@@ -3740,6 +4551,16 @@
+ 
+     #if USE_HARFBUZZ==1
+         } // else fallback to the non harfbuzz code
++        if ( kobalt_check ) {
++            bool same = lastFitChar == _kobalt_check_widths.size();
++            for ( int k = 0; same && k < lastFitChar; k++ )
++                same = widths[k] == _kobalt_check_widths[k] && flags[k] == _kobalt_check_flags[k];
++            if ( !same ) {
++                _kobalt_words_failed = true;
++                CRLog::warn("kobalt: word widths from memory differ from HarfBuzz for %s, run %u: off for this face",
++                            _faceName.c_str(), _kobalt_word_runs);
++            }
++        }
+     #endif
+ 
+         // fill props for rest of chars
+--- a/crengine/src/lvtextfm.cpp
++++ b/crengine/src/lvtextfm.cpp
+@@ -24,6 +24,7 @@
+ #include "../include/lvtextfm_vert_diag.h"
+ #include "../include/lvdrawbuf.h"
+ #include "../include/fb2def.h"
++#include "../include/kobaltshaping.h"
+ 
+ #ifdef __cplusplus
+ #include "../include/lvimg.h"
+@@ -482,8 +490,26 @@
+     //   Handling CSS width and height (and min/max-width/height) will be done
+     //   in measureText(), where we know about the buffer width (its container
+     //   width) and can better apply values in %
++}
++
++// kobalt: see kobaltshaping.h.
++static int kobalt_plain_joiner = -1;
++
++void kobaltSetPlainJoiner(bool enabled)
++{
++    kobalt_plain_joiner = enabled ? 1 : 0;
+ }
+ 
++bool kobaltPlainJoiner()
++{
++    // Until a host chooses, KOBALT_PLAIN_JOINER=1 in the environment turns it on.
++    if ( kobalt_plain_joiner < 0 ) {
++        const char * value = getenv("KOBALT_PLAIN_JOINER");
++        kobalt_plain_joiner = value && value[0] == '1' ? 1 : 0;
++    }
++    return kobalt_plain_joiner == 1;
++}
++
+ class LVFormatter {
+ public:
+     //LVArray<lUInt16>  widths_buf;
+@@ -1310,6 +1336,7 @@
+         m_para_dir_is_rtl = false;
+         #if (USE_FRIBIDI==1)
+         bool has_rtl = false; // if no RTL char, no need for expensive bidi processing
++        const bool joiner_is_plain = kobaltPlainJoiner();
+         // todo: according to https://www.w3.org/TR/css-text-3/#bidi-linebox
+         // the bidi direction, if determined from the text itself (no dir= from
+         // outer containers) must follow up to next paragraphs (separated by <BR/> or newlines).
+@@ -1845,7 +1872,9 @@
+                         // we don't need to invoke expensive fribidi processing below (which
+                         // may add a 50% duration increase to the text rendering phase).
+                         if ( !has_rtl ) {
+-                            has_rtl = lStr_isRTL(c);
++                            // kobalt: U+FEFF has no direction of its own; lStr_isRTL()
++                            // counts it with the Arabic forms around it.
++                            has_rtl = lStr_isRTL(c) && !( c == 0xFEFF && joiner_is_plain );
+                         }
+                     #endif
+ 
+--- /dev/null
++++ b/crengine/include/kobaltshaping.h
+@@ -0,0 +1,46 @@
++#ifndef KOBALT_SHAPING_H
++#define KOBALT_SHAPING_H
++
++/// Take the pair kerning of plain left-to-right horizontal text from a
++/// memory of glyph pairs, which HarfBuzz fills, and shape those runs
++/// without the kern feature. A face checks the result against HarfBuzz
++/// on a sample of its runs and goes back to HarfBuzz for good when they
++/// differ. Off by default.
++#define KOBALT_PAIR_KERNING 1
++void kobaltSetPairKerning(bool enabled);
++bool kobaltPairKerning();
++
++/// Measure plain left-to-right Latin text word by word. HarfBuzz shapes
++/// each different word once; the face keeps its widths, and the kerning
++/// between a word and the space next to it, in memory. Text is measured
++/// from that memory with no shaping. A run that holds anything but such
++/// words is shaped as before. A face checks the result against HarfBuzz on
++/// a sample of its runs and goes back to HarfBuzz for good when they
++/// differ. Only measuring changes; drawing shapes as before. Off by default.
++#define KOBALT_WORD_WIDTHS 1
++void kobaltSetWordWidths(bool enabled);
++bool kobaltWordWidths();
++
++/// With word widths from memory: build the widths of a new word from its
++/// characters and pairs of characters, so that HarfBuzz is asked once for
++/// each character and each pair, not once for each word. A word with a
++/// character or a pair that does not give plain glyphs (a ligature, a
++/// mark) is shaped as a whole. A face checks its first words and a sample
++/// of the later ones against HarfBuzz and stops building words when one
++/// differs. A font rule that needs three or more plain glyphs can pass
++/// that check; such a word is then measured a kerning step off. Off by
++/// default.
++#define KOBALT_WORD_PAIRS 1
++void kobaltSetWordPairs(bool enabled);
++bool kobaltWordPairs();
++
++/// Do not run the bidirectional algorithm on a paragraph only because it
++/// holds U+FEFF (zero width no-break space). Stock CREngine counts that
++/// character as right-to-left, with the Arabic forms around it, so every
++/// paragraph that holds one pays for the algorithm, which then finds
++/// nothing. The layout is the same. Off by default.
++#define KOBALT_PLAIN_JOINER 1
++void kobaltSetPlainJoiner(bool enabled);
++bool kobaltPlainJoiner();
++
++#endif

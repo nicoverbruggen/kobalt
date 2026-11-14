@@ -29,6 +29,7 @@
 #include <QtMath>
 #include <lvdocview.h>
 #include <lvfntman.h>
+#include <kobaltshaping.h>
 #include <lvrend.h>
 #include <hyphman.h>
 #include <textlang.h>
@@ -515,8 +516,25 @@ FontOpticalSizeAxis EngineDocument::opticalSizeAxis() const
     return fontOpticalSizeAxis(readingFonts, face_);
 }
 
+bool EngineDocument::fastShaping() const
+{
+    if (shapingOverride_ >= 0)
+        return shapingOverride_ != 0;
+    return shapingText_ >= fastShapingMinimum;
+}
+
+void EngineDocument::activateFastShaping() const
+{
+    const bool fast = fastShaping();
+    kobaltSetPairKerning(fast);
+    kobaltSetWordWidths(fast);
+    kobaltSetWordPairs(fast);
+    kobaltSetPlainJoiner(fast);
+}
+
 void EngineDocument::activateFontParameters() const
 {
+    activateFastShaping();
     const auto axis = weightAxis();
     // CREngine shares font parameters across documents. Restore this document's
     // values before layout or drawing so previews cannot change another book.

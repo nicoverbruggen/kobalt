@@ -34,6 +34,27 @@ lString32 cre(const QString &s)
     return Utf8ToUnicode(s.toUtf8().constData());
 }
 
+// Count only until the shaping threshold. Images and ZIP compression say
+// nothing about how much text the formatter will measure.
+int shapingText(ldomNode *root, int limit)
+{
+    QVector<ldomNode *> pending{ root };
+    int count = 0;
+    while (!pending.isEmpty() && count < limit) {
+        auto *node = pending.takeLast();
+        if (node->isText()) {
+            count += qMin(limit - count, node->getText().length());
+        } else {
+            const auto style = node->getStyle();
+            if (!style.isNull() && style->display == css_d_none)
+                continue;
+            for (int i = node->getChildCount() - 1; i >= 0; --i)
+                pending.append(node->getChildNode(i));
+        }
+    }
+    return count;
+}
+
 constexpr int maxBook = 64 * 1024 * 1024;
 
 class ResourceStream : public LVNamedStream
@@ -445,6 +466,8 @@ QJsonObject EngineDocument::resourceStats() const
     auto result = source_ && source_->resources ? source_->resources->statistics() : QJsonObject();
     for (auto at = openingTimes_.begin(); at != openingTimes_.end(); ++at)
         result.insert(at.key(), at.value());
+    result["fast_shaping"] = fastShaping();
+    result["shaping_text_characters"] = shapingText_;
     return result;
 }
 
@@ -465,6 +488,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         return false;
     };
     openingTimes_ = {};
+    shapingText_ = 0;
+    const auto shaping = qgetenv("KOBALT_FAST_SHAPING");
+    shapingOverride_ = shaping == "0" ? 0 : shaping == "1" ? 1 : -1;
     QElapsedTimer phase;
     phase.start();
     // Supplying a container skips format detection in the engine. Keep the
@@ -539,10 +565,11 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     applyPublisherFontFallbacks();
     auto *document = engine_->getDocument();
     const auto renderingPolicy = Utf8ToUnicode(lString8(KOBALT_RENDERING_POLICY));
+    const bool sameRenderingPolicy =
+            document->getProps()->getStringDef("kobalt.rendering.policy", "") == renderingPolicy;
     // A compatible engine update keeps the parsed DOM and Kobalt's markers.
     // Rebuild only its layout when shaping or hyphenation rules have changed.
-    if (openedFromCache_
-        && document->getProps()->getStringDef("kobalt.rendering.policy", "") != renderingPolicy) {
+    if (openedFromCache_ && !sameRenderingPolicy) {
         document->forceReinitStyles();
         engine_->requestRender();
         document->setCacheFileStale(true);
@@ -582,6 +609,20 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         engine_->getDocument()->forceReinitStyles();
     }
     applyStyleSheet();
+    if (shapingOverride_ < 0) {
+        // This optional parsed-cache property avoids walking text on a cache hit.
+        // Its key includes the cap; older caches count once and retain their DOM.
+        constexpr auto countProperty = "kobalt.shaping.text.250000";
+        shapingText_ = openedFromCache_ && sameRenderingPolicy
+                ? document->getProps()->getIntDef(countProperty, -1)
+                : -1;
+        if (shapingText_ < 0 || shapingText_ > fastShapingMinimum) {
+            shapingText_ = shapingText(document->getRootNode(), fastShapingMinimum);
+            document->getProps()->setInt(countProperty, shapingText_);
+            document->setCacheFileStale(true);
+        }
+    }
+    activateFastShaping();
     engine_->Render();
     openingTimes_["model_paginate_ms"] = double(phase.restart());
     if (!resourceError().isEmpty()) {

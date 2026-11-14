@@ -28,6 +28,8 @@ The slice checks compare interrupted and uninterrupted readers at the start of l
 
 `engine.page-estimate` compares saved highlight end pages with whole-book pagination after the chapter leaves the window. A selection ending at the start of the next page belongs to the preceding page.
 
+`engine.chapter-slices` checks that the text beside a floating sidebar stays outside the sidebar when Blaze formats the page for display. Rendering policy 8 refreshes saved layouts with the corrected float geometry.
+
 `engine.chapter-parity` compares chapter and whole-book navigation across hidden non-linear chapters. It checks covers, explicit entry into a hidden chapter, forward and reverse turns, adjacent preview pixels and the last readable page before a hidden appendix. It also crosses between a long chapter and a group of short chapters with hidden footnotes at both ends. After a font or line-spacing change, it compares the reading position and page pixels at slice boundaries where a container has a top border and padding. In vertical Japanese text it also checks the next passage after crossing that boundary in both directions. After reflow, forward and reverse turns across a padded container also check its bottom edge against whole-book rendering. A shaded-group fixture checks that blocks from a previous slice leave no background on the current page.
 
 ## Shared locations and the engine interface

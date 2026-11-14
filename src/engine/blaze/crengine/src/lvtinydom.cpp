@@ -2379,12 +2379,14 @@ void RenderRectAccessor::getInvolvedFloatIds( int & float_count, lUInt32 * float
         rr_lock( _node );
 #endif
     }
-    float_count = _extra0;
-    if (float_count > 0) float_ids[0] = _extra1;
-    if (float_count > 1) float_ids[1] = _extra2;
-    if (float_count > 2) float_ids[2] = _extra3;
-    if (float_count > 3) float_ids[3] = _extra4;
-    if (float_count > 4) float_ids[4] = _extra5;
+    // A zero data index ends the list. The vertical inline extent can use
+    // _extra0 on the same final block.
+    const int ids[] = { _extra1, _extra2, _extra3, _extra4, _extra5 };
+    float_count = 0;
+    while ( float_count < 5 && ids[float_count] ) {
+        float_ids[float_count] = ids[float_count];
+        ++float_count;
+    }
 }
 void RenderRectAccessor::setInvolvedFloatIds( int float_count, const lUInt32 * float_ids )
 {
@@ -2395,12 +2397,11 @@ void RenderRectAccessor::setInvolvedFloatIds( int float_count, const lUInt32 * f
         rr_lock( _node );
 #endif
     }
-    _extra0 = float_count;
-    if (float_count > 0) _extra1 = float_ids[0];
-    if (float_count > 1) _extra2 = float_ids[1];
-    if (float_count > 2) _extra3 = float_ids[2];
-    if (float_count > 3) _extra4 = float_ids[3];
-    if (float_count > 4) _extra5 = float_ids[4];
+    _extra1 = float_count > 0 ? float_ids[0] : 0;
+    _extra2 = float_count > 1 ? float_ids[1] : 0;
+    _extra3 = float_count > 2 ? float_ids[2] : 0;
+    _extra4 = float_count > 3 ? float_ids[3] : 0;
+    _extra5 = float_count > 4 ? float_ids[4] : 0;
     _modified = true;
 }
 

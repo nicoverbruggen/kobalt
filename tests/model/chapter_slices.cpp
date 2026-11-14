@@ -102,6 +102,24 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
 #if __has_include(<koblaze.h>)
+    {
+        const auto files = styledBook(
+                "p { margin:0; text-indent:0 } .float { float:left; width:6em; height:5em }",
+                "<p class='float'>Sidebar</p><p>Passage beside the note.</p>");
+        EngineDocument book(test::readerFonts());
+        open(book, files);
+        book.image(0);
+        const auto side = book.searchPage("Sidebar", 0).hits;
+        const auto passage = book.searchPage("Passage", 0).hits;
+        require(side.size() == 1 && passage.size() == 1, "Both words must be on the first page");
+        const auto left = book.rangeRects(side.first().start, side.first().end);
+        const auto right = book.rangeRects(passage.first().start, passage.first().end);
+        require(!left.isEmpty() && !right.isEmpty(), "Both words must have text rectangles");
+        require(left.first().top() < right.first().bottom()
+                        && right.first().top() < left.first().bottom()
+                        && left.first().right() < right.first().left(),
+                "Reformatting the paragraph for display must keep its text beside the float");
+    }
     const int slicePages = 6;
     EngineDocument model(test::readerFonts());
     open(model, test::engineBook(false, 3, 500));

@@ -70,7 +70,13 @@ Native tile cover reuse is enabled at startup when all required capture and inva
 
 `tile-cover-probe-ready` reports the installed hooks. `tile-cover-probe-assigned`, `tile-cover-probe-snapshot`, `tile-cover-probe-seeded` and `tile-cover-probe-first-paint` report dimensions and process-local image keys without book identifiers. Matching nonzero keys show that the assigned image reached the first loading paint. An empty or ambiguous snapshot uses the existing loading path. Larger covers from the disk worker or publication can replace the initial thumbnail. Images with fewer source pixels per painted pixel do not replace sharper covers. The cover surface compares its fitted pixels and skips unchanged images. Changed images damage only the old and new cover bounds and request a partial refresh. Run `ui.openingCoverLayout`, `ui.openingCoverUpgrade`, `ui.openingCoverDamage` and both Kobo SDK adapter checks after changing this path.
 
+## Desktop engine monitor
+
 `full-document-ready` reports that Hybrid has prepared the whole book, with its page count, cache status and number of pauses. It does not mean that the reader has adopted it. `full-document-refused` is a warning with the render ID when that document cannot restore the current position. The reader discards it, keeps chapter mode and continues the requested navigation. It does not retry the same build for the same appearance.
+
+Build `kobalt-desktop-tests` and run `ctest --preset mac -R '^desktop.engineMonitor'`. The focused checks cover event pairing, interruption labels, queue and paint timings, memory values, bounded history, pause/clear/close behavior, safe observer lifetime, timeline zoom, rendering slowdown, nested scopes and cancellation during the artificial wait. A Type Tester reading check verifies that real renderer and background events reach the window.
+
+Set `KOBALT_MONITOR_CAPTURE` to an absolute directory under the worktree's `build/screenshots/` when running `desktop.engineMonitorReading` to retain the desktop monitor and reader captures. This development window uses desktop geometry, separate from the reader's e-reader and phone captures. The checks do not establish timing equivalence with Kobo hardware.
 
 Run `desktop.fastConsecutiveChapterJumps` to check that chapter jumps cancel adjacent-page previews during the simulated slowdown. It uses Type Tester and keeps the Navigate panel open across repeated chapter jumps.
 

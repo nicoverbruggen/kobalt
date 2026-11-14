@@ -103,8 +103,13 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
             layoutPreferences_[key] = preferences.value(key);
     if (saved.value("book").toString() == identity_)
         dictionaryChoice_ = saved.value("dictionary_id").toString();
-    if (saved.value("book").toString() == identity_)
+    if (session_->savedStateMatched() && saved.value("book").toString() == identity_) {
         textPreset_ = saved.value(textpresets::bookKey).toString().left(64);
+    } else {
+        const auto choice = textpresets::newBookChoice(preferences);
+        if (choice != "last" && choice != "book")
+            textPreset_ = choice;
+    }
     // Qt 5.2 leaves a default-constructed QElapsedTimer uninitialized, so
     // isValid() is not reliable until the timer is invalidated or started.
     progressPoll.invalidate();

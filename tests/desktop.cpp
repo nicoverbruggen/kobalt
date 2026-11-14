@@ -5624,6 +5624,38 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(restarted.value("page").toInt(), 0);
         for (const auto *key : { "font_face", "font_pixels", "line_spacing", "text_alignment" })
             QCOMPARE(restarted.value(key), first.value(key));
+        // A second preset can have the same typography. Keep the name chosen
+        // for new books when the first book is opened again.
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(fixture.window.idle());
+        auto prefs = storage::readJson(fixture.paths.preferences());
+        auto presets = textpresets::examples();
+        auto duplicate = presets.first();
+        duplicate.id = "preset-duplicate";
+        duplicate.name = "Same text";
+        duplicate.example = false;
+        presets.prepend(duplicate);
+        textpresets::store(prefs, presets);
+        prefs[textpresets::newBookKey] = "kobalt";
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), prefs));
+        const auto fresh = fixture.directory.path() + "/preset-book.epub";
+        QVERIFY(QFile::copy(book, fresh));
+        for (const int opening : { 4, 5 }) {
+            fixture.window.openBook(fresh);
+            QTRY_COMPARE(opened.count(), opening);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavText"));
+            QTRY_VERIFY(fixture.visible("rrTextPresetToggle"));
+            QCOMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(),
+                     QString("Kobalt"));
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(fixture.window.idle());
+            // Once saved, the book keeps its own preset if the default changes.
+            prefs = storage::readJson(fixture.paths.preferences());
+            prefs[textpresets::newBookKey] = duplicate.id;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), prefs));
+        }
     }
 
     void libraryGridRows()

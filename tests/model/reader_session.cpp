@@ -80,7 +80,7 @@ static void hybridFontEdits(const QString &path, quint16 port)
         reader.open({ path,
                       path,
                       QSize(758, 900),
-                      {},
+                      qt::object({ { "column_spacing_percent", 150 } }),
                       {},
                       {},
                       lease,

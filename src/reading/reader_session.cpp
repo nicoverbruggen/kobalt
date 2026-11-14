@@ -2798,9 +2798,9 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                                         // usable layout while reporting the command error.
                                         guard->layoutReady_ = !result.image.isNull()
                                                 && result.state.value("pages").toInt() > 0;
-                                        if (!result.error.isEmpty()) {
-                                            guard->desired = result.state;
-                                        }
+                                        // This is the latest request. Keep the values the engine
+                                        // resolved, including the pixel gap for the new font size.
+                                        guard->desired = result.state;
                                         if (failed)
                                             guard->cancelPendingTurn();
                                         guard->clearRenderProgress();

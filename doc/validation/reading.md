@@ -14,6 +14,8 @@ A failed jump to a passage in another chapter must preserve the current anchor a
 
 Reopening a finished book at the start must show the original opening page in cold and retained chapter sessions. When a native position and its chapter are both missing, the retained session falls back to that same page.
 
+A session discards an unfinished frame when the host revokes the source or the reader cancels it. Font and viewport changes must keep the last displayed image and finish their progress indication.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

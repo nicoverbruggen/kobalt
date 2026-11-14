@@ -1804,38 +1804,44 @@ int run(int argc, char **argv)
         require(replacementStarted && replacementFinished && !staleFinished
                         && !session->image().isNull(),
                 "Old queued opening completion reached a newer source generation");
-        {
-            auto cancelled =
-                    std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
-            auto cancelledLease = std::make_shared<SourceLease>();
-            cancelled->open({ path,
-                              path,
-                              QSize(758, 900),
-                              {},
-                              {},
-                              {},
-                              cancelledLease,
-                              nativeResourceFactory(path, server.serverPort(), cancelledLease) },
-                            [&](OpeningResult result) {
-                                require(result.ready(), qPrintable(openingMessage(result)));
-                                opened.quit();
-                            });
-            opened.exec();
-            require(cancelled->style(cancelled->fontSize() + 1, cancelled->spacing()),
-                    "Cannot start a cancelled relayout");
-            require(cancelled->renderProgress().active,
-                    "Cancelled relayout never started progress");
-            cancelled->cancelSource();
-            require(!cancelled->renderProgress().active,
-                    "Source cancellation kept relayout progress active");
-            bool staleProgress = false;
-            cancelled->renderProgressChanged = [&] {
-                staleProgress |= cancelled->renderProgress().active;
-            };
-            ReaderSession::drain([&] { drained.quit(); });
-            drained.exec();
-            require(!staleProgress && !cancelled->renderProgress().active,
-                    "Queued progress revived a cancelled relayout");
+        // A source can end while the worker draws its next frame. A host may revoke
+        // the lease directly, without notifying the facade first.
+        enum class Pending { Font, Rotation, Turn };
+        for (const bool hostRevokes : { false, true }) {
+            for (const auto request : { Pending::Font, Pending::Rotation, Pending::Turn }) {
+                ReaderSession cancelled(test::readerFonts(), test::readerPlaceholder());
+                auto access = std::make_shared<SourceLease>();
+                cancelled.open({ path, path, QSize(758, 900), {}, {}, {}, access,
+                                 localResourceFactory(path, access) }, [&](OpeningResult result) {
+                    require(result.ready(), qPrintable(openingMessage(result)));
+                    opened.quit();
+                });
+                opened.exec();
+                const auto shown = cancelled.image().cacheKey();
+                bool published = false;
+                cancelled.updated = [&] { published = true; };
+                if (request == Pending::Font)
+                    cancelled.editAppearance(appearance::Patch(qt::object(
+                            { { "font_pixels", cancelled.fontSize() + 2 } })));
+                else if (request == Pending::Rotation)
+                    cancelled.resize(QSize(900, 758));
+                else
+                    require(cancelled.turn(1), "Cannot start the pending turn");
+                require(cancelled.busy() && cancelled.renderProgress().active == (request != Pending::Turn),
+                        "The requested render must be in progress");
+                if (hostRevokes)
+                    access->revoke();
+                else {
+                    cancelled.cancelSource();
+                    require(!cancelled.renderProgress().active,
+                            "Source cancellation kept relayout progress active");
+                }
+                ReaderSession::drain([&] { drained.quit(); });
+                drained.exec();
+                require(!published && !cancelled.busy() && !cancelled.renderProgress().active
+                                && cancelled.image().cacheKey() == shown,
+                        "An ended source published its pending layout or left progress active");
+            }
         }
         {
             QTemporaryDir logs;

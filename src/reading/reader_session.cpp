@@ -2771,8 +2771,10 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                                             return;
                                         guard->running = false;
                                         guard->turning = false;
-                                        if (afterFrame && lease->revoked())
+                                        if (!lease || lease->revoked()) {
+                                            guard->clearRenderProgress();
                                             return;
+                                        }
                                         // Do not flash intermediate layouts while newer settings wait.
                                         if (job != guard->revision) {
                                             guard->dispatch(false, afterFrame);

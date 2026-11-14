@@ -2098,7 +2098,7 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
 // The switch to the whole book resolves the place of the page on screen in
 // the whole-book document. Walks a book in chapter mode and asks the whole
 // book for the place of every page.
-void handoffWalk(const QByteArray &text)
+void handoffWalk(const QByteArray &text, int slicePages = 0)
 {
     const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
     const auto pixels = [](const QImage &image) {
@@ -2111,8 +2111,17 @@ void handoffWalk(const QByteArray &text)
     EngineDocument whole(test::readerFonts());
     require(whole.open(text, QSize(600, 800), settings, &error), qPrintable(error));
     EngineDocument model(test::readerFonts());
+    const auto previousPages = qgetenv("KOBALT_CHAPTER_PAGES");
+    if (slicePages > 0)
+        qputenv("KOBALT_CHAPTER_PAGES", QByteArray::number(slicePages));
     setChapterModeOverride(1);
     const bool opened = model.open(text, QSize(600, 800), settings, &error);
+    if (slicePages > 0) {
+        if (previousPages.isNull())
+            qunsetenv("KOBALT_CHAPTER_PAGES");
+        else
+            qputenv("KOBALT_CHAPTER_PAGES", previousPages);
+    }
     setChapterModeOverride(-1);
     require(opened && model.bookFraction() >= 0, qPrintable(error));
     int pages = 0, unresolved = 0, otherStart = 0, otherPixels = 0, compared = 0;
@@ -2123,6 +2132,9 @@ void handoffWalk(const QByteArray &text)
             if (++unresolved <= 5)
                 std::printf("unresolved place on chapter page %d: %s\n", pages, qPrintable(place));
         }
+        if (slicePages > 0)
+            require(!place.isEmpty() && whole.page() == pages - 1,
+                    "A mixed-layout reading position must resolve to its displayed page");
         // A blank page can share its source anchor with the following page.
         // Resolve the anchor above to test adoption, but compare pixels at
         // the same sequential page index so that such pages are not skipped.
@@ -2131,7 +2143,8 @@ void handoffWalk(const QByteArray &text)
                 std::printf("other page start at chapter page %d: %s / %s\n", pages,
                             qPrintable(model.pageStart(model.page())),
                             qPrintable(whole.pageStart(whole.page())));
-            if (qEnvironmentVariableIsSet("KOBALT_HANDOFF_ALL_PAGES") || pages % 5 == 0) {
+            if (slicePages > 0 || qEnvironmentVariableIsSet("KOBALT_HANDOFF_ALL_PAGES")
+                || pages % 5 == 0) {
                 ++compared;
                 if (pixels(whole.image(whole.page())) != pixels(model.image(model.page()))
                     && ++otherPixels <= 5) {
@@ -2796,6 +2809,12 @@ int main(int argc, char **argv)
         return 0;
     }
 #if __has_include(<koblaze.h>)
+    const auto walkFixture = [](const char *name, int slicePages) {
+        QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + '/' + QLatin1String(name));
+        require(file.open(QIODevice::ReadOnly), "Cannot open mixed-layout regression book");
+        handoffWalk(file.readAll(), slicePages);
+    };
+    walkFixture("overflowing-float-bookmarks.epub", 3);
     hiddenHeadingOnChapterReflow();
     hiddenHeadingAtHandoff();
 #endif

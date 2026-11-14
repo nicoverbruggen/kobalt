@@ -21850,18 +21850,20 @@ ldomNode * ldomNode::elementFromPoint( lvPoint pt, int direction, bool strict_bo
                 // looking at inlines' children. We handle this case above (at the
                 // start of this function) by looking at erm_inline's children for
                 // non-erm_inline nodes before checking any x/y or bottom overflow.
+                // A logical line scan has no screen x. Include a float on
+                // either side if its final block covers this row. A point
+                // lookup still needs to be inside the float horizontally.
+                const bool logical = direction >= PT_DIR_SCAN_FORWARD_LOGICAL_FIRST;
                 int count = getChildCount();
                 for ( int i=0; i<count; i++ ) {
                     ldomNode * p = getChildNode( i );
-                    // Find an inner erm_final element that has pt in it: for now, it can
-                    // only be a float. Use PT_DIR_EXACT to really check for x boundaries.
-                    ldomNode * e = p->elementFromPoint( lvPoint(pt.x-fmt.getX(), pt.y-fmt.getY()), PT_DIR_EXACT );
+                    ldomNode * e = p->elementFromPoint( lvPoint(pt.x-fmt.getX(), pt.y-fmt.getY()),
+                                                        logical ? direction : PT_DIR_EXACT );
                     if ( e ) {
-                        // Just to be sure, as elementFromPoint() may be a bit fuzzy in its
-                        // checks, double check that pt is really inside that e rect.
                         lvRect erc;
                         e->getAbsRect( erc );
-                        if ( erc.isPointInside(pt0) ) {
+                        if ( logical ? (e->getRendMethod() == erm_final && pt0.y >= erc.top && pt0.y < erc.bottom)
+                                     : erc.isPointInside(pt0) ) {
                             return e; // return this inner erm_final
                         }
                     }

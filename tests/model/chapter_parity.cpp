@@ -1488,22 +1488,29 @@ Book loadBook(const QString &name)
 {
     if (name == QLatin1String("links"))
         return { name, {}, test::linkBook() };
-    if (name == QLatin1String("bordered vertical text")) {
+    if (name == QLatin1String("bordered vertical text")
+        || name == QLatin1String("shaded paragraphs")) {
+        const bool vertical = name == QLatin1String("bordered vertical text");
         QByteArray body;
         for (int group = 0; group < 8; ++group) {
-            body += "<div style='border:1px solid #333;padding:12px 8px'>";
+            body += vertical ? "<div style='border:1px solid #333;padding:12px 8px'>"
+                             : "<div style='background:#eee'>";
             for (int paragraph = 0; paragraph < 3; ++paragraph)
-                body += "<p>" + QByteArray("吾輩は猫である。名前はまだ無い。")
-                                        .repeated(18 + (group + paragraph) % 3)
+                body += "<p>"
+                        + QByteArray("吾輩は猫である。名前はまだ無い。")
+                                  .repeated((vertical ? 18 : 12) + (group + paragraph) % 3)
                         + "</p>";
             body += "</div>";
         }
         auto chapter = test::publisherHtml(body);
-        chapter.replace("</head>", "<style>body{writing-mode:vertical-rl;"
-                                   "font-family:Noto Serif CJK JP}</style></head>");
-        return { name, {}, test::publisherPackage("ja", "Vertical paragraphs",
-                                                  { { "chapter.xhtml", chapter } },
-                                                  "<itemref idref='chapter.xhtml'/>") };
+        chapter.replace("</head>",
+                        QByteArray("<style>body{font-family:Noto Serif CJK JP;writing-mode:")
+                                + (vertical ? "vertical-rl" : "horizontal-tb")
+                                + "}</style></head>");
+        return { name,
+                 {},
+                 test::publisherPackage("ja", name.toUtf8(), { { "chapter.xhtml", chapter } },
+                                        "<itemref idref='chapter.xhtml'/>") };
     }
     if (name == QLatin1String("trevelyan"))
         return { name,

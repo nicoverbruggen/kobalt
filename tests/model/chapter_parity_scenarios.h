@@ -12,6 +12,14 @@ Action chapterSlicePages(int pages)
             } };
 }
 
+Action rotateToLandscape()
+{
+    return { "rotate to landscape", [](Reader &reader) -> QString {
+                return reader.model->applyAppearance({}, { 1072, 758 }) ? QString()
+                                                                       : "error: rotation failed";
+            } };
+}
+
 QVector<Scenario> scenarios()
 {
     return {
@@ -28,12 +36,10 @@ QVector<Scenario> scenarios()
           { chapterSlicePages(2), gotoChapter(3), setFontSize(2), turn(-2), turn(-2) } },
         { "border before a vertical chapter slice",
           "bordered vertical text",
-          { chapterSlicePages(2),
-            { "rotate to landscape", [](Reader &reader) -> QString {
-                 return reader.model->applyAppearance({}, { 1072, 758 }) ? QString()
-                                                                        : "error: rotation failed";
-             } },
-            turn(4), turn(1), turn(-1) } },
+          { chapterSlicePages(2), rotateToLandscape(), turn(4), turn(1), turn(-1) } },
+        { "background from an omitted chapter block",
+          "shaded paragraphs",
+          { chapterSlicePages(2), rotateToLandscape(), turn(5), turn(-1), turn(1) } },
         { "line spacing on the final chapter slice",
           "trevelyan",
           { chapterSlicePages(7), setFontSize(8), gotoChapter(3), turn(-1),

@@ -693,6 +693,17 @@ bool EngineDocument::earlierContentOnPage(ldomNode *block, int page) const
     if (!list || index < 0 || index >= list->length())
         return false;
     const int top = list->get(index)->start;
+    // A container can start this page with a border or padding before its
+    // first text block. Starting the slice at that text would omit the space.
+    lvRect first;
+    block->getAbsRect(first);
+    for (auto *parent = block->getParentNode(); parent && !parent->isNodeName("DocFragment");
+         parent = parent->getParentNode()) {
+        lvRect box;
+        parent->getAbsRect(box);
+        if (box.top >= top && box.top < first.top)
+            return true;
+    }
     // The page can start a little below the top of the last line before the
     // block. That line is then on the page, and the page start names the
     // block.

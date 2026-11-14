@@ -234,6 +234,14 @@ void blocks()
                     "Reading in parts must give the same widths");
     }
 
+    // Engine text positions count Unicode code points, including characters
+    // outside the basic multilingual plane.
+    const auto passage = QStringLiteral("<html><body><p>😀😀 go west</p></body></html>").toUtf8();
+    qint64 words = -1;
+    const auto halfway = pageEstimateTextFraction(passage, "/body/p/text().5", false, &words);
+    require(qAbs(halfway - 0.5) < 0.000001 && words == 1,
+            "Supplementary characters changed the estimated place or word count at a source anchor");
+
     const auto layout = Page().layout();
     const auto prose = measurePageEstimate("<body><p>" + QByteArray(4000, 'a') + "</p></body>");
     const auto verse =

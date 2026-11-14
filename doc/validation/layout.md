@@ -22,6 +22,8 @@ The restored `reader`, `publisher-markup`, `local-reader` and `document-word-cou
 
 The slice checks compare interrupted and uninterrupted readers at the start of layout, during extension of a long paragraph and at a slice boundary. Cancelling preparation of the next slice must preserve the visible page and allow both a reverse turn and a retry. `engine.layout-interrupt` also interrupts a viewport change in a later slice, returns to the original viewport and checks the page starts and pixels in both directions.
 
+`engine.page-estimate` checks the position and word count of a passage with supplementary Unicode characters before the anchor.
+
 `engine.page-estimate` compares saved highlight end pages with whole-book pagination after the chapter leaves the window. A selection ending at the start of the next page belongs to the preceding page.
 
 `engine.chapter-parity` compares chapter and whole-book navigation across hidden non-linear chapters. It checks covers, explicit entry into a hidden chapter, forward and reverse turns, adjacent preview pixels and the last readable page before a hidden appendix. It also crosses between a long chapter and a group of short chapters with hidden footnotes at both ends. After a font or line-spacing change, it compares the reading position and page pixels at slice boundaries where a container has a top border and padding.

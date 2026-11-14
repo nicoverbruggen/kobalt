@@ -338,19 +338,19 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
     bool interrupted = false;
     unsigned work = 0;
     bool space = false;
-    const auto count = [&](const QString &value, int limit) {
-        for (int i = 0; i < value.size() && i < limit; ++i) {
+    const auto count = [&](const QString &value, int &i, int codePoints) {
+        while (i < value.size() && codePoints-- > 0) {
             if (++work % 4096 == 0 && current && !current()) {
                 interrupted = true;
                 return;
             }
-            if (!wordSkip && !value.at(i).isLowSurrogate()) {
-                const auto c = value.at(i).isHighSurrogate() && i + 1 < value.size()
-                        ? QChar::surrogateToUcs4(value.at(i), value.at(i + 1))
-                        : uint(value.at(i).unicode());
+            const auto unit = value.at(i++);
+            char32_t c = unit.unicode();
+            if (unit.isHighSurrogate() && i < value.size() && value.at(i).isLowSurrogate())
+                c = QChar::surrogateToUcs4(unit, value.at(i++));
+            if (!wordSkip)
                 wordCounter.append(c);
-            }
-            if (value.at(i).isSpace()) {
+            if (QChar::isSpace(c)) {
                 space = characters > 0;
             } else {
                 characters += space ? 2 : 1;
@@ -415,20 +415,19 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
             texts.removeLast();
         } else if (token == QXmlStreamReader::Characters && body && depth > 0) {
             const auto value = reader.text().toString();
+            int at = 0;
             if (reader.isWhitespace()) {
-                count(value, INT_MAX);
+                count(value, at, INT_MAX);
                 continue;
             }
             const int index = ++texts.last();
             if (target < 0 && text && matched == depth && matched == elements
                 && steps.last().index == index) {
-                count(value, offset);
+                count(value, at, offset);
                 target = characters;
                 targetWords = wordCounter.words();
-                count(value.mid(qMin(offset, int(value.size()))), INT_MAX);
-                continue;
             }
-            count(value, INT_MAX);
+            count(value, at, INT_MAX);
         }
     }
     if (interrupted || (current && !current()) || !body || characters <= 0)

@@ -1,5 +1,7 @@
 # KOSync checks
 
+`desktop.fastKosyncChoice` opens a synced passage choice for another chapter while reading in Fast mode. It checks the direction, chapter name and whole-book page graph, and that the current position stays on screen.
+
 Label `kosync`. Build `mac-tests`, then run `ctest --preset mac -L kosync` from `platforms/desktop/`. `ctest --preset mac -N -L kosync` lists its tests.
 
 These checks cover KOSync accounts, automatic and manual sync, sync moments and intervals, Wi-Fi connection and release, the Wi-Fi power saver, the Wi-Fi status indicator, the sync client and the KOSync settings controls. They use a controlled network transport, stalled loopback servers and substituted native Wi-Fi calls. The widget keyboard in the account editors is covered in [Widget keyboard](keyboard.md).

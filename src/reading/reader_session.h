@@ -116,7 +116,7 @@ struct SyncedPositionDescription
 {
     PositionComparison comparison;
     QString chapter;
-    // Compared only: the page of the synced position in this layout, or -1.
+    // Compared only: the whole-book page of the synced position, or -1.
     int page = -1;
 };
 
@@ -203,7 +203,7 @@ public:
     bool goToFraction(double fraction);
     bool goToNative(const QString &location, std::function<void(QString)> finished);
     bool goToSyncedPosition(const QString &position, std::function<void(QString)> finished);
-    // Resolves chapter, page and source order without navigating or rendering another page.
+    // Resolves chapter, page and source order without changing the displayed page.
     void describeSyncedPosition(const QString &position,
                                 std::function<void(SyncedPositionDescription)> finished);
     void nativePosition(std::function<void(QString, QString)> finished);

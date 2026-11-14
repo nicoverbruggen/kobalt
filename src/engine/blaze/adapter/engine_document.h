@@ -117,6 +117,8 @@ public:
                                        QString *error) override;
     // Negative is before the current source anchor; positive is beyond it.
     int comparePosition(const QString &position, QString *error) const override;
+    int describePosition(const QString &position, QString *chapter, int *page, QString *error,
+                         const std::function<bool()> &current) override;
     int comparePlatformPosition(const PositionCodec &codec, const QString &location,
                                 QString *error) const override;
     // The shared location of an engine position. False when the position is

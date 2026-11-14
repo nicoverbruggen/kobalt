@@ -1205,13 +1205,11 @@ void ReaderSession::describeSyncedPosition(const QString &position,
                 EngineJob activity;
                 SyncedPositionDescription result;
                 if (ready && lease && !lease->revoked()) {
-                    result.comparison.direction =
-                            engine->comparePosition(position, &result.comparison.error);
-                    if (result.comparison.error.isEmpty()) {
+                    result.comparison.direction = engine->describePosition(
+                            position, &result.chapter, &result.page, &result.comparison.error,
+                            [lease] { return !lease->revoked(); });
+                    if (result.comparison.error.isEmpty())
                         result.comparison.status = PositionComparison::Status::Compared;
-                        result.chapter = engine->chapterTitle(position);
-                        result.page = engine->pagesOf({ position }).value(0, -1);
-                    }
                 }
                 kobalt::qt::invoke(
                         qApp,

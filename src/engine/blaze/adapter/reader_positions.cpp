@@ -1,4 +1,5 @@
 #include "column_view.h"
+#include "reader_source.h"
 #include "engine_document.h"
 #include "platform/api/position_codec.h"
 #include "support/strings.h"
@@ -81,6 +82,24 @@ int EngineDocument::comparePosition(const QString &anchor, QString *error) const
         return 0;
     }
     return incoming.compare(current);
+}
+
+int EngineDocument::describePosition(const QString &position, QString *chapter, int *page,
+                                     QString *error, const std::function<bool()> &current)
+{
+    const int item = spineItemIndex(position);
+    const bool outside =
+            windowFirst_ >= 0 && item >= 0 && (item < windowFirst_ || item > windowLast_);
+    auto *document = outside ? documentFor(item, current) : this;
+    if (!document || !document->engine_ || (current && !current())
+        || document->engine_->getDocument()->createXPointer(cre(position)).isNull()) {
+        *error = strings::get("error.cannot_compare_the_reading_positions");
+        return 0;
+    }
+    *chapter = document->chapterTitle(position);
+    const int number = bookPages({ position }, current).value(0, -1);
+    *page = number > 0 ? number - 1 : -1;
+    return outside ? (item < windowFirst_ ? -1 : 1) : comparePosition(position, error);
 }
 
 QString EngineDocument::platformPosition(const PositionCodec &codec, QString *error) const

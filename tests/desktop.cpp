@@ -6516,6 +6516,73 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void fastKosyncChoice()
+    {
+        renderingMode::setOverride(1);
+        const auto previous = qgetenv("KOBALT_CHAPTER_PAGES");
+        qputenv("KOBALT_CHAPTER_PAGES", "2");
+        const auto restore = qScopeGuard([previous] {
+            renderingMode::setOverride(-1);
+            if (previous.isNull())
+                qunsetenv("KOBALT_CHAPTER_PAGES");
+            else
+                qputenv("KOBALT_CHAPTER_PAGES", previous);
+        });
+        auto body = std::make_shared<QByteArray>("{}");
+        Fixture fixture(false, false, false, true, false, false,
+                        [body](ReaderHostServices &services) {
+                            services.kosyncHttp = [body] {
+                                return std::make_unique<ChoiceProgressHttp>(body);
+                            };
+                        });
+        QVERIFY(fixture.prepared);
+        QVERIFY(storage::writeJson(fixture.paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "local" },
+                                     { "automatic", false } }));
+        selectPreview(fixture, 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(fixture.state().value("rough_pages").toInt() > 0);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter4"));
+        QVERIFY(fixture.press("rrChapter4"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.turnPage(1));
+        const auto remote = fixture.state().value("position").toString();
+        const auto title = fixture.state().value("chapter_title").toString();
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter1"));
+        QVERIFY(fixture.press("rrChapter1"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto local = fixture.state();
+        QVERIFY(local.value("position").toString() != remote);
+        *body = QJsonDocument(QJsonObject{ { "progress", remote },
+                                           { "percentage", 0.7 },
+                                           { "device", "Other reader" },
+                                           { "device_id", "remote" },
+                                           { "timestamp", 1794124800 } })
+                        .toJson();
+        fixture.window.readerWindow()->findChild<QPushButton *>("rrKosyncNow")->click();
+        QPointer<ui::ChoiceModal> dialog;
+        QTRY_VERIFY((dialog = dynamic_cast<ui::ChoiceModal *>(fixture.widget("rrKosyncChoice")))
+                    && dialog->primaryButton()->isEnabled());
+        auto *view = dynamic_cast<reader::SyncChoiceView *>(fixture.widget("rrKosyncChoiceView"));
+        QVERIFY(view);
+        QCOMPARE(dialog->titleLabel()->text(), strings::get("kosync.ahead_title"));
+        QCOMPARE(view->jump().toChapter, title);
+        QCOMPARE(view->jump().pages, local.value("rough_pages").toInt());
+        QCOMPARE(view->jump().here, local.value("rough_page").toInt() - 1);
+        QVERIFY(view->jump().drawable() && view->jump().synced > view->jump().here);
+        QCOMPARE(fixture.state().value("position"), local.value("position"));
+    }
+
     void fastProgressSurfaces()
     {
         renderingMode::setOverride(1);

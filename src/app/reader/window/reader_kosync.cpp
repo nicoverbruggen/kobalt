@@ -635,8 +635,8 @@ void Reader::showKosyncChoice()
                 const int direction = compared ? info.comparison.direction : 0;
                 const auto links = session->chapters();
                 SyncJump jump;
-                jump.pages = session->pages();
-                jump.here = session->page();
+                jump.pages = session->bookPages();
+                jump.here = session->bookPage();
                 jump.synced = compared && info.page < jump.pages ? info.page : -1;
                 jump.starts = syncChapterStarts(links);
                 jump.nested = std::any_of(links.cbegin(), links.cend(),
@@ -650,7 +650,7 @@ void Reader::showKosyncChoice()
                 const auto percent = [&jump](int page) {
                     return jump.pages > 1 ? 100.0 * page / (jump.pages - 1) : 0.0;
                 };
-                jump.fromPercent = percent(jump.here);
+                jump.fromPercent = jump.here >= 0 ? percent(jump.here) : session->progressFraction() * 100;
                 // The synced page in this layout keeps the graph and the row in
                 // agreement. The reported percentage is the fallback.
                 jump.toPercent = jump.synced >= 0 ? percent(jump.synced) : remote.percentage * 100;

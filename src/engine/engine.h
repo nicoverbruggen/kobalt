@@ -102,6 +102,9 @@ public:
                                                QString *error) = 0;
     // Negative is before the current source anchor; positive is beyond it.
     virtual int comparePosition(const QString &position, QString *error) const = 0;
+    // Describes a remote passage in whole-book coordinates without moving the reader.
+    virtual int describePosition(const QString &position, QString *chapter, int *page,
+                                 QString *error, const std::function<bool()> &current) = 0;
     virtual int comparePlatformPosition(const PositionCodec &codec, const QString &location,
                                         QString *error) const = 0;
     // The shared location of an engine position. False when the position is

@@ -2757,7 +2757,8 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
     if (!turnStarted.isValid())
         turnStarted.start();
     if (!annotationMode && !session->busy() && direction > 0
-        && session->nextPage() == session->page() && book->offerFinish()) {
+        && !session->continuesAfter() && session->nextPage() == session->page()
+        && book->offerFinish()) {
         turnStarted.invalidate();
         showFinishChoice();
         return;

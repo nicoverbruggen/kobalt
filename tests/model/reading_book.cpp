@@ -15,6 +15,7 @@
 #include <atomic>
 #include <QSqlQuery>
 #include "publication/native_resources.h"
+#include "publication/local_resources.h"
 #include "support/qt_compat.h"
 #include "publication/resource_server.h"
 #include "plain_archive.h"
@@ -457,6 +458,38 @@ int main(int argc, char **argv)
             const auto pinned = qgetenv("KOBALT_CHAPTER_MODE");
             qputenv("KOBALT_CHAPTER_MODE", "1");
             qputenv("KOBALT_CHAPTER_PAGES", "2");
+            {
+                const QString identity = "finish-across-slices";
+                const auto typeTester =
+                        QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub";
+                auto session = std::make_unique<ReaderSession>(test::readerFonts(),
+                                                               test::readerPlaceholder());
+                auto access = std::make_shared<SourceLease>();
+                bool opened = false;
+                session->open({ identity,
+                                typeTester,
+                                QSize(758, 900),
+                                {},
+                                {},
+                                {},
+                                access,
+                                localResourceFactory(typeTester, access) },
+                              [&](OpeningResult result) {
+                                  require(result.ready(), qPrintable(openingMessage(result)));
+                                  opened = true;
+                              });
+                waitUntil([&] { return opened; });
+                const auto hash = session->sourceHash();
+                ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths,
+                                 identity, hash, nullptr, {}, {});
+                auto *reader = book.session();
+                require(!book.offerFinish(), "Opening a book offered to finish it");
+                require(reader->goToFraction(.93), "Cannot seek near the book end");
+                waitUntil([&] { return !reader->busy(); });
+                require(reader->progressFraction() >= .9 && reader->continuesAfter(),
+                        "The near-end fixture must still have a later slice");
+                require(book.offerFinish(), "Fast mode must offer to finish at 90% on exit");
+            }
             const QString identity = "page-estimate";
             QJsonObject shown;
             {

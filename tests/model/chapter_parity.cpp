@@ -1489,12 +1489,13 @@ Book loadBook(const QString &name)
     if (name == QLatin1String("links"))
         return { name, {}, test::linkBook() };
     if (name == QLatin1String("bordered vertical text")
-        || name == QLatin1String("shaded paragraphs")) {
+        || name == QLatin1String("shaded paragraphs") || name == QLatin1String("padded paragraphs")) {
         const bool vertical = name == QLatin1String("bordered vertical text");
         QByteArray body;
         for (int group = 0; group < 8; ++group) {
             body += vertical ? "<div style='border:1px solid #333;padding:12px 8px'>"
-                             : "<div style='background:#eee'>";
+                             : name == QLatin1String("padded paragraphs") ? "<div style='padding:12px 8px'>"
+                                                                          : "<div style='background:#eee'>";
             for (int paragraph = 0; paragraph < 3; ++paragraph)
                 body += "<p>"
                         + QByteArray("吾輩は猫である。名前はまだ無い。")

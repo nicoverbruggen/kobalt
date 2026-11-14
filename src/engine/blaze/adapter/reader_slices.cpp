@@ -621,6 +621,7 @@ void EngineDocument::applySlice()
     if (!engine_)
         return;
     visiblePages_ = 0;
+    sliceLookAheadHidden_ = false;
     if (!slices()) {
         engine_->getDocument()->setKoblazeLayoutSlice(0, 0);
         return;

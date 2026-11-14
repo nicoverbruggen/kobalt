@@ -741,6 +741,8 @@ int EngineDocument::page() const
 
 int EngineDocument::pages() const
 {
+    if (sliceLookAheadHidden_ && visiblePages_ > 0)
+        return visiblePages_;
     return engine_ ? engine_->getPageCount() : 0;
 }
 
@@ -1183,10 +1185,10 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     observeLayout();
     if (!goTo(anchor))
         return false;
-    // Reflow can extend a slice to find a safe page boundary. Once the
-    // reading slice is known, discard the look-ahead pages beyond its end.
-    return !slices() || visiblePages_ <= 0
-            || (layoutSlice(sliceFirst_, sliceEnd_) && goTo(anchor));
+    // Keep the layout beyond the cut so the last visible page paints a
+    // partial publisher box with its actual border and padding.
+    sliceLookAheadHidden_ = slices() && visiblePages_ > 0;
+    return true;
 }
 
 bool EngineDocument::renderLayout()

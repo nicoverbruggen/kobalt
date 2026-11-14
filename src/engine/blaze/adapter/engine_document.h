@@ -411,6 +411,7 @@ private:
     // found no clean end, and whether the last search found one.
     int sliceExtra_ = 0;
     bool sliceCut_ = true;
+    bool sliceLookAheadHidden_ = false;
     // The characters that are laid out from the start of the slice.
     int sliceReach() const;
     // The starts of the slices that the reader passed going forward, so

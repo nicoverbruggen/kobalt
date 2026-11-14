@@ -5981,14 +5981,28 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         checkPinnedBookmarks(preset, dark);
     }
 
-    // Fast mode keeps contents and saved-list labels usable after leaving a sliced chapter.
+    void fastSavedLists_data()
+    {
+        QTest::addColumn<int>("mode");
+        QTest::addColumn<bool>("adoptWhole");
+        QTest::newRow("fast") << 1 << false;
+        QTest::newRow("hybrid-chapters") << 2 << false;
+        QTest::newRow("hybrid-adopted") << 2 << true;
+    }
+
+    // Saved marks survive chapter eviction, reopening and Hybrid adoption.
     void fastSavedLists()
     {
-        renderingMode::setOverride(1);
+        QFETCH(int, mode);
+        QFETCH(bool, adoptWhole);
+        renderingMode::setOverride(mode);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(60000);
         const auto previousPages = qgetenv("KOBALT_CHAPTER_PAGES");
         qputenv("KOBALT_CHAPTER_PAGES", "2");
-        const auto restore = qScopeGuard([previousPages] {
+        const auto restore = qScopeGuard([previousPages, quiet] {
             renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
             if (previousPages.isNull())
                 qunsetenv("KOBALT_CHAPTER_PAGES");
             else
@@ -6044,20 +6058,28 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrAnnotate"));
         QVERIFY(fixture.press("rrAnnotate"));
-        const auto leaveChapter = [&] {
+        const auto jumpChapter = [&](int chapter) {
             const auto before = fixture.state().value("position");
             if (!fixture.visible("rrNavChapters") && !fixture.press("rrPage"))
                 return false;
             if (!fixture.press("rrNavChapters"))
                 return false;
-            return QTest::qWaitFor([&] { return fixture.visible("rrChapter8"); })
-                    && fixture.press("rrChapter8") && QTest::qWaitFor([&] {
+            const auto target = QString("rrChapter%1").arg(chapter).toLatin1();
+            for (int row = 0; row < 5 && !fixture.visible(target.constData()); ++row)
+                if (!fixture.press("rrContentsNext"))
+                    return false;
+            return fixture.visible(target.constData()) && fixture.press(target.constData())
+                    && QTest::qWaitFor([&] {
                            const auto state = fixture.state();
                            return !state.value("busy").toBool()
                                    && state.value("position") != before;
                        });
         };
-        QVERIFY(leaveChapter());
+        // More separate chapters than the retained-unit limit. The return
+        // must work without relying on the original chapter document.
+        for (int chapter = 2; chapter <= 8; ++chapter)
+            QVERIFY(jumpChapter(chapter));
+        QVERIFY(fixture.state().contains("book_fraction"));
         QVERIFY(fixture.state().value("position") != savedPage);
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBookmarks"));
@@ -6070,7 +6092,38 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrBookmark0"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("position"), savedPage);
-        QVERIFY(leaveChapter());
+        for (int chapter = 2; chapter <= 8; ++chapter)
+            QVERIFY(jumpChapter(chapter));
+        if (adoptWhole) {
+            std::atomic_bool ready{ false };
+            QTemporaryDir logs;
+            QVERIFY(logs.isValid());
+            initializeDiagnostics(logs.path());
+            pauseDiagnostics(false);
+            setDiagnosticObserver([&](const QJsonObject &event) {
+                if (event.value("event") == QLatin1String("full-document-ready"))
+                    ready.store(true);
+            });
+            const auto quietLog = qScopeGuard([] {
+                setDiagnosticObserver({});
+                pauseDiagnostics(true);
+            });
+            renderingMode::setBuildQuietMilliseconds(0);
+            QVERIFY(fixture.turnPage(1));
+            QTRY_VERIFY_WITH_TIMEOUT(ready.load(), 15000);
+            for (int turn = 0; turn < 3 && fixture.state().contains("book_fraction"); ++turn)
+                QVERIFY(fixture.turnPage(-1));
+            QVERIFY(!fixture.state().contains("book_fraction"));
+        } else {
+            // Destroy all engine documents. Reopening in the distant
+            // chapter must still resolve the saved annotation's source.
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.window.idle(), 30000);
+            fixture.window.openBook(book);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(fixture.state().contains("book_fraction"));
+        }
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBookmarks"));
         QVERIFY(fixture.press("rrBookmarks"));
@@ -6081,9 +6134,36 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(annotationRow->titleLabel()->text(), highlight.value("chapter").toString());
         QVERIFY(annotationRow->trailingLabel()->text().toInt() > 0);
         QVERIFY(saveCapture("fast-highlights"));
+        const auto returnPosition = fixture.state().value("position");
+        const int returnPage = fixture.state().contains("book_fraction")
+                ? fixture.state().value("rough_page").toInt()
+                : fixture.state().value("page").toInt() + 1;
+        if (!adoptWhole)
+            QVERIFY(returnPage > fixture.state().value("page").toInt() + 1);
         QVERIFY(fixture.press("rrAnnotation0"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("position"), highlight.value("start"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+        QVERIFY(saveCapture(QString("return-%1").arg(QTest::currentDataTag())));
+        const auto returnLabel = strings::get("reader.return_page").arg(returnPage);
+        QCOMPARE(fixture.widget("rrScrubberReturn")->property("text").toString(), returnLabel);
+        QVERIFY(fixture.press("rrScrubberReturn"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("position"), returnPosition);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrBookmarks"));
+        QVERIFY(fixture.press("rrAnnotationsTab"));
+        QTRY_VERIFY(fixture.visible("rrAnnotation0"));
+        QVERIFY(fixture.press("rrAnnotation0"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("position"), highlight.value("start"));
+        page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        const auto returnedWord = fixture.wordPoint();
+        QVERIFY(returnedWord.x() >= 0);
+        QVERIFY(fixture.startAnnotation(page, returnedWord));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEdit"));
+        QCOMPARE(fixture.stored("highlights.json", "highlights").first().toObject(), highlight);
     }
 
     // Contents and Stats show whole-book page estimates after a Fast chapter jump.
@@ -9525,6 +9605,25 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("position"), origin);
         QVERIFY(android::takeRefreshFrame(reader, canvas->viewport(), damage).clean);
         QVERIFY(!android::takeRefreshFrame(reader, canvas->viewport(), damage).clean);
+        const auto originImage = reading->image;
+        for (const auto *label : { "short note", "long note", "legacy note" }) {
+            const auto reference = fixture.linkPoint(path, label);
+            QVERIFY(reference.x() >= 0);
+            QVERIFY(fixture.hold(page, reference));
+            QTRY_VERIFY(fixture.visible("rrLinkPanel"));
+            QVERIFY(fixture.press("rrLinkOpen"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool()
+                        && fixture.state().value("position") != origin);
+            QVERIFY(!fixture.visible("rrLinkPanel"));
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+            QVERIFY(fixture.press("rrScrubberReturn"));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QCOMPARE(fixture.state().value("position"), origin);
+            QCOMPARE(reading->image, originImage);
+            if (fixture.visible("rrControlsTop"))
+                QVERIFY(fixture.press("rrPage"));
+        }
         const auto passage = fixture.linkPoint(path, "later passage");
         QVERIFY(passage.x() >= 0);
         QVERIFY(fixture.hold(page, passage));

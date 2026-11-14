@@ -4,6 +4,8 @@ Label `annotations`. Build `mac-tests`, then run `ctest --preset mac -L annotati
 
 These checks cover bookmarks, pinned bookmarks, bookmark returns, highlights, notes, annotation mode, the annotation list, the annotation database and annotation export. The `model` checks hold the stores and the database, the `session` checks run each editing case in separate JSON and SQLite processes, and the `desktop`, `lifecycle` and `ui` checks drive the production reader.
 
+`desktop.fastSavedLists` creates saved marks through the reader and visits enough chapters to exceed the retained-document limit. It checks bookmark returns and annotation jumps after reopening in Fast and Hybrid chapter mode, and after Hybrid adopts the whole document. The return action must show the origin's whole-book page number and restore its exact source position. The returned annotation must still open its editor without changing its saved data.
+
 SQLite is the default backend, with an explicit legacy JSON override as documented in [Storage compatibility](../storage.md). A constrained SQLite fixture checks rollback after `SQLITE_FULL`. It does not simulate a full FAT volume or physical power loss. To run only the annotation order cases, use `kobalt-annotation-database-tests --order-regressions [TEMP_PARENT]`. An explicit parent keeps the temporary databases inside a controlled writable test directory.
 
 Right-click annotation entry is a host capability. Desktop enables it; other hosts leave it disabled. Pointer checks cover a normal click, mixed-button gestures, revealed links and a disabled capability.

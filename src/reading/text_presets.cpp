@@ -222,6 +222,9 @@ QJsonObject values(const Preset &preset)
 bool matches(const Preset &preset, const QJsonObject &state)
 {
     auto current = capture(state);
+    // At low display densities two half-point sizes can render at the same pixel size.
+    if (state.value("font_pixels").toInt(defaultFontPixels()) == halfPointPixels(preset.halfPoints))
+        current.halfPoints = preset.halfPoints;
     current.id = preset.id;
     current.name = preset.name;
     current.example = preset.example;

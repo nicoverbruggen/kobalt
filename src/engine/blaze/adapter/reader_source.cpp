@@ -593,7 +593,13 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     if (!initializeFonts())
         return fail(OpeningFailureKind::HostUnavailable,
                     strings::key("error.the_reading_font_is_unavailable"));
+    if (source_ && source_ != source) {
+        dropSideDocuments();
+        fullFailed_.clear();
+        fullUncached_.clear();
+    }
     configure(size, saved);
+    layoutInterrupted_ = false;
     openedFromCache_ = false;
     // Stream loading does not set a filename. CREngine uses its presence to
     // distinguish a loaded document from its internal blank/error document,

@@ -1323,6 +1323,21 @@ void nestedSliceHonorsCancellation()
     require(Probe::callbacksDetached(model), "The interrupted slice retained a callback");
 }
 
+void reopenAfterWholeBookPreparation()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "Cannot prepare the first book");
+    openFiles(model, observedBook());
+    require(!model.fullDocumentStarted(), "Opening another book retained the previous pagination");
+    const auto first = model.image(0);
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                    && model.setChapterMode(false, {}, { 600, 800 }),
+            "Cannot switch to the second whole book");
+    require(model.image(0) == first, "The handoff displayed the first book");
+}
+
 // Only matched, visible unsupported writing modes on this page cause a warning.
 void pageFormattingWarnings()
 {
@@ -2532,6 +2547,7 @@ int main(int argc, char **argv)
         return 0;
     }
     savedPlaceOutsideOpeningWindow();
+    reopenAfterWholeBookPreparation();
     nestedSliceHonorsCancellation();
     blocks();
     QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");

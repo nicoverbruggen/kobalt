@@ -401,7 +401,8 @@ int main(int argc, char **argv)
         // A slice starts on a page boundary within the chapter. A highlight
         // handle on that page can still reach the preceding page.
         kobalt::EngineDocument sliced(kobalt::test::readerFonts());
-        const auto files = kobalt::test::engineBook(false, 1, 80);
+        auto files = kobalt::test::engineBook(false, 1, 80);
+        files["OEBPS/c1.xhtml"].replace("</h1>", "</h1><p style='display:none'>HiddenMarker.</p>");
         QMap<QString, qint64> sizes;
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             sizes[it.key()] = it.value().size();
@@ -430,6 +431,32 @@ int main(int argc, char **argv)
                 continue;
             const auto next = sliced.annotationPageEdges();
             require(next.continuesBefore, "A handle stopped at the start of a later slice");
+            const auto place = sliced.position();
+            const auto image = sliced.image(sliced.page());
+            kobalt::EngineDocument whole(kobalt::test::readerFonts());
+            require(whole.openResources(resources->fresh(), sizes, { 600, 800 },
+                                        { { "font_pixels", 28 } }, &error),
+                    qPrintable(error));
+            const auto selected =
+                    sliced.annotationRange(origin.first.start, origin.first.end, next.first.start,
+                                           next.first.end, true, true);
+            const auto expected =
+                    whole.annotationRange(origin.first.start, origin.first.end, next.first.start,
+                                          next.first.end, true, true);
+            require(!expected.text.isEmpty() && !expected.text.contains("HiddenMarker")
+                            && selected.text == expected.text && selected.start == expected.start
+                            && selected.end == expected.end,
+                    "A multi-page highlight lost text or selected hidden text across slices");
+            const QVector<QPair<QString, QString>> saved{ { selected.start, selected.end } };
+            require(sliced.intersectingRanges(next.first.start, next.first.end, saved)
+                            == QVector<int>{ 0 },
+                    "A highlight missed an existing overlap from another slice");
+            const auto passage = sliced.textRange(selected.start, selected.end, true);
+            const auto original = whole.textRange(expected.start, expected.end, true);
+            require(passage.text == original.text && passage.context == original.context,
+                    "Saving a multi-page highlight lost its text or sentence context");
+            require(sliced.position() == place && sliced.image(sliced.page()) == image,
+                    "Resolving a multi-page highlight moved or redrew the passage differently");
             require(sliced.turnInWindow(-1)
                             && sliced.annotationPageEdges().last.end == previous.last.end,
                     "A backward selection turn missed the previous page");

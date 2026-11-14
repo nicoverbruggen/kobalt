@@ -21,6 +21,21 @@ bool koblazeSpineItemLoaded(int index);
 /// True when only a window of spine items is loaded with its text.
 bool koblazeSpineWindowSet();
 
+/// Source-only text queries can read across layout slices. Word and sentence
+/// traversal then use a block's original rendering method. Page geometry
+/// and drawing always use the current layout.
+#define KOBLAZE_SOURCE_TEXT 1
+class ldomDocument;
+class KoblazeSourceText {
+public:
+    explicit KoblazeSourceText(ldomDocument *document);
+    ~KoblazeSourceText();
+    KoblazeSourceText(const KoblazeSourceText &) = delete;
+    KoblazeSourceText &operator=(const KoblazeSourceText &) = delete;
+private:
+    ldomDocument *previous;
+};
+
 /// Take the pair kerning of plain left-to-right horizontal text from a
 /// memory of glyph pairs, which HarfBuzz fills, and shape those runs
 /// without the kern feature. A face checks the result against HarfBuzz

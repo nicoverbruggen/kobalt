@@ -339,7 +339,7 @@ QString EngineDocument::pageExcerpt(int page) const
 
 namespace {
 AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit,
-                           bool annotation = false)
+                           bool annotation = false, bool geometry = true)
 {
     AnnotationToken result;
     if (hit.isNull() || !hit.isText() || !hit.isVisible()) {
@@ -448,20 +448,22 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit,
         return result;
     auto startPointer = positions[begin], endPointer = positions[end - 1];
     endPointer.setOffset(endPointer.getOffset() + 1);
-    ldomXRange range(startPointer, endPointer);
-    LVArray<lvRect> rectangles;
-    range.getSegmentRects(rectangles);
-    for (int i = 0; i < rectangles.length(); ++i) {
-        const auto &r = rectangles[i];
-        lvPoint top(r.left, r.top), bottom(r.right, r.bottom);
-        if (!engine->docToWindowPoint(top) || !engine->docToWindowPoint(bottom, true))
-            continue;
-        const QRect rect(qMin(top.x, bottom.x), qMin(top.y, bottom.y), qAbs(bottom.x - top.x),
-                         qAbs(bottom.y - top.y));
-        const auto clipped = rect.intersected(QRect(QPoint(), size));
-        if (clipped.isEmpty())
-            continue;
-        result.rectangles.append(clipped);
+    if (geometry) {
+        ldomXRange range(startPointer, endPointer);
+        LVArray<lvRect> rectangles;
+        range.getSegmentRects(rectangles);
+        for (int i = 0; i < rectangles.length(); ++i) {
+            const auto &r = rectangles[i];
+            lvPoint top(r.left, r.top), bottom(r.right, r.bottom);
+            if (!engine->docToWindowPoint(top) || !engine->docToWindowPoint(bottom, true))
+                continue;
+            const QRect rect(qMin(top.x, bottom.x), qMin(top.y, bottom.y), qAbs(bottom.x - top.x),
+                             qAbs(bottom.y - top.y));
+            const auto clipped = rect.intersected(QRect(QPoint(), size));
+            if (clipped.isEmpty())
+                continue;
+            result.rectangles.append(clipped);
+        }
     }
     result.punctuation = punctuation;
     result.text = text.mid(begin, end - begin);
@@ -652,7 +654,7 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range,
     if (!hit.prevVisibleChar(true)) {
         return {};
     }
-    const auto word = sourceWord(engine, size, hit, true);
+    const auto word = sourceWord(engine, size, hit, true, false);
     if (word.punctuation || word.end != range.end || word.endAfterPunctuation.isEmpty()) {
         return {};
     }
@@ -759,7 +761,7 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
 {
     auto *doc = engine->getDocument();
     const ldomXPointerEx start(doc->createXPointer(cre(range.start)));
-    const auto word = sourceWord(engine, size, start, true);
+    const auto word = sourceWord(engine, size, start, true, false);
     if (word.punctuation || word.start != range.start || word.startBeforePunctuation.isEmpty()) {
         return {};
     }
@@ -804,7 +806,7 @@ SentenceOpening sentenceOpening(ColumnView *engine, QSize size, const TextRange 
     if (!lastHit.prevVisibleChar(true)) {
         return {};
     }
-    const auto lastWord = sourceWord(engine, size, lastHit, true);
+    const auto lastWord = sourceWord(engine, size, lastHit, true, false);
     if (lastWord.punctuation || lastWord.text.isEmpty()) {
         return {};
     }
@@ -959,11 +961,13 @@ AnnotationPageEdges EngineDocument::annotationPageEdges()
             return true;
         };
         const auto continuation = [&](bool forward) {
-            // The layout keeps the last block of the preceding slice for margin
-            // collapse. Its text is available, although it has no page here.
+            // A prior slice has source text even though its pages are absent.
             const bool beforeSlice = !forward && page() == 0 && slices() && sliceFirst_ > 0;
             if (forward ? page() + 1 >= pages() : page() == 0 && !beforeSlice)
                 return false;
+#ifdef KOBLAZE_SOURCE_TEXT
+            const KoblazeSourceText sourceText(beforeSlice ? doc : nullptr);
+#endif
             ldomXPointerEx edge(doc->createXPointer(cre(forward ? lastPosition : firstPosition)));
             auto adjacent = forward ? last : edge;
             if (!forward && !adjacent.prevVisibleChar(false))
@@ -1125,6 +1129,9 @@ TextRange EngineDocument::annotationRange(const QString &startTokenStart,
         return {};
     }
     auto *doc = engine_->getDocument();
+#ifdef KOBLAZE_SOURCE_TEXT
+    const KoblazeSourceText sourceText(slices() ? doc : nullptr);
+#endif
     auto token = [&](const QString &start, const QString &end, bool exclusiveEnd) {
         if (start != end) {
             return textRange(start, end);
@@ -1140,7 +1147,7 @@ TextRange EngineDocument::annotationRange(const QString &startTokenStart,
         if (exclusiveEnd && !pointer.prevVisibleChar(true)) {
             return TextRange();
         }
-        const auto word = sourceWord(engine_.get(), size_, pointer, true);
+        const auto word = sourceWord(engine_.get(), size_, pointer, true, false);
         return TextRange{ word.start, word.end, word.text };
     };
     const auto first = token(startTokenStart, startTokenEnd, false);
@@ -1197,6 +1204,9 @@ TextRange EngineDocument::annotationRange(const QString &start, const QString &e
         return {};
     }
     auto *doc = engine_->getDocument();
+#ifdef KOBLAZE_SOURCE_TEXT
+    const KoblazeSourceText sourceText(slices() ? doc : nullptr);
+#endif
     ldomXPointerEx a(doc->createXPointer(cre(start))), b(doc->createXPointer(cre(end)));
     if (a.isNull() || b.isNull() || !a.isText() || !b.isText()) {
         return {};
@@ -1213,8 +1223,8 @@ TextRange EngineDocument::annotationRange(const QString &start, const QString &e
     if (!b.prevVisibleChar(true)) {
         return {};
     }
-    const auto first = sourceWord(engine_.get(), size_, b, true);
-    const auto last = sourceWord(engine_.get(), size_, a, true);
+    const auto first = sourceWord(engine_.get(), size_, b, true, false);
+    const auto last = sourceWord(engine_.get(), size_, a, true, false);
     if (first.text.isEmpty() || last.text.isEmpty()) {
         return {};
     }
@@ -1227,6 +1237,9 @@ TextRange EngineDocument::textRange(const QString &start, const QString &end, bo
         return {};
     }
     auto *doc = engine_->getDocument();
+#ifdef KOBLAZE_SOURCE_TEXT
+    const KoblazeSourceText sourceText(slices() ? doc : nullptr);
+#endif
     ldomXPointerEx a(doc->createXPointer(cre(start))), b(doc->createXPointer(cre(end)));
     if (a.isNull() || b.isNull() || !a.isText() || !b.isText() || a == b) {
         return {};
@@ -1275,6 +1288,9 @@ EngineDocument::intersectingRanges(const QString &start, const QString &end,
         return result;
     }
     auto *doc = engine_->getDocument();
+#ifdef KOBLAZE_SOURCE_TEXT
+    const KoblazeSourceText sourceText(slices() ? doc : nullptr);
+#endif
     auto resolve = [doc](const QString &anchor) {
         ldomXPointerEx pointer;
         if (anchor.isEmpty() || anchor.size() > 4096) {

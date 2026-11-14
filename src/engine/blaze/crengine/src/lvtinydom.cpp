@@ -5731,9 +5731,19 @@ bool ldomDocument::partialRender( ldomNode * node ) {
     // a cache save, and will soon reload the document from that new cache.
 }
 
+lvdom_element_render_method ldomDocument::koblazeSourceMethod( ldomNode * node, lvdom_element_render_method method ) const
+{
+    if ( method == erm_invisible && _koblazeChangedMethodsKnown ) {
+        const auto found = _koblazeChangedMethods.find( node->getDataIndex() );
+        if ( found != _koblazeChangedMethods.end() )
+            return (lvdom_element_render_method)found->second;
+    }
+    return method;
+}
+
 void ldomDocument::koblazeChangeRendMethod( ldomNode * node, lvdom_element_render_method method )
 {
-    _koblazeChangedMethods.emplace_back( node->getDataIndex(), (lUInt8)node->getRendMethod() );
+    _koblazeChangedMethods.emplace( node->getDataIndex(), (lUInt8)node->getRendMethod() );
     node->setRendMethod( method );
 }
 
@@ -5741,9 +5751,8 @@ bool ldomDocument::koblazeRelayout()
 {
     if ( !_koblazeChangedMethodsKnown )
         return false;
-    // The earliest change holds the method that the whole document pass set.
-    for ( auto change = _koblazeChangedMethods.rbegin(); change != _koblazeChangedMethods.rend(); ++change )
-        getTinyNode( change->first )->setRendMethod( (lvdom_element_render_method)change->second );
+    for ( const auto & change : _koblazeChangedMethods )
+        getTinyNode( change.first )->setRendMethod( (lvdom_element_render_method)change.second );
     _koblazeChangedMethods.clear();
     // A full render clears these with the styles.
     _renderedBlockCache.clear();
@@ -15505,6 +15514,29 @@ bool ldomXPointerEx::nextVisibleText( bool thisBlockOnly )
     return false;
 }
 
+static thread_local ldomDocument * sourceTextDocument = NULL;
+
+KoblazeSourceText::KoblazeSourceText(ldomDocument *document)
+    : previous(sourceTextDocument)
+{
+    sourceTextDocument = document;
+}
+
+KoblazeSourceText::~KoblazeSourceText()
+{
+    sourceTextDocument = previous;
+}
+
+static lvdom_element_render_method textRenderMethod(ldomNode *node)
+{
+    lvdom_element_render_method method = node->getRendMethod();
+#if BUILD_LITE!=1
+    if (sourceTextDocument && sourceTextDocument == node->getDocument())
+        return sourceTextDocument->koblazeSourceMethod(node, method);
+#endif
+    return method;
+}
+
 /// returns true if current node is visible element or text
 bool ldomXPointerEx::isVisible()
 {
@@ -15515,7 +15547,7 @@ bool ldomXPointerEx::isVisible()
     else
         p = node;
     while ( p ) {
-        if ( p->getRendMethod() == erm_invisible )
+        if ( textRenderMethod(p) == erm_invisible )
             return false;
         /* This would feel needed now that we added support for visibility:hidden.
          * But it may have side effects that I don't want to investigate.
@@ -16235,7 +16267,7 @@ ldomNode * ldomXPointerEx::getThisBlockNode()
     for (;;) {
         if ( !node )
             return NULL;
-        lvdom_element_render_method rm = node->getRendMethod();
+        lvdom_element_render_method rm = textRenderMethod(node);
         switch ( rm ) {
         case erm_block:
         case erm_final:
@@ -16932,7 +16964,7 @@ public:
         ldomNode * elem = (ldomNode *)ptr->getNode();
         // Allow tweaking that with hints
         css_style_ref_t style = elem->getStyle();
-        lvdom_element_render_method rm = elem->getRendMethod();
+        lvdom_element_render_method rm = textRenderMethod(elem);
         if ( rm == erm_invisible ) {
             return false;
         }

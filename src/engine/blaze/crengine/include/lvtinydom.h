@@ -2790,11 +2790,9 @@ private:
     // loaded document does not change, so each node is counted once.
     std::unordered_map<lUInt32, int> _koblazeTextLengths;
     std::unordered_map<lUInt32, std::vector<int> > _koblazeTextPrefixes;
-    // koblaze: the layout methods that the layouts changed since the methods
-    // were last computed for the whole document, as data index and method,
-    // in the order of the changes. Known is false when they were set another
-    // way, for example from an alternate layout.
-    std::vector<std::pair<lUInt32, lUInt8>> _koblazeChangedMethods;
+    // Original render method of each node changed by layout. An alternate
+    // layout may have no record of these changes.
+    std::unordered_map<lUInt32, lUInt8> _koblazeChangedMethods;
     bool _koblazeChangedMethodsKnown = false;
     bool _koblazeRelayout = false;
     bool _just_rendered_from_cache;
@@ -2828,7 +2826,7 @@ private:
         DocFileHeader header;
         int elements, texts;
         int sliceFirst, sliceLast, spineItemChars;
-        std::vector<std::pair<lUInt32, lUInt8> > changedMethods;
+        std::unordered_map<lUInt32, lUInt8> changedMethods;
         bool changedMethodsKnown;
         KoblazeSavedLayout(int pageBytes) : pages(pageBytes, false) {}
     };
@@ -2948,6 +2946,7 @@ public:
     bool koblazeTableEndsSliceAfter( ldomNode * node, int end );
     /// koblaze, for the layout only: true when the block is in the slice.
     bool koblazeEnterBlock( ldomNode * node, bool spineItem, bool container );
+    lvdom_element_render_method koblazeSourceMethod( ldomNode * node, lvdom_element_render_method method ) const;
     /// koblaze, for the layout only: changes the layout method of a node and
     /// records the method it had, for koblazeRelayout().
     void koblazeChangeRendMethod( ldomNode * node, lvdom_element_render_method method );

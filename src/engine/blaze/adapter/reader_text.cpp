@@ -959,7 +959,10 @@ AnnotationPageEdges EngineDocument::annotationPageEdges()
             return true;
         };
         const auto continuation = [&](bool forward) {
-            if (forward ? page() + 1 >= pages() : page() == 0)
+            // The layout keeps the last block of the preceding slice for margin
+            // collapse. Its text is available, although it has no page here.
+            const bool beforeSlice = !forward && page() == 0 && slices() && sliceFirst_ > 0;
+            if (forward ? page() + 1 >= pages() : page() == 0 && !beforeSlice)
                 return false;
             ldomXPointerEx edge(doc->createXPointer(cre(forward ? lastPosition : firstPosition)));
             auto adjacent = forward ? last : edge;
@@ -972,7 +975,8 @@ AnnotationPageEdges EngineDocument::annotationPageEdges()
                     const auto text = adjacent.getNode()->getText();
                     const int offset = adjacent.getOffset();
                     if (offset >= 0 && offset < text.length() && !QChar::isSpace(text[offset])) {
-                        if (engine_->getBookmarkPage(adjacent) != page() + (forward ? 1 : -1))
+                        if (!beforeSlice
+                            && engine_->getBookmarkPage(adjacent) != page() + (forward ? 1 : -1))
                             return false;
                         return forward ? sameSection(edge, adjacent) : sameSection(adjacent, edge);
                     }

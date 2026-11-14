@@ -1,4 +1,5 @@
 #include "reader_inputs.h"
+#include "engine_fixtures.h"
 #include "support/qt_compat.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QElapsedTimer>
@@ -395,6 +396,52 @@ int main(int argc, char **argv)
     require(model.go(1) && model.annotationPageEdges().continuesBefore
                     && model.annotationPageEdges().continuesAfter,
             "Ordinary paragraph boundaries must allow selection to continue across pages");
+
+    {
+        // A slice starts on a page boundary within the chapter. A highlight
+        // handle on that page can still reach the preceding page.
+        kobalt::EngineDocument sliced(kobalt::test::readerFonts());
+        const auto files = kobalt::test::engineBook(false, 1, 80);
+        QMap<QString, qint64> sizes;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+            sizes[it.key()] = it.value().size();
+        auto resources = std::make_shared<kobalt::ResourceCache>(
+                files.keys(),
+                [files](const QString &name, const kobalt::ResourceCache::Sink &sink, QString *) {
+                    const auto bytes = files.value(name);
+                    return sink(bytes.constData(), bytes.size());
+                },
+                std::make_shared<std::atomic_bool>(false));
+        require(sliced.openResources(resources, sizes, { 600, 800 }, { { "font_pixels", 28 } },
+                                     &error),
+                qPrintable(error));
+        sliced.setChapterSlices(1);
+        require(sliced.showSpineItems(0, 0) && sliced.go(0),
+                "Cannot open sliced selection fixture");
+        const auto origin = sliced.annotationPageEdges();
+        require(!origin.continuesBefore, "A handle can turn before the first chapter");
+        bool crossed = false;
+        while (true) {
+            const auto previous = sliced.annotationPageEdges();
+            if (!sliced.turnInWindow(1))
+                break;
+            sliced.prepareAhead();
+            if (sliced.page() != 0)
+                continue;
+            const auto next = sliced.annotationPageEdges();
+            require(next.continuesBefore, "A handle stopped at the start of a later slice");
+            require(sliced.turnInWindow(-1)
+                            && sliced.annotationPageEdges().last.end == previous.last.end,
+                    "A backward selection turn missed the previous page");
+            require(!sliced.annotationRange(next.first.start, next.first.end, previous.last.start,
+                                            previous.last.end, false, false)
+                             .text.isEmpty(),
+                    "The highlight lost its words across the slice boundary");
+            crossed = true;
+            break;
+        }
+        require(crossed, "The selection fixture must reach a later slice");
+    }
     require(model.go(sectionPage), "Cannot restore the section page");
     require(pageEnd.last.text == "again" && !pageEnd.last.punctuation,
             "Backward page extension must select the last word, not its trailing full stop");

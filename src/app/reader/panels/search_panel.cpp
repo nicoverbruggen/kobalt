@@ -18,6 +18,7 @@
 #include <QGridLayout>
 #include <QIntValidator>
 #include <QLocale>
+#include <algorithm>
 
 namespace kobalt {
 namespace metrics = ui::metrics;
@@ -461,6 +462,13 @@ QFont SearchPanel::excerptFont() const
 
 QString SearchPanel::caption(const SearchHit &hit) const
 {
+    // In chapter mode a hit names its chapter, with an estimated page once
+    // there is one.
+    if (!hit.chapter.isEmpty())
+        return hit.page < 0 ? hit.chapter.simplified()
+                            : strings::get("search_panel.page_chapter")
+                                      .arg(hit.page + 1)
+                                      .arg(hit.chapter.simplified());
     // The chapter that starts last at or before the hit's page contains it.
     QString title;
     int start = -1;
@@ -689,7 +697,10 @@ void SearchPanel::redraw()
         visibleFirst = firstVisible;
         visibleCount = countVisible;
         const auto requestedHits = hits.mid(firstVisible, countVisible);
-        if (countVisible && detailsRequested && requestedHits.first().page < 0) {
+        const bool needsDetails =
+                std::any_of(requestedHits.cbegin(), requestedHits.cend(),
+                            [](const SearchHit &hit) { return hit.text.isEmpty(); });
+        if (countVisible && detailsRequested && needsDetails) {
             const auto epoch = detailsEpoch;
             QPointer<SearchPanel> guard(this);
             detailsRequested(requestedHits, [guard, epoch](QVector<SearchHit> resolved) {
@@ -711,7 +722,9 @@ void SearchPanel::redraw()
             continue;
         buttons[row]->setObjectName(QString("rrSearchResult%1").arg(index));
         buttons[row]->setGeometry(0, listTop + row * rowHeight, width(), rowHeight);
-        const bool ready = row < visibleHits.size() && visibleHits[row].page >= 0;
+        // An estimated page label can arrive before the excerpt, and a
+        // resolved excerpt can be opened before its book page is known.
+        const bool ready = row < visibleHits.size() && !visibleHits[row].text.isEmpty();
         buttons[row]->setEnabled(ready);
         if (!ready) {
             metadata[row]->clear();
@@ -774,7 +787,10 @@ void SearchPanel::redraw()
         }
         labels[row]->setText(excerpt());
         buttons[row]->setAccessibleName(
-                strings::get("search_panel.page_detail").arg(hit.page + 1).arg(hit.text));
+                hit.page >= 0 || hit.chapter.isEmpty()
+                        ? strings::get("search_panel.page_detail").arg(hit.page + 1).arg(hit.text)
+                        : strings::get("search_panel.chapter_detail")
+                                  .arg(hit.chapter.simplified(), hit.text));
     }
 }
 } // namespace kobalt

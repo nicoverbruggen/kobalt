@@ -1,6 +1,6 @@
 #pragma once
-#include "engine/crengine/column_view.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/column_view.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <algorithm>
 
 namespace kobalt {

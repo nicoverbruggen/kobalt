@@ -1,9 +1,4 @@
 {
-  "crengine": {
-    "url": "https://codeload.github.com/koreader/crengine/tar.gz/4ce1aed17e9d7852e047e0b9b0bf6a637486fd97",
-    "sha256": "1027594ee219fc895b99ab00b1619a3401b98d687265d98499f20a333d214e15",
-    "directory": "crengine-4ce1aed17e9d7852e047e0b9b0bf6a637486fd97"
-  },
   "harfbuzz": {
     "url": "https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/15.1.0",
     "sha256": "5c057929413b8664592fea67edea5c2c47b4ffb0bf5f4accb5164bc6acc69d94",

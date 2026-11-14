@@ -1,7 +1,7 @@
 #pragma once
 #include "app/reader_interface.h"
 #include "native_dialog_overlay.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include "reading/reading_progress.h"
 #include "storage/reading_history.h"
 #include <QObject>

@@ -2,7 +2,6 @@
 #include "reading/reader_session.h"
 #include <QObject>
 #include <utility>
-#include <vector>
 
 namespace kobalt::reader {
 // The reader owns widgets and persistence. This owner holds one preview and
@@ -48,8 +47,7 @@ public:
 
     bool edited() const { return edited_; }
 
-    // Edits made before the preview opens wait in its queue. Until then, the
-    // controls hold the latest requested values and no session has them.
+    // The preview holds these edits while its document opens.
     bool queued() const { return edited_ && !ready(); }
 
     PreviewState previewState() const { return previewState_; }
@@ -108,6 +106,5 @@ private:
     bool panelOpen_ = false;
     quint64 panelGeneration_ = 0;
     bool edited_ = false;
-    std::vector<std::function<void(ReaderSession &)>> pendingChanges_;
 };
 } // namespace kobalt::reader

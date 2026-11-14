@@ -10,7 +10,7 @@ namespace kobalt {
 // Everything one opening needs, copied on the GUI thread before the job starts.
 struct OpeningJob
 {
-    std::shared_ptr<EngineDocument> engine;
+    std::shared_ptr<Engine> engine;
     QString path;
     QSize size;
     // The saved book state. mergeSavedState edits it in place.
@@ -19,7 +19,7 @@ struct OpeningJob
     std::shared_ptr<SourceLease> lease;
     ResourceFactory factory;
     PositionCodec positions;
-    QString systemFont, layoutCachePath, documentCachePath, userStyleSheetPath, coverPath;
+    QString systemFont, documentCachePath, userStyleSheetPath, coverPath;
     QString customPinsPath, dictionariesPath;
     QJsonObject pinnedAppearance, appearanceDefaults;
     bool restartAtStart = false;
@@ -30,8 +30,6 @@ struct OpeningJob
     // The hash is empty when that opening cannot be reused.
     QByteArray retainedHash;
     QJsonObject retainedSettings;
-    bool retainedWarning = false;
-    QJsonObject retainedDetails;
 
     // Each callback queues its work on the GUI thread and drops it there
     // when the session has moved on. `coverReady` is empty when nobody wants the cover.
@@ -60,8 +58,6 @@ struct OpeningOutput
     OpeningResult outcome;
     QByteArray digest, syncDigest;
     bool savedMatches = false;
-    bool formattingWarning = false;
-    QJsonObject formattingDetails;
 };
 
 // The values that the stages of one opening share. Lives on the engine worker.
@@ -82,10 +78,8 @@ struct OpeningState
     // The first readable text resource. Reading it checks that the host still serves the book.
     QString probe;
     bool coverPublished = false;
-    bool retainedHit = false, cacheHit = false, cacheStored = false;
-    bool formattingWarning = false;
-    QJsonObject formattingDetails;
-    qint64 directoryMs = 0, hashMs = 0, inspectionMs = 0, modelMs = 0;
+    bool retainedHit = false;
+    qint64 directoryMs = 0, hashMs = 0, modelMs = 0;
 };
 
 // The stages, in the order runOpening calls them. Each one leaves a failure in
@@ -109,7 +103,14 @@ void logOpeningPhases(const OpeningJob &job, const OpeningState &state);
 OpeningOutput runOpening(OpeningJob &job);
 
 // Defined in reader_session.cpp, which uses them for every later frame too.
-void captureChapters(ReaderFrame &result, EngineDocument &engine);
-ReaderFrame capture(EngineDocument &engine, const PositionCodec &positions, bool neighbours = true,
-                    const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0);
+void captureChapters(ReaderFrame &result, Engine &engine,
+                     const std::function<bool()> &current = {});
+BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &positions,
+                                           bool rangeEndpoints, bool sourceOrder,
+                                           const std::function<bool()> &current = {});
+// `times` gets the milliseconds of each step, for the diagnostics of a slow
+// page turn.
+ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours = true,
+                    const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0,
+                    QJsonObject *times = nullptr);
 } // namespace kobalt

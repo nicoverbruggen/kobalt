@@ -128,6 +128,26 @@ int main(int argc, char **argv)
     bundle(first, "first synthetic font");
     bundle(second, "second synthetic font");
     AssetBundle a(first, "asset-test"), b(second, "asset-test");
+    {
+        const auto root = temporary.path() + "/explicit";
+        bundle(root, "verified font");
+        AssetBundle assets(root, "asset-test", AssetBundle::Verification::Explicit);
+        expect(!assets.available(), "explicit assets wait for startup verification");
+        expect(!assets.verify([] { return false; }) && !assets.available(),
+               "a superseded lifecycle check cannot enable assets");
+        expect(assets.verify() && assets.available(), "startup verifies the complete asset bundle");
+        write(root + "/fonts/test.ttf", "damaged font");
+        expect(assets.available(), "book opening retains the lifecycle verification result");
+        expect(assets.fontData("test.ttf").isEmpty(), "font reads still reject changed bytes");
+        assets.invalidate();
+        expect(!assets.available(), "USB release closes the asset gate");
+        expect(!assets.verify() && !assets.available(), "remount rejects damaged assets");
+        bundle(root, "repaired font");
+        expect(!assets.available(), "repair does not trigger verification during book opening");
+        expect(assets.verify() && assets.available()
+                       && assets.fontData("test.ttf") == "repaired font",
+               "a later lifecycle check recovers repaired assets");
+    }
     expect(a.available() && b.available(), "independent asset roots verify");
     expect(a.fontData("test.ttf") == "first synthetic font"
                    && b.fontData("test.ttf") == "second synthetic font",

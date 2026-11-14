@@ -1,11 +1,13 @@
 #pragma once
-#include "engine/crengine/engine_document.h"
+#include "engine/engine.h"
 #include "open_request.h"
+#include "reading_progress.h"
 #include "highlight_geometry.h"
 #include "storage/custom_pins.h"
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QObject>
+#include <QPointer>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -14,6 +16,9 @@ namespace kobalt {
 struct BookmarkLocations
 {
     QVector<int> pages, order;
+    // Whole-book display indexes, separate from the loaded layout pages.
+    QVector<int> bookPages = {};
+    QStringList chapters = {};
 };
 
 struct ReaderMarkupRange
@@ -55,6 +60,7 @@ struct ReaderFrame
 {
     quint64 renderId = 0;
     int turnDirection = 0;
+    bool formattingWarning = false;
     QImage image;
     ReaderMarkupFrame markup;
     // Changed rectangle against the image with cache key `damageFrom`, if the
@@ -110,7 +116,7 @@ struct SyncedPositionDescription
 {
     PositionComparison comparison;
     QString chapter;
-    // Compared only: the page of the synced position in this layout, or -1.
+    // Compared only: the whole-book page of the synced position, or -1.
     int page = -1;
 };
 
@@ -153,7 +159,12 @@ public:
 
     void openPreview(const ReaderSession &source, QSize size,
                      std::function<void(QString)> finished);
-    void requestAppearance(const appearance::Requested &settings, QSize size = {});
+    // `chapterMode`: 1 shows the chapter only, 0 the whole book, -1 keeps
+    // what is shown. hybridChapterMode goes to the chapter when the
+    // appearance changes and keeps what is shown otherwise.
+    static constexpr int hybridChapterMode = 2;
+    void requestAppearance(const appearance::Requested &settings, QSize size = {},
+                           int chapterMode = -1);
     void editAppearance(const appearance::Patch &patch, QSize size = {});
     std::function<void()> updated;
     RenderProgress renderProgress() const;
@@ -180,9 +191,14 @@ public:
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
+    // Goes to the entry `index` of chapters(). See Engine::goToChapter().
+    bool goToChapter(int index);
+    // Goes to about `fraction` of the whole book, from 0 to 1. With only a
+    // part of the book laid out, the engine lays out the text there first.
+    bool goToFraction(double fraction);
     bool goToNative(const QString &location, std::function<void(QString)> finished);
     bool goToSyncedPosition(const QString &position, std::function<void(QString)> finished);
-    // Resolves chapter, page and source order without navigating or rendering another page.
+    // Resolves chapter, page and source order without changing the displayed page.
     void describeSyncedPosition(const QString &position,
                                 std::function<void(SyncedPositionDescription)> finished);
     void nativePosition(std::function<void(QString, QString)> finished);
@@ -197,6 +213,8 @@ public:
     void bookmarkLocations(QStringList positions, std::function<void(BookmarkLocations)> finished,
                            bool rangeEndpoints = false, bool sourceOrder = true,
                            std::shared_ptr<std::atomic_bool> cancelled = {});
+    // My Words needs the book page even if Hybrid adopts a prepared layout
+    // during the lookup. Retry on the same open book when its pages are ready.
     void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                        bool rangeEndpoints = false);
     void pageSummary(int page, std::function<void(QString position, QString excerpt)> finished);
@@ -208,6 +226,8 @@ public:
     // Renders a bounded thumbnail with saved highlights without moving the reading position. Only
     // the latest request can finish; navigation, reflow and cancellation drop it.
     void previewPage(int page, QSize bounds, std::function<void(QImage)> finished);
+    void previewAdjacentPage(int direction, QSize bounds, QStringList bookmarkPositions,
+                             std::function<void(QImage, bool)> finished);
     void cancelPagePreview();
     // One screen of text in the current layout that starts at the reading position.
     void anchoredPage(bool stayInChapter, std::function<void(QImage)> finished);
@@ -266,7 +286,7 @@ public:
     // delivered only through the typed completion result.
     QString error() const { return frame.error; }
 
-    bool formattingWarning() const { return formattingWarning_; }
+    bool formattingWarning() const { return frame.formattingWarning; }
 
     const storage::CustomPins &customPins() const { return customPins_; }
 
@@ -321,6 +341,49 @@ public:
     int page() const { return frame.state.value("page").toInt(); }
 
     int pages() const { return frame.state.value("pages").toInt(); }
+
+    // Display pages cover the whole book. Local pages still drive navigation and geometry.
+    int bookPage() const
+    {
+        return frame.state.contains("book_fraction") ? frame.state.value("rough_page").toInt() - 1
+                                                     : page();
+    }
+
+    int bookPages() const
+    {
+        return frame.state.contains("book_fraction") ? frame.state.value("rough_pages").toInt()
+                                                     : pages();
+    }
+
+    // True while the pages of the book are an estimate.
+    bool bookPagesEstimated() const
+    {
+        return frame.state.contains("book_fraction")
+                && frame.state.value("rough_pages_estimated").toBool();
+    }
+
+    // The engine has more of the book after its last page: that page is not
+    // the end of the book.
+    bool continuesAfter() const { return frame.state.value("continues_after").toBool(); }
+
+    // The percent of the book that is read. An engine with the text of only
+    // a part of the book gives a rough estimate; otherwise it is the page
+    // count of pageProgressPercent().
+    // The same as a fraction from 0 to 1, for the progress bar.
+    double progressFraction() const
+    {
+        const auto fraction = frame.state.value("book_fraction");
+        return fraction.isDouble() ? qBound(0.0, fraction.toDouble(), 1.0)
+                                   : pageProgressFraction(page(), pages());
+    }
+
+    int progressPercent() const
+    {
+        const auto fraction = frame.state.value("book_fraction");
+        if (fraction.isDouble())
+            return qBound(0, int(fraction.toDouble() * 100), 100);
+        return pageProgressPercent(page(), pages());
+    }
 
     // The page a forward turn reaches, or page() on the last page of the text.
     int nextPage() const { return frame.state.value("next_page").toInt(page()); }
@@ -415,13 +478,23 @@ public:
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);
 
 private:
-    bool formattingWarning_ = false;
+    friend struct ReaderLocationProbe;
+    // Background pagination only offers a document. A foreground render
+    // can adopt it after checking the requested layout and reading position.
+    void showFullDocument(quint64 job);
+    bool currentSourceFrame(quint64 job) const;
+    // `requests` is engineWorkRequests() from when this step was queued:
+    // work that was announced after that is in the queue behind this step,
+    // or will be, and goes first.
+    static void refinePageEstimate(std::shared_ptr<Engine> engine,
+                                   const std::function<bool()> &current,
+                                   QPointer<ReaderSession> guard, quint64 job,
+                                   const std::shared_ptr<SourceLease> &lease, quint64 requests);
     storage::CustomPins customPins_;
-    QJsonObject formattingDetails_;
-    ReaderSession(std::shared_ptr<EngineDocument> retainedEngine, QString placeholderFamily);
+    ReaderSession(std::shared_ptr<Engine> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;
     QString placeholderFamily_;
-    std::shared_ptr<EngineDocument> engine_;
+    std::shared_ptr<Engine> engine_;
     ReaderFrame frame;
     void completeFrameMarkup(ReaderFrame result, quint64 job,
                              const std::shared_ptr<SourceLease> &lease,
@@ -443,17 +516,27 @@ private:
     QString identity_;
     PositionCodec positions_;
     QJsonObject desired;
+    int desiredChapterMode = -1;
+    bool fullDocumentPending_ = false;
     QJsonObject temporaryAppearance;
     appearance::SavedInput originalAppearance;
     QSize desiredSize;
     QString destination;
+    // Page turns since the book opened or the appearance changed. Hybrid
+    // rendering counts the pages of the book after a few of them.
+    int quietTurns_ = 0;
+    // The entry of chapters() that `destination` is, or -1.
+    int chapterTarget = -1;
     int pageDelta = 0;
     int pageTarget = -1;
+    // A part of the whole book to go to, from 0 to 1, or negative.
+    double fractionTarget = -1;
     bool running = false;
     bool turning = false;
     int pendingTurn = 0;
     bool loadingImage = false;
     bool preview_ = false;
+    bool openingPreview_ = false;
     bool retiring = false;
     bool layoutReady_ = false;
     RenderProgress renderProgress_;
@@ -481,6 +564,6 @@ private:
                     std::shared_ptr<std::atomic_bool> cancelled,
                     std::function<void(SearchBatch)> finished, bool reset);
     void request(bool appearanceChange = false, RenderReason reason = RenderReason::Appearance);
-    void dispatch(bool pageTurn = false);
+    void dispatch(bool pageTurn = false, std::function<void()> afterFrame = {});
 };
 } // namespace kobalt

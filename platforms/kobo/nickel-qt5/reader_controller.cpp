@@ -16,6 +16,7 @@
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/crash_reports.h"
 #include "support/diagnostics.h"
+#include "ui/style/fonts.h"
 #include "platforms/kobo/common/native_startup.h"
 #include "platforms/kobo/common/native_startup_wait.h"
 #include "platforms/kobo/common/reader_environment.h"
@@ -114,6 +115,12 @@ bool enabled()
 #else
     return QFile::exists("/instance/kobalt-enabled");
 #endif
+}
+
+// Asset availability is retained between boot and USB storage boundaries.
+bool readerAvailable()
+{
+    return enabled() && environment().assets.available();
 }
 
 // A reader preference is independent of the installation and recovery markers.
@@ -248,7 +255,14 @@ public:
     void start()
     {
         retry.start();
-        kobalt::qt::later(0, this, [this] { attempt(false); });
+        kobalt::qt::later(0, this, [this] {
+            environment().verifyAssets(this, "boot", [this](bool valid) {
+                if (valid)
+                    kobalt::ui::prepareOpeningFonts(environment().assets);
+                attempt(false);
+            });
+            attempt(false);
+        });
     }
 
     bool open(const void *volume, const kobalt::nickel_qt5::OpeningContext &context)
@@ -364,7 +378,7 @@ public:
             finish();
             return;
         }
-        CoordinatorBindings bindings{ enabled };
+        CoordinatorBindings bindings{ readerAvailable };
         bindings.automaticBookOpening = alternativeEnabled;
         bindings.setAutomaticBookOpening = setAlternativeFromKobalt;
         bindings.installInput = kobalt::nickel_qt5::installTouchInput;
@@ -518,7 +532,8 @@ int initialize()
     nativeInitializationFinished = [startup] {
         kobalt::qt::later(0, startup, [startup] { startup->attempt(false); });
     };
-    kobalt::configureBookMenu([] { return enabled() && bool(beginOpening); }, alternativeEnabled);
+    kobalt::configureBookMenu([] { return readerAvailable() && bool(beginOpening); },
+                              alternativeEnabled);
     startup->start();
     kobalt::diagnostic("startup-listening");
     return 0;

@@ -12,8 +12,8 @@ class Panel;
 class CaptionButton;
 class PageThumbnail;
 
-// Receives page images and chapter positions from its owner. Scrubbing never
-// changes the book; only accepted reports a destination to the reader.
+// Receives page images and chapter positions from its owner. Preview rendering
+// never moves the book; navigation callbacks report the requested move.
 class PageScrubber : public QWidget
 {
 public:
@@ -23,9 +23,14 @@ public:
 
     void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize);
     void setChapterJumps(bool enabled);
+    void setChapterBar(bool enabled);
+    void setChapterPosition(int index, int count, QString title, int percent, int bookPage,
+                            int bookPages, const QVector<int> &chapterPages);
     void setBookmarkedPages(const QVector<int> &pages);
-    void setPreview(int page, QImage image);
+    void setCurrentPageBookmarked(bool marked);
+    void setPreview(int page, QImage image, bool bookmarked = false);
     void cancel();
+    void beginNavigation();
     void showCurrentPage();
     void turnPreview(int direction);
 
@@ -50,6 +55,7 @@ public:
     QRect panelBounds() const;
     std::function<void(int, QSize)> previewRequested;
     std::function<void(int)> accepted;
+    std::function<void(int)> chapterRequested, pageRequested;
     std::function<void()> cancelled;
     std::function<void()> linksRequested, returnRequested, stayRequested;
     std::function<void()> imageRequested, imageDismissed;
@@ -63,6 +69,10 @@ protected:
 
 private:
     SettingSlider *position;
+    SettingSlider *indicator;
+    int bookPercent = 0;
+    int chapterIndex = -1, chapterCount = 0;
+    QString chapterTitle;
     QPushButton *previous, *next, *zoomOut, *zoomIn, *overviewToggle;
     RangeOverview *overview;
     QLabel *rangeLabel, *overviewLabel, *rangeStart, *rangeEnd, *overviewStart, *overviewEnd;
@@ -72,6 +82,7 @@ private:
     CaptionButton *linksAction, *returnAction, *imageAction;
     QPushButton *stay, *dismissImage;
     QString imageLabel;
+    QString requestedLinksLabel, requestedReturnLabel, requestedReturnNote, requestedImageLabel;
     QTimer renderTimer;
     QVector<QPair<int, QString>> chapters;
     QVector<int> bookmarkedPages;
@@ -84,14 +95,17 @@ private:
     // use the middle card's resolution so promotion does not enlarge a small image.
     QImage prepared[3];
     bool requested[3] = {};
+    bool preparedBookmarks[3] = {};
     int displayedPage = -1;
     bool ready = false;
+    bool navigationPending = false;
     bool previewDismissible = true;
     QSize pageSize{ 3, 4 };
     QRect linksFrame, returnFrame, imageFrame;
     QPoint pressPosition;
     bool pointerActive = false, pointerMoved = false;
     int pressedCard = -1;
+    bool chapterBar = false, currentPageBookmarked = false;
     bool chapterJumps = false, barVisible = true, relocating = false, overviewExpanded = false;
     void choose(int page);
     void step(int direction);
@@ -115,6 +129,7 @@ private:
     bool pointerEvent(QEvent *event, QPoint offset = {});
     QRect imageBounds() const;
     int actionsHeight() const;
+    void syncActions();
     void arrange();
 };
 } // namespace kobalt::ui

@@ -1,7 +1,7 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
 #include <QColor>
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <QGuiApplication>
 #include <cstdio>
 #include "check.h"

@@ -1,10 +1,10 @@
 #include "check.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <QGuiApplication>
 #include <QTemporaryDir>
-#include <kobaltshaping.h>
+#include <koblaze.h>
 
 using kobalt::EngineDocument;
 
@@ -44,8 +44,8 @@ void checkChoice(EngineDocument &model, bool expected)
             "Document selected the wrong shaping path");
     model.releaseImages();
     require(!model.image(0).isNull(), "Cannot draw the shaping fixture");
-    require(kobaltWordWidths() == expected && kobaltPairKerning() == expected
-                    && kobaltWordPairs() == expected && kobaltPlainJoiner() == expected,
+    require(koblazeWordWidths() == expected && koblazePairKerning() == expected
+                    && koblazeWordPairs() == expected && koblazePlainJoiner() == expected,
             "Another document changed the active shaping path");
 }
 
@@ -100,6 +100,10 @@ int main(int argc, char **argv)
     checkChoice(large, true);
     checkChoice(small, false);
     checkChoice(large, true);
+    large.setChapterSlices(2);
+    QString error;
+    require(large.showSpineItems(0, 0, &error), qPrintable(error));
+    checkChoice(large, false);
     QTemporaryDir cache;
     require(cache.isValid(), "Cannot prepare shaping cache");
     const auto prepare = [&](EngineDocument &model) {

@@ -1,5 +1,5 @@
 #include "reading/annotation_draft.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "storage/highlight_store.h"
 #include "check.h"
 #include <QCoreApplication>

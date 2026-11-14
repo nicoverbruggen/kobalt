@@ -92,6 +92,8 @@ public:
     static QString timeRemainingFormatLabel(const QString &format);
     void showPercentageFormats(const QString &current, std::function<void(const QString &)> chosen);
     static QString percentageFormatLabel(const QString &format);
+    void showRenderingModes(const QString &current, std::function<void(const QString &)> chosen);
+    static QString renderingModeLabel(const QString &mode);
     void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
     static QString columnSpacingLabel(int percent);
     enum class AdvancedText {
@@ -176,6 +178,7 @@ public:
     ui::DescribedOption *landscapeColumnsOption = nullptr;
     ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr,
                       *percentageFormatButton = nullptr;
+    ui::CaptionButton *renderingButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr;
     ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr,
                       *hangingPunctuationButton = nullptr, *widowsOrphansButton = nullptr;

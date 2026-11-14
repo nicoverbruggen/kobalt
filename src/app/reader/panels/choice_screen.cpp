@@ -330,6 +330,11 @@ int ChoiceScreen::chapterPage() const
     return contents->currentPage();
 }
 
+void ChoiceScreen::setChapterPages(const QVector<int> &pages)
+{
+    contents->setPages(pages);
+}
+
 void ChoiceScreen::setChapterPosition(const QString &text)
 {
     contents->setPosition(text);

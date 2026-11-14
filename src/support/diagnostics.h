@@ -25,13 +25,14 @@ bool diagnosticsRequested(const QString &profile);
 class DiagnosticOperation
 {
 public:
-    explicit DiagnosticOperation(const char *operation);
+    explicit DiagnosticOperation(const char *operation, std::function<bool()> interrupted = {});
     ~DiagnosticOperation();
     DiagnosticOperation(const DiagnosticOperation &) = delete;
     DiagnosticOperation &operator=(const DiagnosticOperation &) = delete;
 
 private:
     const char *operation;
+    std::function<bool()> interrupted;
     quint64 id = 0;
     QElapsedTimer elapsed;
 };

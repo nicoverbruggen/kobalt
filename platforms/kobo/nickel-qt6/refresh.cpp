@@ -4,7 +4,7 @@
 #include "platform/api/kobo_refresh.h"
 #include "refresh.h"
 #include "platforms/kobo/display/single_update.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include "platforms/kobo/display/page_animation.h"
 #include "platforms/kobo/display/keyboard_refresh.h"
 #include "platforms/kobo/display/panel_damage.h"

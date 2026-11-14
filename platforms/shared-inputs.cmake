@@ -56,12 +56,14 @@ set_source_files_properties("${kobalt_custom_pins_source}" PROPERTIES
     COMPILE_DEFINITIONS ${kobalt_custom_pins_definition})
 
 # reader_styles.h holds the engine's default style sheet.
-file(READ "${CRENGINE_SOURCE}/cr3gui/data/html5.css" READER_HTML_CSS)
-configure_file("${KOBALT_ROOT}/src/engine/crengine/reader_styles.h.in" reader_styles.h @ONLY)
-# reader_hyphenation.h lists the engine's hyphenation patterns.
-file(GLOB kobalt_patterns RELATIVE "${CRENGINE_SOURCE}/cr3gui/data/hyph" "${CRENGINE_SOURCE}/cr3gui/data/hyph/*.pattern")
-list(SORT kobalt_patterns)
+file(READ "${CRENGINE_SOURCE}/data/html5.css" READER_HTML_CSS)
+configure_file("${KOBALT_ROOT}/src/engine/blaze/adapter/reader_styles.h.in" reader_styles.h @ONLY)
+# reader_hyphenation.h lists the names of the hyphenation patterns that the
+# engine knows. Kobalt ships its own pattern files from assets/hyph.
+file(STRINGS "${CRENGINE_SOURCE}/data/hyphenation-patterns.txt" kobalt_patterns)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CRENGINE_SOURCE}/data/hyphenation-patterns.txt")
 list(TRANSFORM kobalt_patterns PREPEND "\"")
 list(TRANSFORM kobalt_patterns APPEND "\"")
 list(JOIN kobalt_patterns ", " READER_HYPHENATION_PATTERNS)
-configure_file("${KOBALT_ROOT}/src/engine/crengine/reader_hyphenation.h.in" reader_hyphenation.h @ONLY)
+configure_file("${KOBALT_ROOT}/src/engine/blaze/adapter/reader_hyphenation.h.in" reader_hyphenation.h @ONLY)

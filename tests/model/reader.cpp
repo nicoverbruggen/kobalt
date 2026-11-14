@@ -6,10 +6,10 @@
 #include "assets/assets.h"
 #include <QTemporaryDir>
 #include <QDir>
-#include "engine/crengine/engine_document.h"
-#include "engine/crengine/document_cache.h"
-#include "engine/crengine/kobo_styles.h"
-#include "engine/crengine/page_pixels.h"
+#include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/adapter/document_cache.h"
+#include "engine/blaze/adapter/kobo_styles.h"
+#include "engine/blaze/adapter/page_pixels.h"
 #include "publication/publication.h"
 #include "support/strings.h"
 #include "publication/image_policy.h"
@@ -1080,14 +1080,13 @@ int main(int argc, char **argv)
     checkBionicWidth();
     {
         kobalt::EngineDocument unopened(kobalt::test::readerFonts());
-        const kobalt::PositionCodec synthetic{ [](const kobalt::EngineDocument &, const QString &,
-                                                  QString *) {
-                                                  return QStringLiteral("/body/p[1]");
-                                              },
-                                               [](const kobalt::EngineDocument &, QString *) {
-                                                   return QStringLiteral("external-position");
-                                               },
-                                               [](const QString &location) { return location; } };
+        const kobalt::PositionCodec synthetic{
+            [](const kobalt::Engine &, const QString &, QString *) {
+                return QStringLiteral("/body/p[1]");
+            },
+            [](const kobalt::Engine &, QString *) { return QStringLiteral("external-position"); },
+            [](const QString &location) { return location; }
+        };
         QString error;
         require(unopened.comparePlatformPosition(synthetic, "external-position", &error) == 0
                         && !error.isEmpty(),
@@ -2038,6 +2037,32 @@ int main(int argc, char **argv)
             "Native chapter, element or offset mapped to the wrong text");
     require(native.platformPosition(positions, &error) == chapter2 + "#kobo.8.1:7",
             "Native position export lost the source offset");
+    for (const int slicePages : { 0, 2 }) {
+        kobalt::EngineDocument window(kobalt::test::readerFonts());
+        require(window.open(bytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
+        window.setChapterSlices(slicePages);
+        require(window.showSpineItems(0, 0, &error) && window.go(0), qPrintable(error));
+        const auto start = window.position();
+        const auto before = window.image(window.page());
+        QString title;
+        int page = -1;
+        require(window.describePosition(native.position(), &title, &page, &error, {}) > 0
+                        && error.isEmpty() && title == native.chapterTitle(native.position())
+                        && window.position() == start,
+                "A synced position outside the chapter window lost its direction or title");
+        const auto location = chapter2 + "#kobo.8.1:7";
+        require(window.comparePlatformPosition(positions, location, &error) > 0 && error.isEmpty()
+                        && window.position() == start && window.image(window.page()) == before,
+                "Comparison did not locate the exact native position without moving the reader");
+        require(window.comparePlatformPosition(positions, chapter2 + "#missing:0", &error) == 0
+                        && !error.isEmpty() && window.position() == start,
+                "Comparison accepted a missing anchor in an unloaded chapter");
+        require(window.goToPlatformNearest(positions, location, &error)
+                                == kobalt::EngineDocument::PositionTarget::Exact
+                        && error.isEmpty() && window.position() == native.position()
+                        && window.platformPosition(positions, &error) == location,
+                "A native import in the next chapter lost the exact source offset");
+    }
     {
         const auto before = native.position();
         require(!native.goToPlatform({}, before, &error) && !error.isEmpty()
@@ -2686,6 +2711,10 @@ int main(int argc, char **argv)
                     "<span id=\"dup%2Danchor\">First</span><span id=\"dup%2Danchor\">Second</span>"
                     "<span id=\"dup-anchor\">Wrong passage</span>"
                     "<span id=\"split\">First<br/>Second</span><span id=\"split\">Other</span></p></body></html>";
+        // The structural position checks navigate these duplicate IDs in the
+        // second chapter. Keep the first chapter's typography fixture as is.
+        if (name.endsWith("c2.xhtml"))
+            content.replace("<p class=\"hidden\">Hidden text", "<p>Nested IDs");
         require(styled.append(name, content, &error), qPrintable(error));
     }
     kobalt::EngineDocument css(kobalt::test::readerFonts());

@@ -40,12 +40,14 @@
 #include "reading/reading_density.h"
 #include "reading/sleep_screen.h"
 #include "reading/reader_session.h"
+#include "reading/rendering_mode.h"
+#include "reading/style_sample.h"
 #include "sync/kosync.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include <QLocale>
-#include "engine/crengine/engine_activity.h"
-#include "engine/crengine/engine_worker.h"
+#include "engine/engine_activity.h"
+#include "engine/engine_worker.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "app/messages/recovery_message.h"
@@ -273,7 +275,7 @@ std::atomic_bool delayUsbEncoding{ false }, releaseUsbEncoding{ false },
 // A delayed encoding holds the engine worker until the test releases it, so
 // the mapping outlasts the reader's deadline without a fixed sleep. The bound
 // keeps a failed test from holding the worker for good.
-QString usbPosition(const EngineDocument &model, QString *error)
+QString usbPosition(const Engine &model, QString *error)
 {
     if (delayUsbEncoding) {
         QElapsedTimer held;
@@ -1869,6 +1871,7 @@ private slots:
         auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);
         const auto first = host.session()->state().value("position").toString();
+        QVERIFY(!first.isEmpty());
         const bool rtl = host.session()->state().value("page_progression_rtl").toBool();
         QVERIFY(clickAt(canvas,
                         page->mapTo(canvas.surface(),
@@ -1878,7 +1881,6 @@ private slots:
                                          && host.session()->state().value("position").toString()
                                                  != first,
                                  10000);
-        QVERIFY(host.session()->page() > 0);
         const auto anchor = host.session()->state().value("position").toString();
         QVERIFY(!anchor.isEmpty());
         const auto menu = [&] {
@@ -2873,7 +2875,7 @@ private slots:
     {
         QTest::addColumn<QString>("stage");
         for (const auto *stage : { "before-threshold", "token-pending", "geometry-pending",
-                                   "dictionary-open", "selection-open" })
+                                   "dictionary-open", "selection-open", "opening-estimates" })
             QTest::newRow(stage) << QString(stage);
     }
 
@@ -2881,6 +2883,10 @@ private slots:
     void pageImageDuringHold()
     {
         QFETCH(QString, stage);
+        const bool openingEstimates = stage == "opening-estimates";
+        if (openingEstimates)
+            renderingMode::setOverride(1);
+        const auto restoreMode = qScopeGuard([] { renderingMode::setOverride(-1); });
         const bool pendingSelection = stage == "token-pending";
         const bool delayedPublication = stage == "geometry-pending" || stage == "dictionary-open"
                 || stage == "selection-open";
@@ -2927,6 +2933,17 @@ private slots:
         QVERIFY(page);
         QVERIFY(!host.session()->busy());
         QVERIFY(host.session()->resourceStats().value("pending_images").toInt() > 0);
+        if (openingEstimates) {
+            const auto position = host.session()->state().value("position");
+            engineActivity().pause(false);
+            QTRY_VERIFY_WITH_TIMEOUT(
+                    host.session()->resourceStats().value("pending_images").toInt() == 0
+                            && host.session()->resourceStats().value("ready_images").toInt() > 0
+                            && host.session()->totalWords() > 0,
+                    10000);
+            QCOMPARE(host.session()->state().value("position"), position);
+            return;
+        }
         const auto imageKey = page->image.cacheKey();
         const auto layout = host.session()->layoutRevision();
         const auto position = host.session()->state().value("position");
@@ -7680,6 +7697,95 @@ private slots:
         host.window()->pageButton(1);
         QTRY_COMPARE(host.session()->page(), start + 2);
         QTRY_VERIFY(scrubber->slider()->value() != open);
+    }
+
+    // A preview of the same book preempts estimates without abandoning their
+    // continuation or changing the reading position.
+    void appearancePreviewInterruptsEstimate()
+    {
+        renderingMode::setOverride(1);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QTemporaryDir logs;
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+
+        struct Trace
+        {
+            std::atomic_bool armed{ false }, started{ false }, interrupted{ false },
+                    sample{ false };
+            std::atomic_int completed{ 0 };
+        };
+
+        auto trace = std::make_shared<Trace>();
+        setDiagnosticObserver([trace](const QJsonObject &event) {
+            if (event.value("work") != "Page estimates")
+                return;
+            if (event.value("event") == "engine-work-start" && !trace->armed.exchange(true)) {
+                engineActivity().pause(true);
+                trace->started = true;
+            }
+            if (event.value("event") == "engine-work-end") {
+                if (event.value("completed").toBool())
+                    ++trace->completed;
+                else
+                    trace->interrupted = true;
+            }
+        });
+        const auto reset = qScopeGuard([] {
+            engineActivity().pause(false);
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+            renderingMode::setOverride(-1);
+        });
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(trace->started.load(), 10000);
+        const auto position = host.session()->state().value("position");
+        StyleSampleRequest request;
+        request.settings = styleSampleSettings(host.session()->state());
+        request.key = "font_pixels";
+        request.values = { 28 };
+        request.page = { 600, 800 };
+        request.thumbnail = { 120, 160 };
+        renderStyleSample(host.session()->fontInputs(), request, host.window(),
+                          [trace](StyleSample sample) { trace->sample = sample.valid(); });
+        engineActivity().pause(false);
+        QTRY_VERIFY_WITH_TIMEOUT(trace->interrupted.load() && trace->sample.load()
+                                         && trace->completed.load() > 0
+                                         && host.session()->totalWords() > 0,
+                                 10000);
+        QCOMPARE(host.session()->state().value("position"), position);
+    }
+
+    // Checks that a host with an opening view gets the reader only after the missing text preset previews are drawn.
+    void textPresetsBeforePresentation()
+    {
+        auto paths = testPaths();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [](ReaderHostServices &services) {
+            services.textPresetsBeforePresentation = true;
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        bool presented = false;
+        host.window()->preparePresentation([&](bool ready) { presented = ready; });
+        // A new profile has no stored previews: they are drawn first.
+        QVERIFY(!presented);
+        QTRY_VERIFY_WITH_TIMEOUT(presented, 10000);
+        QVERIFY(host.window()->property("text_presets_prerendered").toBool());
+        const int drawn = host.window()->property("text_preset_prerender_renders").toInt();
+        QVERIFY(drawn > 0);
+        // Nothing is left to draw after the reader is shown.
+        Canvas canvas(host.window(), nativeSize);
+        const int start = host.session()->page();
+        QVERIFY(host.session()->turn(1));
+        QTRY_COMPARE(host.session()->page(), start + 1);
+        QTRY_VERIFY(!host.session()->busy());
+        QCOMPARE(host.window()->property("text_preset_prerender_renders").toInt(), drawn);
     }
 
     // While a book sits open and nobody reads, nothing on the main thread may

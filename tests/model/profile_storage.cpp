@@ -4,6 +4,7 @@
 #include "storage/reading_history.h"
 #include "storage/bookmark_store.h"
 #include "reading/sleep_screen.h"
+#include "reading/rendering_mode.h"
 #ifndef KOBALT_TEST_NO_LIBRARY
 #  include "library/library_index.h"
 #endif
@@ -154,6 +155,13 @@ int main(int argc, char **argv)
         storage::closeProfile();
     }
     const storage::Paths paths{ root.path() };
+    require(paths.documentCache() == root.path() + "/.cache-blaze"
+                    && storage::Paths{}.documentCache().isEmpty(),
+            "Blaze cache has its own profile namespace");
+    const auto beta8Cache = root.path() + "/.cache";
+    require(QDir().mkpath(beta8Cache), "Beta 8 cache directory");
+    const auto beta8Entry = beta8Cache + "/book.cr3";
+    write(beta8Entry, "beta8-cache-sentinel");
     const QString identity = "file:///books/invented.epub";
     QJsonObject state;
     state["schema"] = 1;
@@ -174,6 +182,11 @@ int main(int argc, char **argv)
     preview.fill(Qt::white);
     require(preview.save(legacyPreview, "PNG"), "Legacy preview fixture");
     require(storage::prepareProfile(paths), "Import complete profile");
+    require(QDir().mkpath(paths.documentCache()), "Blaze cache directory");
+    write(paths.documentCache() + "/book.cr3", "blaze-cache-sentinel");
+    require(QDir(paths.documentCache()).removeRecursively()
+                    && bytes(beta8Entry) == "beta8-cache-sentinel",
+            "Profile preparation and Blaze cache clearing preserve beta 8 cache");
     require(!QFile::exists(legacyPreview), "Profile preparation left a legacy preview");
     require(storage::readBookState(paths, identity).object == state, "Imported state changed");
     const auto backup =
@@ -279,6 +292,36 @@ int main(int argc, char **argv)
     require(!storage::readPreferences(paths.preferences()).object.contains("turn_off_wifi_on_open")
                     && !storage::readJson(paths.preferences()).contains("turn_off_wifi_on_open"),
             "Saved Wi-Fi power saver setting was not removed");
+    // Rendering: a file from an older build has no choice and opens as Fast.
+    // A saved choice survives the round trip with the other preferences.
+    require(storage::writeJson(paths.preferences(),
+                               qt::object({ { "schema", 1 }, { "dark_mode", true } })),
+            "Rendering fixture");
+    const auto older = storage::readPreferences(paths.preferences());
+    require(older.status == ReadStatus::Ok && !older.object.contains(renderingMode::preferenceKey)
+                    && renderingMode::fromPreferences(older.object) == renderingMode::Mode::Hybrid,
+            "Preferences without Rendering did not use Hybrid");
+    for (const auto mode : { renderingMode::Mode::Accurate, renderingMode::Mode::Fast,
+                             renderingMode::Mode::Hybrid }) {
+        auto next = older.object;
+        next[renderingMode::preferenceKey] = renderingMode::value(mode);
+        require(storage::writePreferences(paths.preferences(), next),
+                "Rendering choice was not saved");
+        const auto saved = storage::readPreferences(paths.preferences()).object;
+        // A saved Fast opens as Hybrid: Settings does not offer it for now.
+        const auto opens = mode == renderingMode::Mode::Fast ? renderingMode::Mode::Hybrid : mode;
+        require(renderingMode::fromPreferences(saved) == opens
+                        && saved.value(renderingMode::preferenceKey).toString()
+                                == renderingMode::value(mode)
+                        && saved.value("dark_mode") == true,
+                "Rendering choice did not round-trip with the other preferences");
+    }
+    require(storage::writeJson(paths.preferences(),
+                               qt::object({ { "schema", 1 }, { "rendering_mode", "chapter" } })),
+            "Invalid rendering fixture");
+    require(!storage::readPreferences(paths.preferences())
+                     .object.contains(renderingMode::preferenceKey),
+            "Invalid Rendering value was kept");
     write(paths.preferences(), "{\"schema\":99,\"new_option\":true}");
     const auto settingsBytes = bytes(paths.preferences());
     require(storage::readPreferences(paths.preferences()).status == ReadStatus::Unsupported

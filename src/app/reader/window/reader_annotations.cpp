@@ -6,6 +6,7 @@
 #include "platform/api/kobo_refresh.h"
 #include "support/qt_font.h"
 #include "support/strings.h"
+#include "support/diagnostics.h"
 #include "storage/annotation_export.h"
 
 #include <QHBoxLayout>
@@ -966,6 +967,9 @@ void Reader::syncMarkupRequest()
 
 void Reader::preparePresentation(std::function<void(bool)> finished)
 {
+    DiagnosticOperation setup("reader-presentation-setup");
+    auto waiting = std::make_shared<DiagnosticOperation>("reader-presentation-wait");
+    finished = [waiting, finished = std::move(finished)](bool ready) { finished(ready); };
     prepareKosyncPresentation([this, finished = std::move(finished)](bool ready) mutable {
         if (!ready) {
             finished(false);
@@ -976,14 +980,21 @@ void Reader::preparePresentation(std::function<void(bool)> finished)
                 finished(false);
                 return;
             }
-            book->markNativeReading();
-            saveWifiPower([this, finished] { finished(!closing && !lifecycleHidden); });
+            const auto present = [this, finished] {
+                book->markNativeReading();
+                saveWifiPower([this, finished] { finished(!closing && !lifecycleHidden); });
+            };
+            if (services.textPresetsBeforePresentation)
+                prepareTextPresetPresentation(present);
+            else
+                present();
         });
     });
 }
 
 void Reader::prepareAnnotationPresentation(std::function<void(bool)> finished)
 {
+    DiagnosticOperation setup("reader-annotation-presentation");
     syncMarkupRequest();
     if (annotationRequest.saved.isEmpty()) {
         finished(true);
@@ -1183,8 +1194,12 @@ QVector<BookmarkRow> Reader::annotationRows() const
     rows.reserve(items.size());
     for (int i = 0; i < items.size(); ++i) {
         const auto &item = items[i];
-        BookmarkRow row{ item.id, {}, {}, item.created, locations.pages.value(i * 2, -1), false };
-        row.endPage = locations.pages.value(i * 2 + 1, -1);
+        BookmarkRow row{
+            item.id, {}, {}, item.created, locations.bookPages.value(i * 2, -1), false
+        };
+        row.endPage = locations.bookPages.value(i * 2 + 1, -1);
+        row.pagePending = session->state().contains("book_fraction")
+                && session->state().value("rough_pages").toInt() <= 0;
         row.style = item.style;
         row.color = item.color;
         row.sourceOrder = locations.order.value(i * 2, -1);

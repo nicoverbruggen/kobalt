@@ -1,5 +1,6 @@
 #pragma once
-#include "engine/crengine/engine_document.h"
+#include "assets/font_catalog.h"
+#include "engine/types.h"
 #include <QImage>
 #include <QJsonObject>
 #include <QJsonValue>

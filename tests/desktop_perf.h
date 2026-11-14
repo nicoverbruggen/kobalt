@@ -221,7 +221,7 @@ private:
             if (!require(book.open(QIODevice::ReadOnly), "songbook bytes"))
                 return;
             const auto bytes = book.readAll();
-            const QStringList paths{ "src/engine/crengine/", "src/reading/chapter.h" };
+            const QStringList paths{ "src/engine/blaze/adapter/", "src/reading/chapter.h" };
             auto &index = add(prefix + "index", "micro", paths);
             auto &lookup = add(prefix + "lookup", "micro", paths);
             for (int sample = 0; sample < repetitions; ++sample) {

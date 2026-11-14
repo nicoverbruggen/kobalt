@@ -26,8 +26,17 @@ set(strict "$ENV{KOBALT_STRICT_MAIN_THREAD}")
 if(strict STREQUAL "")
     set(strict 1)
 endif()
+# Tests, captures and timings were written for a layout of the whole book,
+# so they open books as Accurate, whatever the Rendering preference says.
+# Set the variable to 1 in the environment to run them as Fast. A test that
+# needs Fast sets renderingMode::setOverride(1).
+set(chapter_mode "$ENV{KOBALT_CHAPTER_MODE}")
+if(chapter_mode STREQUAL "")
+    set(chapter_mode 0)
+endif()
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env "TMPDIR=${work}" "QT_FORCE_STDERR_LOGGING=1" "KOBALT_STRICT_MAIN_THREAD=${strict}"
+            "KOBALT_CHAPTER_MODE=${chapter_mode}"
             "${TEST_EXECUTABLE}" ${TEST_ARGUMENTS}
     WORKING_DIRECTORY "${work}"
     RESULT_VARIABLE result

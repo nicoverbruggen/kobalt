@@ -1,14 +1,20 @@
 #include "reader_inputs.h"
 #include "reading/reader_session.h"
+#include "reading/rendering_mode.h"
 #include "sync/kosync.h"
 #include "app/messages/opening_message.h"
 #include "publication/native_resources.h"
+#include "publication/local_resources.h"
 #include "plain_archive.h"
 #include "publication/resource_server.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "publication/zip_resource.h"
 #include "support/strings.h"
+#include "engine/engine_worker.h"
+#include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/adapter/column_view.h"
+#include <lvdocview.h>
 #include "check.h"
 #include <QGuiApplication>
 #include <QJsonDocument>
@@ -18,12 +24,519 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QUrl>
 #include <functional>
 
 using namespace kobalt;
+
+// Access the engine only on its worker during the adoption checks.
+static Engine *openedEngine = nullptr;
+static std::function<void()> adoptingDocument;
+
+namespace kobalt {
+struct ReaderLocationProbe
+{
+    static quint64 revision(const ReaderSession &reader) { return reader.revision; }
+
+    static void offer(ReaderSession &reader, quint64 job) { reader.showFullDocument(job); }
+
+    static bool pending(const ReaderSession &reader) { return reader.fullDocumentPending_; }
+
+    static void refusePreparedDocument(Engine &engine)
+    {
+        auto &model = dynamic_cast<EngineDocument &>(engine);
+        require(model.fullDocumentReady(), "The session must have a prepared document");
+        auto *body = model.full_->engine_->getDocument()->nodeFromXPath(U"/body");
+        require(body, "The prepared document must have a body");
+        while (body->getChildCount())
+            body->removeLastChild();
+    }
+};
+} // namespace kobalt
+
+// Compare the chapter frames with a separate session that always lays out the whole book.
+static void hybridFontEdits(const QString &path, quint16 port)
+{
+    QEventLoop frame;
+    ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
+    ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+    ReaderSession *waiting = nullptr;
+    const auto rendered = [&](ReaderSession &reader) {
+        waiting = &reader;
+        if (reader.busy())
+            frame.exec();
+        waiting = nullptr;
+        require(reader.error().isEmpty(), "The requested frame must finish");
+    };
+    const auto open = [&](ReaderSession &reader, bool chapters) {
+        renderingMode::setOverride(chapters ? 2 : 0);
+        auto lease = std::make_shared<SourceLease>();
+        PositionCodec codec{ [](const Engine &, const QString &anchor, QString *) {
+                                return anchor;
+                            },
+                             [](const Engine &engine, QString *) { return engine.position(); },
+                             [](const QString &anchor) { return anchor; } };
+        if (chapters)
+            codec.encode = [](const Engine &engine, QString *) {
+                openedEngine = const_cast<Engine *>(&engine);
+                return engine.position();
+            };
+        reader.open({ path,
+                      path,
+                      QSize(758, 900),
+                      qt::object({ { "column_spacing_percent", 150 } }),
+                      {},
+                      {},
+                      lease,
+                      nativeResourceFactory(path, port, lease),
+                      codec },
+                    [&](OpeningResult result) {
+                        require(result.ready(), qPrintable(openingMessage(result)));
+                        frame.quit();
+                    });
+        frame.exec();
+        require(reader.state().contains("book_fraction") == chapters,
+                "Reference and Hybrid sessions must open in their selected modes");
+        reader.updated = [&reader, &frame, &waiting] {
+            if (waiting == &reader && !reader.busy())
+                frame.quit();
+        };
+    };
+    open(whole, false);
+    open(hybrid, true);
+    const auto turn = [&](ReaderSession &reader) {
+        require(reader.turn(1), "The fixture must have a next page");
+        rendered(reader);
+    };
+    const auto page = [](ReaderSession &reader) {
+        QEventLoop summary;
+        QPair<QString, QString> result;
+        reader.pageSummary(reader.page(), [&](QString start, QString text) {
+            result = { start, text };
+            summary.quit();
+        });
+        summary.exec();
+        require(!result.first.isEmpty() && !result.second.isEmpty(),
+                "The page must have a source anchor and visible text");
+        return result;
+    };
+    const auto compare = [&] {
+        require(page(hybrid) == page(whole) && hybrid.image() == whole.image(),
+                "Hybrid must display the same source passage and pixels as the whole book");
+    };
+    for (auto *reader : { &whole, &hybrid }) {
+        require(reader->goToChapter(1), "Cannot start the reflows in a later chapter");
+        rendered(*reader);
+        turn(*reader);
+    }
+    compare();
+    const int base = hybrid.fontSize();
+    for (const int pixels : { base + 2, base + 4, base + 2 }) {
+        QEventLoop parked;
+        qt::invoke(
+                engineWorker(),
+                [&] {
+                    int checks = 0;
+                    require(openedEngine && !openedEngine->fullDocumentReady()
+                                    && openedEngine->prepareFullDocument([&] {
+                                           return ++checks <= 5;
+                                       }) == Engine::FullDocument::Stopped
+                                    && openedEngine->fullDocumentStarted(),
+                            "Each edit must interrupt a parked whole-book build for the displayed size");
+                    qt::invoke(qApp, [&] { parked.quit(); }, Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
+        parked.exec();
+        const auto anchor = hybrid.state().value("position");
+        const appearance::Patch change(qt::object({ { "font_pixels", pixels } }));
+        hybrid.editAppearance(change);
+        require(hybrid.busy() && !hybrid.turn(1),
+                "A turn during a font edit must wait for the new frame");
+        rendered(hybrid);
+        whole.requestAppearance(whole.requestedAppearance().edited(change), {}, 0);
+        rendered(whole);
+        require(hybrid.state().contains("book_fraction") && hybrid.fontSize() == pixels
+                        && whole.fontSize() == pixels && hybrid.error().isEmpty()
+                        && hybrid.state().value("position") == anchor,
+                "A font edit must preserve the source position in chapter mode");
+        compare();
+        turn(whole);
+        turn(hybrid);
+        compare();
+    }
+    const int quiet = renderingMode::buildQuietMilliseconds();
+    renderingMode::setBuildQuietMilliseconds(0);
+    for (int i = 0; i < 2; ++i) {
+        turn(whole);
+        turn(hybrid);
+        compare();
+    }
+    QEventLoop ready;
+    QTimer poll;
+    QObject::connect(&poll, &QTimer::timeout, &ready, [&] {
+        if (ReaderLocationProbe::pending(hybrid))
+            ready.quit();
+    });
+    poll.start(10);
+    if (!ReaderLocationProbe::pending(hybrid))
+        ready.exec();
+    require(hybrid.state().contains("book_fraction"), "The chapter must stay visible until a turn");
+    turn(whole);
+    QStringList positions;
+    for (const auto &chapter : whole.chapters())
+        positions.append(chapter.position);
+    const auto labels = [&](ReaderSession &reader) {
+        QEventLoop lookup;
+        QVector<int> result;
+        reader.bookmarkPages(positions, [&](QVector<int> pages) {
+            result = std::move(pages);
+            lookup.quit();
+        });
+        lookup.exec();
+        return result;
+    };
+    const auto exact = labels(whole), estimated = labels(hybrid);
+    require(exact.size() == positions.size() && estimated.size() == exact.size(),
+            "Cannot compare saved-word page numbers before the handoff");
+    int word = 0;
+    while (word < positions.size() && (exact[word] < 0 || estimated[word] == exact[word]))
+        ++word;
+    require(word < positions.size(),
+            "The fixture needs a saved position with a different estimate");
+    // The worker receives this lookup before the adopting turn. Its reply
+    // cannot reach the UI until the turn has been requested.
+    bool wordLookupFinished = false;
+    QEventLoop lookup;
+    hybrid.bookmarkPages({ positions[word] }, [&](QVector<int> pages) {
+        require(pages == QVector<int>{ exact[word] },
+                "My Words received a missing or stale page label during the handoff");
+        wordLookupFinished = true;
+        lookup.quit();
+    });
+    turn(hybrid);
+    require(!hybrid.state().contains("book_fraction") && hybrid.page() == whole.page()
+                    && hybrid.pages() == whole.pages(),
+            "The final turn must adopt the whole book at the current font size");
+    compare();
+    if (!wordLookupFinished)
+        lookup.exec();
+    renderingMode::setBuildQuietMilliseconds(quiet);
+    renderingMode::setOverride(-1);
+}
+
+static void mixedSpreadHandoff()
+{
+    const QString path =
+            QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub";
+    const QSize landscape(1072, 758), portrait(758, 1072);
+    const QJsonObject settings{ { "two_columns_landscape", true }, { "font_pixels", 28 } };
+    QEventLoop frame;
+    openedEngine = nullptr;
+    const auto open = [&](ReaderSession &reader, bool hybrid) {
+        renderingMode::setOverride(hybrid ? 2 : 0);
+        auto lease = std::make_shared<SourceLease>();
+        PositionCodec positions{ [](const Engine &, const QString &anchor, QString *) {
+                                    return anchor;
+                                },
+                                 [](const Engine &engine, QString *) { return engine.position(); },
+                                 [](const QString &anchor) { return anchor; } };
+        if (hybrid)
+            positions.encode = [](const Engine &engine, QString *) {
+                openedEngine = const_cast<Engine *>(&engine);
+                return engine.position();
+            };
+        OpenRequest request{ path,     path, landscape, {},
+                             {},       {},   lease,     localResourceFactory(path, lease),
+                             positions };
+        request.appearanceDefaults = settings;
+        reader.open(std::move(request), [&](OpeningResult result) {
+            require(result.ready(), qPrintable(openingMessage(result)));
+            frame.quit();
+        });
+        frame.exec();
+        reader.updated = [&reader, &frame] {
+            if (!reader.busy())
+                frame.quit();
+        };
+    };
+    ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
+    open(whole, false);
+    const auto coverAndTitle = whole.image();
+    const QString coverPosition = whole.state().value("position").toString();
+    for (int direction : { 1, -1 }) {
+        ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+        open(hybrid, true);
+        if (direction < 0) {
+            require(hybrid.turn(1), "Cannot open the title before a reverse handoff");
+            frame.exec();
+        }
+        qt::invoke(
+                engineWorker(),
+                [&] {
+                    require(openedEngine
+                                    && openedEngine->prepareFullDocument({})
+                                            == Engine::FullDocument::Ready,
+                            "Cannot prepare the complete two-column book");
+                    qt::invoke(qApp, [&] { frame.quit(); }, Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
+        frame.exec();
+        ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
+        const QSize bounds(536, 379);
+        QImage thumbnail;
+        bool bookmarked = false;
+        hybrid.previewAdjacentPage(direction, bounds, { coverPosition },
+                                   [&](QImage image, bool marked) {
+                                       thumbnail = std::move(image);
+                                       bookmarked = marked;
+                                       frame.quit();
+                                   });
+        frame.exec();
+        require(bookmarked
+                        && thumbnail
+                                == coverAndTitle.scaled(bounds, Qt::KeepAspectRatio,
+                                                        Qt::SmoothTransformation),
+                "Navigate showed a chapter thumbnail for the prepared full-book turn");
+        require(hybrid.turn(direction), "Cannot turn across the prepared two-column handoff");
+        frame.exec();
+        require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle
+                        && hybrid.chapterTitle() == whole.chapterTitle()
+                        && hybrid.turnDirection() == direction,
+                "The handoff must show the cover and title together before turning beyond them");
+        require(hybrid.turn(1) && whole.turn(1), "Cannot turn beyond the mixed cover spread");
+        while (hybrid.busy() || whole.busy())
+            frame.exec();
+        require(hybrid.image() == whole.image(), "The turn after the handoff lost its next spread");
+        hybrid.resize(portrait);
+        whole.resize(portrait);
+        while (hybrid.busy() || whole.busy())
+            frame.exec();
+        require(hybrid.image() == whole.image(),
+                "Rotating after adoption lost the visible passage");
+        if (direction > 0) {
+            whole.resize(landscape);
+            frame.exec();
+            require(whole.go(0), "Cannot restore the reference cover");
+            frame.exec();
+        }
+    }
+    renderingMode::setOverride(-1);
+}
+
+static void chapterNavigation(const QString &path)
+{
+    const auto previous = qgetenv("KOBALT_CHAPTER_PAGES");
+    qputenv("KOBALT_CHAPTER_PAGES", "1");
+    renderingMode::setOverride(1);
+    QEventLoop loop;
+    ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+    auto lease = std::make_shared<SourceLease>();
+    hybrid.open(
+            { path, path, QSize(758, 900), {}, {}, {}, lease, localResourceFactory(path, lease) },
+            [&](OpeningResult result) {
+                require(result.ready(), qPrintable(openingMessage(result)));
+                loop.quit();
+            });
+    loop.exec();
+    hybrid.updated = [&] {
+        if (!hybrid.busy())
+            loop.quit();
+    };
+    const auto openingPage = hybrid.image();
+    const auto openingAnchor = hybrid.state().value("position");
+    require(hybrid.turn(1), "Cannot leave the opening page");
+    loop.exec();
+    const auto before = hybrid.image();
+    const auto anchor = hybrid.state().value("position");
+    const auto chapter = hybrid.chapterTitle();
+    const QString missing = QStringLiteral("/body/DocFragment[3]/body/MissingParagraph/text().0");
+    QString error;
+    require(hybrid.goToSyncedPosition(missing,
+                                      [&](QString result) {
+                                          error = result;
+                                          loop.quit();
+                                      }),
+            "Cannot submit a saved passage in another chapter");
+    loop.exec();
+    require(!error.isEmpty() && hybrid.state().value("position") == anchor
+                    && hybrid.image() == before && hybrid.chapterTitle() == chapter,
+            "An unavailable synced passage in another chapter must leave the reading page in place");
+    require(hybrid.goToChapter(2), "Cannot jump into the chapter from the refused import");
+    loop.exec();
+    require(hybrid.error().isEmpty() && hybrid.chapterTitle() != chapter,
+            "A refused import must leave a valid jump to the same chapter usable");
+    auto finishedState = hybrid.state();
+    finishedState["fingerprint"] = QString::fromLatin1(hybrid.sourceHash());
+    finishedState["finished_position"] = finishedState.value("position");
+    auto retained = hybrid.retained();
+    require(bool(retained), "Cannot retain the finished chapter");
+    ReaderSession cold(test::readerFonts(), test::readerPlaceholder());
+    for (auto *reader : { &cold, retained.get() }) {
+        auto access = std::make_shared<SourceLease>();
+        reader->open({ path,
+                       path,
+                       QSize(758, 900),
+                       finishedState,
+                       {},
+                       {},
+                       access,
+                       localResourceFactory(path, access) },
+                     [&](OpeningResult result) {
+                         require(result.ready(), qPrintable(openingMessage(result)));
+                         loop.quit();
+                     });
+        loop.exec();
+        require(reader->savedStateMatched() && reader->state().contains("book_fraction"),
+                "The finished state must match this chapter-mode book");
+        require(reader->state().value("position") == openingAnchor
+                        && reader->image() == openingPage,
+                "Reopening a finished book must show the first page of the book");
+    }
+    auto *resumed = retained.get();
+    resumed->updated = [&] {
+        if (!resumed->busy())
+            loop.quit();
+    };
+    require(resumed->goToChapter(2), "Cannot leave the opening chapter before native fallback");
+    loop.exec();
+    auto appearance = resumed->state();
+    appearance.remove("position");
+    appearance["fingerprint"] = QString::fromLatin1(resumed->sourceHash());
+    auto fallback = resumed->retained();
+    auto access = std::make_shared<SourceLease>();
+    OpenRequest request{ path, path, QSize(758, 900), appearance,
+                         {},   {},   access,          localResourceFactory(path, access) };
+    request.positions = { [](const Engine &, const QString &position, QString *) {
+                             return position;
+                         },
+                          [](const Engine &model, QString *) { return model.position(); },
+                          [](const QString &) { return QString(); } };
+    request.platformLocation = QStringLiteral("/unknown-chapter");
+    require(bool(fallback), "Cannot retain the book before native fallback");
+    bool reused = false;
+    fallback->open(
+            std::move(request),
+            [&](OpeningResult result) {
+                require(result.ready(), qPrintable(openingMessage(result)));
+                loop.quit();
+            },
+            {}, {}, [&] { reused = true; });
+    loop.exec();
+    require(reused, "The fallback check must reuse the later chapter");
+    require(fallback->state().value("position") == openingAnchor
+                    && fallback->image() == openingPage,
+            "A missing native chapter must fall back to the first page of the book");
+    renderingMode::setOverride(-1);
+    if (previous.isNull())
+        qunsetenv("KOBALT_CHAPTER_PAGES");
+    else
+        qputenv("KOBALT_CHAPTER_PAGES", previous);
+}
+
+static void positionImportTransitions(const QString &path, const QString &replacement)
+{
+    ReaderSession reader(test::readerFonts(), test::readerPlaceholder());
+    QEventLoop loop;
+    const PositionCodec positions{
+        [](const Engine &, const QString &anchor, QString *) { return anchor; },
+        [](const Engine &engine, QString *) { return engine.position(); },
+        [](const QString &anchor) { return anchor; }
+    };
+    const auto open = [&](const QString &file) {
+        auto lease = std::make_shared<SourceLease>();
+        reader.open({ file,
+                      file,
+                      QSize(758, 900),
+                      {},
+                      {},
+                      {},
+                      lease,
+                      localResourceFactory(file, lease),
+                      positions },
+                    [&](OpeningResult result) {
+                        require(result.ready(), qPrintable(openingMessage(result)));
+                        loop.quit();
+                    });
+        loop.exec();
+    };
+    // Queue the competing request in the same GUI turn as the import. Its worker result
+    // can arrive only after the GUI has recorded the replacement request.
+    for (const bool native : { false, true }) {
+        open(path);
+        QString target;
+        reader.pageSummary(2, [&](QString start, QString text) {
+            require(!text.isEmpty(), "The imported page must contain text");
+            target = start;
+            loop.quit();
+        });
+        loop.exec();
+        require(!target.isEmpty() && target != reader.state().value("position"),
+                "The import must move to another passage");
+        const auto startImport = [&](std::function<void(QString)> finished) {
+            require(native ? reader.goToNative(target, finished)
+                           : reader.goToSyncedPosition(target, finished),
+                    "The first position import must start");
+        };
+        bool stalePreview = false;
+        const auto pageBeforeImport = reader.page();
+        reader.previewPage(pageBeforeImport, QSize(180, 240), [&](QImage) { stalePreview = true; });
+        startImport([&](QString error) {
+            require(error.isEmpty() && reader.state().value("position") == target,
+                    "Import must move the displayed position");
+            loop.quit();
+        });
+        loop.exec();
+        require(!stalePreview, "An import must cancel queued page previews just like a page turn");
+        require(reader.go(pageBeforeImport), "Cannot return to the page before import");
+        reader.updated = [&] {
+            if (!reader.busy())
+                loop.quit();
+        };
+        loop.exec();
+        reader.updated = {};
+        const int pixels = reader.fontSize() + 2;
+        const auto originalImage = reader.image().cacheKey();
+        int completions = 0;
+        startImport([&](QString error) {
+            ++completions;
+            require(error.isEmpty() && reader.state().value("position") == target
+                            && reader.state().value("font_pixels").toInt() == pixels
+                            && !reader.busy(),
+                    "Import completion must save the imported passage in the final layout");
+            require(reader.turn(1), "The import callback must be able to turn the page");
+        });
+        reader.updated = [&] {
+            if (reader.image().cacheKey() != originalImage)
+                require(reader.state().value("font_pixels").toInt() == pixels,
+                        "An import published a superseded layout");
+            if (!reader.busy() && reader.turnDirection() == 1)
+                loop.quit();
+        };
+        reader.editAppearance(appearance::Patch(qt::object({ { "font_pixels", pixels - 1 } })));
+        reader.editAppearance(appearance::Patch(qt::object({ { "font_pixels", pixels } })));
+        loop.exec();
+        require(completions == 1 && reader.state().value("position") != target,
+                "Reentrant navigation must finish without repeating import completion");
+        reader.updated = {};
+        int stale = 0;
+        startImport([&](QString) { ++stale; });
+        open(replacement);
+        require(stale == 0 && reader.syncFilename() == QFileInfo(replacement).fileName(),
+                "An old import must not complete on a replacement book");
+        startImport([&](QString) { ++stale; });
+        const auto before = reader.image().cacheKey();
+        reader.revokeSource();
+        ReaderSession::drain([&] { loop.quit(); });
+        loop.exec();
+        require(stale == 0 && !reader.busy() && reader.image().cacheKey() == before,
+                "A revoked import must not publish or acknowledge a position");
+        require(!reader.goToSyncedPosition(target, {}) && !reader.goToNative(target, {}),
+                "A revoked reader must refuse new position imports");
+    }
+}
 
 int run(int argc, char **argv)
 {
@@ -68,15 +581,13 @@ int run(int argc, char **argv)
         auto session =
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         auto lease = std::make_shared<SourceLease>();
-        PositionCodec firstPositions{ [](const EngineDocument &model, const QString &, QString *) {
-                                         return model.position();
-                                     },
-                                      [](const EngineDocument &model, QString *) {
-                                          return "first:" + model.position();
-                                      },
-                                      [](const QString &location) { return location; } };
+        PositionCodec firstPositions{
+            [](const Engine &model, const QString &, QString *) { return model.position(); },
+            [](const Engine &model, QString *) { return "first:" + model.position(); },
+            [](const QString &location) { return location; }
+        };
         auto secondPositions = firstPositions;
-        secondPositions.encode = [](const EngineDocument &model, QString *) {
+        secondPositions.encode = [](const Engine &model, QString *) {
             return "second:" + model.position();
         };
 
@@ -192,7 +703,7 @@ int run(int argc, char **argv)
             // validation flag distinguishes a content rejection from failed I/O.
             reject(request(path, access, broken),
                    rejected ? OpeningFailureKind::InvalidContent : OpeningFailureKind::Io,
-                   "error.publication_layout_inspection_is_incomplete", rejected);
+                   "opening.resource-read", rejected);
         }
         OpeningResult ready;
         ready.rememberContentRejection();
@@ -285,23 +796,267 @@ int run(int argc, char **argv)
             int warnings = 0;
             for (const auto &line : log.readAll().split('\n')) {
                 const auto entry = QJsonDocument::fromJson(line).object();
-                if (entry.value("event").toString()
-                    != QStringLiteral("opening-formatting-warning")) {
+                if (entry.value("event").toString() != QStringLiteral("page-formatting-warning")) {
                     continue;
                 }
-                require(entry.value("resource").toString().endsWith(".xhtml")
-                                && entry.value("issue").toString().contains("writing")
-                                && entry.value("excerpt").toString().contains("vertical-lr"),
-                        "Formatting warning log lost its cause, resource or excerpt");
-                require(entry.value("retained_book_hit").toBool() == (warnings == 1),
-                        "Retained warning log lost its origin");
+                require(entry.value("page").toInt(-1) >= 0
+                                && !entry.value("position").toString().isEmpty(),
+                        "Page warning log lost its displayed position");
                 ++warnings;
             }
-            require(warnings == 2, "Expected initial and retained formatting warning diagnostics");
+            require(warnings >= 2,
+                    "Expected current-page diagnostics on initial and retained opening");
             retainedWarning->cancelSource();
             ReaderSession::drain([&] { opened.quit(); });
             opened.exec();
             servedPath = path;
+        }
+        mixedSpreadHandoff();
+        chapterNavigation(path);
+        positionImportTransitions(path, publisherPath);
+        hybridFontEdits(path, server.serverPort());
+        ReaderSession::drain([&] { opened.quit(); });
+        opened.exec();
+        // A stale ready notification must not turn into a synchronous whole
+        // book load when its first frame is superseded by another request.
+        for (const int scenario : { 0, 1, 2, 3, 4, 5, 6, 7 }) {
+            const bool prepared = scenario != 0;
+            const bool refuse = scenario == 2;
+            auto fast =
+                    std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+            auto probePositions = firstPositions;
+            probePositions.encode = [](const Engine &engine, QString *) {
+                openedEngine = const_cast<Engine *>(&engine);
+                if (engine.bookFraction() < 0 && adoptingDocument) {
+                    const auto notify = std::exchange(adoptingDocument, {});
+                    notify();
+                }
+                return "first:" + engine.position();
+            };
+            auto access = std::make_shared<SourceLease>();
+            const int quiet = renderingMode::buildQuietMilliseconds();
+            renderingMode::setBuildQuietMilliseconds(0);
+            renderingMode::setOverride(prepared ? 2 : 1);
+            fast->open({ path,
+                         path,
+                         QSize(758, 900),
+                         {},
+                         {},
+                         {},
+                         access,
+                         nativeResourceFactory(path, server.serverPort(), access),
+                         probePositions },
+                       [&](OpeningResult result) {
+                           require(result.ready(), qPrintable(openingMessage(result)));
+                           opened.quit();
+                       });
+            opened.exec();
+            require(fast->state().contains("book_fraction"),
+                    "The stale-ready fixture must open as a chapter");
+            QEventLoop rendered;
+            fast->updated = [&] {
+                if (!fast->busy())
+                    rendered.quit();
+            };
+            if (prepared) {
+                // A completed appearance edit must not leave chapter mode as
+                // pending intent when a later full-document frame is superseded.
+                fast->requestAppearance(
+                        fast->requestedAppearance().edited(appearance::Patch(
+                                QJsonObject{ { "font_pixels",
+                                               fast->state().value("font_pixels").toInt() + 2 } })),
+                        {}, ReaderSession::hybridChapterMode);
+                rendered.exec();
+                if (scenario == 4 || scenario == 5 || scenario == 7) {
+                    require(fast->goToChapter(1), "Cannot open a later chapter for the page jump");
+                    rendered.exec();
+                }
+                const auto nextChapter = fast->chapterTitle();
+                const auto nextChapterImage = fast->image();
+                // Leave the last page of chapter one visible when the count finishes.
+                const QVector<int> directions =
+                        scenario == 5 ? QVector<int>{ -1, 1, -1 } : QVector<int>{ 1, 1, 1, 1 };
+                for (int direction : directions) {
+                    require(fast->turn(direction), "Cannot read on before the full build");
+                    rendered.exec();
+                }
+                QEventLoop ready;
+                QTimer poll;
+                QObject::connect(&poll, &QTimer::timeout, &ready, [&] {
+                    if (ReaderLocationProbe::pending(*fast))
+                        ready.quit();
+                });
+                poll.start(10);
+                if (!ReaderLocationProbe::pending(*fast))
+                    ready.exec();
+                poll.stop();
+                if (refuse) {
+                    QEventLoop damaged;
+                    kobalt::qt::invoke(
+                            engineWorker(),
+                            [&] {
+                                require(openedEngine, "The session must expose its position codec");
+                                ReaderLocationProbe::refusePreparedDocument(*openedEngine);
+                                kobalt::qt::invoke(
+                                        qApp, [&] { damaged.quit(); }, Qt::QueuedConnection);
+                            },
+                            Qt::QueuedConnection);
+                    damaged.exec();
+                    for (int turn = 0; turn < 3; ++turn) {
+                        const auto before = fast->state().value("position");
+                        require(fast->turn(1), "Cannot turn after refusing the prepared document");
+                        rendered.exec();
+                        require(fast->error().isEmpty() && fast->state().contains("book_fraction")
+                                        && fast->state().value("position") != before
+                                        && fast->turnDirection() == 1,
+                                "Refusing the whole book must preserve the requested page turn");
+                    }
+                } else if (scenario == 6) {
+                    const auto anchor = fast->state().value("position");
+                    const QSize landscape(900, 758);
+                    fast->resize(landscape);
+                    rendered.exec();
+                    require(fast->error().isEmpty() && fast->image().size() == landscape
+                                    && fast->state().value("position") == anchor
+                                    && fast->state().contains("book_fraction"),
+                            "Rotating with a prepared count must keep the chapter at the new viewport");
+                } else if (scenario == 5) {
+                    const auto previousChapter = fast->chapterTitle();
+                    const auto previousImage = fast->image();
+                    require(previousChapter != nextChapter && previousImage != nextChapterImage,
+                            "The handoff must start on the preceding chapter's last page");
+                    QStringList titles;
+                    QVector<QImage> images;
+                    QVector<int> turns;
+                    fast->updated = [&] {
+                        if (fast->busy())
+                            return;
+                        require(!fast->state().contains("book_fraction") && fast->error().isEmpty(),
+                                "Both buffered frames must use the adopted whole book");
+                        titles.append(fast->chapterTitle());
+                        images.append(fast->image());
+                        turns.append(fast->turnDirection());
+                        if (titles.size() == 2)
+                            rendered.quit();
+                    };
+                    require(fast->turn(1) && fast->turn(-1),
+                            "Cannot buffer a reverse turn while the whole book is being adopted");
+                    rendered.exec();
+                    require((titles == QStringList{ nextChapter, previousChapter }
+                             && images == QVector<QImage>{ nextChapterImage, previousImage }
+                             && turns == QVector<int>{ 1, -1 }),
+                            "A buffered reversal must cross the chapter boundary and return to the same page");
+                    fast->updated = {};
+                } else if (scenario == 7) {
+                    const int localPage = fast->page() - 1;
+                    const auto expected = fast->state().value("position");
+                    require(fast->go(fast->page()) && !fast->go(localPage),
+                            "A second chapter-local number must wait for the adopting frame");
+                    rendered.exec();
+                    require(!fast->state().contains("book_fraction")
+                                    && fast->state().value("position") == expected,
+                            "Refusing a second jump must preserve the requested passage");
+                    const int wholePage = fast->page() - 1;
+                    require(wholePage >= 0 && fast->go(wholePage),
+                            "Cannot jump using the newly displayed book pagination");
+                    rendered.exec();
+                    require(fast->page() == wholePage,
+                            "The retried page jump must reach its target");
+                } else if (scenario == 4) {
+                    const int target = fast->page() - 1;
+                    QImage expectedImage;
+                    QString expected;
+                    fast->pageSummary(target, [&](QString start, QString) {
+                        expected = start;
+                        opened.quit();
+                    });
+                    opened.exec();
+                    fast->previewPage(target, fast->image().size(), [&](QImage image) {
+                        expectedImage = image;
+                        opened.quit();
+                    });
+                    opened.exec();
+                    require(!expected.isEmpty() && !expectedImage.isNull() && fast->go(target),
+                            "Cannot request the previous chapter-local page");
+                    rendered.exec();
+                    QString actual;
+                    fast->pageSummary(fast->page(), [&](QString start, QString) {
+                        actual = start;
+                        opened.quit();
+                    });
+                    opened.exec();
+                    require(!fast->state().contains("book_fraction") && actual == expected
+                                    && fast->image() == expectedImage,
+                            "A page jump during adoption must resolve the chapter-local page");
+                } else if (scenario == 3) {
+                    const int pixels = fast->state().value("font_pixels").toInt() + 2;
+                    const auto preparedRevision = ReaderLocationProbe::revision(*fast);
+                    adoptingDocument = [&] {
+                        kobalt::qt::invoke(
+                                qApp,
+                                [&] {
+                                    require(fast->busy() && fast->state().contains("book_fraction"),
+                                            "The appearance edit must race the unpublished whole-book frame");
+                                    const auto fontEdit = [&](int size) {
+                                        fast->editAppearance(appearance::Patch(
+                                                QJsonObject{ { "font_pixels", size } }));
+                                    };
+                                    fontEdit(pixels - 1);
+                                    fontEdit(pixels);
+                                    // Deliver the earlier count after both edits but before
+                                    // the worker finishes publishing its previous frame.
+                                    ReaderLocationProbe::offer(*fast, preparedRevision);
+                                },
+                                Qt::BlockingQueuedConnection);
+                    };
+                    require(fast->go(0), "Cannot start adoption before the appearance edit");
+                    rendered.exec();
+                    require(!adoptingDocument && fast->error().isEmpty()
+                                    && fast->state().value("font_pixels").toInt() == pixels
+                                    && fast->state().contains("book_fraction"),
+                            "An appearance edit during adoption must reflow a chapter, not the whole book");
+                } else {
+                    QTemporaryDir logs;
+                    initializeDiagnostics(logs.path());
+                    pauseDiagnostics(false);
+                    auto armed = std::make_shared<std::atomic_bool>(true);
+                    auto opens = std::make_shared<std::atomic_int>(0);
+                    setDiagnosticObserver([&, armed, opens](const QJsonObject &event) {
+                        if (event.value("event") == "operation-start"
+                            && event.value("operation") == "engine-open")
+                            ++*opens;
+                        if (event.value("event") == "render-end"
+                            && event.value("book_fraction").toDouble() < 0
+                            && armed->exchange(false))
+                            kobalt::qt::invoke(
+                                    qApp,
+                                    [&] {
+                                        require(fast->goTo(fast->chapters().first().position),
+                                                "Cannot supersede the adopted full frame");
+                                    },
+                                    Qt::QueuedConnection);
+                    });
+                    require(fast->go(0), "Cannot adopt the prepared full document");
+                    rendered.exec();
+                    setDiagnosticObserver({});
+                    require(!armed->load() && !fast->state().contains("book_fraction")
+                                    && opens->load() == 0,
+                            "A superseded full frame reopened a chapter after an appearance edit");
+                }
+            } else {
+                ReaderLocationProbe::offer(*fast, ReaderLocationProbe::revision(*fast));
+                require(fast->go(0) && fast->goTo(fast->chapters().first().position),
+                        "Cannot supersede the stale-ready frame");
+                rendered.exec();
+                require(fast->state().contains("book_fraction"),
+                        "A superseded stale-ready frame loaded the whole book");
+            }
+            fast.reset();
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+            QEventLoop drained;
+            ReaderSession::drain([&] { drained.quit(); });
+            drained.exec();
         }
         lease = std::make_shared<SourceLease>();
         session->open({ path,
@@ -1018,31 +1773,77 @@ int run(int argc, char **argv)
             auto imageLease = std::make_shared<SourceLease>();
             auto resourceOwner = std::make_shared<int>(0);
             std::weak_ptr<int> resourceLifetime = resourceOwner;
-            ResourceFactory images = [colorPath, imageLease, resourceOwner](
-                                             const QMap<QString, qint64> &sizes, const QString &,
-                                             std::shared_ptr<std::atomic_bool>) {
-                return std::make_shared<ResourceCache>(
-                        sizes.keys(),
-                        ResourceCache::Access{ [colorPath, resourceOwner](
-                                                       const QString &name,
-                                                       const ResourceCache::Sink &sink, QString *) {
-                                                  ZipResource resource;
-                                                  if (!resource.open(colorPath, name))
-                                                      return false;
-                                                  while (resource.valid() && !resource.finished()) {
-                                                      const auto bytes = resource.next();
-                                                      if (!sink(bytes.constData(), bytes.size()))
-                                                          return false;
-                                                  }
-                                                  return resource.valid();
-                                              },
-                                               [imageLease] { return imageLease->revoked(); },
-                                               {},
-                                               [](const QString &name) {
-                                                   return name.endsWith(".png") ? QSize(128, 64)
-                                                                                : QSize();
-                                               } });
+            const auto source =
+                    [&colorPath, &resourceOwner](
+                            const std::shared_ptr<SourceLease> &imageLease) -> ResourceFactory {
+                return [colorPath, imageLease, resourceOwner](const QMap<QString, qint64> &sizes,
+                                                              const QString &,
+                                                              std::shared_ptr<std::atomic_bool>) {
+                    return std::make_shared<ResourceCache>(
+                            sizes.keys(),
+                            ResourceCache::Access{
+                                    [colorPath, resourceOwner](const QString &name,
+                                                               const ResourceCache::Sink &sink,
+                                                               QString *) {
+                                        ZipResource resource;
+                                        if (!resource.open(colorPath, name))
+                                            return false;
+                                        while (resource.valid() && !resource.finished()) {
+                                            const auto bytes = resource.next();
+                                            if (!sink(bytes.constData(), bytes.size()))
+                                                return false;
+                                        }
+                                        return resource.valid();
+                                    },
+                                    [imageLease] { return imageLease->revoked(); },
+                                    {},
+                                    [](const QString &name) {
+                                        return name.endsWith(".png") ? QSize(128, 64) : QSize();
+                                    } });
+                };
             };
+            for (const bool image : { false, true }) {
+                ReaderSession idle(test::readerFonts(), test::readerPlaceholder());
+                auto access = std::make_shared<SourceLease>();
+                idle.open({ colorPath,
+                            colorPath,
+                            QSize(758, 900),
+                            {},
+                            {},
+                            {},
+                            access,
+                            source(access) },
+                          [&](OpeningResult result) {
+                              require(result.ready(), qPrintable(openingMessage(result)));
+                              opened.quit();
+                          });
+                opened.exec();
+                idle.updated = [&] {
+                    if (!idle.busy())
+                        rendered.quit();
+                };
+                require(idle.go(idle.chapters()[1].page - (image ? 0 : 3)),
+                        "Cannot show the idle work test page");
+                rendered.exec();
+                const auto key = idle.image().cacheKey();
+                const auto stats = idle.resourceStats();
+                const int cached = idle.cachedPages();
+                require((stats.value("pending_images").toInt() > 0) == image,
+                        "The idle work test has unexpected deferred images");
+                // Finish the worker job while its GUI delivery is still queued.
+                QSemaphore done;
+                qt::invoke(engineWorker(), [&] { done.release(); }, Qt::QueuedConnection);
+                require(done.tryAcquire(1, 5000), "Idle work did not finish");
+                access->revoke();
+                bool delivered = false;
+                idle.updated = idle.idle = [&] { delivered = true; };
+                ReaderSession::drain([&] { drained.quit(); });
+                drained.exec();
+                require(!delivered && idle.image().cacheKey() == key
+                                && idle.resourceStats() == stats && idle.cachedPages() == cached,
+                        "An ended source published an idle image or neighbouring pages");
+            }
+            ResourceFactory images = source(imageLease);
             auto illustrated =
                     std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
             illustrated->open(
@@ -1175,38 +1976,96 @@ int run(int argc, char **argv)
         require(replacementStarted && replacementFinished && !staleFinished
                         && !session->image().isNull(),
                 "Old queued opening completion reached a newer source generation");
-        {
-            auto cancelled =
-                    std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
-            auto cancelledLease = std::make_shared<SourceLease>();
-            cancelled->open({ path,
-                              path,
-                              QSize(758, 900),
-                              {},
-                              {},
-                              {},
-                              cancelledLease,
-                              nativeResourceFactory(path, server.serverPort(), cancelledLease) },
-                            [&](OpeningResult result) {
-                                require(result.ready(), qPrintable(openingMessage(result)));
-                                opened.quit();
-                            });
+        for (const bool hostRevokes : { false, true }) {
+            ReaderSession metadata(test::readerFonts(), test::readerPlaceholder());
+            auto access = std::make_shared<SourceLease>();
+            metadata.open({ path, path, QSize(758, 900), {}, {}, {}, access,
+                            localResourceFactory(path, access), firstPositions },
+                          [&](OpeningResult result) {
+                              require(result.ready(), qPrintable(openingMessage(result)));
+                              opened.quit();
+                          });
             opened.exec();
-            require(cancelled->style(cancelled->fontSize() + 1, cancelled->spacing()),
-                    "Cannot start a cancelled relayout");
-            require(cancelled->renderProgress().active,
-                    "Cancelled relayout never started progress");
-            cancelled->cancelSource();
-            require(!cancelled->renderProgress().active,
-                    "Source cancellation kept relayout progress active");
-            bool staleProgress = false;
-            cancelled->renderProgressChanged = [&] {
-                staleProgress |= cancelled->renderProgress().active;
+            require(metadata.go(2), "Cannot open the text for a pending selection");
+            metadata.updated = [&] {
+                if (!metadata.busy())
+                    opened.quit();
             };
+            opened.exec();
+            AnnotationPageEdges live;
+            metadata.annotationPageEdges([&](AnnotationPageEdges edges) {
+                live = edges;
+                opened.quit();
+            });
+            opened.exec();
+            require(!live.first.rectangles.isEmpty() && !live.last.end.isEmpty(),
+                    "Expected selectable text on the displayed page");
+            bool comparisonStale = false;
+            metadata.compareNativePosition(live.last.end, [&](PositionComparison comparison) {
+                comparisonStale = comparison.status == PositionComparison::Status::Stale;
+            });
+            int emptyReplies = 0;
+            metadata.annotationPageEdges(
+                    [&](AnnotationPageEdges edges) { emptyReplies += edges.first.text.isEmpty(); });
+            metadata.annotationRange(live.first.start, live.last.end, [&](TextRange range) {
+                emptyReplies += range.text.isEmpty();
+            });
+            metadata.annotationTokenAt(
+                    live.first.rectangles.first().center(),
+                    [&](AnnotationToken token) { emptyReplies += token.text.isEmpty(); });
+            bool published = false;
+            metadata.updated = [&] { published = true; };
+            metadata.setChapters({ { "Ended source", "chapter", 0, 42 } }, {});
+            if (hostRevokes)
+                access->revoke();
+            else
+                metadata.cancelSource();
             ReaderSession::drain([&] { drained.quit(); });
             drained.exec();
-            require(!staleProgress && !cancelled->renderProgress().active,
-                    "Queued progress revived a cancelled relayout");
+            require(comparisonStale, "An ended source compared a native reading position");
+            require(emptyReplies == 3, "An ended source returned a pending text selection");
+            require(!published && (metadata.chapters().isEmpty()
+                                   || metadata.chapters().first().title != "Ended source"),
+                    "Chapter metadata reached the reader after its source ended");
+        }
+        // A source can end while the worker draws its next frame. A host may revoke
+        // the lease directly, without notifying the facade first.
+        enum class Pending { Font, Rotation, Turn };
+        for (const bool hostRevokes : { false, true }) {
+            for (const auto request : { Pending::Font, Pending::Rotation, Pending::Turn }) {
+                ReaderSession cancelled(test::readerFonts(), test::readerPlaceholder());
+                auto access = std::make_shared<SourceLease>();
+                cancelled.open({ path, path, QSize(758, 900), {}, {}, {}, access,
+                                 localResourceFactory(path, access) }, [&](OpeningResult result) {
+                    require(result.ready(), qPrintable(openingMessage(result)));
+                    opened.quit();
+                });
+                opened.exec();
+                const auto shown = cancelled.image().cacheKey();
+                bool published = false;
+                cancelled.updated = [&] { published = true; };
+                if (request == Pending::Font)
+                    cancelled.editAppearance(appearance::Patch(qt::object(
+                            { { "font_pixels", cancelled.fontSize() + 2 } })));
+                else if (request == Pending::Rotation)
+                    cancelled.resize(QSize(900, 758));
+                else
+                    require(cancelled.turn(1), "Cannot start the pending turn");
+                require(cancelled.busy() && cancelled.renderProgress().active == (request != Pending::Turn),
+                        "The requested render must be in progress");
+                if (hostRevokes)
+                    access->revoke();
+                else {
+                    cancelled.cancelSource();
+                    require(!cancelled.renderProgress().active,
+                            "Source cancellation kept relayout progress active");
+                }
+                ReaderSession::drain([&] { drained.quit(); });
+                drained.exec();
+                require(!published && !cancelled.busy() && !cancelled.renderProgress().active
+                                && cancelled.image().cacheKey() == shown,
+                        "An ended source published its pending layout or left progress active");
+            }
         }
         {
             QTemporaryDir logs;

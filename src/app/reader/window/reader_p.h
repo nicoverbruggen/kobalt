@@ -519,6 +519,9 @@ private:
     kobalt::ChoiceScreen *choices = nullptr;
     kobalt::ChapterGraph *chapterGraph = nullptr;
     bool seekOpen = false;
+
+    bool navigateAvailable() const { return features::enabled(preferences, features::Navigate); }
+
     void openSeek();
     kobalt::Acknowledgments *acknowledgments;
     QStackedWidget *panels;
@@ -604,6 +607,7 @@ private:
     QString settingsUiFontFace, settingsUiMonoFontFace, settingsHeaderFooterFontFace;
     QString settingsDictionaryFontFace;
     QString settingsTimeRemainingFormat, settingsPercentageFormat;
+    QString settingsRenderingMode;
     int settingsDictionaryFontSize = 100;
     int settingsHeaderFooterWeight = 2;
     void applyInterfaceFonts();
@@ -771,6 +775,13 @@ private:
     // and only while the reader is idle. Opening All then shows a complete
     // page in one screen update.
     void startTextPresetPrerender();
+    // Draws the previews of the text presets that are not stored yet, while
+    // the host still shows its opening view, so that the first page turns
+    // do not wait for them. Stored previews need no work, so this takes
+    // time only on the first opening with a new preset, size or theme.
+    void prepareTextPresetPresentation(std::function<void()> finished);
+    void finishTextPresetPresentation();
+    std::function<void()> textPresetPresentationReady;
     void prerenderTextPresets();
     void prerenderNextTextPreset();
     // Continues a prerender that waits for the engine. ReaderSession::idle
@@ -865,6 +876,9 @@ private:
     bool pageList(int direction);
     // Runs from a tap or swipe until its page is painted; invalid otherwise.
     QElapsedTimer turnStarted;
+    // How long the last turn took from the accepted tap to its page image,
+    // for the header and footer. Negative before the first turn.
+    qint64 pageTurnMilliseconds = -1;
     // The Settings button ignores the second tap of a double tap on a panel's
     // close cell, which sits where the Settings button is. A tap that waited
     // in the queue while the screen repainted still counts as part of the

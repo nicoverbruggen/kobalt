@@ -1,5 +1,7 @@
 #include "font_catalog.h"
+#include <QDateTime>
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QMap>
 #include <algorithm>
@@ -162,12 +164,20 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
         FT_Done_Face(face);
         if (family.isEmpty())
             return;
+        QByteArray version;
+        if (origin == FontOrigin::Sideloaded
+            || (origin == FontOrigin::BuiltIn && !sources.systemFiles.contains(path))) {
+            const QFileInfo file(path);
+            version = path.toUtf8() + '\0' + QByteArray::number(file.size()) + ':'
+                    + QByteArray::number(file.lastModified().toMSecsSinceEpoch()) + '\0';
+        }
         const auto key = fontFamilyKey(family);
         auto found = seen.constFind(key);
         if (found != seen.cend()) {
             auto &entry = result[*found];
             if (entry.origin == origin && !entry.files.contains(path)) {
                 entry.files.append(path);
+                entry.directoryFileVersions += version;
                 if (entry.opticalSizeAxis.available() && optical.available()) {
                     auto &range = entry.opticalSizeAxis;
                     range.minimum = qMax(range.minimum, optical.minimum);
@@ -195,7 +205,7 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
             return;
         }
         seen.insert(key, result.size());
-        result.append({ family, { path }, origin, axis, optical });
+        result.append({ family, { path }, origin, axis, optical, version });
     };
     const auto core = [](const QString &path) {
         return path.contains("/ebook-core/") || path.contains("/ebook-core-");

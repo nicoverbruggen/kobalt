@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "render/page_content.h"
 #include "ui/controls/rows.h"
 #include "ui/controls/text.h"
@@ -86,6 +87,9 @@ void Reader::refresh()
     // new page is painted, in the refresh that paintTurn() requests.
     if (!turnFrame)
         syncKosyncWhileReading();
+    // The new page's header shows the time of the turn that produced it.
+    if (turnFrame && turnStarted.isValid())
+        pageTurnMilliseconds = turnStarted.elapsed();
     // The refresh that paintTurn() requested: the same page, already painted.
     const bool afterTurn = turnPainted && !turnFrame;
     if (!turnFrame)
@@ -141,6 +145,9 @@ void Reader::refresh()
         paintTurn();
         return;
     }
+    // A turn that a panel covers is not painted as a turn.
+    if (turnFrame)
+        turnStarted.invalidate();
     if (afterTurn && controlsHidden()) {
         // A page turn changes only what the hidden menu and panels show.
         // They sync when they open; see syncStaleControls().
@@ -185,6 +192,8 @@ void Reader::refresh()
     }
     openPendingDestination();
     syncNavigation();
+    if (seekOpen && !session->busy() && session->state().contains("book_fraction"))
+        pageScrubber->showCurrentPage();
     finishAnnotationPresentation();
 }
 
@@ -209,6 +218,19 @@ bool Reader::publishPendingDarkMode()
 
 void Reader::syncFrameState()
 {
+    if (choices->isVisible() && !choosingTypography) {
+        QVector<int> pages;
+        for (const auto &chapter : session->chapters())
+            pages.append(chapter.page);
+        choices->setChapterPages(pages);
+        choices->setChapterPosition(
+                session->bookPages() > 0
+                        ? strings::get("stats.page_of")
+                                  .arg(session->bookPage() + 1)
+                                  .arg(headerfooter::pageTotal(session->bookPages(),
+                                                               session->bookPagesEstimated()))
+                        : strings::get("common.percent").arg(session->progressPercent()));
+    }
     syncBookmarks();
     if (!session->busy() && !pendingSearchHit.start.isEmpty()) {
         const auto hit = std::exchange(pendingSearchHit, {});
@@ -431,8 +453,13 @@ void Reader::showPageImage(const QImage &nextImage)
     if (!page->viewportTransition())
         page->image = std::move(displayedImage);
     // Only a turn forward counts towards the session's pace; jumps and reflows do not.
-    if (!session->busy())
-        book->pace().observe(session->page(), session->turnDirection() > 0);
+    if (!session->busy()) {
+        if (session->state().contains("book_fraction"))
+            book->pace().observePosition(session->state().value("position").toString(),
+                                         session->turnDirection() > 0);
+        else
+            book->pace().observe(session->page(), session->turnDirection() > 0);
+    }
 }
 
 // The reflow placeholder repeats the word lengths of the displayed page. Read
@@ -464,7 +491,7 @@ void Reader::paintTurn()
     QElapsedTimer painting;
     if (turnStarted.isValid())
         painting.start();
-    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    page->progressFraction = session->progressFraction();
     page->preparedDamage = session->damage();
     page->preparedFrom = session->damageFrom();
     // The Refresh the screen setting decides which turns flash.
@@ -481,7 +508,7 @@ void Reader::paintTurn()
                 { { "render_id", double(session->renderId()) }, { "page", session->page() } },
                 false);
     page->refreshContent(true, true);
-    if (turnStarted.isValid()) {
+    if (turnStarted.isValid() && kobalt::diagnosticsActive())
         kobalt::diagnostic("page-turn-painted",
                            { { "render_id", double(session->renderId()) },
                              { "page", session->page() },
@@ -489,8 +516,7 @@ void Reader::paintTurn()
                              { "render_ms", rendered },
                              { "paint_ms", painting.nsecsElapsed() / 1e6 } },
                            false);
-        turnStarted.invalidate();
-    }
+    turnStarted.invalidate();
     // The screen composes the flushed page from the event loop. Return
     // to it now; the second pass finds the page unchanged and does the rest.
     turnPainted = true;
@@ -608,9 +634,13 @@ void Reader::syncStaleControls()
 // The part of syncReadingControls() that does not depend on a visible control.
 void Reader::syncReadingState()
 {
-    if (session->busy())
-        pageScrubber->cancel();
-    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    if (session->busy()) {
+        if (seekOpen && session->state().contains("book_fraction"))
+            pageScrubber->beginNavigation();
+        else
+            pageScrubber->cancel();
+    }
+    page->progressFraction = session->progressFraction();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
@@ -619,20 +649,41 @@ void Reader::syncReadingState()
 
 void Reader::syncReadingControls()
 {
-    if (session->busy())
-        pageScrubber->cancel();
+    if (session->busy()) {
+        if (seekOpen && session->state().contains("book_fraction"))
+            pageScrubber->beginNavigation();
+        else
+            pageScrubber->cancel();
+    }
+    const bool chapterBar = session->state().contains("book_fraction");
     QVector<QPair<int, QString>> chapters;
     for (const auto &chapter : session->chapters())
         chapters.append({ chapter.page, chapter.title });
-    pageScrubber->setChapterJumps(pageNavigation::barButtons(preferences)
-                                  == pageNavigation::BarButtons::Chapters);
-    pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+    pageScrubber->setChapterBar(chapterBar);
+    pageScrubber->setChapterJumps(chapterBar
+                                  || pageNavigation::barButtons(preferences)
+                                          == pageNavigation::BarButtons::Chapters);
+    if (chapterBar) {
+        const bool before =
+                session->page() > 0 || session->state().value("continues_before").toBool();
+        const bool after = session->page() + 1 < session->pages() || session->continuesAfter();
+        pageScrubber->setBook(int(before), 1 + int(before) + int(after), {},
+                              session->image().size());
+        QVector<int> chapterPages;
+        for (const auto &chapter : chapters)
+            chapterPages.append(chapter.first);
+        pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
+                                         session->chapterTitle(), session->progressPercent(),
+                                         session->bookPage(), session->bookPages(), chapterPages);
+    } else {
+        pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+    }
     pageScrubber->setEnabled(!session->busy());
     const auto chapter = session->chapterTitle().isEmpty() ? strings::get("reader.contents")
                                                            : session->chapterTitle();
     chapterButton->setText(chapter);
     chapterButton->setAccessibleName(strings::get("reader.contents_detail").arg(chapter));
-    page->progressFraction = pageProgressFraction(session->page(), session->pages());
+    page->progressFraction = session->progressFraction();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
@@ -763,8 +814,9 @@ void Reader::openPendingDestination()
 void Reader::updateGraph()
 {
     const bool counted = session->totalWords() >= 0;
-    const auto graph = counted ? session->chapterGraph()
-                               : kobalt::chapterPageLengths(session->chapters(), session->pages());
+    const auto graph = counted
+            ? session->chapterGraph()
+            : kobalt::chapterPageLengths(session->chapters(), session->bookPages());
     chapterGraph->setData(graph, counted ? session->graphSelection() : session->contentsSelection(),
                           true, {});
     const auto contents = session->chapters();
@@ -772,17 +824,20 @@ void Reader::updateGraph()
     int nextPages = 0;
     if (next >= 0 && next < contents.size()) {
         const int start = contents[next].page;
-        int end = session->pages();
+        int end = session->bookPages();
         for (const auto &chapter : contents)
             if (chapter.page > start)
                 end = qMin(end, chapter.page);
-        nextPages = qMax(1, end - start);
+        if (start >= 0 && end > start)
+            nextPages = end - start;
     }
     chapterGraph->setChapterNumber(session->contentsSelection().current + 1, contents.size());
     updateReadingStats();
     chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(),
-                              session->chapterPages(), nextPages, session->page(),
-                              session->pages());
+                              session->chapterPages(), nextPages, session->bookPage(),
+                              session->bookPages(),
+                              session->bookPages() > 0 ? -1 : session->progressFraction(),
+                              session->bookPagesEstimated());
 }
 
 void Reader::updateMenuStatus()

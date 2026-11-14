@@ -8,7 +8,7 @@
 #include "reader_inputs.h"
 #include "reading/bookmark_session.h"
 #include "reading/highlight_session.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "reading/reader_session.h"
 #include "support/qt_compat.h"
 

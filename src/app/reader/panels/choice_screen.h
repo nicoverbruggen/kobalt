@@ -32,6 +32,7 @@ public:
     void showChapters(const QString &title, QVector<Choice> choices, const QString &current,
                       ChapterGroups groups = ChapterGroups::Current);
     void setPosition(const QString &text);
+    void setPages(const QVector<int> &pages);
 
     int currentPage() const { return page; }
 
@@ -80,6 +81,7 @@ public:
                      ChapterGroups groups = ChapterGroups::Current);
     void setDropdownGeometry(const QRect &bounds);
     void setChapterPosition(const QString &text);
+    void setChapterPages(const QVector<int> &pages);
     void selectValue(const QString &value);
     int chapterPage() const;
     int fontPanelHeight() const;

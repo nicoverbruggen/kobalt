@@ -65,6 +65,7 @@ public:
     std::function<bool()> openingWorkPending;
     static void finishSleepView();
     std::function<void(std::function<void()>)> prepareUsb;
+    std::function<void()> storageReleased, storageRestored;
     std::function<void(std::function<void()>)> prepareShutdown;
     // False keeps the device awake while pending reader saves are started.
     std::function<bool()> beforeStandby;

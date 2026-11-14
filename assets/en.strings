@@ -294,6 +294,7 @@
 "common.page" = "page";
 /* Arguments: %1, %2 */
 "common.page_fraction" = "%1 / %2";
+"common.estimated_total" = "~%1";
 "common.pages" = "pages";
 /* Arguments: %1 */
 "common.percent" = "%1%";
@@ -493,7 +494,10 @@
 "header_footer.time_left" = "%1 left";
 "header_footer.learning_pace" = "Learning reading speed";
 /* Arguments: %1, %2 */
+"header_footer.calculating" = "Calculating…";
 "header_footer.pages_left" = "%1 %2";
+/* Arguments: %1 */
+"header_footer.milliseconds" = "%1 ms";
 "header_footer.preset.default" = "Kobalt";
 "header_footer.preset.alternative_a" = "Bookish";
 "header_footer.preset.alternative_b" = "Ember";
@@ -533,6 +537,8 @@
 "header_footer.field.chapter_percent" = "Percent of chapter";
 "header_footer.field.book_percent" = "Percent of book";
 "header_footer.field.battery_warning" = "Battery warning";
+"header_footer.field.page_turn_time" = "Page turn time";
+"header_footer.field.chapter_load_time" = "Chapter load time";
 /* Arguments: %1 */
 "header_footer.field_description.battery_warning" = "Shows the battery only below %1%.";
 "header_footer.field_description.time_left" = "Estimated from your reading pace.";
@@ -739,6 +745,7 @@
 "search_panel.no_matches_found" = "No matches";
 /* Arguments: %1, %2 */
 "search_panel.page_detail" = "Page %1: %2";
+"search_panel.chapter_detail" = "%1: %2";
 "search_panel.return_to_original_position" = "Return to original position";
 "search_panel.search" = "Search";
 "search_panel.searching" = "Searching…";
@@ -750,8 +757,18 @@
 "settings.unsupported_description" = "Disabled because this option is not supported on this device.";
 "settings.dark_description" = "Light text on a dark background.";
 "settings.section_opening" = "Opening books";
+"settings.section_engine" = "Engine";
 "settings.opening_cover" = "Do not show book cover while opening";
 "settings.opening_cover_description" = "Always show the Kobalt logo when opening a book.";
+"settings.rendering" = "Rendering engine";
+"settings.rendering_summary" = "Hybrid opens books fast and prepares the whole book while you read.";
+"settings.rendering_description" = "A change reloads the book at your position when you close Settings.";
+"settings.rendering_hybrid" = "Hybrid";
+"settings.rendering_fast" = "Faster";
+"settings.rendering_accurate" = "More accurate";
+"settings.rendering_hybrid_description" = "Open fast, then prepare the whole book in the background.";
+"settings.rendering_fast_description" = "Lay out only the chapter you read. Page numbers stay estimates.";
+"settings.rendering_accurate_description" = "Lay out the whole book first. Large books open slower.";
 "settings.display" = "Display";
 "settings.controls" = "Controls";
 "settings.defaults" = "Defaults";
@@ -1142,7 +1159,7 @@
 
 "reader.both" = "Both";
 "reader.formatting_warning" = "Formatting warning";
-"reader.formatting_warning_description" = "This book may have formatting issues. You can keep reading, but some text or layout may not appear as intended.";
+"reader.formatting_warning_description" = "This page uses unsupported formatting. You can keep reading, but some text or layout may not appear as intended.";
 
 "reader.hide_nonlinear_fragments" = "Hide non-linear fragments";
 "settings.inpage_footnotes" = "Footnotes below the text";

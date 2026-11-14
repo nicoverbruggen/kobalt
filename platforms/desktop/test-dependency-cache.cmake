@@ -15,6 +15,14 @@ function(expect condition message)
     cmake_language(EVAL CODE "if(NOT (${condition}))\nmessage(FATAL_ERROR [==[${message}]==])\nendif()")
 endfunction()
 
+# Inspect the generated compiler inputs, not just the recipe. Explicit CFLAGS
+# once suppressed Autoconf's default optimization in these published libraries.
+get_filename_component(entry "${DEPENDENCY_PREFIX}" DIRECTORY)
+foreach(library libunibreak/src fribidi/lib)
+    file(STRINGS "${entry}/${library}/Makefile" flags REGEX "^CFLAGS = ")
+    expect("flags MATCHES \"(^| )-O[123sgz]( |$)\"" "Autotools dependency has no optimization flag: ${library}: ${flags}")
+endforeach()
+
 # Cache location: a linked worktree shares the main checkout's cache, a tree
 # without its own .git uses its own, even inside a checkout, and an explicit
 # path wins.

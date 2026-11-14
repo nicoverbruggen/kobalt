@@ -72,7 +72,8 @@ void diagnostic(const char *, QJsonObject, bool) { }
 
 void diagnostic(const char *, QJsonObject, DiagnosticSeverity) { }
 
-DiagnosticOperation::DiagnosticOperation(const char *name) : operation(name) { }
+DiagnosticOperation::DiagnosticOperation(const char *name, std::function<bool()> stopped)
+    : operation(name), interrupted(std::move(stopped)) { }
 
 DiagnosticOperation::~DiagnosticOperation() = default;
 } // namespace kobalt

@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "ui/controls/text.h"
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
@@ -328,21 +329,25 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
 }
 
 void ChapterGraph::setProgress(const QString &title, int chapterPage, int chapterPages,
-                               int nextChapterPages, int page, int pages)
+                               int nextChapterPages, int page, int pages, double bookFraction,
+                               bool estimated)
 {
     if (this->title == title && progress.chapterPage == chapterPage
         && progress.chapterPages == chapterPages && progress.nextChapterPages == nextChapterPages
-        && progress.page == page && progress.pages == pages
-        && progressWeight == ui::interfaceWeight())
+        && progress.page == page && progress.pages == pages && progress.bookFraction == bookFraction
+        && progress.estimated == estimated && progressWeight == ui::interfaceWeight())
         return;
     this->title = title;
     progressWeight = ui::interfaceWeight();
-    progress = { chapterPage, chapterPages, nextChapterPages, page, pages };
+    progress = {
+        chapterPage, chapterPages, nextChapterPages, page, pages, bookFraction, estimated
+    };
     chapterTitle->setAccessibleName(strings::get("chapter_graph.current_chapter").arg(title));
-    this->chapterPage->setText(chapterPages > 0 ? strings::get("stats.page_of")
-                                                          .arg(qBound(1, chapterPage, chapterPages))
-                                                          .arg(chapterPages)
-                                                : QString());
+    this->chapterPage->setText(
+            chapterPages > 0 ? strings::get("stats.page_of")
+                                       .arg(qBound(1, chapterPage, chapterPages))
+                                       .arg(headerfooter::pageTotal(chapterPages, estimated))
+                             : QString());
     refreshCells();
     arrange();
 }
@@ -392,7 +397,8 @@ void ChapterGraph::refreshCells()
 {
     const auto &p = progress;
     const int chapterValue = pageProgressPercent(qMax(1, p.chapterPage) - 1, p.chapterPages);
-    const int bookValue = pageProgressPercent(p.page, p.pages);
+    const int bookValue = p.bookFraction >= 0 ? qBound(0, int(p.bookFraction * 100), 100)
+                                              : pageProgressPercent(p.page, p.pages);
     const int left = qMax(0, p.chapterPages - p.chapterPage + 1),
               remaining = qMax(0, p.pages - p.page);
     const auto pagesLeft = [](int count) {
@@ -428,7 +434,8 @@ void ChapterGraph::refreshCells()
                      wordsInCells() ? wordTotal(chapterTotal) : QString());
     chapterCell->percent->setAccessibleName(
             strings::get("chapter_graph.chapter_progress").arg(chapterValue));
-    bookCell->set(QString::number(remaining), pagesLeft(remaining),
+    bookCell->set(p.pages > 0 ? QString::number(remaining) : QString(),
+                  p.pages > 0 ? pagesLeft(remaining) : QString(),
                   bookTime >= 0 ? duration(bookTime) : QString(),
                   strings::get("common.percent").arg(bookValue),
                   bookTime >= 0 ? duration(bookTime, true) : QString(),

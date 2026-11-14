@@ -1,5 +1,5 @@
 #include "highlight_session.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "support/save_wait.h"
 #include "reader_session.h"
 #include "support/diagnostics.h"
@@ -161,7 +161,7 @@ bool HighlightSession::resolved() const
 
 BookmarkLocations HighlightSession::locations() const
 {
-    return resolved() ? BookmarkLocations{ pages_, order_ } : BookmarkLocations{};
+    return resolved() ? BookmarkLocations{ pages_, order_, bookPages_, {} } : BookmarkLocations{};
 }
 
 int HighlightSession::page(int index) const
@@ -190,6 +190,7 @@ bool HighlightSession::sync()
         layoutRevision_ = revision;
         pages_.clear();
         order_.clear();
+        bookPages_.clear();
         return true;
     }
     if (lookup_ == key && lookupRevision_ == revision && lookupGeneration_ == rangesGeneration_) {
@@ -222,6 +223,7 @@ bool HighlightSession::sync()
                     guard->layoutRevision_ = revision;
                     guard->pages_ = std::move(locations.pages);
                     guard->order_ = std::move(locations.order);
+                    guard->bookPages_ = std::move(locations.bookPages);
                 }
                 if (guard->changed) {
                     guard->changed();
@@ -507,10 +509,11 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
                             }
                             // Chapter lookup follows the start endpoint, even after a cross-page selection.
                             const auto positions = QStringList{ h.start };
-                            guard->session_.bookmarkPages(
+                            guard->session_.bookmarkLocations(
                                     positions,
                                     [guard, list, h, index, generation, revision,
-                                     finished](QVector<int> pages) mutable {
+                                     finished](BookmarkLocations locations) mutable {
+                                        const auto &pages = locations.bookPages;
                                         if (!guard) {
                                             return;
                                         }
@@ -521,11 +524,9 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
                                             }
                                             return;
                                         }
-                                        for (const auto &chapter : guard->session_.chapters()) {
-                                            if (chapter.page >= 0 && chapter.page <= pages[0]) {
-                                                h.chapter = chapter.title.left(512);
-                                            }
-                                        }
+                                        const auto chapter = locations.chapters.value(0);
+                                        if (!chapter.isEmpty())
+                                            h.chapter = chapter.left(512);
                                         if (index < 0) {
                                             list.append(h);
                                         } else {
@@ -536,7 +537,8 @@ void HighlightSession::save(const QString &start, const QString &end, const QStr
                                         if (finished) {
                                             finished(saved);
                                         }
-                                    });
+                                    },
+                                    false, false);
                         });
             });
 }

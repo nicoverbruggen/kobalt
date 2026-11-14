@@ -45,7 +45,7 @@
 #include "support/host_presentation.h"
 #include "support/reader_inputs.h"
 #include "support/strings.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <QApplication>
 #include <QtGui/private/qeventpoint_p.h>
 #include <QFontDatabase>

@@ -1,5 +1,5 @@
 #include "check.h"
-#include "engine/crengine/font_weight.h"
+#include "engine/blaze/adapter/font_weight.h"
 
 #include <lvdrawbuf.h>
 #include <lvfntman.h>

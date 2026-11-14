@@ -12,13 +12,14 @@
 #include "browser_handoff.h"
 #include "app/reader_window.h"
 #include "reading/reading_book.h"
+#include "reading/rendering_mode.h"
 #include "storage/profile_database.h"
 #include "storage/annotation_database.h"
 #include "storage/reader_storage.h"
 #include "storage/preview_store.h"
 #include "storage/sleep_snapshot.h"
 #include "reading/reader_session.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "native_lifecycle.h"
 #include "native_authorization.h"
 #include "native_publication.h"
@@ -322,10 +323,14 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
                     kobalt::diagnostic("usb-release-start");
                     disposeForTransition([] { });
                 },
-                [this, ready = std::move(ready)] {
-                    environment_.assets.invalidate();
-                    ready();
-                });
+                std::move(ready));
+    };
+    lifecycle->storageReleased = [this] { environment_.invalidateAssets(); };
+    lifecycle->storageRestored = [this] {
+        environment_.verifyAssets(this, "usb", [this](bool valid) {
+            if (valid)
+                kobalt::ui::prepareOpeningFonts(environment_.assets);
+        });
     };
     lifecycle->preparePowerScreen = [this](NativeLifecycle::Shutdown mode) {
         homeSleep->clear();
@@ -372,7 +377,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     // Read and check the interface faces on a worker thread before any tap,
     // so the first opening view does not wait for storage.
     if (available()) {
-        kobalt::ui::prepareOpeningFonts(environment_.assets);
+        if (environment_.assets.available())
+            kobalt::ui::prepareOpeningFonts(environment_.assets);
         openingDark = storage::readPreferences(environment_.paths.preferences())
                               .object.value("dark_mode")
                               .toBool(false);
@@ -467,7 +473,7 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
 {
     QElapsedTimer openingStarted;
     openingStarted.start();
-    if (!available())
+    if (!available() || !environment_.assets.available())
         return false;
     if (lifecycle->blocked() || lifecycle->draining)
         return true;
@@ -683,6 +689,10 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
     }
 }
 
+// Where the opening bar stands when the engine has the book, and when the
+// reader window is built. The rest fills when the first page is ready.
+static constexpr int openingBarEngine = 60, openingBarWindow = 80;
+
 void ReaderCoordinator::updateOpening(kobalt::OpeningStage stage, int percent)
 {
     if (!run.loading || int(stage) < int(run.openingStage))
@@ -705,7 +715,11 @@ void ReaderCoordinator::updateOpening(kobalt::OpeningStage stage, int percent)
     run.progressPainted = now;
     // Each operation advances one part of the bar. It never resets when
     // the engine moves to the next operation and does not estimate time.
-    const int overall = (int(stage) * 100 + percent) / (int(kobalt::OpeningStage::Ready) + 1);
+    // The engine's operations fill only the first part: the reader window
+    // and its first page still follow, and a full bar must mean that the
+    // page is about to show.
+    const int overall = (int(stage) * 100 + percent) * openingBarEngine
+            / ((int(kobalt::OpeningStage::Ready) + 1) * 100);
     run.loading->setProgress(overall);
 }
 
@@ -1028,6 +1042,7 @@ void ReaderCoordinator::load()
 #endif
     const auto preferences = kobalt::appearance::readerPreferences(
             kobalt::storage::readPreferences(environment_.paths.preferences()).object, saved);
+    kobalt::renderingMode::apply(preferences);
     run.orientation->configure(preferences);
     saved["dark_mode"] = preferences.value("dark_mode").toBool(false);
     saved["bold_reading"] = preferences.value("bold_reading").toString("off");
@@ -1129,6 +1144,7 @@ void ReaderCoordinator::showReader()
             run.nativePublication ? run.nativePublication->coverPath() : QString();
     services.startupNotice = std::exchange(pendingNotice, kobalt::ReaderNotice{});
     services.automaticBookOpening = bindings_.automaticBookOpening;
+    services.textPresetsBeforePresentation = true;
     services.setAutomaticBookOpening = bindings_.setAutomaticBookOpening;
     const auto suspended = services.suspended;
     services.suspended = [this, suspended] {
@@ -1143,6 +1159,8 @@ void ReaderCoordinator::showReader()
         ignoreNativeFontScale(run.reader);
     }
     const double created = creating.nsecsElapsed() / 1e6;
+    if (run.loading)
+        run.loading->setProgress(openingBarWindow);
     // While the reader is visible and awake, its clock tick runs this check, so
     // the device wakes once a minute. The timer then only covers a reader that
     // is hidden or asleep, and the tick keeps pushing it back.
@@ -1219,6 +1237,8 @@ void ReaderCoordinator::showReader()
             return;
         }
         guard->busy = false;
+        if (guard->run.loading)
+            guard->run.loading->setProgress(100);
         const auto &timings = guard->run.openingTimings;
         reader->setOpeningTiming(
                 guard->run.openingTimer,

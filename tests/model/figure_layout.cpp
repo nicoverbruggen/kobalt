@@ -1,7 +1,7 @@
 #include "check.h"
 #include "reader_inputs.h"
-#include "engine/crengine/engine_document.h"
-#include "engine/crengine/column_view.h"
+#include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/adapter/column_view.h"
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
@@ -326,10 +326,13 @@ void floatFootprints()
             require(hits.size() == 24, "Float footprint lost or duplicated text");
             const bool right = QByteArray(side) == "right";
             const QRect occupied(right ? 600 - count * 60 : 0, 0, count * 60, 160);
-            for (const auto &hit : hits)
-                for (const auto &rect : model.rangeRects(hit.start, hit.end))
+            for (const auto &hit : hits) {
+                const auto rects = model.rangeRects(hit.start, hit.end);
+                require(!rects.isEmpty(), "Float footprint text has no geometry");
+                for (const auto &rect : rects)
                     require(!rect.intersects(occupied),
                             "Saved float footprint lost during painting");
+            }
             require(model.saveDocumentCache(), "Save float footprint cache");
             EngineDocument reopened(test::readerFonts());
             reopened.setDocumentCache(cache.path(), "float-footprints", "float-layout",
@@ -393,7 +396,9 @@ void reporterFigure(int columns, bool dark, const QByteArray &css = {}, bool ful
             for (const auto &hit : prose) {
                 if (hit.page != page)
                     continue;
-                for (const auto &rect : model.rangeRects(hit.start, hit.end)) {
+                const auto rects = model.rangeRects(hit.start, hit.end);
+                require(!rects.isEmpty(), "Reporter prose has no geometry on the image page");
+                for (const auto &rect : rects) {
                     require(!rect.intersects(imageRect),
                             "Reporter float paints over following prose");
                     const bool sameColumn = columns == 1

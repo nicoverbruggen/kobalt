@@ -23,13 +23,6 @@ void AppearanceEditSession::open(ReaderSession &main, QSize viewport, std::funct
                     return;
                 guard->previewState_ = error.isEmpty() ? PreviewState::Ready : PreviewState::Failed;
                 guard->error_ = std::move(error);
-                if (guard->ready()) {
-                    auto changes = std::move(guard->pendingChanges_);
-                    guard->pendingChanges_.clear();
-                    for (const auto &change : changes)
-                        change(*guard->preview_);
-                } else
-                    guard->pendingChanges_.clear();
                 if (opened)
                     opened();
             });
@@ -43,19 +36,14 @@ void AppearanceEditSession::mutate(ReaderSession &main, QSize viewport,
         resetPreview();
     }
     edited_ = true;
-    if (ready()) {
-        operation(*preview_);
-        return;
-    }
-    pendingChanges_.push_back(std::move(operation));
     if (!preview_)
         open(main, viewport, std::move(changed), std::move(opened));
+    operation(*preview_);
 }
 
 void AppearanceEditSession::resetPreview()
 {
     ++generation_;
-    pendingChanges_.clear();
     edited_ = false;
     if (preview_)
         preview_->updated = {};

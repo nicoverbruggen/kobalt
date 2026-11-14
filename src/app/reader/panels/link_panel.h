@@ -3,7 +3,7 @@
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
 #include "ui/dialogs/modals.h"
-#include "engine/crengine/reader_links.h"
+#include "engine/links.h"
 #include <QUrl>
 #include <QScrollArea>
 #include "ui/controls/paged_text.h"

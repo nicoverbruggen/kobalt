@@ -1,5 +1,5 @@
 #include "annotation_draft.h"
-#include "engine/crengine/engine_activity.h"
+#include "engine/engine_activity.h"
 #include "reader_session.h"
 #include "storage/highlight_store.h"
 #include <QPointer>

@@ -90,6 +90,18 @@ int main()
         state["line_spacing"] = 141;
         require(!matches(large, state), "A changed line spacing still matched");
     }
+    for (const int density : { 100, 120, 143, 144, 167, 212, 300, 600 }) {
+        readingPpi = density;
+        for (int size = minimumHalfPoints; size <= maximumHalfPoints; ++size) {
+            large.halfPoints = size;
+            auto state = values(large);
+            require(matches(large, state),
+                    "The preset missed its applied size after pixel rounding");
+            state["font_pixels"] = halfPointPixels(size) + readingPixels(4);
+            if (size < maximumHalfPoints)
+                require(!matches(large, state), "A visibly larger size still matched the preset");
+        }
+    }
     readingPpi = previousPpi;
 
     // Ids and names stay unique.

@@ -7,6 +7,7 @@
 #include "reading/text_presets.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
+#include "support/diagnostics.h"
 #include "ui/controls/text.h"
 #include "ui/style/styles.h"
 #include "ui/dialogs/action_menu.h"
@@ -115,7 +116,10 @@ QImage presetPreviewImage(const StyleSample &sample, QSize size, bool dark)
 
 ReaderSession *Reader::textPresetSettings()
 {
-    return appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
+    return appearanceEdit.edited() && appearanceEdit.preview()
+                    && appearanceEdit.previewState() != AppearanceEditSession::PreviewState::Failed
+            ? appearanceEdit.preview()
+            : session;
 }
 
 TextPresetView Reader::textPresetView(const Preset &preset)
@@ -165,7 +169,7 @@ void Reader::buildTextPresets()
 void Reader::textPresetChoice(QVector<Preset> *presets, QString *selected, bool *modified)
 {
     *presets = textpresets::load(preferences);
-    const auto state = textPresetSettings()->state();
+    const auto state = textPresetSettings()->requestedAppearance().fields();
     const QString applied = book ? book->textPreset() : QString();
     selected->clear();
     for (const auto &preset : *presets)
@@ -186,7 +190,9 @@ void Reader::setTextPresetGalleryPresets(TextPresetGallery *gallery, const QVect
         all.append(textPresetView(preset));
     gallery->setPresets(all, selected,
                         // The first cell always offers Save current text.
-                        true, presetSummary(textpresets::capture(textPresetSettings()->state())));
+                        true,
+                        presetSummary(textpresets::capture(
+                                textPresetSettings()->requestedAppearance().fields())));
 }
 
 void Reader::syncTextPresets()
@@ -228,7 +234,9 @@ void Reader::applyTextPreset(const QString &id)
     if (!preset || session->temporaryTypography())
         return;
     book->setTextPreset(id);
-    if (textpresets::matches(*preset, textPresetSettings()->state())) {
+    // A pending preview can still show the preset we are switching back to.
+    if (!appearanceEdit.edited()
+        && textpresets::matches(*preset, textPresetSettings()->requestedAppearance().fields())) {
         syncTextPresets();
         refresh();
         return;
@@ -263,7 +271,7 @@ void Reader::updateTextPreset(const QString &id)
     for (auto &preset : presets) {
         if (preset.id != id)
             continue;
-        auto captured = textpresets::capture(textPresetSettings()->state());
+        auto captured = textpresets::capture(textPresetSettings()->requestedAppearance().fields());
         captured.id = preset.id;
         captured.name = preset.name;
         preset = captured;
@@ -312,7 +320,9 @@ void Reader::editTextPresetName(const QString &id)
     const auto *existing = textpresets::find(presets, id);
     if (!id.isEmpty() && !existing)
         return;
-    auto preset = existing ? *existing : textpresets::capture(textPresetSettings()->state());
+    auto preset = existing
+            ? *existing
+            : textpresets::capture(textPresetSettings()->requestedAppearance().fields());
     auto *dialog = new ui::ChoiceModal(
             this,
             { QString(),
@@ -603,6 +613,7 @@ QVector<Reader::TextPresetPreview> Reader::textPresetPreviews(const QVector<Pres
                                                               const QStringList &ids, QSize size)
 {
     const auto fonts = session->fontInputs();
+    const auto catalog = session->fontCatalog();
     // The tile's size and the paper colour also decide its pixels.
     const QByteArray tile = QByteArray::number(size.width()) + 'x'
             + QByteArray::number(size.height()) + (darkTheme ? 'd' : 'l');
@@ -612,7 +623,7 @@ QVector<Reader::TextPresetPreview> Reader::textPresetPreviews(const QVector<Pres
             TextPresetPreview preview{
                 preset->id, preset->fontFace, textPresetPreviewRequest(*preset, size), {}
             };
-            preview.tile = styleSampleKey(fonts, preview.request) + tile;
+            preview.tile = styleSampleKey(fonts, preview.request, catalog) + tile;
             previews.append(preview);
         }
     return previews;
@@ -731,6 +742,27 @@ void Reader::startTextPresetPrerender()
         qt::later(0, this, [this] { resumeTextPresetPrerender(); });
 }
 
+void Reader::prepareTextPresetPresentation(std::function<void()> finished)
+{
+    DiagnosticOperation setup("reader-text-preset-presentation");
+    // A preview that cannot be drawn in this time must not keep the book
+    // closed. What is left is drawn after the first page, as before. The
+    // previews wait for the pages beside the first one, which a slow
+    // device prepares for several seconds.
+    static constexpr int limit = 15000;
+    textPresetPresentationReady = std::move(finished);
+    textPresetPrerenderStarted = true;
+    textPresetPrerenderWaiting = false;
+    qt::later(limit, this, [this] { finishTextPresetPresentation(); });
+    prerenderTextPresets();
+}
+
+void Reader::finishTextPresetPresentation()
+{
+    if (auto finished = std::exchange(textPresetPresentationReady, {}))
+        finished();
+}
+
 void Reader::resumeTextPresetPrerender()
 {
     if (!std::exchange(textPresetPrerenderWaiting, false))
@@ -743,10 +775,13 @@ void Reader::resumeTextPresetPrerender()
 
 void Reader::prerenderTextPresets()
 {
+    DiagnosticOperation setup("reader-text-preset-prerender");
     // Landscape has no presets bar, so no All.
     if (closing || exitPending || lifecycleHidden || textPresetGallery || !textPresetProbeHost
-        || width() > height())
+        || width() > height()) {
+        finishTextPresetPresentation();
         return;
+    }
     QVector<Preset> presets;
     QString selected;
     bool modified = false;
@@ -757,6 +792,7 @@ void Reader::prerenderTextPresets()
     {
         // A child added to or removed from the reader repaints the page,
         // so the probe lives in a hidden holder made with the window.
+        DiagnosticOperation setup("reader-text-preset-probe");
         TextPresetGallery probe(textPresetProbeHost);
         probe.setGeometry(textPresetGalleryBounds());
         // The presets decide whether the pager shows, so lay out after them.
@@ -765,8 +801,10 @@ void Reader::prerenderTextPresets()
         size = probe.previewSize();
         ids = probe.visibleIds();
     }
-    if (size.isEmpty() || ids.isEmpty())
+    if (size.isEmpty() || ids.isEmpty()) {
+        finishTextPresetPresentation();
         return;
+    }
     if (textPresetPrerenderCancel)
         textPresetPrerenderCancel->store(true);
     textPresetPrerenderCancel = std::make_shared<std::atomic_bool>(false);
@@ -789,12 +827,15 @@ void Reader::prerenderNextTextPreset()
     if (textPresetPrerenderQueue.isEmpty()) {
         // Tests read when the first page is ready.
         setProperty("text_presets_prerendered", true);
+        finishTextPresetPresentation();
         return;
     }
     // One tile at a time, only while nothing else needs the engine, so a page
     // turn waits for one tile at most.
-    if (closing || exitPending || lifecycleHidden || services.suspended())
+    if (closing || exitPending || lifecycleHidden || services.suspended()) {
+        finishTextPresetPresentation();
         return;
+    }
     if (session->busy() || appearanceEdit.applying()
         || appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening
         || stylingSamplesPending > 0) {

@@ -1,9 +1,9 @@
 #include "reader_inputs.h"
-#include "engine/crengine/column_view.h"
+#include "engine/blaze/adapter/column_view.h"
 #include "book_fixtures.h"
 #include <QTemporaryDir>
 #include "support/qt_compat.h"
-#include "engine/crengine/engine_document.h"
+#include "engine/blaze/adapter/engine_document.h"
 #include <QBuffer>
 #include <QFile>
 #include <QGuiApplication>
@@ -179,11 +179,103 @@ void inpageStyling()
     }
 }
 
+void chapterPageNotes()
+{
+    using namespace kobalt;
+    // Window the opening chapter, then compare both the window and the complete
+    // book using the same cross-chapter link. Empty and missing notes add no page.
+    for (const QByteArray &body :
+         { QByteArray("<aside id='café' epub:type='footnote'><p>Referenced note.</p></aside>"),
+           QByteArray("<aside id='café' epub:type='footnote'></aside>"),
+           QByteArray(
+                   "<aside id='café' epub:type='footnote' style='display:none'><p>Hidden note.</p></aside>"),
+           QByteArray("<aside id='elsewhere' epub:type='footnote'><p>Unlinked note.</p></aside>"),
+           QByteArray("<p id='café'>Ordinary passage.</p>") }) {
+        auto files = test::linkBook();
+        files["OEBPS/first.xhtml"] =
+                "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>Read <a href='Notes/foot%20notes.xhtml#caf%C3%A9'>1</a> now.</p></body></html>";
+        files["OEBPS/Notes/foot notes.xhtml"] =
+                "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:epub='http://www.idpf.org/2007/ops'><body>"
+                + body + "</body></html>";
+        QTemporaryDir dir;
+        require(test::writeBook(dir.path(), "notes.epub", files), "Cannot write chapter notes");
+        QFile file(dir.filePath("notes.epub"));
+        require(file.open(QIODevice::ReadOnly), "Cannot read chapter notes");
+        const auto book = file.readAll();
+        QString error;
+        const auto image = [&](bool window, bool enableAfterOpen) {
+            EngineDocument document(test::readerFonts());
+            QJsonObject settings{ { "font_pixels", 28 },
+                                  { "inpage_footnotes", !enableAfterOpen },
+                                  { "koblaze_first_spine_item", window ? 0 : -1 },
+                                  { "koblaze_last_spine_item", window ? 0 : -1 } };
+            require(document.open(book, { 600, 800 }, settings, &error), qPrintable(error));
+            const auto anchor = document.position();
+            if (enableAfterOpen) {
+                require(document.applyAppearance(
+                                appearance::Patch({ { "inpage_footnotes", true } })),
+                        "Cannot turn on chapter notes");
+                require(document.position() == anchor, "Turning on chapter notes moved the reader");
+            }
+            if (window
+                && (body.contains("elsewhere") || body.contains("Ordinary")
+                    || body.contains("footnote'></aside>")))
+                require(document.bookFraction() >= 0,
+                        "An unlinked or empty note loaded the whole book");
+            const bool displaysNote = body.contains("Referenced");
+            require((ReaderFootnoteProbe::view(document)
+                             .getPageList()
+                             ->operator[](0)
+                             ->footnotes.length()
+                     > 0) == displaysNote,
+                    "Missing or unexpected page-note text");
+            return document.image(0);
+        };
+        const auto accurate = image(false, false);
+        require(image(true, false) == accurate && image(true, true) == accurate,
+                "Cold and enabled chapter notes must match the complete book");
+    }
+}
+
+void interruptPageNoteCheck()
+{
+    using namespace kobalt;
+    auto files = test::linkBook();
+    files["OEBPS/first.xhtml"] =
+            "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>Current chapter.</p></body></html>";
+    files["OEBPS/Notes/foot notes.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><body>"
+            + QByteArray("<p>A longer chapter of ordinary prose.</p>").repeated(100000)
+            + "</body></html>";
+    QTemporaryDir dir;
+    require(test::writeBook(dir.path(), "large.epub", files), "Cannot write no-note book");
+    QFile file(dir.filePath("large.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read no-note book");
+    const auto book = file.readAll();
+    QString error;
+    const QJsonObject chapter{ { "koblaze_first_spine_item", 0 },
+                               { "koblaze_last_spine_item", 0 } };
+    EngineDocument document(test::readerFonts());
+    require(document.open(book, { 600, 800 }, chapter, &error), qPrintable(error));
+    const auto anchor = document.position();
+    const auto pixels = document.image(0);
+    int checks = 0;
+    document.setLayoutInterrupt([&] { return ++checks == 4; });
+    const appearance::Patch enable({ { "inpage_footnotes", true } });
+    require(!document.applyAppearance(enable) && checks == 4, "A cancelled note scan kept running");
+    require(document.position() == anchor && document.image(0) == pixels,
+            "A cancelled note scan changed the visible chapter");
+    document.setLayoutInterrupt({});
+    require(document.applyAppearance(enable) && document.bookFraction() >= 0,
+            "Retrying a note-free book must keep chapter rendering");
+}
+
 // Exercise the engine's actual note fragments, not just a changed stylesheet.
 void inpageFootnotes()
 {
     using namespace kobalt;
     auto files = test::linkBook();
+    files["OEBPS/first.xhtml"].replace("#short'", "#caf%C3%A9'");
+    files["OEBPS/Notes/foot notes.xhtml"].replace("id='short'", "id='café'");
     files["OEBPS/first.xhtml"].replace(
             "</body>",
             "<p id='legacy-ref'>Another reference <a href='#legacy-note'>7</a>.</p>"
@@ -463,6 +555,62 @@ kobalt::LinkDetails inspectNote(const NoteCase &test, bool dark)
     return details;
 }
 
+void linksOutsideCurrentLayout()
+{
+    using namespace kobalt;
+    auto files = test::linkBook();
+    files["OEBPS/first.xhtml"] =
+            "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>"
+            "<a href='#caf%C3%A9'>Later</a> <a href='second.xhtml#caf%C3%A9'>Next</a> "
+            "<a href='#hidden'>Hidden</a> <a href='second.xhtml#missing'>Missing</a></p>"
+            + QByteArray("<p>A paragraph of the chapter for the reader to turn through.</p>")
+                      .repeated(100)
+            + "<p id='café'>The last passage.</p><div style='display:none'><p id='hidden'>Hidden passage.</p></div></body></html>";
+    files["OEBPS/second.xhtml"].replace("id='destination'", "id='café'");
+    QTemporaryDir directory;
+    require(directory.isValid() && test::writeBook(directory.path(), "links.epub", files),
+            "Cannot create the chapter link fixture");
+    QFile file(directory.filePath("links.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read the chapter link fixture");
+    const auto bytes = file.readAll();
+    QMap<QString, QString> destinations;
+    QMap<QString, QImage> pages;
+    for (int slicePages : { -1, 1, 0 }) {
+        EngineDocument model(test::readerFonts());
+        QString error;
+        require(model.open(bytes, { 600, 800 }, { { "font_pixels", 28 } }, &error),
+                qPrintable(error));
+        if (slicePages >= 0) {
+            model.setChapterSlices(slicePages);
+            require(model.showSpineItems(0, 0) && model.go(0), "Cannot open the chapter window");
+        }
+        const auto origin = model.position();
+        const auto links = model.pageLinks();
+        require(links.size() == 4, "The link fixture lost a reference");
+        for (const auto &link : links) {
+            const auto details = model.linkDetails(link.source);
+            require(model.position() == origin, "Inspecting a link moved the page");
+            if (details.label == "Hidden" || details.label == "Missing") {
+                require(details.kind == LinkKind::Unavailable && details.target.isEmpty(),
+                        "A missing or hidden passage became navigable");
+            } else {
+                require(link.kind == LinkKind::Passage && details.kind == LinkKind::Passage
+                                && model.goTo(details.target),
+                        qPrintable("Cannot follow the link to " + details.label));
+                if (slicePages < 0) {
+                    destinations[details.label] = details.target;
+                    pages[details.label] = model.image(model.page());
+                } else {
+                    require(destinations.value(details.label) == details.target
+                                    && model.image(model.page()) == pages.value(details.label),
+                            "A chapter link landed on a different page than Accurate");
+                }
+                require(model.goTo(origin), "Cannot return to the passage containing the link");
+            }
+        }
+    }
+}
+
 void noteMatching()
 {
     using kobalt::LinkKind;
@@ -472,6 +620,10 @@ void noteMatching()
     };
     const QByteArray note = "<p id='note'>The note text.</p>";
     const QVector<NoteCase> cases{
+        { "escaped UTF-8 fragment", "<p>Read <a href='#caf%C3%A9'>this passage</a>.</p>",
+          "<p id='café'>The passage.</p>", LinkKind::Passage },
+        { "escaped percent in fragment", "<p>Read <a href='#section%2520one'>this passage</a>.</p>",
+          "<p id='section%20one'>The passage.</p>", LinkKind::Passage },
         { "numeric reference", reference("[1]"), note },
         { "three-digit reference", reference("999"), note },
         { "letter reference", reference("a"), note },
@@ -651,11 +803,20 @@ int main(int argc, char **argv)
     require(model.open(file.readAll(), QSize(1072, 1300),
                        kobalt::qt::object({ { "font_pixels", 32 } }), &error),
             qPrintable(error));
+    const auto website = inspectNote(
+            { "encoded website",
+              "<p><a href='https://example.org/books/part%2Fone?title=ink%26paper'>Website</a></p>",
+              {}, kobalt::LinkKind::Website }, false);
+    require(website.target == "https://example.org/books/part%2Fone?title=ink%26paper",
+            "Website link changed encoded path or query separators");
     linkDecoration();
     inpageMarkup();
     inpageStyling();
     inpageFootnotes();
+    chapterPageNotes();
+    interruptPageNoteCheck();
     noteMatching();
+    linksOutsideCurrentLayout();
     const auto origin = model.position();
     for (const bool dark : { false, true }) {
         model.setDarkMode(dark);

@@ -591,6 +591,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     retiring = false;
     loadingImage = false;
     preview_ = false;
+    openingPreview_ = false;
     desiredChapterMode = -1;
     desiredSize = size;
     destination.clear();
@@ -755,6 +756,13 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
     turning = false;
     pendingTurn = 0;
     preview_ = true;
+    openingPreview_ = true;
+    // A preview starts with the visible book's settings and font catalog.
+    // Edits can use them while the worker opens the isolated document.
+    frame.state = source.frame.state;
+    frame.fonts = source.frame.fonts;
+    frame.fontCatalog = source.frame.fontCatalog;
+    desired = frame.state;
     desiredChapterMode = -1;
     desiredSize = size;
     QPointer<ReaderSession> guard(this);
@@ -791,13 +799,14 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                              { "failed", !result.error.isEmpty() } });
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), finished, lease, job]() mutable {
+                        [guard, result = std::move(result), finished, lease, job, size]() mutable {
                             if (!guard) {
                                 return;
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
-                                    [guard, finished, lease, job](ReaderFrame result) mutable {
+                                    [guard, finished, lease, job,
+                                     size](ReaderFrame result) mutable {
                                         if (!guard || guard->revision != job
                                             || guard->lease_ != lease)
                                             return;
@@ -806,11 +815,20 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                                             result.error =
                                                     strings::get("error.opening_interrupted");
                                         }
+                                        const auto requested = guard->requestedAppearance();
+                                        const bool edited =
+                                                requested != guard->displayedAppearance().settings
+                                                || guard->desiredSize != size;
+                                        guard->openingPreview_ = false;
                                         guard->running = false;
                                         guard->frame = result;
                                         guard->layoutReady_ = !result.image.isNull()
                                                 && result.state.value("pages").toInt() > 0;
                                         guard->desired = result.state;
+                                        if (edited && guard->layoutReady_) {
+                                            requested.replaceIn(guard->desired);
+                                            guard->request(true);
+                                        }
                                         finished(result.error);
                                         if (guard) {
                                             guard->startPendingSearch();
@@ -2545,6 +2563,10 @@ void ReaderSession::clearRenderProgress()
 
 void ReaderSession::request(bool appearanceChange, RenderReason reason)
 {
+    // Keep the opening job current. It renders the latest draft after the
+    // preview document is ready.
+    if (openingPreview_ && appearanceChange)
+        return;
     cancelPendingTurn();
     turning = false;
     if (appearanceChange) {

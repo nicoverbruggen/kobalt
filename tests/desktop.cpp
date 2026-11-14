@@ -12464,6 +12464,24 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             const auto unblock = qScopeGuard([gate] { gate->release.release(); });
             QTRY_VERIFY(gate->entered.load());
             QVERIFY(fixture.press("rrTextPreset_modern"));
+            QVERIFY(fixture.press("rrTextPresetAll"));
+            QTRY_VERIFY(fixture.visible("rrTextPresetGallery"));
+            auto *grid = fixture.widget("rrTextPresetGrid");
+            QVERIFY(grid && fixture.click(grid, QPoint(grid->width() / 4, grid->height() / 6)));
+            QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+            auto *input =
+                    fixture.window.readerWindow()->findChild<QLineEdit *>("rrTextPresetNameInput");
+            QVERIFY(input);
+            const auto name = input->text();
+            input->setText("Evening reading");
+            QVERIFY(fixture.press("rrTextPresetNameSave"));
+            const auto saved =
+                    textpresets::load(storage::readJson(fixture.paths.preferences())).first();
+            QCOMPARE(saved.name, QString("Evening reading"));
+            QCOMPARE(saved.fontFace, QString("NV Jost"));
+            QVERIFY(name.contains("Jost"));
+            QTRY_VERIFY(!fixture.widget("rrTextPresetName"));
+            QVERIFY(fixture.press("rrTextPresetGalleryClose"));
             QVERIFY(fixture.press("rrTextPreset_kobalt"));
             QVERIFY(fixture.press("rrPage"));
         }

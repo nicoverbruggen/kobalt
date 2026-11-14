@@ -781,8 +781,7 @@ void Reader::applySettings()
     static_cast<SettingsPanel *>(general)->dismissRestore();
     static_cast<SettingsPanel *>(general)->dismissStandbyConfirmation();
     static_cast<SettingsPanel *>(general)->dismissAutomaticOpeningConfirmation();
-    // Edits made before the preview opened have no session yet. Apply them
-    // together with these settings once the preview holds them.
+    // Apply the draft and these settings once its preview has opened.
     if (appearanceEdit.queued()
         && appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening) {
         appearanceEdit.deferApply();
@@ -1407,8 +1406,7 @@ void Reader::finishPreview()
         refresh();
         return;
     }
-    // A rendering preview already holds the newest request. Only edits made
-    // before it opened must wait for it.
+    // Finish opening the draft before applying it to the reading session.
     if (appearanceEdit.preview() && !appearanceEdit.ready()) {
         appearanceEdit.deferApply();
         return;

@@ -536,6 +536,7 @@ private:
     int pendingTurn = 0;
     bool loadingImage = false;
     bool preview_ = false;
+    bool openingPreview_ = false;
     bool retiring = false;
     bool layoutReady_ = false;
     RenderProgress renderProgress_;

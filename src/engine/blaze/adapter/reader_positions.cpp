@@ -50,8 +50,7 @@ EngineDocument::PositionTarget EngineDocument::goToPlatformNearest(const Positio
     const auto chapter = codec.chapterStart(location);
     if (!chapter.isEmpty() && goToPlatform(codec, chapter, nullptr))
         return PositionTarget::Chapter;
-    go(0);
-    return PositionTarget::Book;
+    return goToFraction(0) ? PositionTarget::Book : PositionTarget::Unavailable;
 }
 
 int EngineDocument::comparePlatformPosition(const PositionCodec &codec, const QString &location,

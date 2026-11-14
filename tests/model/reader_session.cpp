@@ -239,6 +239,8 @@ static void chapterNavigation(const QString &path)
         if (!hybrid.busy())
             loop.quit();
     };
+    const auto openingPage = hybrid.image();
+    const auto openingAnchor = hybrid.state().value("position");
     require(hybrid.turn(1), "Cannot leave the opening page");
     loop.exec();
     const auto before = hybrid.image();
@@ -260,6 +262,67 @@ static void chapterNavigation(const QString &path)
     loop.exec();
     require(hybrid.error().isEmpty() && hybrid.chapterTitle() != chapter,
             "A refused import must leave a valid jump to the same chapter usable");
+    auto finishedState = hybrid.state();
+    finishedState["fingerprint"] = QString::fromLatin1(hybrid.sourceHash());
+    finishedState["finished_position"] = finishedState.value("position");
+    auto retained = hybrid.retained();
+    require(bool(retained), "Cannot retain the finished chapter");
+    ReaderSession cold(test::readerFonts(), test::readerPlaceholder());
+    for (auto *reader : { &cold, retained.get() }) {
+        auto access = std::make_shared<SourceLease>();
+        reader->open({ path,
+                       path,
+                       QSize(758, 900),
+                       finishedState,
+                       {},
+                       {},
+                       access,
+                       localResourceFactory(path, access) },
+                     [&](OpeningResult result) {
+                         require(result.ready(), qPrintable(openingMessage(result)));
+                         loop.quit();
+                     });
+        loop.exec();
+        require(reader->savedStateMatched() && reader->state().contains("book_fraction"),
+                "The finished state must match this chapter-mode book");
+        require(reader->state().value("position") == openingAnchor
+                        && reader->image() == openingPage,
+                "Reopening a finished book must show the first page of the book");
+    }
+    auto *resumed = retained.get();
+    resumed->updated = [&] {
+        if (!resumed->busy())
+            loop.quit();
+    };
+    require(resumed->goToChapter(2), "Cannot leave the opening chapter before native fallback");
+    loop.exec();
+    auto appearance = resumed->state();
+    appearance.remove("position");
+    appearance["fingerprint"] = QString::fromLatin1(resumed->sourceHash());
+    auto fallback = resumed->retained();
+    auto access = std::make_shared<SourceLease>();
+    OpenRequest request{ path, path, QSize(758, 900), appearance,
+                         {},   {},   access,          localResourceFactory(path, access) };
+    request.positions = { [](const Engine &, const QString &position, QString *) {
+                             return position;
+                         },
+                          [](const Engine &model, QString *) { return model.position(); },
+                          [](const QString &) { return QString(); } };
+    request.platformLocation = QStringLiteral("/unknown-chapter");
+    require(bool(fallback), "Cannot retain the book before native fallback");
+    bool reused = false;
+    fallback->open(
+            std::move(request),
+            [&](OpeningResult result) {
+                require(result.ready(), qPrintable(openingMessage(result)));
+                loop.quit();
+            },
+            {}, {}, [&] { reused = true; });
+    loop.exec();
+    require(reused, "The fallback check must reuse the later chapter");
+    require(fallback->state().value("position") == openingAnchor
+                    && fallback->image() == openingPage,
+            "A missing native chapter must fall back to the first page of the book");
     renderingMode::setOverride(-1);
     if (previous.isNull())
         qunsetenv("KOBALT_CHAPTER_PAGES");

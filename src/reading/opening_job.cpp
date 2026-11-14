@@ -62,6 +62,13 @@ void publishCover(const OpeningJob &job, OpeningState &state)
     job.coverReady(std::move(image));
 }
 
+void restartBook(const OpeningJob &job, OpeningState &state)
+{
+    if (!job.engine->goToFraction(0))
+        state.outcome = OpeningResult::failed(OpeningFailureKind::InvalidContent,
+                                              strings::key("error.could_not_find_that_passage"));
+}
+
 void locate(const OpeningJob &job, OpeningState &state, const QString &location)
 {
     QString detail;
@@ -249,7 +256,7 @@ void openRetained(OpeningJob &job, OpeningState &state)
                 OpeningResult::failed(OpeningFailureKind::InvalidContent,
                                       strings::key("error.cannot_restore_the_retained_appearance"));
     else if (state.restart)
-        engine->go(0);
+        restartBook(job, state);
     else if (!state.initial.isEmpty())
         locate(job, state, state.initial);
     else if (!job.saved.value("position").toString().isEmpty()
@@ -285,7 +292,7 @@ void openCold(OpeningJob &job, OpeningState &state)
                 job.progress, &outcome, [&job, &state] { publishCover(job, state); },
                 job.notifyReuse)) {
         if (state.restart)
-            engine->go(0);
+            restartBook(job, state);
         else if (!state.initial.isEmpty())
             locate(job, state, state.initial);
         if (outcome.ready()) {

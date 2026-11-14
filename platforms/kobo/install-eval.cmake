@@ -3,6 +3,8 @@
 #       -P platforms/kobo/install-eval.cmake
 # Optional: -DSCENARIO_FILTER=kosync. runs only matching scenarios, and
 # -DREPEAT_SCALE=0.2 runs one repetition in five (at least one each).
+# -DCHAPTER_VARIANTS=ON runs every scenario twice, with the book opened as a
+# whole and in chapter mode.
 if(NOT DEFINED PACKAGE OR NOT DEFINED DEVICE)
     message(FATAL_ERROR "PACKAGE and DEVICE are required")
 endif()
@@ -29,6 +31,11 @@ endif()
 if(DEFINED REPEAT_SCALE)
     file(READ "${scenarios}" scenario_json)
     string(JSON scenario_json SET "${scenario_json}" repeat_scale "${REPEAT_SCALE}")
+    file(WRITE "${scenarios}" "${scenario_json}\n")
+endif()
+if(CHAPTER_VARIANTS)
+    file(READ "${scenarios}" scenario_json)
+    string(JSON scenario_json SET "${scenario_json}" chapter_variants true)
     file(WRITE "${scenarios}" "${scenario_json}\n")
 endif()
 # Results from an earlier run must not pass for this one.

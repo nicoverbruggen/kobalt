@@ -145,6 +145,25 @@ The evaluation can also drive a device through an external runner, a program out
 
 The runner installs the package, opens the test book in Kobalt, waits for the `scenario-run-end` event and copies `scenarios.jsonl` into the output folder. It exits with zero when it wrote the file, even if a scenario failed. The comparator still reads `device.json` from runs recorded by an earlier runner.
 
+### Reading benchmark on any book
+
+The opt-in `reading.` scenarios measure reading on a book of your choice, not on the benchmark book. They use the book entry `opened` in the scenario file, which is marked `"current": true`: it stands for whichever book is open when the run starts. Copy a book to the Kobo, install the package with the filter, restart, and open that book in Kobalt:
+
+```sh
+cmake -DPACKAGE=build/kobo-qt5-eval/Kobalt-qt5-eval.zip -DDEVICE=/Volumes/KOBOeReader -DSCENARIO_FILTER=reading. -DCHAPTER_VARIANTS=ON -P platforms/kobo/install-eval.cmake
+```
+
+The run then needs no further input. It ends with the usual notice.
+
+- `reading.open` closes the book and opens it again cold. The player removes the book's document and layout caches and the closed book that Kobalt keeps in memory, so the opening parses and lays out the book again.
+- `reading.turn.paced` turns pages and waits after each turn until the engine is idle, as a reader who reads the page does.
+- `reading.turn.fast` turns pages without that wait.
+- `reading.memory` reports the memory after those turns.
+
+With `-DCHAPTER_VARIANTS=ON`, every scenario runs twice: first with the book opened as a whole, then in chapter mode. Each result has a `variant` field, `whole-book` or `chapter`, and the same word at the end of its identifier. The first scenario of the list must open the book again, as `reading.open` does, because the choice applies when a book opens. Without the option the scenarios run once, in the mode that the device is set to.
+
+The turn scenarios start at the page where the book opens and read forward, so use a book with enough pages after that position: each one turns 120 pages, and with the variants the run turns 480 pages in all. Add `-DREPEAT_SCALE=0.25` for a quarter of that.
+
 ### Wi-Fi off and first open
 
 The opt-in `kosync.wifi-off` scenario measures how long Nickel's Wi-Fi shutdown blocks the main thread after a KOSync sync that Kobalt started. It needs a device with a saved Wi-Fi network. The scenario closes the open book, then sets an in-memory KOSync account that syncs every page, at most once a second (`interval_ms`), and may turn on Wi-Fi. Its server address is on the device itself, where nothing listens (`https://127.0.0.1:9`). Each sample first turns Wi-Fi off, because a connection that is already up is not one that Kobalt turned on. It then waits 1.5 seconds and turns a page. Kobalt then turns Wi-Fi on for the sync, the request is refused at once (a periodic sync makes one attempt), and Kobalt turns Wi-Fi off again. The sample is the `main-thread-wait` of that `wifi-off`. Kobalt's KOSync request stays on the device, and the saved KOSync account is neither used nor changed. Nickel's own connection checks still run while Wi-Fi is on. The scenario needs a host that can turn Wi-Fi off through Nickel, so the Mac player skips it. A sync that succeeded would report a storage error, because the scenario account is never saved; with this server address, no sync succeeds.

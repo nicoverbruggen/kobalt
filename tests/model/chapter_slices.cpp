@@ -418,6 +418,21 @@ int main(int argc, char **argv)
         requireWholeBookPages(styledBook(style, body), 2,
                               "Float and hidden text must preserve chapter slice offsets");
     }
+    // A floating drop cap can start above the first regular line of text.
+    {
+        QByteArray body;
+        const QByteArray sentence =
+                "The reader returns to the same passage after a change of type and page width. ";
+        for (int group = 0; group < 10; ++group) {
+            body += "<section><h2>Entry " + QByteArray::number(group) + "</h2>";
+            for (int i = 0; i < 6; ++i)
+                body += "<p>Section " + QByteArray::number(i) + ". " + sentence.repeated(2 + i % 5)
+                        + "</p>";
+            body += "</section>";
+        }
+        requireWholeBookPages(styledBook("p:first-letter{float:left;font-size:2em}", body), 4,
+                              "A floating drop cap at the page start changed the next slice");
+    }
     // A last spine item without content adds no page to the whole book. As
     // the last unit of chapter mode it must not add one, nor show the pages
     // before it again.

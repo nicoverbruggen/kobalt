@@ -701,6 +701,14 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
     // the same layout so that the text wraps around the same rectangle.
     if (hasFloatFootprint(block))
         return false;
+    // The bookmark for a floating first letter names the original text.
+    // Restarting at that text changes the space above the generated float.
+    if (auto *letter = pointer.getNode()->getFirstLetterPseudoElem()) {
+        for (auto *box = letter; box && box != block; box = box->getParentNode()) {
+            if (box->isFloatingBox())
+                return false;
+        }
+    }
     const int start =
             textBefore(QString::fromUtf8(UnicodeToUtf8(ldomXPointer(block, 0).toString()).c_str()));
     if (start < 0 || textBefore(position) != start)

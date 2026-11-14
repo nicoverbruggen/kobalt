@@ -1,5 +1,7 @@
 # Settings and controls checks
 
+`lifecycle.appearanceRelayoutPreservesPassage` turns once and checks that the new passage survives changes to typeface, size, weight, margins, Bold Reading, dark mode and viewport. It identifies the passage by its canonical position, including when the turn opens the first page of a new chapter.
+
 `desktop.settingsOpeningCover` checks the cover default, saving the logo choice, reopening with the logo and restoring the cover. `ui.openingCoverDisabled` checks that cached and late cover delivery cannot replace the logo or repaint the view, while progress, reopening status and native-reader handoff remain available. The loading gallery includes logo and logo-reopening screens. These checks use headless hosts; physical e-ink refresh remains unverified.
 
 `desktop.settingsRendering` removes the Accurate pin of the test runner. It checks that a book opens as Fast without a saved choice, that choosing Accurate saves `rendering_mode` when Settings closes, and that the next opening is Accurate at the same reading position. It then switches back to Fast and checks the position again. Set `KOBALT_RENDERING_CAPTURES` to an absolute directory to save the six-inch System page with the row and with its choices, at 100% and 150% interface text. `model.appearance-settings` checks the default, invalid values and the order of the override, `KOBALT_CHAPTER_MODE` and the preference. `model.profile-storage` checks the round trip and a preferences file without the key. The gallery includes the choices as Rendering.

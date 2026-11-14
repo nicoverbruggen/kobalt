@@ -1871,6 +1871,7 @@ private slots:
         auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);
         const auto first = host.session()->state().value("position").toString();
+        QVERIFY(!first.isEmpty());
         const bool rtl = host.session()->state().value("page_progression_rtl").toBool();
         QVERIFY(clickAt(canvas,
                         page->mapTo(canvas.surface(),
@@ -1880,7 +1881,6 @@ private slots:
                                          && host.session()->state().value("position").toString()
                                                  != first,
                                  10000);
-        QVERIFY(host.session()->page() > 0);
         const auto anchor = host.session()->state().value("position").toString();
         QVERIFY(!anchor.isEmpty());
         const auto menu = [&] {

@@ -1740,6 +1740,72 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
     require(different == 0, "A parked build changed a page");
 }
 
+// The switch to the whole book resolves the place of the page on screen in
+// the whole-book document. Walks a book in chapter mode and asks the whole
+// book for the place of every page.
+void handoffWalk(const QByteArray &text)
+{
+    const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
+    const auto pixels = [](const QImage &image) {
+        return QCryptographicHash::hash(
+                QByteArray::fromRawData(reinterpret_cast<const char *>(image.constBits()),
+                                        int(image.sizeInBytes())),
+                QCryptographicHash::Md5);
+    };
+    QString error;
+    EngineDocument whole(test::readerFonts());
+    require(whole.open(text, QSize(600, 800), settings, &error), qPrintable(error));
+    EngineDocument model(test::readerFonts());
+    setChapterModeOverride(1);
+    const bool opened = model.open(text, QSize(600, 800), settings, &error);
+    setChapterModeOverride(-1);
+    require(opened && model.bookFraction() >= 0, qPrintable(error));
+    int pages = 0, unresolved = 0, otherStart = 0, otherPixels = 0, compared = 0;
+    for (;;) {
+        const auto place = model.position();
+        ++pages;
+        if (place.isEmpty() || !whole.goTo(place)) {
+            if (++unresolved <= 5)
+                std::printf("unresolved place on chapter page %d: %s\n", pages, qPrintable(place));
+        }
+        // A blank page can share its source anchor with the following page.
+        // Resolve the anchor above to test adoption, but compare pixels at
+        // the same sequential page index so that such pages are not skipped.
+        if (pages <= whole.pages() && whole.go(pages - 1)) {
+            if (whole.pageStart(whole.page()) != model.pageStart(model.page()) && ++otherStart <= 5)
+                std::printf("other page start at chapter page %d: %s / %s\n", pages,
+                            qPrintable(model.pageStart(model.page())),
+                            qPrintable(whole.pageStart(whole.page())));
+            if (qEnvironmentVariableIsSet("KOBALT_HANDOFF_ALL_PAGES") || pages % 5 == 0) {
+                ++compared;
+                if (pixels(whole.image(whole.page())) != pixels(model.image(model.page()))
+                    && ++otherPixels <= 5) {
+                    std::printf("other pixels at chapter page %d: %s\n", pages, qPrintable(place));
+                    const auto folder = qEnvironmentVariable("KOBALT_HANDOFF_CAPTURE_DIR");
+                    if (!folder.isEmpty()) {
+                        require(QDir().mkpath(folder), "Cannot create handoff capture directory");
+                        require(whole.image(whole.page())
+                                                .save(folder + QString("/whole-%1.png").arg(pages))
+                                        && model.image(model.page())
+                                                   .save(folder
+                                                         + QString("/chapter-%1.png").arg(pages)),
+                                "Cannot save handoff mismatch images");
+                    }
+                }
+            }
+        }
+        require(pages <= whole.pages() * 2 + 50, "The chapter walk did not reach the end");
+        if (!model.turnInWindow(1))
+            break;
+    }
+    std::printf("handoff walk: %d chapter pages, %d whole-book pages, %d unresolved, "
+                "%d other page starts, %d of %d compared pages with other pixels\n",
+                pages, whole.pages(), unresolved, otherStart, otherPixels, compared);
+    require(unresolved == 0, "A chapter page has no place in the whole book");
+    require(pages == whole.pages() && otherStart == 0 && otherPixels == 0,
+            "Chapter pages differ from the whole book");
+}
+
 // A parked build must not reuse another book's font bytes, even when the
 // publisher gave both fonts the same file name and the same byte length.
 void parkedPublisherFonts()
@@ -2357,6 +2423,13 @@ int main(int argc, char **argv)
 #if __has_include(<koblaze.h>)
     if (argc > 2 && QByteArray(argv[1]) == "--chapter") {
         chapterSurvey(QString::fromLocal8Bit(argv[2]));
+        return 0;
+    }
+    // KOBALT_HANDOFF_BOOK names an EPUB for the handoff walk alone.
+    if (const auto other = qEnvironmentVariable("KOBALT_HANDOFF_BOOK"); !other.isEmpty()) {
+        QFile book(other);
+        require(book.open(QIODevice::ReadOnly), "Cannot read KOBALT_HANDOFF_BOOK");
+        handoffWalk(book.readAll());
         return 0;
     }
 #endif

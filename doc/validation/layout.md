@@ -8,6 +8,8 @@ These checks cover the CREngine layout groups, publisher markup, the document ca
 
 Hybrid regressions keep the chapter usable when a prepared document cannot resolve its reading position. Such a document is dropped and not built again for the same appearance. The session regression deliberately damages the prepared document and checks that the requested turn and later turns succeed in chapter mode without an error. In a long chapter, the text around a search hit must match the whole book, including when the part containing the hit has no layout.
 
+`KOBALT_HANDOFF_BOOK=<epub>` makes `kobalt-page-estimate-tests` walk that book in chapter mode and resolve every page anchor in the whole book. It compares pages by sequential index because a blank page can share its anchor with the following page. It fails on unresolved positions, different page totals, different page starts or different sampled pixels. Pixel comparisons sample every fifth page. Set `KOBALT_HANDOFF_ALL_PAGES=1` to compare every page. Optional `KOBALT_HANDOFF_CAPTURE_DIR` saves the first differing page pairs for inspection. Keep captures under the worktree’s `build/` directory.
+
 The session checks also request an appearance edit while the worker has adopted the whole book but has not published its frame. The edit must return to chapter rendering before reflow.
 
 The Hybrid checks also cover interrupted chapter-place reads, publisher-font reuse across the whole-book build, parked-cache ownership and abandonment after a cached document opens. Rendering policy 5 rebuilds pagination that may contain another book's publisher-font metrics. Parsed-book data remains compatible and is retained. Search-context resolution and refusal handling do not change either cache format.

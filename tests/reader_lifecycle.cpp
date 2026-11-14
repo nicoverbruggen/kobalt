@@ -5946,6 +5946,76 @@ private slots:
         QVERIFY(gallery->isVisible());
     }
 
+    // The Custom editor shows the cover even when the chosen design does not
+    // draw it, also when it opens again after Done.
+    void sleepCustomEditorShowsTheCover()
+    {
+        const auto paths = testPaths();
+        QJsonObject preferences;
+        sleep::setDesign(preferences, sleep::Design::Page);
+        sleep::Custom custom;
+        custom.sleep = { sleep::Mode::Cover, sleep::Design::Seal, {} };
+        sleep::setCustom(preferences, custom);
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        const auto state = std::make_shared<test::SleepPresentationState>();
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        const QSize size(1072, 1448);
+        host.open(coverBook, size);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), size);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        QVERIFY(clickAt(canvas, QPoint(size.width() / 2, size.height() / 2)));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsSystem")));
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSleepScreen")));
+        auto *gallery = host.window()->findChild<QWidget *>("rrSleepGallery");
+        QVERIFY(gallery && gallery->isVisible());
+        auto *grid = gallery->findChild<QWidget *>("rrSleepGalleryGrid");
+        QVERIFY(grid);
+        // Custom is the second entry on page one.
+        const QPoint custom2(grid->width() * 3 / 4, grid->height() / 4);
+        const auto openEditor = [&]() -> QWidget * {
+            if (!clickAt(canvas, grid->mapTo(canvas.surface(), custom2)))
+                return nullptr;
+            QWidget *editor = nullptr;
+            (void)QTest::qWaitFor([&] {
+                editor = host.window()->findChild<QWidget *>("rrSleepEditor");
+                return editor && editor->isVisible();
+            });
+            return editor;
+        };
+        // The fixture cover is green on its left half; the backdrop is black.
+        const auto showsCover = [](QWidget *editor) {
+            auto *preview = editor->findChild<QWidget *>("rrSleepEditorPreview");
+            if (!preview)
+                return false;
+            const auto image = preview->grab().toImage();
+            const QColor colour(image.pixel(image.width() * 35 / 100, image.height() / 2));
+            return colour.green() > 100 && colour.blue() < 80;
+        };
+        auto *editor = openEditor();
+        QVERIFY(editor);
+        QTRY_VERIFY(showsCover(editor));
+        QVERIFY(click(canvas, editor->findChild<QPushButton *>("rrSleepEditorDone")));
+        QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepEditor")
+                    || !host.window()->findChild<QWidget *>("rrSleepEditor")->isVisible());
+        QVERIFY(gallery->isVisible());
+        editor = openEditor();
+        QVERIFY(editor);
+        // Done kept the decoded cover, so it shows at once.
+        QVERIFY(showsCover(editor));
+    }
+
     void sleepGreetingEditor()
     {
         QTemporaryDir directory;

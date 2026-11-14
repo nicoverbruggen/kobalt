@@ -994,6 +994,13 @@ void Reader::closeSleepScreen()
     if (!sleepPopup) {
         if (!sleep::uses(preferences, sleep::Mode::Overlay))
             sleepOverlay = {};
+        // The gallery and the editor keep the cover while they are open.
+        // Release it once no sleep look draws it.
+        if (!sleep::uses(preferences, sleep::Mode::Cover)) {
+            ++sleepCoverRequest;
+            sleepCover = {};
+            sleepCoverSource = {};
+        }
         return;
     }
     closePopup(sleepPopup);
@@ -1125,6 +1132,8 @@ void Reader::openSleepEditor(sleep::Design design)
     sleepEditor = editor;
     editor->setGeometry(sleepGallery->geometry());
     editor->setImages(sleepCover, page ? page->snapshot(true) : QImage(), sleepOverlay);
+    if (sleepCover.isNull())
+        loadGalleryCover();
     editor->setWallpapers(sleepWallpaperNames);
     const QPointer<SleepEditor> guard(editor);
     editor->wallpaperWanted = [this, guard](const QString &name) {
@@ -1198,7 +1207,10 @@ void Reader::openSleepEditor(sleep::Design design)
             return;
         closeSleepEditor();
         if (custom) {
-            prepareSleepCover();
+            // The gallery stays open and may open the editor again, so keep a
+            // cover that is already decoded; closing the gallery releases it.
+            if (sleepCover.isNull())
+                prepareSleepCover();
             if (sleep::uses(preferences, sleep::Mode::Overlay))
                 prepareSleepOverlay();
             prepareSleepWallpapers();
@@ -1251,6 +1263,9 @@ void Reader::loadGalleryCover()
                 guard->sleepCoverSource = std::move(source);
                 if (guard->sleepGallery)
                     guard->sleepGallery->setCover(image);
+                // An editor opened before the cover arrived shows it now.
+                if (guard->sleepEditor)
+                    guard->sleepEditor->setCover(image);
             },
             services.coverImagePath);
 }

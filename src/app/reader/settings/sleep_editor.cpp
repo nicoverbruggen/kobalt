@@ -503,6 +503,12 @@ void SleepEditor::setImages(const QImage &cover, const QImage &page, const QImag
     preview_->update();
 }
 
+void SleepEditor::setCover(const QImage &cover)
+{
+    cover_ = cover;
+    preview_->update();
+}
+
 void SleepEditor::setWallpapers(const QStringList &names)
 {
     if (names == wallpapers_)

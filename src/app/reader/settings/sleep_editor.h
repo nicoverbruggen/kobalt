@@ -48,6 +48,8 @@ public:
     ~SleepEditor() override;
 
     void setImages(const QImage &cover, const QImage &page, const QImage &overlay);
+    // A cover that finished decoding after the editor opened.
+    void setCover(const QImage &cover);
     // The files in the wallpaper folders, sorted.
     void setWallpapers(const QStringList &names);
     // A decoded wallpaper; an empty name is the random one.

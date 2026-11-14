@@ -453,7 +453,7 @@ int run(int argc, char **argv)
         opened.exec();
         // A stale ready notification must not turn into a synchronous whole
         // book load when its first frame is superseded by another request.
-        for (const int scenario : { 0, 1, 2, 3 }) {
+        for (const int scenario : { 0, 1, 2, 3, 4, 5, 7 }) {
             const bool prepared = scenario != 0;
             const bool refuse = scenario == 2;
             auto fast =
@@ -501,8 +501,17 @@ int run(int argc, char **argv)
                                                fast->state().value("font_pixels").toInt() + 2 } })),
                         {}, ReaderSession::hybridChapterMode);
                 rendered.exec();
-                for (int turn = 0; turn < 4; ++turn) {
-                    require(fast->turn(1), "Cannot read on before the full build");
+                if (scenario == 4 || scenario == 5 || scenario == 7) {
+                    require(fast->goToChapter(1), "Cannot open a later chapter for the page jump");
+                    rendered.exec();
+                }
+                const auto nextChapter = fast->chapterTitle();
+                const auto nextChapterImage = fast->image();
+                // Leave the last page of chapter one visible when the count finishes.
+                const QVector<int> directions =
+                        scenario == 5 ? QVector<int>{ -1, 1, -1 } : QVector<int>{ 1, 1, 1, 1 };
+                for (int direction : directions) {
+                    require(fast->turn(direction), "Cannot read on before the full build");
                     rendered.exec();
                 }
                 QEventLoop ready;
@@ -536,6 +545,74 @@ int run(int argc, char **argv)
                                         && fast->turnDirection() == 1,
                                 "Refusing the whole book must preserve the requested page turn");
                     }
+                } else if (scenario == 5) {
+                    const auto previousChapter = fast->chapterTitle();
+                    const auto previousImage = fast->image();
+                    require(previousChapter != nextChapter && previousImage != nextChapterImage,
+                            "The handoff must start on the preceding chapter's last page");
+                    QStringList titles;
+                    QVector<QImage> images;
+                    QVector<int> turns;
+                    fast->updated = [&] {
+                        if (fast->busy())
+                            return;
+                        require(!fast->state().contains("book_fraction") && fast->error().isEmpty(),
+                                "Both buffered frames must use the adopted whole book");
+                        titles.append(fast->chapterTitle());
+                        images.append(fast->image());
+                        turns.append(fast->turnDirection());
+                        if (titles.size() == 2)
+                            rendered.quit();
+                    };
+                    require(fast->turn(1) && fast->turn(-1),
+                            "Cannot buffer a reverse turn while the whole book is being adopted");
+                    rendered.exec();
+                    require((titles == QStringList{ nextChapter, previousChapter }
+                             && images == QVector<QImage>{ nextChapterImage, previousImage }
+                             && turns == QVector<int>{ 1, -1 }),
+                            "A buffered reversal must cross the chapter boundary and return to the same page");
+                    fast->updated = {};
+                } else if (scenario == 7) {
+                    const int localPage = fast->page() - 1;
+                    const auto expected = fast->state().value("position");
+                    require(fast->go(fast->page()) && !fast->go(localPage),
+                            "A second chapter-local number must wait for the adopting frame");
+                    rendered.exec();
+                    require(!fast->state().contains("book_fraction")
+                                    && fast->state().value("position") == expected,
+                            "Refusing a second jump must preserve the requested passage");
+                    const int wholePage = fast->page() - 1;
+                    require(wholePage >= 0 && fast->go(wholePage),
+                            "Cannot jump using the newly displayed book pagination");
+                    rendered.exec();
+                    require(fast->page() == wholePage,
+                            "The retried page jump must reach its target");
+                } else if (scenario == 4) {
+                    const int target = fast->page() - 1;
+                    QImage expectedImage;
+                    QString expected;
+                    fast->pageSummary(target, [&](QString start, QString) {
+                        expected = start;
+                        opened.quit();
+                    });
+                    opened.exec();
+                    fast->previewPage(target, fast->image().size(), [&](QImage image) {
+                        expectedImage = image;
+                        opened.quit();
+                    });
+                    opened.exec();
+                    require(!expected.isEmpty() && !expectedImage.isNull() && fast->go(target),
+                            "Cannot request the previous chapter-local page");
+                    rendered.exec();
+                    QString actual;
+                    fast->pageSummary(fast->page(), [&](QString start, QString) {
+                        actual = start;
+                        opened.quit();
+                    });
+                    opened.exec();
+                    require(!fast->state().contains("book_fraction") && actual == expected
+                                    && fast->image() == expectedImage,
+                            "A page jump during adoption must resolve the chapter-local page");
                 } else if (scenario == 3) {
                     const int pixels = fast->state().value("font_pixels").toInt() + 2;
                     adoptingDocument = [&] {
@@ -571,7 +648,7 @@ int run(int argc, char **argv)
                             kobalt::qt::invoke(
                                     qApp,
                                     [&] {
-                                        require(fast->go(0),
+                                        require(fast->goTo(fast->chapters().first().position),
                                                 "Cannot supersede the adopted full frame");
                                     },
                                     Qt::QueuedConnection);
@@ -585,7 +662,8 @@ int run(int argc, char **argv)
                 }
             } else {
                 fast->showFullDocument();
-                require(fast->go(0) && fast->go(0), "Cannot supersede the stale-ready frame");
+                require(fast->go(0) && fast->goTo(fast->chapters().first().position),
+                        "Cannot supersede the stale-ready frame");
                 rendered.exec();
                 require(fast->state().contains("book_fraction"),
                         "A superseded stale-ready frame loaded the whole book");

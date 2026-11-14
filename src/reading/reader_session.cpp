@@ -1051,6 +1051,9 @@ bool ReaderSession::turn(int direction)
 
 bool ReaderSession::go(int target)
 {
+    // The worker may already have left the slice whose numbers are on screen.
+    if (running && frame.state.contains("book_fraction"))
+        return false;
     if (target < 0 || target >= pages())
         return false;
     pageTarget = target;
@@ -2617,6 +2620,10 @@ void ReaderSession::dispatch(bool pageTurn)
                 // this render does not know. Loading the whole book here
                 // would make the page turn wait: keep the chapter then.
                 const bool swap = swapToFull && engine->fullDocumentReady();
+                // A numbered jump addresses the displayed chapter. Move there
+                // before adoption so the whole book restores that passage.
+                if (swap && target >= 0)
+                    engine->go(target);
                 const int mode = swapToFull && !swap ? -1 : chapterMode;
                 const bool modeChanged = mode >= 0 && (engine->bookFraction() >= 0) != (mode > 0);
                 const bool unchanged =
@@ -2658,7 +2665,7 @@ void ReaderSession::dispatch(bool pageTurn)
                         && !(chapter >= 0 ? engine->goToChapter(chapter, anchor)
                                           : engine->goTo(anchor)))
                         result.error = strings::get("error.could_not_find_that_passage");
-                    else if (target >= 0)
+                    else if (target >= 0 && !swap)
                         engine->go(target);
                     else if (fraction >= 0)
                         engine->goToFraction(fraction);

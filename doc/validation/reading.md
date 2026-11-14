@@ -4,6 +4,8 @@ The standalone opening bar reaches 60% when the engine finishes, 80% after windo
 
 `session.reader-session` parks a whole-book build before each of two font increases and a decrease in the same Hybrid session. It checks that a turn during reflow is refused, then compares the new page, the following turn and the final whole-book handoff with an Accurate session at the same size.
 
+A numbered jump during handoff uses the displayed chapter. A second number can be used once the new pagination is on screen. A buffered reverse turn must return across the chapter boundary to the same pixels.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

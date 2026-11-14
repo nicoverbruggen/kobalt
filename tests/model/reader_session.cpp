@@ -24,6 +24,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QUrl>
@@ -1747,31 +1748,77 @@ int run(int argc, char **argv)
             auto imageLease = std::make_shared<SourceLease>();
             auto resourceOwner = std::make_shared<int>(0);
             std::weak_ptr<int> resourceLifetime = resourceOwner;
-            ResourceFactory images = [colorPath, imageLease, resourceOwner](
-                                             const QMap<QString, qint64> &sizes, const QString &,
-                                             std::shared_ptr<std::atomic_bool>) {
-                return std::make_shared<ResourceCache>(
-                        sizes.keys(),
-                        ResourceCache::Access{ [colorPath, resourceOwner](
-                                                       const QString &name,
-                                                       const ResourceCache::Sink &sink, QString *) {
-                                                  ZipResource resource;
-                                                  if (!resource.open(colorPath, name))
-                                                      return false;
-                                                  while (resource.valid() && !resource.finished()) {
-                                                      const auto bytes = resource.next();
-                                                      if (!sink(bytes.constData(), bytes.size()))
-                                                          return false;
-                                                  }
-                                                  return resource.valid();
-                                              },
-                                               [imageLease] { return imageLease->revoked(); },
-                                               {},
-                                               [](const QString &name) {
-                                                   return name.endsWith(".png") ? QSize(128, 64)
-                                                                                : QSize();
-                                               } });
+            const auto source =
+                    [&colorPath, &resourceOwner](
+                            const std::shared_ptr<SourceLease> &imageLease) -> ResourceFactory {
+                return [colorPath, imageLease, resourceOwner](const QMap<QString, qint64> &sizes,
+                                                              const QString &,
+                                                              std::shared_ptr<std::atomic_bool>) {
+                    return std::make_shared<ResourceCache>(
+                            sizes.keys(),
+                            ResourceCache::Access{
+                                    [colorPath, resourceOwner](const QString &name,
+                                                               const ResourceCache::Sink &sink,
+                                                               QString *) {
+                                        ZipResource resource;
+                                        if (!resource.open(colorPath, name))
+                                            return false;
+                                        while (resource.valid() && !resource.finished()) {
+                                            const auto bytes = resource.next();
+                                            if (!sink(bytes.constData(), bytes.size()))
+                                                return false;
+                                        }
+                                        return resource.valid();
+                                    },
+                                    [imageLease] { return imageLease->revoked(); },
+                                    {},
+                                    [](const QString &name) {
+                                        return name.endsWith(".png") ? QSize(128, 64) : QSize();
+                                    } });
+                };
             };
+            for (const bool image : { false, true }) {
+                ReaderSession idle(test::readerFonts(), test::readerPlaceholder());
+                auto access = std::make_shared<SourceLease>();
+                idle.open({ colorPath,
+                            colorPath,
+                            QSize(758, 900),
+                            {},
+                            {},
+                            {},
+                            access,
+                            source(access) },
+                          [&](OpeningResult result) {
+                              require(result.ready(), qPrintable(openingMessage(result)));
+                              opened.quit();
+                          });
+                opened.exec();
+                idle.updated = [&] {
+                    if (!idle.busy())
+                        rendered.quit();
+                };
+                require(idle.go(idle.chapters()[1].page - (image ? 0 : 3)),
+                        "Cannot show the idle work test page");
+                rendered.exec();
+                const auto key = idle.image().cacheKey();
+                const auto stats = idle.resourceStats();
+                const int cached = idle.cachedPages();
+                require((stats.value("pending_images").toInt() > 0) == image,
+                        "The idle work test has unexpected deferred images");
+                // Finish the worker job while its GUI delivery is still queued.
+                QSemaphore done;
+                qt::invoke(engineWorker(), [&] { done.release(); }, Qt::QueuedConnection);
+                require(done.tryAcquire(1, 5000), "Idle work did not finish");
+                access->revoke();
+                bool delivered = false;
+                idle.updated = idle.idle = [&] { delivered = true; };
+                ReaderSession::drain([&] { drained.quit(); });
+                drained.exec();
+                require(!delivered && idle.image().cacheKey() == key
+                                && idle.resourceStats() == stats && idle.cachedPages() == cached,
+                        "An ended source published an idle image or neighbouring pages");
+            }
+            ResourceFactory images = source(imageLease);
             auto illustrated =
                     std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
             illustrated->open(

@@ -16,6 +16,8 @@ A failed jump to a passage in another chapter must preserve the current anchor a
 
 The finish prompt on exit uses whole-book progress even when later slices remain. Forward turns continue until the last readable page. Reopening a finished book at the start must show the original opening page in cold and retained chapter sessions. When a native position and its chapter are both missing, the retained session falls back to that same page.
 
+A revoked source also discards queued illustration frames and neighbour-cache updates.
+
 A session discards an unfinished frame when the host revokes the source or the reader cancels it. Font and viewport changes must keep the last displayed image and finish their progress indication.
 
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.

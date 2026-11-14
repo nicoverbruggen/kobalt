@@ -2375,8 +2375,9 @@ void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<Chapter
 
 void ReaderSession::loadImages()
 {
-    if (retiring || running || pendingTurn || loadingImage || !openingResult_.ready()
-        || frame.resources.value("pending_images").toInt() == 0 || !frame.error.isEmpty())
+    if (retiring || running || pendingTurn || loadingImage || !lease_ || lease_->revoked()
+        || !openingResult_.ready() || frame.resources.value("pending_images").toInt() == 0
+        || !frame.error.isEmpty())
         return;
     loadingImage = true;
     const auto engine = engine_;
@@ -2394,18 +2395,21 @@ void ReaderSession::loadImages()
                 EngineJob activity;
                 ReaderFrame result;
                 bool loaded = false;
-                if (latest->load() == job) {
+                const auto current = [latest, job, lease] {
+                    return latest->load() == job && !lease->revoked();
+                };
+                if (current()) {
                     const bool timing = diagnosticsActive();
                     QElapsedTimer timer;
                     if (timing)
                         timer.start();
                     loaded = engine->loadNextImage();
-                    if (loaded && latest->load() == job)
+                    if (loaded && current())
                         result = capture(*engine, positions, false, markup, markupGeneration);
                     if (loaded && timing)
                         diagnostic("image-load-end",
                                    { { "elapsed_ms", double(timer.elapsed()) },
-                                     { "current", latest->load() == job },
+                                     { "current", current() },
                                      { "failed", !engine->resourceError().isEmpty() } },
                                    false);
                 }
@@ -2413,8 +2417,7 @@ void ReaderSession::loadImages()
                 // complete, after handing over the current frame, rather than redrawing
                 // neighbours that the next image will immediately invalidate.
                 const bool refill = loaded && !preview && result.error.isEmpty()
-                        && result.resources.value("pending_images").toInt() == 0
-                        && latest->load() == job;
+                        && result.resources.value("pending_images").toInt() == 0 && current();
                 kobalt::qt::invoke(
                         qApp,
                         [guard, loaded, refill, result = std::move(result), job, lease] {
@@ -2427,6 +2430,8 @@ void ReaderSession::loadImages()
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->loadingImage = false;
+                                        if (lease->revoked())
+                                            return;
                                         if (loaded && !guard->running && job == guard->revision) {
                                             guard->frame = result;
                                             if (guard->updated)
@@ -2447,10 +2452,10 @@ void ReaderSession::loadImages()
 
 void ReaderSession::resumeIdleWork(int direction, quint64 job)
 {
-    if (running || pendingTurn || retiring || revision != job || !frame.error.isEmpty())
+    if (running || pendingTurn || retiring || !currentSourceFrame(job) || !frame.error.isEmpty())
         return;
     loadImages();
-    if (loadingImage || preview_ || !openingResult_.ready() || !lease_ || lease_->revoked())
+    if (loadingImage || preview_ || !openingResult_.ready())
         return;
     const auto engine = engine_;
     const auto latest = newest;
@@ -2465,14 +2470,14 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 QElapsedTimer timer;
                 if (timing)
                     timer.start();
-                const std::function<bool()> current = [latest, job] {
-                    return latest->load() == job;
+                const std::function<bool()> current = [latest, job, lease] {
+                    return latest->load() == job && !lease->revoked();
                 };
                 prepareNeighbours(*engine, direction, current);
                 if (timing)
                     diagnostic("neighbours-end",
                                { { "elapsed_ms", double(timer.elapsed()) },
-                                 { "completed", latest->load() == job } },
+                                 { "completed", current() } },
                                false);
                 // Drawing a neighbour can discover deferred images. Publish them now
                 // so they load before that page is requested.
@@ -2482,7 +2487,7 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                         qApp,
                         [guard, resources, cachedPages, job, lease] {
                             if (!guard || guard->lease_ != lease || guard->running
-                                || guard->revision != job)
+                                || !guard->currentSourceFrame(job))
                                 return;
                             guard->frame.resources = resources;
                             guard->frame.state["cached_pages"] = cachedPages;
@@ -2495,17 +2500,14 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 // neighbour work: they run after this job has ended, so
                 // that the reader does not count as preparing pages for as
                 // long as they take.
-                const std::function<bool()> idle = [current, lease] {
-                    return current() && lease && !lease->revoked();
-                };
                 const quint64 queued = engineWorkRequests();
                 kobalt::qt::invoke(
                         engineWorker(),
-                        [engine, idle, guard, job, lease, queued] {
-                            if (!idle())
+                        [engine, current, guard, job, lease, queued] {
+                            if (!current())
                                 return;
                             EngineJob activity;
-                            refinePageEstimate(engine, idle, guard, job, lease, queued);
+                            refinePageEstimate(engine, current, guard, job, lease, queued);
                         },
                         Qt::QueuedConnection);
             },

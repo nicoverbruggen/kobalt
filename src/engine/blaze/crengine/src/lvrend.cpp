@@ -1771,7 +1771,7 @@ public:
                                             && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                     lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                     if ( href.firstChar()=='#' ) {
-                                        href.erase(0,1);
+                                        href = DecodeHTMLUrlString(href.substr(1));
                                         caption_links.add( href );
                                     }
                                 }
@@ -1989,7 +1989,7 @@ public:
                                                         && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                                 lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                                 if ( href.firstChar()=='#' ) {
-                                                    href.erase(0,1);
+                                                    href = DecodeHTMLUrlString(href.substr(1));
                                                     if ( is_single_column )
                                                         row->single_col_context->addLink( href, link_insert_pos );
                                                     else
@@ -6110,7 +6110,7 @@ int renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int
                                                 && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                         lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                         if ( href.firstChar()=='#' ) {
-                                            href.erase(0,1);
+                                            href = DecodeHTMLUrlString(href.substr(1));
                                             context.addLink( href, link_insert_pos );
                                         }
                                     }
@@ -6146,7 +6146,7 @@ int renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int
                                                 && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                         lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                         if ( href.firstChar()=='#' ) {
-                                            href.erase(0,1);
+                                            href = DecodeHTMLUrlString(href.substr(1));
                                             context.addLink( href, link_insert_pos );
                                         }
                                     }
@@ -10489,7 +10489,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                                                 && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                         lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                         if ( href.firstChar()=='#' ) {
-                                            href.erase(0,1);
+                                            href = DecodeHTMLUrlString(href.substr(1));
                                             flow->getPageContext()->addLink( href, link_insert_pos );
                                         }
                                     }

@@ -184,6 +184,8 @@ void inpageFootnotes()
 {
     using namespace kobalt;
     auto files = test::linkBook();
+    files["OEBPS/first.xhtml"].replace("#short'", "#caf%C3%A9'");
+    files["OEBPS/Notes/foot notes.xhtml"].replace("id='short'", "id='café'");
     files["OEBPS/first.xhtml"].replace(
             "</body>",
             "<p id='legacy-ref'>Another reference <a href='#legacy-note'>7</a>.</p>"
@@ -469,11 +471,12 @@ void linksOutsideCurrentLayout()
     auto files = test::linkBook();
     files["OEBPS/first.xhtml"] =
             "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>"
-            "<a href='#later'>Later</a> <a href='second.xhtml#destination'>Next</a> "
+            "<a href='#caf%C3%A9'>Later</a> <a href='second.xhtml#caf%C3%A9'>Next</a> "
             "<a href='#hidden'>Hidden</a> <a href='second.xhtml#missing'>Missing</a></p>"
             + QByteArray("<p>A paragraph of the chapter for the reader to turn through.</p>")
                       .repeated(100)
-            + "<p id='later'>The last passage.</p><div style='display:none'><p id='hidden'>Hidden passage.</p></div></body></html>";
+            + "<p id='café'>The last passage.</p><div style='display:none'><p id='hidden'>Hidden passage.</p></div></body></html>";
+    files["OEBPS/second.xhtml"].replace("id='destination'", "id='café'");
     QTemporaryDir directory;
     require(directory.isValid() && test::writeBook(directory.path(), "links.epub", files),
             "Cannot create the chapter link fixture");
@@ -527,6 +530,10 @@ void noteMatching()
     };
     const QByteArray note = "<p id='note'>The note text.</p>";
     const QVector<NoteCase> cases{
+        { "escaped UTF-8 fragment", "<p>Read <a href='#caf%C3%A9'>this passage</a>.</p>",
+          "<p id='café'>The passage.</p>", LinkKind::Passage },
+        { "escaped percent in fragment", "<p>Read <a href='#section%2520one'>this passage</a>.</p>",
+          "<p id='section%20one'>The passage.</p>", LinkKind::Passage },
         { "numeric reference", reference("[1]"), note },
         { "three-digit reference", reference("999"), note },
         { "letter reference", reference("a"), note },

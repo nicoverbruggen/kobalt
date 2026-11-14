@@ -6,7 +6,8 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 # Increment for layout/metrics changes not covered by CREngine's formatting
 # version. Figure keep-together defaults require repagination, not reparsing.
 # Version 5: repaginate caches that may contain another book's publisher-font metrics.
-set(rendering_version 5)
+# Version 6: repaginate page notes with percent-encoded fragment links.
+set(rendering_version 6)
 file(GLOB cache_patterns CONFIGURE_DEPENDS "${KOBALT_ROOT}/assets/hyph/*.pattern")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})
 set(cache_hashes "${rendering_version};")

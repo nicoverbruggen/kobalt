@@ -706,15 +706,18 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         }
         return result;
     }
-    auto *target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
+    // A fragment is a URI component. Decode it once before comparing it
+    // with the Unicode id from the XHTML.
+    const auto id = DecodeHTMLUrlString(href.substr(1));
+    auto *target = doc->getNodeById(doc->getAttrValueIndex(id.c_str()));
     auto match = noteReference(node);
     // In chapter mode the target can be in a spine item that is not loaded.
     // The engine names a link into spine item n "#_doc_fragment_n_ id".
     EngineDocument *targetDocument = this;
     std::unique_ptr<EngineDocument> sideWindow;
     if (!target && windowFirst_ >= 0) {
-        static const QRegularExpression fragment(QStringLiteral("^#_doc_fragment_(\\d+)_ "));
-        const auto found = fragment.match(text(href));
+        static const QRegularExpression fragment(QStringLiteral("^_doc_fragment_(\\d+)_ "));
+        const auto found = fragment.match(text(id));
         const int item = found.hasMatch() ? found.captured(1).toInt() : -1;
         if (item < 0 || (item >= windowFirst_ && item <= windowLast_))
             return result;
@@ -723,7 +726,7 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         if (!preview) {
             if (source_
                 && linkTargetExists(*source_, spineItems().value(item),
-                                    text(href).mid(found.capturedLength()), text(href), interrupt_)
+                                    text(id).mid(found.capturedLength()), text(id), interrupt_)
                         == 0)
                 return result;
             result.kind = match == NoteMatch::Explicit ? LinkKind::Footnote : LinkKind::Passage;
@@ -739,7 +742,7 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         if (!targetDocument || !targetDocument->engine_)
             return result;
         auto *other = targetDocument->engine_->getDocument();
-        target = other->getNodeById(other->getAttrValueIndex(href.substr(1).c_str()));
+        target = other->getNodeById(other->getAttrValueIndex(id.c_str()));
     }
     if (!target)
         return result;

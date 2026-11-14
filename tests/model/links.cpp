@@ -713,6 +713,12 @@ int main(int argc, char **argv)
     require(model.open(file.readAll(), QSize(1072, 1300),
                        kobalt::qt::object({ { "font_pixels", 32 } }), &error),
             qPrintable(error));
+    const auto website = inspectNote(
+            { "encoded website",
+              "<p><a href='https://example.org/books/part%2Fone?title=ink%26paper'>Website</a></p>",
+              {}, kobalt::LinkKind::Website }, false);
+    require(website.target == "https://example.org/books/part%2Fone?title=ink%26paper",
+            "Website link changed encoded path or query separators");
     linkDecoration();
     inpageMarkup();
     inpageStyling();

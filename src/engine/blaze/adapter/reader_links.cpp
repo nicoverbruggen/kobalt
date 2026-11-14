@@ -697,11 +697,12 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
     result.kind = LinkKind::Unavailable;
     result.error = strings::get("error.this_passage_is_unavailable");
     if (href[0] != '#') {
-        const QUrl url(text(href));
+        // getHRef decodes external URLs, including escaped path and query separators.
+        const QUrl url(text(node->getAttributeValue("href")));
         if (url.isValid() && !url.host().isEmpty()
             && (url.scheme() == "https" || url.scheme() == "http")) {
             result.kind = LinkKind::Website;
-            result.target = url.toString();
+            result.target = url.toString(QUrl::FullyEncoded);
             result.error.clear();
         }
         return result;

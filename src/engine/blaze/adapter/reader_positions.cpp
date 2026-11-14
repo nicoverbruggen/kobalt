@@ -13,21 +13,35 @@ lString32 cre(const QString &s)
     return Utf8ToUnicode(s.toUtf8().constData());
 }
 
-QString decodePosition(const Engine &engine, const PositionCodec &codec, const QString &location,
-                       QString *error)
-{
-    if (codec)
-        return codec.decode(engine, location, error);
-    if (error)
-        *error = strings::get("error.no_supported_native_reading_position");
-    return {};
-}
 } // namespace
+
+QString EngineDocument::decodePosition(const PositionCodec &codec, const QString &location,
+                                       QString *error)
+{
+    if (!codec) {
+        if (error)
+            *error = strings::get("error.no_supported_native_reading_position");
+        return {};
+    }
+    const auto anchor = codec.decode(*this, location, error);
+    if (!anchor.isEmpty() || windowFirst_ < 0)
+        return anchor;
+    // An unloaded chapter has a fragment in the DOM but no text. Its native
+    // chapter start identifies the spine item without changing the visible page.
+    const auto start = codec.chapterStart(location);
+    if (start.isEmpty() || start == location)
+        return {};
+    const int item = spineItemIndex(codec.decode(*this, start, nullptr));
+    if (item < 0 || (item >= windowFirst_ && item <= windowLast_))
+        return {};
+    auto *document = documentFor(item);
+    return document ? codec.decode(*document, location, error) : QString();
+}
 
 bool EngineDocument::goToPlatform(const PositionCodec &codec, const QString &location,
                                   QString *error)
 {
-    const auto anchor = decodePosition(*this, codec, location, error);
+    const auto anchor = decodePosition(codec, location, error);
     if (anchor.isEmpty())
         return false;
     if (!goTo(anchor)) {
@@ -55,14 +69,17 @@ EngineDocument::PositionTarget EngineDocument::goToPlatformNearest(const Positio
 }
 
 int EngineDocument::comparePlatformPosition(const PositionCodec &codec, const QString &location,
-                                            QString *error) const
+                                            QString *error)
 {
     if (!engine_) {
         if (error)
             *error = strings::get("error.no_supported_native_reading_position");
         return 0;
     }
-    const auto anchor = decodePosition(*this, codec, location, error);
+    const auto anchor = decodePosition(codec, location, error);
+    const int item = spineItemIndex(anchor);
+    if (windowFirst_ >= 0 && item >= 0 && (item < windowFirst_ || item > windowLast_))
+        return item < windowFirst_ ? -1 : 1;
     return anchor.isEmpty() ? 0 : comparePosition(anchor, error);
 }
 

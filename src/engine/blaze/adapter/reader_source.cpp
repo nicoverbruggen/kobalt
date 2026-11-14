@@ -1166,8 +1166,7 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
                                           QString *error)
 {
 #if __has_include(<koblaze.h>)
-    if (slicePages_ <= 0 || windowFirst_ < 0 || !source_ || !engine_ || item < 0
-        || item >= spineItemCount_)
+    if (windowFirst_ < 0 || !source_ || !engine_ || item < 0 || item >= spineItemCount_)
         return nullptr;
     const auto unit = last >= item ? qMakePair(item, last) : unitFrom(item);
     auto settings = windowSettings(unit.first, unit.second);

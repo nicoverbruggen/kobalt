@@ -2037,6 +2037,32 @@ int main(int argc, char **argv)
             "Native chapter, element or offset mapped to the wrong text");
     require(native.platformPosition(positions, &error) == chapter2 + "#kobo.8.1:7",
             "Native position export lost the source offset");
+    for (const int slicePages : { 0, 2 }) {
+        kobalt::EngineDocument window(kobalt::test::readerFonts());
+        require(window.open(bytes, QSize(1072, 1328), legacySettings, &error), qPrintable(error));
+        window.setChapterSlices(slicePages);
+        require(window.showSpineItems(0, 0, &error) && window.go(0), qPrintable(error));
+        const auto start = window.position();
+        const auto before = window.image(window.page());
+        QString title;
+        int page = -1;
+        require(window.describePosition(native.position(), &title, &page, &error, {}) > 0
+                        && error.isEmpty() && title == native.chapterTitle(native.position())
+                        && window.position() == start,
+                "A synced position outside the chapter window lost its direction or title");
+        const auto location = chapter2 + "#kobo.8.1:7";
+        require(window.comparePlatformPosition(positions, location, &error) > 0 && error.isEmpty()
+                        && window.position() == start && window.image(window.page()) == before,
+                "Comparison did not locate the exact native position without moving the reader");
+        require(window.comparePlatformPosition(positions, chapter2 + "#missing:0", &error) == 0
+                        && !error.isEmpty() && window.position() == start,
+                "Comparison accepted a missing anchor in an unloaded chapter");
+        require(window.goToPlatformNearest(positions, location, &error)
+                                == kobalt::EngineDocument::PositionTarget::Exact
+                        && error.isEmpty() && window.position() == native.position()
+                        && window.platformPosition(positions, &error) == location,
+                "A native import in the next chapter lost the exact source offset");
+    }
     {
         const auto before = native.position();
         require(!native.goToPlatform({}, before, &error) && !error.isEmpty()

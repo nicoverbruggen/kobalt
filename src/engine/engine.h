@@ -106,7 +106,7 @@ public:
     virtual int describePosition(const QString &position, QString *chapter, int *page,
                                  QString *error, const std::function<bool()> &current) = 0;
     virtual int comparePlatformPosition(const PositionCodec &codec, const QString &location,
-                                        QString *error) const = 0;
+                                        QString *error) = 0;
     // The shared location of an engine position. False when the position is
     // not in a spine item or is in generated content. *exact is false when
     // the location is the nearest one that the source has, for example for

@@ -120,7 +120,7 @@ public:
     int describePosition(const QString &position, QString *chapter, int *page, QString *error,
                          const std::function<bool()> &current) override;
     int comparePlatformPosition(const PositionCodec &codec, const QString &location,
-                                QString *error) const override;
+                                QString *error) override;
     // The shared location of an engine position. False when the position is
     // not in a spine item or is in generated content. *exact is false when
     // the location is the nearest one that the source has, for example for
@@ -350,6 +350,7 @@ private:
     std::unique_ptr<ColumnView> engine_;
     struct SearchText;
     std::shared_ptr<SearchText> searchText_;
+    QString decodePosition(const PositionCodec &codec, const QString &location, QString *error);
     // The search in the text that this document has.
     SearchBatch searchLoaded(const QString &query, SearchCursor cursor, int maximum,
                              SearchScope scope, bool details,

@@ -50,3 +50,5 @@ The touch-rotation regression failed on the reported Clara HD firmware before th
 Three consecutive screenshot runs with the corrected Type Tester fixture, fixed bookmark dates and fixed dictionary free space produced identical manifests and image checksums. About captures change with the source commit.
 
 The Qt5 package passed ZIP integrity checks and contains the ARM32 library at `usr/local/Kobo/imageformats/libkobalt.so` in `KoboRoot.tgz`. The prepared SDK prints a CMake developer warning for `COPY_ONLY` in its resource macro; this did not prevent compilation or packaging. This check does not run the package on a device or establish firmware compatibility. Neither the Mac nor the Qt5 validation rebuilt Qt.
+
+`desktop.fastLocateText` checks that a scenario can hold a word in another chapter when Fast rendering gives the search hit an estimated book page.

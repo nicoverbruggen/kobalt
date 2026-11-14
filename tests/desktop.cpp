@@ -6548,6 +6548,35 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void fastLocateText()
+    {
+        renderingMode::setOverride(1);
+        const auto previous = qgetenv("KOBALT_CHAPTER_PAGES");
+        const auto restore = qScopeGuard([previous] {
+            renderingMode::setOverride(-1);
+            if (previous.isNull())
+                qunsetenv("KOBALT_CHAPTER_PAGES");
+            else
+                qputenv("KOBALT_CHAPTER_PAGES", previous);
+        });
+        qputenv("KOBALT_CHAPTER_PAGES", "2");
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto files = test::engineBook(false, 4, 35);
+        files["OEBPS/c4.xhtml"].replace("</body>", "<p>Cartographer mapped it.</p></body>");
+        QVERIFY(writeBook(fixture.directory.path(), "mapped.epub", files));
+        selectPreview(fixture, 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.path() + "/mapped.epub");
+        QTRY_COMPARE(opened.count(), 1);
+        auto result = std::make_shared<QPoint>(-2, -2);
+        fixture.window.readerWindow()->locateText("Cartographer",
+                                                  [result](QPoint pos) { *result = pos; });
+        QTRY_VERIFY_WITH_TIMEOUT(result->x() != -2, 15000);
+        QVERIFY2(result->x() >= 0,
+                 "The scenario player could not locate a word in a later chapter");
+    }
+
     void fastKosyncChoice()
     {
         renderingMode::setOverride(1);

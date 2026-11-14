@@ -1233,7 +1233,8 @@ void Reader::locateText(const QString &text, std::function<void(QPoint)> found)
                 continue;
             *settled = true;
             guard->session->cancelSearch();
-            if (hit.page != guard->session->page())
+            if (guard->session->state().contains("book_fraction")
+                || hit.page != guard->session->page())
                 guard->session->goTo(hit.start);
             guard->locateOnPage(hit, found, 0);
             return;
@@ -1249,7 +1250,7 @@ void Reader::locateText(const QString &text, std::function<void(QPoint)> found)
 void Reader::locateOnPage(const kobalt::SearchHit &hit, std::function<void(QPoint)> found,
                           int attempt)
 {
-    if (session->busy() || session->page() != hit.page) {
+    if (session->busy()) {
         if (attempt >= 500) {
             found({ -1, -1 });
             return;

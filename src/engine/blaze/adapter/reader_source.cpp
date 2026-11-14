@@ -1383,6 +1383,31 @@ bool EngineDocument::fullDocumentReady() const
     return full_ && fullSize_ == size_ && fullKey_ == fullDocumentKey(settingsState());
 }
 
+int EngineDocument::preparedSpreadTurn(int direction) const
+{
+    if ((direction != 1 && direction != -1) || columns_ != 2 || !fullDocumentReady())
+        return -1;
+    const int screen = page();
+    const int first = engine_->firstColumn(screen);
+    const int edge = direction < 0 ? first : first + engine_->columnCount(screen) - 1;
+    const auto anchor = engine_->getPageBookmark(edge, true, true).toString();
+    auto &whole = *full_->engine_;
+    const auto pointer = whole.getDocument()->createXPointer(anchor);
+    if (pointer.isNull())
+        return -1;
+    const int physical = whole.getBookmarkPage(pointer, true);
+    if (physical < 0)
+        return -1;
+    const int spread = whole.screenOfColumn(physical);
+    const int firstInSpread = whole.firstColumn(spread);
+    // The adjoining column may already be on this whole-book screen.
+    // Showing that screen repeats one column instead of skipping the other.
+    const bool sameSpread = direction < 0
+            ? physical > firstInSpread
+            : physical + 1 < firstInSpread + whole.columnCount(spread);
+    return sameSpread ? spread : full_->turnTarget(spread, direction);
+}
+
 bool EngineDocument::fullDocumentStarted() const
 {
     if (fullDocumentReady())

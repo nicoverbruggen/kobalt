@@ -280,6 +280,10 @@ public:
     // True while a document from prepareFullDocument() waits to be shown.
     virtual bool fullDocumentReady() const { return false; }
 
+    // Resolve an adopting turn from the edge column of the screen being left.
+    // A negative result uses the usual turn from the adopted reading position.
+    virtual int preparedSpreadTurn(int) const { return -1; }
+
     // True once the build of that document has started.
     virtual bool fullDocumentStarted() const { return false; }
 

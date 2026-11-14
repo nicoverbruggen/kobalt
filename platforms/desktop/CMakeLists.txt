@@ -719,7 +719,7 @@ if(BUILD_TESTING)
     kobalt_regressions(session reading_book bookmark_session highlight_session reader_session)
     kobalt_regressions(resource image_policy resource_provider)
     kobalt_regressions(corpus multilingual)
-    foreach(check location-round-trip page-estimate chapter-parity fast-surfaces)
+    foreach(check location-round-trip page-estimate chapter-parity fast-surfaces reader-session)
         target_compile_definitions(kobalt-${check}-tests PRIVATE
             KOBALT_TEST_FIXTURES="${KOBALT_ROOT}/tests/fixtures")
     endforeach()

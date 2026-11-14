@@ -220,6 +220,89 @@ static void hybridFontEdits(const QString &path, quint16 port)
     renderingMode::setOverride(-1);
 }
 
+static void mixedSpreadHandoff()
+{
+    const QString path =
+            QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub";
+    const QSize landscape(1072, 758), portrait(758, 1072);
+    const QJsonObject settings{ { "two_columns_landscape", true }, { "font_pixels", 28 } };
+    QEventLoop frame;
+    openedEngine = nullptr;
+    const auto open = [&](ReaderSession &reader, bool hybrid) {
+        renderingMode::setOverride(hybrid ? 2 : 0);
+        auto lease = std::make_shared<SourceLease>();
+        PositionCodec positions{ [](const Engine &, const QString &anchor, QString *) {
+                                    return anchor;
+                                },
+                                 [](const Engine &engine, QString *) { return engine.position(); },
+                                 [](const QString &anchor) { return anchor; } };
+        if (hybrid)
+            positions.encode = [](const Engine &engine, QString *) {
+                openedEngine = const_cast<Engine *>(&engine);
+                return engine.position();
+            };
+        OpenRequest request{ path,     path, landscape, {},
+                             {},       {},   lease,     localResourceFactory(path, lease),
+                             positions };
+        request.appearanceDefaults = settings;
+        reader.open(std::move(request), [&](OpeningResult result) {
+            require(result.ready(), qPrintable(openingMessage(result)));
+            frame.quit();
+        });
+        frame.exec();
+        reader.updated = [&reader, &frame] {
+            if (!reader.busy())
+                frame.quit();
+        };
+    };
+    ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
+    open(whole, false);
+    const auto coverAndTitle = whole.image();
+    for (int direction : { 1, -1 }) {
+        ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+        open(hybrid, true);
+        if (direction < 0) {
+            require(hybrid.turn(1), "Cannot open the title before a reverse handoff");
+            frame.exec();
+        }
+        qt::invoke(
+                engineWorker(),
+                [&] {
+                    require(openedEngine
+                                    && openedEngine->prepareFullDocument({})
+                                            == Engine::FullDocument::Ready,
+                            "Cannot prepare the complete two-column book");
+                    qt::invoke(qApp, [&] { frame.quit(); }, Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
+        frame.exec();
+        hybrid.showFullDocument();
+        require(hybrid.turn(direction), "Cannot turn across the prepared two-column handoff");
+        frame.exec();
+        require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle
+                        && hybrid.chapterTitle() == whole.chapterTitle()
+                        && hybrid.turnDirection() == direction,
+                "The handoff must show the cover and title together before turning beyond them");
+        require(hybrid.turn(1) && whole.turn(1), "Cannot turn beyond the mixed cover spread");
+        while (hybrid.busy() || whole.busy())
+            frame.exec();
+        require(hybrid.image() == whole.image(), "The turn after the handoff lost its next spread");
+        hybrid.resize(portrait);
+        whole.resize(portrait);
+        while (hybrid.busy() || whole.busy())
+            frame.exec();
+        require(hybrid.image() == whole.image(),
+                "Rotating after adoption lost the visible passage");
+        if (direction > 0) {
+            whole.resize(landscape);
+            frame.exec();
+            require(whole.go(0), "Cannot restore the reference cover");
+            frame.exec();
+        }
+    }
+    renderingMode::setOverride(-1);
+}
+
 static void chapterNavigation(const QString &path)
 {
     const auto previous = qgetenv("KOBALT_CHAPTER_PAGES");
@@ -694,6 +777,7 @@ int run(int argc, char **argv)
             opened.exec();
             servedPath = path;
         }
+        mixedSpreadHandoff();
         chapterNavigation(path);
         positionImportTransitions(path, publisherPath);
         hybridFontEdits(path, server.serverPort());

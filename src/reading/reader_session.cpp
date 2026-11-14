@@ -2659,6 +2659,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 // before adoption so the whole book restores that passage.
                 if (swap && target >= 0)
                     engine->go(target);
+                const int spreadTurn = swap && delta ? engine->preparedSpreadTurn(delta) : -1;
                 const int mode = swapToFull && !swap ? -1 : chapterMode;
                 const bool modeChanged = mode >= 0 && (engine->bookFraction() >= 0) != (mode > 0);
                 const bool unchanged =
@@ -2704,6 +2705,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                         engine->go(target);
                     else if (fraction >= 0)
                         engine->goToFraction(fraction);
+                    else if (swap && !refused && spreadTurn >= 0)
+                        windowTurned = engine->go(spreadTurn);
                     else if (delta) {
                         const int to = appearanceChanged ? engine->turnTarget(engine->page(), delta)
                                                          : turned;

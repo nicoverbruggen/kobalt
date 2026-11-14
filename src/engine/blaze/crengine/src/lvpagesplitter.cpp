@@ -49,7 +49,9 @@ int LVRendPageList::FindNearestPage( int y, int direction )
     return length()-1;
 }
 
-static LVRendPageContext * main_context = NULL;
+// A whole-book layout can park while another thread lays out a chapter.
+// Nested flows report to the layout running on their own thread.
+static thread_local LVRendPageContext * main_context = NULL;
 
 LVRendPageContext::LVRendPageContext(LVRendPageList * pageList, int pageHeight, int docFontSize, bool gatherLines)
     : callback(NULL), totalFinalBlocks(0)

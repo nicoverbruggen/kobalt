@@ -5,6 +5,7 @@
 #include "engine/blaze/adapter/reader_render_callback.h"
 #include <QGuiApplication>
 #include <cstdio>
+#include <thread>
 
 using namespace kobalt;
 
@@ -112,6 +113,40 @@ void callbacksFollowViews()
     }
 }
 
+// A whole-book layout can park while the reader lays out a chapter on
+// another thread. Nested flows must poll the chapter's callback.
+void parkedLayoutCallbacks()
+{
+    struct Polls : LVDocViewCallback
+    {
+        int count = 0;
+
+        bool OnRenderCancelRequested() override
+        {
+            ++count;
+            return false;
+        }
+    };
+
+    Polls background;
+    LVRendPageContext parked(nullptr, 800);
+    parked.setCallback(&background, 10);
+    parked.updateRenderProgress(1);
+    Polls foreground;
+    std::thread chapter([&] {
+        LVRendPageContext current(nullptr, 800);
+        current.setCallback(&foreground, 10);
+        current.updateRenderProgress(1);
+        LVRendPageContext nested(nullptr, 800);
+        nested.updateRenderProgress(1);
+        current.Abandon();
+    });
+    chapter.join();
+    parked.Abandon();
+    require(background.count == 1 && foreground.count == 2,
+            "A nested chapter flow polled the parked whole-book callback");
+}
+
 // The engine that reads books today lays out the whole book, so it must
 // report every page value as exact and equal to its page numbers.
 void wholeBookPages()
@@ -150,6 +185,7 @@ int main(int argc, char **argv)
     queryStates();
     wholeBookPages();
     callbacksFollowViews();
+    parkedLayoutCallbacks();
     std::printf("PASS: query states and exact page values of the whole-book engine\n");
     return 0;
 }

@@ -94,7 +94,8 @@ QStringList fontFiles(const QStringList &paths)
 }
 } // namespace
 
-QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleRequest &request)
+QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleRequest &request,
+                          const QVector<ReadingFont> &catalog)
 {
     QByteArray bytes;
     QBuffer buffer(&bytes);
@@ -114,6 +115,9 @@ QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleReques
            << fonts.sources.systemDirectory << fonts.sources.sideloadDirectory
            << fontFiles(fonts.sources.systemFiles) << fontFiles(fonts.fallbackFiles)
            << fonts.hyphenationDirectory;
+    for (const auto &font : catalog)
+        if (!font.directoryFileVersions.isEmpty())
+            stream << font.family << font.directoryFileVersions;
     buffer.close();
     return QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
 }

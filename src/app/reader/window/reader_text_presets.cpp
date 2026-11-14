@@ -605,6 +605,7 @@ QVector<Reader::TextPresetPreview> Reader::textPresetPreviews(const QVector<Pres
                                                               const QStringList &ids, QSize size)
 {
     const auto fonts = session->fontInputs();
+    const auto catalog = session->fontCatalog();
     // The tile's size and the paper colour also decide its pixels.
     const QByteArray tile = QByteArray::number(size.width()) + 'x'
             + QByteArray::number(size.height()) + (darkTheme ? 'd' : 'l');
@@ -614,7 +615,7 @@ QVector<Reader::TextPresetPreview> Reader::textPresetPreviews(const QVector<Pres
             TextPresetPreview preview{
                 preset->id, preset->fontFace, textPresetPreviewRequest(*preset, size), {}
             };
-            preview.tile = styleSampleKey(fonts, preview.request) + tile;
+            preview.tile = styleSampleKey(fonts, preview.request, catalog) + tile;
             previews.append(preview);
         }
     return previews;

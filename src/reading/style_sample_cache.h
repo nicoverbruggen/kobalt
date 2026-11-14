@@ -6,7 +6,8 @@
 namespace kobalt {
 // Identifies a sample by everything that decides its pixels: the whole
 // request, the font inputs and the build's rendering policy.
-QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleRequest &request);
+QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleRequest &request,
+                          const QVector<ReadingFont> &catalog = {});
 
 // Rendered Styling samples of one open book, kept in memory so that opening a
 // sample again does not lay it out again. GUI thread only. Portrait and

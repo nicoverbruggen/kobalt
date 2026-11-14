@@ -30,6 +30,7 @@ struct ReadingFont
     FontOrigin origin;
     FontWeightAxis weightAxis;
     FontOpticalSizeAxis opticalSizeAxis;
+    QByteArray directoryFileVersions = {};
 };
 
 struct FontSources

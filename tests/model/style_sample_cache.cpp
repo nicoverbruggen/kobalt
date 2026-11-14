@@ -1,5 +1,7 @@
 #include "reading/style_sample_cache.h"
+#include <QFile>
 #include <QGuiApplication>
+#include <QTemporaryDir>
 #include <QJsonObject>
 #include <cstdio>
 #include <functional>
@@ -42,7 +44,25 @@ int main(int argc, char **argv)
     request.values = { 80, 100, 120 };
     request.page = { 600, 800 };
     request.thumbnail = { 150, 200 };
-    const auto key = styleSampleKey(fonts, request);
+    QTemporaryDir directory;
+    require(directory.isValid(), "Could not create the sideloaded font directory");
+    fonts.sources.sideloadDirectory = directory.path();
+    const auto beforeInstall = discoverReadingFonts(fonts.sources);
+    const auto key = styleSampleKey(fonts, request, beforeInstall);
+    const auto face = directory.filePath("Reader.ttf");
+    require(QFile::copy(QStringLiteral(KOBALT_FONT_DIRECTORY) + "/IBMPlexSans-Regular.ttf", face),
+            "Could not install a reading font");
+    const auto installed = discoverReadingFonts(fonts.sources);
+    const auto installedKey = styleSampleKey(fonts, request, installed);
+    require(installedKey != key, "Installing a reading font reused the old preset thumbnail");
+    require(installedKey == styleSampleKey(fonts, request, discoverReadingFonts(fonts.sources)),
+            "An unchanged font directory discarded the preset thumbnail");
+    require(QFile::remove(face)
+                    && QFile::copy(QStringLiteral(KOBALT_FONT_DIRECTORY) + "/IBMPlexSans-Bold.ttf",
+                                   face),
+            "Could not replace the installed reading font");
+    require(installedKey != styleSampleKey(fonts, request, discoverReadingFonts(fonts.sources)),
+            "Replacing a reading font reused the old preset thumbnail");
     require(key == styleSampleKey(fonts, request), "The same request gave two keys");
     // Every input of a sample changes the key.
     const auto differs = [&](const char *what, std::function<void(StyleSampleRequest &)> change) {

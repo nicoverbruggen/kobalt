@@ -689,7 +689,7 @@ bool EngineDocument::earlierContentOnPage(ldomNode *block, int page) const
     // Page starts and block rectangles use document y in both writing modes.
     // Drawing a vertical page maps that coordinate to screen x.
     const auto *list = engine_->getPageList();
-    const int index = page * qMax(1, columns_);
+    const int index = engine_->firstColumn(page);
     if (!list || index < 0 || index >= list->length())
         return false;
     const int top = list->get(index)->start;
@@ -847,6 +847,7 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
         sliceHistory_ = history;
         windowLoadMs_ = loadMs;
         if (engine_->koblazeRestoreLayout()) {
+            engine_->groupColumns(hideNonlinearFragments_);
             visiblePages_ = visible;
             layoutInterrupted_ = false;
             return go(shown) && false;

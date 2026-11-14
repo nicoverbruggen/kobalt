@@ -31,7 +31,7 @@ struct PageTextRange
     ldomXPointerEx start, end;
 };
 
-QVector<PageTextRange> pageTextRanges(ColumnView &view, int columns)
+QVector<PageTextRange> pageTextRanges(ColumnView &view)
 {
     auto *doc = view.getDocument();
     const int current = view.getCurPage();
@@ -45,9 +45,8 @@ QVector<PageTextRange> pageTextRanges(ColumnView &view, int columns)
                                              : ldomXRange(doc->getRootNode(), true).getEnd());
     // Notes can come from another source section. Resolve only the fragments
     // drawn on this screen, so a long note does not format remote text.
-    for (int column = 0;
-         column < columns && current * columns + column < view.getPageList()->length(); ++column) {
-        const auto &page = *view.getPageList()->operator[](current * columns + column);
+    for (int column = 0; column < view.columnCount(current); ++column) {
+        const auto &page = *view.getPageList()->operator[](view.firstColumn(current) + column);
         for (int i = 0; i < page.footnotes.length(); ++i) {
             const auto &note = page.footnotes[i];
             ldomXPointerEx start(
@@ -1397,7 +1396,7 @@ QVector<int> EngineDocument::visibleRanges(const QVector<QPair<QString, QString>
         return {};
     const auto index = sourceRanges(ranges);
     QVector<int> result;
-    for (const auto &span : pageTextRanges(*engine_, columns_))
+    for (const auto &span : pageTextRanges(*engine_))
         result += index->intersections(span.start, span.end);
     std::sort(result.begin(), result.end());
     result.erase(std::unique(result.begin(), result.end()), result.end());
@@ -1417,7 +1416,7 @@ bool EngineDocument::rangeVisible(const QString &start, const QString &end) cons
         std::swap(a, b);
     if (a.compare(b) >= 0)
         return false;
-    for (const auto &span : pageTextRanges(*engine_, columns_))
+    for (const auto &span : pageTextRanges(*engine_))
         if (a.compare(span.end) < 0 && span.start.compare(b) < 0)
             return true;
     return false;
@@ -1445,9 +1444,9 @@ AnnotationGeometry EngineDocument::annotationGeometry(const QString &start, cons
     const int current = page();
     auto *pageList = engine_->getPageList();
     result.vertical = pageList->hasMixedWritingModes()
-            ? css_wm_is_vertical((*pageList)[current * columns_]->writing_mode)
+            ? css_wm_is_vertical((*pageList)[engine_->firstColumn(current)]->writing_mode)
             : engine_->isVerticalText();
-    const auto spans = pageTextRanges(*engine_, columns_);
+    const auto spans = pageTextRanges(*engine_);
     const auto endpoint = [&](ldomXPointerEx pointer, bool ending) {
         SelectionEndpoint edge;
         if (!pointer.isText() || pointer.getOffset() < 0
@@ -1558,7 +1557,7 @@ QVector<QRect> EngineDocument::rangeRects(const QString &start, const QString &e
     // Resolve geometry only for visible main text and note fragments. Image
     // link ranges keep their existing engine behavior.
     const auto spans =
-            includeImages ? QVector<PageTextRange>{ { a, b } } : pageTextRanges(*engine_, columns_);
+            includeImages ? QVector<PageTextRange>{ { a, b } } : pageTextRanges(*engine_);
     if (!includeImages && a.compare(b) > 0)
         std::swap(a, b);
     for (const auto &span : spans) {

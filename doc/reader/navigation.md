@@ -1,6 +1,6 @@
 # Page turns and navigation
 
-Normal page turns include non-linear EPUB sections, including covers marked as non-linear. Settings > Books > Hide non-linear fragments skips other non-linear sections during page turns. It is off by default. Links, Chapters and page-number navigation can still open hidden sections; page turns within a section already open remain available.
+Normal page turns include non-linear EPUB sections, including covers marked as non-linear. Settings > Books > Hide non-linear fragments skips other non-linear sections during page turns. It is off by default. With two columns and hidden fragments, each non-linear section starts on its own screen. Its text cannot share a screen with ordinary text. Links, Chapters and page-number navigation can still open hidden sections; page turns within a section already open remain available.
 
 Remote page-turn key activity resets Nickel's Bluetooth inactivity timeout while Kobalt is active. Touch page turns do not keep Bluetooth on. Kobalt does not enable Bluetooth or send a periodic heartbeat just because a book is open. When remote activity stops, Nickel retains its normal inactivity shutdown policy.
 

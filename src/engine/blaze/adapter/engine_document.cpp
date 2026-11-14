@@ -1041,6 +1041,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
             || paragraphIndent != paragraphIndent_ || face != face_ || defaultFace != defaultFace_
             || margin != margin_ || topMargin != topMargin_ || bottomMargin != bottomMargin_
             || alignment != alignment_ || hyphenation != hyphenation_;
+    const bool regroup = columns > 1 && hideNonlinear != hideNonlinearFragments_;
     const bool resized = size != size_ || columns != columns_ || columnSpacing != columnSpacing_;
     twoColumnsLandscape_ = landscapeColumns;
     columnSpacingPercent_ = gapPercent;
@@ -1158,8 +1159,15 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
         // Rebuild drawn paragraphs without repaginating or changing anchors.
         engine_->getDocument()->clearRendBlockCache();
     }
-    if (!styled && !resized)
+    if (!styled && !resized && !(regroup && slices())) {
+        if (regroup) {
+            engine_->groupColumns(hideNonlinearFragments_);
+            forgetObservedPages();
+            observeLayout();
+            return goTo(anchor);
+        }
         return true;
+    }
     // The pages that the old settings gave are not the pages of the new ones.
     forgetObservedPages();
     // Applying a panel can change typography, hyphenation and the viewport together.
@@ -1208,6 +1216,7 @@ bool EngineDocument::renderLayout()
 #else
     engine_->Render();
 #endif
+    engine_->groupColumns(hideNonlinearFragments_);
     cutSlice();
     return true;
 }
@@ -1720,6 +1729,7 @@ quint64 EngineDocument::layoutSignature() const
     mix(quint64(quintptr(engine_->getDocument())));
     mix(engine_->getDocumentRenderingHash(true));
     mix(columns_);
+    mix(columns_ > 1 && hideNonlinearFragments_);
     mix(verticalSpacing_ == "center" ? 2 : verticalSpacing_ == "expand" ? 1 : 0);
     mix(verticalSpacingScope_ == "protection");
     return hash ? hash : 1;
@@ -1851,7 +1861,10 @@ int EngineDocument::chapterEndPage(const ChapterLink &next) const
     const int column = pointer.isNull() ? -1 : engine_->getBookmarkPage(pointer, true);
     // A chapter starting in the second column shares this screen with the
     // preceding chapter. Round its exclusive end up before counting screens.
-    return column < 0 ? next.page : (column + columns_ - 1) / columns_;
+    if (column < 0)
+        return next.page;
+    const int screen = engine_->screenOfColumn(column);
+    return screen + (engine_->firstColumn(screen) != column);
 }
 
 ChapterSelection EngineDocument::chapterSelection(const QVector<ChapterLink> &links) const

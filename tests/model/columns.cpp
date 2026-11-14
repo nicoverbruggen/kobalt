@@ -83,6 +83,36 @@ QMap<QString, QByteArray> chapterBook(int firstColumns, bool rtl)
     };
 }
 
+void nonLinearColumns()
+{
+    for (bool rtl : { false, true }) {
+        auto book = chapterBook(1, rtl);
+        book["book.opf"].replace("<itemref idref='b'/>", "<itemref idref='b' linear='no'/>");
+        kobalt::EngineDocument reader(kobalt::test::readerFonts());
+        openResources(reader, book, { { "columns", 2 }, { "hide_nonlinear_fragments", true } },
+                      { 1000, 800 });
+        const auto chapters = reader.chapters();
+        require(chapters.size() == 2 && chapters[1].page == 1 && reader.turnTarget(0, 1) == 0,
+                "A hidden section must begin on its own screen after the end of linear text");
+        const auto paper = reader.image(0);
+        const int trailing = rtl ? 0 : 500;
+        for (int y = 0; y < paper.height(); ++y)
+            for (int x = trailing; x < trailing + 500; ++x)
+                require(qRed(paper.pixel(x, y)) == 255,
+                        "A hidden chapter painted beside linear text");
+        require(reader.wordAt({ trailing + 40, 20 }).text.isEmpty(),
+                "The empty column must not select hidden text");
+        require(reader.goTo(chapters[1].position) && reader.page() == 1
+                        && reader.turnTarget(1, 1) == 2 && reader.turnTarget(1, -1) == 0,
+                "A chapter jump must allow reading the hidden section and returning to linear text");
+        require(reader.applyAppearance(kobalt::appearance::Patch(
+                        QJsonObject{ { "hide_nonlinear_fragments", false } })),
+                "Cannot show non-linear fragments");
+        require(reader.chapters()[1].page == 0 && reader.turnTarget(0, 1) == 1,
+                "Showing non-linear fragments must restore the mixed first screen");
+    }
+}
+
 void chapterProgress()
 {
     for (bool rtl : { false, true })
@@ -226,6 +256,7 @@ void cachedColumns()
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    nonLinearColumns();
     chapterProgress();
     cachedColumns();
     for (bool rtl : { false, true })

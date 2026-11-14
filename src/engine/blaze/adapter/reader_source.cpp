@@ -792,6 +792,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     applyStyleSheet();
     applySlice();
     engine_->Render();
+    engine_->groupColumns(hideNonlinearFragments_);
     openingTimes_["model_paginate_ms"] = double(phase.restart());
     cutSlice();
 #if __has_include(<koblaze.h>)

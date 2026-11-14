@@ -644,9 +644,9 @@ QVector<PageLink> EngineDocument::pageLinks()
             ldomXRangeList &links;
         } collect(links);
 
-        const int first = engine_->getCurPage() * columns_;
-        for (int column = 0; column < columns_ && first + column < engine_->getPageList()->length();
-             ++column) {
+        const int screen = engine_->getCurPage();
+        const int first = engine_->firstColumn(screen);
+        for (int column = 0; column < engine_->columnCount(screen); ++column) {
             const auto &page = *engine_->getPageList()->operator[](first + column);
             for (int i = 0; i < page.footnotes.length(); ++i) {
                 const auto &note = page.footnotes[i];

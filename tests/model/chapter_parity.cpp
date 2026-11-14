@@ -127,6 +127,103 @@ void nonLinearTurns(bool hide, int slicePages)
 
 // A pair of short chapters shares a unit between two long, sliced chapters.
 // Non-linear asides at its edges must be skipped when entering from either side.
+void groupedNonLinearTurns()
+{
+    Book book;
+    QByteArray spine;
+    for (int i = 0; i < 4; ++i) {
+        const auto name = QByteArray::number(i) + ".xhtml";
+        QByteArray body;
+        const auto aside = "<aside epub:type='footnote'><p>Hidden " + name + "</p></aside>";
+        if (i == 1 || i == 3)
+            body += aside;
+        for (int p = 0; p < (i == 0 || i == 3 ? 22 : 2); ++p)
+            body += "<p style='page-break-before:always'>" + name + " " + QByteArray::number(p)
+                    + ". " + QByteArray("The chapter continues. ").repeated(18) + "</p>";
+        if (i == 0 || i == 2)
+            body += aside;
+        book.files[name] = test::publisherHtml(body);
+        spine += "<itemref idref='" + name + "'/>";
+    }
+    book.files = test::publisherPackage("en", "Grouped chapter edges", book.files, spine);
+    auto options = settings;
+    options["hide_nonlinear_fragments"] = true;
+    EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
+    QString error;
+    require(book.open(whole, options, &error) && book.open(chapters, options, &error),
+            qPrintable(error));
+    chapters.setChapterSlices(2);
+    require(chapters.showSpineItems(0, 0) && chapters.go(0),
+            "Cannot open the sliced first chapter");
+    for (const int direction : { 1, -1 }) {
+        bool sawGroup = false;
+        for (;;) {
+            const int target = whole.turnTarget(whole.page(), direction);
+            if (target == whole.page())
+                break;
+            const auto start = whole.pageStart(target);
+            const auto preview = chapters.previewTurn(direction, {});
+            require(chapters.turnInWindow(direction) && whole.go(target),
+                    "Cannot cross the grouped chapter boundary");
+            const auto actual = chapters.pageStart(chapters.page());
+            require(actual == start && preview.position == start,
+                    qPrintable(QString("Grouped turn %1 must show %2; turn showed %3, preview %4")
+                                       .arg(direction)
+                                       .arg(start, actual, preview.position)));
+            require(chapters.image(chapters.page()) == whole.image(target)
+                            && preview.image == whole.image(target),
+                    "The grouped chapter turn or preview painted a different page");
+            if (chapters.spineItemOf(actual) == 1) {
+                // Out-of-window chapters have no pages. Find the last page
+                // actually laid out in this window to prove the grouping.
+                sawGroup |= chapters.spineItemOf(chapters.pageStart(chapters.pages() - 1)) == 2;
+            }
+        }
+        require(sawGroup, "The two short chapters must share a unit in both directions");
+    }
+    // A long footnote in the middle and another at the end require several
+    // slices. Reaching the end must leave the last linear page on screen.
+    QByteArray middle;
+    for (int p = 0; p < 36; ++p) {
+        if (p == 9 || p == 30)
+            middle += "<aside epub:type='footnote'>";
+        if (p == 27)
+            middle += "</aside>";
+        middle += "<p style='page-break-before:always'>Slice " + QByteArray::number(p) + " "
+                + QByteArray("The text continues. ").repeated(18) + "</p>";
+    }
+    middle += "</aside>";
+    book.files = test::publisherPackage("en", "Sliced note",
+                                        { { "middle.xhtml", test::publisherHtml(middle) } },
+                                        "<itemref idref='middle.xhtml'/>");
+    require(book.open(whole, options, &error) && book.open(chapters, options, &error),
+            qPrintable(error));
+    chapters.setChapterSlices(2);
+    require(chapters.showSpineItems(0, 0) && chapters.go(0),
+            "Cannot open the sliced aside fixture");
+    for (const int step : { 1, -1 }) {
+        for (;;) {
+            const int from = whole.page(), target = whole.turnTarget(from, step);
+            if (from == target) {
+                const auto start = whole.pageStart(from);
+                require(!chapters.turnInWindow(step) && chapters.pageStart(chapters.page()) == start
+                                && chapters.image(chapters.page()) == whole.image(from),
+                        "A failed turn through hidden slices must keep the visible page");
+                break;
+            }
+            const auto start = whole.pageStart(target);
+            const auto preview = chapters.previewTurn(step, {});
+            require(chapters.turnInWindow(step) && whole.go(target)
+                            && chapters.pageStart(chapters.page()) == start
+                            && preview.position == start,
+                    qPrintable(QString("Sliced aside at %1 in direction %2 expected %3, got %4")
+                                       .arg(from)
+                                       .arg(step)
+                                       .arg(start, chapters.pageStart(chapters.page()))));
+        }
+    }
+}
+
 // One reader in one mode, with what the actions remember.
 struct Reader
 {
@@ -1374,6 +1471,7 @@ int main(int argc, char **argv)
 #if __has_include(<koblaze.h>)
     const QString only = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QString();
     if (only.isEmpty() || only == QLatin1String("non-linear")) {
+        groupedNonLinearTurns();
         nonLinearTurns(true, 2);
         nonLinearTurns(true, 18);
         nonLinearTurns(false, 2);

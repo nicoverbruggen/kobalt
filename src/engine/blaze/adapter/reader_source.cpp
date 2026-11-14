@@ -1704,59 +1704,47 @@ bool EngineDocument::turnInWindow(int delta)
     // The last page that has a layout stops where the layout stops, so it
     // is not a whole page while the slice continues. With one extra page
     // only, the next page is that one: lay out the next slice first.
-    if (delta > 0 && slices() && visiblePages_ > 0 && sliceEnd_ < spineItemText()
-        && page() + 1 == visiblePages_ && visiblePages_ + 1 >= pages()) {
-        sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
-        return layoutSlice(sliceEnd_) && pages() > 0 && go(0);
-    }
+    const bool nextSlice = delta > 0 && slices() && visiblePages_ > 0 && sliceEnd_ < spineItemText()
+            && page() + 1 == visiblePages_ && visiblePages_ + 1 >= pages();
     const int target = turnTarget(page(), delta);
-    if (target != page())
+    if (!nextSlice && target != page())
         return go(target);
     if (windowFirst_ < 0)
         return false;
-    if (slices()) {
-        // The next or the previous slice of this spine item, then the
-        // spine item beside it.
-        // A slice has no pages when no block starts in it: one block, such
-        // as a table, can be longer than a slice. Pass such slices.
-        if (delta > 0) {
-            for (;;) {
-                if (slices() && sliceEnd_ < spineItemText() && visiblePages_ == 0) {
-                    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
-                    if (!layoutSlice(sliceEnd_))
-                        return false;
-                } else if (!showNextUnit()) {
-                    return false;
-                }
-                if (pages() > 0)
-                    return go(0);
-            }
-        }
+    if (slicePages_ > 0) {
+        const int direction = delta > 0 ? 1 : -1;
+        const bool linear = hideNonlinearFragments_ && engine_->getPageFlow(page()) == 0;
+        const QString original = linear ? position() : QString();
+        bool passedHiddenPages = false;
         for (;;) {
-            if (slices() && sliceFirst_ > 0) {
+            bool moved = false;
+            if (direction > 0) {
+                if (slices() && sliceEnd_ < spineItemText()) {
+                    sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
+                    moved = layoutSlice(sliceEnd_);
+                } else
+                    moved = showNextUnit();
+            } else if (slices() && sliceFirst_ > 0) {
                 // A recorded start gives the same pages as before. Without
                 // one, the slice before must stop where this one starts.
                 const auto slice = sliceHistory_.isEmpty()
                         ? qMakePair(qMax(0, sliceFirst_ - sliceSize()), sliceFirst_)
                         : sliceHistory_.takeLast();
-                if (!layoutSlice(slice.first, slice.second))
-                    return false;
-            } else if (!showPreviousUnit()) {
+                moved = layoutSlice(slice.first, slice.second);
+            } else
+                moved = showPreviousUnit();
+            if (!moved) {
+                if (passedHiddenPages)
+                    goTo(original);
                 return false;
             }
-            // The extra pages after the end of the slice repeat the start
-            // of the slice that the reader came from.
-            if (pages() > 0)
-                return go((visiblePages_ > 0 ? visiblePages_ : pages()) - 1);
-        }
-    }
-    if (slicePages_ > 0) {
-        // A unit of several short spine items. Pass a unit without pages.
-        for (;;) {
-            if (!(delta > 0 ? showNextUnit() : showPreviousUnit()))
-                return false;
-            if (pages() > 0)
-                return go(delta > 0 ? 0 : (visiblePages_ > 0 ? visiblePages_ : pages()) - 1);
+            // Look-ahead pages after the cut will occur in the following slice.
+            // The first or last physical page can itself be a footnote.
+            const int end = visiblePages_ > 0 ? visiblePages_ : pages();
+            for (int p = direction > 0 ? 0 : end - 1; p >= 0 && p < end; p += direction)
+                if (!linear || engine_->getPageFlow(p) == 0)
+                    return go(p);
+            passedHiddenPages |= linear;
         }
     }
     const auto items = spineItems();

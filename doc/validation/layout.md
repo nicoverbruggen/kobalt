@@ -22,6 +22,8 @@ The restored `reader`, `publisher-markup`, `local-reader` and `document-word-cou
 
 The slice checks compare interrupted and uninterrupted readers at the start of layout, during extension of a long paragraph and at a slice boundary. Cancelling preparation of the next slice must preserve the visible page and allow both a reverse turn and a retry. `engine.layout-interrupt` also interrupts a viewport change in a later slice, returns to the original viewport and checks the page starts and pixels in both directions.
 
+`engine.chapter-parity` compares chapter and whole-book navigation across hidden non-linear chapters. It checks covers, explicit entry into a hidden chapter, forward and reverse turns, adjacent preview pixels and the last readable page before a hidden appendix.
+
 ## Shared locations and the engine interface
 
 `engine.location-round-trip` opens the real EPUB fixtures in `tests/fixtures`. For sampled text nodes of each spine item it converts three CREngine positions to a shared location and back, and requires the same place in the text. It also parses the source XHTML and requires the same element name and the same counted text at each location path. To report on other books, run `kobalt-location-round-trip-tests FOLDER` with `QT_QPA_PLATFORM=minimal`; it prints one line for each EPUB in the folder and requires nothing. See [the location format](../engines/contract.md#location-format).

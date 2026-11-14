@@ -200,7 +200,10 @@ public:
     bool turnInWindow(int delta) override;
     void prepareAhead(const std::function<bool()> &current = {}) override;
 
-    bool continuesBefore() const override { return windowFirst_ > 0 || sliceFirst_ > 0; }
+    bool continuesBefore() const override
+    {
+        return windowFirst_ >= 0 && (sliceFirst_ > 0 || adjacentSpineItem(-1) >= 0);
+    }
 
     double bookFraction() const override;
     RoughPages roughPages() const override;
@@ -222,7 +225,7 @@ public:
     bool continuesAfter() const override
     {
         return windowFirst_ >= 0
-                && (windowLast_ + 1 < spineItemCount_ || (slices() && sliceEnd_ < spineItemText()));
+                && ((slices() && sliceEnd_ < spineItemText()) || adjacentSpineItem(1) >= 0);
     }
 
     // With the koblaze fork only, experimental. A spine item that is shown
@@ -489,7 +492,8 @@ private:
     // slice.
     void prepareNextItem(const std::function<bool()> &current);
     void preparePreviousItem(const std::function<bool()> &current);
-    QPair<int, int> neighbouringUnit(int direction) const;
+    int adjacentSpineItem(int direction) const;
+    QPair<int, int> neighbouringUnit(int item, int direction) const;
     // Opens the unit that starts at spine item `item` in `ahead_`, or keeps
     // it when it is open there. The reader can then show it without a new
     // load. Also used to read a spine item that is not shown, such as the

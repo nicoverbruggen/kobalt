@@ -1032,9 +1032,38 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
     return opened;
 }
 
-QPair<int, int> EngineDocument::neighbouringUnit(int direction) const
+int EngineDocument::adjacentSpineItem(int direction) const
 {
-    const int item = direction > 0 ? windowLast_ + 1 : windowFirst_ - 1;
+    int item = direction > 0 ? windowLast_ + 1 : windowFirst_ - 1;
+    if (item < 0 || item >= spineItemCount_)
+        return -1;
+    if (!hideNonlinearFragments_)
+        return item;
+    // Even a chapter window has a DocFragment for each omitted spine item.
+    // The manifest flag lets us skip entire hidden chapters without laying them out.
+    auto &hidden = source_->nonLinearItems;
+    if (hidden.isEmpty()) {
+        auto *document = engine_->getDocument();
+        const auto flag = document->getAttrNameIndex("NonLinear");
+        auto *body = document->nodeFromXPath(U"/body");
+        for (int i = 0; body && i < body->getChildCount(); ++i) {
+            auto *fragment = body->getChildNode(i);
+            if (fragment->isElement() && fragment->isNodeName("DocFragment"))
+                hidden.append(fragment->hasAttribute(flag));
+        }
+    }
+    // Blaze lays out adjacent non-linear spine items as one non-linear flow.
+    // A direct jump into that flow keeps its adjacent pages available.
+    const int from = direction > 0 ? windowLast_ : windowFirst_;
+    if (engine_->getPageFlow(page()) > 0 && hidden.value(from) && hidden.value(item))
+        return item;
+    while (item >= 0 && item < spineItemCount_ && hidden.value(item))
+        item += direction;
+    return item >= 0 && item < spineItemCount_ ? item : -1;
+}
+
+QPair<int, int> EngineDocument::neighbouringUnit(int item, int direction) const
+{
     // Forward and backward grouping can choose different ranges of short
     // items. Keep the actual adjacent range when it is already available.
     if (ahead_ && (direction > 0 ? ahead_->windowFirst_ == item : ahead_->windowLast_ == item)) {
@@ -1051,13 +1080,13 @@ void EngineDocument::prepareNextItem(const std::function<bool()> &current)
 {
     if (slicePages_ <= 0 || windowFirst_ < 0)
         return;
-    const int next = windowLast_ + 1;
+    const int next = adjacentSpineItem(1);
     // In a spine item with slices, only in the last slice: a second
     // document takes memory, and the reader is far from the next unit
     // before that.
-    if (next >= spineItemCount_ || (slices() && sliceEnd_ < spineItemText()))
+    if (next < 0 || (slices() && sliceEnd_ < spineItemText()))
         return;
-    const auto unit = neighbouringUnit(1);
+    const auto unit = neighbouringUnit(next, 1);
     auto *prepared = openAhead(unit.first, current, unit.second);
 #if defined(KOBLAZE_CANCEL_CHECK)
     if (!prepared)
@@ -1098,7 +1127,10 @@ void EngineDocument::preparePreviousItem(const std::function<bool()> &current)
     if (slicePages_ <= 0 || windowFirst_ <= 0 || page() != 0 || (slices() && sliceFirst_ > 0)
         || (current && !current()))
         return;
-    const auto unit = neighbouringUnit(-1);
+    const int item = adjacentSpineItem(-1);
+    if (item < 0)
+        return;
+    const auto unit = neighbouringUnit(item, -1);
     const int direction = emptyUnitDirection_;
     emptyUnitDirection_ = -1;
     auto *previous = openAhead(unit.first, current, unit.second);
@@ -1620,9 +1652,10 @@ bool EngineDocument::showNextUnit()
     DiagnosticOperation turning("chapter-turn", engineCancellationRequested);
     EngineSlowdownScope slowdown;
     const int last = windowLast_;
-    if (last + 1 >= spineItemCount_)
+    const int item = adjacentSpineItem(1);
+    if (item < 0)
         return false;
-    const auto unit = neighbouringUnit(1);
+    const auto unit = neighbouringUnit(item, 1);
     if (!showSpineItems(unit.first, unit.second))
         return false;
     // The rest of the book has no pages. The window then holds the spine
@@ -1639,9 +1672,10 @@ bool EngineDocument::showPreviousUnit()
 {
     DiagnosticOperation turning("chapter-turn", engineCancellationRequested);
     EngineSlowdownScope slowdown;
-    if (windowFirst_ <= 0)
+    const int item = adjacentSpineItem(-1);
+    if (item < 0)
         return false;
-    const auto unit = neighbouringUnit(-1);
+    const auto unit = neighbouringUnit(item, -1);
     emptyUnitDirection_ = -1;
     // A backward page turn can use the retained last slice directly.
     const bool shown = adoptAhead(unit.first, unit.second)
@@ -1727,8 +1761,8 @@ bool EngineDocument::turnInWindow(int delta)
     }
     const auto items = spineItems();
     const int count = items.size();
-    const int item = delta > 0 ? windowLast_ + 1 : windowFirst_ - 1;
-    if (item < 0 || item >= count)
+    const int item = adjacentSpineItem(delta > 0 ? 1 : -1);
+    if (item < 0)
         return false;
     if (!showSpineItems(qMax(0, item - 1), qMin(count - 1, item + 1)))
         return false;

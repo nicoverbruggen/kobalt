@@ -60,6 +60,73 @@ struct Book
     }
 };
 
+void nonLinearTurns(bool hide, int slicePages)
+{
+    Book book;
+    book.files["cover.xhtml"] = test::publisherHtml(
+            "<div><svg xmlns='http://www.w3.org/2000/svg'"
+            " width='180' height='240'><rect width='180' height='240' fill='#555'/></svg></div>");
+    QByteArray spine = "<itemref idref='cover.xhtml' linear='no'/>";
+    for (const auto &name : { QByteArray("start"), QByteArray("notes"), QByteArray("other-notes"),
+                              QByteArray("end"), QByteArray("appendix") }) {
+        QByteArray body;
+        for (int p = 0; p < 12; ++p)
+            body += "<p style='page-break-before:always'>" + name + " " + QByteArray::number(p)
+                    + ". " + QByteArray("The text continues. ").repeated(28) + "</p>";
+        book.files[name + ".xhtml"] = test::publisherHtml(body);
+        spine += "<itemref idref='" + name + ".xhtml'"
+                + ((name == "start" || name == "end") ? "" : " linear='no'") + "/>";
+    }
+    book.files = test::publisherPackage("en", "Non-linear turns", book.files, spine);
+    auto appearance = settings;
+    appearance["hide_nonlinear_fragments"] = hide;
+    QString error;
+    EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
+    require(book.open(whole, appearance, &error) && book.open(chapters, appearance, &error),
+            qPrintable(error));
+    chapters.setChapterSlices(slicePages);
+    require(chapters.showSpineItems(0, 0) && chapters.go(0), "Cannot open the chapter fixture");
+    const auto turn = [&](int direction) {
+        const int from = whole.page(), target = whole.turnTarget(from, direction);
+        const auto expected = whole.pageStart(target);
+        const auto preview = chapters.previewTurn(direction, {});
+        require((target == from) == preview.image.isNull()
+                        && (target == from
+                            || (preview.position == expected
+                                && preview.image == whole.image(target))),
+                qPrintable(QString("Preview from page %1 in direction %2 expected %3, got %4")
+                                   .arg(from)
+                                   .arg(direction)
+                                   .arg(expected, preview.position)));
+        require(chapters.turnInWindow(direction) == (target != from),
+                "A non-linear boundary changed whether the turn succeeded");
+        if (target != from)
+            require(whole.go(target), "Cannot turn the reference reader");
+        require(chapters.pageStart(chapters.page()) == expected
+                        && chapters.image(chapters.page()) == whole.image(target),
+                "A turn across a non-linear boundary differs from the whole book");
+        if (target != from && target % 2 == 0)
+            chapters.prepareAhead();
+        return target != from;
+    };
+    require(whole.spineItemOf(whole.position()) == 0
+                    && chapters.image(chapters.page()) == whole.image(whole.page()),
+            "The non-linear cover must open as the first page");
+    while (turn(1)) { }
+    require(whole.spineItemOf(whole.position()) == (hide ? 4 : 5),
+            "The final readable chapter must be reachable");
+    while (turn(-1)) { }
+    // Opening a hidden chapter explicitly allows reading all of its pages.
+    Location notes;
+    notes.href = "notes.xhtml";
+    const auto firstNote = whole.positionOf(notes);
+    require(whole.goTo(firstNote) && chapters.goTo(firstNote), "Cannot open the hidden chapter");
+    while (whole.spineItemOf(whole.position()) != 4)
+        require(turn(1), "Cannot leave a hidden chapter after reading it");
+}
+
+// A pair of short chapters shares a unit between two long, sliced chapters.
+// Non-linear asides at its edges must be skipped when entering from either side.
 // One reader in one mode, with what the actions remember.
 struct Reader
 {
@@ -1306,6 +1373,11 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
 #if __has_include(<koblaze.h>)
     const QString only = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QString();
+    if (only.isEmpty() || only == QLatin1String("non-linear")) {
+        nonLinearTurns(true, 2);
+        nonLinearTurns(true, 18);
+        nonLinearTurns(false, 2);
+    }
     const auto other = qEnvironmentVariable("KOBALT_PARITY_BOOK");
     int differences = 0;
     for (const auto &scenario : scenarios()) {

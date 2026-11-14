@@ -182,6 +182,8 @@ Annotation exports are compressed ZIP snapshots for reading outside Kobalt. Each
 
 ## Disposable caches
 
+Rendering version 7 repaginates compatible parsed books for conditional fast shaping. The optional `kobalt.shaping.text.250000` property retains the bounded text count under the same rendering policy. A cache without it computes the count once. The parser format and saved reading data do not change.
+
 The 10,000-entry chapter limit changes no saved-data, parsed-book or rendering format. Chapter indices rebuild from the parsed TOC for each layout. Stored word counts with a different number or order of chapter positions are rejected and recounted. Word-count JSON uses its actual encoded size within the existing 512 KiB limit; oversized counts remain usable in memory but are not cached.
 
 Parsed-book cache format 10 rebuilds paragraph markers for publisher containers with zero-width borders. These containers now allow ordinary paragraph adjustments. Visible borders keep their protection. Older rendering caches rebuild without changing settings, reading positions or annotations.

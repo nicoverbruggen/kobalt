@@ -48,6 +48,28 @@ lString32 cre(const QString &s)
 
 constexpr int maxBook = 64 * 1024 * 1024;
 
+// Count only until the shaping threshold. Images and ZIP compression say
+// nothing about how much text the formatter will measure.
+int shapingText(ldomNode *root, int limit)
+{
+    QVector<ldomNode *> pending{ root };
+    int count = 0;
+    while (!pending.isEmpty() && count < limit) {
+        stopPoint();
+        auto *node = pending.takeLast();
+        if (node->isText()) {
+            count += qMin(limit - count, node->getText().length());
+        } else {
+            const auto style = node->getStyle();
+            if (!style.isNull() && style->display == css_d_none)
+                continue;
+            for (int i = node->getChildCount() - 1; i >= 0; --i)
+                pending.append(node->getChildNode(i));
+        }
+    }
+    return count;
+}
+
 #ifdef KOBLAZE_DOCUMENT_FONT_DATA
 quint64 documentFontSource = 0;
 
@@ -544,6 +566,8 @@ QJsonObject EngineDocument::resourceStats() const
     auto result = source_ && source_->resources ? source_->resources->statistics() : QJsonObject();
     for (auto at = openingTimes_.begin(); at != openingTimes_.end(); ++at)
         result.insert(at.key(), at.value());
+    result["fast_shaping"] = fastShaping();
+    result["shaping_text_characters"] = shapingText_;
     return result;
 }
 
@@ -573,6 +597,9 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
                     strings::key("error.the_reading_engine_could_not_open_this_epub"));
 #endif
     openingTimes_ = {};
+    shapingText_ = 0;
+    const auto shaping = qgetenv("KOBALT_FAST_SHAPING");
+    shapingOverride_ = shaping == "0" ? 0 : shaping == "1" ? 1 : -1;
     QElapsedTimer phase;
     phase.start();
     // Supplying a container skips format detection in the engine. Keep the
@@ -627,7 +654,8 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
 #else
     firstSpineItem = lastSpineItem = -1;
 #endif
-    EngineSlowdownScope slowdown(firstSpineItem >= 0, [this] { return openInterrupt_ && openInterrupt_(); });
+    EngineSlowdownScope slowdown(firstSpineItem >= 0,
+                                 [this] { return openInterrupt_ && openInterrupt_(); });
     QElapsedTimer windowTimer;
     windowTimer.start();
     windowFirst_ = firstSpineItem < 0 ? -1 : firstSpineItem;
@@ -685,25 +713,6 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         // Experimental, with the koblaze fork only: load the text of a
         // window of spine items. The others stay empty.
         koblazeSetSpineWindow(firstSpineItem, lastSpineItem);
-        // The fork measures plain text from memories of glyph pairs and of
-        // words. HarfBuzz fills them, and each face checks a sample of its
-        // results against HarfBuzz and stops when one differs. The pages
-        // are the same. KOBALT_FAST_SHAPING=0 turns this off, to compare.
-        {
-            const bool fast = qgetenv("KOBALT_FAST_SHAPING") != "0";
-#  ifdef KOBLAZE_PAIR_KERNING
-            koblazeSetPairKerning(fast);
-#  endif
-#  ifdef KOBLAZE_WORD_WIDTHS
-            koblazeSetWordWidths(fast);
-#  endif
-#  ifdef KOBLAZE_WORD_PAIRS
-            koblazeSetWordPairs(fast);
-#  endif
-#  ifdef KOBLAZE_PLAIN_JOINER
-            koblazeSetPlainJoiner(fast);
-#  endif
-        }
 #endif
         loaded = engine_->LoadDocument(LVCreateMemoryStream(), false, source_->container);
 #if __has_include(<koblaze.h>)
@@ -730,10 +739,11 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     applyPublisherFontFallbacks();
     auto *document = engine_->getDocument();
     const auto renderingPolicy = Utf8ToUnicode(lString8(KOBALT_RENDERING_POLICY));
+    const bool sameRenderingPolicy =
+            document->getProps()->getStringDef("kobalt.rendering.policy", "") == renderingPolicy;
     // A compatible engine update keeps the parsed DOM and Kobalt's markers.
     // Rebuild only its layout when shaping or hyphenation rules have changed.
-    if (openedFromCache_
-        && document->getProps()->getStringDef("kobalt.rendering.policy", "") != renderingPolicy) {
+    if (openedFromCache_ && !sameRenderingPolicy) {
         document->forceReinitStyles();
         engine_->requestRender();
         document->setCacheFileStale(true);
@@ -790,6 +800,20 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     engine_->getDocument()->setKoblazeDropEmptyPages(true);
 #endif
     applyStyleSheet();
+    if (shapingOverride_ < 0) {
+        // This optional parsed-cache property avoids walking text on a cache hit.
+        // Its key includes the cap; older caches count once and retain their DOM.
+        constexpr auto countProperty = "kobalt.shaping.text.250000";
+        shapingText_ = openedFromCache_ && sameRenderingPolicy
+                ? document->getProps()->getIntDef(countProperty, -1)
+                : -1;
+        if (shapingText_ < 0 || shapingText_ > fastShapingMinimum) {
+            shapingText_ = shapingText(document->getRootNode(), fastShapingMinimum);
+            document->getProps()->setInt(countProperty, shapingText_);
+            document->setCacheFileStale(true);
+        }
+    }
+    activateFastShaping();
     applySlice();
     engine_->Render();
     engine_->groupColumns(hideNonlinearFragments_);
@@ -1005,7 +1029,8 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
         return false;
     if (adoptAhead(first, last)) {
         if (diagnosticsActive())
-            diagnostic("engine-cache-reuse", { { "first_item", first }, { "last_item", last } }, false);
+            diagnostic("engine-cache-reuse", { { "first_item", first }, { "last_item", last } },
+                       false);
         // An explicit chapter jump starts at its first slice, even when
         // the retained document was left at the end of the chapter.
         return !slices() || sliceFirst_ == 0 || showSliceAt(0);
@@ -1339,6 +1364,10 @@ struct EngineDocument::FullBuild
         // must not write to that cache.
         int levels[64];
         const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
+        const bool pairKerning = koblazePairKerning();
+        const bool wordWidths = koblazeWordWidths();
+        const bool wordPairs = koblazeWordPairs();
+        const bool plainJoiner = koblazePlainJoiner();
 #  ifdef KOBLAZE_DOCUMENT_FONT_DATA
         const auto fontSource = documentFontSource;
 #  endif
@@ -1362,6 +1391,10 @@ struct EngineDocument::FullBuild
         ldomDocCache::koblazeSuspend(false);
         koblazeSwapCancelScopes(&noCancel, &parserCanStop);
         TextLangMan::koblazeSetQuoteLevels(levels, count);
+        koblazeSetPairKerning(pairKerning);
+        koblazeSetWordWidths(wordWidths);
+        koblazeSetWordPairs(wordPairs);
+        koblazeSetPlainJoiner(plainJoiner);
         koblazeSetSpineWindow(-1, -1);
         koblazeSetPausePoint(&FullBuild::pausePoint, this);
         StopCheck::resume();
@@ -1703,8 +1736,8 @@ bool EngineDocument::showPreviousUnit()
     const auto unit = neighbouringUnit(item, -1);
     emptyUnitDirection_ = -1;
     // A backward page turn can use the retained last slice directly.
-    const bool shown = adoptAhead(unit.first, unit.second)
-            || showSpineItems(unit.first, unit.second);
+    const bool shown =
+            adoptAhead(unit.first, unit.second) || showSpineItems(unit.first, unit.second);
     emptyUnitDirection_ = 1;
     if (!shown)
         return false;

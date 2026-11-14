@@ -86,12 +86,12 @@ void compareWithReflow(const kobalt::test::BookFiles &files, const QJsonObject &
 void measureLayouts(EngineDocument &model, double loadMs)
 {
     require(model.go(model.pages() / 2), "Cannot position timing book");
-    auto sample = [&](QSize size, const char *label, bool cold) {
+    auto sample = [&](QSize size, const char *label, bool cold, QJsonObject settings = {}) {
         if (cold)
             model.releaseImages();
         QElapsedTimer timer;
         timer.start();
-        const int formats = reflow(model, size);
+        const int formats = reflow(model, size, settings);
         const double layoutMs = timer.nsecsElapsed() / 1e6;
         timer.restart();
         require(!model.image(model.page()).isNull(), "Cannot paint timing page");
@@ -113,6 +113,10 @@ void measureLayouts(EngineDocument &model, double loadMs)
         sample(landscape, "landscape-reused", false);
         sample(portrait, "portrait-cold", true);
     }
+    const int originalPixels = model.fontSize();
+    for (int pixels : { 40, 44, 48, 52, 56 })
+        sample(portrait, "font-size-cold", true, { { "font_pixels", pixels } });
+    reflow(model, portrait, { { "font_pixels", originalPixels } });
 }
 
 void roundTrip(EngineDocument &model)
@@ -178,23 +182,27 @@ int main(int argc, char **argv)
                         QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex(),
                         "layout-timings", bytes.size());
         };
-        EngineDocument model(kobalt::test::readerFonts());
-        useCache(model);
         QString error;
         QElapsedTimer timer;
-        timer.start();
-        require(model.open(bytes, portrait, settings, &error), qPrintable(error));
-        const double loadMs = timer.nsecsElapsed() / 1e6;
-        if (disk) {
-            timer.restart();
-            require(model.saveDocumentCache(), "Cannot prepare disk-backed timing book");
-            printf("{\"cache_save_ms\":%.3f}\n", timer.nsecsElapsed() / 1e6);
+        {
+            EngineDocument model(kobalt::test::readerFonts());
+            useCache(model);
+            timer.start();
+            require(model.open(bytes, portrait, settings, &error), qPrintable(error));
+            const double loadMs = timer.nsecsElapsed() / 1e6;
+            if (disk) {
+                timer.restart();
+                require(model.saveDocumentCache(), "Cannot prepare disk-backed timing book");
+                printf("{\"cache_save_ms\":%.3f}\n", timer.nsecsElapsed() / 1e6);
+            }
+            measureLayouts(model, loadMs);
+            if (disk) {
+                // Reopen from a cache saved in the landscape viewport.
+                reflow(model, landscape);
+                require(model.saveDocumentCache(), "Cannot save the landscape timing cache");
+            }
         }
-        measureLayouts(model, loadMs);
         if (disk) {
-            // Reopen from a cache saved in the landscape viewport.
-            reflow(model, landscape);
-            require(model.saveDocumentCache(), "Cannot save the landscape timing cache");
             for (int repeat = 0; repeat < 5; ++repeat) {
                 EngineDocument reopened(kobalt::test::readerFonts());
                 useCache(reopened);

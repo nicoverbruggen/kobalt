@@ -98,3 +98,5 @@ Current-page formatting warnings use parsed-book format 12 for the added style d
 The session check turns forward from Trevelyan’s cover and backward from its title while adopting full pagination. Both turns must show the mixed cover and title screen before proceeding. It also checks a subsequent turn and return to portrait.
 
 The columns check reads a non-linear section in both page directions. It checks that hiding it clears the trailing column, explicit jumps still reach it and showing it restores the shared screen.
+
+`engine.fast-shaping` checks automatic selection around the text threshold, explicit overrides, font-size changes, interleaved documents and small slices of a large chapter. It compares page counts, boundaries and pixels with the selected forced path across bundled serif and sans-serif fonts. The optional parsed-cache property `kobalt.shaping.text.250000` retains the bounded count for the same rendering policy. Older caches compute it once without reparsing. Rendering policy 7 repaginates existing layouts while retaining parsed books and reading data.

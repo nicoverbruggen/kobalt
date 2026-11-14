@@ -665,6 +665,12 @@ private:
     int margin_ = defaultMarginPixels(), topMargin_ = defaultVerticalMarginPixels(margin_),
         bottomMargin_ = defaultVerticalMarginPixels(margin_);
     void activateFontParameters() const;
+    // Capped at the measured crossover; no full-book text allocation is needed.
+    static constexpr int fastShapingMinimum = 250000;
+    int shapingText_ = 0;
+    int shapingOverride_ = -1;
+    bool fastShaping() const;
+    void activateFastShaping() const;
     int axisWeight_ = defaultVariableFontWeight;
     double opticalSize_ = 0;
     int weight_ = 0;

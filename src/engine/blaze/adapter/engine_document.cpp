@@ -540,8 +540,25 @@ FontOpticalSizeAxis EngineDocument::opticalSizeAxis() const
     return fontOpticalSizeAxis(readingFonts, face_);
 }
 
+bool EngineDocument::fastShaping() const
+{
+    if (shapingOverride_ >= 0)
+        return shapingOverride_ != 0;
+    return shapingText_ >= fastShapingMinimum && (!slices() || sliceSize() >= fastShapingMinimum);
+}
+
+void EngineDocument::activateFastShaping() const
+{
+    const bool fast = fastShaping();
+    koblazeSetPairKerning(fast);
+    koblazeSetWordWidths(fast);
+    koblazeSetWordPairs(fast);
+    koblazeSetPlainJoiner(fast);
+}
+
 void EngineDocument::activateFontParameters() const
 {
+    activateFastShaping();
     const auto axis = weightAxis();
     // CREngine shares font parameters across documents. Restore this document's
     // values before layout or drawing so previews cannot change another book.
@@ -1201,6 +1218,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
 
 bool EngineDocument::renderLayout()
 {
+    activateFastShaping();
     applySlice();
 #if __has_include(<koblaze.h>)
     try {

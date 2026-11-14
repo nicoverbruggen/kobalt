@@ -1935,7 +1935,20 @@ bool EngineDocument::mayContain(int item, const QString &query) const
         }
         texts[item] = bytes.isEmpty() ? QStringLiteral("") : chapterSearchKey(bytes);
     }
-    return texts[item].isEmpty() || texts[item].contains(searchKey(query));
+    const auto &text = texts[item];
+    const auto pattern = searchKey(query);
+    if (text.isEmpty() || text.contains(pattern))
+        return true;
+    // CSS can hide intervening text nodes, joining visible parts of a word.
+    // Rule out a chapter only when the letters cannot occur in order.
+    int after = 0;
+    for (const auto letter : pattern) {
+        const int at = text.indexOf(letter, after);
+        if (at < 0)
+            return false;
+        after = at + 1;
+    }
+    return true;
 }
 
 EngineDocument *EngineDocument::documentFor(int item, const std::function<bool()> &current)

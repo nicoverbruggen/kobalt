@@ -431,9 +431,12 @@ void searchUnopenedChapter()
     book.files = test::engineBook();
     book.files["OEBPS/c3.xhtml"] = test::publisherHtml(
             QStringLiteral("<p>Caf&#233;teria a−minus سـلام</p><p>One<!-- note > here -->Two</p>"
-                           "<p>Pub<![CDATA[lication]]>Needle</p>")
+                           "<p>Pub<![CDATA[lication]]>Needle</p>"
+                           "<p>rose<span style='display:none'>omitted</span>bud</p>")
                     .toUtf8());
-    book.files["OEBPS/c2.xhtml"] = test::publisherHtml("<p>Andr&eacute;nav</p>");
+    book.files["OEBPS/c2.xhtml"] =
+            test::publisherHtml("<p>Andr&eacute;nav</p>"
+                                + QByteArray("<p>Intervening chapter text.</p>").repeated(800));
     QString error;
     EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
     require(book.open(whole, settings, &error) && book.open(chapters, settings, &error),
@@ -450,9 +453,10 @@ void searchUnopenedChapter()
         } while (!batch.done);
         return positions;
     };
-    for (const auto &query : { QStringLiteral("cafe"), QStringLiteral("a-minus"),
-                               QStringLiteral("سلام"), QStringLiteral("OneTwo"),
-                               QStringLiteral("PublicationNeedle"), QStringLiteral("Andrénav") }) {
+    for (const auto &query :
+         { QStringLiteral("cafe"), QStringLiteral("a-minus"), QStringLiteral("سلام"),
+           QStringLiteral("OneTwo"), QStringLiteral("PublicationNeedle"),
+           QStringLiteral("Andrénav"), QStringLiteral("rosebud") }) {
         const auto expected = hits(whole, query);
         require(expected.size() == 1 && hits(chapters, query) == expected,
                 qPrintable("Missing search result in an unopened chapter: " + query));

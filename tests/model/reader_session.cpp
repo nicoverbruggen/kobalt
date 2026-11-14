@@ -39,6 +39,12 @@ static std::function<void()> adoptingDocument;
 namespace kobalt {
 struct ReaderLocationProbe
 {
+    static quint64 revision(const ReaderSession &reader) { return reader.revision; }
+
+    static void offer(ReaderSession &reader, quint64 job) { reader.showFullDocument(job); }
+
+    static bool pending(const ReaderSession &reader) { return reader.fullDocumentPending_; }
+
     static void refusePreparedDocument(Engine &engine)
     {
         auto &model = dynamic_cast<EngineDocument &>(engine);
@@ -171,11 +177,11 @@ static void hybridFontEdits(const QString &path, quint16 port)
     QEventLoop ready;
     QTimer poll;
     QObject::connect(&poll, &QTimer::timeout, &ready, [&] {
-        if (hybrid.fullDocumentPending_)
+        if (ReaderLocationProbe::pending(hybrid))
             ready.quit();
     });
     poll.start(10);
-    if (!hybrid.fullDocumentPending_)
+    if (!ReaderLocationProbe::pending(hybrid))
         ready.exec();
     require(hybrid.state().contains("book_fraction"), "The chapter must stay visible until a turn");
     turn(whole);
@@ -278,7 +284,7 @@ static void mixedSpreadHandoff()
                 },
                 Qt::QueuedConnection);
         frame.exec();
-        hybrid.showFullDocument();
+        ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
         const QSize bounds(536, 379);
         QImage thumbnail;
         bool bookmarked = false;
@@ -866,11 +872,11 @@ int run(int argc, char **argv)
                 QEventLoop ready;
                 QTimer poll;
                 QObject::connect(&poll, &QTimer::timeout, &ready, [&] {
-                    if (fast->fullDocumentPending_)
+                    if (ReaderLocationProbe::pending(*fast))
                         ready.quit();
                 });
                 poll.start(10);
-                if (!fast->fullDocumentPending_)
+                if (!ReaderLocationProbe::pending(*fast))
                     ready.exec();
                 poll.stop();
                 if (refuse) {
@@ -973,14 +979,22 @@ int run(int argc, char **argv)
                             "A page jump during adoption must resolve the chapter-local page");
                 } else if (scenario == 3) {
                     const int pixels = fast->state().value("font_pixels").toInt() + 2;
+                    const auto preparedRevision = ReaderLocationProbe::revision(*fast);
                     adoptingDocument = [&] {
                         kobalt::qt::invoke(
                                 qApp,
                                 [&] {
                                     require(fast->busy() && fast->state().contains("book_fraction"),
                                             "The appearance edit must race the unpublished whole-book frame");
-                                    fast->editAppearance(appearance::Patch(
-                                            QJsonObject{ { "font_pixels", pixels } }));
+                                    const auto fontEdit = [&](int size) {
+                                        fast->editAppearance(appearance::Patch(
+                                                QJsonObject{ { "font_pixels", size } }));
+                                    };
+                                    fontEdit(pixels - 1);
+                                    fontEdit(pixels);
+                                    // Deliver the earlier count after both edits but before
+                                    // the worker finishes publishing its previous frame.
+                                    ReaderLocationProbe::offer(*fast, preparedRevision);
                                 },
                                 Qt::BlockingQueuedConnection);
                     };
@@ -1019,7 +1033,7 @@ int run(int argc, char **argv)
                             "A superseded full frame reopened a chapter after an appearance edit");
                 }
             } else {
-                fast->showFullDocument();
+                ReaderLocationProbe::offer(*fast, ReaderLocationProbe::revision(*fast));
                 require(fast->go(0) && fast->goTo(fast->chapters().first().position),
                         "Cannot supersede the stale-ready frame");
                 rendered.exec();

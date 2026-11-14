@@ -33,3 +33,5 @@ These checks cover empty-library startup, opening books, rendered pages, page tu
 `desktop.formattingWarning` checks supported, unsupported and supported pages within one chapter, including the warning menu entry and notice. `engine.page-estimate` checks matched CSS, importance, inheritance, unused and hidden declarations, generated content, image-only pages, columns, footnotes and parsed-cache reopening. The `formattingWarning` gallery case captures the menu entry and notice at every viewport and variant. `session.reader-session` checks warning delivery and retained reopening.
 
 A pending native progress comparison must report a stale result when its source ends. Pending selection, token and page-edge requests must return empty after a source ends. Queued chapter metadata must preserve the displayed table of contents when its source ends before publication. The session check covers reader cancellation and direct host revocation.
+
+The Hybrid session test delivers an old pagination result after two font changes while the worker still holds an unpublished whole-book frame. The final frame must use the last font size and chapter pagination.

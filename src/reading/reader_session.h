@@ -191,11 +191,6 @@ public:
     void cancelPendingTurn();
     bool go(int page);
     bool goTo(const QString &anchor);
-    // Hybrid rendering has the document of the whole book ready. The next
-    // page turn or jump shows it: the switch rides on a render that the
-    // user asked for, so it draws nothing by itself and disturbs no menu.
-    void showFullDocument();
-    bool fullDocumentPending_ = false;
     // Goes to the entry `index` of chapters(). See Engine::goToChapter().
     bool goToChapter(int index);
     // Goes to about `fraction` of the whole book, from 0 to 1. With only a
@@ -483,6 +478,10 @@ public:
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);
 
 private:
+    friend struct ReaderLocationProbe;
+    // Background pagination only offers a document. A foreground render
+    // can adopt it after checking the requested layout and reading position.
+    void showFullDocument(quint64 job);
     bool currentSourceFrame(quint64 job) const;
     // `requests` is engineWorkRequests() from when this step was queued:
     // work that was announced after that is in the queue behind this step,
@@ -518,6 +517,7 @@ private:
     PositionCodec positions_;
     QJsonObject desired;
     int desiredChapterMode = -1;
+    bool fullDocumentPending_ = false;
     QJsonObject temporaryAppearance;
     appearance::SavedInput originalAppearance;
     QSize desiredSize;

@@ -289,12 +289,9 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         if (full == Engine::FullDocument::Ready) {
             kobalt::qt::invoke(
                     qApp,
-                    [guard, lease] {
-                        // Also when a page turn came meanwhile: the render
-                        // after it shows the document, if it is still there.
-                        if (!guard || guard->lease_ != lease || !lease || lease->revoked())
-                            return;
-                        guard->showFullDocument();
+                    [guard, lease, job] {
+                        if (guard && guard->lease_ == lease)
+                            guard->showFullDocument(job);
                     },
                     Qt::QueuedConnection);
             return;
@@ -865,9 +862,10 @@ void ReaderSession::editAppearance(const appearance::Patch &patch, QSize size)
     requestAppearance(requestedAppearance().edited(patch), size);
 }
 
-void ReaderSession::showFullDocument()
+void ReaderSession::showFullDocument(quint64 job)
 {
-    fullDocumentPending_ = true;
+    if (currentSourceFrame(job))
+        fullDocumentPending_ = true;
 }
 
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
@@ -896,8 +894,7 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
     if (chapterMode == hybridChapterMode
         || (chapterMode < 0 && renderingMode::countsInBackground()))
         chapterMode = next != desired || resized ? 1 : -1;
-    // A document that was prepared for the old appearance is of no use.
-    if (next != desired || resized || chapterMode >= 0)
+    if (chapterMode >= 0)
         fullDocumentPending_ = false;
     const bool modeChanged = chapterMode >= 0 && chapterMode != previousMode;
     if (next != desired || resized || modeChanged) {
@@ -2570,6 +2567,7 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
     cancelPendingTurn();
     turning = false;
     if (appearanceChange) {
+        fullDocumentPending_ = false;
         layoutReady_ = false;
         newestLayout->fetch_add(1);
         interruptSearch();
@@ -2596,14 +2594,14 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     const auto markupGeneration = markupGeneration_;
     const auto requested = desired;
     // The prepared document of the whole book is shown with this render.
-    const bool swapToFull = std::exchange(fullDocumentPending_, false);
+    const bool swapToFull = std::exchange(fullDocumentPending_, false) && desiredChapterMode < 0;
     // Queries queued before this turn used chapter pagination. Later queries
     // run behind the swap and see the whole book, or the chapter if it refused.
     if (swapToFull)
         newestLayout->fetch_add(1);
     // A ready notification is only a try. Keep it local to this job until
     // adoption succeeds, so a superseded try cannot request a full load.
-    const auto chapterMode = swapToFull ? 0 : desiredChapterMode;
+    const auto chapterMode = desiredChapterMode;
     const auto size = desiredSize;
     const auto anchor = std::exchange(destination, {});
     const int chapter = std::exchange(chapterTarget, -1);
@@ -2692,7 +2690,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 if (swap && target >= 0)
                     engine->go(target);
                 const int spreadTurn = swap && delta ? engine->preparedSpreadTurn(delta) : -1;
-                const int mode = swapToFull && !swap ? -1 : chapterMode;
+                const int mode = swap ? 0 : chapterMode;
                 const bool modeChanged = mode >= 0 && (engine->bookFraction() >= 0) != (mode > 0);
                 const bool unchanged =
                         !modeChanged && appearance::same(before, requested) && oldSize == size;

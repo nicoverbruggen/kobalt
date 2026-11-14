@@ -2779,8 +2779,8 @@ private:
     bool _rendered;
     int _koblazeSliceFirst = 0;
     int _koblazeSliceLast = 0;
-    int _koblazeChars = 0;
     int _koblazeSpineItemChars = 0;
+    bool _koblazeSliceHasFloats = false;
     // koblaze: the first block that a slice lays out, when the slice does
     // not start at the start of the spine item.
     ldomNode * _koblazeFirstBlock = NULL;
@@ -2924,6 +2924,8 @@ public:
     /// koblaze: the characters of the spine item that was laid out last, as
     /// the slices count them. Valid after a layout.
     int getKoblazeSpineItemChars() const { return _koblazeSpineItemChars; }
+    /// A block float in the last slice can extend beyond its main text.
+    bool koblazeSliceHasFloats() const { return _koblazeSliceHasFloats; }
     /// koblaze: keeps the current layout aside. False when the document has
     /// no layout. A full style pass drops what was kept.
     bool koblazeSaveLayout();

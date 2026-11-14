@@ -403,6 +403,21 @@ int main(int argc, char **argv)
                 styledBook("p{display:block;text-indent:0.2em;padding:0.1em;margin:0}", body), 2,
                 "A line above the page start changed the pages of chapter mode");
     }
+    // The DOM position counts every character in the body, including text
+    // rendered in a separate float flow and text hidden by publisher CSS.
+    for (const auto &style : { QByteArray(".aside{float:left;width:5em;border:1px solid}"),
+                               QByteArray(".aside{display:none}") }) {
+        QByteArray body;
+        for (int group = 0; group < 8; ++group) {
+            body += "<div><h2>Group " + QByteArray::number(group) + "</h2><p class='aside'>"
+                    + prose(group, 4) + "</p>";
+            for (int i = 0; i < 6; ++i)
+                body += "<p>" + prose(group + i, 5) + "</p>";
+            body += "</div>";
+        }
+        requireWholeBookPages(styledBook(style, body), 2,
+                              "Float and hidden text must preserve chapter slice offsets");
+    }
     // A last spine item without content adds no page to the whole book. As
     // the last unit of chapter mode it must not add one, nor show the pages
     // before it again.

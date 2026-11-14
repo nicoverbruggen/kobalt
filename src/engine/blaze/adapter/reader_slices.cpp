@@ -13,6 +13,7 @@
 #include <climits>
 #include <cmath>
 #include <lvdocview.h>
+#include <lvrend.h>
 #if __has_include(<koblaze.h>)
 #  include <koblaze.h>
 #endif
@@ -37,6 +38,21 @@ bool countText(ldomNode *node, ldomNode *target, int &count)
     return false;
 }
 #endif
+
+bool hasFloatFootprint(ldomNode *block)
+{
+    RenderRectAccessor rect(block);
+    if (RENDER_RECT_HAS_FLAG(rect, FINAL_FOOTPRINT_AS_SAVED_FLOAT_IDS)) {
+        int count;
+        lUInt32 ids[5];
+        rect.getInvolvedFloatIds(count, ids);
+        return count > 0;
+    }
+    int left, topLeft, right, topRight, minLeft, minRight;
+    rect.getTopRectsExcluded(left, topLeft, right, topRight);
+    rect.getNextFloatMinYs(minLeft, minRight);
+    return topLeft > 0 || topRight > 0 || minLeft > 0 || minRight > 0;
+}
 } // namespace
 
 int EngineDocument::sliceSize() const
@@ -207,6 +223,8 @@ QString EngineDocument::estimateKey(const QJsonObject &settings) const
         key.remove(name);
     key["viewport"] = QString("%1x%2").arg(size_.width()).arg(size_.height());
     key["slice_pages"] = slicePages_;
+    if (slicePages_ > 0)
+        key["slice_offsets"] = 1;
     key["policy"] = QString::fromUtf8(documentCachePolicy());
     return QString::fromLatin1(
             QCryptographicHash::hash(QJsonDocument(key).toJson(QJsonDocument::Compact),
@@ -675,9 +693,14 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
     // another such block is laid out as one, so a slice cannot start in it.
     for (auto *parent = block->getParentNode(); parent && !parent->isNodeName("DocFragment");
          parent = parent->getParentNode()) {
-        if (parent->getRendMethod() != erm_block)
+        if (parent->getRendMethod() != erm_block || parent->isFloatingBox())
             return false;
     }
+    // A paragraph can start at the top of a page while the float beside
+    // it started on the preceding page. Keep the float and paragraph in
+    // the same layout so that the text wraps around the same rectangle.
+    if (hasFloatFootprint(block))
+        return false;
     const int start =
             textBefore(QString::fromUtf8(UnicodeToUtf8(ldomXPointer(block, 0).toString()).c_str()));
     if (start < 0 || textBefore(position) != start)
@@ -760,6 +783,11 @@ void EngineDocument::cutSlice()
     for (int page = laidOut - 1; page >= qMax(1, laidOut / 2); --page) {
         int before = 0;
         if (pageStartsBlock(page, &before) && before > sliceFirst_) {
+#ifdef KOBLAZE_TEXT_LENGTHS
+            // Text beyond the cut can change the height of the page beside a
+            // tall float. Show that page after the next slice has laid it out.
+            sliceLookAheadHidden_ = engine_->getDocument()->koblazeSliceHasFloats();
+#endif
             visiblePages_ = page;
             sliceEnd_ = before;
             return;

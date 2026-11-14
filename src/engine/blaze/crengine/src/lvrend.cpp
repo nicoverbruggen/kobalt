@@ -9691,6 +9691,12 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                     //   not move and continue being rendered at the current y
 
                     if ( child->isFloatingBox() ) {
+                        // The float lays out in its own flow below. Account for its
+                        // whole subtree in the main flow's chapter slice first.
+                        if ( flow->isMainFlow() && !child->getDocument()->koblazeEnterBlock(child, false, false) ) {
+                            child->getDocument()->koblazeChangeRendMethod(child, erm_invisible);
+                            continue;
+                        }
                         // Block floats are positioned respecting the current collapsed
                         // margin, without actually globally pushing it, and without
                         // collapsing with it.

@@ -5927,25 +5927,30 @@ bool ldomDocument::koblazeTableEndsSliceAfter( ldomNode * node, int end )
 
 bool ldomDocument::koblazeEnterBlock( ldomNode * node, bool spineItem, bool container )
 {
-    if ( spineItem ) {
-        _koblazeChars = 0;
+    if ( _koblazeSliceLast <= 0 || spineItem )
         return true;
-    }
-    if ( _koblazeSliceLast <= 0 )
-        return true;
-    // The text of a table or another block that is not a plain container is
-    // counted once, at that block. Its inner blocks follow it: they are not
-    // counted again, so that the count does not depend on what is shown.
-    for ( ldomNode * parent = node->getParentNode(); parent && parent->getNodeId() != el_DocFragment;
-            parent = parent->getParentNode() ) {
+    // Use the same offsets as saved passages. Hidden blocks and floats
+    // are not always visited by the main flow.
+    ldomNode * body = node;
+    for ( ldomNode * parent = node->getParentNode(); parent; parent = parent->getParentNode() ) {
+        if ( parent->getNodeId() == el_DocFragment )
+            break;
         if ( parent->getRendMethod() != erm_block )
             return true;
+        body = parent;
     }
-    int start = _koblazeChars;
-    int length = koblazeTextLength(node);
+    if ( body->getNodeId() != el_body || !body->getParentNode() ||
+            body->getParentNode()->getNodeId() != el_DocFragment )
+        return true;
+    const int length = koblazeTextLength(node);
+    if ( node == body && length > _koblazeSpineItemChars )
+        _koblazeSpineItemChars = length;
+    const int start = koblazeTextBefore(body, node);
+    if ( node->getNodeId() == el_floatBox && node->isFloatingBox() )
+        _koblazeSliceHasFloats = true;
     if ( container ) {
         // A container with text in the slice is entered, and its blocks are
-        // counted one by one. A container outside the slice is left out as
+        // placed by their source offsets. Containers outside the slice are left out as
         // a whole, with its margins and page breaks.
         if ( length > 0 && start + length > _koblazeSliceFirst && start < _koblazeSliceLast )
             return true;
@@ -5959,9 +5964,6 @@ bool ldomDocument::koblazeEnterBlock( ldomNode * node, bool spineItem, bool cont
                 && koblazeTableEndsSliceAfter(node, start + length) )
             return true;
     }
-    _koblazeChars += length;
-    if ( _koblazeChars > _koblazeSpineItemChars )
-        _koblazeSpineItemChars = _koblazeChars;
     if ( container )
         return false;
     const bool inside = length > 0 ? start >= _koblazeSliceFirst && start < _koblazeSliceLast
@@ -6150,8 +6152,8 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
         context.setCallback(callback, numFinalBlocks);
         //updateStyles();
         CRLog::trace("rendering...");
-        _koblazeChars = 0;
         _koblazeSpineItemChars = 0;
+        _koblazeSliceHasFloats = false;
         _koblazeFirstBlock = NULL;
         if ( _koblazeSliceFirst > 0 && _koblazeSliceLast > 0 )
             context.koblazeSkipLinesUntil( &_koblazeFirstBlock );

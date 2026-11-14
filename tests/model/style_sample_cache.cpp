@@ -1,4 +1,5 @@
 #include "reading/style_sample_cache.h"
+#include "assets/assets.h"
 #include <QFile>
 #include <QGuiApplication>
 #include <QTemporaryDir>
@@ -125,16 +126,23 @@ int main(int argc, char **argv)
     auto otherFonts = fonts;
     otherFonts.fallbackFiles = QStringList{ "b.ttf" };
     require(styleSampleKey(otherFonts, request) != key, "The font inputs are not in the key");
-    // The same font file in another folder is the same input: Kobo's
-    // system fonts are unpacked into a folder with a new name on every start.
-    auto firstStart = fonts, secondStart = fonts;
-    firstStart.sources.systemFiles = QStringList{ "/tmp/run-a/system/Serif.ttf" };
-    secondStart.sources.systemFiles = QStringList{ "/tmp/run-b/system/Serif.ttf" };
-    require(styleSampleKey(firstStart, request) == styleSampleKey(secondStart, request),
+    // Kobo extracts the same compressed system font under a different root
+    // after each restart. The digest within that path identifies its bytes.
+    FontCopies firstRun, secondRun;
+    auto firstFonts = fonts, secondFonts = fonts;
+    const auto first = firstRun.file("system/Serif.ttf", "first");
+    const auto same = secondRun.file("system/Serif.ttf", "first");
+    const auto changed = secondRun.file("system/Serif.ttf", "other");
+    require(!first.isEmpty() && !same.isEmpty() && !changed.isEmpty() && first != same,
+            "Cannot prepare independent system font copies");
+    firstFonts.sources.systemFiles = QStringList{ first };
+    secondFonts.sources.systemFiles = QStringList{ same };
+    require(styleSampleKey(firstFonts, request) == styleSampleKey(secondFonts, request),
             "The folder of a system font changed the key");
-    secondStart.sources.systemFiles = QStringList{ "/tmp/run-b/system/Sans.ttf" };
-    require(styleSampleKey(firstStart, request) != styleSampleKey(secondStart, request),
-            "Another system font did not change the key");
+    secondFonts.sources.systemFiles = QStringList{ changed };
+    require(styleSampleKey(firstFonts, request) != styleSampleKey(secondFonts, request),
+            "Changed font bytes reused the previous preview");
+
     // A cancellation flag is not an input.
     auto cancellable = request;
     cancellable.cancelled = std::make_shared<std::atomic_bool>(false);

@@ -77,16 +77,20 @@ qint64 convert(StyleSample &sample, Convert change)
         each(image);
     return bytes;
 }
-} // namespace
 
-namespace {
-// A font file by its name and size, not by its folder. Kobo's system fonts
-// are unpacked into a temporary folder whose name is new on every start,
-// and a kept sample must be found again after a restart.
 QStringList fontFiles(const QStringList &paths)
 {
     QStringList files;
     for (const auto &path : paths) {
+        // FontCopies puts each decoded system font under its content digest.
+        // Only the temporary directory above the digest changes on restart.
+        const auto parts = path.split('/');
+        const int count = parts.size();
+        if (count >= 4 && parts[count - 4].startsWith("kobalt-assets-")
+            && parts[count - 3].size() == 64 && parts[count - 2] == "system") {
+            files.append(parts[count - 3] + "/system/" + parts.last());
+            continue;
+        }
         const QFileInfo file(path);
         files.append(file.fileName() + '|' + QString::number(file.size()));
     }

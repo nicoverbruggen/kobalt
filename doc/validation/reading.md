@@ -6,6 +6,8 @@ The standalone opening bar reaches 60% when the engine finishes, 80% after windo
 
 A numbered jump during handoff uses the displayed chapter. A second number can be used once the new pagination is on screen. A buffered reverse turn must return across the chapter boundary to the same pixels. Rotation while a whole-book count is ready keeps the chapter at the new viewport.
 
+My Words resolves a saved passage while Hybrid switches to whole-book pagination. The returned page must match an Accurate session. `desktop.savedWords` also checks the page number on the action in the word detail view.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

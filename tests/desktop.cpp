@@ -7419,8 +7419,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(context && context->isVisible() && context->text().contains("<u>"));
         auto *passage = qobject_cast<QPushButton *>(fixture.widget("rrWordPagePassage"));
         QVERIFY(passage && passage->isVisible());
-        QVERIFY(passage->text().startsWith(
-                strings::get("words.go_to_page").arg(QString()).trimmed()));
+        const auto shown = fixture.state();
+        const int savedWordPage = shown.contains("book_fraction")
+                ? shown.value("rough_page").toInt()
+                : shown.value("page").toInt() + 1;
+        QVERIFY(savedWordPage > 0);
+        QCOMPARE(passage->text(), strings::get("words.go_to_page").arg(savedWordPage));
         QVERIFY(fixture.press("rrWordPageBack"));
         QTRY_VERIFY(!fixture.visible("rrWordPage"));
         // Every book's words open over the list and return to it.

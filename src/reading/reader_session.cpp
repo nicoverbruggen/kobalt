@@ -1337,9 +1337,20 @@ BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &po
 void ReaderSession::bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                                   bool rangeEndpoints)
 {
+    const auto layout = layoutRevision();
+    const auto lease = lease_;
     bookmarkLocations(
-            std::move(positions),
-            [finished](BookmarkLocations result) { finished(std::move(result.bookPages)); },
+            positions,
+            [this, positions, layout, lease, rangeEndpoints, finished](BookmarkLocations result) {
+                // My Words needs a label for this position even when the chapter gives
+                // way to the whole book while its first lookup is queued.
+                if (layout != layoutRevision() && layoutReady_ && lease_ == lease && lease
+                    && !lease->revoked()) {
+                    bookmarkPages(positions, finished, rangeEndpoints);
+                    return;
+                }
+                finished(std::move(result.bookPages));
+            },
             rangeEndpoints, false);
 }
 
@@ -2536,6 +2547,10 @@ void ReaderSession::dispatch(bool pageTurn)
     const auto requested = desired;
     // The prepared document of the whole book is shown with this render.
     const bool swapToFull = std::exchange(fullDocumentPending_, false);
+    // Queries queued before this turn used chapter pagination. Later queries
+    // run behind the swap and see the whole book, or the chapter if it refused.
+    if (swapToFull)
+        newestLayout->fetch_add(1);
     // A ready notification is only a try. Keep it local to this job until
     // adoption succeeds, so a superseded try cannot request a full load.
     const auto chapterMode = swapToFull ? 0 : desiredChapterMode;

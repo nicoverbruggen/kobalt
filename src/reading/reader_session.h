@@ -218,6 +218,8 @@ public:
     void bookmarkLocations(QStringList positions, std::function<void(BookmarkLocations)> finished,
                            bool rangeEndpoints = false, bool sourceOrder = true,
                            std::shared_ptr<std::atomic_bool> cancelled = {});
+    // My Words needs the book page even if Hybrid adopts a prepared layout
+    // during the lookup. Retry on the same open book when its pages are ready.
     void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                        bool rangeEndpoints = false);
     void pageSummary(int page, std::function<void(QString position, QString excerpt)> finished);

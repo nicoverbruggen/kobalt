@@ -177,11 +177,44 @@ static void hybridFontEdits(const QString &path, quint16 port)
         ready.exec();
     require(hybrid.state().contains("book_fraction"), "The chapter must stay visible until a turn");
     turn(whole);
+    QStringList positions;
+    for (const auto &chapter : whole.chapters())
+        positions.append(chapter.position);
+    const auto labels = [&](ReaderSession &reader) {
+        QEventLoop lookup;
+        QVector<int> result;
+        reader.bookmarkPages(positions, [&](QVector<int> pages) {
+            result = std::move(pages);
+            lookup.quit();
+        });
+        lookup.exec();
+        return result;
+    };
+    const auto exact = labels(whole), estimated = labels(hybrid);
+    require(exact.size() == positions.size() && estimated.size() == exact.size(),
+            "Cannot compare saved-word page numbers before the handoff");
+    int word = 0;
+    while (word < positions.size() && (exact[word] < 0 || estimated[word] == exact[word]))
+        ++word;
+    require(word < positions.size(),
+            "The fixture needs a saved position with a different estimate");
+    // The worker receives this lookup before the adopting turn. Its reply
+    // cannot reach the UI until the turn has been requested.
+    bool wordLookupFinished = false;
+    QEventLoop lookup;
+    hybrid.bookmarkPages({ positions[word] }, [&](QVector<int> pages) {
+        require(pages == QVector<int>{ exact[word] },
+                "My Words received a missing or stale page label during the handoff");
+        wordLookupFinished = true;
+        lookup.quit();
+    });
     turn(hybrid);
     require(!hybrid.state().contains("book_fraction") && hybrid.page() == whole.page()
                     && hybrid.pages() == whole.pages(),
             "The final turn must adopt the whole book at the current font size");
     compare();
+    if (!wordLookupFinished)
+        lookup.exec();
     renderingMode::setBuildQuietMilliseconds(quiet);
     renderingMode::setOverride(-1);
 }

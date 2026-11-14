@@ -94,7 +94,9 @@ function(kobalt_library name)
     if(lib_AUTOTOOLS)
 set(host)
         set(cc "${CMAKE_C_COMPILER}")
-        set(cflags "-fPIC ${CMAKE_C_FLAGS}")
+        # Explicit CFLAGS suppress Autoconf's default -O2. Keep that optimization
+        # before caller flags so an intentional override still takes precedence.
+        set(cflags "-fPIC -O2 ${CMAKE_C_FLAGS}")
         if(ANDROID)
             set(host --host=aarch64-linux-android)
             string(APPEND cc " --target=${CMAKE_C_COMPILER_TARGET}")

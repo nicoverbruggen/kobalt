@@ -11,6 +11,56 @@
   },
   "scenarios": [
     {
+      "id": "loading.large.accurate.cold",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 3,
+      "paths": ["src/reading/", "src/engine/", "src/publication/", "dependencies/"],
+      "book": "war-and-peace",
+      "fixture": {"mode": "accurate", "cache": "cold", "first_page": "opening page, may be cover or front matter"},
+      "steps": [
+        {"close": true},
+        {"event": "book-close"},
+        {"open": "war-and-peace", "fresh": true},
+        {"event": "reader-shown", "as": "shown"},
+        {"event": "opening-phases", "earlier": true, "where": {"document_cache_hit": false, "retained_book_hit": false}}
+      ],
+      "sample": {"event": "shown", "field": "total_ms", "stages": true}
+    },
+    {
+      "id": "loading.large.hybrid.cold",
+      "kind": "e2e",
+      "opt_in": true,
+      "repeat": 3,
+      "paths": ["src/reading/", "src/engine/", "src/publication/", "dependencies/"],
+      "book": "war-and-peace",
+      "fixture": {"mode": "hybrid", "cache": "cold", "first_page": "opening page, may be cover or front matter", "full_ready_timer": "third page turn through full-document-ready"},
+      "steps": [
+        {"close": true},
+        {"event": "book-close"},
+        {"open": "war-and-peace", "fresh": true},
+        {"event": "reader-shown", "as": "shown"},
+        {"key": "PageDown"},
+        {"event": "page-turn-painted"},
+        {"key": "PageDown"},
+        {"event": "page-turn-painted"},
+        {"settle": true},
+        {"mark": true},
+        {"key": "PageDown"},
+        {"event": "page-turn-painted"},
+        {"event": "full-document-ready", "as": "whole", "earlier": true, "timeout": 120000, "where": {"from_cache": false}},
+        {"mark_end": true}
+      ],
+      "sample": {
+        "timer": true,
+        "stages": {
+          "reader_shown_ms": {"event": "shown", "field": "total_ms"},
+          "engine_ms": {"event": "shown", "field": "engine_ms"},
+          "whole_pages": {"event": "whole", "field": "pages"}
+        }
+      }
+    },
+    {
       "id": "book.open",
       "kind": "e2e",
       "paths": ["src/reading/", "src/sync/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"],

@@ -37,6 +37,13 @@
 
 #if USE_HARFBUZZ==1
 #include <hb.h>
+
+// The formatter uses HarfBuzz's default Unicode functions.
+static inline hb_script_t koblazeUnicodeScript( hb_unicode_funcs_t * funcs, lChar32 c ) {
+    if ( c < 0x80 )
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ? HB_SCRIPT_LATIN : HB_SCRIPT_COMMON;
+    return hb_unicode_script(funcs, c);
+}
 #endif
 
 #if (USE_FRIBIDI==1)
@@ -2229,7 +2236,7 @@ public:
                 if ( usingHarfbuzz && !isObject ) {
                     // While we have the hb_script here, we'll update m_flags[i]
                     // with LCHAR_LOCKED_SPACING if the script is cursive
-                    hb_script_t script = hb_unicode_script(_hb_unicode_funcs, m_text[i]);
+                    hb_script_t script = koblazeUnicodeScript(_hb_unicode_funcs, m_text[i]);
                     if ( script != HB_SCRIPT_COMMON && script != HB_SCRIPT_INHERITED && script != HB_SCRIPT_UNKNOWN ) {
                         if ( script != prevScript ) {
                             if ( prevScript != HB_SCRIPT_COMMON ) {
@@ -4127,7 +4134,7 @@ void addLineHorizontal( LVFormatter* fmt, int start, int end, int x, src_text_fr
                     // To be done only when we met multiple scripts in a same paragraph
                     // while measuring (which we checked only when using Harfbuzz kerning)
                     if ( fmt->m_has_multiple_scripts && !(fmt->m_flags[i] & LCHAR_IS_OBJECT) ) {
-                        hb_script_t script = hb_unicode_script(_hb_unicode_funcs, fmt->m_text[i]);
+                        hb_script_t script = koblazeUnicodeScript(_hb_unicode_funcs, fmt->m_text[i]);
                         if ( script != HB_SCRIPT_COMMON && script != HB_SCRIPT_INHERITED && script != HB_SCRIPT_UNKNOWN ) {
                             if ( prevScript != HB_SCRIPT_COMMON && script != prevScript ) {
                                 scriptChanged = true;

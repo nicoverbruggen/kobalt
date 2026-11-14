@@ -26,11 +26,13 @@ bool special(ldomNode *node)
     static const QRegularExpression names(
             "(?:^|[\\s_-])(?:quote|quotation|blockquote|letter|signature|verse|poem|poetry|stanza|caption|epigraph|dedication|footnote|endnote|noteref|title|subtitle|heading|scene|break|separator|copyright|toc)(?:$|[\\s_-])",
             QRegularExpression::CaseInsensitiveOption);
-    const auto types = text(
-            node->getAttributeValue(LXML_NS_ANY, node->getDocument()->getAttrNameIndex("type")));
-    if (names.match(text(node->getAttributeValue("class"))).hasMatch()
-        || names.match(types).hasMatch()
-        || names.match(text(node->getAttributeValue("role"))).hasMatch())
+    const auto &types =
+            node->getAttributeValue(LXML_NS_ANY, node->getDocument()->getAttrNameIndex("type"));
+    const auto matchesName = [&](const lString32 &value) {
+        return !value.empty() && names.match(text(value)).hasMatch();
+    };
+    if (matchesName(node->getAttributeValue("class")) || matchesName(types)
+        || matchesName(node->getAttributeValue("role")))
         return true;
     const auto style = node->getStyle();
     return !style.isNull()
@@ -49,8 +51,11 @@ bool initial(ldomNode *node)
     // Some publishers use generic names such as "big". A floated
     // single letter is also evidence of a text initial, regardless of its name.
     const bool floated = !style.isNull() && style->float_ == css_f_left;
-    if (!floated && !name.match(text(node->getAttributeValue("class"))).hasMatch())
-        return false;
+    if (!floated) {
+        const auto &classes = node->getAttributeValue("class");
+        if (classes.empty() || !name.match(text(classes)).hasMatch())
+            return false;
+    }
     const auto value = text(node->getText()).trimmed();
     // Include an opening quotation mark, but never a whole decorated word.
     if (value.isEmpty() || value.size() > 3)
@@ -105,9 +110,11 @@ void markBeautifierContent(ldomDocument *document)
             node->setAttributeValue(0, initialAttribute, U"1");
         static const QRegularExpression opener("drop.?cap|stickupcap",
                                                QRegularExpression::CaseInsensitiveOption);
-        const bool firstLetter = node->hasAttribute(engineFirstLetter)
-                || (text(node->getNodeName()) == "p"
-                    && opener.match(text(node->getAttributeValue("class"))).hasMatch());
+        bool firstLetter = node->hasAttribute(engineFirstLetter);
+        if (!firstLetter && text(node->getNodeName()) == "p") {
+            const auto &classes = node->getAttributeValue("class");
+            firstLetter = !classes.empty() && opener.match(text(classes)).hasMatch();
+        }
         if (firstLetter)
             node->setAttributeValue(0, firstLetterAttribute, U"1");
         const bool blocked = frame.blocked || special(node);

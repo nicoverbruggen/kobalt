@@ -3281,7 +3281,8 @@ ldomTextStorageChunk * ldomDataStorageManager::getChunk( lUInt32 address )
             _recentChunk->_prevRecent = chunk;
         _recentChunk = chunk;
     }
-    chunk->ensureUnpacked();
+    if ( !chunk->_buf )
+        chunk->ensureUnpacked();
     return chunk;
 }
 

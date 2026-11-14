@@ -7141,7 +7141,7 @@ static bool getOriginalFragmentAttributeValue(const ldomNode *node, lUInt16 attr
         lString32 value = node->getAttributeValue(attrid);
         if (!value.startsWith(U"_doc_fragment_"))
             return false;
-        int sep = value.pos(lString32(" "));
+        int sep = value.pos(U' ');
         if (sep <= 0 || sep + 1 >= value.length())
             return false;
         if (value[sep - 1] != U'_')
@@ -7153,7 +7153,7 @@ static bool getOriginalFragmentAttributeValue(const ldomNode *node, lUInt16 attr
         lString32 value = node->getAttributeValue(attrid);
         if (!value.startsWith(U"#_doc_fragment_"))
             return false;
-        int sep = value.pos(lString32(" "));
+        int sep = value.pos(U' ');
         if (sep <= 1 || sep + 1 > value.length())
             return false;
         if (value[sep - 1] != U'_')

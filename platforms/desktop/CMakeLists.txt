@@ -224,6 +224,7 @@ if(BUILD_TESTING)
     set_tests_properties(build.cachePolicy PROPERTIES LABELS "fast;build" TIMEOUT 30)
     add_test(NAME build.dependencyCache COMMAND "${CMAKE_COMMAND}"
         "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/dependency-cache-test"
+        "-DDEPENDENCY_PREFIX=${KOBALT_TEST_DEPENDENCIES}"
         "-DCACHE_SCRIPT=${KOBALT_ROOT}/dependencies/cache.cmake" "-DMAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/test-dependency-cache.cmake")
     set_tests_properties(build.dependencyCache PROPERTIES LABELS "fast;build" TIMEOUT 60)

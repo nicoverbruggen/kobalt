@@ -14,6 +14,22 @@ QString text(const lString32 &value)
     return QString::fromUtf8(UnicodeToUtf8(value).c_str());
 }
 
+bool hasText(ldomNode *node)
+{
+    const auto bytes = node->getText8();
+    for (int i = 0; i < bytes.length(); ++i) {
+        const auto c = static_cast<unsigned char>(bytes[i]);
+        // Keep the existing Unicode and malformed-input handling.
+        if (c >= 0x80)
+            return !text(Utf8ToUnicode(bytes)).trimmed().isEmpty();
+        if (c == 0)
+            return false;
+        if (c != ' ' && (c < '\t' || c > '\r'))
+            return true;
+    }
+    return false;
+}
+
 bool preserve(ldomNode *node, const QString &name)
 {
     static const QSet<QString> elements{ "h1",     "h2",     "h3",     "h4",         "h5",
@@ -42,7 +58,8 @@ bool preserve(ldomNode *node, const QString &name)
     static const QRegularExpression headingClass(
             "(?:^|[\\s_-])(?:title|subtitle|heading)(?:$|[\\s_-])",
             QRegularExpression::CaseInsensitiveOption);
-    return headingClass.match(text(node->getAttributeValue("class"))).hasMatch();
+    const auto &classes = node->getAttributeValue("class");
+    return !classes.empty() && headingClass.match(text(classes)).hasMatch();
 }
 
 struct Frame
@@ -79,12 +96,14 @@ void markBodyAlignment(ldomDocument *document)
             static const QRegularExpression specialClass(
                     "(?:^|[\\s_-])(?:verse|poem|poetry|stanza|caption|epigraph|dedication|footnote|endnote)(?:$|[\\s_-])",
                     QRegularExpression::CaseInsensitiveOption);
-            const auto type =
-                    text(node->getAttributeValue(LXML_NS_ANY, document->getAttrNameIndex("type")));
+            const auto &type =
+                    node->getAttributeValue(LXML_NS_ANY, document->getAttrNameIndex("type"));
+            const auto matchesSpecial = [&](const lString32 &value) {
+                return !value.empty() && specialClass.match(text(value)).hasMatch();
+            };
             frame.paragraphBlocked = frame.paragraphBlocked || frame.blocked
-                    || special.contains(name)
-                    || specialClass.match(text(node->getAttributeValue("class"))).hasMatch()
-                    || specialClass.match(type).hasMatch();
+                    || special.contains(name) || matchesSpecial(node->getAttributeValue("class"))
+                    || matchesSpecial(type);
             const auto style = node->getStyle();
             // Publisher exports can leave a border style on a zero-width frame.
             // Only borders with width need to protect the text inside it.
@@ -114,7 +133,7 @@ void markBodyAlignment(ldomDocument *document)
             continue;
         }
         if (node->isText())
-            frame.words = !text(node->getText()).trimmed().isEmpty();
+            frame.words = hasText(node);
         const bool block = frame.block;
         if (block && frame.words && !frame.blocked && !frame.protectedChild && !frame.blockChild)
             node->setAttributeValue(0, attribute, U"1");

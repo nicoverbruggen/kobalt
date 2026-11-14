@@ -196,6 +196,8 @@ The first configure after this separation creates a new dependency set for each 
 
 All worktrees of a repository share compiled dependencies. The cache is `build/dependency-cache/` in the main checkout. Configuration finds it through Git's common directory, so every linked worktree uses the same folder. A tree without Git, such as an extracted source bundle, uses its own `build/dependency-cache/`. To use another folder, set `KOBALT_DEPENDENCY_CACHE` to an absolute path, as a CMake variable or in the environment. The environment value applies when a build directory is first configured.
 
+CMake dependencies use Release builds. Autotools dependencies use `-O2`, followed by the caller's C flags so explicit overrides take precedence. Setting `CFLAGS` for position-independent code must not disable Autoconf's default optimization. Autotools builds keep their assertions enabled unless the caller disables them.
+
 | Path | Contents |
 | --- | --- |
 | `downloads/<name>-<SHA-256>.tar` | Verified source archives, shared by all platforms. |

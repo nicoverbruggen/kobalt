@@ -635,7 +635,8 @@ void calendarDays()
 void daylightSavingDays()
 {
     const auto previous = qgetenv("TZ");
-    qputenv("TZ", "Europe/Brussels");
+    // Explicit rules keep the DST fixture independent of installed timezone data.
+    qputenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3");
     tzset();
     for (const QDate date : { QDate(2026, 3, 29), QDate(2026, 10, 25) }) {
         QTemporaryDir root;

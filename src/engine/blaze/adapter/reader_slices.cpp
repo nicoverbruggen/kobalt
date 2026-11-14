@@ -656,6 +656,10 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
     const auto position = pageStart(page);
     const auto pointer =
             engine_->getDocument()->createXPointer(Utf8ToUnicode(position.toUtf8().constData()));
+    // A column with only decoration can borrow a bookmark from another
+    // column. Cutting at that bookmark would repeat or omit the decoration.
+    if (pointer.isNull() || engine_->getBookmarkPage(pointer, true) != engine_->firstColumn(page))
+        return false;
     auto *block = pointer.getNode();
     while (block && (block->isText() || block->getRendMethod() != erm_final))
         block = block->getParentNode();

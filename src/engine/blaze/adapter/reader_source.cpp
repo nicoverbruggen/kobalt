@@ -1423,13 +1423,18 @@ int EngineDocument::preparedSpreadTurn(int direction) const
     const int screen = page();
     const int first = engine_->firstColumn(screen);
     const int edge = direction < 0 ? first : first + engine_->columnCount(screen) - 1;
-    const auto anchor = engine_->getPageBookmark(edge, true, true).toString();
+    auto anchor = engine_->getPageBookmark(edge, true, true);
+    if (anchor.isNull())
+        return -1;
     auto &whole = *full_->engine_;
-    const auto pointer = whole.getDocument()->createXPointer(anchor);
+    const auto pointer = whole.getDocument()->createXPointer(anchor.toString());
     if (pointer.isNull())
         return -1;
-    const int physical = whole.getBookmarkPage(pointer, true);
-    if (physical < 0)
+    // On a column containing only decoration, the bookmark can point to
+    // nearby text. Keep the distance from that text to the displayed column.
+    const int offset = edge - engine_->getBookmarkPage(anchor, true);
+    const int physical = whole.getBookmarkPage(pointer, true) + offset;
+    if (physical < 0 || physical >= whole.getPageList()->length())
         return -1;
     const int spread = whole.screenOfColumn(physical);
     const int firstInSpread = whole.firstColumn(spread);

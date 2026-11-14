@@ -97,7 +97,7 @@ The horizontal-rule check in `engine.beautifier` renders the reported top-border
 
 Current-page formatting warnings use parsed-book format 12 for the added style diagnostic field. `engine.page-estimate` checks that unsupported CSS does not change fallback pixels and that cached styles retain the warning. The previous whole-book inspector remains covered as a standalone utility; it no longer determines reader warnings.
 
-The session check turns forward from Trevelyan’s cover and backward from its title while adopting full pagination. Both turns must show the mixed cover and title screen before proceeding. It also checks a subsequent turn and return to portrait.
+The session check turns forward from Trevelyan’s cover and backward from its title while adopting full pagination. Both turns must show the mixed cover and title screen before proceeding. It also checks a subsequent turn and return to portrait. The chapter-parity check reads a vertical Japanese chapter with ornamental columns in both directions. It compares the slice pixels and the screen selected for handoff with Accurate pagination.
 
 The columns check reads a non-linear section in both page directions. It checks that hiding it clears the trailing column, explicit jumps still reach it and showing it restores the shared screen.
 

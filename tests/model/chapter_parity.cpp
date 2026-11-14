@@ -60,6 +60,59 @@ struct Book
     }
 };
 
+// A tall ornament in vertical text can fill a physical column without giving
+// the engine a bookmark on that column. The nearest text is on a neighbor.
+void verticalOrnamentTurns()
+{
+    QByteArray body = "<h1>一</h1>";
+    for (int group = 0; group < 6; ++group) {
+        body += "<div style='page-break-before:always;page-break-after:always'><div style='border:"
+                + QByteArray::number(group + 1) + "px solid #335588;height:"
+                + QByteArray::number(120 + group * 20) + "px'>&#160;</div></div>";
+        for (int p = 0; p < 3; ++p)
+            body += "<p>" + QByteArray::number(group * 3 + p)
+                    + QByteArray("吾輩は猫である。名前はまだ無い。").repeated(8 + (group + p) % 5)
+                    + "</p>";
+    }
+    auto chapter = test::publisherHtml(body);
+    chapter.replace(
+            "</head>",
+            "<style>body{writing-mode:vertical-rl;font-family:Noto Serif CJK JP}</style></head>");
+    Book book;
+    book.files =
+            test::publisherPackage("ja", "Vertical ornaments", { { "chapter.xhtml", chapter } },
+                                   "<itemref idref='chapter.xhtml'/>");
+    book.files["book.opf"].replace("<spine>", "<spine page-progression-direction='rtl'>");
+    auto options = settings;
+    options["two_columns_landscape"] = true;
+    EngineDocument whole(test::readerFonts()), fast(test::readerFonts());
+    QString error;
+    setChapterModeOverride(0);
+    require(book.open(whole, options, &error), qPrintable(error));
+    setChapterModeOverride(1);
+    require(book.open(fast, options, &error), qPrintable(error));
+    setChapterModeOverride(-1);
+    fast.setChapterSlices(2);
+    const QSize landscape(1072, 758);
+    require(fast.applyAppearance({}, landscape) && whole.applyAppearance({}, landscape),
+            "Cannot lay out the vertical spreads");
+    require(fast.prepareFullDocument({}) == Engine::FullDocument::Ready && whole.pages() > 4,
+            "Cannot prepare the vertical book");
+    for (const int direction : { 1, -1 }) {
+        for (;;) {
+            const int page = whole.page(), target = whole.turnTarget(page, direction);
+            require(fast.image(fast.page()) == whole.image(page),
+                    "A vertical slice repeated an ornamental column");
+            require(fast.preparedSpreadTurn(direction) == target,
+                    "The nearest text on another column changed the handoff target");
+            if (target == page)
+                break;
+            require(fast.turnInWindow(direction) && whole.go(target),
+                    "Cannot turn a vertical spread");
+        }
+    }
+}
+
 void nonLinearTurns(bool hide, int slicePages)
 {
     Book book;
@@ -1539,6 +1592,8 @@ int main(int argc, char **argv)
         nonLinearTurns(true, 18);
         nonLinearTurns(false, 2);
     }
+    if (only.isEmpty() || only == QLatin1String("vertical ornaments"))
+        verticalOrnamentTurns();
     if (only.isEmpty() || only == QLatin1String("unopened search"))
         searchUnopenedChapter();
     const auto other = qEnvironmentVariable("KOBALT_PARITY_BOOK");

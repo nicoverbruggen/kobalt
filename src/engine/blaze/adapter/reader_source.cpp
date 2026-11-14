@@ -1514,6 +1514,9 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         // mode uses.
         kept_.clear();
         auto saved = state();
+        // The page to show is resolved at adoption. The reader can turn
+        // several pages while this layout is still being built.
+        saved.remove("position");
         saved.remove("page_estimate");
         saved["koblaze_first_spine_item"] = -1;
         saved["koblaze_last_spine_item"] = -1;

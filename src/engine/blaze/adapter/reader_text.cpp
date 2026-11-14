@@ -301,8 +301,10 @@ QVector<int> EngineDocument::pagesOf(const QStringList &positions, bool rangeEnd
                 const int before = textBefore(qstring(pointer.toString()));
                 inSlice = before >= sliceFirst_ && before < sliceEnd_;
             }
-            entry.page[exclusive] =
-                    pointer.isNull() || !inSlice ? -1 : engine_->getBookmarkPage(pointer);
+            const int y = inSlice && !pointer.isNull() ? pointer.toPoint().y : -1;
+            entry.page[exclusive] = y < 0
+                    ? -1
+                    : engine_->screenOfColumn(engine_->getPageList()->FindNearestPage(y, 0));
         }
         pages.append(entry.page[exclusive]);
     }

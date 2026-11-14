@@ -896,10 +896,22 @@ bool EngineDocument::goTo(const QString &position)
         windowLoadMs_ = loadMs;
         return true;
     }
-    if (!engine_ || !showSpineItemOf(position) || !showSliceOf(position))
+    if (!engine_ || !showSpineItemOf(position))
         return false;
-    auto pointer = engine_->getDocument()->createXPointer(cre(position));
+    auto *document = engine_->getDocument();
+    ldomXPointerEx pointer(document->createXPointer(cre(position)));
     if (pointer.isNull())
+        return false;
+#ifdef KOBLAZE_SOURCE_TEXT
+    if (slices()) {
+        // Check the publisher's style before moving the current slice.
+        // A visible passage may still be outside the part laid out on screen.
+        const KoblazeSourceText sourceText(document);
+        if (!pointer.isVisible())
+            return false;
+    }
+#endif
+    if (!showSliceOf(position) || pointer.toPoint().y < 0)
         return false;
     engine_->goToBookmark(pointer);
     anchor_ = position;

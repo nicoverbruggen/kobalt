@@ -2711,6 +2711,10 @@ int main(int argc, char **argv)
                     "<span id=\"dup%2Danchor\">First</span><span id=\"dup%2Danchor\">Second</span>"
                     "<span id=\"dup-anchor\">Wrong passage</span>"
                     "<span id=\"split\">First<br/>Second</span><span id=\"split\">Other</span></p></body></html>";
+        // The structural position checks navigate these duplicate IDs in the
+        // second chapter. Keep the first chapter's typography fixture as is.
+        if (name.endsWith("c2.xhtml"))
+            content.replace("<p class=\"hidden\">Hidden text", "<p>Nested IDs");
         require(styled.append(name, content, &error), qPrintable(error));
     }
     kobalt::EngineDocument css(kobalt::test::readerFonts());

@@ -1874,6 +1874,20 @@ void hiddenHeadingAtHandoff()
         const auto next = model.position();
         require(model.turnInWindow(-1), "Cannot return to the chapter heading");
         const auto heading = model.position();
+        if (prepared) {
+            EngineDocument whole(test::readerFonts());
+            openResources(whole, files, { { "font_pixels", 28 } });
+            require(whole.goTo(next) && whole.page() > 0,
+                    "Cannot reach the passage after the hidden heading");
+            const int page = whole.page();
+            const auto cover = whole.pageStart(0);
+            require(whole.pagesOf({ heading, cover, next }) == QVector<int>({ -1, 0, page })
+                            && whole.bookPages({ heading, cover, next })
+                                    == QVector<int>({ -1, 1, page + 1 }),
+                    "A hidden heading must not be assigned the cover page");
+            require(!whole.goTo(heading) && whole.page() == page && whole.position() == next,
+                    "A jump to a hidden heading must keep the displayed passage");
+        }
         if (prepared)
             require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
                     "Cannot prepare the whole book");

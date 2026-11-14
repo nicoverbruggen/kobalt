@@ -8,6 +8,7 @@
 #include "storage/highlight_store.h"
 #include "library/library_index.h"
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QFile>
 #include <QDir>
 #include <sys/stat.h>
@@ -581,6 +582,83 @@ void sleepingObservations()
             "Completion retry lost a sleeping interval or attached wake time/position");
 }
 
+void calendarDays()
+{
+    QTemporaryDir root;
+    const QDate date(2026, 11, 10);
+    const auto midnight = QDateTime(date, QTime(0, 0)).toMSecsSinceEpoch();
+    qint64 utc = midnight - 600000;
+    ReadingHistory history(root.path(), "days", {}, {}, "Days", "Author", [&] { return utc; });
+    const auto yesterday = date.addDays(-1).toString(Qt::ISODate);
+    const auto today = date.toString(Qt::ISODate);
+    history.start(0, "start");
+    utc += 1200000;
+    history.pause(1200000, "sleep");
+    require(history.dayMilliseconds(yesterday) == 600000
+                    && history.dayMilliseconds(today) == 600000,
+            "Continuous reading was not divided at local midnight");
+    require(history.save(), "Save daily totals");
+    require(ReadingHistory::dayTotal(root.path(), today, {}) == 600000
+                    && ReadingHistory::dayTotal(root.path(), today, history.openingId()) == 0,
+            "Persisted current opening was counted twice");
+    // The same UUID resumes several days later. Neither the session duration
+    // nor its wall-clock span may attach yesterday's time to the new day.
+    utc = QDateTime(date.addDays(3), QTime(0, 5)).toMSecsSinceEpoch();
+    history.start(1200000, "wake");
+    utc += 300000;
+    history.stop(1500000, "end");
+    const auto later = date.addDays(3).toString(Qt::ISODate);
+    require(history.dayMilliseconds(later) == 300000
+                    && history.dayMilliseconds(date.addDays(1).toString(Qt::ISODate)) == 0
+                    && sql(root.path(), "SELECT COUNT(*) FROM reading_sessions").toInt() == 1,
+            "Sleep or a retained UUID contaminated the next reading day");
+    sql(root.path(),
+        "CREATE TRIGGER fail_day BEFORE INSERT ON profile_state "
+        "WHEN NEW.name LIKE 'reading-day:%' BEGIN SELECT RAISE(ABORT,'test'); END");
+    require(!history.save() && ReadingHistory::dayTotal(root.path(), later, {}) == 0,
+            "Failed daily checkpoint published a partial total");
+    sql(root.path(), "DROP TRIGGER fail_day");
+    require(history.save() && history.save()
+                    && ReadingHistory::dayTotal(root.path(), later, {}) == 300000,
+            "Retry duplicated or lost daily time");
+    ReadingHistory reopened(root.path(), "days", {}, {}, "Days", "Author", [&] { return utc; });
+    reopened.start(0, "reopen");
+    utc += 60000;
+    reopened.stop(60000, "end");
+    require(reopened.save()
+                    && ReadingHistory::dayTotal(root.path(), later, reopened.openingId())
+                                    + reopened.dayMilliseconds(later)
+                            == 360000,
+            "Reopening lost or duplicated the day's earlier reading");
+}
+
+void daylightSavingDays()
+{
+    const auto previous = qgetenv("TZ");
+    qputenv("TZ", "Europe/Brussels");
+    tzset();
+    for (const QDate date : { QDate(2026, 3, 29), QDate(2026, 10, 25) }) {
+        QTemporaryDir root;
+        qint64 utc = QDateTime(date, QTime(0, 0)).toMSecsSinceEpoch();
+        ReadingHistory history(root.path(), "dst", {}, {}, "DST", "Author", [&] { return utc; });
+        history.start(0, "start");
+        const auto end = QDateTime(date.addDays(1), QTime(0, 0)).toMSecsSinceEpoch();
+        const auto elapsed = end - utc;
+        require(elapsed == (date.month() == 3 ? 23 : 25) * qint64(3600000),
+                "DST fixture did not use the selected local zone");
+        utc = end + 60000;
+        history.stop(elapsed + 60000, "end");
+        require(history.dayMilliseconds(date.toString(Qt::ISODate)) == elapsed
+                        && history.dayMilliseconds(date.addDays(1).toString(Qt::ISODate)) == 60000,
+                "Reading days used fixed 24-hour boundaries across DST");
+    }
+    if (previous.isNull())
+        qunsetenv("TZ");
+    else
+        qputenv("TZ", previous);
+    tzset();
+}
+
 void intervals()
 {
 
@@ -745,6 +823,8 @@ int main(int argc, char **argv)
 
     rejectsVersionTwoWithoutBookIdentityUniqueness();
     migrationRejectsOrphanedAnnotations();
+    calendarDays();
+    daylightSavingDays();
     intervals();
     sleepingObservations();
     coalescedFailureRetainsEveryInterval();

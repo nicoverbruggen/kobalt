@@ -624,6 +624,26 @@ void ReadingBook::saveSpeed(bool force, bool background)
     });
 }
 
+QString ReadingBook::readingDay() const
+{
+    return history ? history->day()
+                   : QDateTime::fromMSecsSinceEpoch(utc()).date().toString(Qt::ISODate);
+}
+
+QString ReadingBook::readingOpeningId() const
+{
+    return history ? history->openingId() : QString();
+}
+
+qint64 ReadingBook::readingDayMilliseconds()
+{
+    if (!history)
+        return 0;
+    if (activeReading.isValid())
+        history->update(readingMilliseconds(), session_->state().value("position").toString());
+    return history->dayMilliseconds(readingDay());
+}
+
 qint64 ReadingBook::readingMilliseconds() const
 {
     return completedReadingMilliseconds + (activeReading.isValid() ? activeReading.elapsed() : 0);

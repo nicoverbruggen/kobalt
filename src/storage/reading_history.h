@@ -2,6 +2,7 @@
 #include <QString>
 #include <QByteArray>
 #include <QVector>
+#include <QMap>
 #include <functional>
 #include <memory>
 #include "record_writer.h"
@@ -45,10 +46,16 @@ public:
     // process share it; another process cannot recover or start a reader here.
     // Failed acquisition returns a diagnostic code through error.
     static std::shared_ptr<Profile> openProfile(const QString &directory, QString *error = nullptr);
-    // Active reading time of the sessions that started at or after `utcStart`
-    // and are no longer running. Waits for the profile writer: call it off the
-    // GUI thread. Returns -1 when the profile cannot be read.
-    static qint64 finishedSince(const QString &directory, qint64 utcStart);
+    QString day() const;
+
+    QString openingId() const { return opening; }
+
+    qint64 dayMilliseconds(const QString &day) const { return days.value(day); }
+
+    // Other openings are read off the GUI thread. This opening is added from
+    // memory, independently of its checkpoint's progress through the writer.
+    static qint64 dayTotal(const QString &directory, const QString &day,
+                           const QString &excludeOpening);
 
 private:
     static bool recover(const QString &directory);
@@ -64,7 +71,10 @@ private:
     QByteArray fingerprint;
     UtcClock utc;
     QVector<Interval> pending;
-    qint64 baseline = 0;
+    qint64 baseline = 0, dayBaseline = 0;
+    const QString opening;
+    QMap<QString, qint64> days;
+    void countDays(qint64 activeMilliseconds);
     bool paused = false;
     bool dirty = false;
     quint64 generation = 0, posted = 0, acknowledged = 0;

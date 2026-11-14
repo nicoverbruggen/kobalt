@@ -4516,6 +4516,113 @@ private slots:
                  "Today dropped the completed session after the sleep timeout");
     }
 
+    void sleepWidgetsUseSavedDay()
+    {
+        const auto paths = testPaths();
+        QVERIFY(storage::writePreferences(paths.preferences(),
+                                          { { sleep::designKey, "widgets" } }));
+        qint64 utc = QDateTime(QDate(2026, 11, 10), QTime(9, 0)).toMSecsSinceEpoch();
+        {
+            ReadingHistory previous(paths.directory, "other-book", {}, {}, "Other", "Author",
+                                    [&] { return utc; });
+            previous.start(0, "start");
+            utc += 8 * 60000;
+            previous.stop(8 * 60000, "end");
+            QVERIFY(previous.save());
+        }
+        qint64 active = 0;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.utc = [&] { return utc; };
+        host.readingClock = [&] { return active; };
+        auto state = std::make_shared<test::SleepPresentationState>();
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.book()->readingActive());
+        QTRY_COMPARE(host.window()->powerScreenSnapshot().details.todayMilliseconds,
+                     qint64(8 * 60000));
+        utc += 2 * 60000;
+        active += 2 * 60000;
+        host.window()->checkpoint();
+        QCOMPARE(host.window()->powerScreenSnapshot().details.todayMilliseconds,
+                 qint64(10 * 60000));
+        host.shutdown();
+        QTRY_VERIFY(host.idle());
+        host.open(textBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.book()->readingActive());
+        QTRY_COMPARE(host.window()->powerScreenSnapshot().details.todayMilliseconds,
+                     qint64(10 * 60000));
+    }
+
+    void sleepWidgetsUseLocalDay_data()
+    {
+        QTest::addColumn<int>("timeout");
+        QTest::newRow("short-sleep") << 15;
+        QTest::newRow("expired-session") << 15;
+        QTest::newRow("never-reset-session") << 0;
+    }
+
+    void sleepWidgetsUseLocalDay()
+    {
+        QFETCH(int, timeout);
+        const auto paths = testPaths();
+        const QJsonObject preferences{ { sleep::designKey, "widgets" },
+                                       { sessionTimeout::preferenceKey, timeout } };
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        const QDate date(2026, 11, 10);
+        qint64 utc = QDateTime(date, QTime(23, 50)).toMSecsSinceEpoch();
+        qint64 active = 0;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.utc = [&] { return utc; };
+        host.readingClock = [&] { return active; };
+        auto state = std::make_shared<test::SleepPresentationState>();
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        QTRY_VERIFY(host.book()->readingActive());
+        utc += 15 * 60000;
+        active += 15 * 60000;
+        auto shot = host.window()->powerScreenSnapshot();
+        QCOMPARE(shot.details.todayMilliseconds, qint64(5 * 60000));
+        // A completed checkpoint must not be added to this opening twice.
+        host.book()->checkpointReadingHistory();
+        shot = host.window()->powerScreenSnapshot();
+        QCOMPARE(shot.details.todayMilliseconds, qint64(5 * 60000));
+        host.window()->sleepReader();
+        const int days = QByteArray(QTest::currentDataTag()) == "short-sleep" ? 0 : 3;
+        utc = QDateTime(date.addDays(1 + days), QTime(0, 10)).toMSecsSinceEpoch();
+        host.window()->wakeReader();
+        QTRY_VERIFY(host.book()->readingActive());
+        utc += 2 * 60000;
+        active += 2 * 60000;
+        shot = host.window()->powerScreenSnapshot();
+        QCOMPARE(shot.details.todayMilliseconds, qint64((days ? 2 : 7) * 60000));
+        host.window()->sleepReader();
+        // A sleep spanning midnight contributes zero until reading resumes.
+        utc = QDateTime(date.addDays(2 + days), QTime(0, 1)).toMSecsSinceEpoch();
+        host.window()->wakeReader();
+        QTRY_VERIFY(host.book()->readingActive());
+        shot = host.window()->powerScreenSnapshot();
+        QCOMPARE(shot.details.todayMilliseconds, qint64(0));
+    }
+
     void sleepPrivatePreviewsHideBookPixels()
     {
         const QSize size(300, 400);

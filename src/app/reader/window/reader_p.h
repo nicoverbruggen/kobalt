@@ -434,9 +434,10 @@ private:
     sleep::Snapshot sleepShot;
     QPointer<QLabel> privateSleepFrame;
     QVector<QImage> sleepUnderlay;
-    // Reading finished earlier today, loaded off the GUI thread when the book
-    // opens. Sleep uses it only once it is ready.
+    // Other openings on this local date, loaded off the GUI thread.
+    // The current opening is counted from memory to avoid checkpoint races.
     std::future<qint64> todayReading;
+    QString todayReadingDate;
     qint64 todayReadingFinished = -1;
     QFileInfo sleepCoverSource;
     sleep::Snapshot exitSleepSnapshot;

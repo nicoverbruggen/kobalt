@@ -98,6 +98,9 @@ public:
 
     // Active time for this opening, excluding sleep and hidden reader time.
     qint64 readingMilliseconds() const;
+    QString readingDay() const;
+    QString readingOpeningId() const;
+    qint64 readingDayMilliseconds();
 
     qint64 sessionReadingMilliseconds() const { return readingMilliseconds() - sessionBaseline; }
 

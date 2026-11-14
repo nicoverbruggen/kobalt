@@ -144,6 +144,7 @@ void Reader::observeReading()
         return;
     }
     const bool wasReading = book->readingActive();
+    loadTodayReading();
     book->observeReading(!topControls->isVisible() && !general->isVisible() && !choices->isVisible()
                          && !(imageViewer && imageViewer->isVisible())
                          && !dictionaryPanel->isVisible() && !searchPanel->isVisible()
@@ -429,23 +430,33 @@ sleep::Details Reader::sleepDetails()
     details.greeting = preferences.value(sleep::greetingKey).toString();
     details.left = sleepDuration(book->estimates().bookMilliseconds,
                                  remainingTime::approximate(preferences));
-    if (todayReadingFinished < 0 && todayReading.valid()
-        && todayReading.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        todayReadingFinished = todayReading.get();
-    // A sleep timeout starts a new session, but all time in this opening counts.
+    loadTodayReading();
     details.todayMilliseconds =
-            qMax<qint64>(0, todayReadingFinished) + qMax<qint64>(0, book->readingMilliseconds());
+            qMax<qint64>(0, todayReadingFinished) + book->readingDayMilliseconds();
     return details;
 }
 
 void Reader::loadTodayReading()
 {
-    if (todayReading.valid() || !book)
+    if (!book)
         return;
+    const auto day = book->readingDay();
+    if (todayReading.valid()) {
+        if (todayReading.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            if (todayReadingDate != day)
+                todayReadingFinished = -1;
+            return;
+        }
+        todayReadingFinished = todayReading.get();
+    }
+    if (todayReadingDate == day)
+        return;
+    todayReadingDate = day;
+    todayReadingFinished = -1;
     const auto directory = book->paths().directory;
-    const qint64 midnight = QDateTime(QDate::currentDate(), QTime(0, 0)).toMSecsSinceEpoch();
-    todayReading = std::async(std::launch::async, [directory, midnight] {
-        return ReadingHistory::finishedSince(directory, midnight);
+    const auto opening = book->readingOpeningId();
+    todayReading = std::async(std::launch::async, [directory, day, opening] {
+        return ReadingHistory::dayTotal(directory, day, opening);
     });
 }
 
